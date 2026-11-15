@@ -1,0 +1,11 @@
+{
+  "kind": "message_bounce_observed",
+  "version": 1,
+  "case": "a send first said soft, said once more when a later read found the address takes no mail",
+  "body": {
+    "key": "wi_01JC0000000000000000000002/stop",
+    "old": null,
+    "new": {"plugin": "example-mail", "reference": "snd-55102", "channel": "email", "message_id": "<a1b2c3@mail.example.com>", "bounce": "hard", "bounce_code": "hard", "bounced_at": "2026-10-30T09:12:05.000Z", "read_work_item": "wi_01JC000000000000000000000F"}
+  },
+  "expect": "valid"
+}

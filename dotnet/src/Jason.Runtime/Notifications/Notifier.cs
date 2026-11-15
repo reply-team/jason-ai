@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
@@ -225,35 +226,38 @@ public sealed class Notifier(
         var protective = failed is null || failed.Lines == 0 ? null : new Burst(failed.Lines, failed.Oldest, failed.Newest);
         var unread = gaps is null || gaps.Lines == 0 ? null : new Burst(gaps.Lines, gaps.Oldest, gaps.Newest);
         var blocked = blocks is null || blocks.Lines == 0 ? null : new Burst(blocks.Lines, blocks.Oldest, blocks.Newest);
-        return Joined(Joined(Joined(Joined(asked, protective), unread), blocked), await HoldsAsync(db, after, upTo, ct).ConfigureAwait(false));
+        var held = await KeptAsync(BudgetHoldLines.Of(db), BudgetHoldLines.Holds, after, upTo, ct).ConfigureAwait(false);
+        var bounced = await KeptAsync(BounceLines.Of(db), BounceLines.Bounced, after, upTo, ct).ConfigureAwait(false);
+        return Joined(Joined(Joined(Joined(Joined(asked, protective), unread), blocked), held), bounced);
     }
 
     /// <summary>
-    /// The holds in <c>(after, upTo]</c>, as one burst. Only a line's payload says it is one, so this reads the lines of the
-    /// kind rather than aggregating them, a batch at a time over the kind index, and no read returns rows without a bound.
+    /// The lines in <c>(after, upTo]</c> of one kind that only their payload says are a trigger — a hold, a bounce — as one
+    /// burst. This reads the lines of the kind rather than aggregating them, a batch at a time over the kind index, and no
+    /// read returns rows without a bound.
     /// </summary>
-    private static async Task<Burst?> HoldsAsync(JasonDbContext db, int after, int upTo, CancellationToken ct)
+    private static async Task<Burst?> KeptAsync(IQueryable<JournalEntry> kind, Func<JsonNode?, bool> keep, int after, int upTo, CancellationToken ct)
     {
-        Burst? held = null;
+        Burst? kept = null;
         var from = after;
         while (true)
         {
             var position = from;
-            var lines = await BudgetHoldLines.Of(db)
+            var lines = await kind
                 .Where(e => e.Id > position && e.Id <= upTo)
                 .OrderBy(e => e.Id)
                 .Take(ReadBatch)
                 .Select(e => new { e.Id, e.Ts, e.New })
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
-            foreach (var line in lines.Where(line => BudgetHoldLines.Holds(line.New)))
+            foreach (var line in lines.Where(line => keep(line.New)))
             {
-                held = held?.With(line.Ts) ?? new Burst(1, line.Ts, line.Ts);
+                kept = kept?.With(line.Ts) ?? new Burst(1, line.Ts, line.Ts);
             }
 
             if (lines.Count < ReadBatch)
             {
-                return held;
+                return kept;
             }
 
             from = lines[^1].Id;
@@ -301,10 +305,16 @@ public sealed class Notifier(
             ? (await BudgetHoldLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => new { e.Id, e.New }).ToListAsync(ct).ConfigureAwait(false))
                 .Where(line => BudgetHoldLines.Holds(line.New)).Select(line => line.Id).ToHashSet()
             : new HashSet<int>();
+
+        // A provider event's line wakes one only when the event is a bounce, which only its payload says too.
+        var bounces = lines.Any(line => line.Kind == BounceLines.Kind)
+            ? (await BounceLines.Of(db).Where(e => e.Id >= oldest && e.Id <= newest.Id).Select(e => new { e.Id, e.New }).ToListAsync(ct).ConfigureAwait(false))
+                .Where(line => BounceLines.Bounced(line.New)).Select(line => line.Id).ToHashSet()
+            : new HashSet<int>();
         state.Advance(
             newest.Id,
             newest.PublicId,
-            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id) || holds.Contains(line.Id)).Select(line => line.Ts));
+            lines.Where(line => Triggers.Contains(line.Kind) || protective.Contains(line.Id) || line.Kind == EventGapLines.Kind || blocks.Contains(line.Id) || holds.Contains(line.Id) || bounces.Contains(line.Id)).Select(line => line.Ts));
         if (lines.Count < ReadBatch)
         {
             return;

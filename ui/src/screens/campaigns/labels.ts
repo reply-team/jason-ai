@@ -41,9 +41,14 @@ export const activityColumns: readonly Column[] = [
     },
     { key: 'replied', label: 'Replied', hint: 'Their first reply to this agent came in the period.' },
     {
+        key: 'bounced',
+        label: 'Bounced',
+        hint: "A provider's event said in the period that a message to them bounced, hard or soft.",
+    },
+    {
         key: 'opted_out',
         label: 'Opted out',
-        hint: 'One of their addresses was put on the do-not-contact register in the period.',
+        hint: 'One of their addresses was put on the do-not-contact register in the period, other than by the runtime for a bounce.',
     },
     {
         key: 'removed',

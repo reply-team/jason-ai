@@ -147,6 +147,28 @@
         "format": "date-time",
         "maxLength": 64,
         "description": "When the send was cancelled, in UTC, or null where it was not or the provider gives no moment."
+      },
+      "bounced": {
+        "type": ["boolean", "null"],
+        "description": "True where the provider says the email went and came back as a bounce, false where it says it did not, null where it cannot say. Absent reads as null."
+      },
+      "bounce": {
+        "type": ["string", "null"],
+        "enum": ["hard", "soft", null],
+        "description": "`hard` only where the provider says the address itself does not take mail; `soft` for every other kind it names, one the plugin does not know included; null only where the provider says the message bounced and names no kind, or there was no bounce. Absent reads as null."
+      },
+      "bounced_at": {
+        "type": ["string", "null"],
+        "format": "date-time",
+        "maxLength": 64,
+        "description": "When the bounce notice came, in UTC, or null where there was no bounce or the provider gives no moment. Absent reads as null."
+      },
+      "bounce_code": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+        "description": "The provider's own word for the kind of bounce, uninterpreted: one word of the provider's vocabulary, a letter or digit first and then letters, digits, dots, underscores and hyphens, never a server's text; null where it gives none. Absent reads as null."
       }
     }
   },

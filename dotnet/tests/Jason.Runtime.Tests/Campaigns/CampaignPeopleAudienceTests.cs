@@ -69,10 +69,10 @@ public class CampaignPeopleAudienceTests
         }
 
         Assert.Equal(
-            new ActivityCounts(world.Spring.Id, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, OptedOut: 0, Removed: 1),
+            new ActivityCounts(world.Spring.Id, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, Bounced: 0, OptedOut: 0, Removed: 1),
             Assert.Single(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, withoutArchived: false, Ct)).Value);
         Assert.Equal(
-            new ActivityCounts(0, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, OptedOut: 0, Removed: 1),
+            new ActivityCounts(0, People: 5, Added: 2, WorkedOn: 2, Contacted: 0, Replied: 1, Bounced: 0, OptedOut: 0, Removed: 1),
             await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, first.Id, withoutArchived: false, Ct));
     }
 
@@ -88,7 +88,7 @@ public class CampaignPeopleAudienceTests
         Assert.Empty(await CampaignPeople.SummaryCountsAsync(db, spring, empty.Id, withoutArchived: false, Ct));
         Assert.Equal(new SummaryCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.SummaryTotalAsync(db, spring, empty.Id, withoutArchived: false, Ct));
         Assert.Empty(await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
-        Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
+        Assert.Equal(new ActivityCounts(0, 0, 0, 0, 0, 0, 0, 0, 0), await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
         Assert.Empty(await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.People, CampaignWorld.Since, CampaignWorld.Until, empty.Id, withoutArchived: false, Ct));
         foreach (var filter in Enum.GetValues<CampaignSummaryFilter>())
         {

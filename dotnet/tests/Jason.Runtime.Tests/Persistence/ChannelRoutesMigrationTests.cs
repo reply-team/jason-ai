@@ -57,7 +57,11 @@ public class ChannelRoutesMigrationTests
         Assert.Empty(Rows(after, "SELECT name FROM sqlite_master WHERE name LIKE 'ef_temp_%'"));
 
         var shape = ShapeOf(after);
-        var lost = before.Shape.Except(shape).ToList();
+
+        // A later migration's reshape, which the migrator applies in the same run: ProviderBlockChannels makes the sender's
+        // one-open index again over the channel, and ProviderBlocksSchemaTests holds what it makes.
+        string[] reshapedLater = ["index provider_blocks.ix_provider_blocks_one_open_per_sender | "];
+        var lost = before.Shape.Where(line => !reshapedLater.Any(key => line.StartsWith(key, StringComparison.Ordinal))).Except(shape).ToList();
         Assert.True(lost.Count == 0, $"The migration lost or changed:{Environment.NewLine}{string.Join(Environment.NewLine, lost)}");
         Assert.Equal(
             [

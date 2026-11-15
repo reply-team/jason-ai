@@ -175,6 +175,16 @@ draft, so read both lists at this review:
 jason rolenote get --role responder --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+A bounce a provider's events say (`provider_event_observed` whose `kind` is `bounce`) is followed up by the runtime
+itself: it reads the campaign's own emails to that person the bounce could be of, and a read that finds the email
+bounced writes `message_bounce_observed` about that send. For a hard bounce, or one the provider named no kind for, the
+same read puts the person's email on the do-not-contact register as `system:bounce`: you do not add it, and you do not
+lift it; a person does. A soft bounce (`bounce` is `soft`, and `bounce_code` carries the provider's own word) stops
+nothing and is yours to weigh with what else the campaign knows of the person. A send said soft is read again at the
+person's next bounce, and a later read that finds it hard says so once more and stops the address. A bounce the
+runtime finds no send of this campaign for, a sequence's email at the provider or a mail written by hand, stays the
+event's line alone.
+
 You record no verdict of your own reading: a verdict is the responder's reading of a reply, and one that looks wrong to
 you is a question for the person, with the line's id. The one you do record is a person's answer. Below its confidence
 threshold the responder records its best guess and raises a question whose options are the category ids, and drafts
@@ -285,9 +295,11 @@ of the kind since your last review:
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --since 2026-09-18T09:00:00Z
 ```
 
-**The runtime has usually raised the responder already.** For a thread the campaign holds by its own pin, the runtime queues
-the read of the thread and the responder by itself, in the scan that wrote the line, so before you create anything look
-for that item. A responder it made is an `ai_role` item made by `system:dispatcher`, and its context's
+**The runtime has usually raised the responder already.** For a thread the campaign holds by its own pin — a line with
+no `attributed_by`, or with `campaign_pin` — and for a line found by the person's pin that says `campaign_own` `true`,
+the runtime queues the read of the thread and the responder by itself, in the scan that wrote the line, so before you
+create anything look for that item. A line found by the person's pin without `campaign_own` is yours, as below: the
+runtime raises nothing for it. A responder it made is an `ai_role` item made by `system:dispatcher`, and its context's
 `inbound_reply.moves` names each line it answers by the line's `jrn_` id:
 
 ```
@@ -346,8 +358,13 @@ Such a line also says how it found this campaign, under `attributed_by`. `campai
 campaign's own operations pinned: the thread is this campaign's outreach. `contact_pin` is the person alone — the
 provider named no campaign, or one that no campaign that is not archived is linked to, or more than one is — so the
 thread may be one this campaign did not start: a direct email, a message outside any sequence, another campaign's
-outreach. Then queue the read alone, and only where this campaign reads conversations at the plugin the line names under
-`plugin`: the read follows this campaign's route, which may lead elsewhere, and this names where it goes:
+outreach. Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written,
+it already was, or no campaign the reply was found in held it yet and this campaign was the only one, of those not
+archived, that had written to the person through that plugin before the reply — a message, an invitation or an answer
+that succeeded — and the reply named no provider campaign. The runtime raises its read and its responder as for
+`campaign_pin`, so look for them as above. Without `campaign_own`, the thread is yours: queue the read alone, and only
+where this campaign reads conversations at the plugin the line names under `plugin`: the read follows this campaign's
+route, which may lead elsewhere, and this names where it goes:
 
 ```
 jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation conversation.get
@@ -382,10 +399,10 @@ jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_eve
 
 Each one is a fact to plan from, and what it calls for is yours to decide inside your boundary, as with any line. A
 detected reply is read as a reply is: queue the read of its thread and the responder after it, as above — or the read
-alone where the line says `attributed_by` `contact_pin`. A hard bounce is a person that channel no longer reaches:
-work waiting to write to them there is work the campaign may no longer need. An accepted invitation is a channel that
-opened. Whatever you do or leave, say it in your note; where the next step is a person's to choose, raise one
-question.
+alone where the line says `attributed_by` `contact_pin`: a provider event's line never says `campaign_own`, and the
+runtime raises nothing for it. A hard bounce is a person that channel no longer reaches: work waiting to write to them
+there is work the campaign may no longer need. An accepted invitation is a channel that opened. Whatever you do or
+leave, say it in your note; where the next step is a person's to choose, raise one question.
 
 ## When a send that went woke you
 

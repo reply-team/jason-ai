@@ -24,9 +24,14 @@ export const counts: readonly { key: ActivityCount; label: string; hint: string 
     },
     { key: 'replied', label: 'Replied', hint: 'Their first reply to an agent came in the period.' },
     {
+        key: 'bounced',
+        label: 'Bounced',
+        hint: "A provider's event said in the period that a message to them bounced, hard or soft.",
+    },
+    {
         key: 'opted_out',
         label: 'Opted out',
-        hint: 'One of their addresses was put on the do-not-contact register in the period.',
+        hint: 'One of their addresses was put on the do-not-contact register in the period, other than by the runtime for a bounce.',
     },
     {
         key: 'removed',
@@ -42,6 +47,7 @@ export const byTheDay: Record<ActivityCount, string> = {
     worked_on: 'by the day they were worked on',
     contacted: 'by the day they were contacted',
     replied: 'by the day they replied',
+    bounced: 'by the day they bounced',
     opted_out: 'by the day they opted out',
     removed: 'by the day they were removed',
 };
@@ -59,7 +65,7 @@ export const perBucket: Record<ActivityPeriod, string> = { hour: 'per hour', day
 export const barsAddUp = 'A person counted on two days is in two bars and once in the number above.';
 
 /**
- * Replied or opted out as a share of the period's contacted. The counts cover different people (today's replies may
+ * Replied, bounced or opted out as a share of the period's contacted. The counts cover different people (today's replies may
  * answer last week's messages), so past all of them it says so rather than print a share over a hundred percent.
  */
 export function shareOfContacted(value: number, contacted: number): string | null {

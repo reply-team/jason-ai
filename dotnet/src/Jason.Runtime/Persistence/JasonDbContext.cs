@@ -238,6 +238,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
             campaign.Property(c => c.ResponderWatermark).HasDefaultValue(0);
+            campaign.Property(c => c.BounceWatermark).HasDefaultValue(0);
             campaign.Property(c => c.AudienceWatermark).HasDefaultValue(0);
 
             // One key names one campaign, and the database is what says so: two creates deciding "is it free?" by
@@ -618,20 +619,30 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             block.Property(b => b.PluginId).HasMaxLength(64);
             block.Property(b => b.BindingIdentity).HasMaxLength(71);
             block.Property(b => b.SenderExternalId).HasMaxLength(256);
+            block.Property(b => b.Channel).HasMaxLength(32);
             block.Property(b => b.Reason).HasMaxLength(32);
             block.Property(b => b.Link).HasMaxLength(2048);
             block.Property(b => b.ClearedById).HasMaxLength(100);
 
-            // The two halves of one rule, one open block per binding, scope and sender: SQLite holds nulls distinct, so
-            // an account block, which names no sender, is held unique by an index of its own.
+            // The three parts of one rule, one open block per binding, scope, sender and channel, a block on every channel
+            // being one value of the channel: SQLite holds nulls distinct, so an account block, which names no sender, and
+            // a sender's block on every channel, which names no channel, are each held unique by an index of their own. The
+            // sender's index keeps the plugin and the binding first, so the trial query reads an account's senders by it.
+            // No check holds that only a sender's block names a channel: SQLite adds a check to a table only by building
+            // the table again, which the migration that added the channel does not do. The one writer, ProviderBlocks.Meet,
+            // reads a channel only for a sender's block, and the block's contract refuses an account's block that names one.
             block.HasIndex(b => new { b.PluginId, b.BindingIdentity })
                 .IsUnique()
                 .HasFilter("status = 'open' AND scope = 'account'")
                 .HasDatabaseName("ix_provider_blocks_one_open_per_account");
-            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId })
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId, b.Channel })
                 .IsUnique()
                 .HasFilter("status = 'open' AND scope = 'sender'")
                 .HasDatabaseName("ix_provider_blocks_one_open_per_sender");
+            block.HasIndex(b => new { b.PluginId, b.BindingIdentity, b.SenderExternalId })
+                .IsUnique()
+                .HasFilter("status = 'open' AND scope = 'sender' AND channel IS NULL")
+                .HasDatabaseName("ix_provider_blocks_one_open_per_sender_on_every_channel");
 
             // The blocks whose trial is due, by how they stand and when: the resume step's trial query reads them here.
             block.HasIndex(b => new { b.Status, b.NextTrialAt });
@@ -766,6 +777,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_sends")
                 .IsUnique()
                 .HasFilter("kind = 'message_sent_observed'");
+
+            // A send seen to have bounced is said once, under the key of the work item that sent it, in an index of its own:
+            // the read that sees the bounce looks the key up first, and a second line, two reads of one send deciding it at
+            // once, is refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_bounces")
+                .IsUnique()
+                .HasFilter("kind = 'message_bounce_observed'");
 
             // A search ends once, under the key of its work item. The search's row is marked in the same change set, and a
             // second line — two writers deciding the same ending at once — is refused here.

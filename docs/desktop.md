@@ -67,7 +67,10 @@ The window calls a campaign with its chat an **agent** (**Agents** in the sideba
 campaign and nothing else: the commands, the API and the ids keep `campaign`, and so do the rest of these pages. The AI that
 runs commands is called the AI.
 
-The desktop wears the console: the chat is home, in a dock with panels beside it. The window opens on **Start**, headed
+The desktop wears the console: a sidebar and one area beside it that shows one thing at a time, chosen from the sidebar,
+its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed, only chosen. A chat you leave and
+choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
+The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
 without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
@@ -89,8 +92,8 @@ shows before anything is typed and what you send waits, while the window is open
   follow under **Recent**, and **Settings** stands alone at the foot.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
-- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in a page panel of the same
-  dock. [ui.md](ui.md) describes each.
+- The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
+  [ui.md](ui.md) describes each.
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light, in the demo it opens on and again when
 you first choose Live; one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
@@ -375,6 +378,10 @@ is the same path with `-demo` after it.
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
   sign-in.
+  Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
+  servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
+  runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
+  plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's

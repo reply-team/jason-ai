@@ -174,16 +174,21 @@ the runtime by hand.
 
 ## Notifications
 
-When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a
-protective action fails, when it finds a span of an account's events it will not read, or when a provider block is
-open, it tells them once, with a pointer: how many, and where to look. A pointer that says an account has events
-Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that says
-provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where the
-person clears it. The toast, the operating system's own notification, is on by default and needs nothing set up;
-`jason runtime status --human` says on its `Notify:` line what each channel did last.
-`Notifications:Enabled` set to `false` in `~/.jason/config/settings.json` turns all of it off, and
-`Notifications:Toast` set to `false` turns off the toast alone. `docs/notifications.md` says when a burst is said, and
-what a pointer never carries.
+When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective
+action fails, when it finds a span of an account's events it will not read, when a provider block is open, or when an
+email bounces, it tells them once, with a pointer: how many, and where to look. A pointer that says an account has
+events Jason did not read sends you to `jason events sources`, as "The accounts whose events it reads" says. One that
+says provider blocks hold work items sends you to `jason block list`, which shows each block, what it holds and where
+the person clears it. One that says emails bounced names no command and leaves them to you: a bounce is a
+`provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its
+campaign, and its contact where one is pinned; `jason journal list --kind provider_event_observed` lists those lines
+beside the replies the provider detected and the invitations accepted, so keep the bounces and say in which campaigns
+they were and, where a line names a contact, whose email it was. You may also read the period's `bounced` count with
+`jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. The toast,
+the operating system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says
+on its `Notify:` line what each channel did last. `Notifications:Enabled` set to `false` in
+`~/.jason/config/settings.json` turns all of it off, and `Notifications:Toast` set to `false` turns off the toast alone.
+`docs/notifications.md` says when a burst is said, and what a pointer never carries.
 
 Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person
 asks, with the topic they choose. On the public ntfy server a topic is readable by anyone who knows its name, so tell

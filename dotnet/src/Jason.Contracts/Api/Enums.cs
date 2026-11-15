@@ -166,6 +166,7 @@ public enum CampaignActivityFilter
     WorkedOn,
     Contacted,
     Replied,
+    Bounced,
     OptedOut,
     Removed,
 }

@@ -338,6 +338,13 @@ export interface DesktopHost {
      * that the turn uses the host's own default model; null otherwise. The box then offers the host's default alone.
      */
     modelsUnread: string | null;
+    /**
+     * The names of the person's own MCP servers, on Claude Code and Codex found on this computer: Claude Code's user
+     * servers and the servers of Codex's config.toml, in the file's order, each cut at forty characters by the desktop.
+     * Names and nothing else; empty for any other host, for a host not found, and where the file is not there or could not
+     * be read. A name is the person's own text: the Connect page draws it as text and nothing else reads it.
+     */
+    ownServers: string[];
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */

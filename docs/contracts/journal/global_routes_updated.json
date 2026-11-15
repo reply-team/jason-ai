@@ -3,7 +3,7 @@
   "version": 1,
   "since": "0.42.0",
   "summary": "A global route was set or taken away by route.set or route.unset, so an operation, one channel of an operation, or all provider work goes to the plugin it names for every campaign with no route of its own, or no longer does.",
-  "subscribable": false,
+  "subscribable": true,
   "entities": {
     "plugin": { "at": ["/new/plugin", "/old/plugin"], "presence": "sometimes" }
   },

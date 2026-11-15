@@ -475,7 +475,9 @@ public sealed class ReplyAccount : IDisposable
     /// An account a send can go from, as Reply lists it: a mailbox (<c>email</c>) or a LinkedIn account, with its name, its
     /// address — the mailbox's email or the LinkedIn profile — the Reply user whose it is, and Reply's own word for its
     /// state (<c>connected</c>, <c>disconnected</c>, <c>unknown</c>; <c>enabled</c>, <c>disabled</c>, <c>cookieInvalid</c>,
-    /// <c>dailyLimitReached</c>). <paramref name="limit"/> plants a LinkedIn account whose daily or weekly allowance is spent.
+    /// <c>dailyLimitReached</c>). <paramref name="limit"/> plants a LinkedIn account whose daily or weekly allowance is spent,
+    /// or a mailbox at a limit Reply counts on direct emails: <c>daily</c>, its daily limit, or <c>active_contacts</c>, the
+    /// active contacts of the account's billing period.
     /// </summary>
     public ReplyAccount WithSender(
         long id,
@@ -832,13 +834,15 @@ public sealed class ReplyAccount : IDisposable
     /// A direct send Reply kept, under <paramref name="reference"/>, in <paramref name="state"/>: what <c>direct-send
     /// get</c> reads back and <c>direct-send cancel</c> takes back. The members left null are none given; a rendered
     /// subject names the rendered body beside it, a failure's code is printed only where one is given, and so is the
-    /// moment Reply expects to send a send waiting for its schedule.
+    /// moment Reply expects to send a send waiting for its schedule. Whether it bounced, with its kind and moment, is
+    /// printed only where <paramref name="bounced"/> is given, as a reply-cli that prints the three passes them on.
     /// </summary>
     public ReplyAccount WithDirectSend(
         string reference, string state, string? sendAfter = null, string? sentAt = null, string? messageId = null,
         string? failureReason = null, string? cancelledAt = null, string? renderedSubject = null, string? renderedBody = null,
         string? failureCode = null,
-        string? estimatedSendAt = null)
+        string? estimatedSendAt = null,
+        JsonNode? bounced = null, string? bounceType = null, string? bouncedAt = null)
     {
         ArgumentNullException.ThrowIfNull(reference);
         var sends = ReadArray(DirectSendsFile);
@@ -868,6 +872,13 @@ public sealed class ReplyAccount : IDisposable
         if (estimatedSendAt is not null)
         {
             record["estimatedSendAt"] = estimatedSendAt;
+        }
+
+        if (bounced is not null)
+        {
+            record["bounced"] = bounced.DeepClone();
+            record["bounceType"] = bounceType;
+            record["bouncedAt"] = bouncedAt;
         }
 
         sends.Add(record);

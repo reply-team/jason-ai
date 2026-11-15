@@ -11,7 +11,7 @@
     "attempt": { "at": "/attempt_id", "presence": "sometimes" },
     "plugin": { "at": "/new/plugin", "presence": "always" }
   },
-  "field_since": { "/new/event_id": "0.12.0", "/new/attributed_by": "0.16.0" },
+  "field_since": { "/new/event_id": "0.12.0", "/new/attributed_by": "0.16.0", "/new/campaign_own": "0.43.0" },
   "body": {
     "type": "object",
     "additionalProperties": false,
@@ -32,7 +32,8 @@
           "has_meeting_intent": { "type": ["null", "boolean"], "description": "The provider's own judgement that the thread asks for a meeting, or null where it makes none." },
           "contact_id": { "type": ["null", "string"], "pattern": "^cnt_", "description": "The campaign's contact the provider's person is pinned to, or null where none is." },
           "event_id": { "type": "string", "pattern": "^evt_", "description": "The stored provider event the move was read from; absent where the inbound read found it." },
-          "attributed_by": { "type": "string", "enum": ["campaign_pin", "contact_pin"], "description": "Which rule found that the provider event concerns the campaign: the campaign's own pinned identifier, or the contact's." }
+          "attributed_by": { "type": "string", "enum": ["campaign_pin", "contact_pin"], "description": "Which rule found that the provider event concerns the campaign: the campaign's own pinned identifier, or the contact's." },
+          "campaign_own": { "type": "boolean", "const": true, "description": "Present, and true, only on a line found by the contact's pin about a thread that is the campaign's own: one the campaign already held as its own through the plugin when the line was written (a line its own read said, one found by its own pin, or one marked so), or, where no campaign the event was found in held the thread yet and the event names no provider campaign, the campaign was the one, of those not archived, that had written to the person through the plugin before the reply, where the event was found in it: a message, an invitation or an answer that succeeded, its attempt finished at or before the moment the event gives. Decided once, then; absent on every other line." }
         }
       }
     },
@@ -44,16 +45,23 @@
             "not": {
               "anyOf": [
                 { "required": ["event_id"] },
-                { "required": ["attributed_by"] }
+                { "required": ["attributed_by"] },
+                { "required": ["campaign_own"] }
               ]
             }
           }
         }
       },
       {
-        "description": "Found by a read of the account's provider events.",
+        "description": "Found by a read of the account's provider events; marked the campaign's own only where the contact's pin found it.",
         "properties": {
-          "new": { "required": ["event_id"] }
+          "new": {
+            "required": ["event_id"],
+            "anyOf": [
+              { "not": { "required": ["campaign_own"] } },
+              { "not": { "properties": { "attributed_by": { "const": "campaign_pin" } } } }
+            ]
+          }
         }
       }
     ]

@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "a channel in the provider's spelling rather than the one the channel rules keep",
+  "value": { "scope": "sender", "sender_external_id": "1042", "channel": "LinkedIn", "reason": "limit" },
+  "expect": { "invalid": [{ "pointer": "/channel", "reason": "pattern" }] }
+}

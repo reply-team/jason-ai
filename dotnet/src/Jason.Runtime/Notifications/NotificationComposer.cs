@@ -1,12 +1,13 @@
 using System.Globalization;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Notifications;
 using Jason.Runtime.Approvals;
 using Jason.Runtime.Decisions;
 
 namespace Jason.Runtime.Notifications;
 
 /// <summary>
-/// What a notification says, made from six counts and, for failed protective work, at most three campaign public ids
+/// What a notification says, made from seven counts and, for failed protective work, at most three campaign public ids
 /// — opaque ids that name nothing by themselves — and nothing else. That is half of why nothing about the work — a
 /// campaign's name, a contact, a subject, a question's words, an error — can reach a channel: this signature has
 /// nowhere to take it from.
@@ -58,6 +59,26 @@ public static class NotificationComposer
     /// <summary>The one command that shows failed protective work and held items together.</summary>
     public const string LookAtFailedAndHeldCommand = "jason workitem list --status failed --status expired --status waiting";
 
+    /// <summary>
+    /// The command that shows the bounces alone: none today. The journal's list by kind shows replies found and invitations
+    /// accepted beside them, and a command in a pointer answers the question it is given for, so the bounces are the
+    /// agent's to read; a command named here is named wherever a bounce is said.
+    /// </summary>
+    public static readonly string? LookAtBouncesCommand;
+
+    /// <summary>Where to look when emails bounced and nothing else is said.</summary>
+    public static readonly string LookAtBounces = LookAtBouncesCommand is { } command
+        ? $"Ask your agent what bounced, or run {command}."
+        : "Ask your agent what bounced.";
+
+    /// <summary>
+    /// The longest message the delivery contract takes, read from the contract itself: where to look names no command past
+    /// it.
+    /// </summary>
+    public static int MessageBound { get; } =
+        DeliveryCatalog.Find("notification.send")?.InputSchema["properties"]?["message"]?["maxLength"]?.GetValue<int>()
+            ?? throw new InvalidOperationException("This build publishes no bound on a notification's message.");
+
     /// <param name="item">
     /// The public id of the one approval or question that waits, read beside the counts; carried only when it is the
     /// one thing that waits for a person, and only by the Windows toast.
@@ -65,8 +86,9 @@ public static class NotificationComposer
     /// <param name="eventGaps">How many accounts have a span of events nobody will read, said since the last pointer that reached anybody.</param>
     /// <param name="blocks">The provider blocks opened since the last pointer that reached anybody and open still, and the work items they hold.</param>
     /// <param name="held">How many items wait, as this is sent, on a daily limit of launches.</param>
+    /// <param name="bounces">How many emails bounced, said since the last pointer that reached anybody: provider events, each once however many campaigns it reached.</param>
     /// <exception cref="ArgumentOutOfRangeException">A count is negative, or every count is zero: nothing to say is never composed.</exception>
-    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null, string? item = null, int held = 0)
+    public static NotificationMessage Compose(int approvals, int decisions, FailedProtectiveWork? failed = null, int eventGaps = 0, HeldByBlocks? blocks = null, string? item = null, int held = 0, int bounces = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(approvals);
         ArgumentOutOfRangeException.ThrowIfNegative(decisions);
@@ -77,12 +99,13 @@ public static class NotificationComposer
         ArgumentOutOfRangeException.ThrowIfNegative(blocked);
         ArgumentOutOfRangeException.ThrowIfNegative(blocks?.WorkItems ?? 0);
         ArgumentOutOfRangeException.ThrowIfNegative(held);
-        if (approvals == 0 && decisions == 0 && failures == 0 && eventGaps == 0 && blocked == 0 && held == 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(bounces);
+        if (approvals == 0 && decisions == 0 && failures == 0 && eventGaps == 0 && blocked == 0 && held == 0 && bounces == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(approvals), "Nothing is waiting, so there is nothing to say.");
         }
 
-        var sentences = new List<string>(5);
+        var sentences = new List<string>(6);
         if (approvals > 0 || decisions > 0)
         {
             var parts = new List<string>(2);
@@ -114,7 +137,7 @@ public static class NotificationComposer
 
         if (blocked > 0)
         {
-            var alone = sentences.Count == 0 && eventGaps == 0;
+            var alone = sentences.Count == 0 && eventGaps == 0 && bounces == 0;
             var verb = blocked == 1 ? "holds" : "hold";
             sentences.Add($"{Count(blocked, "provider block", "provider blocks")} {verb} {Count(blocks!.WorkItems, "work item", "work items")}{(alone ? " in Jason" : string.Empty)}.");
         }
@@ -124,13 +147,20 @@ public static class NotificationComposer
             sentences.Add($"{Count(eventGaps, "account has", "accounts have")} events Jason did not read.");
         }
 
+        if (bounces > 0)
+        {
+            sentences.Add($"{Count(bounces, "email", "emails")} bounced.");
+        }
+
+        var summary = string.Join(" ", sentences);
+
         // Either alone, never their sum: two counts near the largest an int holds would add up to less than nothing.
         var waiting = approvals > 0 || decisions > 0;
-        var look = eventGaps > 0 || blocked > 0 || held > 0 ? Pointing(waiting, failures > 0, held > 0, blocked > 0, eventGaps > 0)
+        var look = eventGaps > 0 || blocked > 0 || held > 0 || bounces > 0 ? Pointing(summary, waiting, failures > 0, held > 0, blocked > 0, eventGaps > 0, bounces > 0)
             : failures == 0 ? Look
             : waiting ? LookAtBoth
             : LookAtFailures;
-        return new NotificationMessage(Title, string.Join(" ", sentences), look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item), held);
+        return new NotificationMessage(Title, summary, look, approvals, decisions, failures, eventGaps, blocked, One(approvals, decisions, item), held, bounces);
     }
 
     /// <summary>
@@ -146,47 +176,72 @@ public static class NotificationComposer
         };
 
     /// <summary>
-    /// Where to look when items are held, a provider block holds work or an account's events were not read: alone, the agent and the one
-    /// command that shows it; beside other things, the agent and the command of each thing, in the order they were said,
-    /// without the questions each would ask — six things said in full would not fit the message the delivery contract
-    /// takes.
+    /// Where to look when items are held, a provider block holds work, an account's events were not read or emails bounced:
+    /// alone, the agent and the one command that shows it; beside other things, the agent and the commands of the things
+    /// said, in the order they were said, without the questions each would ask. The commands are named until the next would
+    /// pass the bound the delivery contract sets on the message, and the things after it are left to the agent: the
+    /// things said first keep their commands. A thing with no command of its own, a bounce today, is the agent's alone.
     /// </summary>
-    private static string Pointing(bool waiting, bool failed, bool held, bool blocked, bool gaps)
+    private static string Pointing(string summary, bool waiting, bool failed, bool held, bool blocked, bool gaps, bool bounced)
     {
-        var commands = new List<string>(5);
+        var things = new List<string[]>(6);
         if (waiting)
         {
-            commands.Add("jason approval list");
-            commands.Add("jason decision list");
+            things.Add(["jason approval list", "jason decision list"]);
         }
 
         if (failed)
         {
-            commands.Add(held ? LookAtFailedAndHeldCommand : "jason workitem list --status failed --status expired");
+            things.Add([held ? LookAtFailedAndHeldCommand : "jason workitem list --status failed --status expired"]);
         }
         else if (held)
         {
-            commands.Add(LookAtHeldCommand);
+            things.Add([LookAtHeldCommand]);
         }
 
         if (blocked)
         {
-            commands.Add(LookAtBlocksCommand);
+            things.Add([LookAtBlocksCommand]);
         }
 
         if (gaps)
         {
-            commands.Add(LookAtGapsCommand);
+            things.Add([LookAtGapsCommand]);
         }
 
-        if (commands.Count == 1)
+        if (bounced)
         {
-            // Failed protective work comes here only beside a hold: alone it has its own words.
-            return failed ? LookAtFailedAndHeld : held ? LookAtHeld : blocked ? LookAtBlocks : LookAtGaps;
+            things.Add(LookAtBouncesCommand is { } command ? [command] : []);
         }
 
-        return $"Ask your agent, or run {string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}.";
+        if (things.Count == 1)
+        {
+            // One thing said, or failed protective work beside a hold, which share one command: its own words. Failed
+            // protective work comes here only beside a hold, since alone it has its own words too.
+            return failed ? LookAtFailedAndHeld : held ? LookAtHeld : blocked ? LookAtBlocks : gaps ? LookAtGaps : LookAtBounces;
+        }
+
+        var named = new List<string>(6);
+        var look = "Ask your agent.";
+        foreach (var thing in things.Where(thing => thing.Length > 0))
+        {
+            var next = Listed([.. named, .. thing]);
+            if (summary.Length + 1 + next.Length > MessageBound)
+            {
+                break;
+            }
+
+            named.AddRange(thing);
+            look = next;
+        }
+
+        return look;
     }
+
+    private static string Listed(List<string> commands) =>
+        commands.Count == 1
+            ? $"Ask your agent, or run {commands[0]}."
+            : $"Ask your agent, or run {string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}.";
 
     /// <summary>"2 protective actions failed in Jason, in cmp_… and cmp_…." — the campaigns by public id, <paramref name="most"/> at most, and with none to name, none counted.</summary>
     private static string Failed(FailedProtectiveWork failed, int most)
@@ -219,7 +274,7 @@ public static class NotificationComposer
 /// One pointer: a title, a summary of the counts, and where to look. A toast shows the title, then the summary and
 /// where to look as two lines; a channel that carries one line sends <see cref="Text"/>.
 /// </summary>
-public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0, string? Item = null, int Held = 0)
+public sealed record NotificationMessage(string Title, string Summary, string Look, int Approvals, int Decisions, int ProtectiveFailures = 0, int EventGaps = 0, int Blocks = 0, string? Item = null, int Held = 0, int Bounces = 0)
 {
     public string Text => $"{Summary} {Look}";
 }

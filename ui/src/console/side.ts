@@ -35,7 +35,7 @@ function pageOf(id: string): string | null {
     );
 }
 
-/** What More holds: each opens a panel of the console's own or a registered screen in the page panel. */
+/** What More holds: each opens a panel of the console's own or a registered screen in the area. */
 const more: readonly { label: string; hint: string; icon: IconName; panel?: PanelName; screen?: string }[] = [
     { label: 'Performance', hint: "Replies and what's working", icon: 'perf', screen: 'performance' },
     { label: 'Activity', hint: 'What happened, line by line', icon: 'pulse', panel: 'activity' },
@@ -44,12 +44,41 @@ const more: readonly { label: string; hint: string; icon: IconName; panel?: Pane
     { label: 'System', hint: 'The runtime and this installation', icon: 'ops', screen: 'system' },
 ];
 
-/** More is active while one of its screens is in front. */
-function moreActive(): boolean {
+/** The rows of the sidebar that mark what the area shows; a chat is marked in Recent, or on the Feed's row. */
+type Row = 'start' | 'dashboard' | 'needs' | 'people' | 'campaigns' | 'accounts' | 'more' | 'settings';
+
+/** The screens of the browser shell each row stands for; a screen of none of them marks no row. */
+const screenRows: Readonly<Record<string, Row>> = {
+    attention: 'needs',
+    people: 'people',
+    campaigns: 'campaigns',
+    accounts: 'accounts',
+    performance: 'more',
+    workitems: 'more',
+    system: 'more',
+    settings: 'settings',
+};
+
+/** The row whose page the area shows, or null while a chat is shown. */
+function shownRow(): Row | null {
     const front = activePanel.value;
-    if (front === 'activity' || front === 'connect') return true;
-    return front === 'page' && ['performance', 'workitems', 'system'].includes(route.value.screen);
+    switch (front) {
+        case 'start':
+        case 'dashboard':
+        case 'needs':
+        case 'campaigns':
+            return front;
+        case 'activity':
+        case 'connect':
+            return 'more';
+        case 'page':
+            return screenRows[route.value.screen] ?? null;
+        default:
+            return null;
+    }
 }
+
+const marked = (row: Row): Html | null => (shownRow() === row ? html`aria-current="true"` : null);
 
 /** How many approvals and questions wait on a person: the number the Needs you panel shows. */
 export function waitingCount(): number {
@@ -117,11 +146,11 @@ export function sideView(): Html {
     const count = waitingCount();
     const feed = feedId.value;
     const menu = open.value;
-    const pageRow = (id: string, label: string, icon: IconName): Html | null => {
+    const pageRow = (id: Row, label: string, icon: IconName): Html | null => {
         const href = pageOf(id);
         return href === null
             ? null
-            : html`<button class="item" type="button" ${act('side.page', href)}>
+            : html`<button class="item" type="button" ${marked(id)} ${act('side.page', href)}>
                   ${svg(icon, 15)}<span>${label}</span>
               </button>`;
     };
@@ -146,7 +175,13 @@ export function sideView(): Html {
         </div>
         <div class="menuwrap create">
             <div class="newrow">
-                <button class="newbtn" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                <button
+                    class="newbtn"
+                    type="button"
+                    ${marked('start')}
+                    ${act('side.start')}
+                    ${offUnless('chat.create')}
+                >
                     ${svg('plusc', 15)}New GTM agent
                 </button>
                 <button
@@ -197,15 +232,15 @@ export function sideView(): Html {
                           ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                       </button>`
             }
-            <button class="item" type="button" ${act('side.show', 'dashboard')}>
+            <button class="item" type="button" ${marked('dashboard')} ${act('side.show', 'dashboard')}>
                 ${svg('home', 15)}<span>${t('dash.title')}</span>
             </button>
-            <button class="item" type="button" ${act('side.show', 'needs')}>
+            <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
                 ${svg('att', 15)}<span>Needs you</span>
                 ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
             </button>
             ${pageRow('people', 'People', 'people')}
-            <button class="item" type="button" ${act('side.show', 'campaigns')}>
+            <button class="item" type="button" ${marked('campaigns')} ${act('side.show', 'campaigns')}>
                 ${svg('camp', 15)}<span>Agents</span>
             </button>
             ${pageRow('accounts', 'Accounts', 'plug')}
@@ -215,7 +250,7 @@ export function sideView(): Html {
                     type="button"
                     aria-haspopup="menu"
                     aria-expanded="${menu === 'more' ? 'true' : 'false'}"
-                    ${moreActive() ? html`aria-current="true"` : null}
+                    ${marked('more')}
                     ${act('side.menu', 'more')}
                 >
                     ${svg('more', 15)}<span>More</span>
@@ -245,7 +280,7 @@ export function sideView(): Html {
             settings === null
                 ? null
                 : html`<div class="sfoot">
-                      <button class="item" type="button" ${act('side.page', settings)}>
+                      <button class="item" type="button" ${marked('settings')} ${act('side.page', settings)}>
                           ${svg('gear', 15)}<span>Settings</span>
                       </button>
                   </div>`

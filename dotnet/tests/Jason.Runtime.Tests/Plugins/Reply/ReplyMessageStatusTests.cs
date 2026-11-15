@@ -41,7 +41,7 @@ public class ReplyMessageStatusTests
         var result = await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct);
 
         Assert.Equal(
-            $$"""{"state":"{{state}}","channel":"email","cancelable":{{(cancelable ? "true" : "false")}},"accepted_for":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"rendered_subject":null,"rendered_body":null,"failure_reason":null,"failure_code":null,"cancelled_at":null}""",
+            $$"""{"state":"{{state}}","channel":"email","cancelable":{{(cancelable ? "true" : "false")}},"accepted_for":"2099-11-03T14:00:00Z","sent_at":null,"message_id":null,"rendered_subject":null,"rendered_body":null,"failure_reason":null,"failure_code":null,"cancelled_at":null,"bounced":null,"bounce":null,"bounced_at":null,"bounce_code":null}""",
             ReplyOperations.Succeeded(Operation, result).ToJsonString());
         Assert.Null(Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome).ExternalIds);
         Assert.Equal([$"direct-send get {Reference}"], account.Calls.Select(call => call.Line));
@@ -68,7 +68,7 @@ public class ReplyMessageStatusTests
 
         Assert.True(
             JsonNode.DeepEquals(
-                JsonNode.Parse("""{"state":"sent","channel":"email","cancelable":false,"accepted_for":null,"sent_at":"2026-11-03T14:00:12Z","message_id":"<msg-7001@example.com>","rendered_subject":"Hello","rendered_body":"<p>Hi Marta</p>","failure_reason":null,"failure_code":null,"cancelled_at":null}"""),
+                JsonNode.Parse("""{"state":"sent","channel":"email","cancelable":false,"accepted_for":null,"sent_at":"2026-11-03T14:00:12Z","message_id":"<msg-7001@example.com>","rendered_subject":"Hello","rendered_body":"<p>Hi Marta</p>","failure_reason":null,"failure_code":null,"cancelled_at":null,"bounced":null,"bounce":null,"bounced_at":null,"bounce_code":null}"""),
                 sent),
             sent.ToJsonString());
         Assert.Equal(
@@ -315,6 +315,29 @@ public class ReplyMessageStatusTests
             ((string?)read["state"], (bool)read["cancelable"]!, (string?)read["failure_reason"], (string?)read["failure_code"]));
     }
 
+    /// <summary>
+    /// An email Reply held and then could not send for a limit it counts — the mailbox's daily limit of direct emails, or
+    /// the account's active contacts for its billing period — is that send's fate: <c>failed</c>, Reply's code passed on as
+    /// Reply gave it. A read opens no block; the mailbox's block is the send's to say, when Reply refuses one.
+    /// </summary>
+    [Theory]
+    [InlineData("contact.dailyLimitReached")]
+    [InlineData("contact.activeContactsLimitReached")]
+    public async Task An_email_that_failed_for_a_limit_reply_counts_is_failed_with_reply_s_code(string code)
+    {
+        using var account = new ReplyAccount().WithDirectSend(Reference, "failed", sendAfter: "2026-11-18T09:00:00Z", failureReason: "Reply's sentence.", failureCode: code);
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var result = await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct);
+        var read = ReplyOperations.Succeeded(Operation, result);
+
+        Assert.Equal(
+            ("failed", "email", false, code),
+            ((string?)read["state"], (string?)read["channel"], (bool)read["cancelable"]!, (string?)read["failure_code"]));
+        Assert.IsType<InvocationOutcome.Succeeded>(result.Outcome);
+    }
+
     /// <summary>A code past the document's bound, or one not written as text, is none given rather than cut.</summary>
     [Theory]
     [InlineData(129)]
@@ -390,6 +413,97 @@ public class ReplyMessageStatusTests
 
         Assert.Equal((null, null, "<p>kept</p>"), ((string?)sent["message_id"], (string?)sent["rendered_subject"], (string?)sent["rendered_body"]));
         Assert.Equal(new string('r', 512), (string?)failed["failure_reason"]);
+    }
+
+    /// <summary>
+    /// Reply's kinds of bounce told in the document's two words: only a dead address is <c>hard</c>; a full mailbox, the
+    /// sender's own limits and the receiving server's judgement of the message are <c>soft</c>, and so is a word this
+    /// package does not know, since a stop comes only from what Reply says outright; Reply's own <c>unknown</c>, and a
+    /// bounce with no word at all, name no kind. Reply's nine words are matched ignoring case and separators, so a word
+    /// respelt never turns a soft bounce into a stop. Reply's own word is carried beside, as given, and so is the moment.
+    /// </summary>
+    [Theory]
+    [InlineData("hard", "hard")]
+    [InlineData("soft", "soft")]
+    [InlineData("mailboxFull", "soft")]
+    [InlineData("gmailApiLimitWarning", "soft")]
+    [InlineData("office365LimitWarning", "soft")]
+    [InlineData("authenticationFailure", "soft")]
+    [InlineData("spamRejection", "soft")]
+    [InlineData("policyViolation", "soft")]
+    [InlineData("unknown", null)]
+    [InlineData("mailbox_full", "soft")]
+    [InlineData("MailboxFull", "soft")]
+    [InlineData("mailbox-full", "soft")]
+    [InlineData("spam_rejection", "soft")]
+    [InlineData("HARD", "hard")]
+    [InlineData("Unknown", null)]
+    [InlineData("somethingLater", "soft")]
+    [InlineData("hard_bounce", "soft")]
+    [InlineData(null, null)]
+    public async Task Reply_s_kind_of_bounce_is_told_in_the_document_s_two_words(string? word, string? bounce)
+    {
+        using var account = new ReplyAccount().WithDirectSend(
+            Reference, "sent", sentAt: "2026-11-03T14:00:12Z", bounced: true, bounceType: word, bouncedAt: "2026-11-03T09:02:40-05:00");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+
+        Assert.Equal(
+            (true, bounce, "2026-11-03T14:02:40Z", word),
+            ((bool?)read["bounced"], (string?)read["bounce"], (string?)read["bounced_at"], (string?)read["bounce_code"]));
+    }
+
+    /// <summary>
+    /// A send Reply says did not bounce says false and nothing more, whatever else the record holds; a reply-cli that prints
+    /// none of the members, and a member in a shape the document does not take, say null: the read cannot tell, which is
+    /// never told as false.
+    /// </summary>
+    [Fact]
+    public async Task A_send_that_did_not_bounce_says_false_and_one_the_read_cannot_tell_says_null()
+    {
+        using var account = new ReplyAccount()
+            .WithDirectSend("email-1001", "sent", bounced: false, bounceType: "hard", bouncedAt: "2026-11-03T14:02:40Z")
+            .WithDirectSend("email-1002", "sent")
+            .WithDirectSend("email-1003", "sent", bounced: JsonValue.Create("yes"), bounceType: "hard");
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        foreach (var (reference, bounced) in new[] { ("email-1001", "false"), ("email-1002", "null"), ("email-1003", "null") })
+        {
+            var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(reference), Ct));
+
+            Assert.Equal(
+                $$"""{"bounced":{{bounced}},"bounce":null,"bounced_at":null,"bounce_code":null}""",
+                new JsonObject
+                {
+                    ["bounced"] = read["bounced"]?.DeepClone(),
+                    ["bounce"] = read["bounce"]?.DeepClone(),
+                    ["bounced_at"] = read["bounced_at"]?.DeepClone(),
+                    ["bounce_code"] = read["bounce_code"]?.DeepClone(),
+                }.ToJsonString());
+        }
+    }
+
+    /// <summary>
+    /// A bounce word the document cannot carry is none given, never cut or cleaned, and the read still succeeds: it says
+    /// the send bounced, and a kind this package cannot tell is <c>soft</c>, which stops nothing. One past the document's
+    /// bound, and a mail server's text, which is not one word and may name an address.
+    /// </summary>
+    [Theory]
+    [InlineData(129, null)]
+    [InlineData(0, "550 5.1.1 <ada@example.com>: user unknown")]
+    [InlineData(0, "mailbox full")]
+    public async Task A_bounce_word_the_document_cannot_carry_whole_is_none_given(int length, string? text)
+    {
+        using var account = new ReplyAccount().WithDirectSend(Reference, "sent", bounced: true, bounceType: text ?? new string('w', length));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
+
+        Assert.Equal((true, "soft", null), ((bool?)read["bounced"], (string?)read["bounce"], (string?)read["bounce_code"]));
     }
 
     /// <summary>The input the runtime composes: the work item that made the send, and the reference it holds for it.</summary>

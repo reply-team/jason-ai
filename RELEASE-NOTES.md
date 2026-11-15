@@ -19,214 +19,230 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.42.0
+# Jason 0.43.0
 
-## What is new since 0.41.0
+## What is new since 0.42.0
 
-This release is about two things: how much of the sending you keep in your own hands, and your own AI changing Jason
-itself. You say, for people who have not answered and for people who have, whether each message waits for your yes or
-goes on its own. Where it goes on its own, a critic reads it first, and a doubt, a text nobody passed, a reply not yet
-judged, a message written in the desktop's chat and the day's limit still bring it to you. Jason now knows which of the
-two kinds a person is, and waits for a reply to be judged before it writes on its own to someone who just wrote; and a
-person who asks not to be written to is never written to again, on any address. And your own AI can now change Jason
-itself: its roles, its plugins, a route for every campaign and what a plugin is granted, from the command line or from
-**Open in**, with a skill and a page that say how.
+This release is about what comes back after a message goes. A bounce is now read as a bounce, not as a reply: it is
+counted in a campaign's activity and on the Dashboard, a notification says how many emails bounced, and where the
+provider says the address itself does not take mail, the address goes on the do-not-contact register so nothing more is
+sent to it; through Reply, that stop waits on releases of Reply and reply-cli not yet out, as the known issues say. A
+reply to a message a campaign sent directly is now that campaign's own, answered by its responder and holding its next
+automatic send like any other reply. A provider's limit on one channel of an account holds that channel alone, and
+Reply's two limits on a direct email hold the mailbox instead of being repeated blind. And the console is one area
+chosen from the sidebar, with no tab strips, and Connect names the MCP servers you already have for Claude Code and
+Codex.
 
-- **Say how sends go, for people who have not answered and for people who have.** Two named preferences,
-  [`send_mode.cold`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.cold.md) and
-  [`send_mode.warm`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/preferences/send_mode.warm.md), each `automatic` or `every_message`, set by a
-  named person with `jason preference set` and read when a send is claimed. A campaign may hold a mode of its own with
-  `jason campaign set-send-mode <campaign-id> --cold … --warm …`, set under a person's name and given back to the
-  installation's preference with `--clear`; naming neither mode, and an archived campaign, are refused. `jason status`
-  says which mode is in force for each kind of contact and where it comes from, and `jason campaign get --human` says
-  the campaign's own. A mode nobody has set reads as `every_message`, so installing this release changes nothing about
-  how your sends go, and every approval names the preferences still unset. No role sets a mode, and a request from
-  inside a run is refused.
-- **Under `automatic`, a message goes without asking you, and some still come to you.** Where the mode for a contact's
-  kind is `automatic` and a named person set it, the claim releases a message, a reply or an invitation under an
-  approval born approved, with the reason `automatic_mode`, decided in the name of the person who set the mode, and
-  writes an `approval_automatic_applied` line. It goes only once the runtime's critic, or a person by name, has passed
-  the text as it now reads. It waits for you instead, under an approval whose reason says why in one sentence, where it
-  was written or edited in the desktop's chat; where its creator or a reviewer doubted it; where the contact has a reply
-  not judged yet, or one judged before Jason recorded what kind of reply it was; where it answers no judged reply, or an
-  automatic reply, a bounce or a request to stop, or a conversation a role marked for you; where nobody passed its text,
-  or it was edited after the pass; and once the campaign has reached the day's ceiling. A standing approval still lets
-  a reply go where it waits only for its contact's reply, for what it answers or for a review, as before; it never lets
-  go one written in the chat, a doubted one or one past the ceiling. A retry reads the contact again, so a reply that
-  landed in the meantime brings the message back to you. See
-  [the send mode at the claim](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#the-send-mode-at-the-claim).
-- **The critic reads each automatic message first.** When a send to a person is created while the mode for its
-  contact's kind is `automatic`, the runtime creates a `critic` work item for it in the same save, naming the send in
-  the reserved context key `send_review`, and the send waits on it. Only that critic's pass, or a person's, lets the send
-  go: a critic somebody queued by hand, or the critic of another send, is shown to you and releases nothing. Nothing is
-  created under `every_message`, for a send that carries its creator's doubt, for one written in the desktop's chat, or
-  where no critic could be launched; a critic that fails or ends without a review leaves the send to you, unless a
-  standing approval covers it. The critic's skill knows that under an automatic mode its pass is the last look.
-- **A daily ceiling of automatic sends.** `Sending:AutomaticMaxPerDay`, 100 unless you set it, from 1 to 1000, is the
-  most sends the automatic mode releases from one campaign in a UTC day, counted since 00:00Z by the releases it wrote,
-  whatever became of each. At the ceiling the next send waits for you with the reason `daily_ceiling`, and its preview
-  says the limit, the count and since when; a standing approval does not let it go either, and a new day does not
-  release it on its own. There is no 0 and no unlimited: to send nothing automatically, set the mode to
-  `every_message`.
-- **The desktop's chat is never a person's word.** Every request the chat's CLI sends carries the header
-  `Jason-Confined`, and the runtime records it on the work, the edits, the verdicts, the reviews and the standing
-  approvals made under it: a send written there always waits for you, a verdict there lifts no opt-out, a review there
-  is no person's pass, and a standing approval set there sets nothing. The chat refuses a campaign's send mode and the
-  send-mode preferences in every access mode and on every platform, refuses `workitem.review`, refuses a denied verb in
-  any letter case, and can neither claim to be a run nor inherit being one.
-- **Send modes in the console.** An approval card asks "How should messages go?" while a mode is unset, for people who
-  have not replied yet and for people who have: **Every message waits for you** or **Goes automatically**, with
-  **Remember this**. Settings sets the choice for every agent, an agent's own Settings tab sets its own, and System says
-  which mode is in force and where it comes from. A doubted message shows on its card who doubted it and why, in their
-  own words, and a held message says why it waits; one that went without asking you says so on its card, with the mode
-  it went under.
-- **Jason knows whether a person has answered.** `jason reply record` takes `--nature`: `person`, `automatic`, `bounce`
-  or `opt_out`, in the runtime's own words. A contact is cold until a verdict that stands judges a reply of theirs, in
-  that campaign, a person's answer; from then on they are warm. A reply nobody has judged yet makes the contact wait,
-  even a warm one, since a new reply may be a request to stop; and where Jason cannot prove a reply judged, because a
-  thread runs past one page or a read did not finish, the contact keeps waiting rather than being taken for warm or
-  cold. See [cold, warm or waiting](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#cold-warm-or-waiting) and
-  [the Runtime API](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/runtime-api.md#reply).
-- **A person who asks not to be written to is stopped on every address.** A verdict whose nature is `opt_out` puts every
-  address and profile the contact has on the do-not-contact register in the same act, by the runtime's own actor, and
-  the claim refuses work about that contact in every campaign, including for a value they gain later. Only a person's
-  own later verdict, under their name and outside any run and the desktop's chat, lifts it; a role's verdict, or a
-  person named from inside a run, never does. A claim that refuses for this says `opted_out`. See
-  [the claim's checks](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/routing.md).
-- **A doubt about a message reaches you before anything can release it.** The one composing a message can say at
-  creation, with `--ask-person` and a code, that you should look at it, and a role that reviews a message can pass it or
-  doubt it with `jason workitem review`, bound to the text it read; an edit voids the review. A send can be created
-  waiting on its review with `--wait-on`. A doubt goes ahead of a standing approval and of the automatic mode, so
-  neither lets a doubted message go without you. Nobody reviews a message they wrote or edited, and a message edited
-  under no name is reviewed only by a person by name. See
-  [doubts about a send](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#doubts-about-a-send).
-- **The quick-start skill reads your accounts before you say go.** It tells you how many mailboxes and LinkedIn
-  accounts are connected through the provider your sends go through, in the same message as the plan, and a read that
-  fails or is slow never holds the question up.
-- **Change Jason itself.** A new entry in the desktop's **Open in** menu, below Copy path, opens your own AI in a new
-  terminal at Jason's role skills folder, with the plugins folder beside it where the AI takes a second folder (Claude
-  Code and Codex), and a short first message that sets the session up for changing Jason. The AI is the one your
-  preference `agent.interactive_host` names, else Claude Code, else Codex. It is offered in your own installation only,
-  never in the demo. The desktop's chat still cannot change Jason's roles, plugins or settings, on purpose: asked to, it
-  now says so and points you to this entry. See
-  [Changing Jason](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/customising.md).
-- **`jason session open --setup`.** The same session from a terminal: `jason session open --setup [--host <word>]` opens
-  your agent host at the role skills folder, adds the plugins folder for Claude Code and Codex, and sends the setup
-  brief as its first input. Every folder comes from what `jason status` reports, not from a remembered path. It starts
-  no runtime and writes nothing of Jason's. Where the `customising-jason` skill is not yet deployed for that host, the
-  answer says so, and the brief asks the AI to install it on your yes before it changes anything. `--setup` cannot be
-  combined with an approval, a question, a campaign, a project, `--here`, `--shell` or `--resume`.
-- **A skill and a page for changing Jason.** The runtime pack gains `customising-jason`, and the documentation gains
-  [Changing Jason](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/customising.md). Both tell your AI, or
-  you, where the parts are, read from `jason status`. They say what a role's skill changes: that role, in every
-  campaign. A standing rule for one campaign, one project or all your work goes in the memory file at that level
-  instead; a fact every role of one campaign shares goes in the campaign's context; how you sound goes in the tone of
-  voice preference. So the AI asks which you mean before it edits a role. They also say how a new role, a plugin, its
-  grants, a secret and a global route are added and when each takes effect, what an update keeps, and what is never
-  touched.
-- **A route for every campaign from the command line.** `jason route set --global
-  [--operation <op> [--channel <channel>]] --plugin <id> --actor human:<you>` and `jason route unset --global
-  [--operation <op> [--channel <channel>]] --actor human:<you>` write the global route, the default for every campaign
-  with no route of its own or one operation's, or one channel of it, into `settings.json` and put it in force in the
-  same act, where before it was a hand edit followed by `jason plugin reload`. Every byte of the file the route does not
-  own is kept: comments, layout, line ends, the other sections and every plugin secret. A reload that refuses the new
-  route puts the file back, and the answer says whether it did. A route is never written while another program changes
-  the file, or where a `JASON_` environment variable overrides it (`setting_shadowed`, naming the variable). It is never
-  written from inside a run either: nothing inside a run changes Jason itself. A write now needs exactly one of
-  `--campaign` and `--global`. See [routing](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/routing.md).
-- **A plugin's grants from the command line.** `jason plugin grant <id>` and `jason plugin revoke <id>` name one entry
-  of one capability, with exactly one of `--http`, `--exec`, `--env`, `--api`, `--files` and `--subscription`. The grant
-  is written under `Plugins:Grants:<id>` through the same writer and put in force in the same act. The verb is stricter
-  than the file: it refuses what the plugin's manifest does not ask for (`grant_unrequested`), except a host where the
-  manifest says `any_granted_host`. It refuses a directory the loader would refuse, and revoking one entry that a `*`
-  grant covers (`grant_held_by_star`). Both verbs need `--actor`, and are refused under `JASON_CONFINED`, by the
-  desktop's chat in every access mode, and inside a run. Where a plugin is granted nothing it asks for, `jason plugin
-  install --human`, `plugin list --human`, `plugin reload --human` and `jason status` now name the command that grants
-  it. See [plugins](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/plugins.md).
-- **Where Jason keeps its parts, in `jason status` and `system.info`.** Both gain a `setup` section, the last one: the
-  role skills folder, the plugins folder, the custom UI folder, the settings file, whether the settings file is also
-  where plugin secrets are kept, and the data directory's layout. `jason status --human` prints them under the checks:
-  - `Role skills:`
-  - `Plugins:`
-  - `Custom UI:`
-  - `Settings:`, with "(where plugin secrets are kept)"
-  - `Layout:`
-  `status` composes the section itself, so it is there when the runtime is not running. `jason doctor` carries both
-  records, with their paths rewritten as it rewrites every path.
-- **The data directory's layout stamp.** A data directory may now carry `layout.json`, which says how it is laid out:
-  `{"layout": N, "written_by": "<version>", "at": "<moment>"}`. This release writes none and moves nothing. It reads the
-  stamp so that a later release can move the parts you edit, and a Jason that does not know that layout refuses to touch
-  the directory rather than recreate an empty plugins folder beside the moved one or lose a secret. The desktop reads
-  the stamp by the same rules, and places the settings file, the plugins and the role skills by it.
+- **Bounces in a campaign's activity and on the Dashboard.** `jason campaign activity` (`campaign.activity`) gains the
+  count `bounced`: the campaign's people a provider's bounce event names in the period, dated by the moment the provider
+  gives, a person who bounced twice counted once, and hard and soft alike, since an event does not always say which. A
+  direct email's bounce names no provider campaign, so, as a reply found through the person does, it counts in every
+  campaign that holds the person through that plugin, one that never wrote to them included. It is a count like the
+  others: `jason campaign list-contacts --activity bounced` lists the people it counts,
+  `jason campaign activity-by-period` carries it, `--count` takes it, a person's why names it, and
+  `campaign activity --human` gains a BOUNCED column. The Dashboard's **Bounce rate** tile, which always showed a dash,
+  now shows the window's bounced people over its contacted ones, with "N bounced" under it. Where nobody was contacted,
+  or more people bounced than were contacted, yesterday's sends bouncing today say, or bounces of another campaign's
+  emails, it shows the dash with the count under it, never a rate above 100%. The campaigns table, the panel's figures, the People tab's Activity chips and the
+  Performance tiles list it beside the other counts. See
+  [a campaign's people, counted](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-campaigns-people-counted).
+- **A notification says how many emails bounced.** A seventh count joins the six a notification carried: "1 email
+  bounced." or "N emails bounced.", each bounce counted once however many campaigns it reached, since the last
+  notification that reached anybody, with no address, name or campaign name. A bounce is a reason to notify by itself,
+  under the rule that already holds a burst to one notification in 30 minutes; there is no new setting. Said alone, it
+  ends "Ask your agent what bounced.", and the `operating-the-installation` skill tells your agent where to look: the
+  journal's bounce lines, each naming its campaign, and the `bounced` count and the people it counts. Every pointer still
+  fits the delivery contract's 400 characters. See
+  [notifications](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/notifications.md).
+- **A hard bounce stops the address.** When a provider's events say that one of a campaign's contacts bounced, the
+  runtime reads, with `message.status`, the campaign's own emails to that person the bounce could be of: sent directly
+  through the plugin the bounce was read at, finished no earlier than 45 days before it, the newest three. A read that
+  finds the email bounced writes `message_bounce_observed` about that send, and where the bounce is hard, or the
+  provider names no kind for it, it puts the contact's email on the do-not-contact register as `system:bounce`, with
+  the line named in the reason, so the claim refuses every later send to that address. A soft bounce, a full mailbox
+  say, stops nothing and is the manager's to weigh; a send said soft and later found hard is said once more, and then
+  stops. A person lifts a stop with `jason suppression remove`, and the same send never puts it back. The reads sit one
+  below `Responder:Priority`, so a person's reply is read before a mail server's notice, and both before the sends
+  while `Responder:Priority` sits above the sends' own. See
+  [inbound sync](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/inbound-sync.md#1-where-it-runs) and
+  [`message.status`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/operations/message.status.md).
+  Through Reply, this waits for releases of Reply and of reply-cli that are not out yet: until then each read answers
+  that it cannot say, and nothing is stopped (Known issues).
+- **A bounce is not an opt-out.** The activity's `opted_out` leaves out the register entries the runtime writes for a
+  bounce, in the count, its moments, the people it lists and the counts over time, so a list with bad addresses does not
+  read as one whose people asked to be left alone. An opt-out, and a person's own `jason suppression add`, count as
+  before.
+- **The bounce line, and two lines of 0.42.0, for subscribers.** The journal forwarder 1.4.0 declares
+  `message_bounce_observed`, and `global_routes_updated` and `plugin_grants_updated`, which 0.42.0 wrote and which can
+  now be subscribed to, so a person can grant all three. The bounce line is no default manager trigger, since the
+  provider's bounce event has already woken the manager; add it to `Manager:Triggers` to be woken by it too.
+- **A reply to a campaign's own direct send is the campaign's own.** A reply Jason finds through the person, rather
+  than through the campaign's own provider campaign, used to be left to the manager, so a campaign that wrote to a
+  person directly never had its responder raised for their answer, could not see them become warm, and did not hold its
+  automatic sends to them while the answer waited. Such a reply is now the campaign's own where the thread already was,
+  or, for a reply that names no provider campaign, on a thread no campaign it was found in holds yet, where that
+  campaign alone had written to the person through that plugin before the reply: a message, an invitation or an answer
+  that succeeded, one the provider took for later included. It raises the campaign's responder, a later move on the thread is recorded on the responder already open,
+  an unjudged one makes the contact wait, and a `person` verdict on it makes them warm. `inbound_reply_observed` says so
+  with `campaign_own: true`. See [inbound sync](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/inbound-sync.md)
+  and [events](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/events.md).
+- **The console: a sidebar and one area.** The console, in the desktop and in a browser tab, is a sidebar and one area
+  beside it that shows one thing at a time: Start, one chat, Dashboard, Needs you, Agents, Activity, Connect, or one of
+  People, Performance, Work items, System, Accounts and Settings. You choose it from the sidebar, its Recent list or
+  Search, and the sidebar marks what is shown. The tab strips are gone: nothing is closed any more, only chosen. A chat
+  you leave and choose again keeps the words you typed and did not send, what arrived meanwhile and the message that
+  waits. Needs you keeps its count in the sidebar. The window opens on Start, and a chat taken away shows Start in its
+  place. See [the desktop](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md) and
+  [the browser UI](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md).
+- **Connect names the MCP servers you already have.** Under Claude Code and under Codex, Connect says in one line which
+  MCP servers you have set up for that program, the first five and then "and N more", and that they work when you open
+  Jason in it from Open in, where it runs with your own settings: Claude Code's user servers, and the servers of Codex's
+  `config.toml` but one set `enabled = false`. Only the names are read; no command, argument, address, header or
+  variable is kept, and a name is never logged, given to the chat or put in a diagnostic bundle. With no
+  server, or a file that cannot be read, Connect says nothing. Open in's Claude Code and Codex entries now read "A new
+  session in a terminal, with your own settings and tools". See
+  [the desktop](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md).
 
-## Fixed since 0.41.0
+## Fixed since 0.42.0
 
-- **`jason import` says when a project folder was not linked.** It exited 0 even when the runtime refused to link a
-  project's folder. It now exits 1, with everything placed and the whole answer printed, names each refused link in
-  `link_refused` with its project, folder, code and message, and keeps the `jason project link` line in `next`.
-- **The install prompt's first line no longer ends in a full stop;** a copy that still has one works as before wherever
-  the agent reads the address as an address.
-- **A settings file with an undecodable `\u` escape no longer escapes the parser.** The runtime used to throw on such a
-  file, both when it was edited live and on a reload. It now treats the file like any other that does not parse: it
-  keeps running with the last good settings, and the reload answers `settings_file_unreadable` with the line and byte
-  where the parser stopped.
-- **The `plugin_package` check of `jason status` names the right folder.** It used to build the folder from the
-  runtime's data directory. It now names the folder that the command it suggests, `jason plugin install`, places a
-  package in.
+- **A bounce notice is no longer taken for a reply.** When an email bounces, the notice lands on its thread at Reply as
+  an inbound message. Reply's change feed flags such a thread, and the Reply package used to read it like any thread the
+  other side moved: it was said as `inbound_reply_observed` and raised a responder to answer a mail server. Through the
+  Reply package 0.16.0, a thread flagged as holding a bounce and none of a reply, an automatic reply or an absence,
+  whose last message is inbound, is one `bounce` event, said as `provider_event_observed`: it wakes the campaign's
+  manager and feeds the count, the notification and the stop above. A thread flagged with a bounce and a reply stays a
+  reply. A bounce on a thread Reply names no contact for is left out, and the package says so in one line of its
+  diagnostics, by the thread's and the sequence's identifiers.
+- **A provider's block on one channel of an account holds that channel alone.** A sender's block used to hold the
+  sender on every channel: a daily limit on a mailbox's email stopped the same account's LinkedIn work, and the first
+  send of any channel that got past cleared it. A sender's block may now name its channel (`channel` in
+  [the block's document](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/block/provider_block.md)):
+  it holds that channel's work, and the sender's block that names none holds every channel with no block of its own.
+  Only a send that gets past, which clears its own channel's block and the one that names none, or a person clears a
+  sender's block. The Reply package 0.16.0 names the channel, `email` or `linkedin`, in every sender's block it reports,
+  since Reply numbers its mailboxes apart from its LinkedIn accounts and mailbox 12 and LinkedIn account 12 are two
+  accounts. A block that names another channel than the one the send was asked to go on is refused, and the attempt
+  ends `permanent`.
+- **Reply's limits on a direct email hold the mailbox instead of being repeated blind.** The mailbox's daily limit
+  (`contact.dailyLimitReached`) and the account's active contacts for its billing period
+  (`contact.activeContactsLimitReached`) reached the package as reply-cli's `rate_limited` and were taken for a busy
+  Reply, so the send was repeated against a limit that would refuse it again. Through the Reply package 0.16.0 both end
+  the attempt `provider_blocked`, on the mailbox's block for the `email` channel, which leaves its LinkedIn work alone.
+  The daily block clears at the next midnight UTC, when Reply counts a new day, or at the wait reply-cli names; the
+  active-contacts block only at such a wait, and it is otherwise tried at the runtime's cadence. A refusal that names a
+  record of the send names a dead one, which is no longer kept as the work item's `send`. `message.status` passes both
+  codes through as the send's `failure_code`. Against a Reply that never answers these codes, nothing changes.
 
-## Upgrading from 0.41.0
+## Upgrading from 0.42.0
 
-Nothing stops and no setting is renamed. Four database migrations run on the first start, after the backup the runtime
-already takes: an index for reading a thread's verdicts, the campaign's own send modes, room for a send's doubt notes,
-and an index for counting a campaign's automatic sends of the day.
+Nothing stops and no setting is renamed. Two database migrations run on the first start, after the backup the runtime
+already takes: a provider block's channel, with the rule of one open block per sender made again over it, and each
+campaign's place in the bounce reads, with an index for a send's bounce lines. Every block already open names no
+channel, and every campaign starts at the journal's last line, so a bounce said before the update asks for no read.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` and
-  `jason ui install` follow: the first brings this release's skills, the critic's among them, and the second the
-  console's send modes.
-- **The packages:** reply 0.15.1, journal-forwarder 1.3.0, ntfy 1.0.3, slack 1.0.0 and telegram 1.0.0, each the same as
-  in 0.41.0, so there is nothing to replace with `jason plugin install`.
-- **Your sends go as before.** Neither send mode is set by an update, so every send to a person still waits for a person
-  until you set one; `jason status` says so.
-- **The desktop's chat:** a send written in the desktop's chat always waits for the person, even where a standing
-  approval would have covered it.
-- **What automatic costs.** Where a send mode is automatic, each message to a contact of that kind costs one more AI run,
-  the critic's, and the critics share the campaign's one slot with its other role work.
-- **An opt-out before this release is held as before,** by the register entries made for it then. The new opt-out lock
-  reads only verdicts that state the nature `opt_out`, which no verdict recorded before this release carries, so an
-  address such a contact gains after the update is refused only once it is put on the register by hand.
-- **A contact whose last reply was judged before this release waits for its nature,** since such a verdict states none,
-  until a verdict that does is recorded on that thread.
+  `jason ui install` follow: the first brings the skills' words on bounces and on a block's channel, the second the
+  console's one area and the Bounce rate tile.
+- **The packages:** reply 0.16.0 (0.15.1 in 0.42.0) and journal-forwarder 1.4.0 (1.3.0); ntfy 1.0.3, slack 1.0.0 and
+  telegram 1.0.0 as in 0.42.0. `jason update apply` replaces an installed package you did not edit; for one you edited,
+  `jason plugin install <id> --replace` puts this release's in its place.
+- **The Reply package 0.16.0 needs Jason 0.43.0,** and its manifest cannot say so: an earlier runtime loads it, refuses
+  a block that names a channel, and the send that met the block ends `permanent` instead of waiting on it. Update the
+  executable and the package together, as `jason update apply` does.
+- **A block open at the update** names no channel, so it still holds its sender on every channel until a send gets past
+  it or a person clears it with `jason block clear`.
+- **The opt-out count** leaves out only the runtime's own bounce entries, which no release before this one wrote, so
+  every entry already on the register counts as before.
+- **For subscribers.** `message_bounce_observed` is a new kind. `inbound_reply_observed` may carry `campaign_own`, and
+  `notification_sent` carries `counts.bounces`, each marked in its document as arriving in 0.43.0. A sender's block a
+  plugin reports may carry `channel`, and `provider_blocked` lines, `jason block list` and `jason block get` carry it,
+  null for a block that names none.
+- **A narrowed `Manager:Triggers`** keeps your choice; `message_bounce_observed` is in no default, so add it if a send's
+  bounce should wake the manager.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the
-  disk image for your machine from this release, or let an installed desktop offer the update.
-- **Update the desktop and Jason together.** This release's desktop carries the chat's refusals of the send modes, and
-  its console the send modes' card and settings; and **Change Jason itself** runs this release's `jason session open
-  --setup`, which an earlier `jason` refuses as a usage error.
-- **The skills:** after `jason update apply`, `jason skills update` deploys the new `customising-jason` skill to every
-  host the skills were deployed to. Until it runs, `jason session open --setup` says that the skill is not deployed, and
-  the setup brief asks your AI to install it on your yes.
-- **No layout stamp means layout 1, and nothing moves.** Every installation so far has no `layout.json`, and every path
-  is the one it was. `jason status` gains one required check, `layout`, which passes on such a directory, and its
-  `setup` the member `layout`. `export.json` gains `layout`, and an archive without it, as every earlier Jason wrote,
-  imports as before.
-- **A newer layout is refused, not followed.** Where `layout.json` names a layout newer than this `jason` runs, or
-  cannot be read, the runtime's start and these verbs refuse before anything is read or written, as `layout_newer` or
-  `layout_unreadable`, exit 1: `jason runtime start` and `restart`, `plugin install` and `reload`, `skills install` and
-  `update`, `ui install`, `update apply` and `rollback`, `export`, `import`, `uninstall --purge-data` and `session open
-  --setup`. `update apply` and `rollback` say to install that newer Jason by running the install line again. `jason
-  status`, `jason doctor` and `jason logs` never refuse on a stamp, since they are how such an installation is looked
-  at. `uninstall --purge-data` keeps a `setup` folder that no stamp says Jason made.
-- **The runtime now writes its own settings file,** in exactly two places: a global route and a plugin's grants. A hand
-  edit is still read as before. A grant written by hand for something the manifest does not ask for still only warns.
-- **A global route or a grant is refused inside a run** as `decided_inside_a_run`, with a sentence of its own: nothing
-  inside a run changes Jason itself. The sentence for an approval or an answer inside a run is unchanged.
-- **Refusals that found nothing routed** used to say "write a global route in the settings file". `route.resolve`,
-  `operation.describe` and the audience reads now name `jason route set --global` instead, and so does `jason status`.
-- **`jason doctor --include-journal`** now also carries the two new journal lines, `global_routes_updated` and
-  `plugin_grants_updated`: the account a global route binds, and a plugin's granted hosts, programs, variable names, API
-  families, directories and journal kinds before and after, never a value. Neither line can be subscribed to for now.
-- **From 0.40.x or earlier,** the notes of each release in between apply as well.
+  disk image for your machine from this release, or let an installed desktop offer the update. This release's desktop
+  carries the console's one area and Connect's list of MCP servers.
+- **Going back:** an apply of 0.42.0 leaves the newer packages where they are. 0.42.0 refuses the forwarder 1.4.0 over
+  the kinds it declares, and a package problem rejects the whole load, so the runtime starts with no plugin loaded at
+  all until the forwarder is put back with `jason plugin install journal-forwarder --replace`, run just after the
+  apply. It loads Reply 0.16.0 and refuses its blocks, as above, so put that back the same way,
+  `jason plugin install reply --replace`. The older executable opens the database as this one migrated it, which it may
+  refuse to do. See
+  [Applying an older release](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/release-and-update.md#applying-an-older-release).
+- **From 0.41.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
+
+Through Reply, the stop after a bounce works only once a release of Reply reports a direct send's bounce on the send's
+own record and a release of reply-cli prints it; neither is out yet. Until then, a bounce is recorded, counted in the
+campaign's activity and on the Dashboard, and notified, and nothing is stopped: each read a bounce asks for answers that
+it cannot say whether the email bounced.
+
+A campaign's bounce reads sit just below its responder and, while `Responder:Priority` stays above the sends' own
+priority, above its sends; a campaign's work is claimed one item a scan, so while many bounces' reads wait, a storm of
+them after a bad list say, that campaign's sends and its manager's check-in wait behind them. Each bounce asks for up to
+three reads.
+
+A bounce stops an address only where it is of an email the campaign itself sent directly through Jason, through the
+plugin the bounce was read at, no earlier than 45 days before the bounce, and only the newest three such sends are
+read, so for a bounce read long after it happened, a span read again say, they may be sends made after it, and the one
+that bounced is not read. A bounce of a sequence's email at the provider, of a mail written by hand or of an older send
+is counted and notified, wakes the campaign's manager, and stops nothing. So is a bounce of a send whose campaign's
+route has since moved to another plugin or account: no route takes a read of the send where it ran.
+
+Through Reply, a bounce on a thread that Reply's change feed also flags as holding a reply, an automatic reply or an
+absence, flags that stay once set, is still read as a move of the thread: it raises the responder against the mail
+server's notice, and it is not counted, notified or stopped as a bounce. A bounce on a thread whose newest message is
+already the account's own when the feed is read is not seen at all.
+
+The address a hard bounce puts on the register is the contact's email when the read ends, since a send's record does not
+keep the address it went to: where the contact's email was changed between the send and the read, the new address is
+the one stopped.
+
+A person whose email a bounce already stopped, and who then asks to be left alone, gets no register entry of their own
+for that address, so the opt-out is not counted for it; the opt-out lock still holds them in every campaign.
+
+No one command lists what bounced: `jason journal list --kind provider_event_observed` lists every provider event, of
+every kind, and `jason campaign list-contacts --activity bounced` the people a campaign's bounces named in a period.
+
+The desktop's chat runs without your own MCP servers: Connect lists them, and they work in a session opened from Open
+in. Connect lists Claude Code's user servers and the servers of Codex's `config.toml` only; the servers of the folder
+Open in opens, of a plugin, and claude.ai connectors or ChatGPT apps are not listed, and work in such a session all the
+same.
+
+A reply Jason finds through the person, not through the campaign's own provider campaign, is a campaign's own only where
+the thread already was, or where that campaign alone wrote to the person through that plugin before it; otherwise it
+neither makes the person warm there nor holds a message to them there. So once two campaigns have written to a person,
+a reply on a thread neither holds as its own raises no responder and holds nothing in either, a person already warm in
+one of them included; both managers are woken by it, and only an opt-out verdict on it stops the sends. Whether a send
+came before the reply is told by two clocks, the runtime's and the provider's, so a send that finished within their
+difference of the reply may be counted on the wrong side of it.
+
+Where two campaigns both already hold a thread as their own, a reply on it raises a responder in each, so the person can
+get two answers.
+
+Through Reply, a thread whose newest message is the responder's own answer is read as a move of the thread, so in a
+campaign whose threads are its own, direct sends' threads now among them, every answer the responder sends costs one
+more read of the thread and one more responder run, which find nothing to answer.
+
+While Reply's active-contacts limit holds a mailbox, every email from it waits, answers to people already in
+conversation included, though Reply may take those. A block's trial is always its oldest waiting send, so while Reply
+keeps refusing that one, the others wait behind it. Raise the limit at Reply, or wait for the billing period to renew.
+
+Reply gives its daily-limit code also to an email held for later while the mailbox already holds as many held emails as
+its daily limit, and Jason cannot tell the two apart: every email from that mailbox, one that would go now included,
+then waits until midnight UTC, or longer while the mailbox holds that many.
+
+Where reply-cli passes one of Reply's two limits on a direct email on as an answer it lost, rather than as a refusal, no
+block is opened: the active-contacts limit then ends the send `provider_call_failed`, permanent, and the daily limit at
+a 429 is repeated as a lost answer is.
+
+Nothing follows a send Reply holds for later to its end: one Reply fails when it goes is known only when somebody reads
+it with `message.status`, which gives Reply's `failure_code`.
+
+A send moved to another sending account while it waited on the first account's block clears that block when it goes
+from the second, though nothing went from the first; the first account's other sends are then tried again, and meet the
+provider's refusal anew where it still stands.
 
 The opt-out lock holds by the contact's record: another contact record of the same person, with a value the opted-out
 record never had, is not covered, since Jason does not merge contacts. The register still holds every value the
@@ -234,9 +250,6 @@ opted-out record had.
 
 Where a provider does not say which person a reply is from, Jason cannot hold an automatic message to that person until
 the reply is judged: until a verdict names them, a first message to them may still go.
-
-A reply this campaign heard of only because another campaign knows the same person neither makes that person warm here
-nor holds a message to them here.
 
 Under `automatic` for people who have replied, a message that is not an answer, such as a follow-up planned before the
 person wrote, can still go to them on its own after their reply was marked for you. Only an answer in that conversation
@@ -347,6 +360,10 @@ Not yet seen on a real machine:
 - Open in with real editors, terminals and file managers, and Continue this chat with a real Claude Code or Codex: the tests run against stand-ins, and the words that continue a conversation were read from each program's own help.
 - The console in a tab of a real browser that the desktop opened: the page's tests run against a stand-in for the desktop's side, and the desktop's against a test client.
 - The demo placed from the release's archive on a Mac and on Linux: the placing has been timed on Windows alone.
+- Connect's list of MCP servers against a real Claude Code's and a real Codex's settings: the tests plant their own
+  files in a temporary home.
+- A bounce on a real Reply account: the package's reading of Reply's change feed is tested against a stand-in for
+  reply-cli.
 
 The AppImage refuses to start on a system that refuses its sandbox, with a sentence naming the deb; that refusal has not been seen either.
 

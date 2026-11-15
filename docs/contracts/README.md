@@ -171,14 +171,14 @@ the operation stays work as well.
 ## The delivery contract
 
 One more document is published here, and it is not a canonical operation:
-[`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked
-for — put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed,
-accounts have events Jason did not read, provider blocks are open or items wait on a launch budget, and where to look. It is a family of
-its own, under `notifications/` rather than `operations/`, read by its own catalog. The operation catalog has no notion
-of kind: a document dropped among the operations would become a provider operation a work item could name, a route
-could carry and a lease would be sized for. So it has none of an operation's level-one fields — no reach, no approval,
-no preflight, no repeat rule — because a delivery is not SDR work, and only its input, its result, three failure codes,
-its timeout and its conformance list. Its fixtures live beside the operations' under
+[`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked for
+— put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed, accounts
+have events Jason did not read, provider blocks are open, items wait on a launch budget or emails bounced, and where to
+look. It is a family of its own, under `notifications/` rather than `operations/`, read by its own catalog. The
+operation catalog has no notion of kind: a document dropped among the operations would become a provider operation a
+work item could name, a route could carry and a lease would be sized for. So it has none of an operation's level-one
+fields — no reach, no approval, no preflight, no repeat rule — because a delivery is not SDR work, and only its input,
+its result, three failure codes, its timeout and its conformance list. Its fixtures live beside the operations' under
 [`fixtures/notification.send/`](fixtures/notification.send) and are run by the same tests.
 
 ## The events contract
@@ -213,9 +213,10 @@ handler pins nothing. Its fixtures live beside the others' under
 A failure of the class `blocked` says the provider refused the call for a reason outside the work item — the account's
 money or plan, an allowance it counts, a credential it no longer accepts, a channel disconnected or paused — and did
 nothing for it. Every published operation declares it under one code, `provider_blocked`, and the failure carries a
-block: what is blocked, the account or one sender; why, from a closed list; where a person clears it; and, where the
-provider says, when it clears by itself; an open block is cleared only by the provider's judgment of the work. The
-block is written once, for every operation, in [`block/provider_block.json`](block/provider_block.json), explained on
+block: what is blocked, the account or one sender, on one channel or on every channel; why, from a closed list; where
+a person clears it; and, where the provider says, when it clears by itself; an open block is cleared only by the
+provider's judgment of the work or by a person, with `block.clear`. The block is written once, for every operation, in
+[`block/provider_block.json`](block/provider_block.json), explained on
 [its page](block/provider_block.md), embedded into the runtime the same way, and its value fixtures under
 [`fixtures/block/`](fixtures/block) are run by the same tests. The events and delivery families declare no block.
 
@@ -425,11 +426,12 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`external_id_diverged`](journal/external_id_diverged.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A provider returned an identifier different from the one already pinned: the pin stands, and the value it returned is recorded beside it. |
 | [`external_id_origin`](journal/external_id_origin.json) | `0.19.0` | yes | campaign, contact, work_item, attempt | A plugin said how the provider came to hold the entity whose identifier was just pinned or diverged: found already there, or created by the attempt. |
 | [`external_id_pinned`](journal/external_id_pinned.json) | `0.1.0` | yes | campaign, contact, work_item, attempt | A provider's identifier for a campaign or a contact was pinned for the first time, by the attempt that returned it, and is never overwritten. |
-| [`global_routes_updated`](journal/global_routes_updated.json) | `0.42.0` | no | plugin | A global route was set or taken away by route.set or route.unset, so an operation, one channel of an operation, or all provider work goes to the plugin it names for every campaign with no route of its own, or no longer does. |
+| [`global_routes_updated`](journal/global_routes_updated.json) | `0.42.0` | yes | plugin | A global route was set or taken away by route.set or route.unset, so an operation, one channel of an operation, or all provider work goes to the plugin it names for every campaign with no route of its own, or no longer does. |
 | [`inbound_reply_observed`](journal/inbound_reply_observed.json) | `0.4.0` | yes | campaign, contact, work_item, attempt, plugin | A conversation thread of a campaign moved because the other side wrote, as the inbound read of the campaign or a read of the account's provider events found it. |
+| [`message_bounce_observed`](journal/message_bounce_observed.json) | `0.43.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it; said once per send, and once more where a bounce first said soft is found to stop. |
 | [`message_sent_observed`](journal/message_sent_observed.json) | `0.22.0` | yes | campaign, contact, work_item, plugin | A read of a send found that the message went out, with the moment it went and the provider's identifier for it. |
 | [`notification_sent`](journal/notification_sent.json) | `0.2.0` | yes | none | A notification pointing at what waits for a person went out, with the counts it carried and what each channel did with it. |
-| [`plugin_grants_updated`](journal/plugin_grants_updated.json) | `0.42.0` | no | plugin | A plugin was granted something its manifest requests, or a grant was taken back, by plugin.grant or plugin.revoke: that capability's grants in force before and after, as the reload froze them. |
+| [`plugin_grants_updated`](journal/plugin_grants_updated.json) | `0.42.0` | yes | plugin | A plugin was granted something its manifest requests, or a grant was taken back, by plugin.grant or plugin.revoke: that capability's grants in force before and after, as the reload froze them. |
 | [`plugins_reloaded`](journal/plugins_reloaded.json) | `0.1.0` | yes | plugin | A load of the plugins was activated, at startup or by a reload: the line names every package then active at its digest, and the routes frozen with it. |
 | [`preference_set`](journal/preference_set.json) | `0.14.0` | yes | none | A person set a named preference, recorded by the value's size and hash and never the value. |
 | [`preference_unset`](journal/preference_unset.json) | `0.14.0` | yes | none | A person took a named preference's value back, recorded by the size and hash of the value it had. |

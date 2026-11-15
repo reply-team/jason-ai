@@ -153,13 +153,31 @@ internal static partial class CampaignPeople
         GROUP BY r.campaign_id, r.contact_id
         """;
 
+    // Every bounce the provider's events said of a person in the campaign, dated by the provider's moment as a reply is:
+    // a backfill writes a bounce from months ago today. Hard or soft is the provider's word, which not every event carries,
+    // so each counts. A line that names nobody is about no membership.
+    private const string Bounces = $$"""
+        SELECT jl.campaign_id, jl.contact_id, julianday(json_extract(jl.new_json, '$.occurred_at')) AS day
+        FROM journal AS jl
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_event_observed' AND jl.contact_id IS NOT NULL
+          AND json_extract(jl.new_json, '$.kind') = 'bounce'
+        """;
+
+    private const string Bounced = $$"""
+        SELECT DISTINCT b.campaign_id, b.contact_id
+        FROM ({{Bounces}}) AS b
+        WHERE b.day >= julianday({1}) AND b.day < julianday({2})
+        """;
+
     // The register forgets an entry once it is lifted; the journal does not. Read from the period's opt-outs, each found
-    // among the channels by its value; whose campaign they are in is the memberships' join to say.
+    // among the channels by its value; whose campaign they are in is the memberships' join to say. An entry the runtime
+    // wrote for a bounce (actor system:bounce) is a dead address, not a person's wish, and is no opt-out.
     private const string OptedOut = """
         SELECT DISTINCT ch.contact_id
         FROM journal AS jl INDEXED BY ix_journal_suppression_added_ts
         JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
         WHERE jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
+          AND NOT (jl.actor_type = 'system' AND jl.actor_id IS 'bounce')
         """;
 
     // Every membership, the removed ones too: Removed counts them, and every other count only the members (Current).
@@ -204,6 +222,8 @@ internal static partial class CampaignPeople
     private static readonly Part FirstReplyPart = new(
         "fr", FirstReply, ByPerson: false, "coalesce(fr.first >= julianday({1}) AND fr.first < julianday({2}), 0) AS has_replied");
 
+    private static readonly Part BouncedPart = new("bo", Bounced, ByPerson: false, "bo.contact_id IS NOT NULL AS has_bounced");
+
     private static readonly Part OptedOutPart = new("oo", OptedOut, ByPerson: true, "oo.contact_id IS NOT NULL AS has_opted_out");
 
     private static readonly Part RemovedPart = new("rm", Removals, ByPerson: false, "rm.contact_id IS NOT NULL AS was_removed");
@@ -229,6 +249,7 @@ internal static partial class CampaignPeople
         new(CampaignActivityFilter.WorkedOn, "f.was_worked_on", [FinishedPart]),
         new(CampaignActivityFilter.Contacted, "f.was_contacted", [FinishedPart]),
         new(CampaignActivityFilter.Replied, "f.has_replied", [FirstReplyPart]),
+        new(CampaignActivityFilter.Bounced, "f.has_bounced", [BouncedPart]),
         new(CampaignActivityFilter.OptedOut, "f.has_opted_out", [OptedOutPart]),
         new(CampaignActivityFilter.Removed, "f.was_removed", [RemovedPart]),
     ];
@@ -248,8 +269,9 @@ internal static partial class CampaignPeople
 
     // When each Activity count's happenings happened, one row each, dated where the list's why dates it: an addition by
     // the membership or the line that added the person back, work by its finish, a reply by the provider's moment of the
-    // first, an opt-out and a removal by their line. Only members are counted, as the counts count memberships. Work is
-    // read by its finish, so a short window reads only the work that finished in it.
+    // first, a bounce by the provider's moment of each, an opt-out and a removal by their line. Only members are counted,
+    // as the counts count memberships. Work is read by its finish, so a short window reads only the work that finished in
+    // it.
     private const string AddedMoments = $$"""
         SELECT cc.campaign_id, cc.contact_id, julianday(cc.added_at) AS day
         FROM campaign_contacts AS cc
@@ -281,12 +303,19 @@ internal static partial class CampaignPeople
         WHERE fr.first >= julianday({1}) AND fr.first < julianday({2})
         """;
 
+    private const string BouncedMoments = $$"""
+        SELECT b.campaign_id, b.contact_id, b.day
+        FROM ({{Bounces}}) AS b
+        WHERE b.day >= julianday({1}) AND b.day < julianday({2})
+        """;
+
     private const string OptedOutMoments = $$"""
         SELECT m.campaign_id, ch.contact_id, julianday(jl.ts) AS day
         FROM journal AS jl INDEXED BY ix_journal_suppression_added_ts
         JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
         JOIN campaign_contacts AS m ON m.contact_id = ch.contact_id
         WHERE m.campaign_id IN {{Asked}} AND jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
+          AND NOT (jl.actor_type = 'system' AND jl.actor_id IS 'bounce')
         """;
 
     private const string RemovedMoments = $$"""
@@ -302,6 +331,7 @@ internal static partial class CampaignPeople
         [CampaignActivityFilter.WorkedOn] = WorkedOnMoments,
         [CampaignActivityFilter.Contacted] = ContactedMoments,
         [CampaignActivityFilter.Replied] = RepliedMoments,
+        [CampaignActivityFilter.Bounced] = BouncedMoments,
         [CampaignActivityFilter.OptedOut] = OptedOutMoments,
         [CampaignActivityFilter.Removed] = RemovedMoments,
     }.ToFrozenDictionary();
@@ -650,4 +680,4 @@ internal sealed record PersonMoment(int ContactId, string PublicId, long Ms);
 internal sealed record SummaryCounts(int CampaignId, int People, int Waiting, int Failed, int Working, int New, int Idle, int Sequence, int Out, int Removed);
 
 /// <summary>One campaign's Activity counts, as <see cref="CampaignPeople.ActivityCountsAsync"/> reads them.</summary>
-internal sealed record ActivityCounts(int CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
+internal sealed record ActivityCounts(int CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int Bounced, int OptedOut, int Removed);

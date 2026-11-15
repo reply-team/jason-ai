@@ -25,6 +25,7 @@ public class ActivityByPeriodEndpointTests
     [InlineData("worked_on")]
     [InlineData("contacted")]
     [InlineData("replied")]
+    [InlineData("bounced")]
     [InlineData("opted_out")]
     [InlineData("removed")]
     public async Task Each_bucket_is_the_count_with_the_bucket_as_its_period(string count)
@@ -47,8 +48,8 @@ public class ActivityByPeriodEndpointTests
                 new { CampaignIds = both, Since = Instant(bucket.Start.UtcDateTime), Until = Instant(bucket.End.UtcDateTime) },
                 Ct);
             var total = activity.Total;
-            int[] counts = [total.People, total.Added, total.WorkedOn, total.Contacted, total.Replied, total.OptedOut, total.Removed];
-            string[] names = ["people", "added", "worked_on", "contacted", "replied", "opted_out", "removed"];
+            int[] counts = [total.People, total.Added, total.WorkedOn, total.Contacted, total.Replied, total.Bounced, total.OptedOut, total.Removed];
+            string[] names = ["people", "added", "worked_on", "contacted", "replied", "bounced", "opted_out", "removed"];
             Assert.Equal(counts[Array.IndexOf(names, count)], bucket.Value);
         }
     }
@@ -60,14 +61,15 @@ public class ActivityByPeriodEndpointTests
         await CampaignWorld.WriteAsync(api, Ct);
 
         // 11: Uma opted out. 12: Ada added, Ivy and Tess contacted, Rae replied. 13: Ben, Pia, Uma and Wes worked on,
-        // Oli removed. 14: Cleo and Lou worked on, Quinn added back, Vic contacted, Oli replied. 15: Kit opted out.
+        // Oli removed, Max and Ned bounced. 14: Cleo and Lou worked on, Quinn added back, Vic contacted, Oli replied. 15:
+        // Kit opted out.
         var series = await SeriesAsync(api, "people");
         Assert.Equal((ActivityPeriod.Day, "UTC"), (series.Period, series.Zone));
         Assert.Equal(
             [new DateTimeOffset(CampaignWorld.Since), new DateTimeOffset(CampaignWorld.Since.AddDays(7))],
             [series.Buckets[0].Start, series.Buckets[^1].Start]);
         Assert.Equal(new DateTimeOffset(CampaignWorld.Until), series.Buckets[^1].End);
-        Assert.Equal([0, 0, 1, 4, 5, 5, 1, 0], series.Buckets.Select(bucket => bucket.Value));
+        Assert.Equal([0, 0, 1, 4, 7, 5, 1, 0], series.Buckets.Select(bucket => bucket.Value));
 
         // A browser on a machine set to UTC names it so, or Etc/UTC; either is the same day as no zone at all, on every system.
         foreach (var name in new[] { "UTC", "Etc/UTC" })
@@ -78,10 +80,10 @@ public class ActivityByPeriodEndpointTests
         }
 
         // Fourteen hours ahead of UTC, what happened at ten in the morning UTC happened just after the next local midnight;
-        // Ada's addition at nine, and the replies at eight, stay on their own local day.
+        // Ada's addition at nine, the replies at eight and the bounces at seven stay on their own local day.
         var ahead = await SeriesAsync(api, "people", zone: "Pacific/Kiritimati");
         Assert.Equal("Pacific/Kiritimati", ahead.Zone);
-        Assert.Equal([0, 0, 0, 3, 2, 5, 4, 1], ahead.Buckets.Select(bucket => bucket.Value));
+        Assert.Equal([0, 0, 0, 3, 4, 5, 4, 1], ahead.Buckets.Select(bucket => bucket.Value));
     }
 
     [Fact]

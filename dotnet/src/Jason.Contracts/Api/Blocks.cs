@@ -2,7 +2,7 @@ namespace Jason.Contracts.Api;
 
 /// <summary>
 /// One block a provider said it holds, as a person and the UI read it: what is blocked — the account as a whole or one
-/// sending account under it — why, where a person goes to clear it, how long and how often it has held, the work it
+/// sending account under it, on one channel or on every channel — why, where a person goes to clear it, how long and how often it has held, the work it
 /// holds now, its next trial, and, once cleared, when and by whom: the attempt that got past it, or the person who said
 /// the cause is gone. The link travels here and in a held item's error, and nowhere else.
 /// </summary>
@@ -14,6 +14,9 @@ public sealed record ProviderBlockDto(
 
     /// <summary>The provider's identifier of the sending account; null for a block of the account.</summary>
     string? SenderExternalId,
+
+    /// <summary>The channel a sender's block holds the sender on; null where it holds the sender on every channel, and for a block of the account.</summary>
+    string? Channel,
     string Reason,
     string? Link,
     DateTimeOffset? ClearsAt,

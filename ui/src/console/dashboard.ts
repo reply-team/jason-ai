@@ -88,7 +88,7 @@ async function reloadTrends(): Promise<void> {
                 ...archivedLeftOut,
                 ...window,
             });
-            return { contacted: read.total.contacted, replied: read.total.replied };
+            return { contacted: read.total.contacted, replied: read.total.replied, bounced: read.total.bounced };
         } catch {
             return null;
         }
@@ -125,6 +125,10 @@ async function keptTrendsChoice(): Promise<boolean> {
 }
 /** How many Dashboard panels are open: the journal's reload reads the counts again only for one that is. */
 let open = 0;
+/** Whether the open Dashboard is the one thing the area shows; out of sight it reads nothing. */
+let inSight = false;
+/** The journal said something changed while the Dashboard was out of sight: it reads its counts again when shown. */
+let missed = false;
 
 /** The period's counts and replies; a late answer is dropped, and a failed read leaves its numbers unknown. */
 export async function reload(withTrends = true): Promise<void> {
@@ -146,9 +150,12 @@ export async function reload(withTrends = true): Promise<void> {
             });
             if (mine !== generation) return;
             activity.value = {
-                total: { contacted: read.total.contacted, replied: read.total.replied },
+                total: { contacted: read.total.contacted, replied: read.total.replied, bounced: read.total.bounced },
                 byCampaign: Object.fromEntries(
-                    read.campaigns.map((row) => [row.campaign_id, { contacted: row.contacted, replied: row.replied }]),
+                    read.campaigns.map((row) => [
+                        row.campaign_id,
+                        { contacted: row.contacted, replied: row.replied, bounced: row.bounced },
+                    ]),
                 ),
             };
         } catch {
@@ -173,6 +180,7 @@ export async function reload(withTrends = true): Promise<void> {
 /** Called by the panel as it opens and closes. */
 export function watching(on: boolean): void {
     open = Math.max(0, open + (on ? 1 : -1));
+    missed = false;
     if (on) {
         period.value = defaultDashboardPeriod;
         custom.value = { from: '', to: '' };
@@ -191,9 +199,21 @@ export function watching(on: boolean): void {
     }
 }
 
-/** The journal said something changed: the counts are read again when a Dashboard is open. */
+/** Called by the panel as the area shows it and as it shows something else. */
+export function sighted(on: boolean): void {
+    inSight = on;
+    if (on && missed) {
+        missed = false;
+        if (open > 0) void reload();
+    }
+}
+
+/** The journal said something changed: the counts are read again by a Dashboard in sight, and by one out of sight once
+ *  it is shown again. */
 export function reloadIfOpen(): void {
-    if (open > 0) void reload();
+    if (open === 0) return;
+    if (inSight) void reload();
+    else missed = true;
 }
 
 define('dash.period', (_args, element) => {
@@ -364,8 +384,9 @@ function tiles(): Html {
                     <span class="label">${tile.label}</span>
                     ${
                         tile.value === null
-                            ? html`<b class="dash-none" aria-label="${t('dash.tile.none')}">${t('dash.dash')}</b
-                                  ><span class="rel">${t('dash.tile.none')}</span>`
+                            ? html`<b class="dash-none" aria-label="${tile.none ?? t('dash.tile.none')}"
+                                      >${t('dash.dash')}</b
+                                  ><span class="rel">${tile.sub ?? t('dash.tile.none')}</span>`
                             : html`<b>${tile.value}</b
                                   >${trendView(tile.trend ?? null)}${tile.sub === null ? null : html`<span class="rel">${tile.sub}</span>`}`
                     }

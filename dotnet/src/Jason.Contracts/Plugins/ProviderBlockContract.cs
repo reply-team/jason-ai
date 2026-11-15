@@ -32,6 +32,13 @@ public sealed record ProviderBlockContract(string Id, int Version, string Summar
     /// </summary>
     public const string SenderPointer = "/args/sender/external_id";
 
+    /// <summary>
+    /// Where an operation's input names the channel it consumes, beside the sender: the one place a sender's block that
+    /// names a channel is matched against an item. Every operation that takes a sender names the channel at this pointer,
+    /// and the tests hold that over the operation documents too.
+    /// </summary>
+    public const string ChannelPointer = "/args/channel";
+
     private const string ResourceName = "Jason.Contracts.Blocks.provider_block.json";
     private const string Contract = "the provider block";
 

@@ -30,6 +30,13 @@ public sealed class ProviderBlock
     /// <summary>The provider's identifier of the sending account; present exactly when the scope is <c>sender</c>.</summary>
     public string? SenderExternalId { get; set; }
 
+    /// <summary>
+    /// The channel a sender's block holds the sender on, as the operation's arguments name the channel they consume; null
+    /// where it holds the sender on every channel — every block opened before blocks named one, and every block of a plugin
+    /// that names none — and always null for the account's block.
+    /// </summary>
+    public string? Channel { get; set; }
+
     /// <summary>Why, as the contract's word, from the latest answer that named the block.</summary>
     public required string Reason { get; set; }
 

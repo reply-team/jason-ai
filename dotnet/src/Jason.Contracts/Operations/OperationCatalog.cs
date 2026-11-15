@@ -72,6 +72,17 @@ public static class OperationCatalog
             All.Where(contract => HeldByProviderBlock.Contains(contract.Id) && string.Equals(contract.Reach.Value, ActReach, StringComparison.Ordinal)).Select(contract => contract.Id),
             StringComparer.Ordinal);
 
+    /// <summary>
+    /// The operations that write to a person: those whose <c>reach</c> is <c>act</c> without a condition — a message, an
+    /// invitation, an answer in a thread. An act whose reach is conditional (a campaign's activation, an enrolment) writes
+    /// to nobody by itself: what reaches a person is the provider's sequence, whose replies a campaign hears by its own pin.
+    /// Read once, as the documents are.
+    /// </summary>
+    public static IReadOnlySet<string> WritesToAPerson { get; } =
+        new HashSet<string>(
+            All.Where(contract => string.Equals(contract.Reach.Value, ActReach, StringComparison.Ordinal) && !contract.Reach.Conditional).Select(contract => contract.Id),
+            StringComparer.Ordinal);
+
     /// <summary>The contract for one operation, or null when nothing of that name is published.</summary>
     public static OperationContract? Find(string operation)
     {

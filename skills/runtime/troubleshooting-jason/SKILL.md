@@ -162,15 +162,16 @@ the person adds it, with `read_file(<harness folder>)` beside it for the memory 
 jason suppression list --human
 ```
 
-**What it means.** That channel value is on the do-not-contact register, so this campaign does not reach them
-there. Nothing was sent and nothing was attempted at the provider — the register is consulted before any of
+**What it means.** That channel value is on the do-not-contact register — a person's or an opt-out's wish, or
+the runtime's stop after a hard bounce (`system:bounce`, whose reason names the bounce line) — so this campaign does
+not reach them there. Nothing was sent and nothing was attempted at the provider — the register is consulted before any of
 that — and this is the register **working**. It is final by design: the item is finished, and a second item
 for the same person on the same value would stop in exactly the same place.
 
 **The repair is not yours.** Lifting a suppression is `jason suppression remove`, which names the person who
 lifts it with `--actor human:<Name>`, and it is a person's act on another person's behalf — somebody asked not to
-be contacted, and a session that lifted that to get its work moving would be the one failure in this whole
-document that reaches a real person. Say who is suppressed and on which value, and let the person decide. If the
+be contacted, or the address does not take mail, and a session that lifted that to get its work moving would be the
+one failure in this whole document that reaches a real person. Do not lift either. Say who is suppressed and on which value, and let the person decide. If the
 campaign should reach them somewhere else, that is new work on a channel they have.
 
 ### 6. A transient failure
@@ -216,7 +217,8 @@ in that shape.
 **A failure classed `blocked` is final too, and its repair is elsewhere.** Its code is `provider_blocked`: the
 provider refused the account, or one sender under it, rather than this item's arguments — money or a plan, an
 allowance it counts, a key it no longer accepts, a channel disconnected or paused — and did nothing for the call.
-`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender), why
+`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender, with the
+`channel` it is blocked on where the block names one: a mailbox and a LinkedIn account may share a number), why
 (`reason`), where a person goes to clear it (`link`), and, where the provider said, when it may clear by itself
 (`clears_at`). Read those to the person. The repair is theirs, at the provider — topping up, reconnecting, renewing a
 key, or waiting for an allowance to renew — and never an edit of the item; once the block has cleared, the work is

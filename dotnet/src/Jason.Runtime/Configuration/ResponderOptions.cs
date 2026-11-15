@@ -27,7 +27,9 @@ public sealed class ResponderOptions
     /// <summary>
     /// Where the read of the thread and the responder sit in the queue: above ordinary work and a check-in, so a reply is
     /// answered ahead of the campaign's queued sends, and below the urgent work the skills raise. The inbound read of
-    /// conversations sits ten above it, so detecting a reply never waits behind answering one.
+    /// conversations sits ten above it, so detecting a reply never waits behind answering one. The bounce step's reads of
+    /// sends sit one below it, so a reply's read is claimed before a mail server's notice, and both before the sends while
+    /// this sits above the sends' own.
     /// </summary>
     public int Priority { get; set; } = 50;
 

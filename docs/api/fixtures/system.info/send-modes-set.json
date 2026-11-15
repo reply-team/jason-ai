@@ -49,7 +49,9 @@
         "20261114031653_JournalVerdictsByThread",
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
-        "20261114084851_ApprovalsAutomaticByDay"
+        "20261114084851_ApprovalsAutomaticByDay",
+        "20261114190252_ProviderBlockChannels",
+        "20261114215710_BounceStep"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -89,7 +91,9 @@
         "20261114031653_JournalVerdictsByThread",
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
-        "20261114084851_ApprovalsAutomaticByDay"
+        "20261114084851_ApprovalsAutomaticByDay",
+        "20261114190252_ProviderBlockChannels",
+        "20261114215710_BounceStep"
       ],
       "backup_file": null
     },
@@ -159,7 +163,7 @@
         "id": "journal-forwarder",
         "state": "not_installed",
         "released": {
-          "version": "1.3.0",
+          "version": "1.4.0",
           "digest": "sha256:recorded-1"
         },
         "installed": null
@@ -177,7 +181,7 @@
         "id": "reply",
         "state": "not_installed",
         "released": {
-          "version": "0.15.1",
+          "version": "0.16.0",
           "digest": "sha256:recorded-3"
         },
         "installed": null

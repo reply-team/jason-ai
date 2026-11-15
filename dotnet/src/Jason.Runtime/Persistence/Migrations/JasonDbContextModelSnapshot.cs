@@ -500,6 +500,12 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("audience_watermark");
 
+                    b.Property<int>("BounceWatermark")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("bounce_watermark");
+
                     b.Property<string>("Context")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1581,6 +1587,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasDatabaseName("ix_journal_audience_reserve_recovered_campaign_id")
                         .HasFilter("kind = 'audience_reserve_recovered'");
 
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_bounces")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_bounces")
+                        .HasFilter("kind = 'message_bounce_observed'");
+
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_events")
                         .IsUnique()
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
@@ -1760,6 +1771,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("binding_identity");
 
+                    b.Property<string>("Channel")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("channel");
+
                     b.Property<DateTime?>("ClearedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("cleared_at");
@@ -1873,11 +1889,16 @@ namespace Jason.Runtime.Persistence.Migrations
 
                     b.HasIndex("PluginId", "BindingIdentity", "SenderExternalId")
                         .IsUnique()
-                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
-                        .HasFilter("status = 'open' AND scope = 'sender'");
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender_on_every_channel")
+                        .HasFilter("status = 'open' AND scope = 'sender' AND channel IS NULL");
 
                     b.HasIndex("Status", "OpenedAt", "PublicId")
                         .HasDatabaseName("ix_provider_blocks_status_opened_at_public_id");
+
+                    b.HasIndex("PluginId", "BindingIdentity", "SenderExternalId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_blocks_one_open_per_sender")
+                        .HasFilter("status = 'open' AND scope = 'sender'");
 
                     b.ToTable("provider_blocks", t =>
                         {

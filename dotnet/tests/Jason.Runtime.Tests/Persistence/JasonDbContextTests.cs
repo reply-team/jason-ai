@@ -28,7 +28,7 @@ public class JasonDbContextTests
              "manager_event_watermark", "manager_review_anchor", "manager_review_seconds", "idempotency_digest", "idempotency_key",
              "inbound_failures", "inbound_offset", "inbound_sync_item_id", "inbound_synced_at", "inbound_watermark", "events_from",
              "project_id", "folder_path", "responder_watermark", "audience_threshold", "audience_watermark", "send_mode_cold",
-             "send_mode_cold_set_by", "send_mode_warm", "send_mode_warm_set_by"],
+             "send_mode_cold_set_by", "send_mode_warm", "send_mode_warm_set_by", "bounce_watermark"],
             Names(connection, "SELECT name FROM pragma_table_info('campaigns')"));
     }
 

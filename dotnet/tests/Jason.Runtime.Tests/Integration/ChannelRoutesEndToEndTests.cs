@@ -85,7 +85,8 @@ public class ChannelRoutesEndToEndTests
         Assert.Equal([Feed, linkedin], CallsAt(profile));
 
         // 2. The person answers on each channel. Each account's next read of its events finds its thread moved by the
-        //    other side, about the person its send pinned, and the campaign is told once per thread, by that person.
+        //    other side, about the person its send pinned, and the campaign is told once per thread, by that person; the
+        //    campaign is the only one that wrote to the person through each plugin, so each line is marked as its own.
         host.Clock.Advance(TimeSpan.FromMinutes(20));
         WriteEvents(mailbox, Reply(MailerThread, MailerContact, "email", host.Clock.Now.AddMinutes(-5)));
         WriteEvents(profile, Reply(SocialThread, SocialContact, "linkedin", host.Clock.Now.AddMinutes(-4)));
@@ -93,8 +94,8 @@ public class ChannelRoutesEndToEndTests
 
         var seen = await SeenAsync(host, campaign);
         Assert.Equal(
-            [(Mailer, MailerThread, "email", "contact_pin"), (Social, SocialThread, "linkedin", "contact_pin")],
-            seen.Select(line => ((string)line["plugin"]!, (string)line["thread"]!, (string)line["channel"]!, (string)line["attributed_by"]!))
+            [(Mailer, MailerThread, "email", "contact_pin", (bool?)true), (Social, SocialThread, "linkedin", "contact_pin", (bool?)true)],
+            seen.Select(line => ((string)line["plugin"]!, (string)line["thread"]!, (string)line["channel"]!, (string)line["attributed_by"]!, (bool?)line["campaign_own"]))
                 .OrderBy(line => line.Item1, StringComparer.Ordinal));
         Assert.All(seen, line => Assert.Equal(contact, (string?)line["contact_id"]));
 

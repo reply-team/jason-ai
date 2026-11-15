@@ -11,16 +11,20 @@ reply means, and what to do about it, is the responder's first and the manager's
 
 ## 1. Where it runs
 
-Each scan runs in twelve short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**,
-**summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
+Each scan runs in thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**,
+**bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe** ([work execution](work-execution.md)). Sync comes before the respond step and the
 summon, so a reply it says wakes the responder and the manager in the same scan, and before the claim, so a read it
 starts can be claimed in the same scan. Events, before it, hands a read of an account's events to a reader that runs off the scan
 ([events](events.md) §5).
 
 **Respond** reads each active campaign's `inbound_reply_observed` lines above a watermark of its own, whichever writer
 said them — this read or the events store, which say a move under one key — at most 100 a campaign a scan, each in one
-short transaction with the watermark's guarded move. For a line about a thread the campaign holds by its own pin — every
-line this read says, and an events line whose `attributed_by` is `campaign_pin` — it queues two work items:
+short transaction with the watermark's guarded move. For a line about a thread that is the campaign's own — every line
+this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
+and that says `campaign_own`, because the thread was already the campaign's own or, where no campaign the reply was
+found in held it yet and the reply named no provider campaign, the campaign was the only one, of those not archived,
+that had written to the person through that plugin before the reply ([events](events.md) §4) — it queues two work
+items:
 
 - a read of the thread, a `conversation.get` `provider_op` whose input is the thread's identifier, a page of 20 and
   offset 0, made where the thread was seen: at the plugin the reply was read at, when a route names it, resolved as the
@@ -56,17 +60,47 @@ item. A move after it
 ended makes a new pair. A responder is never given an `idempotency_key`.
 
 The step creates nothing, and still moves past the line, when `Responder:OnReply` is false; for a line older than
-`Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through a person the campaign shares rather than
-its own pin, which the manager reads across campaigns before anyone answers (`thread_not_campaign_own`); and when no
-responder could be launched — no execution profile anywhere and no entry command for the role or by default, the case
-the claim would end `role_not_launchable` (`responder_not_configured`). Each code is logged once per campaign, by id and
-code. A line whose write the database refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its
-code, and passed over alone; any other failure — a write that failed for another reason included — stops that campaign
-for this scan, and the next scan tries again. A paused campaign is not read, so its lines wait for it; a campaign with
-no new line has its watermark moved to its own last line, and a line said in another campaign or by the installation
-writes nothing for it.
+`Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through the person rather than the campaign's own
+pin, and not marked `campaign_own`: the person may be another campaign's too, so the manager reads across campaigns
+before anyone answers (`thread_not_campaign_own`); and when no responder could be launched — no execution profile
+anywhere and no entry command for the role or by default, the case the claim would end `role_not_launchable`
+(`responder_not_configured`). Each code is logged once per campaign, by id and code. A line whose write the database
+refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its code, and passed over alone; any
+other failure — a write that failed for another reason included — stops that campaign for this scan, and the next scan
+tries again. A paused campaign is not read, so its lines wait for it; a campaign with no new line has its watermark
+moved to its own last line, and a line said in another campaign or by the installation writes nothing for it.
 
-It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
+**Bounce**, right after it, reads each active campaign's `provider_event_observed` lines above a watermark of its own,
+at most 100 a campaign a scan, each in one short transaction with the watermark's guarded move, and acts on those whose
+kind is `bounce`. For each such line it queues a read of each of the campaign's own sends the bounce could be of: the
+campaign's emails to the contact the line names, sent through the plugin the bounce was read at, that succeeded with a
+reference, finished no earlier than 45 days before the bounce and of which no bounce that stops has been said, newest first, at most 3
+of them; one finished after the bounce's moment is not left out, since that moment is another clock's and a read of a
+send that did not bounce decides nothing. A read is a `message.status` `provider_op` whose input names the send and
+nothing else, created by the dispatcher as root work at one below `Responder:Priority`, so a person's reply is read
+before a mail server's notice and both before the sends while `Responder:Priority` sits above the sends' own, and
+never a second one for a send that already has an open
+read the runtime made. Each read decides alone, when it ends: a read that finds the send bounced says
+`message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
+do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
+itself writes no line and no register entry, and a bounce of a send Jason did not make — a sequence's own email at the
+provider, a mail written by hand, a send older than the window — stops nothing: where the campaign has no send it could
+be of, it asks for no read, and a read of a send that did not bounce decides nothing; a campaign with no send the bounce
+could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each logged once per
+campaign by id and code; a line the step passes is not read again, and a later bounce of the same person asks again:
+
+| Code | Why |
+|---|---|
+| `bounce_names_no_contact` | The line names no contact the installation holds, so no send of the campaign can be found for it. |
+| `bounce_read_not_routed` | No route active now takes a read of the send where it ran, its plugin and its account, so the claim would refuse one. |
+
+A line the database or a domain rule refuses is passed over alone, and any other failure stops that campaign for the
+scan, as in the respond step. While a campaign's bounce reads wait, its sends and its manager's check-in wait behind
+them. A paused campaign's bounces wait, and so do the reads they ask for: the step does not
+read a paused campaign, and its watermark holds until the campaign is live again. The bounce step runs whatever
+`Inbound:Enabled` says, since its lines come from the events' read, not from sync.
+
+Sync runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
 A runtime with no dispatch loop reads nothing.
 

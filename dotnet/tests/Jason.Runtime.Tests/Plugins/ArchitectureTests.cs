@@ -22,6 +22,19 @@ public class ArchitectureTests
         Assert.DoesNotContain("Jason.PluginHost", referenced, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The runtime's own tests run no plugin JavaScript in their process either: a test of a package's code beside the engine
+    /// that runs it belongs to the plugin host's tests, so this assembly never comes to need the engine it proves absent.
+    /// </summary>
+    [Fact]
+    public void The_runtime_s_tests_run_no_plugin_in_their_own_process()
+    {
+        var referenced = References(typeof(ArchitectureTests).Assembly);
+
+        Assert.DoesNotContain("Jint", referenced, StringComparer.Ordinal);
+        Assert.DoesNotContain("Acornima", referenced, StringComparer.Ordinal);
+    }
+
     [Fact]
     [Critical(Family.B2, "the contracts stay clean")]
     public void The_contracts_carry_the_protocol_and_no_dependency_of_either_side()
