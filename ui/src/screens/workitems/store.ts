@@ -12,9 +12,11 @@ import type {
     WorkItemCount,
     WorkItemSummary,
 } from '../../api/types';
+import { approveWhole, fillApprovals, wholeReads } from '../../console/waiting';
 import { mergePage } from '../../lists/paging';
 import { displayName } from '../../pickers/search';
 import type { Tab, WorkItemFilters } from '../../router';
+import { attentionStore } from '../attention/store';
 
 export type View = { tab: Tab; filters: WorkItemFilters };
 
@@ -194,6 +196,15 @@ export const history = signal<JournalEntry[]>([]);
 export const historyCursor = signal<string | null>(null);
 /** The approval a waiting item waits for, so the panel can link to it. */
 export const approvalId = signal<string | null>(null);
+/**
+ * The approval the open item waits for, read whole by the gate every place that approves shares (`console/waiting.ts`):
+ * the panel's own holder lists that one approval, as `approval.list` gives it for the item, and the gate reads it whole
+ * once, keeps what the runtime said when it could not, and approves it only as it was read. Its `load` is never called:
+ * what this holder lists is the open item's, never what waits everywhere.
+ */
+export const reads = wholeReads('workitems', attentionStore());
+/** True while the press of Approve checks the message against its work item, before it approves. */
+export const checking = signal(false);
 /** A line about the open item itself: it changed under the person while they looked at it. */
 export const panelNotice = signal<string | null>(null);
 export const busy = signal(false);
@@ -214,19 +225,33 @@ export async function openItem(api: Api, id: string): Promise<void> {
         history.value = entries.items;
         historyCursor.value = entries.next_cursor;
         approvalId.value = null;
+        let waitingFor: ApprovalSummary[] = [];
         if (item.status === 'awaiting_approval') {
             const waiting = await api.call<Page<ApprovalSummary>>('approval.list', {
                 work_item_id: id,
                 statuses: ['pending'],
             });
-            if (mine === opened) approvalId.value = waiting.items[0]?.id ?? null;
+            if (mine !== opened) return;
+            waitingFor = waiting.items.slice(0, 1);
+            approvalId.value = waitingFor[0]?.id ?? null;
         }
+        list(api, waitingFor);
     } catch (error) {
         if (mine === opened) {
             detail.value = null;
+            list(api, []);
             fail(error);
         }
     }
+}
+
+/**
+ * What the panel's holder lists: the approval the open item waits for, or nothing. The gate reads it whole if it has
+ * not, a few rows at a time as it reads every holder's, and lets go of what it kept for an approval no longer listed.
+ */
+function list(api: Api, waitingFor: ApprovalSummary[]): void {
+    reads.store.approvals.value = waitingFor;
+    void fillApprovals(api, reads);
 }
 
 export function closeItem(): void {
@@ -235,6 +260,7 @@ export function closeItem(): void {
     history.value = [];
     historyCursor.value = null;
     approvalId.value = null;
+    reads.store.approvals.value = [];
     panelNotice.value = null;
 }
 
@@ -304,8 +330,26 @@ async function decide(api: Api, view: View, id: string, call: () => Promise<unkn
     }
 }
 
-export function approve(api: Api, view: View, id: string, approval: string): Promise<void> {
-    return decide(api, view, id, () => api.call('approval.approve', { approval_id: approval }, 'write'));
+/**
+ * Approves only through the shared gate: nothing until the approval has been read whole, and a message only once its
+ * work item, read again at the press, still holds what the approval was asked about. A press that approved nothing
+ * reads the item again and says why on the panel, in the words the gate gives.
+ */
+export async function approve(api: Api, view: View, id: string, approval: string): Promise<void> {
+    if (checking.value) return;
+    const why = await approveWhole(
+        api,
+        reads.approvals.value[approval],
+        () =>
+            decide(api, view, id, () => api.call('approval.approve', { approval_id: approval }, 'write')).then(
+                () => true,
+            ),
+        (on) => (checking.value = on),
+    );
+    if (why === null) return;
+    await openItem(api, id);
+    panelNotice.value = why;
+    void load(api, view);
 }
 
 export function reject(api: Api, view: View, id: string, approval: string, reason?: string): Promise<void> {

@@ -1,0 +1,14 @@
+{
+  "operation": "workitem.count",
+  "case": "panel-doubted-planned",
+  "request": {
+    "status": [
+      "created"
+    ],
+    "order": "due"
+  },
+  "status": 200,
+  "response": {
+    "total": 0
+  }
+}

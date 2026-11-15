@@ -375,6 +375,8 @@ public class RecordedExchangesTests
         await HistoryAsync("by-succeeded-item", seed.Succeeded);
         await HistoryAsync("by-awaiting-item", seed.Awaiting);
         await HistoryAsync("by-expired-item", seed.Expired);
+        // The panel reads the approval whole before its Approve is live, the same one the list gave it for the item.
+        Assert.Equal(seed.Awaiting, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "by-work-item", new { approval_id = waitingFor.Id }, Ct)).WorkItemId);
         Assert.Equal(ApprovalStatus.Rejected, (await api.RecordAsync<ApprovalDto>(Operations.ApprovalReject, "from-work-item", new { approval_id = waitingFor.Id, reason = "Not this person.", actor = ada }, Ct)).Status);
     }
 
