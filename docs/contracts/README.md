@@ -171,14 +171,14 @@ the operation stays work as well.
 ## The delivery contract
 
 One more document is published here, and it is not a canonical operation:
-[`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked
-for — put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed,
-accounts have events Jason did not read, provider blocks are open or items wait on a launch budget, and where to look. It is a family of
-its own, under `notifications/` rather than `operations/`, read by its own catalog. The operation catalog has no notion
-of kind: a document dropped among the operations would become a provider operation a work item could name, a route
-could carry and a lease would be sized for. So it has none of an operation's level-one fields — no reach, no approval,
-no preflight, no repeat rule — because a delivery is not SDR work, and only its input, its result, three failure codes,
-its timeout and its conformance list. Its fixtures live beside the operations' under
+[`notifications/notification.send.json`](notifications/notification.send.md), what a notification plugin is invoked for
+— put a pointer in front of a person: how many approvals and questions wait, whether protective actions failed, accounts
+have events Jason did not read, provider blocks are open, items wait on a launch budget or emails bounced, and where to
+look. It is a family of its own, under `notifications/` rather than `operations/`, read by its own catalog. The
+operation catalog has no notion of kind: a document dropped among the operations would become a provider operation a
+work item could name, a route could carry and a lease would be sized for. So it has none of an operation's level-one
+fields — no reach, no approval, no preflight, no repeat rule — because a delivery is not SDR work, and only its input,
+its result, three failure codes, its timeout and its conformance list. Its fixtures live beside the operations' under
 [`fixtures/notification.send/`](fixtures/notification.send) and are run by the same tests.
 
 ## The events contract

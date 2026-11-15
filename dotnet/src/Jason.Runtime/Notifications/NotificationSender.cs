@@ -151,13 +151,14 @@ public sealed class NotificationSender(
         var gaps = await GapsAsync(request, ct).ConfigureAwait(false);
         var blocks = await BlocksAsync(request, ct).ConfigureAwait(false);
         var held = await HeldAsync(ct).ConfigureAwait(false);
-        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0)
+        var bounces = await BouncesAsync(request, ct).ConfigureAwait(false);
+        if (approvals == 0 && decisions == 0 && failedWork.Count == 0 && gaps == 0 && blocks.Blocks == 0 && held == 0 && bounces == 0)
         {
             status.NothingWaited(clock.GetUtcNow());
             return null;
         }
 
-        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held);
+        var message = NotificationComposer.Compose(approvals, decisions, failedWork.Count > 0 ? failedWork : null, gaps, blocks.Blocks > 0 ? blocks : null, item, held, bounces);
         var outcomes = await Task.WhenAll(channels.Resolve(settings.Current).Select(channel => DeliverAsync(channel, message, request.NotificationId, ct))).ConfigureAwait(false);
         var now = clock.GetUtcNow();
 
@@ -183,7 +184,8 @@ public sealed class NotificationSender(
             reached ? request.CoveredThrough : request.DeliveredThrough,
             gaps,
             blocks.Blocks,
-            held);
+            held,
+            bounces);
 
         await using (var scope = scopes.CreateAsyncScope())
         {
@@ -265,6 +267,32 @@ public sealed class NotificationSender(
 
         var gaps = await EventGapLines.Of(db).Where(e => e.Id > after && e.Id <= upTo).Select(e => e.New).ToListAsync(ct).ConfigureAwait(false);
         return gaps.Select(EventGapLines.Source).Distinct(StringComparer.Ordinal).Count();
+    }
+
+    /// <summary>
+    /// The emails that bounced in the same window as failed protective work: after the line the last notification that
+    /// reached anybody covered, through the line this one covers. Counted by event — the key every line of one event
+    /// carries, in each campaign it reached — and never by line. The lines of one event are written in one transaction, so
+    /// an event is never split across two windows.
+    /// </summary>
+    private async Task<int> BouncesAsync(NotificationRequest request, CancellationToken ct)
+    {
+        if (request.CoveredThrough is null)
+        {
+            return 0;
+        }
+
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        var upTo = await IdOfAsync(db, request.CoveredThrough, ct).ConfigureAwait(false);
+        int? after = request.DeliveredThrough is null ? 0 : await IdOfAsync(db, request.DeliveredThrough, ct).ConfigureAwait(false);
+        if (upTo is null || after is null)
+        {
+            return 0;
+        }
+
+        var lines = await BounceLines.Of(db).Where(e => e.Id > after && e.Id <= upTo).Select(e => new { e.Key, e.New }).ToListAsync(ct).ConfigureAwait(false);
+        return lines.Where(line => BounceLines.Bounced(line.New)).Select(line => line.Key).Distinct(StringComparer.Ordinal).Count();
     }
 
     /// <summary>
