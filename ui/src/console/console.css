@@ -297,6 +297,15 @@
     --gray-2: #eef1f6;
     --f: 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --m: ui-monospace, SFMono-Regular, Menlo, monospace;
+    /* The strip: the quiet track of its segments, the pressed one, and the demo's warm ground. */
+    --seg-track: rgba(20, 33, 43, 0.08);
+    --seg-on: #fff;
+    --seg-on-ink: #14212b;
+    --demo-bg: #fff4d6;
+    --demo-line: #f2dc9c;
+    --demo-ink: #6b4e00;
+    /* The count on Needs you: white figures on it read at 4.5:1 or more in either theme. */
+    --count-bg: var(--red);
     color-scheme: light;
 }
 .jc-console {
@@ -366,16 +375,19 @@
 .jc-console .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 6px;
     padding: 18px 18px 12px;
 }
 .jc-console .brand .mark {
-    width: 26px;
-    height: 26px;
+    width: 20px;
+    height: 20px;
     flex: none;
 }
+.jc-console .brand .alpha {
+    margin-left: 2px;
+}
 .jc-console .brand .wordmark {
-    height: 15px;
+    height: 19px;
     width: auto;
     min-width: 0;
     max-width: 100%;
@@ -418,33 +430,47 @@
 .jc-console .menuwrap {
     position: relative;
 }
-.jc-console .menuwrap.create {
-    padding: 0 14px;
-}
+/* New GTM agent: one full-width box, its words centred across it, the caret's menu a quiet end of the same box. */
 .jc-console .newrow {
     display: flex;
-    gap: 6px;
-    margin: 2px 0 8px;
+    margin: 2px 14px 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    overflow: hidden;
+}
+.jc-console .newrow:hover {
+    border-color: var(--accent-line);
+}
+.jc-console .newrow:has(> .newbtn[aria-current='true']) {
+    border-color: var(--accent-line);
+    background: var(--hover);
 }
 .jc-console .newrow .newbtn {
     margin: 0;
     flex: 1;
     min-width: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    padding: 10px 10px 10px 44px;
 }
 .jc-console .caret {
     flex: none;
-    width: 40px;
+    width: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    color: var(--ink);
+    border: 0;
+    background: none;
+    color: var(--mute);
     cursor: pointer;
 }
 .jc-console .caret:hover {
-    border-color: var(--accent-line);
+    background: var(--hover);
+    color: var(--ink);
 }
 .jc-console .menu-away {
     position: fixed;
@@ -505,23 +531,24 @@
 }
 .jc-console .item[aria-current='true'] {
     background: var(--hover);
+    font-weight: 600;
 }
 .jc-console .item .count {
     margin-left: auto;
-    min-width: 18px;
+    min-width: 17px;
     padding: 0 6px;
-    border-radius: 999px;
-    background: #e3a03a;
-    color: #1b1303;
-    font-size: 11.5px;
-    font-weight: 600;
-    line-height: 18px;
+    border-radius: 9px;
+    background: var(--count-bg);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 17px;
     text-align: center;
 }
 .jc-console .recent {
-    padding: 10px 18px 2px;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 14px 10px 4px;
+    font-size: 13px;
+    font-weight: 400;
     color: var(--faint);
 }
 .jc-console .item {
@@ -927,8 +954,28 @@
 .jc-console [hidden] {
     display: none;
 }
+/* The Mac desktop's window has no title bar: its buttons sit in the sidebar's top 26 px, and the window is dragged by the
+   band over them as by the strip. A drag region takes every click in it, so whatever floats over one says it is none. */
 .jc-console.desktop-mac .side {
     padding-top: 26px;
+}
+.jc-console > .title-drag {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 284px;
+    height: 26px;
+    z-index: 30;
+    -webkit-app-region: drag;
+}
+.jc-console .menu,
+.jc-console .menu-away,
+.jc-console .palette-away,
+.jc-console .palette,
+.jc-console .overlay,
+.jc-console .dialog,
+.jc-console .act-dialog {
+    -webkit-app-region: no-drag;
 }
 .jc-console .hero {
     display: flex;
@@ -985,6 +1032,13 @@
         --blue: #5cc1f5;
         --blue-2: #10283a;
         --gray-2: #1f1f24;
+        --seg-track: rgba(255, 255, 255, 0.08);
+        --seg-on: #2a2a30;
+        --seg-on-ink: var(--ink);
+        --demo-bg: var(--amber-2);
+        --demo-line: #4a3a1c;
+        --demo-ink: var(--amber);
+        --count-bg: #c2410c;
         color-scheme: dark;
     }
 }
@@ -1020,6 +1074,13 @@
     --blue: #5cc1f5;
     --blue-2: #10283a;
     --gray-2: #1f1f24;
+    --seg-track: rgba(255, 255, 255, 0.08);
+    --seg-on: #2a2a30;
+    --seg-on-ink: var(--ink);
+    --demo-bg: var(--amber-2);
+    --demo-line: #4a3a1c;
+    --demo-ink: var(--amber);
+    --count-bg: #c2410c;
     color-scheme: dark;
 }
 html,
@@ -1033,9 +1094,47 @@ body,
     height: 100vh;
 }
 .jc-console .side {
-    width: 232px;
-    flex: none;
+    width: 284px;
+    flex: 0 0 284px;
+    overflow: hidden;
+    line-height: 1.45;
+}
+/* The sidebar's body: the brand and the button, the menu and Recent scrolling between them and the foot. */
+.jc-console .side-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+.jc-console .sscroll {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    padding: 0 8px 10px;
+}
+.jc-console .sscroll .list {
+    margin: 0;
+    gap: 0;
+}
+/* Search: a quiet row under the button, its key on the right. */
+.jc-console .item.find {
+    width: calc(100% - 12px);
+    margin: 0 6px 8px;
+    padding: 5px 8px;
+    color: var(--mute);
+    line-height: normal;
+}
+/* The column right of the sidebar: the strip, then the area under it. */
+.jc-console .mainc {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.jc-console .mainc > .area {
+    flex: 1;
+    min-height: 0;
+    height: auto;
 }
 /* The one area beside the sidebar: it holds what was shown, and only the one shown is in sight. */
 .jc-console .area {
@@ -1237,7 +1336,7 @@ body,
     margin: 0 auto;
     padding: 0 20px;
 }
-/* The bar heads the window above the sidebar and the area in both modes, and the shell takes the height that is left. */
+/* The shell takes the window's height: the sidebar runs it whole, and the strip heads the column right of it. */
 .jc-console {
     display: flex;
     flex-direction: column;
@@ -1261,40 +1360,59 @@ body,
 .jc-console .open-in-split {
     display: flex;
 }
+/* Open in: a split button in the strip's quiet look, the segments' track with its parts plain until pointed at. */
+.jc-console .open-in-split {
+    padding: 2px;
+    gap: 1px;
+    border-radius: 7px;
+    background: var(--seg-track);
+}
 .jc-console .open-in-split button {
-    padding: 3px 10px;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: inherit;
+    cursor: pointer;
 }
 .jc-console .open-in-split button:hover:not(:disabled) {
-    background: var(--hover);
+    background: var(--seg-on);
+    color: var(--seg-on-ink);
+    box-shadow: 0 1px 2px rgba(20, 33, 43, 0.18);
 }
 .jc-console .open-in-split button:disabled {
     color: var(--faint);
     cursor: default;
 }
-.jc-console .open-in-main {
-    border-radius: 6px 0 0 6px;
+.jc-console .open-in-split .oi-glyph {
+    flex: none;
 }
 .jc-console .open-in-arrow {
-    border-left: 0;
-    border-radius: 0 6px 6px 0;
+    padding: 2px 6px;
 }
 .jc-console .open-in-menu {
     position: absolute;
     top: 100%;
     right: 0;
-    z-index: 20;
+    z-index: 30;
     display: flex;
     flex-direction: column;
-    min-width: 200px;
-    margin-top: 4px;
+    min-width: 210px;
+    margin-top: 6px;
     padding: 4px;
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 6px 18px rgb(15 23 42 / 14%);
+    border-radius: 12px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+    color: var(--ink);
+    font-size: 13px;
+    white-space: normal;
 }
 .jc-console .open-in-header {
     padding: 6px 10px 2px;
@@ -1344,35 +1462,52 @@ body,
     background: transparent;
     cursor: default;
 }
+/* The strip: 38 pixels at the head of the column right of the sidebar, the part of the window it is dragged by. A drag
+   region takes every click in it, so every control in the strip, and the menu that drops from one, says it is none. */
 .jc-console .mode-strip {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 6px 14px;
-    border-bottom: 1px solid var(--line);
+    gap: 8px;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 0 12px 0 16px;
     font-size: 13px;
+    white-space: nowrap;
+    -webkit-app-region: drag;
 }
-/* The demo is told from Live by a warm tone, Live by a calm green mark. */
-.jc-console .mode-strip.mode-demo {
-    background: var(--amber-2);
-    color: var(--amber);
+.jc-console .mode-strip button,
+.jc-console .mode-strip input,
+.jc-console .mode-strip a,
+.jc-console .mode-strip [role='group'],
+.jc-console .mode-strip [role='menu'] {
+    -webkit-app-region: no-drag;
 }
+/* Live is white, with a line under it, and says nothing on the left; the demo is warm, its dot amber. */
 .jc-console .mode-strip.mode-live {
-    background: var(--green-2);
-    color: var(--green);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    color: var(--mute);
 }
-.jc-console .mode-strip.mode-live .mode-dot {
-    background: var(--green);
+.jc-console .mode-strip.mode-demo {
+    background: var(--demo-bg);
+    border-bottom: 1px solid var(--demo-line);
+    color: var(--demo-ink);
 }
-.jc-console .mode-strip.mode-demo .mode-dot {
-    background: var(--amber);
+.jc-console .mode-strip strong {
+    color: inherit;
+    font-weight: 600;
+}
+.jc-console .mode-strip > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .jc-console .mode-dot {
     flex: none;
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    background: #e0a100;
 }
 .jc-console .mode-spacer {
     flex: 1;
@@ -1381,6 +1516,7 @@ body,
     display: flex;
     flex: none;
     align-items: center;
+    margin-right: 4px;
 }
 .jc-console .mode-open-in:empty {
     display: none;
@@ -1397,10 +1533,6 @@ body,
     opacity: 0.75;
     font-style: italic;
 }
-.jc-console .mode-switch button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
 .jc-console .mode-unopened {
     display: flex;
     align-items: center;
@@ -1408,12 +1540,6 @@ body,
     min-width: 0;
     color: var(--amber);
 }
-.jc-console .mode-switch {
-    display: flex;
-    flex: none;
-    gap: 4px;
-}
-.jc-console .mode-switch button,
 .jc-console .mode-unopened-close {
     flex: none;
     padding: 2px 10px;
@@ -1422,21 +1548,47 @@ body,
     background: transparent;
     color: inherit;
 }
+/* Demo | Live: one segmented control, a quiet track with the mode in force a white pill. */
+.jc-console .mode-switch {
+    display: flex;
+    flex: none;
+    padding: 2px;
+    border-radius: 7px;
+    background: var(--seg-track);
+}
+.jc-console .mode-switch button {
+    flex: none;
+    padding: 2px 12px;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: inherit;
+    cursor: pointer;
+}
 .jc-console .mode-switch button.on {
-    background: var(--amber);
-    color: var(--amber-2);
+    background: var(--seg-on);
+    color: var(--seg-on-ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(20, 33, 43, 0.18);
+    cursor: default;
 }
-.jc-console .mode-strip.mode-live .mode-switch button.on {
-    background: var(--green);
-    color: var(--green-2);
+.jc-console .mode-switch button:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
-/* A narrow window takes the short form. */
-@media (max-width: 1000px) {
+/* A narrow window takes the short form, and Open in its glyph alone where it has one. */
+@media (max-width: 1100px) {
     .jc-console .mode-strip .mode-strip-long {
         display: none;
     }
     .jc-console .mode-strip-short {
         display: inline;
+    }
+    .jc-console .open-in-main:has(.oi-glyph) .oi-l {
+        display: none;
     }
 }
 /* The Dashboard: the six tiles, the two cards side by side and the Recent activity card below. */
@@ -1553,19 +1705,18 @@ body,
 }
 .jc-console .rtools {
     display: flex;
-    gap: 2px;
-    margin-right: -8px;
+    gap: 0;
 }
 .jc-console .rbtn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 25px;
+    height: 25px;
     border: 0;
-    border-radius: 6px;
+    border-radius: 7px;
     background: none;
-    color: var(--faint);
+    color: var(--mute);
     cursor: pointer;
 }
 .jc-console .rbtn:hover,
@@ -1595,7 +1746,7 @@ body,
     grid-row: auto;
 }
 .jc-console .rsearch {
-    padding: 4px 14px 2px;
+    padding: 2px 6px 6px;
 }
 .jc-console .rsearch .inp {
     width: 100%;
@@ -1610,24 +1761,27 @@ body,
 .jc-console .recent-row .t {
     margin-left: 0;
 }
+/* A conversation's count of what waits: amber, quieter than the red on Needs you. */
 .jc-console .recent-row .count {
     margin-left: 0;
+    background: var(--amber-2);
+    color: var(--amber);
 }
 .jc-console .rdot {
     flex: none;
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     box-sizing: border-box;
 }
 .jc-console .rdot.waiting {
-    background: #e3a03a;
+    background: var(--amber);
 }
 .jc-console .rdot.active {
-    background: var(--green);
+    background: #22c55e;
 }
 .jc-console .rdot.paused {
-    background: var(--faint);
+    background: #f59e0b;
 }
 .jc-console .rdot.draft {
     border: 1.5px solid var(--blue);
@@ -1640,7 +1794,7 @@ body,
     justify-content: center;
 }
 .jc-console .rnone {
-    padding: 4px 18px;
+    padding: 4px 10px;
     font-size: 12.5px;
     color: var(--faint);
 }
@@ -1651,12 +1805,12 @@ body,
 /* The search palette: the sidebar's Search row and its key, and the box over the console. */
 .jc-console .item .kbd {
     margin-left: auto;
-    padding: 0 6px;
+    padding: 0 5px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: 5px;
+    background: var(--panel);
     color: var(--faint);
-    font-size: 11.5px;
-    line-height: 18px;
+    font: 11px var(--f);
 }
 .jc-console .palette-away {
     position: fixed;

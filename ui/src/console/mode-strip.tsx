@@ -6,12 +6,14 @@ import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode }
 const modes: readonly Mode[] = ['demo', 'live'];
 
 /**
- * The bar above the console, over the sidebar and every panel, in both modes. On the left a dot and a mark: the word
- * Live, or in the demo one short sentence saying the data is sample; in a narrow window the demo's sentence is
- * shorter (`console.css`). The two modes differ by colour from the existing tokens. A demo that could not be opened
+ * The strip at the head of the column right of the sidebar, over every panel, in both modes: 38 pixels high, and the
+ * part of the window it is dragged by, its controls excepted (`console.css`). In Live it is white and says nothing on
+ * the left, the pressed segment of the switch being the mark; in the demo a dot and one short sentence say the data is
+ * sample, on a warm ground, and in a narrow window the sentence is shorter. A demo that could not be opened
  * leaves the person in Live, and the desktop's sentence about it stands in the bar until closed; a refused switch
  * is said there too. On the right, in this order: `data-slot="open-in"`, the one place a control for opening the
- * work elsewhere goes, then the Demo | Live switch, the mode in force marked, asking the desktop through the seam.
+ * work elsewhere goes, then the Demo | Live switch, one segmented control with the mode in force pressed, asking the
+ * desktop through the seam.
  * While the demo's sample is still being made a quiet mark says so beside the sentence, and the switch is off, its
  * reason on each button, until the desktop says the sample is ready.
  */
@@ -24,9 +26,9 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
     const switchable = can('mode.set');
     return (
         <div className={`mode-strip ${demo ? 'mode-demo' : 'mode-live'}`} role="region" aria-label={t('mode.strip')}>
-            <span className="mode-dot" aria-hidden="true" />
-            {demo ? (
+            {demo && (
                 <>
+                    <span className="mode-dot" aria-hidden="true" />
                     <span className="mode-mark mode-strip-long">
                         <strong>{t('mode.strip.name')}</strong> {t('mode.strip.long')}
                     </span>
@@ -37,10 +39,6 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
                         </span>
                     )}
                 </>
-            ) : (
-                <span className="mode-mark">
-                    <strong>{t('mode.switch.live')}</strong>
-                </span>
             )}
             {!demo && unopened !== null && (
                 <span className="mode-unopened" role="status" aria-label={t('mode.unopened')}>

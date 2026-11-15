@@ -321,10 +321,10 @@ yours, or one holding nothing but the desktop's own records, and no record of a 
 starts on it, and nothing of your own installation is made until you choose **Live**. Choosing **Live** from it starts your
 own installation for the first time, as a first start without the demo would, in the Light theme a new installation meets.
 An installation that already existed, with a record or without, and one updated from an earlier version open where they
-did. A top bar heads every screen in both modes: in your own installation a green dot and **Live**; in the demo an amber
-dot and "Demo: an example of what you can build on Jason. The data is samples, and nothing is sent." (in a narrow window,
+did. A top bar heads every screen in both modes, right of the sidebar: in your own installation it is white and says
+nothing on the left; in the demo an amber dot and "Demo: an example of what you can build on Jason. The data is samples, and nothing is sent." (in a narrow window,
 "Sample data. Nothing is sent."). On its right
-the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
+the **Demo | Live** switch, one control of two segments, marks the mode in force; choosing the other writes the mode and starts the desktop again on that
 installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
 whose start failed. The first time the demo opens, its sample is placed rather than made: the application carries the
 sample as an archive that `jason export` wrote when the release was built, and `jason import` places it into the demo's
