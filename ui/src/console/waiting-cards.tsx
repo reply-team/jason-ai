@@ -102,9 +102,10 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             <div className="ask-h">
                 <span className="b amber">Waiting for you</span> <b>{card.what}</b>{' '}
                 {card.to !== null && <span className="waiting-to">to {card.to}</span>}{' '}
-                <span className="meta">{[card.channel, card.age].filter(Boolean).join(' · ')}</span>
+                <span className="meta">
+                    {[card.channel, card.from !== null && `from ${card.from}`, card.age].filter(Boolean).join(' · ')}
+                </span>
             </div>
-            {card.from !== null && <div className="meta waiting-from">From {card.from}</div>}
             <div className="ask-w">{card.why}</div>
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
             {whole !== undefined && <Doubts preview={whole.preview} />}

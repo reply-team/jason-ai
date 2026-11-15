@@ -9,15 +9,21 @@
     margin-bottom: 2px;
 }
 
-/* An empty chat: its mark over its question and promise, centred, and the chips under them. */
+/* The thread and the cards under it, as wide as the console's own thread: 780 across, 732 of it for the words. */
+.jc-console .chat-panel .thread,
+.jc-console .chat-panel .chat-waiting-for {
+    max-width: 780px;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+/* An empty chat: its mark over its question and promise, centred, and the chips under them. The heading keeps the
+   console's hero size, the one the start screen's heading reads too. */
 .jc-console .thread .hero {
     flex-direction: column;
     gap: 8px;
     margin: 28px 0 22px;
     text-align: center;
-}
-.jc-console .thread .hero h2 {
-    font-size: 24px;
 }
 .jc-console .thread .hero p {
     margin: 0;
@@ -69,12 +75,12 @@
 .jc-console .btn.no:hover {
     border-color: var(--red);
 }
-.jc-console .btn.ghost {
+.jc-console .waiting-card .btn.ghost {
     border-color: transparent;
     background: transparent;
     color: var(--mute);
 }
-.jc-console .ask-a .lk {
+.jc-console .waiting-card .ask-a .lk {
     margin-left: auto;
     font-size: 12.5px;
 }
@@ -123,7 +129,7 @@
 }
 
 /* A question's options, as pills; the answer in the person's own words stays below them. */
-.jc-console .ask.q .ask-s {
+.jc-console .waiting-card.ask.q .ask-s {
     font-weight: 650;
 }
 .jc-console .ui-opts {
@@ -174,6 +180,9 @@
         border-color: rgba(240, 180, 90, 0.35);
         color: var(--amber);
     }
+    :root:not([data-theme='light']) .jc-console .waiting-card.ask.q {
+        border-color: rgba(182, 156, 255, 0.3);
+    }
 }
 :root[data-theme='dark'] .jc-console .btn.ok {
     color: var(--bg);
@@ -187,4 +196,7 @@
 :root[data-theme='dark'] .jc-console .waiting-card .send-doubts {
     border-color: rgba(240, 180, 90, 0.35);
     color: var(--amber);
+}
+:root[data-theme='dark'] .jc-console .waiting-card.ask.q {
+    border-color: rgba(182, 156, 255, 0.3);
 }

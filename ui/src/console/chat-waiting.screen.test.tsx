@@ -180,7 +180,13 @@ describe('what waits in an agent’s chat', () => {
 
         // An approval's card: to whom, from which mailbox, the channel, the subject and the body, and its four acts.
         expect(words(email)).toContain('Waiting for you Message to Ines Duarte, ines@example.test Email');
-        expect(words(email)).toContain('From owner@example.test');
+        // The mailbox it goes from is in the header's meta, beside the channel, before any act of the card.
+        const meta = email.querySelector<HTMLElement>('.ask-h .meta')!;
+        expect(words(meta)).toMatch(/^Email · from owner@example\.test · /);
+        expect(
+            meta.compareDocumentPosition(within(email).getByRole('button', { name: 'Approve' })) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
         expect(within(email).getByText('Notes from the meetup')).toBeTruthy();
         expect(within(email).getByText('Hi Ines, thanks for the talk at the meetup.')).toBeTruthy();
         // Why it waits, in the sentence Needs you's panel gives.
@@ -286,6 +292,34 @@ describe('what waits in an agent’s chat', () => {
             delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
             delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
         }
+    });
+
+    // Only a message's words are clamped: the doubt, what will happen, the notes of a read and the acts stand outside it.
+    it('never clamps the doubt, what will happen or the note of a read, and draws Approve outside the clamp', async () => {
+        const { fake } = renderConsole();
+        fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        const clamped = (element: Element) => element.closest('.ask-b') !== null;
+        const doubts = email.querySelector('.send-doubts')!;
+        expect(doubts).not.toBeNull();
+        expect(clamped(doubts)).toBe(false);
+        expect(clamped(within(email).getByText(/^The critic role doubted this/))).toBe(false);
+        expect(clamped(within(email).getByText('Hi Ines, thanks for the talk at the meetup.'))).toBe(true);
+        const approve = within(email).getByRole('button', { name: 'Approve' });
+        expect(clamped(approve)).toBe(false);
+        expect(approve.closest('.ask-a')).not.toBeNull();
+
+        // The note of a read not yet answered, and then what will happen once it is.
+        const enroll = card(pane, 'apr_2')!;
+        const note = within(enroll).getByText(/cannot be approved until it is shown here whole/);
+        expect(clamped(note)).toBe(false);
+        release();
+        await drawn(pane, 'apr_2');
+        const intent = within(card(pane, 'apr_2')!).getByText('Put Grace Hopper into the campaign at the provider.');
+        expect(clamped(intent)).toBe(false);
+        expect(clamped(within(card(pane, 'apr_2')!).getByRole('button', { name: 'Approve' }))).toBe(false);
     });
 
     it('draws exactly the runtime’s cards, whatever the AI writes to look like one', async () => {
@@ -688,6 +722,52 @@ describe('the sheet of the chat and its cards', () => {
                 );
     });
 
+    // A button, a card's parts, a box and a note are drawn by the harness's screens inside the console too (People,
+    // Inbox, the threads, Needs you, the message editor): a rule here that names one reaches the waiting cards alone.
+    it('restyles the harness’s shared pieces only on the waiting cards', () => {
+        const shared = /\.(btn(?!\.(ok|no)(?![\w-]))|ask(-[achsw])?|inp|note|meta)(?![\w-])/;
+        const outside = rules
+            .flatMap((rule) => rule.selectors)
+            .filter((each) => shared.test(each) && !/\.waiting-card(?![\w-])/.test(each));
+        expect(outside).toEqual([]);
+    });
+
+    // The console's two sheets that draw the cards. The clamp is the body's alone: no rule that reaches the doubt, why it
+    // waits, the subject, what will happen, a note of the card or its acts hides or cuts anything of them.
+    it('clamps a message’s words and nothing else, and hides no part of a card nor its acts', () => {
+        const parsed = (file: string) =>
+            Array.from(
+                readFileSync(file, 'utf8')
+                    .replace(/[/][*][^]*?[*][/]/g, '')
+                    .matchAll(/([^{}]+)[{]([^{}]*)[}]/g),
+                (rule) => ({
+                    selectors: rule[1]!.split(',').map((each) => each.trim()),
+                    body: rule[2]!.replace(/\s+/g, ' ').trim(),
+                }),
+            );
+        const cuts = /line-clamp|max-height|overflow(-[xy])?: (hidden|clip)|text-overflow/;
+        const hides = /display: none|visibility: hidden|opacity: 0(?![.\d])|(^|[ ;])height: 0/;
+        // The one clamp: the words of a message, in either theme.
+        const clamp = /(^| )\.jc-console \.ask-b$/;
+        // The parts of a card a person reads before an act, and the acts themselves.
+        const kept =
+            /\.(waiting-card|chat-waiting-for|ask|ask-h|ask-s|ask-w|ask-a|send-doubts|waiting-intent|note|btn\.ok|btn\.no)(?![\w-])/;
+        const offending = (sheet: typeof rules, reaches: (selector: string) => boolean) =>
+            sheet.flatMap((rule) =>
+                rule.selectors
+                    .filter(reaches)
+                    .filter((each) => (cuts.test(rule.body) && !clamp.test(each)) || hides.test(rule.body))
+                    .map((each) => `${each} { ${rule.body} }`),
+            );
+        // This sheet is the chat's own: nothing in it cuts but the clamp, wherever it reaches.
+        expect(offending(rules, () => true)).toEqual([]);
+        expect(rules.filter((rule) => cuts.test(rule.body)).flatMap((rule) => rule.selectors)).toEqual([
+            '.jc-console .ask-b',
+        ]);
+        // The console's sheet, where it reaches a card's parts.
+        expect(offending(parsed('src/console/console.css'), (each) => kept.test(each))).toEqual([]);
+    });
+
     it('draws Approve green, Reject red and the body clamped to four lines, in both themes', () => {
         expect(body('.jc-console .btn.ok').join(' ')).toMatch(/background: var\(--green\)/);
         expect(body('.jc-console .btn.no').join(' ')).toMatch(/color: var\(--red\)/);
@@ -707,6 +787,7 @@ describe('the sheet of the chat and its cards', () => {
             '.jc-console .btn.ok',
             '.jc-console .ask-b',
             '.jc-console .waiting-card .send-doubts',
+            '.jc-console .waiting-card.ask.q',
         ]) {
             expect(dark(selector, 'system')).not.toEqual([]);
             expect(dark(selector, 'system')).toEqual(dark(selector, 'chosen'));
