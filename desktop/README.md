@@ -17,8 +17,9 @@ that a person needs.
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
 | Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
-| Carry the demo provider | every build carries `plugins/demo` as `resources/bundle/plugins/demo`, the package's files exactly as the tree holds them (`scripts/prepare.mjs`; a pack refuses a bundle without it), and the demo's seed places a copy of it as `<demo data>/plugins/demo/` (`src/demo-plugin.ts`); the person's installation never receives it |
-| Place the prepared demo | `jason import <archive> --root <the demo's harness root>` on the demo's data directory, at a demo's first start and at the start after Start the Demo Over, when the package carries `bundle/demo/jason-demo.zip` and its `export.json` says `exported_at` is at most twenty-one days ago; begun before the window opens and the log is opened, which is held until it ends, and waited for before the runtime starts (`src/demo-archive.ts`). A package without the archive (every build made outside a release), an older archive, or an import that fails makes the sample at the start, as the seed does |
+| Carry the demo provider | every build carries `plugins/demo` as `resources/bundle/plugins/demo`, the package's files exactly as the tree holds them (`scripts/prepare.mjs`; a pack refuses a bundle without it). The demo of 0.44 and earlier placed a copy of it in its own installation (`src/demo-plugin.ts`); since the demo became a page nothing places it, and it goes with that demo's code. The person's installation never receives it |
+| Carry the prepared demo's archive | a release's package still carries `bundle/demo/jason-demo.zip`, which the demo of 0.44 and earlier placed with `jason import` (`src/demo-archive.ts`); since the demo became a page nothing places it |
+| Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started and no folder made |
 | Load the window | the link `jason ui open --no-open` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
@@ -535,6 +536,20 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
 - The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
+  and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
+  view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
+  in-memory partition of its own, and `src/demo-page.ts` seals it: its session answers its own `jason-demo:` or
+  `jason-switch:` address alone through a protocol handler that sends the content policy as a header (inline script
+  and style, `data:` fonts and images, nothing else); `http`, `https` and `file` answer 403 there, every request but
+  the page's own address or a `data:` one is cancelled, and a proxy that leads nowhere stands behind them; WebRTC keeps
+  to the proxy. Pop-ups, navigation, redirects, frames' navigation, webviews, downloads, devtools, a login, a
+  certificate error and an unload prompt are refused or cancelled, and every permission request and check, device chooser
+  and screen capture is denied. Each kind refused is logged once a run (`demo_refused`), by its name alone.
+  `test/demo-page.test.ts` holds each seal on stand-ins for the contents and the session.
+- The switch's view is the page's top bar's right end, 226 by 37 pixels at the window's right edge, measured on the page
+  as it is committed (`switchBounds`); it is laid out again at each resize and added after the page's view, so it is
+  drawn over it and takes the clicks there.
 
 ## Links
 
@@ -620,7 +635,7 @@ with another data directory. Where PowerShell is not available nothing is looked
 runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
 stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login, the runtime's
 start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
-application, and the demo's two folders, its data directory and its harness root (the person's with `-demo` after
+application, and an earlier version's demo's two folders, its data directory and its harness root (the person's with `-demo` after
 each), once the demo's own runtime is stopped, and names what it leaves: the data directory, the harness root
 and the updater's cache.
 
@@ -642,7 +657,7 @@ Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it wa
 4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
-`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. The demo's two folders (removed only when they carry the mark the desktop wrote into each when it made them, `.jason-demo-folder`) are not
+`Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. An earlier version's demo's two folders (removed only when they carry the mark the desktop wrote into each when it made them, `.jason-demo-folder`) are not
 among them: the menu act takes them off, and by hand they are `~/.jason-demo` and `~/Jason-demo` (the data directory's and
 the harness root's own names with `-demo` after them), deleted once the demo's runtime is stopped.
 
@@ -681,7 +696,7 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
 - Before removing Jason, choose Remove What Jason Placed… in the Jason menu (or the tray's), which takes the same steps
   as on macOS. On an AppImage it also stops a runtime started from any copy of its `jason`, and last removes the copies:
   the real folders named as versions under `<data>/desktop/bundle/`, when nothing runs from them, and the folder itself
-  once that leaves it empty; a link or anything else there stays, and is named. It also takes off the demo's two folders
+  once that leaves it empty; a link or anything else there stays, and is named. It also takes off an earlier version's demo's two folders
   (see macOS above). It then says what removes the
   application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. What stays after
   that is the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
@@ -736,7 +751,7 @@ electron-updater update a package as a deb, so the configuration starts the deb 
 
 The release passes `--executable` with the `jason` it has already built and signed, so the package carries that very
 file, and signs the package itself: a Mac package is never built unsigned. Inside `app.asar` are `lib/`, `shell/`,
-`resources/` (the application icon as a PNG, and the tray's images; the Mac's icon set is read at build time from `installer/icon.icns`, and the Linux packages install the PNGs of `installer/linux-icons/`, the same icon set's 32, 64, 128, 256, 512 and 1024 px images, under hicolor), the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
+`resources/` (the application icon as a PNG, and the tray's images; the Mac's icon set is read at build time from `installer/icon.icns`, and the Linux packages install the PNGs of `installer/linux-icons/`, the same icon set's 32, 64, 128, 256, 512 and 1024 px images, under hicolor), `demo/index.html` (the demo page, without its folder's README and licence text), the chat's two lists and its instruction text; beside it, in the package's `resources/`, are `bundle/`
 (the executable with `LICENSE` and `THIRD-PARTY-NOTICES`, the skills and `version.json`) and `notices/` (the
 repository's `LICENSE`, this folder's `THIRD-PARTY-NOTICES` and Chromium's `LICENSES.chromium.html`). The package
 carries no UI: `jason ui install` places the UI of the runtime's own release.

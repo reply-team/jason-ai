@@ -45,14 +45,12 @@ export interface DeskDeps {
      */
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
     /**
-     * In a demo run, what is drawn in place of the update, the start at logon, the jason command and Remove What Jason
-     * Placed, each a line saying to go back to the person's own installation, and the way back (`demoMenu`); null in Live.
+     * In a demo run, the way back (`demoMenu`), and nothing where the update, the start at logon, the jason command and
+     * Remove What Jason Placed would be; null in Live.
      */
     demo: DemoMenu | null;
     /** Back to Your Own Installation: switches to Live and starts the desktop again. */
     back(): void;
-    /** Start the Demo Over (a demo run only): the demo's runtime stopped, its folders made again, the window loaded again. */
-    startOver(): void;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -75,16 +73,17 @@ function trayIcon(): Electron.NativeImage {
 export class Desk {
     private readonly deps: DeskDeps;
     private tray: Tray | null = null;
-    private attention: Attention = { state: 'reading' };
+    private attention: Attention;
     private autostartOn: boolean | null = null;
     private readonly removal: RemovalAct | null;
     private readonly watcher: AttentionWatcher;
-    /** The demo's lines as they stand now: drawn again while the sample is made and once it is ready (`setDemo`). */
-    private demo: DemoMenu | null;
+    private readonly demo: DemoMenu | null;
 
     constructor(deps: DeskDeps) {
         this.deps = deps;
         this.demo = deps.demo;
+        // The Demo reads no count: the tray says it is the demo from the first.
+        this.attention = deps.demo === null ? { state: 'reading' } : { state: 'demo' };
         const removal = deps.removal;
         this.removal =
             removal === null
@@ -161,25 +160,27 @@ export class Desk {
                 checked: opens && login.isOn(),
                 click: (item) => void login.set(item.checked).finally(() => this.renderMenu()),
             },
-            this.demo !== null
-                ? this.demo.autostart
-                : {
-                    label: 'Start the Runtime at Logon',
-                    type: 'checkbox',
-                    enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
-                    checked: this.autostartOn === true,
-                    click: (item) =>
-                        void autostart?.set(item.checked).then((now) => {
-                            this.autostartOn = now;
-                            this.renderMenu();
-                        }),
-                },
+            ...(this.demo !== null
+                ? []
+                : [
+                      {
+                          label: 'Start the Runtime at Logon',
+                          type: 'checkbox' as const,
+                          enabled: autostart !== null && this.autostartOn !== null && !this.removing(),
+                          checked: this.autostartOn === true,
+                          click: (item: Electron.MenuItem) =>
+                              void autostart?.set(item.checked).then((now) => {
+                                  this.autostartOn = now;
+                                  this.renderMenu();
+                              }),
+                      },
+                  ]),
         ];
     }
 
     /** The update item, and under it, unclickable, where the previous version is kept while it is. */
     private updateItems(): MenuItemConstructorOptions[] {
-        if (this.demo !== null) return [this.demo.updates];
+        if (this.demo !== null) return [];
         const { updates } = this.deps;
         const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
         let kept: string | null = null;
@@ -206,10 +207,10 @@ export class Desk {
      * The Command Line submenu: the bundled executable's full path always, where the command stands, and the act the
      * state allows. A development build shows it and places nothing: its executable is the checkout's, not an install's.
      */
-    private commandItem(): MenuItemConstructorOptions {
-        if (this.demo !== null) return { label: 'Command Line', submenu: [this.demo.command] };
+    private commandItems(): MenuItemConstructorOptions[] {
+        if (this.demo !== null) return [];
         const command = this.deps.command;
-        if (command === null) return { label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] };
+        if (command === null) return [{ label: 'Command Line', submenu: [{ label: uncarriedLine, enabled: false }] }];
         let status: CommandStatus;
         try {
             status = command.status();
@@ -223,7 +224,7 @@ export class Desk {
         for (const act of menu.acts) {
             items.push({ label: act.label, enabled: app.isPackaged && !this.removing(), click: () => void this.commandAct(act.act, status) });
         }
-        return { label: 'Command Line', submenu: items };
+        return [{ label: 'Command Line', submenu: items }];
     }
 
     /** Asks, then places or removes the command; what went wrong is said in a box of its own. */
@@ -260,13 +261,12 @@ export class Desk {
         if (demo === null) return [];
         return [
             { type: 'separator' },
-            { label: demo.startOver.label, enabled: demo.startOver.enabled, click: () => this.deps.startOver() },
             { label: demo.back.label, enabled: demo.back.enabled, click: () => this.deps.back() },
         ];
     }
 
     private removalItems(): MenuItemConstructorOptions[] {
-        if (this.demo !== null) return this.demo.removal === null ? [] : [this.demo.removal];
+        if (this.demo !== null) return [];
         if (this.removal === null) return [];
         return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
     }
@@ -299,12 +299,6 @@ export class Desk {
         this.tray = null;
     }
 
-    /** Draws the demo's lines again, as the sample being made or made has them. */
-    setDemo(demo: DemoMenu | null): void {
-        this.demo = demo;
-        this.renderMenu();
-    }
-
     renderMenu(): void {
         const keys: MenuItemConstructorOptions[] = bindingsFor(app.isPackaged).map((binding) => ({
             label: binding.label,
@@ -316,7 +310,7 @@ export class Desk {
             ...this.loginItems(),
             { type: 'separator' },
             ...this.updateItems(),
-            this.commandItem(),
+            ...this.commandItems(),
             ...this.removalItems(),
             ...this.backItems(),
             { type: 'separator' },
@@ -350,7 +344,7 @@ export class Desk {
                 ...this.loginItems(),
                 { type: 'separator' },
                 ...this.updateItems(),
-                this.commandItem(),
+                ...this.commandItems(),
                 ...this.removalItems(),
                 ...this.backItems(),
                 { type: 'separator' },

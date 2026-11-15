@@ -195,13 +195,10 @@ test('a demo runtime that will not stop is said to be the demo’s in what the p
     assert.match(uninstallRefusal(personRefused as { kind: 'failed'; exit: number }), /the runtime this application carries is running/);
 });
 
-test('the update, the installer’s stop and the uninstall stop the demo’s runtime too, and the start-up is the one function', () => {
+test('the update, the installer’s stop and the uninstall stop a runtime an earlier demo left too; no start prepares a demo any more', () => {
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
-    const flat = main.split(/\s+/).join(' ');
-    assert.ok(flat.includes('prepareLive = (demo) => prepareDemo(demo, { harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile))), place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory), route: writeDemoRoute,'));
-    assert.ok(flat.includes('open: openDemoDirectory,'));
-    assert.ok(main.includes('fixedSettings: (data) => writeDemoSettings(data, harnessRoot('));
+    for (const gone of ['prepareDemo(', 'openDemoDirectory', 'writeDemoSettings(', 'placeDemoPlugin(']) assert.equal(main.includes(gone), false, gone);
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
     assert.ok(start.includes('runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },'));

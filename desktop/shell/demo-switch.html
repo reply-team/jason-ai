@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo | Live</title>
+<!--
+The desktop's own Demo | Live switch, drawn over the right end of the demo page's top strip, where the page draws its
+own, in a view of its own (src/demo-window.ts, switchBounds). It holds no script: Live is a link the view refuses to
+follow and reads as the person's choice (src/demo-page.ts, switchChoice); Demo is the mode in force. It is served alone,
+under the same content policy as the page.
+-->
+<style>
+:root { color-scheme: light; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: flex-end; box-sizing: border-box; padding-right: 12px; background: #fff4d6; color: #8a5a00; font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.switch { display: flex; gap: 2px; padding: 2px; border-radius: 7px; box-shadow: inset 0 0 0 1px #f2dc9c; }
+.switch a, .switch span { display: block; padding: 5px 12px; border-radius: 5px; color: inherit; text-decoration: none; user-select: none; -webkit-user-drag: none; }
+.switch span[aria-current] { background: #8a5a00; color: #fff4d6; }
+.switch a:hover { background: #f7e7b5; }
+.switch a:focus-visible { outline: 2px solid #005aff; outline-offset: 1px; }
+</style>
+</head>
+<body>
+<nav class="switch" aria-label="Demo or Live">
+<span aria-current="page">Demo</span>
+<a href="jason-switch://switch/live" draggable="false">Live</a>
+</nav>
+</body>
+</html>

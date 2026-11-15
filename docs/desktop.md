@@ -3,9 +3,8 @@
 Jason Desktop is a window onto the installation the `jason` command line already uses. It is one more client of that
 installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
-and the settings file a person would edit. It runs on one installation at a time, yours or, on your word, the sample
-installation of [the demo](#the-demo) beside it, which is a second data directory and a second harness root. Nothing in
-the runtime exists for the desktop.
+and the settings file a person would edit. It runs on one installation, yours; in [the demo](#the-demo) it shows a page of sample data instead and runs
+no installation. Nothing in the runtime exists for the desktop.
 
 The full experience is still a session with your agent, by text or by voice, with the skills loaded; the desktop is for
 the moments you want to see a screen, and what a screen shows is never all there is. It adds three things the browser
@@ -73,8 +72,7 @@ choose again still has the words you typed and did not send, what arrived meanwh
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
-without it, from Claude Code, Codex or any other agent; in the demo it adds that what the demo shows is an example of what
-you can build, that Live has the essentials, and that Jason is open source, so your coding agent can build the pages you need. What you type there starts a set-up chat on the AI you connected, about no campaign
+without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -97,17 +95,14 @@ shows before anything is typed and what you send waits, while the window is open
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
   addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
   **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
-  System holds. The demo's sidebar lists the whole set, under **New GTM agent**: **Search**; the **Feed**, the desktop's main chat (below); **Dashboard**, numbers the page computes
-  from what it already reads; **Needs you**, with the number of approvals and questions waiting; **People**; **Agents**;
-  **Accounts**; and **More**, which holds Performance, Activity, Work items, Connect and System. The other conversations
-  follow under **Recent**, and **Settings** stands alone at the foot.
+  System holds.
 - **Connect** shows the agent hosts found on the machine, the model keys, the Reply connection and the notification
   channels (below).
 - The browser's other screens, People, Performance, Work items, System, Accounts and Settings, open in the same area.
   [ui.md](ui.md) describes each.
 
-**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light, in the demo it opens on and again when
-you first choose Live; one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
+**Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
+drawn in the light theme it was built in); one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
 its settings and the starting page and the window's background before the page loads follow it.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
@@ -121,23 +116,12 @@ them on.
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (a `feed`, the theme, and the version whose skills were last deployed).
-- `<data>/desktop/mode`: which installation the desktop runs on, one word, `live` or `demo`; a file that is missing or
-  says anything else is Live, but a new installation's first start writes it as `demo` (see [the demo](#the-demo)). For `demo` the desktop runs on the sibling directory `<data>-demo` (`~/.jason` gives
-  `~/.jason-demo`), and this file stays in `<data>`. Before the demo's runtime first starts, the desktop writes the demo's
-  own `<data>-demo/config/settings.json`, after it has placed the demo provider in `<data>-demo/plugins/demo/` (from the copy the application carries) and written `Routes:Default` naming it, so no route stands without its plugin: a harness root beside yours with `-demo` after it (`~/Jason` gives
-  `~/Jason-demo`), the responder off and the campaign manager left only to answered decisions, so a terminal with
-  `JASON_DATA_DIR` naming the demo finds the same installation; your own settings are never written. Where the demo is placed
-  from the archive the application carries (see [the demo](#the-demo)), that settings file and the provider come with the
-  archive instead. The top bar's Demo | Live
-  switch writes this file and starts the desktop again, on your own environment, and a new installation's first start
-  writes it as `demo` before anything else. Quitting a demo run, the switch to
-  Live included, stops the demo's runtime first, waiting at most fifteen seconds; your own runtime is never stopped by
-  either. An update, the installer and the uninstaller, run from your own installation, stop a demo runtime that a crash left running too. A demo run offers no update, no start at logon, no `jason` command on the PATH and no Remove What Jason
-  Placed: each says to go back to your own installation, and the tray and the Jason menu offer Back to Your Own
-  Installation. The desktop writes a mark file, `.jason-demo-folder`, into the demo's data directory and into its harness root when it makes them, because a folder of the same name can already be yours: a folder of either name without the mark is never used, written into or removed, and the desktop opens your own installation instead. When the demo's directory cannot be made or used, the desktop opens your own installation instead, sets
-  this file back to `live` and says so at the top of the window. A Live and a Demo desktop are separate instances, each
-  with its own profile, so while a demo run is still stopping its runtime after a switch, a click on Jason's icon may
-  open Live first; the start the switch asked for then only brings that window forward.
+- `<data>/desktop/mode`: what the desktop shows, one word, `live` or `demo`; a file that is missing or says anything
+  else is Live, but a new installation's first start writes it as `demo` (see [the demo](#the-demo)). Both run on this
+  data directory: Live is your installation, and Demo shows the page the application carries, starts no runtime and makes,
+  reads or writes no folder of an installation. The Demo | Live switch writes this file and starts the desktop again, on your own environment. A Live and
+  a Demo desktop are separate instances, so a click on Jason's icon while the switch is starting the other may bring the
+  one that is quitting forward; the start the switch asked for then only brings its own window forward.
 - `<data>/desktop/chat/`: the chat's working folder. Its skills, Jason's and Reply's, are in `.claude/skills/` for Claude
   Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instructions to the
   agent, written again when it starts and before each turn, so an edit to either does not last.
@@ -167,7 +151,7 @@ them on.
   runtime from, puts on the PATH and gives the chat. A copy is used only when every file matches the package's, and one
   that differs, or a link where the folder should be, stops the start and is named, to be removed by hand.
 - `<data>/desktop/electron/`: Electron's own profile and its logs, so a second data directory is a second desktop and
-  nothing of it lands outside `<data>`. The window's page keeps its storage in memory only, so its pairing with the
+  nothing of it lands outside `<data>`. The demo's page keeps nothing here: its session is in memory only. The window's page keeps its storage in memory only, so its pairing with the
   runtime, a key with the run token's rights, never reaches this folder, whatever build of the page the runtime serves.
   An earlier version kept it here: at the first start after the update the desktop revokes every UI token before the
   window loads, then removes what that page stored, so a browser you paired with `jason ui open` must be paired again
@@ -191,7 +175,7 @@ lists each key and each card's grant.
 
 ## Open in
 
-The top bar has an **Open in** split button, in your own installation and in [the demo](#the-demo) alike. Its main part
+The top bar has an **Open in** split button in your own installation; [the demo](#the-demo) has none. Its main part
 opens a folder in the place you used last, and its arrow lists every place available on this computer:
 
 - **Editors** that are installed: VS Code, Cursor, Antigravity, Windsurf and Zed, each found the way your system
@@ -212,22 +196,18 @@ in `<data>/desktop/settings.json`, in the data directory of the installation it 
 your folders.
 
 **Which folder opens.** The campaign's own folder, the one the installation records for it, only while that campaign's chat is in
-front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder. In the demo these are the demo's folders, and a terminal opened there works with the demo's data,
-so `jason` in it reads and changes the demo. The page names only the place and, where a campaign's chat is open, the
+front; otherwise the harness root, and the desktop starts the command line with the harness root as its working folder.
+The page names only the place and, where a campaign's chat is open, the
 campaign; it never sends a path, and the desktop resolves the folder from the installation's own record. A campaign whose
 folder is not recorded, or is not on this computer, is refused with a sentence ("This agent's folder is not recorded, or it
 is not on this computer."), and nothing is opened elsewhere, the harness root included. Likewise a harness root that is not
 there yet is refused, with a sentence that it is made with the first agent.
 
 **What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
-entries run `jason session open` on the folder, with the environment of the installation the desktop runs on, so in the demo
-a terminal works with the demo's data; no first input is sent to the host, so the session is yours to begin. Typed by hand,
-the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). In the demo, an editor is started with
-your own environment, not the demo's, and the desktop says so after one opens: an editor's own terminal may work with
-your own installation, not the demo. A successful open says "Opened {folder} in {place}.", with "Jason there works with the
-same data as this window." after a terminal, and in your own installation after an editor or the file manager too; Copy
-path says "Copied the path of {folder}.". In the demo the menu also says "Opens the demo's own folder. A terminal there
-works with the demo's data."
+entries run `jason session open` on the folder, with the environment of the installation the desktop runs on; no first input is sent to the host, so the session is yours to begin. Typed by hand,
+the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). A successful open says "Opened {folder} in
+{place}.", with "Jason there works with the same data as this window." after a terminal, an editor or the file manager;
+Copy path says "Copied the path of {folder}.".
 
 Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
 comma, which File Explorer reads as a separator, and on macOS one whose name ends in `.app`, which could be started rather
@@ -240,7 +220,7 @@ refused, as the commands that start a session on your computer. It does not open
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
 it, to change Jason itself.
 
-**Changing Jason itself.** In your own installation, never in the demo, **Change Jason itself**, below Copy path and
+**Changing Jason itself.** **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
 plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
 `jason session open --setup`, which opens the host the preference
@@ -260,7 +240,7 @@ turn of this kind has named since an earlier version of the desktop kept it show
 the entry is shown but cannot be chosen, and says to stop the turn or wait for it to end. Beside it the menu says "It
 continues in your terminal under {place}'s own permission settings. This window's permission cards do not follow it, and
 this window does not show what happens there." It is never the default. A refusal of the command line is said in its own
-words, and in the demo the terminal works with the demo's data, as the other terminals do.
+words.
 
 ### The chat in a browser tab
 
@@ -285,104 +265,46 @@ not already running keeps it, with the code, in its arguments for as long as it 
 `127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
 which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
 still answered in this window." The runtime gains no route for it and knows nothing of it; its page may connect to any port on
-`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation and in the demo alike.
+`127.0.0.1`, which is how the tab reaches the desktop. Browser is offered in your own installation.
 
 ## The demo
 
-The demo is a second, real installation of Jason on invented people, so you can see the product work before you connect
-anything of your own. It has its own data directory and its own harness root, and nothing of your installation is read,
-written or mixed into it. It runs the same runtime, the same database and the same page; a campaign in it is a campaign,
-an approval you give moves the work, and the numbers and the Feed are the runtime's own. What stands where a provider
-would is [the demo provider](../plugins/demo/README.md), a plugin that requests no program, no host and no variable, so
-it can reach nothing outside its process: a message approved in the demo is answered as sent and goes to nobody.
+The demo is a page: a mock of Jason at work on sample data, so you can see what Jason does before you connect anything of
+your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
+shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
+started, no folder is made and nothing of your own installation is read or written. Nothing the page shows is sent
+anywhere, and nothing you do in it is kept; the page starts from its beginning each time it is shown.
 
-**How you meet it.** A new installation opens on the demo: the first start of a desktop that finds no data directory of
-yours, or one holding nothing but the desktop's own records, and no record of a mode writes the record as the demo and
-starts on it, and nothing of your own installation is made until you choose **Live**. Choosing **Live** from it starts your
-own installation for the first time, as a first start without the demo would, in the Light theme a new installation meets.
-An installation that already existed, with a record or without, and one updated from an earlier version open where they
-did. A top bar heads every screen in both modes: in your own installation a green dot and **Live**; in the demo an amber
-dot and "Demo: an example of what you can build on Jason. The data is samples, and nothing is sent." (in a narrow window,
-"Sample data. Nothing is sent."). On its right
-the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
-installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
-whose start failed. The first time the demo opens, its sample is placed rather than made: the application carries the
-sample as an archive that `jason export` wrote when the release was built, and `jason import` places it into the demo's
-two folders, beginning as the window opens and ending before the demo's runtime starts, which takes a few seconds behind
-**Preparing the demo…**. The sample is made at the start instead when the archive is older than twenty-one days, by the
-moment the archive itself records, so an old installer never opens on an empty Dashboard; when the application carries
-no archive, which is so of a build made outside a release; and when the import fails, after what it placed is taken away.
-Then the page opens at once and the sample fills it as it is made, with **Preparing the demo…** in the top bar until it
-is ready, which takes a little over a minute. Until the sample is ready, placed or made, the switch, **Start the Demo
-Over** and **Back to Your Own Installation** wait for it, each saying so. If the desktop quits before the sample is
-whole, the next start of the demo starts it over by itself and makes it whole. **Start the Demo Over**, beside it
-in the same menus, asks once ("Start the demo over?": everything you did in the demo is removed and it starts again from
-the beginning; your own installation is not touched), stops the demo's runtime, leaves a request in your own installation's
-`desktop/` folder and starts the desktop again. The next start carries the request out before anything names the demo's
-directory: it takes each of the demo's two folders out of the demo's name with one rename, deletes the renamed copies as far
-as it can, and then places the sample again, or makes it as above, so what you did in it is gone and the story moves from
-its start. A
-copy it could not delete is left, marked, and removed by the next start over, by Remove What Jason Placed or by the
-uninstall. If the start cannot carry the request out, it keeps it and opens your own installation, and the next demo start
-tries again.
+**How you meet it.** A new installation opens on the demo, at once: the first start of a desktop that finds no data
+directory of yours, or one holding nothing but the desktop's own records (the record of the mode, Electron's profile and
+the desktop's own log), and no record of a mode writes the record as the demo and shows the page. Nothing of your own
+installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
+updated from an earlier version open where they did.
 
-**What the sample holds.** An invented seller and one project with four campaigns in different states (two running,
-one paused, one a draft), fifty-four invented people at `.example` addresses, twenty-eight messages already approved and
-sent, and ten waiting for your approval. A few of the people who were written to answer, and the demo provider reports their written
-replies through events as any provider that reads events does: where the sample is placed, the replies of its story are
-there when the demo opens; where it is made at the start, they arrive within minutes. The sample's
-story began when the release was built, or, where the sample is made at the start, that day, with no past before it, so
-the Dashboard's thirty days hold it for thirty days after; it is email only; it raises no question, and a person whose
-message is waiting for your approval never answers it.
+**The switch.** On the right of the page's top bar is the **Demo | Live** switch, drawn by the desktop over the place
+where the page draws its own, in the page's colours, so you see one. Choosing **Live** writes the mode and starts the
+desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
+meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
+carries the same switch, with **Demo** to come back.
 
-**What is off in the demo, and why.** The demo has no real account and never gets one, so the acts that connect or change
-one are off, and the card says "Not in the demo: accounts are connected in your own installation.": signing in to Reply,
-its API key, the Reply CLI's install and update, adding, reconnecting, pausing, resuming, unblocking, limiting and
-deleting an account, and connecting or disconnecting a notification channel. Updates, the runtime's start at logon, the
-`jason` command on the PATH and Remove What Jason Placed are off too, each with a line saying it is not in the demo and
-that going back to your own installation is how to reach it, because each outlasts the run or removes an installation.
-Your AI's own keys and hosts, which are the chat's and not an account of the demo, work as they do in your installation.
+**What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
+a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The view loads the
+page's own file and nothing else: every other request the page makes, to the network, to a file or to this computer, is
+refused, and a link, a form, a pop-up, a download, a dropped file and any other way to leave the page are refused too.
+Every permission it asks for is denied: the camera, the microphone, your location, notifications, reading the clipboard,
+the screen and any device. Its content policy lets it run only the script and the styles written inside it, with the fonts
+and the pictures it carries. What you type into it stays in it.
 
-**Full access is not offered in the demo.** The mode menu shows it off with "Not in the demo: Full access is for your own
-installation.", and the standing choice does not apply there, to a new chat or to one reopened. No chat of a demo run
-enters it by any path, the menu and the page's call included.
+**What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
+tray offer no update, no start of the runtime at logon, no `jason` command on the PATH and no Remove What Jason Placed:
+each belongs to your own installation, which **Live** opens. The page is drawn in the light theme it was built in,
+whatever you chose in Appearance.
 
-**The chat refuses your own installation, whole.** In a demo run the chat's fence holds your own data directory and your own
-harness root, each refused whole in every access mode: no folder inside either is open, and no card covers them. A read,
-a write or a command that names them is refused with a sentence saying the path belongs to your own installation and that
-the chat runs in the demo. The match is by path segment, so `~/.jason` never covers `~/.jason-demo` and `~/Jason` never
-covers `~/Jason-demo`, in either direction. In your own installation the chat's fence holds the data directory alone, as
-before. Codex's turns are unchanged: they run in Codex's read-only sandbox, in the demo as in your own installation.
-
-**The chat.** The chat works in the demo as anywhere: the AI you connected runs `jason` against the demo installation,
-where it can do no harm to anybody. Nothing is connected for you, and the chat says so as it does in your own
-installation when no AI is. No AI role runs in the demo's runtime: the responder is off and the campaign manager keeps
-only the trigger it cannot do without at its slowest cadence, so nothing waits for an AI nobody connected and nothing
-fails for lack of one.
-
-**Its two folders.** The demo's data directory and its harness root are each your own with `-demo` after the name, beside
-yours: `~/.jason` gives `~/.jason-demo` and `~/Jason` gives `~/Jason-demo`, whatever `JASON_DATA_DIR` and `Harness:Root`
-name for you. The demo's harness root is set in the demo's own settings file, never inside either data directory. It is
-made from your harness root as it stands when the demo is set up, so if you change `Harness:Root` later, Remove What
-Jason Placed and the uninstall take off the `-demo` folder of the new root and the old one stays behind. Each of the two
-folders carries a mark file, `.jason-demo-folder`, written when the desktop makes it or, for a harness root `jason import`
-made, carried in the archive or written once the import has ended: a folder of the same name without the
-mark is never used, written into or removed, and the desktop opens your own installation instead. Which
-installation the desktop runs on is one word, `live` or `demo`, in `<data>/desktop/mode` of your own installation (see
-Its own files, above), and a start is Live unless it says `demo`.
-
-**Quitting and switching.** Quitting a demo run, or switching to Live, stops the demo's runtime first; your own runtime is
-never stopped by either. **Remove What Jason Placed** and the Windows uninstall take the demo's two folders off too,
-the demo's runtime stopped first, and with them any `<folder>.removing-*` copy a start over left beside either, when it
-carries the demo's mark (see Taking it off, below). Removing the two folders is all that removing the demo means.
-
-**From a terminal.** The demo installation is a real installation, so the `jason` command line reaches it by naming its
-data directory: set `JASON_DATA_DIR` to the demo's data directory, and every verb you type then reads and changes the demo
-and not your own installation, with no verb of its own for it. The demo's runtime must be running, which the desktop
-does while a demo run is open. In a POSIX shell, `JASON_DATA_DIR="$HOME/.jason-demo" jason campaign list`; in PowerShell,
-`$env:JASON_DATA_DIR = "$HOME\.jason-demo"; jason campaign list`, after which that window's `jason` stays on the demo until
-you remove the variable with `Remove-Item Env:JASON_DATA_DIR`. If your own data directory is not `~/.jason`, the demo's
-is the same path with `-demo` after it.
+**An earlier version's demo.** Up to version 0.44 the demo was a second installation of Jason on invented people, with a
+data directory and a harness root of its own beside yours (`~/.jason-demo` and `~/Jason-demo`). This version neither
+starts nor touches them. An update, the installer and the uninstaller still stop a runtime such a demo left running,
+and Remove What Jason Placed and the Windows uninstall still take the two folders off (see Taking it off, below);
+nothing else reads them, and they can be deleted by hand once nothing runs from them.
 
 ## Connect
 
@@ -823,19 +745,20 @@ seen. The x64 Mac executable is built and signed and not covered by the suite.
 
 Take off what Jason placed first, then the application. What stays in every case is your data: the data directory
 (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one `Harness:Root` names) and the
-updater's cache named above. The demo's two folders are not your data: the removal takes them off too.
+updater's cache named above. The two folders an earlier version's demo made (see [the demo](#the-demo)) are not your
+data: the removal takes them off too.
 
 - **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
   removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
   the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
-  names this application's `jason`, then the demo's two folders and any marked `<folder>.removing-*` copy beside them, and names what it leaves.
+  names this application's `jason`, then an earlier demo's two folders and any marked `<folder>.removing-*` copy beside them, and names what it leaves.
 - **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
-  them. It last takes off the demo's two folders, its data directory and its harness root, which are yours with `-demo`
+  them. It last takes off an earlier demo's two folders, its data directory and its harness root, which are yours with `-demo`
   after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
-  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since the demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
+  one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since that demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
 - **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`
