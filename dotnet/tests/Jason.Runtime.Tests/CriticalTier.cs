@@ -39,7 +39,7 @@ internal static partial class CriticalTier
         [Family.B4] =  [  0,   0,   0,   0,   7],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
-        [Family.B7] =  [  3,   3,   3,   3,  13],
+        [Family.B7] =  [  4,   4,   4,   4,  14],
         [Family.B8] =  [  0,   0,   0,   0,   1],
         [Family.B9] =  [  3,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
@@ -101,11 +101,11 @@ internal static partial class CriticalTier
     /// </summary>
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
-        (28, 375, 607),       // Jason.App.Tests
-        (164, 2779, 5269),    // Jason.Cli.Tests
-        (104, 804, 3890),     // Jason.Contracts.Tests
-        (47, 282, 450),       // Jason.PluginHost.Tests
-        (718, 6121, 12272),   // Jason.Runtime.Tests
+        (29, 415, 676),       // Jason.App.Tests
+        (165, 2780, 5270),    // Jason.Cli.Tests
+        (105, 864, 4589),     // Jason.Contracts.Tests
+        (48, 302, 479),       // Jason.PluginHost.Tests
+        (719, 6123, 12274),   // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>
@@ -154,6 +154,44 @@ internal static partial class CriticalTier
 
     /// <summary>The method a case runs, by its class and name.</summary>
     public static string Method(ITestCase testCase) => $"{testCase.TestClassName}.{testCase.TestMethodName}";
+
+    /// <summary>
+    /// Whether a method belongs to a class the tier carries whole, a class a unit can turn red without touching it: in
+    /// <c>Jason.Runtime.Tests.Persistence</c>, every class whose name ends in <c>MigrationTests</c>,
+    /// <c>MigrationHistoryTests</c>, <c>DatabaseMigratorTests</c>, and the three classes whose only subject is one
+    /// migration's <c>Up</c> over a seeded database; in <c>Jason.Cli.Tests.Documentation</c>,
+    /// <c>DocumentedPageCommandsTests</c>, except its <c>doctor --output</c> rows, whose lines are the test's own and not a
+    /// page's.
+    /// </summary>
+    /// <remarks>
+    /// A name cannot hold the upgrade methods inside the schema classes — a test that migrates to the previous migration,
+    /// seeds, and migrates to the head, in a class whose other methods hold the schema at the head — so a unit that adds
+    /// one to a schema class marks it itself.
+    /// </remarks>
+    public static bool CarriedWhole(string @class, string method)
+    {
+        var dot = @class.LastIndexOf('.');
+        var space = dot < 0 ? string.Empty : @class[..dot];
+        var name = @class[(dot + 1)..];
+        return space switch
+        {
+            "Jason.Runtime.Tests.Persistence" => name.EndsWith("MigrationTests", StringComparison.Ordinal)
+                || name is "MigrationHistoryTests" or "DatabaseMigratorTests" or "LineageBackfillTests" or "BounceStepSchemaTests" or "ResponderWatermarkSchemaTests",
+            "Jason.Cli.Tests.Documentation" => name == "DocumentedPageCommandsTests"
+                && method != "A_file_a_printed_command_writes_lands_in_this_tests_own_directory",
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// The methods, by class and name, that a class the tier carries whole holds outside the tier: each method once, in the
+    /// order the cases come, however many of its cases are outside.
+    /// </summary>
+    public static List<string> OutsideTheTier(IEnumerable<(string Class, string Method, bool Critical)> cases) =>
+        [.. cases
+            .Where(testCase => !testCase.Critical && CarriedWhole(testCase.Class, testCase.Method))
+            .Select(testCase => $"{testCase.Class[(testCase.Class.LastIndexOf('.') + 1)..]}.{testCase.Method}")
+            .Distinct(StringComparer.Ordinal)];
 
     /// <summary>Whether a data row's traits, names and values in turn, put it in the tier.</summary>
     public static bool MarksTheTier(string[]? traits) =>
@@ -382,6 +420,23 @@ public sealed class CriticalTierTests
             $"{name} {CriticalTier.Differs}:\n{string.Join('\n', problems)}\n"
             + $"Discovered, as the table writes it: {string.Join(" · ", byFamily.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key} {pair.Value}"))}; "
             + $"sizes ({tierMethods}, {methods}, {cases.Count}).");
+    }
+
+    /// <summary>
+    /// Every method of a class the tier carries whole is in the tier, so a migration's or a page's test added without its
+    /// mark is named here rather than left for the whole suite to find.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B7, "a test of a class the tier carries whole, added without its mark, which a run of the tier cannot see, turns this red")]
+    public async Task Every_method_of_a_class_the_tier_carries_whole_is_in_it()
+    {
+        var cases = await CriticalTier.ThisAssembly();
+
+        var outside = CriticalTier.OutsideTheTier(cases.Select(testCase => (testCase.TestClassName ?? string.Empty, testCase.TestMethodName ?? string.Empty, CriticalTier.IsCritical(testCase))));
+
+        Assert.True(
+            outside.Count == 0,
+            $"{typeof(CriticalTierTests).Assembly.GetName().Name} holds methods of classes the tier carries whole outside the tier; mark each with [Critical]:\n{string.Join('\n', outside)}");
     }
 
     /// <summary>

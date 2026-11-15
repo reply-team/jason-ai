@@ -94,4 +94,38 @@ public class CriticalTierTableTests
             CriticalTier.WithinCeiling(tier, suite) == within,
             $"{tier} of {suite} was {(within ? "refused" : "let through")}.");
     }
+
+    /// <summary>
+    /// The classes the tier carries whole are held by their names: a method of one outside the tier is named by its class
+    /// and its name, once however many of its rows are outside, and a class of another name or another namespace is not.
+    /// </summary>
+    [Fact]
+    public void A_method_of_a_class_the_tier_carries_whole_that_is_outside_it_is_named()
+    {
+        var cases = new (string Class, string Method, bool Critical)[]
+        {
+            ("Jason.Runtime.Tests.Persistence.FooMigrationTests", "Down_restores_the_table", false),
+            ("Jason.Runtime.Tests.Persistence.FooMigrationTests", "Up_keeps_the_rows", true),
+            ("Jason.Runtime.Tests.Persistence.MigrationHistoryTests", "The_history_is_append_only", false),
+            ("Jason.Runtime.Tests.Persistence.DatabaseMigratorTests", "A_failed_migration_restores_the_backup", false),
+            ("Jason.Runtime.Tests.Persistence.DatabaseMigratorTests", "A_failed_migration_restores_the_backup", true),
+            ("Jason.Runtime.Tests.Persistence.FooSchemaTests", "The_index_is_unique", false),
+            ("Jason.Runtime.Tests.Hosting.FooMigrationTests", "Elsewhere", false),
+            ("Jason.Cli.Tests.Documentation.DocumentedPageCommandsTests", "Every_documented_command_is_understood", false),
+            ("Jason.Cli.Tests.Documentation.DocumentedPageCommandsTests", "Every_documented_command_is_understood", false),
+            ("Jason.Cli.Tests.Documentation.DocumentedPageCommandsTests", "A_file_a_printed_command_writes_lands_in_this_tests_own_directory", false),
+            ("Jason.Cli.Tests.Documentation.OtherPageTests", "Every_line_is_typed", false),
+        };
+
+        var outside = CriticalTier.OutsideTheTier(cases);
+
+        Assert.Equal(
+            [
+                "FooMigrationTests.Down_restores_the_table",
+                "MigrationHistoryTests.The_history_is_append_only",
+                "DatabaseMigratorTests.A_failed_migration_restores_the_backup",
+                "DocumentedPageCommandsTests.Every_documented_command_is_understood",
+            ],
+            outside);
+    }
 }
