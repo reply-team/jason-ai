@@ -831,9 +831,27 @@ export function ownServersLine(host: DesktopHost): string | null {
     });
 }
 
+/**
+ * The one line under the program the agents' roles run on by default, where the chat can use it — it drives the chat, is
+ * found here and is at its version floor: the host and the profile's name, as the desktop read them from the
+ * installation's settings and the runtime. Nothing for any other host.
+ */
+export function runsRolesLine(host: DesktopHost): string | null {
+    if (
+        host.kind !== 'program' ||
+        !host.found ||
+        !host.drivesChat ||
+        host.belowFloor !== null ||
+        typeof host.runsRoles !== 'string'
+    )
+        return null;
+    return t('connect.runsRoles', { host: host.label, profile: host.runsRoles });
+}
+
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     const own = ownServersLine(host);
+    const roles = runsRolesLine(host);
     return html`<div class="setrow">
         <div class="grow">
             <b>${host.label}</b>
@@ -848,6 +866,7 @@ function program(host: DesktopHost, busy: Html | null): Html {
             ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
             ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
             ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
+            ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
         </div>
         ${
             !host.found && host.install

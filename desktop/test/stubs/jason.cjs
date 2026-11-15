@@ -132,6 +132,67 @@ if (args[0] === 'status') {
     const answer = () => print({ items, next_cursor: process.env.STUB_JOURNAL_MORE === 'yes' ? 'jrn_next' : null });
     if (process.env.STUB_JOURNAL_SLEEP) setTimeout(answer, Number(process.env.STUB_JOURNAL_SLEEP));
     else answer();
+} else if (verb === 'profile list' || verb === 'profile create' || verb === 'profile get') {
+    // The execution profiles, kept beside the record (outside the data directory, as the runtime's database is no file a
+    // test reads): each { name, disabled, revision: { host, program } }, plus what the desktop's own settings file held when
+    // it was made. STUB_PROFILE_LIST_FAILS=yes answers as an unreachable runtime does; STUB_PROFILE_CREATE_FAILS=yes refuses
+    // the create; STUB_PROFILE_CREATE_LOST=yes makes the profile and still exits 1, as an answer lost on its way would;
+    // STUB_PROFILE_CREATE_BREAKS_SETTINGS=yes makes it and leaves the installation's settings file unreadable;
+    // STUB_PROFILE_CREATE_NAMES_DEFAULT=<name> makes it and names that default in the installation's settings file, as a
+    // person editing the file at that moment would. A made profile gets an id of the runtime's shape.
+    const store = join(require('node:path').dirname(process.env.STUB_RECORD), 'profiles.json');
+    let profiles = [];
+    try {
+        profiles = JSON.parse(readFileSync(store, 'utf8'));
+    } catch {}
+    const refuse = (code, message) => {
+        print({ error: { code, message, retryable: false } });
+        process.exit(1);
+    };
+    if (verb === 'profile list') {
+        if (process.env.STUB_PROFILE_LIST_FAILS === 'yes') {
+            process.stderr.write('No runtime answered.\n');
+            process.exit(3);
+        }
+        const listed = args.includes('--include-disabled') ? profiles : profiles.filter((profile) => !profile.disabled);
+        const size = args.includes('--limit') ? Number(args[args.indexOf('--limit') + 1]) : 50;
+        print({ items: listed.slice(0, size), next_cursor: listed.length > size ? String(size) : null });
+    } else if (verb === 'profile get') {
+        const found = profiles.find((profile) => profile.name === args[2]);
+        if (found === undefined) refuse('profile_not_found', 'No profile has that name.');
+        print(found);
+    } else {
+        if (process.env.STUB_PROFILE_CREATE_FAILS === 'yes') refuse('validation_failed', 'The profile was refused.');
+        const name = args[2];
+        if (profiles.some((profile) => profile.name === name)) refuse('profile_exists', 'A profile has that name.');
+        const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
+        let mark = null;
+        try {
+            mark = JSON.parse(readFileSync(join(data, 'desktop', 'settings.json'), 'utf8')).roles_profile_pending ?? null;
+        } catch {}
+        const id = `exp_01JD${String(profiles.length + 1).padStart(22, '0')}`;
+        const made = { id, name, disabled: false, revision: { host: option('--host'), program: option('--program') }, mark_when_made: mark };
+        writeFileSync(store, JSON.stringify([...profiles, made]));
+        if (process.env.STUB_PROFILE_CREATE_BREAKS_SETTINGS === 'yes') {
+            mkdirSync(join(data, 'config'), { recursive: true });
+            writeFileSync(join(data, 'config', 'settings.json'), '{ not json');
+        }
+        if (process.env.STUB_PROFILE_CREATE_NAMES_DEFAULT) {
+            const file = join(data, 'config', 'settings.json');
+            let held = {};
+            try {
+                held = JSON.parse(readFileSync(file, 'utf8'));
+            } catch {}
+            held.Roles = { ...(held.Roles ?? {}), DefaultExecutionProfile: process.env.STUB_PROFILE_CREATE_NAMES_DEFAULT };
+            mkdirSync(join(data, 'config'), { recursive: true });
+            writeFileSync(file, JSON.stringify(held, null, 2));
+        }
+        if (process.env.STUB_PROFILE_CREATE_LOST === 'yes') {
+            process.stderr.write('No answer came back.\n');
+            process.exit(1);
+        }
+        print(made);
+    }
 } else if (verb === 'project get') {
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
