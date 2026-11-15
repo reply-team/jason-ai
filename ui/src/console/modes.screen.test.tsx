@@ -730,6 +730,26 @@ describe('the empty chat’s sentence about approval', () => {
         expect(said()).toBeNull();
     });
 
+    it('is not drawn for a mode word this desktop does not know, which a newer desktop may write', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000C1',
+            campaignId: 'cmp_3',
+            title: 'Autumn',
+            mode: 'some_newer_mode' as never,
+        });
+        renderConsole(desktop, (fake) =>
+            fake
+                .answerAnyRequest('approval.list', () => 'approval.list/empty')
+                .answerAnyRequest('decision.list', () => 'decision.list/empty'),
+        );
+        const nav = () => document.querySelector<HTMLElement>('.side nav[aria-label="Conversations"]')!;
+        await waitFor(() => within(nav()).getByRole('button', { name: 'Autumn' }));
+        fireEvent.click(within(nav()).getByRole('button', { name: 'Autumn' }));
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Autumn?' }));
+        expect(said('What should Jason do in Autumn?')).toBeNull();
+    });
+
     it('is drawn from the mode a reopened chat holds, never from an earlier drawing of it', async () => {
         const desktop = chatDesktop();
         desktop.keep({
