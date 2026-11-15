@@ -34,7 +34,8 @@ async function renderConsole(
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
-        .answer('approval.get', 'approval.get/email-message');
+        // A link opens the first; Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/email-message', 'approval.get/other-pending');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();

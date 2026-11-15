@@ -37,12 +37,16 @@ function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop(), jour
 }
 
 function pending(fake: FakeApi): FakeApi {
-    return nothingWaitsInChats(fake)
-        .answer('approval.list', 'approval.list/pending')
-        .answer('decision.list', 'decision.list/pending')
-        .answer('preference.list', 'preference.list/set')
-        .answer('campaign.list', 'campaign.list/screen')
-        .answer('campaign.summary', 'campaign.summary/all');
+    return (
+        nothingWaitsInChats(fake)
+            .answer('approval.list', 'approval.list/pending')
+            // Needs you reads each approval it lists whole, for its row's Approve.
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
+            .answer('decision.list', 'decision.list/pending')
+            .answer('preference.list', 'preference.list/set')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all')
+    );
 }
 
 /**
@@ -136,6 +140,10 @@ describe('the console', () => {
         const needs = await openNeeds();
         await waitFor(() => within(needs).getAllByText('Grace Hopper'));
         const row = (id: string) => needs.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+        // Approve is live once the row's approval has been read whole.
+        await waitFor(() =>
+            expect(within(row('apr_1')).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false),
+        );
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(fake.sent('approval.approve')).toEqual({ approval_id: 'apr_1' }));
         await waitFor(() => expect(fake.calls.filter((each) => each.operation === 'approval.list')).toHaveLength(2));

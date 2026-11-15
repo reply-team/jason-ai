@@ -82,8 +82,9 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
-  **Open your agents**.
+  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
+  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
+  could not be, and **Details** stays. With nothing waiting it says you are caught up and offers **Open your agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
   channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,

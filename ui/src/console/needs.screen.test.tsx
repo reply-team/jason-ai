@@ -10,8 +10,9 @@ import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { attention, filter } from './needs';
+import { attention, filter, reads } from './needs';
 import { chats, lines } from './state';
+import { forgetWaiting } from './waiting';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -47,6 +48,9 @@ beforeEach(() => {
     attention.detail.value = null;
     attention.approvals.value = [];
     attention.questions.value = [];
+    reads.approvals.value = {};
+    reads.unread.value = {};
+    forgetWaiting();
     filter.value = 'all';
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
@@ -93,9 +97,10 @@ describe('Needs you', () => {
     it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
-        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
         expect(pressed()).toEqual(['All']);
         const asked = fake.calls.length;
         const hash = location.hash;
@@ -117,7 +122,8 @@ describe('Needs you', () => {
         await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/messages-pending')
-                .answer('decision.list', 'decision.list/empty'),
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message'),
         );
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         const waiting = attention.approvals.value;
@@ -146,22 +152,27 @@ describe('Needs you', () => {
         await waitFor(() => expect(row('dec_1')).toBeTruthy());
     });
 
-    it('says on each row who the message goes to, from what the row carries and with no read per row', async () => {
+    it('says on each row who the message goes to, from what the row carries, before its whole read answers', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const release = fake.hold('approval.get');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('to Ines Duarte');
         expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('to Noor Haddad');
-        expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(0);
+        // Each row is read whole once, for its Approve; the name never waits for that read.
+        await waitFor(() => expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(2));
+        release();
+        await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
     });
 
     it('names a row that carries no contact by the address its own preview highlights, once its details are open', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
-            .answer('approval.get', 'approval.get/email-message');
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: null }));
@@ -178,7 +189,8 @@ describe('Needs you', () => {
         await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/pending')
-                .answer('decision.list', 'decision.list/empty'),
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending'),
         );
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('Ada Lovelace');
@@ -214,7 +226,7 @@ describe('Needs you', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/pending')
             .answer('decision.list', 'decision.list/empty')
-            .answer('approval.get', 'approval.get/pending-with-preview');
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Details' }));
@@ -227,7 +239,8 @@ describe('Needs you', () => {
     it('draws a hostile sender, channel and recipient as text', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         const recorded = fixtures['approval.get/email-message'].response;
@@ -342,6 +355,106 @@ describe('Needs you', () => {
             await waitFor(() => expect(reads(fake, 'apr_1')).toHaveLength(2), { timeout: 3000 });
             release();
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+        });
+
+        const enrolments = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/pending')
+                .answer('decision.list', 'decision.list/empty');
+
+        // The rule is the row's, not a list of kinds: whatever an approval does, Approve waits for its whole read.
+        it('holds Approve on an enrolment it could not read, says why, keeps Details, and approves nothing', async () => {
+            const fake = enrolments().answer('approval.get', 'approval.get/pending-with-preview');
+            fake.unreachable('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            const said = await waitFor(() =>
+                within(row('apr_2')).getByText(/could not be read, so it cannot be approved here/),
+            );
+            expect(words(said)).toContain('Details reads it again');
+            expect(words(said)).toContain('Failed to fetch');
+            expect(live(approve('apr_2'))).toBe(false);
+            expect(live(details('apr_2'))).toBe(true);
+            fireEvent.click(approve('apr_2'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+        });
+
+        it('holds Approve on an enrolment while its read is unanswered, and says so', async () => {
+            const fake = enrolments().answer(
+                'approval.get',
+                'approval.get/pending-with-preview',
+                'approval.get/other-pending',
+            );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_2',
+            );
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            expect(words(row('apr_2'))).toContain('cannot be approved until it is shown here whole');
+            expect(live(approve('apr_2'))).toBe(false);
+            expect(live(details('apr_2'))).toBe(true);
+            release();
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            expect(words(row('apr_2'))).not.toContain('cannot be approved');
+        });
+
+        it('draws the doubts of an enrolment a person was asked to look at, as it draws a message’s', async () => {
+            const fake = enrolments().answer('approval.get', 'approval.get/with-doubts', 'approval.get/other-pending');
+            await renderConsole(fake);
+            const asked = await waitFor(() =>
+                within(row('apr_1')).getByText(`A person asked you to look at this: ${whyWords('sensitive_topic')}`),
+            );
+            expect(within(row('apr_1')).getByText('Their words: She asks about a price.')).toBeTruthy();
+            expect(live(approve('apr_1'))).toBe(true);
+            expect(asked.compareDocumentPosition(approve('apr_1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(row('apr_2').querySelector('.send-doubts')).toBeNull();
+        });
+
+        it('approves a message it has read through approval.approve, after checking it against its work item', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-send')
+                .answer('approval.approve', 'approval.approve/approved');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fake.answer('approval.list', 'approval.list/empty');
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]));
+            expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
+            await waitFor(() => expect(needs().querySelector('[data-id="apr_1"]')).toBeNull());
+        });
+
+        it('does not approve a message whose text moved since it was asked, and says so on its row', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-edited-send');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => within(row('apr_1')).getByText(/changed after this approval was asked/));
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+            expect(live(approve('apr_1'))).toBe(true);
+        });
+
+        it('approves a row whose own read failed once Details has read it whole', async () => {
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const reachable = fake.unreachable(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake);
+            await waitFor(() => within(row('apr_1')).getByText(/could not be read/));
+            reachable();
+            fireEvent.click(details('apr_1'));
+            await waitFor(() => within(row('apr_1')).getByText('Notes from the meetup'));
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
         });
     });
 });

@@ -1,5 +1,6 @@
 import type { Api } from '../../api/client';
 import type { ActorRef, ModeInForce } from '../../api/types';
+import type { MessageKey } from '../../locale/en';
 import { t } from '../../platform/i18n';
 import { senderKey, toneKey, valueOf, type PreferenceItem, type PreferenceUnsetRequest } from '../settings/voice-model';
 
@@ -91,6 +92,50 @@ export function doubtsOf(preview: Record<string, unknown>): Doubt[] {
             },
         ];
     });
+}
+
+const knownCodes = [
+    'unsupported_claim',
+    'not_in_memory',
+    'off_brief',
+    'sensitive_topic',
+    'instruction_in_text',
+    'new_kind_of_person',
+    'wrong_recipient',
+    'other',
+];
+
+/** Why a send is doubted, in words; a code this build does not know is shown as it is. */
+export const whyWords = (code: string): string =>
+    knownCodes.includes(code) ? t(`modes.code.${code}` as MessageKey) : code;
+
+function whoWords(doubt: Doubt): string {
+    if (doubt.who) return doubt.who;
+    if (doubt.role) return t('modes.doubts.who.role', { role: doubt.role });
+    return doubt.who === '' ? t('modes.doubts.who.person') : t('modes.doubts.who.ai');
+}
+
+/** One doubt in words: who doubted the send and why, and the sentence the doubter wrote, when they wrote one. */
+export type DoubtWords = { said: string; note: string | null };
+
+/**
+ * The doubts an approval's preview carries, in the words every place that draws them uses: a heading and, for each
+ * doubt, who doubted the send and why, and the doubter's own sentence. Null where the preview carries none. Text only:
+ * each place draws it as text, never as markup.
+ */
+export function doubtWords(preview: Record<string, unknown>): { heading: string; doubts: DoubtWords[] } | null {
+    const doubts = doubtsOf(preview);
+    if (doubts.length === 0) return null;
+    return {
+        heading: t('modes.doubts.heading'),
+        doubts: doubts.map((doubt) => ({
+            said: t(doubt.source === 'ask_person' ? 'modes.doubts.asked' : 'modes.doubts.reviewed', {
+                who: whoWords(doubt),
+                why: whyWords(doubt.code),
+            }),
+            note: doubt.note ? t('modes.doubts.note', { note: doubt.note }) : null,
+        })),
+    };
 }
 
 /** The mode word a stored send-mode preference holds, or null for one unset, which the runtime treats as every message. */

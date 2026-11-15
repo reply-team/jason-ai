@@ -3,21 +3,15 @@ import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { MessageEditor } from '../screens/attention/message-editor';
-import {
-    STALE_SENTENCE,
-    checkMessage,
-    editable,
-    readItem,
-    sentence,
-    uncheckedSentence,
-} from '../screens/attention/message-edit';
+import { editable, readItem, sentence } from '../screens/attention/message-edit';
 import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
 import { clock, here } from './state';
-import { toApprovalCard, toQuestionCard } from './waiting-model';
+import { approvalGate, readingSentence, toApprovalCard, toQuestionCard, unreadSentence } from './waiting-model';
 import {
     answerWaiting,
     approveWaiting,
+    approveWhole,
     drawWaiting,
     editedWaiting,
     moreWaiting,
@@ -29,14 +23,10 @@ import {
 // An agent's chat, under its conversation: the campaign's approvals and questions that wait on a person, as cards.
 // Approve, Edit, Reject and an answer act through Needs you's holder; Details opens the item in Needs you.
 
-const readingSentence = 'This approval is being read; it cannot be approved until it is shown here whole.';
-const unreadSentence =
-    'This approval could not be read, so it cannot be approved here; Details opens it in Needs you. The runtime said:';
-
 function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSummary }) {
     const api = useApi();
     const whole = waiting.approvals.value[row.id];
-    const unreadWhy = waiting.unread.value[row.id];
+    const gate = approvalGate(whole, waiting.unread.value[row.id]);
     const card = toApprovalCard(row, whole, clock.value);
     const busy = waiting.store.busy.value;
     const [rejecting, setRejecting] = useState(false);
@@ -53,24 +43,16 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
-    // Every approval, whatever it does, is decided only once it has been read whole: its doubts, its words or what will
-    // happen, and the person it reaches all come from that read. The rule is the card's, never a list of kinds.
-    const unread = whole === undefined;
-    const held = busy || checking || unread;
+    // Every approval, whatever it does, is decided only once it has been read whole (`approvalGate`, which Needs you's
+    // rows follow too): its doubts, its words or what will happen, and the person it reaches all come from that read.
+    const held = busy || checking || !gate.live;
 
-    // The browser's approval panel's check, at the press: the work item is read again, and a message whose text moved
-    // since the approval was asked is not approved, since the runtime asks again with the new text.
+    // A message is checked against its work item at the press, and one whose text moved since the approval was asked is
+    // not approved, since the runtime asks again with the new text.
     async function approve() {
         setProblem(null);
-        if (whole === undefined) return;
-        if (card.message) {
-            setChecking(true);
-            const checked = await checkMessage(api, whole).finally(() => setChecking(false));
-            if (checked === null) return;
-            if ('unchecked' in checked) return setProblem(uncheckedSentence(checked.unchecked));
-            if (checked.stale) return setProblem(STALE_SENTENCE);
-        }
-        await approveWaiting(api, waiting, row.id);
+        const why = await approveWhole(api, whole, () => approveWaiting(api, waiting, row.id), setChecking);
+        if (why !== null) setProblem(why);
     }
 
     async function edit() {
@@ -112,14 +94,14 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             {card.body !== null && <div className="said waiting-body">{card.body}</div>}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
             {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}
-            {unread && (
+            {!gate.live && (
                 <div className="note am" role="status">
-                    {unreadWhy === undefined ? (
+                    {'reading' in gate ? (
                         readingSentence
                     ) : (
                         <>
-                            {unreadSentence} {unreadWhy.code !== null && <code>{unreadWhy.code}</code>}{' '}
-                            {unreadWhy.message}
+                            {unreadSentence('chat')} {gate.unread.code !== null && <code>{gate.unread.code}</code>}{' '}
+                            {gate.unread.message}
                         </>
                     )}
                 </div>

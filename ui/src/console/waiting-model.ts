@@ -6,6 +6,37 @@ import { reasonLabel, title } from '../screens/attention/labels';
 import { isMessage } from '../screens/attention/message-edit';
 import { ageOf, operationWords, toApprovalDetail } from './live';
 
+/** What the runtime said: its code, when it gave one, and its words. */
+export interface Said {
+    code: string | null;
+    message: string;
+}
+
+/**
+ * Whether an approval may be approved where it is drawn, in an agent's chat or on a row of Needs you: only once it has
+ * been read whole, whatever it does, since its doubts, its words or what will happen, and the person it reaches all
+ * come from that read. The rule is the approval's, never a list of kinds. Until then it is being read, or its read
+ * failed with what the runtime said.
+ */
+export type ApprovalGate = { live: true } | { live: false; reading: true } | { live: false; unread: Said };
+
+export function approvalGate(whole: Approval | undefined, unread: Said | undefined): ApprovalGate {
+    if (whole !== undefined) return { live: true };
+    return unread === undefined ? { live: false, reading: true } : { live: false, unread };
+}
+
+/** What a held Approve says while its approval is being read. */
+export const readingSentence = 'This approval is being read; it cannot be approved until it is shown here whole.';
+
+/**
+ * What a held Approve says when its approval could not be read, before what the runtime said; and where the person can
+ * still open it: in a chat, Details opens it in Needs you; on Needs you's row, Details reads it again.
+ */
+export const unreadSentence = (where: 'chat' | 'needs'): string =>
+    `This approval could not be read, so it cannot be approved here; ${
+        where === 'chat' ? 'Details opens it in Needs you' : 'Details reads it again'
+    }. The runtime said:`;
+
 export interface ApprovalCard {
     id: string;
     /** What the approval does, in words: Message, LinkedIn invite, Add to sequence. */

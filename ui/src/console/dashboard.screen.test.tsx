@@ -41,6 +41,8 @@ type Options = {
 function renderConsole(options: Options = {}) {
     const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', options.approvals ?? 'approval.list/pending')
+        // Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
         .answer(
             'decision.list',
             options.approvals === 'approval.list/empty' ? 'decision.list/empty' : 'decision.list/pending',
