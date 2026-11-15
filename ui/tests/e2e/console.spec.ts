@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, openBySearch, test } from './fixtures';
 
 // The console is what the page mounts inside Jason Desktop. The desktop is stood in for by a script that runs before the
 // page's own: the seam's shape and nothing behind it, so this proves the console's seams in a real browser, under the
@@ -165,13 +165,8 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     await expect(page.locator('.jc-console .shell')).toHaveCSS('display', 'flex');
     await expect(page.locator('.jc-console .side')).toHaveCSS('width', '232px');
 
-    const side = page.locator('.side');
     // Live's sidebar draws no row for Activity, the Feed or Connect; Search finds each.
-    const search = async (text: string) => {
-        await side.getByRole('button', { name: /^Search/ }).click();
-        await page.getByPlaceholder('Search agents, people, pages and settings').fill(text);
-        await page.keyboard.press('Enter');
-    };
+    const search = (text: string) => openBySearch(page, text);
     await search('Activity');
     await expect(page.getByText('Following the journal')).toBeVisible();
     expect(streams).toEqual([`ws://127.0.0.1:${jason.port}/v1/journal.stream`]);
