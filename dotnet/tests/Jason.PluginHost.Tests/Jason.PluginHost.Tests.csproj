@@ -8,6 +8,8 @@
   <ItemGroup>
     <!-- The canonical plugin package, kept in one place and linked into every test project that runs it. -->
     <None Include="../fixtures/plugins/**" LinkBase="Fixtures/plugins" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The official Reply package, linked apart from the fixtures, so its error table runs here on a pinned clock. -->
+    <None Include="../../../plugins/reply/**" LinkBase="Fixtures/packages/reply" CopyToOutputDirectory="PreserveNewest" />
     <!-- The one rule against a test matching a sentence the system words in the machine's language: each test assembly reads itself. -->
     <Compile Include="../Jason.Runtime.Tests/SystemSentenceTests.cs" Link="SystemSentenceTests.cs" />
     <!-- The one rule for ending a process from a test, held in one file and linked here: a test ends only a child it can prove is its own. -->

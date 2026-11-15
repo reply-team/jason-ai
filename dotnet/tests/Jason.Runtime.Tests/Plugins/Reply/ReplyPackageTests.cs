@@ -1465,6 +1465,35 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// 0.16.0 also reads Reply's two limits on a direct email by Reply's code as the mailbox's block, the daily one until the
+    /// next midnight UTC, and keeps nothing of the dead record a refusal names. The README says, in one sentence, what the
+    /// active-contacts block holds: every email from that mailbox, to people already in conversation too. Both say that Reply
+    /// gives the daily code to an email held for later while the mailbox already holds as many held emails as its limit.
+    /// </summary>
+    [Fact]
+    public void The_changelog_and_the_readme_say_what_reply_s_limits_on_a_direct_email_hold()
+    {
+        var section = Flat(ChangelogSection(0));
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            [
+                "`contact.dailyLimitReached`", "`contact.activeContactsLimitReached`", "midnight UTC", "dead one",
+                "already holds as many held emails as its daily limit",
+            ],
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains(
+            "While the active-contacts block stands, every email send from that mailbox waits, people already in conversation included.",
+            readme,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Reply gives the same code to an email held for later while the mailbox already holds as many held emails as its daily limit;",
+            readme,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Below it, 0.15.1, which names the two things this package gives a search that a later version reads
     /// back — the list's name and the search's reference — and says they never change; then 0.15.0, the audience family over
     /// Reply's Live Data as this package performs it: the six

@@ -19,8 +19,12 @@ starts can be claimed in the same scan. Events, before it, hands a read of an ac
 
 **Respond** reads each active campaign's `inbound_reply_observed` lines above a watermark of its own, whichever writer
 said them — this read or the events store, which say a move under one key — at most 100 a campaign a scan, each in one
-short transaction with the watermark's guarded move. For a line about a thread the campaign holds by its own pin — every
-line this read says, and an events line whose `attributed_by` is `campaign_pin` — it queues two work items:
+short transaction with the watermark's guarded move. For a line about a thread that is the campaign's own — every line
+this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
+and that says `campaign_own`, because the thread was already the campaign's own or, where no campaign the reply was
+found in held it yet and the reply named no provider campaign, the campaign was the only one, of those not archived,
+that had written to the person through that plugin before the reply ([events](events.md) §4) — it queues two work
+items:
 
 - a read of the thread, a `conversation.get` `provider_op` whose input is the thread's identifier, a page of 20 and
   offset 0, made where the thread was seen: at the plugin the reply was read at, when a route names it, resolved as the
@@ -56,15 +60,15 @@ item. A move after it
 ended makes a new pair. A responder is never given an `idempotency_key`.
 
 The step creates nothing, and still moves past the line, when `Responder:OnReply` is false; for a line older than
-`Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through a person the campaign shares rather than
-its own pin, which the manager reads across campaigns before anyone answers (`thread_not_campaign_own`); and when no
-responder could be launched — no execution profile anywhere and no entry command for the role or by default, the case
-the claim would end `role_not_launchable` (`responder_not_configured`). Each code is logged once per campaign, by id and
-code. A line whose write the database refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its
-code, and passed over alone; any other failure — a write that failed for another reason included — stops that campaign
-for this scan, and the next scan tries again. A paused campaign is not read, so its lines wait for it; a campaign with
-no new line has its watermark moved to its own last line, and a line said in another campaign or by the installation
-writes nothing for it.
+`Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through the person rather than the campaign's own
+pin, and not marked `campaign_own`: the person may be another campaign's too, so the manager reads across campaigns
+before anyone answers (`thread_not_campaign_own`); and when no responder could be launched — no execution profile
+anywhere and no entry command for the role or by default, the case the claim would end `role_not_launchable`
+(`responder_not_configured`). Each code is logged once per campaign, by id and code. A line whose write the database
+refuses by a constraint, or a domain rule refuses, is rolled back, logged once by its code, and passed over alone; any
+other failure — a write that failed for another reason included — stops that campaign for this scan, and the next scan
+tries again. A paused campaign is not read, so its lines wait for it; a campaign with no new line has its watermark
+moved to its own last line, and a line said in another campaign or by the installation writes nothing for it.
 
 It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.

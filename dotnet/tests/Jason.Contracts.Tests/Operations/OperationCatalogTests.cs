@@ -99,6 +99,26 @@ public class OperationCatalogTests
         Assert.Equal(UnderProviderBlock.Runs, OperationCatalog.Find("message.cancel")!.Dispatch.UnderProviderBlock);
     }
 
+    /// <summary>
+    /// What writes to a person is read from the documents: every operation whose <c>reach</c> is <c>act</c> without a
+    /// condition, and nothing else. A conditional act — an activation, an enrolment — writes to nobody by itself.
+    /// </summary>
+    [Fact]
+    public void The_operations_that_write_to_a_person_are_the_unconditional_acts()
+    {
+        foreach (var contract in OperationCatalog.All)
+        {
+            var writes = string.Equals(contract.Reach.Value, "act", StringComparison.Ordinal) && !contract.Reach.Conditional;
+            Assert.True(
+                writes == OperationCatalog.WritesToAPerson.Contains(contract.Id),
+                $"'{contract.Id}' (reach {contract.Reach.Value}, conditional {contract.Reach.Conditional}) writes to a person: {OperationCatalog.WritesToAPerson.Contains(contract.Id)}; expected {writes}.");
+        }
+
+        Assert.Equal(
+            ["conversation.reply", "message.send", "social_invitation.send"],
+            OperationCatalog.WritesToAPerson.Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public void Find_and_knows_give_the_same_answer_and_an_unpublished_operation_is_simply_unknown()
     {

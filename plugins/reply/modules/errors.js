@@ -212,6 +212,11 @@ export const COMMANDS = {
 // exit 3 by the command's own read/write mark in `COMMANDS` before any code is mapped. Its row says what that ending is;
 // the mark decides it — which is why `inbox reply` being marked a write is what keeps a lost reply from being sent again.
 //
+// `reply_code:<code>` is a refusal read by Reply's own code alone, before any other key, on every refusal the CLI explains,
+// whatever its status and whatever code the CLI gave it: under `message.send`, Reply's two limits on a direct email, which
+// reply-cli from 0.20.0 prints as `rate_limited` and may give a word of its own later. An answer at 500 or above is the
+// lost answer whatever code it carries, read by `cli.js` before any row is. The two are named nowhere else.
+//
 // `inbox.category_not_found` under `conversation.classify` is kept as a defence and is not reached against a live
 // account: Reply answers a filing under a category it does not hold, on a thread it does, as a missing thread. The
 // package resolves the category from Reply's list first, so that answer comes back only for a category that disappeared
@@ -412,6 +417,8 @@ export const CODES = {
       "linkedin.sales_navigator_disconnected": "sender_unavailable",
       "linkedin.voice_profile_missing": "sender_unavailable",
       "linkedin.limit_reached": "sender_blocked_limit",
+      "reply_code:contact.dailyLimitReached": "mailbox_daily_limit",
+      "reply_code:contact.activeContactsLimitReached": "mailbox_active_contacts_limit",
       "linkedin.not_connected": "not_a_connection",
       "linkedin.no_inmail_credits": "no_inmail_credits",
       "linkedin.message_too_long": "text_too_long",
@@ -455,7 +462,10 @@ export const CODES = {
 // and a shared row naming a code an operation never declared would be a code the runtime refuses. The one exception
 // is `capability_not_offered`, which no document declares and the runtime admits beside every operation. Each row says
 // `when` it applies, the `code` and `class` it reports, and the `note` an operator reads, which is also the
-// message the failure carries.
+// message the failure carries. A row of class `blocked` names its `block` and, for a sender's, the `unnamed_sender` row a
+// command run from no sending account ends in instead; `clears` says when a block clears that the CLI named no wait for
+// (`next_utc_day`: the next midnight UTC); and `keeps_no_send` says the send a refusal names is a dead record, never kept
+// as the work item's.
 export const ROWS = {
   "shared": {
     "program_never_started": {
@@ -1506,6 +1516,32 @@ export const ROWS = {
         "class": "permanent",
         "note": "The LinkedIn account has spent its daily or weekly allowance — the attempt's trace says which — so nothing was sent. Propose the message again once the allowance renews."
       },
+      "mailbox_daily_limit": {
+        "when": "The send answered Reply's code `contact.dailyLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the mailbox has sent as many direct emails today as Reply allows it, or, for an email held for later, already holds as many held emails as its daily limit, naming a record of the send in the state `failed` or not. Reply counts the mailbox's day in UTC, so the block clears at the next midnight UTC, or as long after the answer as the CLI said to wait (`retry_after`) where it said. The record a refusal names is dead and is not kept.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "limit" },
+        "clears": "next_utc_day",
+        "keeps_no_send": true,
+        "unnamed_sender": "mailbox_limit_spent",
+        "note": "The mailbox has sent as many direct emails today as Reply allows it, so nothing was sent. The message waits on the mailbox's block and goes once Reply's day turns, at midnight UTC, and a trial gets past it."
+      },
+      "mailbox_active_contacts_limit": {
+        "when": "The send answered Reply's code `contact.activeContactsLimitReached` on a refusal reply-cli explained, whatever its status and whatever code reply-cli gave it (`rate_limited` at 429 today): the account has emailed as many contacts in its billing period as its plan allows, naming a record of the send in the state `failed` or not. The block clears as long after the answer as the CLI said to wait (`retry_after`) where it said, and is otherwise tried at the runtime's cadence. The record a refusal names is dead and is not kept.",
+        "code": "provider_blocked",
+        "class": "blocked",
+        "block": { "scope": "sender", "reason": "limit" },
+        "keeps_no_send": true,
+        "unnamed_sender": "mailbox_limit_spent",
+        "note": "The account has emailed as many contacts in its billing period as its plan allows, so nothing was sent. While this block stands every email from this mailbox waits, to people already in conversation too. Raise the limit at Reply or wait for the period to renew; the message goes once a trial gets past the block."
+      },
+      "mailbox_limit_spent": {
+        "when": "Only where a command that ran from no sending account, such as a read on the way to the send, answered Reply's code `contact.dailyLimitReached` or `contact.activeContactsLimitReached`: a block names the account it holds, and there is none to name. Every other such refusal is the mailbox's block (`mailbox_daily_limit`, `mailbox_active_contacts_limit`).",
+        "code": "sender_limit_reached",
+        "class": "permanent",
+        "keeps_no_send": true,
+        "note": "Reply refused the email for a limit it counts — the mailbox's daily limit of direct emails, or the active contacts of the account's billing period; the attempt's trace has Reply's code — so nothing was sent. Propose the message again once the limit renews."
+      },
       "not_a_connection": {
         "when": "The CLI answered `linkedin.not_connected`: a LinkedIn message or voice message to a person the account is not connected with.",
         "code": "not_connected",
@@ -1981,8 +2017,9 @@ export function cutAnswerRow(operation, command) {
   return kindOf(command) === "read" && readsIt ? "answer_too_large_on_a_read" : lostAnswerRow(command);
 }
 
-// The row an error the CLI explained belongs in, for this operation: its own mapping, then the shared one, then the
-// CLI's namespaces. An invalid request naming a field has a row of its own wherever the operation has one for that
+// The row an error the CLI explained belongs in, for this operation: a row it reads by Reply's own code first, then its
+// own mapping, then the shared one, then the CLI's namespaces. An invalid request naming a field has a row of its own
+// wherever the operation has one for that
 // field: the email, where the operation takes an address, because there the person's data is what Reply refused rather
 // than a request this package built wrong; and a send's text, which Reply holds to a length of its own. `variant` is
 // `template` for a send composed as one, and undefined otherwise; `repeat` is true for a repeat of a send after an
@@ -1993,6 +2030,12 @@ export function rowOf(operation, error, variant, repeat) {
   const own = has(CODES.per_operation, operation) ? CODES.per_operation[operation] : {};
   const details = error.details !== null && typeof error.details === "object" ? error.details : {};
   const fields = Array.isArray(details.fields) ? details.fields : [];
+
+  // A refusal the operation reads by Reply's own code, before anything else: whatever the status of a refusal the CLI
+  // explains, and whatever code this CLI or a later one gives it.
+  if (typeof error.reply_code === "string" && has(own, "reply_code:" + error.reply_code)) {
+    return own["reply_code:" + error.reply_code];
+  }
 
   for (const field of code === "reply.invalid_request" ? fields : []) {
     if (typeof field === "string" && has(own, code + ":" + field)) {
@@ -2073,6 +2116,12 @@ function unknownKey(code, error) {
 // pinned.
 export function codeOf(operation, key) {
   return rowFor(operation, key).code;
+}
+
+// Whether the send a refusal on this row names is a dead record, which is never kept as the work item's send: Reply
+// released the key with it, so the send a later attempt makes is a record of its own, and that one is the work item's.
+export function keepsNoSend(operation, key) {
+  return rowFor(operation, key).keeps_no_send === true;
 }
 
 // What came back, short enough to travel in a failure: a provider's answer is reported rather than interpreted
@@ -2156,7 +2205,7 @@ export function fail(operation, observed, learned) {
     message: messageOf(row, observed, operation),
     details: Object.keys(details).length === 0 ? undefined : details,
     external_ids: learned,
-    block: row.block === undefined ? undefined : blockOf(row.block, observed),
+    block: row.block === undefined ? undefined : blockOf(row, observed),
   }));
 }
 
@@ -2186,16 +2235,20 @@ function messageOf(row, observed, operation) {
 // went from where the scope is a sender, with the channel it went on — Reply numbers its mailboxes apart from its
 // LinkedIn accounts, so mailbox 12 and LinkedIn account 12 are two accounts and a block of one is not a block of the
 // other — and when it clears where the CLI said how long to wait — that long after this
-// answer, since Reply's wait counts from it. A wait that is not a number of seconds between none and a year is left out,
-// and the runtime tries the block on its own cadence: Reply's allowances renew by the day or the week, and a moment far
-// enough out would be written with a year the block contract does not take.
+// answer, since Reply's wait counts from it. A wait that is not a number of seconds between none and a year is left out;
+// then a row that knows when its limit renews says so (`clears`: `next_utc_day`, the next midnight UTC, for a mailbox's
+// daily limit, which Reply counts in UTC), and otherwise the runtime tries the block on its own cadence: Reply's
+// allowances renew by the day or the week, and a moment far enough out would be written with a year the block contract
+// does not take.
 const LONGEST_WAIT_SECONDS = 365 * 24 * 60 * 60;
 
-function blockOf(block, observed) {
+function blockOf(row, observed) {
+  const block = row.block;
   const wait = observed.retry_after;
+  const now = Date.now();
   const clears = typeof wait === "number" && Number.isFinite(wait) && wait >= 0 && wait <= LONGEST_WAIT_SECONDS
-    ? new Date(Date.now() + wait * 1000).toISOString()
-    : undefined;
+    ? new Date(now + wait * 1000).toISOString()
+    : row.clears === "next_utc_day" ? nextUtcDay(now) : undefined;
   return compact({
     scope: block.scope,
     sender_external_id: block.scope === "sender" ? observed.sender : undefined,
@@ -2203,6 +2256,13 @@ function blockOf(block, observed) {
     reason: block.reason,
     clears_at: clears,
   });
+}
+
+// The first midnight UTC after `now`, a moment in milliseconds, as an ISO-8601 string: the start of the next day as Reply
+// counts a mailbox's day.
+function nextUtcDay(now) {
+  const today = new Date(now);
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1)).toISOString();
 }
 
 function rowFor(operation, key) {

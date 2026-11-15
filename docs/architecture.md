@@ -1684,8 +1684,10 @@ condition that requires semantic action.
 **Boundary:** the trigger is deterministic; the opportunity strategy is semantic.
 
 **In this build:** the synchronization is a scan step that reads each linked active campaign's conversations on a
-cadence and writes one `inbound_reply_observed` line for each thread that moved. A respond step after it reads that
-line and, for a thread the campaign holds by its own pin, queues a read of the thread (`conversation.get`) and the
+cadence and writes one `inbound_reply_observed` line for each thread that moved. A respond step after it reads that line
+and, for a thread that is the campaign's own — by its own pin, or by the person's pin where the thread was already its
+own or, on a reply that named no provider campaign and a thread no other campaign the reply was found in held, it alone
+had written to them through that plugin before the reply — queues a read of the thread (`conversation.get`) and the
 responder's work created waiting on it — one open responder a thread, a further move recorded on it — so the reply is
 answered without waiting for a review. The kind is also a default manager trigger, so the same line releases a manager
 check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
