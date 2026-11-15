@@ -26,6 +26,7 @@ import * as connect from './connect';
 import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
+import { reloadWaiting } from './waiting';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
@@ -326,6 +327,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 pending = setTimeout(() => {
                     pending = null;
                     void needs.reload();
+                    reloadWaiting(api);
                     void campaigns.reload();
                     dashboard.reloadIfOpen();
                 }, reloadDelay);

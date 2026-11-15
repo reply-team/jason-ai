@@ -10,26 +10,34 @@ export type Kind = 'approvals' | 'questions';
 /**
  * What each list is asked for under the filter: nothing (pending), or everything that no longer needs a person, several
  * statuses at once: decided by one, or ended without one (superseded by a changed input, cancelled with its work item).
+ * A holder of one campaign's asks for that campaign's pending ones, as the campaign's own page does.
  */
-function statusBody(kind: Kind, decided: boolean): object {
-    if (!decided) return {};
+function statusBody(kind: Kind, decided: boolean, campaignId?: string): object {
+    if (campaignId !== undefined && !decided) return { status: 'pending', campaign_id: campaignId, limit: 50 };
+    const scope = campaignId === undefined ? {} : { campaign_id: campaignId };
+    if (!decided) return scope;
     return kind === 'approvals'
-        ? { statuses: ['approved', 'rejected', 'superseded', 'cancelled'] }
-        : { statuses: ['answered'] };
+        ? { ...scope, statuses: ['approved', 'rejected', 'superseded', 'cancelled'] }
+        : { ...scope, statuses: ['answered'] };
 }
 
 /**
  * One holder of the approvals and questions a person reads: its lists, the item open, and the acts on them. The
  * Attention screen has the default one below; a view that lists them beside that screen, such as the desktop's own
  * panel, holds one of its own, so neither replaces what the other shows. A pending list read by either sets the mark.
+ * A holder given a campaign reads that campaign's alone, as an agent's chat does, and leaves the mark to the others: one
+ * campaign's lists say nothing of what waits elsewhere.
  */
-export function attentionStore() {
+export function attentionStore(scope?: { campaignId: string }) {
+    const campaignId = scope?.campaignId;
     const approvals = signal<ApprovalSummary[]>([]);
     const approvalsCursor = signal<string | null>(null);
     const questions = signal<DecisionSummary[]>([]);
     const questionsCursor = signal<string | null>(null);
     const detail = signal<{ kind: 'approvals'; item: Approval } | { kind: 'questions'; item: Decision } | null>(null);
     const failure = signal<string | null>(null);
+    /** The runtime's code for the failure shown, when the runtime refused; null for a failure it gave no code for. */
+    const failureCode = signal<string | null>(null);
     const busy = signal(false);
     const loaded = signal(false);
     /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
@@ -41,6 +49,7 @@ export function attentionStore() {
             return;
         }
         failure.value = error instanceof ApiError ? error.message : String(error);
+        failureCode.value = error instanceof ApiError ? error.code : null;
     }
 
     /** Which list is shown, so the reload after an action reads the same one. */
@@ -49,16 +58,17 @@ export function attentionStore() {
     async function load(api: Api, decided: boolean): Promise<void> {
         shownDecided = decided;
         failure.value = null;
+        failureCode.value = null;
         try {
             const [a, q] = await Promise.all([
-                api.call<Page<ApprovalSummary>>('approval.list', statusBody('approvals', decided)),
-                api.call<Page<DecisionSummary>>('decision.list', statusBody('questions', decided)),
+                api.call<Page<ApprovalSummary>>('approval.list', statusBody('approvals', decided, campaignId)),
+                api.call<Page<DecisionSummary>>('decision.list', statusBody('questions', decided, campaignId)),
             ]);
             approvals.value = a.items;
             approvalsCursor.value = a.next_cursor;
             questions.value = q.items;
             questionsCursor.value = q.next_cursor;
-            if (!decided) pendingMark.value = a.items.length + q.items.length > 0;
+            if (!decided && campaignId === undefined) pendingMark.value = a.items.length + q.items.length > 0;
             loaded.value = true;
         } catch (error) {
             fail(error);
@@ -69,7 +79,7 @@ export function attentionStore() {
         const cursor = kind === 'approvals' ? approvalsCursor.value : questionsCursor.value;
         if (!cursor) return;
         try {
-            const status = statusBody(kind, decided);
+            const status = statusBody(kind, decided, campaignId);
             if (kind === 'approvals') {
                 const page = await api.call<Page<ApprovalSummary>>('approval.list', { ...status, cursor });
                 approvals.value = mergePage(approvals.value, page.items, (i) => i.id);
@@ -137,6 +147,7 @@ export function attentionStore() {
     async function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
         busy.value = true;
         failure.value = null;
+        failureCode.value = null;
         let problem: unknown = null;
         try {
             await call();
@@ -181,6 +192,7 @@ export function attentionStore() {
         questionsCursor,
         detail,
         failure,
+        failureCode,
         busy,
         loaded,
         refreshing,
