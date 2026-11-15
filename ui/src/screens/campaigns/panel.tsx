@@ -1,5 +1,6 @@
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
 import { campaignTabs, href, type CampaignTab, type Route } from '../../router';
+import { mode } from '../../platform/mode';
 import { periodLabels } from '../../time/periods';
 import { activityColumns, summaryColumns } from './labels';
 import { useCampaignChat } from './campaign-chat';
@@ -25,6 +26,9 @@ const tabNames: Record<CampaignTab, string> = {
     results: 'Results',
     settings: 'Settings',
 };
+
+/** The tabs only the demo draws; their addresses open them in Live all the same. */
+const demoOnly: readonly CampaignTab[] = ['sequence', 'results'];
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -110,10 +114,12 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                     </button>
                 )}
                 <Tabs
-                    tabs={campaignTabs.map((each) => ({
-                        key: each,
-                        label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
-                    }))}
+                    tabs={campaignTabs
+                        .filter((each) => mode.value === 'demo' || !demoOnly.includes(each))
+                        .map((each) => ({
+                            key: each,
+                            label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
+                        }))}
                     active={at.tab}
                     to={to}
                 />

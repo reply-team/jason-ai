@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { firstCampaignTab } from '../router';
 import { t } from './i18n';
 import { can, cannotHere } from './places';
 
@@ -74,6 +75,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
             ? (kept as { mode?: unknown; unopened?: unknown; preparing?: unknown })
             : { mode: kept };
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
+    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : 'people';
     if (mode.value === 'live' && typeof answer.unopened === 'string' && answer.unopened !== '')
         modeUnopened.value = answer.unopened;
     if (mode.value === 'demo') modePreparing.value = heard ?? answer.preparing === true;

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { stubDesktop } from '../test/desktop';
 import { FakeApi } from '../test/fake-api';
 import { renderApp } from '../test/render-app';
+import { firstCampaignTab } from '../router';
 import { loadMode, mode, modePreparing, modeRefusal, modeUnopened, switchMode } from './mode';
 
 // The mode is which installation the desktop runs on, and the page learns it from the desktop alone, once, as it loads.
@@ -13,6 +14,7 @@ afterEach(() => {
     modePreparing.value = false;
     modeRefusal.value = null;
     modeUnopened.value = null;
+    firstCampaignTab.value = 'sequence';
     history.replaceState(null, '', '/ui/');
 });
 
@@ -24,6 +26,18 @@ describe('the mode read as the page loads', () => {
         expect(mode.value).toBe('demo');
         desktop.modeKept = 'live';
         expect(await loadMode(desktop)).toBe('live');
+    });
+
+    it('makes People the first tab of an agent in Live and Sequence the first in the demo', async () => {
+        const desktop = stubDesktop();
+        desktop.modeKept = 'live';
+        await loadMode(desktop);
+        expect(firstCampaignTab.value).toBe('people');
+        desktop.modeKept = 'demo';
+        await loadMode(desktop);
+        expect(firstCampaignTab.value).toBe('sequence');
+        await loadMode();
+        expect(firstCampaignTab.value).toBe('people');
     });
 
     it('carries the desktop’s sentence when the demo could not be opened, and the run is Live', async () => {

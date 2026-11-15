@@ -28,6 +28,12 @@ export type PeopleFilters = {
 /** A campaign's tabs, in the order they are drawn; the first is where a campaign opens. */
 export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings'] as const;
 export type CampaignTab = (typeof campaignTabs)[number];
+
+/**
+ * The tab an agent's address opens when it names none or an older one: Sequence, and in Live, which draws People first
+ * and no Sequence, People (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
+ */
+export const firstCampaignTab: { value: CampaignTab } = { value: 'sequence' };
 export type CampaignView = 'summary' | 'activity';
 export type Period = 'today' | '7d' | '30d' | '90d';
 export type CampaignFilters = {
@@ -157,7 +163,7 @@ function campaigns(segments: string[], query: string): Route {
     if (id === null) return { screen: 'campaigns', tab: 'sequence', view, period, filters };
     // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
     const named = segments[1] === 'details' ? 'settings' : segments[1];
-    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? 'sequence';
+    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? firstCampaignTab.value;
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');

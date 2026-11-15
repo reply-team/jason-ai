@@ -383,7 +383,8 @@ function StartChat() {
                 {!notesClosed.value.includes(mode.value) && (
                     <div className="start-note" role="note">
                         <span>
-                            <strong>{t('start.note.lead')}</strong> {t('start.note.body')}
+                            <strong>{t(mode.value === 'demo' ? 'start.note.demo.lead' : 'start.note.lead')}</strong>{' '}
+                            {t(mode.value === 'demo' ? 'start.note.demo.body' : 'start.note.body')}
                         </span>
                         <button
                             className="btn sm start-note-close"

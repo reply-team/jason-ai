@@ -13,6 +13,7 @@ import { Console } from './console';
 import * as dashboard from './dashboard';
 import { attention, filter } from './needs';
 import { chats, lines } from './state';
+import { bringForward } from '../test/area';
 
 // The Dashboard: opened from the sidebar row after the Feed, drawn from the reads the console already makes and two
 // reads of its own over one period: the counts and the replies a role judged, by category. The counts are recorded for
@@ -109,10 +110,11 @@ const side = () => document.querySelector<HTMLElement>('.side')!;
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 const dashboardRow = () => within(side()).getByRole('button', { name: 'Dashboard' });
 
-/** Opens the panel from the sidebar and waits for its agents to be read. */
+/** Opens the panel and waits for its agents to be read. */
 async function open(): Promise<HTMLElement> {
-    await waitFor(() => expect(dashboardRow()).toBeTruthy());
-    fireEvent.click(dashboardRow());
+    await waitFor(() => within(side()).getByRole('button', { name: /^Needs you/ }));
+    // Live's sidebar draws no row for it; it is brought forward as a link does it.
+    bringForward('Dashboard');
     await waitFor(() => expect(document.querySelector('.dash')).toBeTruthy());
     await waitFor(() => expect(document.querySelector('.dash .dash-tiles, .dash .dash-empty')).toBeTruthy());
     return document.querySelector<HTMLElement>('.dash')!;
@@ -150,7 +152,8 @@ afterEach(() => {
 });
 
 describe('the Dashboard', () => {
-    it('is a sidebar row right after the Feed, and the row opens the panel', async () => {
+    it('is a sidebar row right after the Feed in the demo, and the row opens the panel', async () => {
+        mode.value = 'demo';
         renderConsole();
         await waitFor(() => expect(dashboardRow()).toBeTruthy());
         const feed = within(side()).getByRole('button', { name: /^Feed/ });
@@ -886,14 +889,14 @@ describe('the cards', () => {
         await waitFor(() => expect(waits()).toBeGreaterThan(waitsBefore));
         await settled();
         expect(reads()).toBe(shownReads);
-        fireEvent.click(dashboardRow());
+        bringForward('Dashboard');
         await waitFor(() => expect(reads()).toBeGreaterThan(shownReads));
         // Shown again with nothing written meanwhile, it reads nothing more.
         await settled();
         const again = reads();
         fireEvent.click(needsRow());
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Needs you', level: 1 })).toBeTruthy());
-        fireEvent.click(dashboardRow());
+        bringForward('Dashboard');
         await settled();
         expect(reads()).toBe(again);
     });

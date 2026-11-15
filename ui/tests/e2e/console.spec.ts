@@ -166,8 +166,13 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     await expect(page.locator('.jc-console .side')).toHaveCSS('width', '232px');
 
     const side = page.locator('.side');
-    await side.getByRole('button', { name: 'More', exact: true }).click();
-    await side.getByRole('menuitem', { name: /^Activity/ }).click();
+    // Live's sidebar draws no row for Activity, the Feed or Connect; Search finds each.
+    const search = async (text: string) => {
+        await side.getByRole('button', { name: /^Search/ }).click();
+        await page.getByPlaceholder('Search agents, people, pages and settings').fill(text);
+        await page.keyboard.press('Enter');
+    };
+    await search('Activity');
     await expect(page.getByText('Following the journal')).toBeVisible();
     expect(streams).toEqual([`ws://127.0.0.1:${jason.port}/v1/journal.stream`]);
 
@@ -179,10 +184,9 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     expect(toFeed).toContainEqual(expect.objectContaining({ kind: 'campaign_created' }));
     for (const line of toFeed)
         expect(Object.keys(line as object).sort()).toEqual(['campaign_id', 'id', 'kind', 'ts', 'work_item_id']);
-    await side.getByRole('navigation', { name: 'Menu' }).getByRole('button', { name: /^Feed/ }).click();
+    await search('Feed');
     await expect(page.getByRole('heading', { name: 'The Feed' })).toBeVisible();
-    await side.getByRole('button', { name: 'More', exact: true }).click();
-    await side.getByRole('menuitem', { name: /^Connect/ }).click();
+    await search('Connect');
     await expect(page.getByText('Drives the chat')).toBeVisible();
 
     expect(violations).toEqual([]);

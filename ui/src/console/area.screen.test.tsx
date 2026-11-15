@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
+import { mode } from '../platform/mode';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { shown, shownPane } from '../test/area';
+import { shown, shownPane, bringForward } from '../test/area';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
@@ -86,6 +87,7 @@ const repeatedIds = () => {
 };
 
 beforeEach(() => {
+    mode.value = 'live';
     resetRecent();
     chats.value = {};
     conversations.value = [];
@@ -114,6 +116,8 @@ describe('the one area', () => {
     });
 
     it('shows exactly the one thing chosen from the menu, and marks its row alone', async () => {
+        // The demo's sidebar draws every row; Live's draws Needs you and Settings alone.
+        mode.value = 'demo';
         await renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         fireEvent.click(menu().getByRole('button', { name: /^Needs you/ }));
@@ -121,11 +125,10 @@ describe('the one area', () => {
         expect(within(shownPane()!).getByRole('heading', { name: 'Needs you', level: 1 })).toBeTruthy();
         expect(marked()).toHaveLength(1);
         expect(marked()[0]).toMatch(/^Needs you/);
-        fireEvent.click(menu().getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         await waitFor(() => expect(shown()).toBe('campaigns'));
         expect(marked()).toEqual(['Agents']);
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^Activity/ }));
+        bringForward('Activity');
         await waitFor(() => expect(shown()).toBe('activity'));
         expect(marked()).toEqual(['More']);
         fireEvent.click(side().getByRole('button', { name: 'Settings' }));
