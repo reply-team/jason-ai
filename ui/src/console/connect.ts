@@ -837,7 +837,14 @@ export function ownServersLine(host: DesktopHost): string | null {
  * installation's settings and the runtime. Nothing for any other host.
  */
 export function runsRolesLine(host: DesktopHost): string | null {
-    if (host.kind !== 'program' || !host.found || !host.drivesChat || host.belowFloor !== null || typeof host.runsRoles !== 'string') return null;
+    if (
+        host.kind !== 'program' ||
+        !host.found ||
+        !host.drivesChat ||
+        host.belowFloor !== null ||
+        typeof host.runsRoles !== 'string'
+    )
+        return null;
     return t('connect.runsRoles', { host: host.label, profile: host.runsRoles });
 }
 

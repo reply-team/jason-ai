@@ -1071,7 +1071,15 @@ describe('the console', () => {
             const below = withRoles('claude-code', null);
             const held = {
                 ...below,
-                hosts: below.hosts.map((each) => (each.id === 'claude' ? { ...each, version: '2.1.200', belowFloor: 'Claude Code 2.1.200 is older than the chat needs.' } : each)),
+                hosts: below.hosts.map((each) =>
+                    each.id === 'claude'
+                        ? {
+                              ...each,
+                              version: '2.1.200',
+                              belowFloor: 'Claude Code 2.1.200 is older than the chat needs.',
+                          }
+                        : each,
+                ),
             };
             const connect = await openConnect(chatDesktop(held));
             expect(connect.querySelectorAll('.runs-roles')).toHaveLength(0);
