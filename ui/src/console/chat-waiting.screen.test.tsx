@@ -1,5 +1,6 @@
 import { cleanup, act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -140,6 +141,83 @@ async function drawn(pane: HTMLElement, id: string): Promise<HTMLElement> {
     });
 }
 
+/** A sheet's rules, read from the file (the test run hands a stylesheet import back empty; the run starts in ui/). */
+function ruled(file: string): { file: string; selectors: string[]; body: string }[] {
+    const text = readFileSync(file, 'utf8')
+        .replace(/[/][*][^]*?[*][/]/g, '')
+        .replace(/@(import|charset)[^;]*;/g, '');
+    return Array.from(text.matchAll(/([^{}]+)[{]([^{}]*)[}]/g), (rule) => ({
+        file,
+        selectors: topLevel(rule[1]!),
+        body: rule[2]!.replace(/\s+/g, ' ').trim(),
+    }));
+}
+
+/** A selector list split at its own commas, not at those inside `:not(…)` or `:is(…)`. */
+function topLevel(list: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let part = '';
+    for (const each of list) {
+        if (each === '(') depth++;
+        if (each === ')') depth--;
+        if (each === ',' && depth === 0) {
+            parts.push(part.trim());
+            part = '';
+        } else part += each;
+    }
+    parts.push(part.trim());
+    return parts;
+}
+
+/** What cuts an element's content and what hides it. */
+const cuts = /line-clamp|max-height|overflow(-[xy])?: (hidden|clip)|text-overflow/;
+const hides = /display: none|visibility: hidden|opacity: 0(?![.\d])|(^|[ ;])height: 0/;
+
+/** The sheets the chat and its cards are drawn with: those the desktop's window and the browser tab's chat import. */
+const sheetsOfTheChat = [
+    ...new Set(
+        ['src/console/mount.tsx', 'src/screens/chat/tab-chat.tsx'].flatMap((file) =>
+            Array.from(readFileSync(file, 'utf8').matchAll(/^import '(\.[^']+\.css)';$/gm), (sheet) =>
+                posix.join(posix.dirname(file), sheet[1]!),
+            ),
+        ),
+    ),
+];
+
+/** The rules that could ever reach an element: in any state of it (hovered, focused, disabled), in either theme. A rule
+ * of a pseudo-element never hides the element itself, and a selector this document cannot read is not one a browser
+ * would apply to it either. */
+function reaching(rules: ReturnType<typeof ruled>, element: Element): string[] {
+    return rules.flatMap((rule) =>
+        rule.selectors
+            .filter((selector) => !selector.includes('::') && !selector.startsWith('@'))
+            .filter((selector) => {
+                const any = selector
+                    .replace(/:not\(:[\w-]+\)/g, '')
+                    .replace(/:(hover|focus-visible|focus-within|focus|active|disabled|enabled|checked)(?![\w-])/g, '');
+                try {
+                    return element.matches(any);
+                } catch {
+                    return false;
+                }
+            })
+            .map((selector) => `${rule.file}: ${selector} { ${rule.body} }`),
+    );
+}
+
+/** Every element of the drawn cards outside a message's clamped words, and each rule of the chat's sheets that cuts or
+ * hides one: none may, the clamp of the words alone excepted. */
+function cutting(pane: HTMLElement): string[] {
+    const rules = sheetsOfTheChat.flatMap(ruled).filter((rule) => cuts.test(rule.body) || hides.test(rule.body));
+    return [...pane.querySelectorAll('.waiting-card')]
+        .flatMap((each) => [each, ...each.querySelectorAll('*')])
+        .filter((element) => element.closest('.ask-b') === null)
+        .flatMap((element) =>
+            reaching(rules, element).map((rule) => `${element.className || element.tagName}: ${rule}`),
+        );
+}
+
 /** What the console's modules hold between two drawings of it, as a window that is opened again starts from. */
 function freshConsole(): void {
     chats.value = {};
@@ -201,7 +279,7 @@ describe('what waits in an agent’s chat', () => {
         expect(words(enroll)).toContain('Put Grace Hopper into the campaign at the provider.');
         expect(within(enroll).queryByRole('button', { name: 'Edit' })).toBeNull();
 
-        // A question's card: its text, its options as buttons, and a free answer.
+        // A question's card: its text, its options as buttons, and a free answer one press away.
         const question = await waitFor(() => {
             const found = card(pane, 'dec_1')!;
             within(found).getByRole('button', { name: 'Pause until the news' });
@@ -209,6 +287,7 @@ describe('what waits in an agent’s chat', () => {
         });
         expect(within(question).getByText('Follow up on LinkedIn?')).toBeTruthy();
         expect(within(question).getByRole('button', { name: 'Keep going' })).toBeTruthy();
+        fireEvent.click(within(question).getByRole('button', { name: 'Something else…' }));
         expect(within(question).getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
         expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
     });
@@ -231,7 +310,7 @@ describe('what waits in an agent’s chat', () => {
         fireEvent.click(button('Reject'));
         const asking = within(email).getByRole('alertdialog');
         expect(within(asking).getByRole('button', { name: 'Reject' }).className).toBe('btn sm no');
-        // A question's options are pills in a row of their own; the free answer stays below them.
+        // A question's options are pills in a row of their own, with one more for an answer of one's own.
         const question = await waitFor(() => {
             const found = card(pane, 'dec_1')!;
             within(found).getByRole('button', { name: 'Keep going' });
@@ -241,10 +320,8 @@ describe('what waits in an agent’s chat', () => {
         expect([...options.querySelectorAll('button')].map((each) => [each.className, each.textContent])).toEqual([
             ['ui-opt', 'Pause until the news'],
             ['ui-opt', 'Keep going'],
+            ['ui-opt', 'Something else…'],
         ]);
-        expect(options.compareDocumentPosition(within(question).getByRole('textbox', { name: 'Your answer' }))).toBe(
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        );
     });
 
     it('clamps a message longer than four lines, opens it in place on Show, and never holds Approve for it', async () => {
@@ -294,14 +371,20 @@ describe('what waits in an agent’s chat', () => {
         }
     });
 
-    // Only a message's words are clamped: the doubt, what will happen, the notes of a read and the acts stand outside it.
-    it('never clamps the doubt, what will happen or the note of a read, and draws Approve outside the clamp', async () => {
+    // Only a message's words are clamped: why it waits, the doubt, what will happen, the notes of a read and the acts
+    // stand outside it.
+    it('never clamps why it waits, the doubt, what will happen or the note of a read, and draws Approve outside the clamp', async () => {
         const { fake } = renderConsole();
         fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
         const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
         const pane = await openChat('Spring');
         const email = await drawn(pane, 'apr_1');
         const clamped = (element: Element) => element.closest('.ask-b') !== null;
+        // Why it waits, which on a doubted message says the doubt is below.
+        const why = email.querySelector('.ask-w')!;
+        expect(words(why)).not.toBe('');
+        expect(clamped(why)).toBe(false);
+        expect(why.querySelector('.ask-b')).toBeNull();
         const doubts = email.querySelector('.send-doubts')!;
         expect(doubts).not.toBeNull();
         expect(clamped(doubts)).toBe(false);
@@ -320,6 +403,84 @@ describe('what waits in an agent’s chat', () => {
         const intent = within(card(pane, 'apr_2')!).getByText('Put Grace Hopper into the campaign at the provider.');
         expect(clamped(intent)).toBe(false);
         expect(clamped(within(card(pane, 'apr_2')!).getByRole('button', { name: 'Approve' }))).toBe(false);
+    });
+
+    // Matched in the page, not by the names of a list: every rule of the sheets the chat is drawn with, in any state and
+    // either theme, against every element of the cards drawn, a doubted message's, a held one's with its note, an
+    // enrolment's with what will happen, and a question's with its own answer open.
+    it('lets no rule of the chat’s sheets cut or hide a part of a card or its acts, the clamp of the words alone excepted', async () => {
+        const { fake } = renderConsole();
+        fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        // Both shells' own sheets and the console's, read from their imports.
+        expect(sheetsOfTheChat).toEqual(
+            expect.arrayContaining([
+                'src/console/console.css',
+                'src/console/harness.css',
+                'src/console/chat-cards.css',
+                'src/screens/chat/tab-chat.css',
+            ]),
+        );
+        expect(sheetsOfTheChat.length).toBeGreaterThanOrEqual(5);
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        within(card(pane, 'apr_2')!).getByText(/cannot be approved until it is shown here whole/);
+        expect(cutting(pane)).toEqual([]);
+        release();
+        await drawn(pane, 'apr_2');
+        const question = await waitFor(() => card(pane, 'dec_1')!);
+        fireEvent.click(within(question).getByRole('button', { name: 'Something else…' }));
+        within(question).getByRole('textbox', { name: 'Reason (optional)' });
+        expect(cutting(pane)).toEqual([]);
+    });
+
+    // The message editor drawn in a card on Edit is Needs you's: the chat's sheet restyles the card's acts, not the
+    // editor's buttons, its fields or its notes, in any state of them.
+    it('leaves the message editor drawn in a card on Edit its own look: no rule of the chat’s sheet reaches it', async () => {
+        const { fake } = renderConsole();
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        await waitFor(() => within(email).getByRole('textbox', { name: 'Body' }));
+        const editor = email.querySelector('.waiting-edit')!;
+        within(editor as HTMLElement).getByRole('button', { name: 'Cancel' });
+        const rules = ruled('src/console/chat-cards.css');
+        expect([...editor.querySelectorAll('*')].flatMap((element) => reaching(rules, element))).toEqual([]);
+    });
+
+    // His option card: the options as pills, and one more in his words for an answer of one's own, which opens the free
+    // answer and the reason in place. Both stay one press away and are sent as before.
+    it('draws a question’s options as pills and one more, “Something else…”, that opens the own answer and the reason in place', async () => {
+        renderConsole();
+        const pane = await openChat('Spring');
+        const question = await waitFor(() => {
+            const found = card(pane, 'dec_1')!;
+            within(found).getByRole('button', { name: 'Keep going' });
+            return found;
+        });
+        expect([...question.querySelectorAll('.ui-opts button')].map((each) => each.textContent)).toEqual([
+            'Pause until the news',
+            'Keep going',
+            'Something else…',
+        ]);
+        expect(within(question).queryByRole('textbox')).toBeNull();
+        const other = within(question).getByRole('button', { name: 'Something else…' });
+        expect(other.getAttribute('aria-expanded')).toBe('false');
+        fireEvent.click(other);
+        expect(other.getAttribute('aria-expanded')).toBe('true');
+        const answer = within(question).getByRole('textbox', { name: 'Your answer' });
+        expect(document.activeElement).toBe(answer);
+        expect(question.querySelector('.ui-opts')!.compareDocumentPosition(answer)).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+        within(question).getByRole('textbox', { name: 'Reason (optional)' });
+        within(question).getByRole('button', { name: 'Answer' });
+        // A question with no options keeps its own answer open: it is the one answer it takes.
+        const bare = await waitFor(() => card(pane, 'dec_2')!);
+        expect(within(bare).queryByRole('button', { name: 'Something else…' })).toBeNull();
+        within(bare).getByRole('textbox', { name: 'Your answer' });
+        within(bare).getByRole('textbox', { name: 'Reason (optional)' });
     });
 
     it('draws exactly the runtime’s cards, whatever the AI writes to look like one', async () => {
@@ -654,6 +815,8 @@ describe('what waits in an agent’s chat', () => {
             within(found).getByRole('button', { name: 'Pause until the news' });
             return found;
         });
+        // The reason sits with the answer of one's own, one press away; an option then carries it.
+        fireEvent.click(within(question).getByRole('button', { name: 'Something else…' }));
         fireEvent.change(within(question).getByRole('textbox', { name: 'Reason (optional)' }), {
             target: { value: 'their CFO is leaving' },
         });
@@ -745,13 +908,11 @@ describe('the sheet of the chat and its cards', () => {
                     body: rule[2]!.replace(/\s+/g, ' ').trim(),
                 }),
             );
-        const cuts = /line-clamp|max-height|overflow(-[xy])?: (hidden|clip)|text-overflow/;
-        const hides = /display: none|visibility: hidden|opacity: 0(?![.\d])|(^|[ ;])height: 0/;
         // The one clamp: the words of a message, in either theme.
         const clamp = /(^| )\.jc-console \.ask-b$/;
         // The parts of a card a person reads before an act, and the acts themselves.
         const kept =
-            /\.(waiting-card|chat-waiting-for|ask|ask-h|ask-s|ask-w|ask-a|send-doubts|waiting-intent|note|btn\.ok|btn\.no)(?![\w-])/;
+            /\.(waiting-card|chat-waiting-for|ask|ask-h|ask-s|ask-w|ask-a|section|send-doubts|message-text|waiting-intent|note|btn\.ok|btn\.no)(?![\w-])/;
         const offending = (sheet: typeof rules, reaches: (selector: string) => boolean) =>
             sheet.flatMap((rule) =>
                 rule.selectors

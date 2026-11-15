@@ -222,6 +222,17 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
     const busy = waiting.store.busy.value;
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
+    // An answer of one's own and the reason sit behind one more pill, "Something else…", as the console's option card
+    // draws them, and open in place below the options; a question with no options takes no other answer, so they stand
+    // open. An option pressed while they are open carries the reason typed, and one pressed while they are shut, none.
+    const [other, setOther] = useState(false);
+    const own = card.options.length === 0 || other;
+    const ownBox = useRef<HTMLInputElement>(null);
+    const wasOther = useRef(false);
+    useEffect(() => {
+        if (other && !wasOther.current) ownBox.current?.focus();
+        wasOther.current = other;
+    }, [other]);
     const optional = (value: string) => value.trim() || undefined;
     const answer = (event: FormEvent) => {
         event.preventDefault();
@@ -243,33 +254,54 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
                             title={option.detail ?? undefined}
                             disabled={busy}
                             onClick={() =>
-                                void answerWaiting(api, waiting, row.id, { option: option.label }, optional(reason))
+                                void answerWaiting(
+                                    api,
+                                    waiting,
+                                    row.id,
+                                    { option: option.label },
+                                    own ? optional(reason) : undefined,
+                                )
                             }
                         >
                             {option.label}
                         </button>
                     ))}
+                    <button
+                        className={other ? 'ui-opt on' : 'ui-opt'}
+                        type="button"
+                        aria-expanded={other}
+                        onClick={() => setOther(!other)}
+                    >
+                        Something else…
+                    </button>
                 </div>
             )}
-            <form className="ask-a" onSubmit={answer} aria-label="Answer in your own words">
-                <input
-                    className="inp"
-                    aria-label="Your answer"
-                    placeholder="Your answer"
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                />
-                <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
-                    Answer
-                </button>
-                <input
-                    className="inp"
-                    aria-label="Reason (optional)"
-                    placeholder="Reason (optional)"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                />
-            </form>
+            {own && (
+                <form
+                    className={card.options.length > 0 ? 'ask-a ui-other' : 'ask-a'}
+                    onSubmit={answer}
+                    aria-label="Answer in your own words"
+                >
+                    <input
+                        ref={ownBox}
+                        className="inp"
+                        aria-label="Your answer"
+                        placeholder="Your answer"
+                        value={text}
+                        onChange={(event) => setText(event.target.value)}
+                    />
+                    <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
+                        Answer
+                    </button>
+                    <input
+                        className="inp"
+                        aria-label="Reason (optional)"
+                        placeholder="Reason (optional)"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                    />
+                </form>
+            )}
         </div>
     );
 }
