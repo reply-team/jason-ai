@@ -43,9 +43,9 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
-    // A message's words are clamped to four lines. One that runs past them is shown whole only once the person opens it,
-    // and Approve waits for that: the card never approves words it has not shown. Measured in the page, and again as the
-    // card's width changes; a body that fits changes nothing.
+    // A message's words are clamped to four lines; one that runs past them offers to open them in place, and stays open
+    // for this card. Measured in the page, and again as the card's width changes; a body that fits changes nothing. The
+    // clamp holds no act: the gate below is the whole read's alone.
     const bodyBox = useRef<HTMLDivElement>(null);
     const [overflows, setOverflows] = useState(false);
     const [opened, setOpened] = useState<string | null>(null);
@@ -63,9 +63,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
     const unopened = card.body !== null && overflows && !open;
     // Every approval, whatever it does, is decided only once it has been read whole (`approvalGate`, which Needs you's
     // rows follow too): its doubts, its words or what will happen, and the person it reaches all come from that read.
-    const unread = busy || checking || !gate.live;
-    // Edit opens the message whole in its editor, so only Approve waits for the clamp.
-    const held = unread || unopened;
+    const held = busy || checking || !gate.live;
 
     // A message is checked against its work item at the press, and one whose text moved since the approval was asked is
     // not approved, since the runtime asks again with the new text.
@@ -120,8 +118,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                 <div className="waiting-more">
                     <button className="btn sm ghost" type="button" onClick={() => setOpened(card.body)}>
                         Show the whole message
-                    </button>{' '}
-                    <span className="meta">Approve waits until the whole message is shown.</span>
+                    </button>
                 </div>
             )}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
@@ -193,7 +190,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                         Approve
                     </button>
                     {whole !== undefined && editable(whole) && (
-                        <button className="btn sm" type="button" disabled={unread} onClick={() => void edit()}>
+                        <button className="btn sm" type="button" disabled={held} onClick={() => void edit()}>
                             Edit
                         </button>
                     )}

@@ -241,7 +241,7 @@ describe('what waits in an agent’s chat', () => {
         );
     });
 
-    it('holds Approve on a message longer than its four lines until the card has shown it whole', async () => {
+    it('clamps a message longer than four lines, opens it in place on Show, and never holds Approve for it', async () => {
         // The page measures the clamp: here a body runs past its four lines until the card opens it.
         const runsOver = (box: HTMLElement) => box.classList.contains('ask-b') && !box.classList.contains('open');
         Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
@@ -265,22 +265,23 @@ describe('what waits in an agent’s chat', () => {
                 within(found).getByRole('button', { name: 'Show the whole message' });
                 return found;
             });
-            const approve = within(email).getByRole('button', { name: 'Approve' });
-            expect(approve.hasAttribute('disabled')).toBe(true);
-            expect(words(email)).toContain('Approve waits until the whole message is shown.');
-            // Edit and Reject are not held by it; neither is the enrolment beside it, which has no words to clamp.
-            expect(within(email).getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(false);
-            expect(within(email).getByRole('button', { name: 'Reject' }).hasAttribute('disabled')).toBe(false);
-            await drawn(pane, 'apr_2');
-            fireEvent.click(approve);
-            expect(sent(fake, 'workitem.get')).toEqual([]);
+            // The gate is the whole read's alone: Approve, Edit, Reject and Details are live while the words are clamped.
+            const live = () =>
+                ['Approve', 'Edit', 'Reject', 'Details'].map(
+                    (name) => !within(email).getByRole('button', { name }).hasAttribute('disabled'),
+                );
+            expect(live()).toEqual([true, true, true, true]);
+            const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
+            expect(body.classList.contains('open')).toBe(false);
+            // Why it waits and the subject stand outside the clamp.
+            expect(within(email).getByText('Notes from the meetup').closest('.ask-b')).toBeNull();
 
             fireEvent.click(within(email).getByRole('button', { name: 'Show the whole message' }));
-            const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
-            expect(body.classList.contains('open')).toBe(true);
+            expect(
+                within(email).getByText('Hi Ines, thanks for the talk at the meetup.').classList.contains('open'),
+            ).toBe(true);
             expect(within(email).queryByRole('button', { name: 'Show the whole message' })).toBeNull();
-            expect(words(email)).not.toContain('Approve waits until');
-            expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
+            expect(live()).toEqual([true, true, true, true]);
         } finally {
             delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
             delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
