@@ -46,24 +46,35 @@ public partial class RoleSkillTests
 
     /// <summary>
     /// A first message built on something that happened to the person reads as written for them; one padded around a
-    /// title reads as pretending to know them. The personalizer is told that the length follows what this runtime holds
-    /// about the person, where that comes from, and that a length the person set is theirs to keep.
+    /// title reads as pretending to know them. The personalizer is told that a first message is short either way and that
+    /// what is known decides what it is built on, never its length; that a concrete fact is held about this person, read
+    /// where it really is, and never taken from whom the campaign looks for; that a very short one still does its job;
+    /// that what the person has said about length or content holds; and that templates for many are not held to it.
     /// </summary>
     [Fact]
-    public void The_personalizer_makes_a_first_message_as_long_as_what_is_known_about_the_person()
+    public void The_personalizer_keeps_a_first_message_short_and_builds_it_on_what_is_known_about_the_person()
     {
         var skill = Flattened("personalizer");
 
-        Assert.Contains("**A first message is as long as what is known about the person.**", skill, StringComparison.Ordinal);
+        Assert.Contains("**A first message is short, and built on what is known about the person.**", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "A concrete fact is one this runtime holds about them or their case — what a researcher established on an item about them, their record, the campaign's context — and something that happened or was said, not a title or a company's name alone.",
+            "A concrete fact is one held about this person or their case — what a researcher established about them, which `jason workitem get` returns for an item the list above shows, or what their record or the brief says of them — and something that happened or was said, not a title or a company's name alone.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("With one, write a pointed message built on it, and not a long one.", skill, StringComparison.Ordinal);
+        Assert.Contains("The campaign's context says whom the campaign looks for and is never a fact about the person.", skill, StringComparison.Ordinal);
+        Assert.Contains("With one, write a pointed message built on it.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "With little known, write a very short message that does not pretend to know them: no interest, familiarity or praise that nothing here supports.",
+            "With little known, write a very short message that still says who writes, why this person, and asks one thing, and that does not pretend to know them: no interest, familiarity or praise that nothing here supports.",
             skill,
             StringComparison.Ordinal);
-        Assert.Contains("Where the brief or the person's memory says how long it should be, theirs holds.", skill, StringComparison.Ordinal);
+        Assert.Contains("What is known decides what the message is built on, never how long it is.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "Where a preference, a memory file or the brief says how long a message should be or what it must hold, theirs holds.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The rule is for a message written for one person; the copywriter's templates are written for many and are left without it.",
+            skill,
+            StringComparison.Ordinal);
     }
 }

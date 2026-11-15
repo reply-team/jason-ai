@@ -111,8 +111,9 @@ for a role that sits with a person, the judgement it shares with its session fil
   itself says about voice and guardrails, the tone and the sender it writes in, where the copy goes when it is
   written, when one text may be a template for a whole audience, and why writing it is not sending it.
 - [`roles/personalizer`](roles/personalizer/SKILL.md) — The messaging adapted to one person: what
-  this runtime knows about them and where to read it, a first message as long as what is known, the tone and the
-  sender's forms it writes in, where the wording goes afterwards, and why a contact record is not the place for it.
+  this runtime knows about them and where to read it, a first message kept short and built on what is known, the
+  tone and the sender's forms it writes in, where the wording goes afterwards, and why a contact record is not the
+  place for it.
 - [`roles/critic`](roles/critic/SKILL.md) — The review of a draft against the brief and the
   guardrails: what to read before judging it, what a verdict is worth here, and why saying plainly what fails
   is the whole of the job.

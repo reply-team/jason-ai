@@ -23,12 +23,15 @@ jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-**A first message is as long as what is known about the person.** A concrete fact is one this runtime holds about them
-or their case — what a researcher established on an item about them, their record, the campaign's context — and
-something that happened or was said, not a title or a company's name alone. With one, write a pointed message built on
-it, and not a long one. With little known, write a very short message that does not pretend to know them: no interest,
-familiarity or praise that nothing here supports. Where the brief or the person's memory says how long it should be,
-theirs holds.
+**A first message is short, and built on what is known about the person.** A concrete fact is one held about this
+person or their case — what a researcher established about them, which `jason workitem get` returns for an item the
+list above shows, or what their record or the brief says of them — and something that happened or was said, not a title
+or a company's name alone. The campaign's context says whom the campaign looks for and is never a fact about the person.
+With one, write a pointed message built on it. With little known, write a very short message that still says who
+writes, why this person, and asks one thing, and that does not pretend to know them: no interest, familiarity or praise
+that nothing here supports. What is known decides what the message is built on, never how long it is. Where a
+preference, a memory file or the brief says how long a message should be or what it must hold, theirs holds. The rule
+is for a message written for one person; the copywriter's templates are written for many and are left without it.
 
 **There is no per-contact draft store in this build.** What you write for one person is this work item's result;
 the contact record holds that person's own data and is not a place to park drafts about them.
