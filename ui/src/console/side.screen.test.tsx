@@ -23,6 +23,8 @@ function renderConsole(desktop: StubDesktop = stubDesktop(), where: Mode = 'demo
     mode.value = where;
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
+        // Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Approval, ApprovalSummary, Decision, DecisionSummary } from '../api/types';
 import { fixtures } from '../test/fixtures';
-import { keptAndMissing, stillAsking, toApprovalCard, toQuestionCard } from './waiting-model';
+import {
+    approvalGate,
+    keptAndMissing,
+    readingSentence,
+    stillAsking,
+    toApprovalCard,
+    toQuestionCard,
+    unreadSentence,
+} from './waiting-model';
 
 const now = Date.parse('2026-10-01T10:09:00.000Z');
 const rows = fixtures['approval.list/by-campaign-pending'].response.items as ApprovalSummary[];
@@ -59,5 +67,51 @@ describe('what the chat keeps between reads', () => {
         expect(stillAsking(reasked, [rows[0]!])).toEqual(reasked);
         expect(stillAsking(reasked, [])).toEqual(reasked);
         expect(stillAsking(reasked, [{ ...rows[0]!, id: 'apr_7' }])).toEqual([]);
+    });
+});
+
+describe('when an approval may be approved where it is drawn', () => {
+    const failed = { code: null, message: 'Failed to fetch' };
+
+    it('is live only once the approval has been read whole, whatever it does', () => {
+        for (const operation of ['message.send', 'social_invitation.send', 'campaign.enroll', 'x.y']) {
+            expect(approvalGate({ ...email, operation }, undefined)).toEqual({ live: true });
+            expect(approvalGate(undefined, undefined)).toEqual({ live: false, reading: true });
+        }
+    });
+
+    it('says what the runtime said while the read failed, and a whole read outweighs an earlier failure', () => {
+        expect(approvalGate(undefined, failed)).toEqual({ live: false, unread: failed });
+        expect(approvalGate(enroll, failed)).toEqual({ live: true });
+    });
+
+    it('says an approval is being read in the words of where it is drawn: a card shows it whole, a row reads it', () => {
+        expect(readingSentence('chat')).toBe(
+            'This approval is being read; it cannot be approved until it is shown here whole.',
+        );
+        expect(readingSentence('needs')).toBe(
+            'This approval is being read; it cannot be approved until it has been read whole.',
+        );
+    });
+
+    it('says where the person can still open an approval it could not read', () => {
+        expect(unreadSentence('chat')).toContain('Details opens it in Needs you');
+        expect(unreadSentence('needs')).toContain('Details reads it again');
+        for (const where of ['chat', 'needs'] as const)
+            expect(unreadSentence(where)).toMatch(/^This approval could not be read, so it cannot be approved here; /);
+    });
+
+    it('says nothing of what the runtime said when its time ran out with no answer', () => {
+        const unanswered = {
+            code: null,
+            message: 'The runtime did not answer within 30 seconds.',
+            unanswered: true,
+        } as const;
+        for (const where of ['chat', 'needs'] as const) {
+            expect(unreadSentence(where)).toMatch(/\. The runtime said:$/);
+            expect(unreadSentence(where, { code: 'not_found', message: 'gone' })).toMatch(/\. The runtime said:$/);
+            expect(unreadSentence(where, unanswered)).toMatch(/^This approval could not be read, .*\.$/);
+            expect(unreadSentence(where, unanswered)).not.toContain('The runtime said');
+        }
     });
 });

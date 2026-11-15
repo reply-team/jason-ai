@@ -26,6 +26,8 @@ function renderConsole(options: { platform?: 'darwin' | 'win32'; desktop?: StubD
     if (options.platform) Object.assign(desktop, { platform: options.platform });
     const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
+        // Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')

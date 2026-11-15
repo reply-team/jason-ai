@@ -1,5 +1,5 @@
 import { cleanup, act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -16,7 +16,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
 import { chats, conversations } from './state';
-import { forgetWaiting } from './waiting';
+import { READ_LIMIT_MS, forgetWaiting } from './waiting';
 
 // An agent's chat draws, under its conversation, the campaign's approvals and questions that wait on a person: read
 // with `approval.list` and `decision.list` of that campaign, decided through the calls Needs you makes, and gone once
@@ -149,6 +149,10 @@ function freshConsole(): void {
     attention.detail.value = null;
 }
 
+afterEach(() => {
+    vi.useRealTimers();
+});
+
 beforeEach(() => {
     freshConsole();
     forgetWaiting();
@@ -276,7 +280,10 @@ describe('what waits in an agent’s chat', () => {
         expect(within(card(pane, 'apr_1')!).queryByText(/could not be read/)).toBeNull();
     });
 
-    it('says a message is being read while its read is unanswered, and reads it again at the next reload', async () => {
+    // A read in flight is not sent beside itself, but its time runs out: the card then says it could not be read, and the
+    // next reload reads it again, once. The clock is a fake one that also moves on its own, so the test waits for nothing.
+    it('says a message is being read while its read is unanswered, does not read it again while it is, and reads it again at the next reload once its time ran out', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
         springApprovals = 'approval.list/messages-pending';
         const journal = stubStream();
         const { fake } = renderConsole(undefined, journal);
@@ -290,11 +297,28 @@ describe('what waits in an agent’s chat', () => {
         const reads = () =>
             sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === 'apr_1');
         expect(reads()).toHaveLength(1);
+        const listed = sent(fake, 'approval.list').length;
         flush(() => {
             journal.open();
             journal.send(journalLine({ id: 'jrn_203', kind: 'approval_requested' }));
         });
+        await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(listed), { timeout: 3000 });
+        // Every answer the fake gave is taken in within one task: the reload's fill has run by then.
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(reads()).toHaveLength(1);
+
+        await flush(() => vi.advanceTimersByTimeAsync(READ_LIMIT_MS));
+        const late = card(pane, 'apr_1')!;
+        expect(words(late)).toContain(
+            'This approval could not be read, so it cannot be approved here; Details opens it in Needs you. The runtime did not answer within 30 seconds.',
+        );
+        expect(words(late)).not.toContain('The runtime said');
+        expect(within(late).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+        expect(reads()).toHaveLength(1);
+        flush(() => journal.send(journalLine({ id: 'jrn_204', kind: 'approval_requested' })));
         await waitFor(() => expect(reads()).toHaveLength(2), { timeout: 3000 });
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(reads()).toHaveLength(2);
         release();
         await drawn(pane, 'apr_1');
     });

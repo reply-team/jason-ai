@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { askedKinds, doubtsOf, keyOf, remindsOfVoice, storedMode } from './model';
+import { fixtures } from '../../test/fixtures';
+import { askedKinds, doubtWords, doubtsOf, keyOf, remindsOfVoice, storedMode, whyWords } from './model';
 
 describe('the send modes the card asks about', () => {
     it('asks the kinds whose preference is unset, cold first, whatever order the runtime lists them in', () => {
@@ -88,5 +89,35 @@ describe('the reminder about name and tone', () => {
 
     it('goes away once both are set, whatever goes automatically', () => {
         expect(remindsOfVoice(stored(automatic, automatic, name, tone), agent('automatic', 'automatic'))).toBe(false);
+    });
+});
+
+describe('the doubts in the words every place draws them in', () => {
+    it('says who doubted a send and why, and the words they wrote, under one heading', () => {
+        const preview = fixtures['approval.get/park-doubted'].response.preview as Record<string, unknown>;
+        const { doubts } = preview as { doubts: { note: string }[] };
+        expect(doubtWords(preview)).toEqual({
+            heading: 'Doubts about this message',
+            doubts: [
+                {
+                    said: `The critic role doubted this: ${whyWords('unsupported_claim')}`,
+                    note: `Their words: ${doubts[0]!.note}`,
+                },
+            ],
+        });
+    });
+
+    it('says a person asked, and leaves out words nobody wrote', () => {
+        expect(
+            doubtWords({ doubts: [{ source: 'ask_person', by: { type: 'human', id: null }, code: 'x_y' }] }),
+        ).toEqual({
+            heading: 'Doubts about this message',
+            doubts: [{ said: 'A person asked you to look at this: x_y', note: null }],
+        });
+    });
+
+    it('draws nothing for a preview that carries no doubt', () => {
+        expect(doubtWords({})).toBeNull();
+        expect(doubtWords({ doubts: [] })).toBeNull();
     });
 });
