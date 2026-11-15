@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Json;
+using Jason.Contracts.Operations;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
@@ -30,7 +31,8 @@ public enum BlockAnswer
 /// <summary>
 /// What the runtime knows about the blocks a provider said it holds, and the rules both entries to a park read: the
 /// claim, which parks work a block already holds, and <see cref="AttemptOutcomes"/>, which parks an attempt that met one.
-/// A block is kept per plugin and binding identity — the account as a whole, or one sending account under it — and is
+/// A block is kept per plugin and binding identity — the account as a whole, or one sending account under it, on one
+/// channel or on every channel — and is
 /// opened by the first answer that names it, seen again by every later one, and cleared by the first call that gets past
 /// it. Nothing here saves: what it changes joins the caller's change set.
 /// </summary>
@@ -49,20 +51,29 @@ public static class ProviderBlocks
     /// The sending account a composed input names, at <see cref="ProviderBlockContract.SenderPointer"/>, or null where it
     /// names none — the one place a block of scope <c>sender</c> is matched against work.
     /// </summary>
-    public static string? Sender(JsonObject? input)
-    {
-        JsonNode? node = input;
-        foreach (var segment in ProviderBlockContract.SenderPointer.Split('/', StringSplitOptions.RemoveEmptyEntries))
-        {
-            node = node is JsonObject parent && parent.TryGetPropertyValue(segment, out var child) ? child : null;
-        }
+    public static string? Sender(JsonObject? input) => At(input, ProviderBlockContract.SenderPointer);
 
-        return node is JsonValue value && value.TryGetValue(out string? sender) && !string.IsNullOrEmpty(sender) ? sender : null;
+    /// <summary>
+    /// The channel a composed input consumes, at <see cref="ProviderBlockContract.ChannelPointer"/>, or null where it names
+    /// none — read beside the sender, since a sender's block that names a channel holds that sender on that channel alone.
+    /// </summary>
+    public static string? Channel(JsonObject? input) => At(input, ProviderBlockContract.ChannelPointer);
+
+    /// <summary>
+    /// Whether a sender's block holds the sender's work on <paramref name="channel"/>: a block on every channel holds it on
+    /// any, and a block on one channel only on that one. Work that names no channel is held only by a block on every channel.
+    /// </summary>
+    public static bool OnChannel(ProviderBlock block, string? channel)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+        return block.Channel is null || string.Equals(block.Channel, channel, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// The open block that holds work with this input, among the open blocks of its plugin and binding: the account's,
-    /// which covers every sender under it, or else the block of the sender the input names. Null where neither is open.
+    /// which covers every sender under it, or else a block of the sender the input names — its block on the channel the
+    /// input names where one is open, which governs that channel, and otherwise its block on every channel, which governs
+    /// every channel that has no open block of its own. Null where none is open.
     /// </summary>
     public static ProviderBlock? Covering(IEnumerable<ProviderBlock> open, JsonObject? input)
     {
@@ -73,22 +84,72 @@ public static class ProviderBlocks
             return account;
         }
 
-        return Sender(input) is { } sender
-            ? blocks.FirstOrDefault(block => block.Scope == ProviderBlockScope.Sender && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal))
-            : null;
+        if (Sender(input) is not { } sender)
+        {
+            return null;
+        }
+
+        var channel = Channel(input);
+        return blocks
+            .Where(block => block.Scope == ProviderBlockScope.Sender
+                && string.Equals(block.SenderExternalId, sender, StringComparison.Ordinal)
+                && OnChannel(block, channel))
+            .OrderBy(block => block.Channel is null ? 1 : 0)
+            .FirstOrDefault();
     }
 
     /// <summary>
-    /// Whether <paramref name="block"/> holds work parked on <paramref name="parkedOn"/>: it is that block, or it is the
-    /// account's block and <paramref name="parkedOn"/> the open block of a sender under that account, which it covers.
+    /// Whether <paramref name="met"/> is a block of the sender <paramref name="everyChannel"/> holds on every channel, on one
+    /// channel of its own: what a trial of the block on every channel meets when the provider names the channel. The block
+    /// on every channel is only the channel unknown, so meeting one channel's block decides nothing about the others.
     /// </summary>
-    public static bool Holds(ProviderBlock block, ProviderBlock? parkedOn) =>
+    public static bool OneChannelOf(ProviderBlock met, ProviderBlock everyChannel)
+    {
+        ArgumentNullException.ThrowIfNull(met);
+        ArgumentNullException.ThrowIfNull(everyChannel);
+        return everyChannel is { Scope: ProviderBlockScope.Sender, Channel: null }
+            && met is { Scope: ProviderBlockScope.Sender, Channel: not null }
+            && string.Equals(met.SenderExternalId, everyChannel.SenderExternalId, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// What is wrong with a sender's block <paramref name="said"/> beside a call whose input is <paramref name="input"/>, or
+    /// null: a block that names a channel says it is that channel's alone, so one that names another channel than the call
+    /// was asked to send on, or names one for a call that names none, is a broken answer, refused as a block outside its
+    /// contract is. A block that names no channel is held to nothing here.
+    /// </summary>
+    public static SchemaProblem? OffChannel(JsonNode? said, JsonObject? input)
+    {
+        var named = said is JsonObject block ? Text(block, "channel") : null;
+        var asked = Channel(input);
+        if (named is null || string.Equals(named, asked, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new SchemaProblem(
+            ChannelMember,
+            "const",
+            asked is null
+                ? $"The block names the channel '{named}', but the call was asked to send on no channel; a block that names a channel is that channel's alone."
+                : $"The block names the channel '{named}', but the call was asked to send on '{asked}'; a block that names a channel is that channel's alone.");
+    }
+
+    /// <summary>
+    /// Whether <paramref name="block"/> may draw its trial from work parked on <paramref name="parkedOn"/> whose input names
+    /// <paramref name="channel"/>: it is that block; or it is the account's block and <paramref name="parkedOn"/> the open
+    /// block of a sender under that account, which it covers; or it is a sender's block on one channel and
+    /// <paramref name="parkedOn"/> the same sender's open block on every channel, holding work on that channel, which the
+    /// channel's block governs.
+    /// </summary>
+    public static bool Holds(ProviderBlock block, ProviderBlock? parkedOn, string? channel) =>
         block is not null && parkedOn is not null
         && (parkedOn.Id == block.Id
-            || (block.Scope == ProviderBlockScope.Account
-                && parkedOn is { Scope: ProviderBlockScope.Sender, Status: ProviderBlockStatus.Open }
+            || (parkedOn is { Scope: ProviderBlockScope.Sender, Status: ProviderBlockStatus.Open }
                 && string.Equals(parkedOn.PluginId, block.PluginId, StringComparison.Ordinal)
-                && string.Equals(parkedOn.BindingIdentity, block.BindingIdentity, StringComparison.Ordinal)));
+                && string.Equals(parkedOn.BindingIdentity, block.BindingIdentity, StringComparison.Ordinal)
+                && (block.Scope == ProviderBlockScope.Account
+                    || (OneChannelOf(block, parkedOn) && string.Equals(block.Channel, channel, StringComparison.Ordinal)))));
 
     /// <summary>
     /// Whether a save was refused because a block it opens is already open — opened by another attempt that read the
@@ -140,6 +201,7 @@ public static class ProviderBlocks
 
         var scope = SnakeCaseEnumConverter<ProviderBlockScope>.Parse(Text(said, "scope")!);
         var sender = scope == ProviderBlockScope.Sender ? Text(said, "sender_external_id") : null;
+        var channel = scope == ProviderBlockScope.Sender ? Text(said, "channel") : null;
         var reason = Text(said, "reason")!;
         var link = Text(said, "link");
         DateTime? clearsAt = Text(said, "clears_at") is { } moment
@@ -148,7 +210,8 @@ public static class ProviderBlocks
 
         var block = open.FirstOrDefault(candidate => candidate.Status == ProviderBlockStatus.Open
             && candidate.Scope == scope
-            && string.Equals(candidate.SenderExternalId, sender, StringComparison.Ordinal));
+            && string.Equals(candidate.SenderExternalId, sender, StringComparison.Ordinal)
+            && string.Equals(candidate.Channel, channel, StringComparison.Ordinal));
         if (block is null)
         {
             block = new ProviderBlock
@@ -158,6 +221,7 @@ public static class ProviderBlocks
                 BindingIdentity = identity,
                 Scope = scope,
                 SenderExternalId = sender,
+                Channel = channel,
                 Reason = reason,
                 OpenedAt = now,
                 OpenedByAttempt = attempt,
@@ -267,6 +331,7 @@ public static class ProviderBlocks
                 ["plugin_id"] = block.PluginId,
                 ["scope"] = SnakeCaseEnumConverter<ProviderBlockScope>.Format(block.Scope),
                 ["sender_external_id"] = block.SenderExternalId,
+                ["channel"] = block.Channel,
                 ["reason"] = block.Reason,
                 ["clears_at"] = block.ClearsAt is { } clearsAt ? JsonSerializer.SerializeToNode(WorkItemMapper.Utc(clearsAt), JasonJson.Options) : null,
                 ["work_item_id"] = item.PublicId,
@@ -343,6 +408,11 @@ public static class ProviderBlocks
             said["sender_external_id"] = sender;
         }
 
+        if (block.Channel is { } channel)
+        {
+            said["channel"] = channel;
+        }
+
         said["reason"] = block.Reason;
         if (block.Link is { } link)
         {
@@ -372,10 +442,24 @@ public static class ProviderBlocks
     /// <summary>The start of what SQLite says when either one-open index refuses a block: both lead with the plugin.</summary>
     private const string OneOpenRefused = "UNIQUE constraint failed: provider_blocks.plugin_id";
 
+    /// <summary>Where in a block its channel is, as a problem with the block names it.</summary>
+    private const string ChannelMember = "/channel";
+
     private static bool Blocked(JournalEntry entry, ProviderBlock block, int campaignId) =>
         entry.Kind == JournalKinds.ProviderBlocked
         && string.Equals(entry.Key, block.PublicId, StringComparison.Ordinal)
         && (entry.CampaignId ?? entry.Campaign?.Id) == campaignId;
+
+    private static string? At(JsonObject? input, string pointer)
+    {
+        JsonNode? node = input;
+        foreach (var segment in pointer.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            node = node is JsonObject parent && parent.TryGetPropertyValue(segment, out var child) ? child : null;
+        }
+
+        return node is JsonValue value && value.TryGetValue(out string? text) && !string.IsNullOrEmpty(text) ? text : null;
+    }
 
     private static string? Text(JsonObject said, string name) =>
         said.TryGetPropertyValue(name, out var node) && node is JsonValue value && value.TryGetValue(out string? text) ? text : null;

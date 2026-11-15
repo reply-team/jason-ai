@@ -81,7 +81,9 @@ public static class BlockRenderers
     }
 
     private static string Blocked(ProviderBlockDto block) =>
-        block.Scope == ProviderBlockScope.Sender ? $"sender {block.SenderExternalId}" : "the account";
+        block.Scope != ProviderBlockScope.Sender ? "the account"
+        : block.Channel is { } channel ? $"sender {block.SenderExternalId} on {channel}"
+        : $"sender {block.SenderExternalId}";
 
     private static string? ClearedBy(ProviderBlockDto block) =>
         block.ClearedByActor is { } actor ? RenderText.Actor(actor)

@@ -16,6 +16,13 @@ absorbed by a release of this package alone.
   moved thread; a bounce on a thread Reply names no contact for is left out, and the package says so in one line on
   stderr by the thread's and the sequence's identifiers and the thread's last activity; and a feed that never sets the
   flag reads as before. Update the package (`jason update apply`) to have it.
+- Every sender's block the package reports names the `channel` the send went on, `email` or `linkedin`, beside the
+  sender's number: a mailbox turned off or disconnected, and a LinkedIn account turned off, disconnected or at its
+  daily or weekly allowance. Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and LinkedIn
+  account 12 are two accounts; without the channel, a block of one held the other's sends too, and a send of one that
+  got past cleared the other's block.
+- Needs Jason 0.43.0 or newer, the release that keeps a sender's block per channel: an older one refuses a block that
+  names a channel, and the send it met ends `permanent` instead of waiting on the block.
 
 ## 0.15.1
 

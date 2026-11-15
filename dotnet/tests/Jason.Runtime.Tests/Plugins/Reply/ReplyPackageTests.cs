@@ -1448,6 +1448,23 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// The same section, 0.16.0, also says every sender's block names the channel the send went on, since Reply numbers its
+    /// mailboxes apart from its LinkedIn accounts, and the runtime it needs to keep a block per channel. The README says the
+    /// same where the sends' endings are explained.
+    /// </summary>
+    [Fact]
+    public void The_changelog_s_0_16_0_says_a_senders_block_is_on_the_channel_the_send_went_on()
+    {
+        var section = Flat(ChangelogSection(0));
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(["`channel`", "mailbox 12 and LinkedIn account 12", "Jason 0.43.0"], word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains("Every sender's block this package reports names the channel the send went on", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("## 0.15.2", File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "CHANGELOG.md")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Below it, 0.15.1, which names the two things this package gives a search that a later version reads
     /// back — the list's name and the search's reference — and says they never change; then 0.15.0, the audience family over
     /// Reply's Live Data as this package performs it: the six

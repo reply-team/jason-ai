@@ -37,6 +37,7 @@ channel or an events read reports is an answer outside its contract.
 {
   "scope": "sender",
   "sender_external_id": "mbx_1042",
+  "channel": "email",
   "reason": "limit",
   "link": "https://app.example.com/mailboxes/1042",
   "clears_at": "2026-10-25T00:00:00Z"
@@ -47,6 +48,13 @@ channel or an events read reports is an answer outside its contract.
   account under it, such as a mailbox at its daily limit. Required.
 - `sender_external_id` is the provider's identifier of that sending account: 1 to 256 characters, no control
   characters. Present exactly when `scope` is `sender`, and absent when it is `account`.
+- `channel` is the channel the sending account is blocked on, spelled as the operation's arguments name the channel
+  they consume (`email`, `linkedin`). A provider that numbers its mailboxes apart from its social accounts, so that one
+  identifier may name a mailbox and a social account at once, says it on every sender's block. Absent, the block holds
+  the sender on every channel that has no open block of its own. Present only when `scope` is `sender`: an account's
+  block holds every channel. A block that names another channel than the one the call was asked to send on, or names one
+  for a call that names none, is refused as a block outside the schema is: the channel a block names is the provider's
+  word that the block is that channel's alone.
 - `reason` is why, in the contract's words, never the provider's: `billing` (credits, a plan, a subscription or a
   payment), `limit` (an allowance the provider counts), `credential` (a key or a sign-in the provider no longer
   accepts), `channel` (a mailbox or a social account disconnected or paused), or `other` where none of these fits.
@@ -81,14 +89,18 @@ breaks either half is not an outcome, and ends as `plugin_malformed_outcome`.
 
 A blocked failure spends no retry: the attempt ends `blocked`, never counted, and the block is kept beside the error
 the work item shows (`last_error.block`). The runtime keeps the block itself too, per plugin and binding identity —
-the account's, or one sender's under it — and holds the work it concerns: the work of every operation whose
-contract says `dispatch.under_provider_block: waits` — every `reach: act` operation, `campaign.pause` and
+the account's, or one sender's under it, on one channel or on every channel — and holds the work it concerns: the
+work of every operation whose contract says `dispatch.under_provider_block: waits` — every `reach: act` operation, `campaign.pause` and
 `optout.record` — waits on the block, as `waiting` with a `wait.blocked_by` naming it, until an act's call gets past
 it — one of them let through as the block's trial at the moment the provider said it clears by itself where that is ahead, a day
 at most; otherwise at the cadence. Every other operation's item ends final, and reads run through an open block. The
 `link` stays on the block, which `block.get` and `block.list` answer, and on the error, where a person reads it: never
 in a log, a journal line, a notification or a `wait` block. A person who has removed the cause clears the block with
 `block.clear`, under their name, and the next scan lets what it held go; a provider that refuses again opens a new block.
+A sender's block that names a channel holds the work whose input names that sender at `/args/sender/external_id` and
+that channel at `/args/channel`; the sender's block that names none holds the sender's work on every channel that has
+no open block of its own. A call that gets past clears the sender's blocks on its own channel and on every channel,
+never one on another channel, and nothing else but a person clears a sender's block.
 A block that does not satisfy the schema is recorded `permanent`, with what is
 wrong with it named beside the error, so a malformed block never stands for a real one. A read made on request outside
 any work item, such as `contact.threads`, answers a blocked failure as an API error carrying the plugin's code with

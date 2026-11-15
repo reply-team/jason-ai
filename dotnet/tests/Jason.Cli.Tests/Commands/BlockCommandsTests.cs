@@ -17,6 +17,7 @@ public class BlockCommandsTests
           "binding_identity": "sha256:account",
           "scope": "sender",
           "sender_external_id": "snd_marta",
+          "channel": "email",
           "reason": "billing",
           "link": "https://provider.example.com/billing",
           "clears_at": "2026-09-15T08:00:00+00:00",
@@ -37,6 +38,7 @@ public class BlockCommandsTests
     private static string AccountBlock(string cleared) => OpenSenderBlock
         .Replace("\"scope\": \"sender\"", "\"scope\": \"account\"", StringComparison.Ordinal)
         .Replace("\"sender_external_id\": \"snd_marta\"", "\"sender_external_id\": null", StringComparison.Ordinal)
+        .Replace("\"channel\": \"email\"", "\"channel\": null", StringComparison.Ordinal)
         .Replace("\"status\": \"open\"", "\"status\": \"cleared\"", StringComparison.Ordinal)
         .Replace("\"cleared_at\": null", "\"cleared_at\": \"2026-09-14T13:00:00+00:00\"", StringComparison.Ordinal)
         .Replace("\"cleared_by_attempt_id\": null,\n  \"cleared_by_actor\": null", cleared, StringComparison.Ordinal)
@@ -123,7 +125,7 @@ public class BlockCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         foreach (var shown in (string[])[
-            "Blocked:       sender snd_marta",
+            "Blocked:       sender snd_marta on email",
             "Reason:        billing",
             "Link:          https://provider.example.com/billing",
             "Clears at:     2026-09-15 08:00:00 UTC",
@@ -178,7 +180,7 @@ public class BlockCommandsTests
         var exit = await cli.RunAsync("block", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        foreach (var shown in (string[])["OPENED", "BLOCKED", "HELD", "blk_01K52JR0000000000000000001", "sender snd_marta", "billing", "open"])
+        foreach (var shown in (string[])["OPENED", "BLOCKED", "HELD", "blk_01K52JR0000000000000000001", "sender snd_marta on email", "billing", "open"])
         {
             Assert.True(cli.Text.Contains(shown, StringComparison.Ordinal), $"The table does not show '{shown}':{Environment.NewLine}{cli.Text}");
         }

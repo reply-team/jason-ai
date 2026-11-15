@@ -44,7 +44,7 @@ public sealed class ProviderBlockContractTests
         var schema = ProviderBlockContract.Published.Schema;
         var properties = (JsonObject)schema["properties"]!;
 
-        Assert.Equal(["scope", "sender_external_id", "reason", "link", "clears_at"], properties.Select(property => property.Key));
+        Assert.Equal(["scope", "sender_external_id", "channel", "reason", "link", "clears_at"], properties.Select(property => property.Key));
         Assert.Equal(["scope", "reason"], Names(schema["required"]));
         Assert.Equal(["account", "sender"], Names(properties["scope"]!["enum"]));
         Assert.Equal(["billing", "limit", "credential", "channel", "other"], Names(properties["reason"]!["enum"]));

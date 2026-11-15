@@ -1,0 +1,7 @@
+{
+  "contract": "provider_block",
+  "version": 1,
+  "case": "the whole account is blocked, and the block names a channel as if the account held only one",
+  "value": { "scope": "account", "channel": "email", "reason": "billing" },
+  "expect": { "invalid": [{ "pointer": "", "reason": "any_of" }] }
+}

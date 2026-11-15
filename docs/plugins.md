@@ -845,9 +845,10 @@ the same way a log line is.
 
 `block` goes with the class `blocked` and with no other: the class without a block, or a block beside another class,
 is a `TypeError`, and so is a block that is not an object or is over 8 KiB. It says what the provider refused this call
-for — the account or one sender, the reason, where a person clears it, and when it clears by itself if the provider
-says — in the fields the [provider block](contracts/block/provider_block.md) publishes; the runtime holds it to that
-page when it records the failure, not here (§8). A host from 0.18.0 accepts `block`; an older host answers
+for — the account or one sender, on the channel the call was asked to send on or on every channel, the reason, where
+a person clears it, and when it clears by itself if the provider says — in the fields the
+[provider block](contracts/block/provider_block.md) publishes; the runtime holds it to that page when it records
+the failure, not here (§8). A host from 0.18.0 accepts `block`; an older host answers
 `host.fail`'s `block` with a `TypeError`, which ends the invocation `plugin_exception`, `permanent`. That is a refusal
 the plugin can see, never a block mistaken for something else.
 
@@ -1329,7 +1330,11 @@ you cannot read as a block. The block is kept on the attempt and on the item's `
 to clear. Where the operation is one a block holds — its contract says `dispatch.under_provider_block: waits` — the attempt
 ends `blocked`, never counted, and the item waits on the block until it clears or a trial gets past it; any other
 operation ends there, final. So report `blocked` only for a refusal that concerns the account or the sender rather
-than the call: work waits on it. A block outside that page is recorded `permanent`, with what is wrong with it named
+than the call: work waits on it. A sender's block names the channel the sender is blocked on wherever the provider
+numbers its accounts on one channel apart from those on another, as Reply numbers its mailboxes apart from its
+LinkedIn accounts: without it, one identifier's block holds and clears that identifier's work on every channel. Name
+the channel the call was asked to send on, never another, and none for a call that names none: a block naming another
+channel, or one for a call that names none, is refused as one outside its schema is. A block outside its schema is recorded `permanent`, with what is wrong with it named
 beside the failure. The events and delivery families declare no
 block, so a `blocked` answer there is an answer outside the contract, `result_invalid`.
 

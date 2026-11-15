@@ -216,7 +216,8 @@ in that shape.
 **A failure classed `blocked` is final too, and its repair is elsewhere.** Its code is `provider_blocked`: the
 provider refused the account, or one sender under it, rather than this item's arguments — money or a plan, an
 allowance it counts, a key it no longer accepts, a channel disconnected or paused — and did nothing for the call.
-`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender), why
+`last_error.block` on the item says what is blocked (`scope`, and `sender_external_id` when it is one sender, with the
+`channel` it is blocked on where the block names one: a mailbox and a LinkedIn account may share a number), why
 (`reason`), where a person goes to clear it (`link`), and, where the provider said, when it may clear by itself
 (`clears_at`). Read those to the person. The repair is theirs, at the provider — topping up, reconnecting, renewing a
 key, or waiting for an allowance to renew — and never an edit of the item; once the block has cleared, the work is

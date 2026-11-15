@@ -2183,7 +2183,9 @@ function messageOf(row, observed, operation) {
 }
 
 // What a row of class `blocked` says is blocked: the scope and the reason the row names, the sending account the call
-// went from where the scope is a sender, and when it clears where the CLI said how long to wait — that long after this
+// went from where the scope is a sender, with the channel it went on — Reply numbers its mailboxes apart from its
+// LinkedIn accounts, so mailbox 12 and LinkedIn account 12 are two accounts and a block of one is not a block of the
+// other — and when it clears where the CLI said how long to wait — that long after this
 // answer, since Reply's wait counts from it. A wait that is not a number of seconds between none and a year is left out,
 // and the runtime tries the block on its own cadence: Reply's allowances renew by the day or the week, and a moment far
 // enough out would be written with a year the block contract does not take.
@@ -2197,6 +2199,7 @@ function blockOf(block, observed) {
   return compact({
     scope: block.scope,
     sender_external_id: block.scope === "sender" ? observed.sender : undefined,
+    channel: block.scope === "sender" && typeof observed.channel === "string" ? observed.channel : undefined,
     reason: block.reason,
     clears_at: clears,
   });

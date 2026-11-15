@@ -7,6 +7,7 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
+import { shown } from '../test/area';
 import { stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
@@ -23,13 +24,13 @@ const needs = 'This needs Jason Desktop.';
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 
-async function renderNone(): Promise<FakeApi> {
+async function renderNone(waits: 'pending' | 'empty' = 'pending'): Promise<FakeApi> {
     const none = noDesktop();
     setPlace('none', none);
     await loadMode(none);
     const fake = new FakeApi()
-        .answer('approval.list', 'approval.list/pending')
-        .answer('decision.list', 'decision.list/pending')
+        .answer('approval.list', `approval.list/${waits}`)
+        .answer('decision.list', `decision.list/${waits}`)
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
         .answer('plugin.list', 'plugin.list/none')
@@ -90,6 +91,21 @@ describe('The console in a tab with no desktop', () => {
         expect(link.getAttribute('href')).toBe('https://github.com/reply-team/jason-ai/releases');
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
         expect(screen.queryByRole('textbox', { name: 'Who do you want to reach?' })).toBeNull();
+    });
+
+    it('opens on Start, which says where the chat is, and shows Needs you chosen from the menu, caught up when nothing waits', async () => {
+        // What the browser smoke's pairing test asserts of the same page against a fresh runtime.
+        await renderNone('empty');
+        await waitFor(() => screen.getByRole('heading', { name: 'Chat', level: 1 }));
+        expect(shown()).toBe('start');
+        expect(screen.queryByRole('heading', { name: 'Who do you want to reach?', level: 1 })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Needs you', level: 1 })).toBeNull();
+        fireEvent.click(
+            within(side().getByRole('navigation', { name: 'Menu' })).getByRole('button', { name: /^Needs you/ }),
+        );
+        await waitFor(() => screen.getByRole('heading', { name: 'Needs you', level: 1 }));
+        expect(shown()).toBe('needs');
+        await waitFor(() => screen.getByText("You're all caught up"));
     });
 
     it('draws the New chat entry off with the sentence, and says nothing failed', async () => {

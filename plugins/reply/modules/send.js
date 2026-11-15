@@ -142,7 +142,7 @@ export function senderFor(operation, context, channel, sender) {
   }
 
   if (UNAVAILABLE.indexOf(account.status) >= 0) {
-    fail(operation, { call: SENDERS, row: "sender_blocked_channel", provider_code: describe(account.reply_status), sender: id }, undefined);
+    fail(operation, { call: SENDERS, row: "sender_blocked_channel", provider_code: describe(account.reply_status), sender: id, channel: channel }, undefined);
   }
 
   return id;
