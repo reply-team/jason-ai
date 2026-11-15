@@ -238,6 +238,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             campaign.ToTable(t => t.HasCheckConstraint("ck_campaigns_context_json", "json_valid(context_json)"));
             campaign.Property(c => c.ManagerEventWatermark).HasDefaultValue(0);
             campaign.Property(c => c.ResponderWatermark).HasDefaultValue(0);
+            campaign.Property(c => c.BounceWatermark).HasDefaultValue(0);
             campaign.Property(c => c.AudienceWatermark).HasDefaultValue(0);
 
             // One key names one campaign, and the database is what says so: two creates deciding "is it free?" by
@@ -776,6 +777,13 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_sends")
                 .IsUnique()
                 .HasFilter("kind = 'message_sent_observed'");
+
+            // A send seen to have bounced is said once, under the key of the work item that sent it, in an index of its own:
+            // the read that sees the bounce looks the key up first, and a second line, two reads of one send deciding it at
+            // once, is refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_bounces")
+                .IsUnique()
+                .HasFilter("kind = 'message_bounce_observed'");
 
             // A search ends once, under the key of its work item. The search's row is marked in the same change set, and a
             // second line — two writers deciding the same ending at once — is refused here.

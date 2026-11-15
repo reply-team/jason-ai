@@ -194,6 +194,24 @@ internal sealed class CampaignWorld
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>A person's email put on the register at this moment by this actor, as its journal line says it.</summary>
+    public static async Task StoppedAsync(RuntimeApiFixture api, Contact person, ActorRef actor, DateTime at, CancellationToken ct)
+    {
+        await using var scope = api.Resolve<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+        db.Journal.Add(new JournalEntry
+        {
+            Key = "email",
+            PublicId = PublicId.New("jrn"),
+            Ts = at,
+            ActorType = actor.Type,
+            ActorId = actor.Id,
+            Kind = JournalKinds.SuppressionAdded,
+            New = new JsonObject { ["channel"] = "email", ["value"] = person.Channels[0].Value },
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <param name="db">The context the world is written through.</param>
     /// <param name="ct">The test's token.</param>
     /// <param name="id">

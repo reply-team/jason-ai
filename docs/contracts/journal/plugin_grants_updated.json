@@ -3,7 +3,7 @@
   "version": 1,
   "since": "0.42.0",
   "summary": "A plugin was granted something its manifest requests, or a grant was taken back, by plugin.grant or plugin.revoke: that capability's grants in force before and after, as the reload froze them.",
-  "subscribable": false,
+  "subscribable": true,
   "entities": {
     "plugin": {
       "at": "/new/plugin",

@@ -170,12 +170,14 @@ internal static partial class CampaignPeople
         """;
 
     // The register forgets an entry once it is lifted; the journal does not. Read from the period's opt-outs, each found
-    // among the channels by its value; whose campaign they are in is the memberships' join to say.
+    // among the channels by its value; whose campaign they are in is the memberships' join to say. An entry the runtime
+    // wrote for a bounce (actor system:bounce) is a dead address, not a person's wish, and is no opt-out.
     private const string OptedOut = """
         SELECT DISTINCT ch.contact_id
         FROM journal AS jl INDEXED BY ix_journal_suppression_added_ts
         JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
         WHERE jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
+          AND NOT (jl.actor_type = 'system' AND jl.actor_id IS 'bounce')
         """;
 
     // Every membership, the removed ones too: Removed counts them, and every other count only the members (Current).
@@ -313,6 +315,7 @@ internal static partial class CampaignPeople
         JOIN contact_channels AS ch ON ch.channel = json_extract(jl.new_json, '$.channel') AND ch.value = json_extract(jl.new_json, '$.value')
         JOIN campaign_contacts AS m ON m.contact_id = ch.contact_id
         WHERE m.campaign_id IN {{Asked}} AND jl.kind = 'suppression_added' AND jl.ts >= {1} AND jl.ts < {2}
+          AND NOT (jl.actor_type = 'system' AND jl.actor_id IS 'bounce')
         """;
 
     private const string RemovedMoments = $$"""

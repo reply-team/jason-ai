@@ -31,7 +31,7 @@ Thirty operations — the whole set this build publishes: eighteen that write an
 | `schedule.list` | Reads the account's sending schedules, ordered by Reply's identifier: each with its time zone, its windows by weekday as authored, the windows of later steps where Reply keeps them, and whether it is the caller's default. Reply holds a time zone as a Windows time zone identifier, and this package carries it as written under the scheme `windows`, always — never converted. No calendar is worked out from the windows. |
 | `social_invitation.send` | Invites one person to connect on LinkedIn from one of the account's LinkedIn accounts, with a note or without one, once a person approves it. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
 | `message.send` | Sends one person one message outside any sequence, once a person approves it: an email, or on LinkedIn a message to a connection, an InMail or a voice message Reply speaks from the text. Nothing is sent unless the account is the one the person approving read, and Reply's contact for the person is reached at the address or the profile the work item consumes and is not held as opted out. A person Reply holds nobody for is created first, as an add creates one. |
-| `message.status` | Reads one direct send by the reference Reply gave it when it took it, which the runtime keeps for the send: whether Reply still holds it, it went or it failed, and whether a cancel can still stop it. Reply lists no pending sends, so one send is all it reads. |
+| `message.status` | Reads one direct send by the reference Reply gave it when it took it, which the runtime keeps for the send: whether Reply still holds it, it went or it failed, whether a cancel can still stop it, and whether an email came back as a bounce, hard or soft, where the installed reply-cli prints it. Only Reply's `hard` is hard; Reply's `unknown`, or a bounce with no word, names no kind; every other word, one this package does not know included, is soft, matched ignoring case and separators. Reply lists no pending sends, so one send is all it reads. |
 | `message.cancel` | Takes back one direct send Reply still holds for its moment, by that same reference. One cancelled before answers the same; one that went, that Reply is sending or that failed is refused, and nothing changes. |
 | `audience.preview` | Asks Reply's Live Data how many people and companies a definition matches, and shows up to ten of them with no way to reach them. Reply saves and charges nothing. |
 | `audience.search` | Starts a Live Data search for up to the count asked, on a contact list of its own that Reply puts the people it finds on, once a person approves it. Reply charges per person found. **A person Reply already holds is never found:** Reply skips everyone the account holds — every person an earlier search found among them — and never puts them on the list. See [What it cannot do](#what-it-cannot-do). |
@@ -192,9 +192,13 @@ jason route set --campaign cmp_… --plugin reply --binding '{"profile":"outboun
 jason route resolve --campaign cmp_… --operation list_membership.add --human
 ```
 
-**There is deliberately no global `route set`.** A global route is a setting, frozen by the same explicit
-act that freezes the plugins it names, so the only way to write one is to edit `settings.json` and
-reload; the CLI refuses `route set` without `--campaign` and says where a global route lives instead.
+**A global route can be set from the command line too**, on a running runtime. The command writes the
+same `Routes` section of `settings.json` and freezes it by the reload in the same act, so steps 4 and 5
+become one, and every other byte of the file is kept ([routing](../../docs/routing.md)):
+
+```sh
+jason route set --global --plugin reply --binding '{"profile":"outbound"}' --actor human:you@example.com
+```
 
 **And two things that are not true yet.** There is **no signing and no publisher identity**: the
 digest in `plugin list` says what the files are, never who wrote them, so a package is exactly as trusted
@@ -903,8 +907,9 @@ reply-cli passes them on. `idempotency_key.in_use` (409) is the one where the ke
 request's claim, and Reply answers so until that request completes or releases the key. A 429 (`rate_limited`) under any
 code of Reply's but its two limits on a direct email is refused before the guard runs, so nothing was taken and no key
 was touched. Those two limits, the mailbox's daily limit (`contact.dailyLimitReached`) and the account's active contacts
-(`contact.activeContactsLimitReached`), are read by Reply's code on every refusal reply-cli explains, whatever its
-status and CLI code, and are about the sender: the mailbox's block. Reply may count them after it made a record of an
+(`contact.activeContactsLimitReached`), are read by Reply's code on every refusal reply-cli explains, that is, one it
+passes on as a refusal and not as a lost answer, whatever its status and CLI code, and are about the sender: the
+mailbox's block. Reply may count them after it made a record of an
 email it sends now under the key; the record is failed and the key released with it, so the record is dead, never kept
 as the work item's `send`, and the send a later trial makes under the same key is a record of its own, the one kept. The
 LinkedIn account's own refusals in that range, its 409s (`linkedin.account_inactive`, `linkedin.invalid_cookie`) and its

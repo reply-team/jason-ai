@@ -1693,7 +1693,10 @@ answered without waiting for a review. The kind is also a default manager trigge
 check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
 (`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same line from the provider's own record,
 and a bounce, a reply the provider detected or an accepted invitation as `provider_event_observed`, which releases a
-check-in the same way and wakes no responder (`docs/events.md`).
+check-in the same way and wakes no responder (`docs/events.md`). A bounce said so is also followed up by a bounce step
+after respond: it queues a read (`message.status`) of each of the campaign's own emails to that person the bounce
+could be of, and a read that finds a hard bounce, or one the provider named no kind for, puts the person's email on
+the do-not-contact register (`docs/inbound-sync.md`).
 
 ### 17.6 Scheduled campaign-management review
 

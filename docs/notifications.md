@@ -37,7 +37,7 @@ Seven things, and only these:
   store said in a campaign, as a `provider_event_observed` line ([events.md](events.md) §4). It wakes a pointer by that
   line, and the pointer counts each such event once, however many campaigns it reached. An event the store keeps as
   history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified. Which
-  campaign a bounce was in, and whose email it was where a contact is pinned to the person, the person's agent reads
+  campaign a bounce was in, and whose email it was where the line names a contact, the person's agent reads
   from those lines; the pointer says only how many.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work

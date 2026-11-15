@@ -114,7 +114,8 @@ For each campaign it concerns, a stored event says at most one line, written in 
 
 Both lines are written by `system:dispatcher`, name the campaign and no work item or attempt, and are trigger kinds a
 manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
-`campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder
+`campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder, and a
+`provider_event_observed` line of a `bounce` asks for reads of the campaign's own sends it could be of
 ([inbound sync](inbound-sync.md) §1).
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with the fields

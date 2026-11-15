@@ -1,0 +1,11 @@
+{
+  "kind": "message_bounce_observed",
+  "version": 1,
+  "case": "a read of a send's status found the message came back, and the provider named no kind",
+  "body": {
+    "key": "wi_01JC0000000000000000000002",
+    "old": null,
+    "new": { "plugin": "example-mail", "reference": "snd-55102", "channel": "email", "message_id": null, "bounce": null, "bounce_code": "unknown", "bounced_at": null, "read_work_item": "wi_01JC000000000000000000000E" }
+  },
+  "expect": "valid"
+}
