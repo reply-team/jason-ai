@@ -44,6 +44,13 @@ public sealed record RuntimeHostOptions(
     /// </summary>
     internal Action<TimeSpan, CancellationToken>? DescriptorPause { get; init; }
 
+    /// <summary>
+    /// How the start's sweep removes a settings writer's stray temporary file; null means
+    /// <see cref="Configuration.SettingsTemporarySweep.RemoveUnheld"/>. A test hands in one that fails, to see a start that
+    /// could not remove one go on.
+    /// </summary>
+    internal Action<string>? SettingsTemporaryRemoval { get; init; }
+
     /// <summary>The port to listen on, overriding the settings when set. The test suite sets 0 so every test runtime is on a random port.</summary>
     public int? Port { get; init; }
 

@@ -17,6 +17,7 @@ import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
 import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
+import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import { OwnServers, type UnreadKind } from './own-servers.ts';
@@ -271,7 +272,7 @@ function readText(file: string): string | null {
  */
 export function writeAtomically(file: string, text: string): void {
     mkdirSync(dirname(file), { recursive: true });
-    const temporary = `${file}.${process.pid}.tmp`;
+    const temporary = settingsTemporary(file);
     try {
         writeFileSync(temporary, text, { mode: 0o600 });
         renameSync(temporary, file);
