@@ -36,19 +36,20 @@ Seven things, and only these:
 - **an email that bounced** — a provider event of the kind `bounce` that a read of an account found and the events
   store said in a campaign, as a `provider_event_observed` line ([events.md](events.md) §4). It wakes a pointer by that
   line, and the pointer counts each such event once, however many campaigns it reached. An event the store keeps as
-  history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified. Whose
-  email bounced, and in which campaign, the person's agent reads from those lines; the pointer says only how many.
+  history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified. Which
+  campaign a bounce was in, and whose email it was where a contact is pinned to the person, the person's agent reads
+  from those lines; the pointer says only how many.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
 that failed, not a block that cleared, not a reply the provider detected or an invitation accepted, and not a
 protective action somebody cancelled — a cancellation is a decision. A person who answers a question is not told that
 they answered it.
 
-A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how
-many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items
-wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to it. An approval
-is a person's decision, recorded as theirs, made where they read what they are approving — through their agent,
-or `jason approval list` and `jason approval approve`.
+A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how many
+accounts have events Jason did not read, how many provider blocks hold how many work items, how many items wait on a
+launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to
+it. An approval is a person's decision, recorded as theirs, made where they read what they are approving — through their
+agent, or `jason approval list` and `jason approval approve`.
 
 ## 2. When
 
@@ -146,13 +147,14 @@ work item or attempt. A campaign's public id travels only in the sentence about 
 of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read,
 nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are
 and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
-Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email
-that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for
-the bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
-approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on (§7). That id is never
-in the words, never in a plugin channel's input, and never in a toast on macOS or Linux. A campaign's name is the plainest example of why: it
-is often a customer's name or a deal, written by the person for themselves, and a notification is read by whoever can
-see the screen, the phone or, on a public ntfy server, the topic.
+Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email that
+bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for the
+bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the
+Windows toast alone, when exactly one approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a
+click opens on (§7). That id is never in the words, never in a plugin channel's input, and never in a toast on macOS or
+Linux. A campaign's name is the plainest example of why: it is often a customer's name or a deal, written by the person
+for themselves, and a notification is read by whoever can see the screen, the phone or, on a public ntfy server, the
+topic.
 
 ## 4. Where it can appear
 
