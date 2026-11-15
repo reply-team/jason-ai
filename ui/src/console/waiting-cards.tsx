@@ -3,7 +3,15 @@ import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { MessageEditor } from '../screens/attention/message-editor';
-import { editable, isStale, readItem, sentence } from '../screens/attention/message-edit';
+import {
+    STALE_SENTENCE,
+    checkMessage,
+    editable,
+    readItem,
+    sentence,
+    uncheckedSentence,
+} from '../screens/attention/message-edit';
+import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
 import { clock, here } from './state';
 import { toApprovalCard, toQuestionCard } from './waiting-model';
@@ -21,13 +29,14 @@ import {
 // An agent's chat, under its conversation: the campaign's approvals and questions that wait on a person, as cards.
 // Approve, Edit, Reject and an answer act through Needs you's holder; Details opens the item in Needs you.
 
-const staleSentence =
-    'The text of this message changed after this approval was asked, so Jason will ask again with the new text.';
-const uncheckedSentence = 'The message could not be checked against its work item, so it cannot be approved now: ';
+const readingSentence = 'This message is being read; it cannot be approved until its words are shown here.';
+const unreadSentence =
+    'This message could not be read, so it cannot be approved here; Details opens it in Needs you. The runtime said:';
 
 function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSummary }) {
     const api = useApi();
     const whole = waiting.approvals.value[row.id];
+    const unreadWhy = waiting.unread.value[row.id];
     const card = toApprovalCard(row, whole, clock.value);
     const busy = waiting.store.busy.value;
     const [rejecting, setRejecting] = useState(false);
@@ -48,23 +57,16 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
     const unread = card.message && whole === undefined;
     const held = busy || checking || unread;
 
-    // As the browser's approval panel does: the work item is read at the press, and a message whose text moved since
-    // the approval was asked is not approved, since the runtime asks again with the new text.
+    // The browser's approval panel's check, at the press: the work item is read again, and a message whose text moved
+    // since the approval was asked is not approved, since the runtime asks again with the new text.
     async function approve() {
         setProblem(null);
         if (whole !== undefined && card.message) {
             setChecking(true);
-            try {
-                if (isStale(whole, await readItem(api, whole.work_item_id))) {
-                    setProblem(staleSentence);
-                    return;
-                }
-            } catch (error) {
-                if (!(error instanceof Unpaired)) setProblem(uncheckedSentence + sentence(error));
-                return;
-            } finally {
-                setChecking(false);
-            }
+            const checked = await checkMessage(api, whole).finally(() => setChecking(false));
+            if (checked === null) return;
+            if ('unchecked' in checked) return setProblem(uncheckedSentence(checked.unchecked));
+            if (checked.stale) return setProblem(STALE_SENTENCE);
         }
         await approveWaiting(api, waiting, row.id);
     }
@@ -101,10 +103,25 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                 <span className="meta">{[card.channel, card.age].filter(Boolean).join(' · ')}</span>
             </div>
             {card.from !== null && <div className="meta waiting-from">From {card.from}</div>}
+            <div className="ask-w">{card.why}</div>
+            {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
+            {whole !== undefined && <Doubts preview={whole.preview} />}
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
             {card.body !== null && <div className="said waiting-body">{card.body}</div>}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
-            <div className="ask-w">{card.why}</div>
+            {/* A message is approved only once its words are here: until then, the card says why it cannot be. */}
+            {unread && (
+                <div className="note am" role="status">
+                    {unreadWhy === undefined ? (
+                        readingSentence
+                    ) : (
+                        <>
+                            {unreadSentence} {unreadWhy.code !== null && <code>{unreadWhy.code}</code>}{' '}
+                            {unreadWhy.message}
+                        </>
+                    )}
+                </div>
+            )}
             {problem !== null && (
                 <div className="note am" role="status">
                     {problem}

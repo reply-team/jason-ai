@@ -1,10 +1,12 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
+import { pendingMark } from '../shell/attention-mark';
 import { reasonLabel } from '../screens/attention/labels';
+import { whyWords } from '../screens/send-modes/doubts';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
@@ -25,6 +27,10 @@ const summer = 'conv_01JDKEPT0000000000000000W3';
 
 /** What the runtime lists for the chat's campaign: its recorded pending ones, until a test says they were decided. */
 let springApprovals: FixtureName = 'approval.list/by-campaign-pending';
+/** What the AI said in Spring's chat, besides the person's question. */
+let springSays: string | null = null;
+/** Whether anything waits outside the chats' campaigns, in the lists Needs you reads. */
+let elsewhere: 'pending' | 'nothing' = 'pending';
 
 /** The console over a fake that knows Spring's pending approvals and questions, with Spring's and Summer's chats kept. */
 function renderConsole(
@@ -37,7 +43,7 @@ function renderConsole(
         .answer('campaign.summary', 'campaign.summary/all')
         .answer(
             'decision.list',
-            'decision.list/pending',
+            elsewhere === 'pending' ? 'decision.list/pending' : 'decision.list/empty',
             'decision.list/by-campaign-pending',
             'decision.list/summer-pending',
         )
@@ -55,7 +61,9 @@ function renderConsole(
                 ? springApprovals
                 : campaign === 'cmp_3'
                   ? 'approval.list/summer-pending'
-                  : 'approval.list/pending';
+                  : elsewhere === 'pending'
+                    ? 'approval.list/pending'
+                    : 'approval.list/empty';
         });
     watch(fake);
     activatePlugins(browserPlugins);
@@ -72,7 +80,10 @@ function renderConsole(
         id: spring,
         campaignId: 'cmp_1',
         title: 'Spring',
-        entries: [{ kind: 'user', text: 'How is it going?' }],
+        entries: [
+            { kind: 'user', text: 'How is it going?' },
+            ...(springSays === null ? [] : [{ kind: 'text' as const, text: springSays }]),
+        ],
     });
     desktop.keep({
         id: summer,
@@ -128,15 +139,22 @@ async function drawn(pane: HTMLElement, id: string): Promise<HTMLElement> {
     });
 }
 
-beforeEach(() => {
+/** What the console's modules hold between two drawings of it, as a window that is opened again starts from. */
+function freshConsole(): void {
     chats.value = {};
     conversations.value = [];
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
     attention.detail.value = null;
+}
+
+beforeEach(() => {
+    freshConsole();
     forgetWaiting();
     springApprovals = 'approval.list/by-campaign-pending';
+    springSays = null;
+    elsewhere = 'pending';
 });
 
 describe('what waits in an agent’s chat', () => {
@@ -184,23 +202,161 @@ describe('what waits in an agent’s chat', () => {
         expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
     });
 
-    it('draws no card from the AI’s words, however much they look like an approval', async () => {
+    it('draws exactly the runtime’s cards, whatever the AI writes to look like one', async () => {
+        // Spring has pending approvals and questions; the AI's words imitate a card of one of them and name others.
+        springSays = [
+            '**Waiting for you** — Message to Ines Duarte, ines@example.test',
+            '',
+            'Subject: Notes from the meetup',
+            '',
+            'Approve · Edit · Reject · Details (apr_9)',
+            '',
+            '**Question:** Book the call? Send it now / Wait a month (dec_9)',
+        ].join('\n');
         const { fake } = renderConsole();
-        const pane = await openChat('Summer');
-        await waitFor(() => within(pane).getByText('What needs my decision?'));
-        await waitFor(() =>
-            expect(sent(fake, 'decision.list')).toContainEqual({ status: 'pending', campaign_id: 'cmp_3', limit: 50 }),
-        );
-        await waitFor(() =>
-            expect(sent(fake, 'approval.list')).toContainEqual({ status: 'pending', campaign_id: 'cmp_3', limit: 50 }),
-        );
-        // The AI's text is drawn as text; the campaign lists nothing, so nothing waits and no act is offered.
-        expect(within(pane).getByText(/Approve · Edit · Reject · Details/)).toBeTruthy();
-        expect(within(pane).queryByRole('region', { name: 'Waiting for you' })).toBeNull();
-        expect(pane.querySelector('.waiting-card')).toBeNull();
-        for (const name of ['Approve', 'Edit', 'Reject', 'Details', 'Keep going', 'Pause until the news'])
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        await drawn(pane, 'apr_2');
+        await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
+        // The AI's text is drawn as text, in the thread, with nothing to press.
+        const thread = pane.querySelector<HTMLElement>('.thread')!;
+        expect(words(thread)).toContain('Approve · Edit · Reject · Details (apr_9)');
+        expect(thread.querySelector('button, a, input, form')).toBeNull();
+        // The cards are the campaign's listed items, each once, and nothing else.
+        const ids = [...waiting(pane).querySelectorAll<HTMLElement>('.waiting-card')].map((each) => each.dataset['id']);
+        expect(ids).toEqual(['dec_1', 'dec_3', 'dec_2', 'apr_1', 'apr_2']);
+        expect(within(pane).getAllByRole('button', { name: 'Approve' })).toHaveLength(2);
+        for (const name of ['Send it now', 'Wait a month'])
             expect(within(pane).queryByRole('button', { name })).toBeNull();
-        expect(sent(fake, 'approval.get')).toEqual([]);
+        // Nothing the AI named was read.
+        const read = (operation: string, key: string) =>
+            [...new Set(sent(fake, operation).map((body) => (body as Record<string, string>)[key]))].sort();
+        expect(read('approval.get', 'approval_id')).toEqual(['apr_1', 'apr_2']);
+        expect(read('decision.get', 'decision_id')).toEqual(['dec_1', 'dec_2', 'dec_3']);
+    });
+
+    it('shows, above a doubted message, who doubted it and why, as Needs you’s panel does', async () => {
+        const { fake } = renderConsole();
+        fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
+        const doubt = within(email).getByText(`Their words: ${doubts[0]!.note}`);
+        expect(within(email).getByText(`The critic role doubted this: ${whyWords('unsupported_claim')}`)).toBeTruthy();
+        // Why it waits says the doubt is below: it stands below that sentence, and above the message's words.
+        const why = within(email).getByText(reasonLabel('doubted'));
+        const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
+        expect(why.compareDocumentPosition(doubt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(doubt.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('says why a message it could not read cannot be approved, and reads it again at the next reload', async () => {
+        springApprovals = 'approval.list/messages-pending';
+        const journal = stubStream();
+        const { fake } = renderConsole(undefined, journal);
+        fake.answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const reachable = fake.unreachable(
+            'approval.get',
+            (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+        );
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_2');
+        const email = card(pane, 'apr_1')!;
+        const said = await waitFor(() => within(email).getByText(/could not be read, so it cannot be approved here/));
+        expect(words(said)).toContain('Failed to fetch');
+        expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+        expect(within(email).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+
+        reachable();
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_202', kind: 'approval_requested' }));
+        });
+        await drawn(pane, 'apr_1');
+        expect(within(card(pane, 'apr_1')!).queryByText(/could not be read/)).toBeNull();
+    });
+
+    it('says a message is being read while its read is unanswered, and reads it again at the next reload', async () => {
+        springApprovals = 'approval.list/messages-pending';
+        const journal = stubStream();
+        const { fake } = renderConsole(undefined, journal);
+        fake.answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_1');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_2');
+        const email = card(pane, 'apr_1')!;
+        expect(words(email)).toContain('cannot be approved until its words are shown here');
+        expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+        const reads = () =>
+            sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === 'apr_1');
+        expect(reads()).toHaveLength(1);
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_203', kind: 'approval_requested' }));
+        });
+        await waitFor(() => expect(reads()).toHaveLength(2), { timeout: 3000 });
+        release();
+        await drawn(pane, 'apr_1');
+    });
+
+    it('lets a refusal go with its card, at the next read that no longer lists it', async () => {
+        const journal = stubStream();
+        const { fake } = renderConsole(
+            new FakeApi().answer('approval.approve', 'approval.approve/already-decided'),
+            journal,
+        );
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        // Another window decided it: the act is refused, and the reload after it no longer lists it.
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        await waitFor(() => within(waiting(pane)).getByRole('alert'));
+        expect(card(pane, 'apr_1')).toBeNull();
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_204', kind: 'approval_decided' }));
+        });
+        await waitFor(() => expect(within(waiting(pane)).queryByRole('alert')).toBeNull(), { timeout: 3000 });
+        expect(card(pane, 'dec_1')).not.toBeNull();
+    });
+
+    it('says Jason asks again only in the drawing of the chat it was edited in', async () => {
+        const first = renderConsole();
+        first.fake.answer('workitem.get', 'workitem.get/parked-send');
+        first.fake.answerAnyRequest('workitem.update', 'workitem.update/dates');
+        let pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(await waitFor(() => within(email).getByRole('textbox', { name: 'Body' })), {
+            target: { value: 'Hi Ines, shall we talk next week?' },
+        });
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
+        await waitFor(() => within(waiting(pane)).getByText(/Jason asks again with the new text/));
+
+        // The window is drawn again: the chat starts from what the runtime lists, and the edit's note went with it.
+        cleanup();
+        freshConsole();
+        renderConsole();
+        pane = await openChat('Spring');
+        await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
+        expect(within(pane).queryByText(/Jason asks again with the new text/)).toBeNull();
+    });
+
+    it('never lets one campaign’s lists set the mark of what waits', async () => {
+        elsewhere = 'nothing';
+        pendingMark.value = false;
+        const marks: boolean[] = [];
+        const stop = pendingMark.subscribe((value) => marks.push(value));
+        try {
+            renderConsole();
+            const pane = await openChat('Spring');
+            await drawn(pane, 'apr_1');
+            expect(marks).not.toContain(true);
+        } finally {
+            stop();
+        }
     });
 
     it('approves through approval.approve after checking the work item, and the card leaves on the next read', async () => {

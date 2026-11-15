@@ -1863,6 +1863,27 @@ body,
 .jc-console .waiting-card .waiting-intent {
     margin-top: 4px;
 }
+/* Who doubted a send and why, drawn by the browser's own component above the message's words. */
+.jc-console .waiting-card .send-doubts {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--amber);
+    background: var(--amber-2);
+}
+.jc-console .waiting-card .send-doubts h3 {
+    margin: 0 0 4px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.jc-console .waiting-card .send-doubts ul {
+    margin: 0;
+    padding-left: 18px;
+}
+.jc-console .waiting-card .send-doubts p {
+    margin: 2px 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
 .jc-console .waiting-card > .note,
 .jc-console .waiting-card .waiting-reject {
     margin-top: 10px;
