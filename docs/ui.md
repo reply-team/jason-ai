@@ -140,8 +140,9 @@ or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
 opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
 runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
-its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
-add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
+with its kind beside it: **Sequence** where a provider campaign is pinned to it, **Adaptive** where the agent has been started, no provider campaign is pinned and none is being made (every message it sends is Jason's own; the page reads one page of its unfinished provider operations to know none is being made, and says nothing if that read fails), and nothing otherwise, a draft included; a pin whose provider campaign has gone since still reads Sequence;
+it shows its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
+add-contacts`). A campaign opens on its first tab, named **Sequence** where its kind is Sequence and **Paths** otherwise, which puts what is planned, what waits for you and what is running
 above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
 narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`), each row saying where the person stands in this campaign, its Stage word from `standing`; in Activity the tab is **People Activity**, and everything it lists is the period's, All being

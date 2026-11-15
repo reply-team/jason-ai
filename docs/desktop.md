@@ -85,7 +85,7 @@ shows before anything is typed and what you send waits, while the window is open
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
   **Open your agents**.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
-  header, beside Add people, so they are there from every tab.
+  header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
   macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
   the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
