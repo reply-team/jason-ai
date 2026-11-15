@@ -115,6 +115,7 @@ import {
     type SandboxCheck,
 } from './codex-sandbox.ts';
 import { hosts, keyedFolder, keyProvider, providerEnvironment, withoutKey, withoutWholeKey } from './providers-model.ts';
+import { lastChosenHost } from './roles-profile.ts';
 
 /** Why a turn starts a fresh session of a conversation that had one. */
 export type FreshReason = 'host_changed' | 'not_found';
@@ -845,6 +846,14 @@ export class Chat {
             .filter((conversation) => this.#kept.has(conversation.id))
             .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : a.id < b.id ? 1 : -1))
             .map((conversation) => this.#summaryOf(conversation));
+    }
+
+    /**
+     * The host the chat is set to run on, from the conversations this run holds, read once at its start: the one the
+     * newest conversation's last turn ran on (`lastChosenHost`); null before any turn.
+     */
+    chosenHost(): string | null {
+        return lastChosenHost([...this.#conversations.values()]);
     }
 
     #summaryOf(conversation: Conversation): ConversationSummary {

@@ -53,6 +53,7 @@ export const setupFound: DesktopSetup = {
             typedModel: true,
             modelsUnread: null,
             ownServers: [],
+            runsRoles: null,
         },
         {
             id: 'codex',
@@ -70,6 +71,7 @@ export const setupFound: DesktopSetup = {
             typedModel: false,
             modelsUnread: null,
             ownServers: [],
+            runsRoles: null,
         },
         {
             id: 'gemini',
@@ -86,6 +88,7 @@ export const setupFound: DesktopSetup = {
             typedModel: false,
             modelsUnread: null,
             ownServers: [],
+            runsRoles: null,
         },
         {
             id: 'deepseek',
@@ -105,6 +108,7 @@ export const setupFound: DesktopSetup = {
             typedModel: false,
             modelsUnread: null,
             ownServers: [],
+            runsRoles: null,
         },
     ],
     reply: {

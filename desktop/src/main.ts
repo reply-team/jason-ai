@@ -56,6 +56,7 @@ import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
@@ -579,43 +580,51 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
-    registerSetup(
-        seam,
-        new Setup({
-            paths,
-            cli,
-            programs,
-            keys,
-            log,
-            bundleVersion: version ?? 'unprepared',
-            runtimeVersion: () => runtimeVersion,
-            runtimeIsOurs: () => runtimeIsOurs,
-            settings: () => settings,
-            models,
-            // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
-            ownServers: { env: process.env, home },
-            // A demo run offers no Full access (`demoFullAccess`).
-            demo: runOn.mode === 'demo',
-            // A box is closed, and read as a no, when its window is hidden or closed.
-            confirm: (box) =>
-                askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
-                    window.once('hide', abort);
-                    window.once('close', abort);
-                    return () => {
-                        window.removeListener('hide', abort);
-                        window.removeListener('close', abort);
-                    };
-                }),
-            // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
-            // kept nowhere.
-            openLink: toBrowser,
-            // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
-            copyLink: (link) => clipboard.writeText(link),
-        }),
-        origin,
+    const setup = new Setup({
+        paths,
+        cli,
+        programs,
+        keys,
         log,
-        () => toPage('setup.changed'),
-    );
+        bundleVersion: version ?? 'unprepared',
+        runtimeVersion: () => runtimeVersion,
+        runtimeIsOurs: () => runtimeIsOurs,
+        settings: () => settings,
+        // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
+        saveSettings: (next) => {
+            settings = next;
+            writeSettings(paths.settings, next);
+        },
+        models,
+        // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
+        ownServers: { env: process.env, home },
+        // A demo run offers no Full access (`demoFullAccess`).
+        demo: runOn.mode === 'demo',
+        // A box is closed, and read as a no, when its window is hidden or closed.
+        confirm: (box) =>
+            askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
+                window.once('hide', abort);
+                window.once('close', abort);
+                return () => {
+                    window.removeListener('hide', abort);
+                    window.removeListener('close', abort);
+                };
+            }),
+        // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
+        // kept nowhere.
+        openLink: toBrowser,
+        // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
+        copyLink: (link) => clipboard.writeText(link),
+    });
+    registerSetup(seam, setup, origin, log, () => toPage('setup.changed'));
+    // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, with the host
+    // the chat holds, and as each turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
+    const roles = rolesMoments(runOn.mode, {
+        connect: (chosen) => setup.connectRoles(chosen),
+        chosen: () => chat.chosenHost(),
+        failed: () => log.warn('roles_profile', { Outcome: 'failed' }),
+    });
+    const turns = loggedTurns(log);
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
     const chat = new Chat({
@@ -646,10 +655,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
             return fullAccessAnswer(response, checkboxChecked);
         },
-        ...loggedTurns(log),
+        ...turns,
+        started: (host, resumed, mode) => {
+            turns.started(host, resumed, mode);
+            roles.atTurn(host);
+        },
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
-            loggedTurns(log).standingChanged(standing, why);
+            turns.standingChanged(standing, why);
             toPage('fullAccess.changed', standing);
         },
     });
@@ -818,6 +831,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             }
         }
         log.info('window_loaded', { Origin: started.origin });
+        roles.atStart();
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();

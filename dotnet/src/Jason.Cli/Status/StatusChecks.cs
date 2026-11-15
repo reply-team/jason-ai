@@ -37,7 +37,7 @@ namespace Jason.Cli.Status;
 /// Both are held by guards, because a status verb that grows a probe has become a diagnostics verb.
 /// </para>
 /// </remarks>
-internal static class StatusChecks
+internal static partial class StatusChecks
 {
     /// <summary>
     /// Every repair a check can print, composed in one place — and there are two kinds of them.
@@ -165,6 +165,17 @@ internal static class StatusChecks
             $"jason profile update {profile} --host {AgentHosts.Word(host)} --program {AgentHosts.Of(host).CommandWord}";
 
         /// <summary>
+        /// The repair where no role's work would find a profile by the default: one profile for Claude Code, by its command
+        /// word. It runs nothing until a level names it, so the fact gives <see cref="RolesDefaultLine"/> beside it, the one
+        /// line of settings that makes it the default. No verb names the default, so that half is a line a person writes,
+        /// never a repair.
+        /// </summary>
+        public const string CreateRolesProfile = "jason profile create claude-code --host claude_code --program claude";
+
+        /// <summary>The line of settings, printed in a fact, that names a profile the default.</summary>
+        public static string RolesDefaultLine(string profile) => "\"Roles\": {\"DefaultExecutionProfile\": \"" + profile + "\"}";
+
+        /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
         /// default, or the one builds before 0.33.0 had: the line that moves a harness deployment its record pins to this build's tag.
         /// </summary>
@@ -276,6 +287,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             var profiles = client is null ? default : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false);
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
+            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env), profileNames));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1779,6 +1791,161 @@ internal static class StatusChecks
         var profile = names ? astray.Name : "<name>";
         var host = detected[0].Kind;
         return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.MoveProfile(profile, host));
+    }
+
+    /// <summary>
+    /// Whether a role's work would find a profile by <c>Roles:DefaultExecutionProfile</c>, the claim's own rule for work
+    /// nothing else names a profile for: ok only where the default (<paramref name="named"/>, as
+    /// <see cref="DefaultProfileOf"/> reads it) names one of the enabled profiles <c>agent_hosts</c> reads, compared as the
+    /// claim compares a name. Otherwise absent, and the fact says what the claim would end the work with and names whichever
+    /// of the repair's two halves is still missing — the command that makes <c>claude-code</c> (the fix) and the line of
+    /// <paramref name="settingsFile"/> that names it, or the name of the person's own profile where they have one and name
+    /// none — with the fix null where only the line is missing, since a line is no command. It does not read a profile a work
+    /// item, a campaign's policy or a role's policy names, nor an entry command, and says so. A value the runtime's options
+    /// refuse — read as written, with nothing trimmed, and held to a profile name's shape, so a padded, capitalised or blank
+    /// one — is absent too, and shown as written: a runtime does not start with it and a running one keeps the settings it
+    /// read before. Never required: <c>ready</c>
+    /// says whether the installation can start work, and a role is one kind of work. Without <paramref name="names"/>, as the
+    /// doctor's bundle composes it, no profile is named but <c>claude-code</c>, the repair's own: a profile's name is the
+    /// person's.
+    /// </summary>
+    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile, DefaultProfileSetting named, bool names = true)
+    {
+        const string Name = "roles_launchable";
+        const string Ours = "claude-code";
+        const string NotRead = "This check reads that default alone: not a profile a work item, a campaign's policy or a role's policy names, nor an entry command.";
+        if (profiles is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "Whether a role can run is not known: the profiles could not be read: " + (unread ?? "the runtime did not answer") + ".", null);
+        }
+
+        if (named.Unread is { } why)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, $"Whether a role can run is not known: the settings file at {settingsFile} cannot be read ({why}), so the default profile it may name is not known.", null);
+        }
+
+        string Shown(string profile) => names || profile == Ours ? profile : "<name>";
+
+        // Compared as the claim looks a profile up, by its exact name; a value the runtime refuses is no profile's name.
+        var enabled = profiles.Select(profile => profile.Name).ToList();
+        var refused = named.Name is { } value && !ProfileNameShape().IsMatch(value);
+        if (named.Name is { } name && enabled.Contains(name, StringComparer.Ordinal))
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, $"Roles:DefaultExecutionProfile names {Shown(name)}, an enabled execution profile, so a role's work that nothing else names a profile for runs on it. {NotRead}", null);
+        }
+
+        string said;
+        if (refused)
+        {
+            var written = names ? JsonSerializer.Serialize(named.Name, Written) : "<name>";
+            said = $"Roles:DefaultExecutionProfile gives {written}, which the runtime refuses: it reads the value with nothing trimmed, and a profile's name is "
+                + "lowercase letters, digits and hyphens, starting with a letter, at most 64 characters. A runtime does not start with it, and a running one "
+                + "keeps the settings it read before, so no role's work runs on this value.";
+        }
+        else if (named.Name is { } absent)
+        {
+            said = $"Roles:DefaultExecutionProfile names {Shown(absent)}, which is not an enabled execution profile here, so a role's work that nothing else names a profile for fails at its claim with profile_not_found or profile_disabled.";
+        }
+        else
+        {
+            var exist = enabled.Count switch
+            {
+                0 => "No enabled execution profile exists",
+                1 => "1 enabled execution profile exists",
+                _ => string.Create(CultureInfo.InvariantCulture, $"{enabled.Count} enabled execution profiles exist"),
+            };
+            said = exist + " and Roles:DefaultExecutionProfile names none, so a role's work that nothing else names a profile for fails at its claim with role_not_launchable, "
+                + "unless the role has an entry command of its own or Roles:DefaultEntryCommand names one.";
+        }
+
+        // The profile the repair names: the person's own where they have profiles and name none, unless one of them is
+        // ours, and ours otherwise. A name already given is replaced only by ours, and a value the runtime refuses by the
+        // enabled profile it names once trimmed, where there is one.
+        var ours = enabled.Contains(Ours, StringComparer.Ordinal);
+        var meant = refused ? enabled.FirstOrDefault(each => string.Equals(each, named.Name!.Trim(), StringComparison.Ordinal)) : null;
+        var target = meant ?? (named.Name is null && enabled.Count > 0 && !ours
+            ? (enabled.Count == 1 ? enabled[0] : null)
+            : Ours);
+        var make = target == Ours && !ours;
+        var instead = named.Name is null ? string.Empty : " in place of the name it gives";
+        string repair;
+        if (make && named.Name == Ours)
+        {
+            repair = $"`{Repair.CreateRolesProfile}` makes it, or `jason profile enable {Ours}` where it is there and disabled, and the roles run on Claude Code.";
+        }
+        else if (make)
+        {
+            repair = $"`{Repair.CreateRolesProfile}`, then `{Repair.RolesDefaultLine(Ours)}` in {settingsFile}{instead}, which the runtime reads without a restart, run the roles on Claude Code.";
+        }
+        else if (target is null)
+        {
+            var which = names ? $" ({string.Join(", ", enabled)})" : string.Empty;
+            repair = $"`{Repair.RolesDefaultLine("<name>")}` in {settingsFile}, with the name of one of them{which}, which the runtime reads without a restart, runs the roles on it.";
+        }
+        else
+        {
+            repair = $"`{Repair.RolesDefaultLine(Shown(target))}` in {settingsFile}{instead}, which the runtime reads without a restart, runs the roles on {Shown(target)}.";
+        }
+
+        // The fix is the command alone, and only where the command is the step missing: a line of settings is no command.
+        var fact = $"{said} {repair} {NotRead}";
+        return make
+            ? new StatusCheck(Name, false, CheckState.Absent, fact, Repair.CreateRolesProfile)
+            : new StatusCheck(Name, false, CheckState.Absent, fact, null);
+    }
+
+    /// <summary>
+    /// <c>Roles:DefaultExecutionProfile</c> as the runtime would read it from this environment and the settings file: the
+    /// value as written, nothing trimmed, or null where none is given (a key that is not there, or null); or why the file
+    /// could not be read.
+    /// </summary>
+    internal sealed record DefaultProfileSetting(string? Name, string? Unread);
+
+    /// <summary>
+    /// The shape the runtime's options hold <c>Roles:DefaultExecutionProfile</c> to, the shape of a profile's name, matched
+    /// against the value with nothing trimmed (<c>RolesOptionsValidator</c>).
+    /// </summary>
+    [System.Text.RegularExpressions.GeneratedRegex("^[a-z][a-z0-9-]{0,63}\\z")]
+    private static partial System.Text.RegularExpressions.Regex ProfileNameShape();
+
+    /// <summary>How a refused value is shown: as a JSON string, so a space or a line break in it can be seen.</summary>
+    private static readonly JsonSerializerOptions Written = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>The variable the runtime reads <c>Roles:DefaultExecutionProfile</c> from, over the settings file.</summary>
+    internal const string DefaultProfileVariable = "JASON_Roles__DefaultExecutionProfile";
+
+    /// <summary>
+    /// <c>Roles:DefaultExecutionProfile</c> read the way <c>export</c> and <c>import</c> read the harness root
+    /// (<see cref="Moving.InstallationPlaces"/>): <see cref="DefaultProfileVariable"/>, by any case of its name, over the
+    /// settings file's key in any case, the value as written with nothing trimmed, as the runtime's options bind it — a blank
+    /// value is one they refuse, and a blank variable hides the file's, as it does for the runtime. A runtime started with
+    /// another environment than this command's may read another; the check says what this one would.
+    /// </summary>
+    internal static DefaultProfileSetting DefaultProfileOf(CliEnvironment env)
+    {
+        if (Moving.InstallationPlaces.Variable(env, DefaultProfileVariable) is { } variable)
+        {
+            return new DefaultProfileSetting(variable, null);
+        }
+
+        string? text;
+        try
+        {
+            text = File.Exists(env.Paths.UserSettingsFile) ? File.ReadAllText(env.Paths.UserSettingsFile) : null;
+        }
+        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return new DefaultProfileSetting(null, unreadable.Message);
+        }
+
+        try
+        {
+            return new DefaultProfileSetting(Moving.InstallationPlaces.SettingsText(text, "Roles:DefaultExecutionProfile"), null);
+        }
+        catch (JsonException notJson)
+        {
+            return new DefaultProfileSetting(null, "it is not JSON the configuration reads: " + notJson.Message);
+        }
     }
 
     /// <summary>The most pages of profiles the check reads; past them the answer is not one it can read whole.</summary>

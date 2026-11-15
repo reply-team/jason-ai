@@ -99,6 +99,7 @@ export const en = {
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',
     'connect.ownServers': 'Your MCP servers: {names}. For now they work when you open Jason in {host}, from Open in.',
     'connect.ownServers.more': '{names} and {count} more',
+    'connect.runsRoles': "Your agents' roles run on {host}, by the execution profile {profile}.",
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
     'mode.preparing': 'Preparing the demo…',
