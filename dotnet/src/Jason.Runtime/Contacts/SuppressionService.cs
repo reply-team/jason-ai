@@ -64,7 +64,9 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
             db.Entry(suppression).State = EntityState.Detached;
             db.Entry(line).State = EntityState.Detached;
             var held = await FindAsync(channel!, value!, cancellationToken).ConfigureAwait(false);
-            return ToDto(held!);
+            // A pair lifted again between the refusal and this read leaves nothing to answer: a lost race, a 409 as for any
+            // other, not a failure of the runtime.
+            return held is null ? throw DomainErrors.ConcurrentUpdate() : ToDto(held);
         }
 
         return ToDto(suppression);

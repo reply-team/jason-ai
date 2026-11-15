@@ -88,6 +88,35 @@ public class SuppressionAddRaceTests
         Assert.False(SuppressionService.HeldFirstElsewhere(refused));
     }
 
+    /// <summary>The stop's entry is lifted again before the re-read: nothing is there to answer, so the add is a lost race, not a failure.</summary>
+    [Fact]
+    public async Task An_add_whose_pair_is_lifted_again_before_the_re_read_is_answered_as_a_concurrent_update()
+    {
+        using var database = new TestDatabase();
+        var clock = new FixedClock(Noon);
+        var stop = new BeforeTheSave(
+            context => context.ChangeTracker.Entries<Suppression>().Any(entry => entry.State == EntityState.Added),
+            async _ =>
+            {
+                await using var other = database.Open();
+                await SuppressionService.StageAsync(other, new JournalWriter(clock), Noon.UtcDateTime, Actors.OptOut, [("email", Address)], "Said stop.", Ct);
+                await other.SaveChangesAsync(Ct);
+            });
+        var lift = new AfterTheRefusal(async () =>
+        {
+            await using var other = database.Open();
+            other.Suppressions.RemoveRange(await other.Suppressions.ToListAsync(Ct));
+            await other.SaveChangesAsync(Ct);
+        });
+        await using var db = new JasonDbContext(new DbContextOptionsBuilder<JasonDbContext>(database.Options).AddInterceptors(stop, lift).Options);
+        var service = new SuppressionService(db, new JournalWriter(clock), clock);
+
+        var lost = await Assert.ThrowsAsync<DomainException>(() => service.AddAsync(new SuppressionAddRequest("email", Address, null, "Asked by hand."), Ct));
+
+        Assert.True(stop.Fired);
+        Assert.Equal("concurrent_update", lost.Code);
+    }
+
     /// <summary>Another writer's save, run once, the first time a save of this context is about to begin that the predicate recognises.</summary>
     private sealed class BeforeTheSave(Func<DbContext, bool> when, Func<DbContext, Task> act) : SaveChangesInterceptor
     {
@@ -107,6 +136,22 @@ public class SuppressionAddRaceTests
             }
 
             return await base.SavingChangesAsync(eventData, result, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Another writer's act, run once, when a save of this context has been refused.</summary>
+    private sealed class AfterTheRefusal(Func<Task> act) : SaveChangesInterceptor
+    {
+        private int _fired;
+
+        public override async Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _fired, 1) == 0)
+            {
+                await act().ConfigureAwait(false);
+            }
+
+            await base.SaveChangesFailedAsync(eventData, cancellationToken).ConfigureAwait(false);
         }
     }
 }
