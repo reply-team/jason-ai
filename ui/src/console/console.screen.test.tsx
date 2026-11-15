@@ -12,6 +12,7 @@ import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, typ
 import { readdirSync, readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { nothingWaitsInChats } from '../test/waiting';
+import { choicesOf, chooseIn, currentOf, menuButton, openMenu, waitForMenus } from '../test/menus';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
@@ -272,23 +273,28 @@ describe('the console', () => {
     it('picks a model and, where the model takes one, an effort beside the host, and sends both with the turn', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
-        expect(model).toHaveProperty('value', '');
-        expect(
-            within(model)
-                .getAllByRole('option')
-                .map((each) => each.textContent),
-        ).toEqual(['Default (recommended)', 'Opus', 'Sonnet', 'Haiku', 'Another model…']);
+        await waitFor(() => menuButton('Model'));
+        expect(currentOf('Model', 'model')).toBe('');
+        expect(choicesOf('Model', 'model').map((each) => each.text)).toEqual([
+            'Default (recommended)',
+            'Opus',
+            'Sonnet',
+            'Haiku',
+            'Another model…',
+        ]);
         // The host's own model takes no effort the desktop knows of: none is offered.
-        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
-        fireEvent.change(model, { target: { value: 'opus' } });
-        const effort = await waitFor(() => screen.getByRole('combobox', { name: 'Effort' }));
-        expect(
-            within(effort)
-                .getAllByRole('option')
-                .map((each) => each.textContent),
-        ).toEqual(['Default effort', 'Low', 'Medium', 'High', 'Extra high', 'Max']);
-        fireEvent.change(effort, { target: { value: 'xhigh' } });
+        expect(choicesOf('Model', 'effort')).toEqual([]);
+        chooseIn('Model', 'model', 'opus');
+        expect(choicesOf('Model', 'effort').map((each) => each.text)).toEqual([
+            'Low',
+            'Medium',
+            'High',
+            'Extra high',
+            'Max',
+            'Default effort',
+        ]);
+        chooseIn('Model', 'effort', 'xhigh');
+        expect(menuButton('Model').getAttribute('aria-label')).toBe('Model: Opus, Extra high effort');
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Think hard.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -296,22 +302,22 @@ describe('the console', () => {
             'Think hard.',
             { host: 'claude', model: 'opus', effort: 'xhigh' },
         ]);
-        // A model that takes no effort hides the menu, and the next turn names none.
-        fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'haiku' } });
-        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        // A model that takes no effort hides the steps, and the next turn names none.
+        chooseIn('Model', 'model', 'haiku');
+        expect(choicesOf('Model', 'effort')).toEqual([]);
     });
 
     it('takes a model’s full name typed on Claude Code, with no effort', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
-        fireEvent.change(model, { target: { value: 'opus' } });
-        fireEvent.change(await waitFor(() => screen.getByRole('combobox', { name: 'Effort' })), {
-            target: { value: 'high' },
-        });
-        fireEvent.change(model, { target: { value: '-another' } });
+        await waitFor(() => menuButton('Model'));
+        chooseIn('Model', 'model', 'opus');
+        chooseIn('Model', 'effort', 'high');
+        // Another model keeps the menu open on the box for the name, and takes the focus there.
+        fireEvent.click(within(openMenu('Model')).getByRole('menuitemradio', { name: 'Another model…' }));
         const name = await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
-        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        expect(document.activeElement).toBe(name);
+        expect(choicesOf('Model', 'effort')).toEqual([]);
         // With the name empty the turn is not sent, and Enter sends nothing either.
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
@@ -319,7 +325,8 @@ describe('the console', () => {
         expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(false);
         fireEvent.change(name, { target: { value: ' claude-opus-5-5 ' } });
         expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false);
-        expect(screen.getByRole('combobox', { name: 'Model' })).toHaveProperty('value', '-another');
+        expect(currentOf('Model', 'model')).toBe('-another');
+        expect(menuButton('Model').getAttribute('aria-label')).toBe('Model: claude-opus-5-5');
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -342,9 +349,10 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        await waitFor(() => expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'codex'));
-        expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
-        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('codex'));
+        expect(choicesOf('Model', 'model')).toEqual([]);
+        expect(choicesOf('Model', 'effort')).toEqual([]);
+        expect(menuButton('Model').getAttribute('aria-label')).toBe('Model: Codex default');
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -368,15 +376,12 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        const model = await waitFor(() => screen.getByRole('combobox', { name: 'Model' }));
-        expect(model).toHaveProperty('disabled', true);
-        expect(
-            within(model)
-                .getAllByRole('option')
-                .map((each) => each.textContent),
-        ).toEqual(['Default (recommended)']);
+        await waitFor(() => menuButton('Model'));
+        expect(choicesOf('Model', 'model')).toEqual([
+            { value: '', text: 'Default (recommended)', said: sentence, disabled: true, checked: true },
+        ]);
         expect(document.querySelector('.composer .model-unread')?.textContent).toBe(sentence);
-        expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        expect(choicesOf('Model', 'effort')).toEqual([]);
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -389,14 +394,13 @@ describe('the console', () => {
     it('sends a turn to the host that drives the chat, and draws what the agent says as text', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() =>
-            expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude'),
-        );
-        const host = screen.getByRole('combobox', { name: 'AI host' });
-        expect(
-            within(host).getByRole('option', { name: 'Gemini CLI: runs campaign work, not the chat yet' }),
-        ).toHaveProperty('disabled', true);
-        expect(within(host).queryByRole('option', { name: 'Codex' })).toBeNull();
+        await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('claude'));
+        const hosts = choicesOf('Model', 'host');
+        expect(hosts.find((each) => each.text === 'Gemini CLI')).toMatchObject({
+            disabled: true,
+            said: 'runs campaign work, not the chat yet',
+        });
+        expect(hosts.find((each) => each.text === 'Codex')).toBeUndefined();
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.find((each) => each.name === 'chat.send')).toBeTruthy());
@@ -476,8 +480,8 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        const host = await waitFor(() => screen.getByRole('combobox', { name: 'AI host' }));
-        fireEvent.change(host, { target: { value: 'codex' } });
+        await waitFor(() => menuButton('Model'));
+        chooseIn('Model', 'host', 'codex');
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'What waits?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(desktop.calls.find((each) => each.name === 'chat.send')).toBeTruthy());
@@ -789,18 +793,12 @@ describe('the console', () => {
             const fake = pending(new FakeApi());
             const desktop = chatDesktop(withClaude(old(), true));
             renderConsole(fake, desktop);
-            await waitFor(() =>
-                expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'codex'),
-            );
-            const host = screen.getByRole('combobox', { name: 'AI host' });
-            const option = within(host).getByRole('option', {
-                name: 'Claude Code: Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
+            await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('codex'));
+            expect(choicesOf('Model', 'host').find((each) => each.value === 'claude')).toMatchObject({
+                text: 'Claude Code',
+                disabled: true,
+                said: 'Claude Code 2.1.200 is older than 2.1.257, the oldest version the chat runs on. Update Claude Code, for example by running claude update in a terminal, then check again.',
             });
-            expect(option).toHaveProperty('disabled', true);
-            // The sentence is long; the closed list keeps to the composer's row.
-            expect(rules().find((rule) => rule.selector === '.jc-console .composer select')?.body).toMatch(
-                /max-width:\s*60%/,
-            );
             fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
             fireEvent.click(screen.getByRole('button', { name: 'Send' }));
             await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
@@ -834,14 +832,14 @@ describe('the console', () => {
                 expect(desktop.calls.filter((each) => each.name === 'setup.status').length).toBe(read + 1),
             );
             await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false));
-            expect(screen.getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude');
+            expect(currentOf('Model', 'host')).toBe('claude');
             expect(document.querySelector('.composer .host-held')).toBeNull();
         });
 
         describe('held under a chat whose host it is, while another host drives the chat', () => {
             const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
             const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
-            const hostMenu = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'AI host' });
+            const hostChosen = () => currentOf('Model', 'host');
             const unreadable =
                 'The version of Claude Code could not be read, so the chat does not run on it. Run `claude --version` in a terminal to see it; the chat needs 2.1.257 or newer, and `claude update` updates it. Then check again.';
 
@@ -849,7 +847,7 @@ describe('the console', () => {
             async function heldAfterATurn(sentence: string): Promise<{ desktop: StubDesktop; id: string }> {
                 const desktop = chatDesktop(withClaude(null, true));
                 renderConsole(pending(new FakeApi()), desktop);
-                await waitFor(() => expect(hostMenu()).toHaveProperty('value', 'claude'));
+                await waitForMenus(() => expect(hostChosen()).toBe('claude'));
                 fireEvent.change(box(), { target: { value: 'Go' } });
                 fireEvent.click(screen.getByRole('button', { name: 'Send' }));
                 await waitFor(() => expect(sends(desktop)).toHaveLength(1));
@@ -887,7 +885,7 @@ describe('the console', () => {
                     expect(words(note)).toContain(said);
                     expect(within(note).getByRole('button', { name: 'Check again' })).toBeTruthy();
                     // The menu still names the chat's own host; nothing moved it to Codex.
-                    expect(hostMenu().value).toBe('claude');
+                    expect(hostChosen()).toBe('claude');
                     expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
                     fireEvent.change(box(), { target: { value: 'Next' } });
                     fireEvent.keyDown(box(), { key: 'Enter' });
@@ -910,7 +908,7 @@ describe('the console', () => {
                     expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', false),
                 );
                 expect(document.querySelector('.composer .host-held')).toBeNull();
-                expect(hostMenu().value).toBe('claude');
+                expect(hostChosen()).toBe('claude');
                 fireEvent.change(box(), { target: { value: 'Next' } });
                 fireEvent.click(screen.getByRole('button', { name: 'Send' }));
                 await waitFor(() => expect(sends(desktop)).toHaveLength(2));
@@ -920,8 +918,8 @@ describe('the console', () => {
             it('runs the turn on another host the person chooses', async () => {
                 const { desktop } = await heldAfterATurn(old());
                 await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
-                fireEvent.change(hostMenu(), { target: { value: 'codex' } });
-                await waitFor(() => expect(hostMenu().value).toBe('codex'));
+                chooseIn('Model', 'host', 'codex');
+                await waitForMenus(() => expect(hostChosen()).toBe('codex'));
                 expect(document.querySelector('.composer .host-held')).toBeNull();
                 fireEvent.change(box(), { target: { value: 'Next' } });
                 fireEvent.click(screen.getByRole('button', { name: 'Send' }));

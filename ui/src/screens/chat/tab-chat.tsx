@@ -10,6 +10,7 @@ import { asDesktop, type Bridge } from '../../platform/bridge';
 import { followStanding } from '../../platform/full-access';
 import { t } from '../../platform/i18n';
 import '../../console/console.css';
+import '../../console/composer.css';
 import '../../console/harness.css';
 import '../../console/chat-cards.css';
 import './tab-chat.css';
