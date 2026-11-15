@@ -27,6 +27,22 @@ public static class BounceLines
         return db.Journal.AsNoTracking().Where(entry => entry.Kind == Kind);
     }
 
+    /// <summary>
+    /// How many events said a bounce in the lines of the kind in <c>(after, upTo]</c>: counted by the database, by the key
+    /// every line of one event carries, so a window that grows while no pointer reaches anybody is never read into memory.
+    /// The payload's <c>$.kind</c> is the one <see cref="Bounced"/> reads, and SQLite's <c>=</c> keeps exactly the payloads
+    /// it keeps: a number, a boolean, an object, an array, a null or an absent kind is never the bounce's text. Read through
+    /// the kind index, bounded by the window on both sides.
+    /// </summary>
+    public static IQueryable<int> Count(JasonDbContext db, int after, int upTo)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.SqlQuery<int>($"""
+            SELECT count(DISTINCT key) AS "Value" FROM journal INDEXED BY ix_journal_kind
+            WHERE kind = {Kind} AND id > {after} AND id <= {upTo} AND json_extract(new_json, '$.kind') = {EventKind}
+            """);
+    }
+
     /// <summary>Whether a line of the kind says a bounce: only its payload says, beside replies detected and invitations accepted.</summary>
     public static bool Bounced(JsonNode? payload) =>
         payload?["kind"] is JsonValue value && value.TryGetValue<string>(out var kind) && string.Equals(kind, EventKind, StringComparison.Ordinal);
