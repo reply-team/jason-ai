@@ -32,12 +32,12 @@ namespace Jason.Runtime.Events;
 /// </para>
 /// <para>
 /// A send the provider took for later succeeded when it was taken (<c>accepted</c>), and it counts from then: from the
-/// moment its attempt finished. One that was later taken back, or that the provider later failed, still counts: its item
-/// stays succeeded, and nothing here reads what became of it. The cost is accepted: it can only take a mark away, and only
-/// where a second campaign shares the person, its send never went, and the person replies all at once. A send that ended
-/// <c>ambiguous</c> may have gone and did not succeed: it does not count, and where it was the only one the line stays
-/// unmarked, the manager's as before. A campaign archived after the line was written takes no mark back and gives none:
-/// the line was decided once.
+/// moment its attempt finished. One that was later taken back, or that the provider later failed, still counts: its
+/// item stays succeeded, and nothing here reads what became of it. The cost is accepted. Where a second campaign shares
+/// the person, a send that never went takes a mark away; where the campaign is the only one, a reply the person wrote
+/// before the send went, or though it never went, is marked its own. A send that ended <c>ambiguous</c> may have gone
+/// and did not succeed: it does not count, and where it was the only one the line stays unmarked, the manager's as
+/// before. A campaign archived after the line was written takes no mark back and gives none: the line was decided once.
 /// </para>
 /// <para>
 /// The read names its index and a test pins its plan: the person's own items through the contact index, each one's
