@@ -638,7 +638,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         return html`<div class="hero">
                 <div class="glyph">${svg('chat', 22)}</div>
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
-                <p>Nothing written here reaches a person without your approval.</p>
+                ${chat.mode === 'ask_first' || chat.mode === 'auto_edit' || chat.mode === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
             </div>
             <div class="sugs">
                 ${suggestions.map((chip) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`)}
@@ -744,6 +744,7 @@ function threadOf(chatId: string) {
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.card === card &&
+            last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
         if (!same) last = { chat, host, named, now, card, view: threadView(chat, host) };

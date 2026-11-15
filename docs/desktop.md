@@ -613,8 +613,9 @@ access asks about this one", which waits thirty minutes and then is not run, and
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
 not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
-configuration (aliases, shell options), so such a program can still act as you. None of your own MCP servers or
-connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
+configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat in Full
+access does not carry the line "Nothing written here reaches a person without your approval." that the empty chat draws
+in the other modes. None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.
