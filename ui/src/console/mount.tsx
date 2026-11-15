@@ -7,7 +7,10 @@ import { bindDesktopTheme, startTheme } from '../platform/theme';
 import { browserPlugins } from '../plugins';
 import { Console } from './console';
 import './console.css';
+import './composer.css';
 import './harness.css';
+import './chat-cards.css';
+import './harness-palette.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */
 export async function mount(element: HTMLElement, desktop: JasonDesktop, bootstrapped = false): Promise<void> {

@@ -869,29 +869,6 @@
     gap: 6px;
     margin-left: -6px;
 }
-/* A host held below the floor is listed with a whole sentence; the closed list keeps to the row all the same. */
-.jc-console .composer select {
-    min-width: 0;
-    max-width: 60%;
-    text-overflow: ellipsis;
-}
-/* The model, its typed name and its effort sit beside the host, each kept short so the row holds on a narrow window. */
-.jc-console .composer select.model,
-.jc-console .composer select.effort,
-.jc-console .composer select.mode {
-    max-width: 22%;
-}
-/* While the desktop holds the chat in Full access or Auto-edit, the line under the composer says so; it is never
-   dismissed. */
-.jc-console .composer .full-access,
-.jc-console .composer .auto-edit {
-    margin-top: 6px;
-}
-.jc-console .composer .model-name {
-    min-width: 0;
-    width: 11em;
-    max-width: 30%;
-}
 .jc-console .send {
     margin-left: auto;
     width: 34px;
@@ -1191,10 +1168,6 @@ body,
     width: 100%;
     margin: 0 auto;
 }
-.jc-console .chat-panel .composer {
-    margin: 0 auto 16px;
-    width: calc(100% - 32px);
-}
 .jc-console .said {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1343,17 +1316,6 @@ body,
     margin: 0 0 16px;
 }
 
-/* The start screen: one question, centred, with the AI card above the box when no AI is connected. */
-.jc-console .start .panel-body {
-    max-width: 720px;
-    margin: 8vh auto 0;
-}
-.jc-console .start .composer {
-    margin-top: 14px;
-}
-.jc-console .start .start-waiting {
-    margin-top: 14px;
-}
 .jc-console .chat-panel .chat-reply {
     display: flex;
     flex-direction: column;
@@ -1723,78 +1685,6 @@ body,
 .jc-console .dash-categories {
     margin-bottom: 12px;
 }
-/* The start screen: the mark by the title, the note under the box, and the two menu buttons under the box. */
-.jc-console .start .start-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.jc-console .start .start-mark {
-    width: 28px;
-    height: 28px;
-    flex: none;
-}
-.jc-console .start .start-note {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    margin-top: 14px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: var(--teal-2);
-    color: var(--ink);
-}
-.jc-console .start .start-note-close {
-    flex: none;
-    margin-left: auto;
-}
-.jc-console .start .start-menu {
-    position: relative;
-    display: inline-block;
-}
-.jc-console .start .start-menu-panel {
-    position: absolute;
-    z-index: 10;
-    bottom: calc(100% + 4px);
-    left: 0;
-    min-width: 260px;
-    max-width: 380px;
-    padding: 6px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--panel);
-    box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
-}
-.jc-console .start .start-menu-head {
-    padding: 4px 8px;
-    font-size: 11px;
-    color: var(--muted);
-}
-.jc-console .start .start-menu-item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    width: 100%;
-    padding: 6px 8px;
-    border: 0;
-    border-radius: 6px;
-    background: none;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-}
-.jc-console .start .start-menu-item[aria-checked='true'] {
-    background: var(--teal-2);
-}
-.jc-console .start .start-menu-item:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-.jc-console .start .start-menu-reason {
-    font-size: 11px;
-    color: var(--muted);
-}
-
 .jc-console .recent {
     position: relative;
     display: flex;
@@ -1999,9 +1889,6 @@ body,
 }
 .jc-console .waiting-card .waiting-to {
     color: var(--mute);
-}
-.jc-console .waiting-card .waiting-from {
-    margin-top: 5px;
 }
 .jc-console .waiting-card .waiting-body,
 .jc-console .waiting-card .waiting-intent {

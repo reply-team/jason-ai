@@ -293,7 +293,7 @@ describe('A chat in a tab', () => {
 
     it('shows the mode as a label, not a control', async () => {
         await shown();
-        expect(screen.queryByRole('combobox', { name: 'Access mode' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Access mode/ })).toBeNull();
         const label = screen.getByLabelText('Access mode');
         expect(label.tagName).toBe('SPAN');
         expect(label.textContent).toBe('Ask first');
@@ -343,7 +343,7 @@ describe('The start screen in a tab', () => {
         const current = items.find((each) => each.getAttribute('aria-checked') === 'true')!;
         expect(words(current)).toContain('Ask first');
         for (const each of items.filter((one) => one !== current)) {
-            expect(each.disabled, words(each)).toBe(true);
+            expect(each.getAttribute('aria-disabled'), words(each)).toBe('true');
             expect(words(each)).toContain(elsewhere);
         }
     });

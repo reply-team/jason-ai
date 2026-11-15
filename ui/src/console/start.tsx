@@ -10,7 +10,7 @@ import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
-import { AccessButton, ModelButton } from './start-menus';
+import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
 import { voiceSectionId } from '../screens/settings/voice-id';
 import { voiceKnown } from '../screens/settings/voice-state';
@@ -273,6 +273,7 @@ function StartChat() {
     useEffect(() => {
         if (!held) box.current?.focus();
     }, [held]);
+    useFit(box, startDraft.value);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         submitStart(startDraft.value);
@@ -291,14 +292,10 @@ function StartChat() {
     return (
         <div className="painted start">
             <div className="panel-body">
-                <div className="ph">
-                    <div>
-                        <div className="start-title">
-                            <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
-                            <h1>Who do you want to reach?</h1>
-                            <span className="alpha">Alpha</span>
-                        </div>
-                    </div>
+                <div className="start-title hero">
+                    <img className="start-mark" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+                    <h1>Who do you want to reach?</h1>
+                    <span className="alpha">Alpha</span>
                 </div>
                 {card && <Painted className="start-ai" view={connect.aiCardView} />}
                 {making !== null && (
@@ -329,44 +326,49 @@ function StartChat() {
                         </div>
                     </div>
                 )}
-                <form className="composer" onSubmit={send} aria-label="Start">
-                    <textarea
-                        ref={box}
-                        rows={2}
-                        placeholder={placeholder()}
-                        aria-label="Who do you want to reach?"
-                        value={startDraft.value}
-                        disabled={held}
-                        onChange={(event) => (startDraft.value = event.target.value)}
-                        onKeyDown={enter}
-                    />
-                    <div className="crow">
-                        <AccessButton
-                            chat={startChatNow()}
-                            choose={(chosen) => (startMode.value = chosen)}
-                            takeBack={() => void takeBackStanding(here().desktop).catch(() => undefined)}
-                            buttonRef={modeMenu}
-                        />
-                        <span className="grow" />
-                        <ModelButton
-                            chat={startChatNow()}
-                            change={(next) => (startPick.value = next(startPick.value))}
-                            choose={(chosen) => (startMode.value = chosen)}
-                        />
-                        <button
-                            className="send"
-                            type="submit"
+                <form className="cform" onSubmit={send} aria-label="Start">
+                    <div className="composer">
+                        <textarea
+                            ref={box}
+                            rows={2}
+                            placeholder={placeholder()}
+                            aria-label="Who do you want to reach?"
+                            value={startDraft.value}
                             disabled={held}
-                            title={why ?? t('start.send')}
-                            aria-label={t('start.send')}
-                        >
-                            ↑
-                        </button>
+                            onChange={(event) => (startDraft.value = event.target.value)}
+                            onKeyDown={enter}
+                        />
+                        <div className="crow">
+                            <AccessButton
+                                chat={startChatNow()}
+                                choose={(chosen) => (startMode.value = chosen)}
+                                takeBack={() => void takeBackStanding(here().desktop).catch(() => undefined)}
+                                buttonRef={modeMenu}
+                                header={t('start.access.header')}
+                                order={['full_access', 'ask_first', 'auto_edit', 'plan_only']}
+                            />
+                            <span className="grow" />
+                            <ModelButton
+                                chat={startChatNow()}
+                                change={(next) => (startPick.value = next(startPick.value))}
+                                choose={(chosen) => (startMode.value = chosen)}
+                                header={t('start.model.header')}
+                            />
+                            <button
+                                className="send"
+                                type="submit"
+                                disabled={held}
+                                title={why ?? t('start.send')}
+                                aria-label={t('start.send')}
+                            >
+                                <Glyph name="up" size={16} />
+                            </button>
+                        </div>
                     </div>
-                    <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
+                    <ChatNotes chat={startChatNow()} />
                 </form>
                 {askable && voiceKnown.value === 'none' && (
-                    <div className="start-note" role="note" aria-label={t('start.voice.name')}>
+                    <div className="start-note uinote" role="note" aria-label={t('start.voice.name')}>
                         <span>
                             <strong>{t('start.voice.lead')}</strong> {t('start.voice.body')}
                         </span>
@@ -381,7 +383,7 @@ function StartChat() {
                     </div>
                 )}
                 {!notesClosed.value.includes(mode.value) && (
-                    <div className="start-note" role="note">
+                    <div className="start-note uinote" role="note">
                         <span>
                             <strong>{t(mode.value === 'demo' ? 'start.note.demo.lead' : 'start.note.lead')}</strong>{' '}
                             {t(mode.value === 'demo' ? 'start.note.demo.body' : 'start.note.body')}
