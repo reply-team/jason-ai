@@ -35,13 +35,15 @@ Codex.
 
 - **Bounces in a campaign's activity and on the Dashboard.** `jason campaign activity` (`campaign.activity`) gains the
   count `bounced`: the campaign's people a provider's bounce event names in the period, dated by the moment the provider
-  gives, a person who bounced twice counted once, and hard and soft alike, since an event does not always say which. It
-  is a count like the others: `jason campaign list-contacts --activity bounced` lists the people it counts,
+  gives, a person who bounced twice counted once, and hard and soft alike, since an event does not always say which. A
+  direct email's bounce names no provider campaign, so, as a reply found through the person does, it counts in every
+  campaign that holds the person through that plugin, one that never wrote to them included. It is a count like the
+  others: `jason campaign list-contacts --activity bounced` lists the people it counts,
   `jason campaign activity-by-period` carries it, `--count` takes it, a person's why names it, and
   `campaign activity --human` gains a BOUNCED column. The Dashboard's **Bounce rate** tile, which always showed a dash,
   now shows the window's bounced people over its contacted ones, with "N bounced" under it. Where nobody was contacted,
-  or more people bounced than were contacted, yesterday's sends bouncing today say, it shows the dash with the count
-  under it, never a rate above 100%. The campaigns table, the panel's figures, the People tab's Activity chips and the
+  or more people bounced than were contacted, yesterday's sends bouncing today say, or bounces of another campaign's
+  emails, it shows the dash with the count under it, never a rate above 100%. The campaigns table, the panel's figures, the People tab's Activity chips and the
   Performance tiles list it beside the other counts. See
   [a campaign's people, counted](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/work-execution.md#a-campaigns-people-counted).
 - **A notification says how many emails bounced.** A seventh count joins the six a notification carried: "1 email
@@ -79,7 +81,7 @@ Codex.
   automatic sends to them while the answer waited. Such a reply is now the campaign's own where the thread already was,
   or, for a reply that names no provider campaign, on a thread no campaign it was found in holds yet, where that
   campaign alone had written to the person through that plugin before the reply: a message, an invitation or an answer
-  that went. It raises the campaign's responder, a later move on the thread is recorded on the responder already open,
+  that succeeded, one the provider took for later included. It raises the campaign's responder, a later move on the thread is recorded on the responder already open,
   an unjudged one makes the contact wait, and a `person` verdict on it makes them warm. `inbound_reply_observed` says so
   with `campaign_own: true`. See [inbound sync](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/inbound-sync.md)
   and [events](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/events.md).
@@ -152,7 +154,8 @@ channel, and every campaign starts at the journal's last line, so a bounce said 
   every entry already on the register counts as before.
 - **For subscribers.** `message_bounce_observed` is a new kind. `inbound_reply_observed` may carry `campaign_own`, and
   `notification_sent` carries `counts.bounces`, each marked in its document as arriving in 0.43.0. A sender's block a
-  plugin reports may carry `channel`.
+  plugin reports may carry `channel`, and `provider_blocked` lines, `jason block list` and `jason block get` carry it,
+  null for a block that names none.
 - **A narrowed `Manager:Triggers`** keeps your choice; `message_bounce_observed` is in no default, so add it if a send's
   bounce should wake the manager.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the
@@ -183,6 +186,11 @@ plugin the bounce was read at, no earlier than 45 days before the bounce, and on
 read, so for a bounce read long after it happened, a span read again say, they may be sends made after it, and the one
 that bounced is not read. A bounce of a sequence's email at the provider, of a mail written by hand or of an older send
 is counted and notified, wakes the campaign's manager, and stops nothing.
+
+Through Reply, a bounce on a thread that Reply's change feed also flags as holding a reply, an automatic reply or an
+absence, flags that stay once set, is still read as a move of the thread: it raises the responder against the mail
+server's notice, and it is not counted, notified or stopped as a bounce. A bounce on a thread whose newest message is
+already the account's own when the feed is read is not seen at all.
 
 The address a hard bounce puts on the register is the contact's email when the read ends, since a send's record does not
 keep the address it went to: where the contact's email was changed between the send and the read, the new address is
