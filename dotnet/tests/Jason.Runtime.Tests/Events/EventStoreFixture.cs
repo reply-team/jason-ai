@@ -139,7 +139,8 @@ internal sealed class EventStoreFixture : IDisposable
 
     /// <summary>
     /// A provider operation of the campaign about the contact, ended as said — a send that succeeded at the plugin unless
-    /// said otherwise — with its one attempt, whose provenance names the plugin that ran it.
+    /// said otherwise — with its one attempt, whose provenance names the plugin that ran it, finished at
+    /// <paramref name="at"/>: the day before noon unless said.
     /// </summary>
     public async Task<WorkItem> SentAsync(
         Contact contact,
@@ -149,17 +150,20 @@ internal sealed class EventStoreFixture : IDisposable
         WorkItemStatus status = WorkItemStatus.Succeeded,
         AttemptStatus attemptStatus = AttemptStatus.Succeeded,
         FailureClass? failure = null,
-        JsonNode? result = null)
+        JsonNode? result = null,
+        DateTime? at = null)
     {
         await using var db = Open();
-        var item = WorkItemFactory.NewProviderOp(campaign, operation, Noon.AddDays(-1));
+        var finished = at ?? Noon.AddDays(-1);
+        var started = at is null ? finished : finished.AddMinutes(-1);
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, started);
         item.Campaign = null;
         item.CampaignId = campaign.Id;
         item.ContactId = contact.Id;
         item.Status = status;
         item.Result = result;
-        var attempt = WorkItemFactory.NewAttempt(item, 1, attemptStatus, Noon.AddDays(-1));
-        attempt.FinishedAt = Noon.AddDays(-1);
+        var attempt = WorkItemFactory.NewAttempt(item, 1, attemptStatus, started);
+        attempt.FinishedAt = finished;
         attempt.Provenance = new AttemptProvenanceDto(
             plugin, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
             operation, 1, PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC", "rts_01K5B7Q2WE5X3M9T0YH4C6RDND",

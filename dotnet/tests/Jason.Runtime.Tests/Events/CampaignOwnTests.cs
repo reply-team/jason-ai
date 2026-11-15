@@ -368,7 +368,7 @@ public class CampaignOwnTests
 
         await using (var db = store.Open())
         {
-            Assert.Equal(writer.Id, (await SoleSenders.OfAsync(db, Reader, [marta.Id], Ct))[marta.Id]);
+            Assert.Equal(writer.Id, (await SoleSenders.OfAsync(db, Reader, [marta.Id], Ct)).SoleBefore(marta.Id, Noon.AddHours(-2)));
         }
 
         await store.StoreAsync(source, "c-0", Page("c-1", Moved(thread: "t_501", campaign: null, at: Noon.AddHours(-2)), Moved(thread: "t_777", campaign: null, at: Noon.AddHours(-1))));
@@ -431,6 +431,148 @@ public class CampaignOwnTests
             .ToList();
         Assert.Equal(2, lines.Count);
         Assert.All(lines, line => Assert.False(line.New!.AsObject().ContainsKey(CampaignOwn), $"A line was marked: {line.New.ToJsonString()}."));
+    }
+
+    public enum Named
+    {
+        ACampaignNobodyHolds,
+        ACampaignOnlyAnArchivedOneHolds,
+        ACampaignTwoHold,
+    }
+
+    /// <summary>
+    /// A reply that names a provider campaign reached the person's campaigns only because no live campaign, or more than
+    /// one, holds that campaign: it is a sequence's thread — run by hand at the provider, an archived campaign's, or one two
+    /// campaigns pin — and never a direct send's. The one campaign that alone wrote to the person is not marked on it;
+    /// beside it, on the same page, the person's reply that names no campaign is.
+    /// </summary>
+    [Theory]
+    [InlineData(Named.ACampaignNobodyHolds)]
+    [InlineData(Named.ACampaignOnlyAnArchivedOneHolds)]
+    [InlineData(Named.ACampaignTwoHold)]
+    public async Task A_reply_that_names_a_provider_campaign_is_marked_nowhere_though_one_campaign_alone_wrote(Named named)
+    {
+        using var store = new EventStoreFixture();
+        var (source, sender, other, marta) = await WorldAsync(store);
+        switch (named)
+        {
+            case Named.ACampaignOnlyAnArchivedOneHolds:
+                await store.CampaignAsync(status: CampaignStatus.Archived, pins: (Reader, "p_9"));
+                break;
+            case Named.ACampaignTwoHold:
+                await store.CampaignAsync(pins: (Reader, "p_9"));
+                await store.CampaignAsync(pins: (Reader, "p_9"));
+                break;
+        }
+
+        await store.SentAsync(marta, sender);
+
+        await store.StoreAsync(source, null, Page("c-1", Moved(thread: "t_501", campaign: "p_9"), Moved(thread: "t_777", campaign: null)));
+
+        var lines = (await store.AllLinesAsync())
+            .Where(line => line.Kind == JournalKinds.InboundReplyObserved)
+            .Select(line => (line.CampaignId, Thread: (string?)line.New!["thread"], Rule: (string?)line.New!["attributed_by"], Marked: line.New!.AsObject().ContainsKey(CampaignOwn)))
+            .ToList();
+        Assert.Contains((sender.Id, "t_501", EventAttributionRules.ContactPin, false), lines);
+        Assert.Contains((other.Id, "t_501", EventAttributionRules.ContactPin, false), lines);
+        Assert.Contains((sender.Id, "t_777", EventAttributionRules.ContactPin, true), lines);
+        Assert.Contains((other.Id, "t_777", EventAttributionRules.ContactPin, false), lines);
+        Assert.Equal(4, lines.Count);
+    }
+
+    /// <summary>
+    /// The first clause is asked whatever the event names: a thread the campaign holds by a mark stays its own when the
+    /// person's next reply on it names a provider campaign nobody holds.
+    /// </summary>
+    [Fact]
+    public async Task A_thread_already_the_campaigns_own_stays_its_own_when_the_next_reply_names_a_provider_campaign()
+    {
+        using var store = new EventStoreFixture();
+        var (source, sender, other, marta) = await WorldAsync(store);
+        await store.SentAsync(marta, sender);
+        await store.StoreAsync(source, null, Page("c-0", Moved(campaign: null, at: Noon.AddHours(-4))));
+
+        await store.StoreAsync(source, "c-0", Page("c-1", Moved(campaign: "p_9", at: Noon.AddHours(-2))));
+
+        var mine = await store.LinesAsync(sender, JournalKinds.InboundReplyObserved);
+        Assert.Equal(2, mine.Count);
+        Assert.All(mine, line => Assert.True(line.New!.AsObject().ContainsKey(CampaignOwn), $"A line of the owner's was not marked: {line.New.ToJsonString()}."));
+        Assert.All(await store.LinesAsync(other, JournalKinds.InboundReplyObserved), line => Assert.False(Marked((JsonObject)line.New!)));
+    }
+
+    /// <summary>
+    /// A writer counts only where it wrote before the reply. A second campaign that writes to the person after the reply and
+    /// before the page is read takes nothing from the campaign that alone had written when the person replied; the person's
+    /// later reply on the same page, after both had written, is marked nowhere.
+    /// </summary>
+    [Fact]
+    public async Task A_second_writer_after_the_reply_and_before_the_read_takes_no_mark()
+    {
+        using var store = new EventStoreFixture();
+        var (source, sender, other, marta) = await WorldAsync(store);
+        await store.SentAsync(marta, sender);
+        await store.SentAsync(marta, other, at: Noon.AddHours(-2));
+
+        await store.StoreAsync(source, null, Page("c-1", Moved(thread: "t_501", campaign: null, at: Noon.AddHours(-3)), Moved(thread: "t_777", campaign: null, at: Noon.AddHours(-1))));
+
+        var lines = (await store.AllLinesAsync())
+            .Select(line => (line.CampaignId, Thread: (string?)line.New!["thread"], Marked: line.New!.AsObject().ContainsKey(CampaignOwn)))
+            .ToList();
+        Assert.Contains((sender.Id, "t_501", true), lines);
+        Assert.Contains((other.Id, "t_501", false), lines);
+        Assert.Contains((sender.Id, "t_777", false), lines);
+        Assert.Contains((other.Id, "t_777", false), lines);
+    }
+
+    /// <summary>
+    /// A campaign whose first send finished after the reply had not written when the person replied: it is not marked on a
+    /// thread it could not have started. One whose send finished at the reply's own moment had written.
+    /// </summary>
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(0, true)]
+    public async Task A_first_send_after_the_reply_marks_nothing(int secondsAfter, bool marked)
+    {
+        using var store = new EventStoreFixture();
+        var (source, sender, other, marta) = await WorldAsync(store);
+        var replied = Noon.AddHours(-3);
+        await store.SentAsync(marta, sender, at: replied.AddSeconds(secondsAfter));
+
+        await store.StoreAsync(source, null, Page("c-1", Moved(campaign: null, at: replied)));
+
+        Assert.Equal(marked, Marked(await LineOfAsync(store, sender)));
+        Assert.False(Marked(await LineOfAsync(store, other)));
+    }
+
+    /// <summary>
+    /// A span read again is decided by the writers of its time: of two campaigns that have both written to the person by
+    /// now, a backfilled move made when only the first had written is the first one's own, and one made after the second
+    /// wrote too is marked nowhere.
+    /// </summary>
+    [Fact]
+    public async Task A_backfilled_move_is_decided_by_the_writers_of_its_time()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync(cursor: "c-9");
+        var sender = await store.CampaignAsync(eventsFrom: Noon.AddDays(-60));
+        var other = await store.CampaignAsync(eventsFrom: Noon.AddDays(-60));
+        var marta = await store.ContactAsync("c_1001");
+        await store.MemberAsync(marta, sender, addedAt: Noon.AddDays(-60));
+        await store.MemberAsync(marta, other, addedAt: Noon.AddDays(-60));
+        await store.SentAsync(marta, sender, at: Noon.AddDays(-50));
+        await store.SentAsync(marta, other, at: Noon.AddDays(-40));
+        var backfill = await store.BackfillAsync(source);
+
+        await store.StoreAsync(source, EventFence.OfBackfill(backfill.Id, null), Page("b-1", Moved(thread: "t_501", campaign: null, at: Noon.AddDays(-45)), Moved(thread: "t_777", campaign: null, at: Noon.AddDays(-35))));
+
+        var lines = (await store.AllLinesAsync())
+            .Select(line => (line.CampaignId, Thread: (string?)line.New!["thread"], Marked: line.New!.AsObject().ContainsKey(CampaignOwn)))
+            .ToList();
+        Assert.Equal(4, lines.Count);
+        Assert.Contains((sender.Id, "t_501", true), lines);
+        Assert.Contains((other.Id, "t_501", false), lines);
+        Assert.Contains((sender.Id, "t_777", false), lines);
+        Assert.Contains((other.Id, "t_777", false), lines);
     }
 
     /// <summary>

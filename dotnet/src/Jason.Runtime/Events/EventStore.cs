@@ -152,7 +152,8 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
 
         // Beside the members the contact rule reads, two facts about the page's replies found by the person's pin, both
         // decided now and carried by the line, never worked out again: which of the campaigns found already holds the
-        // thread as its own, and which one campaign, if exactly one, wrote to each person through the plugin that saw it.
+        // thread as its own, and, for a reply that names no provider campaign, which campaigns had written to each person
+        // through the plugin that saw it, and from when.
         var byThePerson = found
             .Where(entry => Thread(entry.Read) is not null)
             .SelectMany(entry => entry.Campaigns
@@ -166,7 +167,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             [.. byThePerson.Select(pair => pair.Thread).Distinct(StringComparer.Ordinal)],
             ct).ConfigureAwait(false);
         var replied = found
-            .Where(entry => Thread(entry.Read) is not null)
+            .Where(entry => Thread(entry.Read) is not null && entry.Read.Campaign is null)
             .Select(entry => pins.ContactOf(entry.Read))
             .OfType<ContactPin>()
             .Select(pin => pin.ContactId)
@@ -208,10 +209,13 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         {
             // A reply found by the person's pin is the campaign's own, said campaign_own, by the first of two clauses that
             // holds. A thread a campaign found here already holds as its own — by its own read, by its own pin, or marked —
-            // stays that campaign's, whoever has written to the person since, and the second clause is not asked. Only a
-            // thread none of them holds yet goes to the one campaign, of those not archived, that alone had written to the
-            // person through the plugin, where the rule found that campaign: a writer it did not find (one that excluded
-            // the person) marks nobody.
+            // stays that campaign's, whoever has written to the person since and whatever the event names, and the second
+            // clause is not asked. Only a thread none of them holds yet, on a reply that names no provider campaign, goes to
+            // the one campaign, of those not archived, that alone had written to the person through the plugin at or before
+            // the reply's own moment, where the rule found that campaign: a writer it did not find (one that excluded the
+            // person) marks nobody. A reply that names a provider campaign reached the person's campaigns because no live
+            // campaign, or more than one, holds that campaign: it is a sequence's thread, never a direct send's, and the
+            // one that wrote directly did not start it.
             var thread = Thread(read);
             var owners = thread is null
                 ? []
@@ -225,7 +229,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
                     && string.Equals(attributed.Rule, EventAttributionRules.ContactPin, StringComparison.Ordinal)
                     && (owners.Count > 0
                         ? owners.Contains(campaign.Id)
-                        : contact is not null && soleSenders.TryGetValue(contact.ContactId, out var writer) && writer == campaign.Id);
+                        : read.Campaign is null && contact is not null && soleSenders.SoleBefore(contact.ContactId, row.OccurredAt) == campaign.Id);
 
                 // What happened before the campaign went live, or before the person it was found by joined it, is history:
                 // kept, and found to concern it, and said by no line.
