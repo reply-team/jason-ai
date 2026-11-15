@@ -7,7 +7,7 @@ the contract for the `Notifications` section of the settings, the toast, notific
 
 ## 1. What notifies, and what does not
 
-Six things, and only these:
+Seven things, and only these:
 
 - **an approval parked at a claim** — a provider operation that needs a person's yes before it runs
   ([work-execution.md](work-execution.md));
@@ -33,14 +33,20 @@ Six things, and only these:
   campaign, and the claim set the item aside until the next UTC day ([work-execution.md](work-execution.md)). It wakes
   a pointer once, by the `workitem_waiting` line that names `held_by`, and the pointer counts every item that waits
   on such a limit as it is sent, whichever campaign it is in; a hold let go before the pointer is sent is not said.
+- **an email that bounced** — a provider event of the kind `bounce` that a read of an account found and the events
+  store said in a campaign, as a `provider_event_observed` line ([events.md](events.md) §4). It wakes a pointer by that
+  line, and the pointer counts each such event once, however many campaigns it reached. An event the store keeps as
+  history, or one that reaches no campaign, says no line and is not counted: what is not said is not notified. Whose
+  email bounced, and in which campaign, the person's agent reads from those lines; the pointer says only how many.
 
 Nothing else notifies: not an answer, not an approval given or refused, not a review, not finished work, not other work
-that failed, not a block that cleared, and not a protective action somebody cancelled — a cancellation is a decision. A
-person who answers a question is not told that they answered it.
+that failed, not a block that cleared, not a reply the provider detected or an invitation accepted, and not a
+protective action somebody cancelled — a cancellation is a decision. A person who answers a question is not told that
+they answered it.
 
 A notification is a pointer: how many approvals and questions are waiting, how many protective actions failed, how
 many accounts have events Jason did not read, how many provider blocks hold how many work items, how many items
-wait on a launch budget, and where to look. It decides nothing, and nothing is approved by reacting to it. An approval
+wait on a launch budget, how many emails bounced, and where to look. It decides nothing, and nothing is approved by reacting to it. An approval
 is a person's decision, recorded as theirs, made where they read what they are approving — through their agent,
 or `jason approval list` and `jason approval approve`.
 
@@ -107,18 +113,30 @@ Jason
 Ask your agent what is held, or run jason workitem list --status waiting.
 ```
 
+And where emails bounced:
+
+```text
+Jason
+2 emails bounced.
+Ask your agent what bounced.
+```
+
 The title; how many approvals and questions are waiting **at the moment it is sent** — counted then, so a burst
 answered before it was said says nothing at all; how many protective actions failed, how many accounts have events
-Jason did not read, and how many provider blocks opened, **since the last notification that reached anybody**
-— counted from that one's line, so a notification that reached nobody leaves them for the next; of those blocks,
-only the ones still open when it is sent, with the work items they hold then; how many items wait on a daily limit,
-counted when it is sent, as approvals are; and where to look. Said beside anything else, a hold, a provider block
-or an account whose events were not read makes where to look the commands of each thing alone, in the order they
-are said — "Ask your agent, or run jason approval list, jason decision list, jason workitem list --status failed
---status expired, jason block list and jason events sources." — and failed protective work and a hold share
-one command, jason workitem list --status failed --status expired --status waiting, so that six things said at
-once still fit the message the delivery contract takes; beside a provider block or a hold, failed protective work
-names one campaign and counts the rest, and beside both it names none. Past three campaigns, the rest are counted:
+Jason did not read, how many provider blocks opened, and how many emails bounced, **since the last notification that
+reached anybody** — counted from that one's line, so a notification that reached nobody leaves them for the next; of
+those blocks, only the ones still open when it is sent, with the work items they hold then; how many items wait on a
+daily limit, counted when it is sent, as approvals are; and where to look. Said beside anything else, a hold, a
+provider block, an account whose events were not read or an email that bounced makes where to look the commands of
+each thing alone, in the order they are said — "Ask your agent, or run jason approval list, jason decision list,
+jason workitem list --status failed --status expired, jason block list and jason events sources." — and failed
+protective work and a hold share one command, jason workitem list --status failed --status expired --status waiting.
+A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations
+accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named
+in the order the things are said until the next would not fit the message the delivery contract takes, and the things
+after it are left to the agent the pointer names first: the things said first keep their commands, and seven things
+said at once still fit. Beside a provider block or a hold, failed protective work names one campaign and counts the
+rest, and beside both it names none. Past three campaigns, the rest are counted:
 "… in cmp_…, cmp_…, cmp_… and 2 more." A count past 9999 is said as "10k+", so the longest pointer fits
 whatever the counts are; the line keeps the counts themselves. That is every field.
 
@@ -128,8 +146,9 @@ work item or attempt. A campaign's public id travels only in the sentence about 
 of them, to say where to look: an opaque `cmp_…` that names nothing by itself. Of an account whose events were not read,
 nothing travels but how many such accounts there are. Of a provider block, nothing travels but how many blocks there are
 and how many work items they hold: not its link, its reason, a sending account's identifier, the plugin or a campaign.
-Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. The pointer
-is made from six counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
+Of a hold, nothing travels but how many items wait: not the role, the limit, the item or the campaign. Of an email
+that bounced, nothing travels but how many bounced: not the address, the person, the message, the provider's word for
+the bounce, the plugin or a campaign. The pointer is made from seven counts, those ids, and nothing else — and in the Windows toast alone, when exactly one
 approval or one question waits, that item's opaque `apr_…` or `dec_…` id, which a click opens on (§7). That id is never
 in the words, never in a plugin channel's input, and never in a toast on macOS or Linux. A campaign's name is the plainest example of why: it
 is often a customer's name or a deal, written by the person for themselves, and a notification is read by whoever can
@@ -223,6 +242,12 @@ way, and sent to a channel only as words, beside the work items those blocks hel
 `responder_launches_spent`, the code a 0.30.0 runtime wrote. It is not carried forward, and a line written before 0.31.0
 has none.
 
+`counts.bounces` is how many emails bounced in the same window, counted by event: by the key every
+`provider_event_observed` line of one bounce carries, in each campaign it reached, so one bounce said in three campaigns
+is one. It is carried forward by a notification that reached nobody the same way, and sent to a channel only as words;
+a line written before 0.43.0 has none. An event the store keeps as history says no line and is not counted; a span read
+again that says an older bounce as a line counts it then ([events.md](events.md) §6).
+
 A notification is a pointer. Each channel's outcome is one of `delivered`; `failed`, with its code and class — a
 server still unreachable after its one retry is failed, and so is a delivery whose input the runtime's own half of the
 delivery contract refuses before the plugin runs, `input_invalid` (`validation`); or `not_attempted`, with its reason,
@@ -247,10 +272,11 @@ as `result_invalid` with the runtime's own sentence in place of the plugin's mes
 times the channel was tried.
 
 A transient failure is tried once more, thirty seconds later, and nothing else is ever repeated: a pointer that may
-have arrived is not sent twice. Three cases write no line — every channel off (nothing is read at all), nothing waiting
-and no protective action failed by the time it is sent, and a runtime that stops while it sends, whose successor reads the same lines and sends once.
-One case writes a line though nothing reached anybody: channels exist and none could, which moves the watermark so the
-same lines are not said again — except failed protective work, whose window moves only when somebody was reached.
+have arrived is not sent twice. Three cases write no line — every channel off (nothing is read at all), nothing of the
+seven things of §1 to say by the time it is sent, and a runtime that stops while it sends, whose successor reads the
+same lines and sends once. One case writes a line though nothing reached anybody: channels exist and none could, which
+moves the watermark so the same lines are not said again — except what is counted in a window, failed protective work,
+accounts not read, provider blocks and bounces, whose window moves only when somebody was reached.
 
 ```sh
 jason journal list --kind notification_sent

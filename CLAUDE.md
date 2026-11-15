@@ -171,8 +171,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   account and nothing else and brings its next read forward, never within a minute of the last; `events.sources` is the
   accounts' record and never answers a cursor. `docs/events.md` is the contract.
 - Notifications: a parked approval, a raised question, failed protective work, an account whose events were not
-  read, an open provider block and an item held at a daily limit of launches are notified as a pointer —
-  counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a reserved `notification_sent` line.
+  read, an open provider block, an item held at a daily limit of launches and an email that bounced are notified as a
+  pointer — counts and where to look — by a scan step after the dispatch, delivered off the scan and recorded in a
+  reserved `notification_sent` line.
   `docs/notifications.md` is the contract.
 - Projects and preferences: every campaign is in exactly one project — the default one, which every installation has,
   unless it names another — and a project's slug is unique and never changes. The client is the installation and has

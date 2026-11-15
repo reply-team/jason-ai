@@ -228,7 +228,7 @@ public partial class InteractiveSkillTests
         var skill = Flattened("operating-the-installation");
 
         Assert.Contains(
-            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, or when a provider block is open, it tells them once, with a pointer: how many, and where to look.",
+            "When Jason starts waiting for a person — an approval parked at a claim, or a question a role raised — when a protective action fails, when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once, with a pointer: how many, and where to look.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -487,8 +487,21 @@ public partial class InteractiveSkillTests
     {
         var skill = Flattened("operating-the-installation");
 
-        Assert.Contains("when it finds a span of an account's events it will not read, or when a provider block is open, it tells them once", skill, StringComparison.Ordinal);
+        Assert.Contains("when it finds a span of an account's events it will not read, when a provider block is open, or when an email bounces, it tells them once", skill, StringComparison.Ordinal);
         Assert.Contains("One that says provider blocks hold work items sends you to `jason block list`", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A pointer that says emails bounced names no command, so the agent is the door: the skill says where the bounces are
+    /// read and that the one list that shows them shows other events beside them.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_says_where_an_agent_reads_the_bounces_a_pointer_counts()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("One that says emails bounced names no command and leaves them to you: a bounce is a `provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its contact and its campaign;", skill, StringComparison.Ordinal);
+        Assert.Contains("`jason journal list --kind provider_event_observed` lists those lines beside the replies the provider detected and the invitations accepted, so keep the bounces", skill, StringComparison.Ordinal);
     }
 
     /// <summary>

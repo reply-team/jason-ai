@@ -141,7 +141,8 @@ manager is woken by under the default `Manager:Triggers`; an `inbound_reply_obse
   reply is said again, as the inbound read says it.
 - **`provider_event_observed`** carries the event, the person it is about, `attributed_by`, and the kind's own
   identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
-  by the event's own key.
+  by the event's own key. A bounce's line is counted by the next notification that reaches anybody, once by that key
+  however many campaigns the bounce reached ([notifications](notifications.md)).
 
 **Said once.** A campaign says each line once under its key, and the database refuses a second; one key may be said in
 two campaigns, and the rule that found a campaign is no part of the key. **History is not said.** An event that
