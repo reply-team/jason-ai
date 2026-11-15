@@ -538,9 +538,10 @@ jobs:
           # A draft's push tests the critical tier alone, the tests that go red first when a rule the product rests on
           # breaks and the tests a change can turn red without touching them (the migrations' own, the pages' printed
           # commands), and so do a pull request into a release branch and the version pull request when they are ready:
-          # for them the tier is the ready run, by rule. A change is cleared by the tests it touched, the classes that hold
-          # a list it moves, its two reviews and its pull request's own Linux set; the whole suite runs once per release,
-          # at the release's pull request into main. Every other run tests the whole suite.
+          # for them the tier is the ready run, by rule. A change is cleared by the tests it touched, the tests that check
+          # a list or a table it edits, a review by whoever leads the release and one by a reviewer who reads only the
+          # change, and its pull request's own Linux set; the whole suite runs once per release, at the release's pull
+          # request into main. Every other run tests the whole suite.
           $draft = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'
           $tier = $draft -or $set -eq 'version-only' -or ($env:EVENT -eq 'pull_request' -and $toRelease)
 
