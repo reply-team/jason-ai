@@ -737,6 +737,41 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// A started agent with no provider campaign pinned: its header asks, once and for one page, whether a
+    /// <c>campaign.create</c> is still unfinished, oldest first, before it says what kind of agent this is. One campaign
+    /// has that work waiting; the other has been started with nothing of the kind.
+    /// </summary>
+    [Fact]
+    public async Task Campaign_header_asks_for_a_provider_campaign_in_the_making()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var making = WorkItemFactory.NewCampaign("Making", now: Noon);
+            making.PublicId = "cmp_01K7QN00000000000000000001";
+            making.Status = CampaignStatus.Active;
+            var running = WorkItemFactory.NewCampaign("Running", now: Noon);
+            running.PublicId = "cmp_01K7QN00000000000000000002";
+            running.Status = CampaignStatus.Active;
+            db.Campaigns.AddRange(making, running);
+            var create = WorkItemFactory.NewProviderOp(making, "campaign.create", Noon);
+            create.PublicId = "wi_01K7QN00000000000000000001";
+            create.Status = WorkItemStatus.Created;
+            db.WorkItems.Add(create);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        string[] unfinished = ["created", "awaiting_approval", "scheduled", "processing", "waiting"];
+        object Ask(string id) => new { campaign_id = id, kind = "provider_op", status = unfinished, order = "created", limit = 50 };
+        Assert.Empty((await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "making", new { campaign_id = "cmp_01K7QN00000000000000000001" }, Ct)).ExternalIds);
+        var open = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "creating-open", Ask("cmp_01K7QN00000000000000000001"), Ct);
+        Assert.Equal("campaign.create", Assert.Single(open.Items).Operation);
+        Assert.Empty((await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "started", new { campaign_id = "cmp_01K7QN00000000000000000002" }, Ct)).ExternalIds);
+        Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "creating-none", Ask("cmp_01K7QN00000000000000000002"), Ct)).Items);
+    }
+
+    /// <summary>
     /// What a first start shows: a Campaigns list and a People list that hold nothing yet, asked as the screens and the
     /// desktop's console ask them, and the People page's counts of its default view, which count nobody.
     /// </summary>

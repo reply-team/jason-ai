@@ -128,9 +128,11 @@ import campaignGetGoneHere from '../../../docs/api/fixtures/campaign.get/gone-he
 import campaignGetInProjectWithFolder from '../../../docs/api/fixtures/campaign.get/in-project-with-folder.json';
 import campaignGetInbox from '../../../docs/api/fixtures/campaign.get/inbox.json';
 import campaignGetInboxQuiet from '../../../docs/api/fixtures/campaign.get/inbox-quiet.json';
+import campaignGetMaking from '../../../docs/api/fixtures/campaign.get/making.json';
 import campaignGetMany from '../../../docs/api/fixtures/campaign.get/many.json';
 import campaignGetOne from '../../../docs/api/fixtures/campaign.get/one.json';
 import campaignGetSendModeOverride from '../../../docs/api/fixtures/campaign.get/send-mode-override.json';
+import campaignGetStarted from '../../../docs/api/fixtures/campaign.get/started.json';
 import campaignSetSendModeCleared from '../../../docs/api/fixtures/campaign.set_send_mode/cleared.json';
 import campaignSetSendModeNotHuman from '../../../docs/api/fixtures/campaign.set_send_mode/not-human.json';
 import campaignSetSendModeSet from '../../../docs/api/fixtures/campaign.set_send_mode/set.json';
@@ -338,6 +340,8 @@ import workitemListByContact from '../../../docs/api/fixtures/workitem.list/by-c
 import workitemListByContactOpen from '../../../docs/api/fixtures/workitem.list/by-contact-open.json';
 import workitemListByContactOpenImported from '../../../docs/api/fixtures/workitem.list/by-contact-open-imported.json';
 import workitemListByContactOpenNone from '../../../docs/api/fixtures/workitem.list/by-contact-open-none.json';
+import workitemListCreatingNone from '../../../docs/api/fixtures/workitem.list/creating-none.json';
+import workitemListCreatingOpen from '../../../docs/api/fixtures/workitem.list/creating-open.json';
 import workitemListDone from '../../../docs/api/fixtures/workitem.list/done.json';
 import workitemListEmpty from '../../../docs/api/fixtures/workitem.list/empty.json';
 import workitemListFailed from '../../../docs/api/fixtures/workitem.list/failed.json';
@@ -587,6 +591,7 @@ export const fixtures = {
     >,
     'campaign.get/inbox': campaignGetInbox satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/inbox-quiet': campaignGetInboxQuiet satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/making': campaignGetMaking satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/many': campaignGetMany satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/one': campaignGetOne satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/send-mode-override': campaignGetSendModeOverride satisfies Exchange<
@@ -606,6 +611,7 @@ export const fixtures = {
         CampaignSetSendModeRequest,
         Campaign
     >,
+    'campaign.get/started': campaignGetStarted satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
@@ -1056,6 +1062,14 @@ export const fixtures = {
         Page<WorkItemSummary>
     >,
     'workitem.list/by-contact-open-none': workitemListByContactOpenNone satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/creating-none': workitemListCreatingNone satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/creating-open': workitemListCreatingOpen satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,

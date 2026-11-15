@@ -1,0 +1,51 @@
+{
+  "operation": "workitem.list",
+  "case": "creating-open",
+  "request": {
+    "campaign_id": "cmp_1",
+    "kind": "provider_op",
+    "status": [
+      "created",
+      "awaiting_approval",
+      "scheduled",
+      "processing",
+      "waiting"
+    ],
+    "order": "created",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "wi_1",
+        "campaign_id": "cmp_1",
+        "contact_id": null,
+        "kind": "provider_op",
+        "role": null,
+        "operation": "campaign.create",
+        "execution_profile": null,
+        "status": "created",
+        "eligible": true,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": null
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-15T12:00:00.000Z",
+        "updated_at": "2026-10-15T12:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Making",
+        "contact_name": null,
+        "running_since": null
+      }
+    ],
+    "next_cursor": null
+  }
+}
