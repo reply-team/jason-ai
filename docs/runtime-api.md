@@ -101,10 +101,11 @@ Jason-Attempt: att_...
 
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the ones that are a
-person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)) and the two that change what
-a plugin may use, `plugin.grant` and `plugin.revoke`, which answer it `403` with the code `decided_inside_a_run` before
-the body is read, and record nothing; the two grants say in a sentence of their own that nothing inside a run changes
-Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
+person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), the two that change what
+a plugin may use, `plugin.grant` and `plugin.revoke`, and the two that name the profile agent work runs on by default,
+`profile.set_default` and `profile.unset_default`, which answer it `403` with the code `decided_inside_a_run` before
+the body is read, and record nothing; the grants and the default say in a sentence of their own that nothing inside a
+run changes Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. Nor does `reply.record` read past it: it records a verdict that names
 a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
@@ -494,6 +495,23 @@ that is not that attempt does not call them.
 - `profile.list`: the profiles in the order they were added; a disabled one only when it is asked for.
 - `profile.disable`: out of service; the revisions stay, and new work no longer resolves to them.
 - `profile.enable`
+- `profile.set_default`: names the profile agent work runs on when nothing more specific names one, the setting
+  `Roles:DefaultExecutionProfile`, written to `settings.json` and in force at once.
+- `profile.unset_default`: takes it away, the same way.
+
+  `profile.set_default` takes the profile's `name`, which must answer a profile: `404` `profile_not_found` where none
+  does, `validation_failed` on `name` where it is missing or not a profile's name. A disabled profile is still one, and
+  may be named; work meets it at its claim. Either writes the setting into `settings.json`, keeping every byte of the file
+  it does not own, and taking the `Roles` object away where the unset leaves it empty; the value is the one the claim
+  reads when the request answers, with no restart and no reload, and the answer is that value,
+  `{"execution_profile":"claude-code"}`, or `{"execution_profile":null}` where none is named. Naming the default already
+  in force, and taking away one nobody named, write nothing and answer success. Nothing is written, and the answer is
+  `409`, for the settings file's own refusals, as for `route.set` with scope `global`, `setting_shadowed` among them where
+  a `JASON_` variable sets the default. Where another setting of the `Roles` section does not validate, so the runtime
+  keeps working from the last `Roles` settings that did, the value written could not be in force: the answer is `409`
+  `setting_not_in_force`, with the file put back and one more detail under the field `settings.json`,
+  `settings_file_put_back` or `settings_file_not_put_back`. Each change of the default in force is journaled as
+  `default_profile_updated` ([docs/execution-profiles.md](execution-profiles.md), §3).
 
 ### `journal`
 

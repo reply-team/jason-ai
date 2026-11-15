@@ -93,3 +93,18 @@ public sealed record ProfileListRequest(bool? IncludeDisabled, int? Limit, strin
 
 /// <summary>The body of <c>profile.disable</c> and <c>profile.enable</c>.</summary>
 public sealed record ProfileToggleRequest(string? Name, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// <c>profile.set_default</c>: names the profile agent work falls back to when nothing more specific names one, the setting
+/// <c>Roles:DefaultExecutionProfile</c>. The profile must exist; it may be disabled, which work meets at its claim.
+/// </summary>
+public sealed record ProfileSetDefaultRequest(string? Name, ActorRef? Actor, string? Reason);
+
+/// <summary><c>profile.unset_default</c>: takes the configured default away, so agent work that nothing else names a profile for has none.</summary>
+public sealed record ProfileUnsetDefaultRequest(ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// The configured default execution profile in force when the request answered: the name, or null where none is named.
+/// A name, never the profile: it is resolved when work is claimed.
+/// </summary>
+public sealed record ProfileDefaultDto(string? ExecutionProfile);

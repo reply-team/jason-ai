@@ -38,15 +38,28 @@ public static class InsideARun
         Operations.CampaignSetSendMode,
     };
 
-    /// <summary>The operations that change Jason itself: what a plugin may use. A role Jason launches is no person granting it.</summary>
+    /// <summary>
+    /// The operations that change Jason itself: what a plugin may use, and which profile agent work runs on by default. A role
+    /// Jason launches is no person granting it, nor the person who chose the host its kind of work runs on.
+    /// </summary>
     public static IReadOnlySet<string> ChangesJason { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         Operations.PluginGrant,
         Operations.PluginRevoke,
+        Operations.ProfileSetDefault,
+        Operations.ProfileUnsetDefault,
     };
 
     /// <summary>Every operation that refuses a request from inside a run.</summary>
     public static IReadOnlySet<string> Refusing { get; } = new HashSet<string>(PersonsWord.Concat(ChangesJason), StringComparer.Ordinal);
+
+    /// <summary>The refusal an operation of <see cref="Refusing"/> answers a request from inside a run with, in its own sentence.</summary>
+    public static Domain.ForbiddenException Refusal(string operation, string attempt) => operation switch
+    {
+        Operations.ProfileSetDefault or Operations.ProfileUnsetDefault => Domain.DomainErrors.DefaultProfileInsideARun(attempt),
+        _ when ChangesJason.Contains(operation) => Domain.DomainErrors.ChangesJasonInsideARun(attempt),
+        _ => Domain.DomainErrors.DecidedInsideARun(attempt),
+    };
 
     /// <summary>The attempt a request says it comes from, as it said it; null where it names none.</summary>
     public static string? AttemptOf(HttpRequest request)

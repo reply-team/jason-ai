@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 
 namespace Jason.Cli.Human;
@@ -53,6 +55,35 @@ public static class ProfileRenderers
         profile.Problems is { Count: > 0 } problems
             ? [Line("Refused:", string.Join(", ", problems.Select(problem => $"{problem.Field} ({problem.Code})")))]
             : [];
+
+    /// <summary>
+    /// The default in force after <c>set-default</c> or <c>unset-default</c>, in one line: the profile's name, or none. A body
+    /// without the field is not this answer.
+    /// </summary>
+    public static string? Default(string json)
+    {
+        JsonObject? body;
+        try
+        {
+            body = JsonNode.Parse(json) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        if (body is null || !body.TryGetPropertyValue("execution_profile", out var named))
+        {
+            return null;
+        }
+
+        return named switch
+        {
+            null => "Default profile: none",
+            JsonValue value when value.TryGetValue<string>(out var name) => "Default profile: " + RenderText.Shown(name),
+            _ => null,
+        };
+    }
 
     /// <summary>The registry as a table: what can launch work, what it starts, and which revision is in force.</summary>
     public static string? ProfileList(string json)

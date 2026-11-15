@@ -200,6 +200,55 @@ public class ProfileCommandsTests
             "{\"name\":\"retired\",\"reason\":\"The host was uninstalled.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
     }
 
+    [Fact]
+    public async Task Set_default_names_the_profile_and_says_who_and_why()
+    {
+        using var cli = new CliRun("{\"execution_profile\":\"claude-code\"}");
+
+        var exit = await cli.RunAsync("profile", "set-default", "claude-code", "--reason", "The roles run on Claude Code.", "--actor", "human:person-1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ProfileSetDefault,
+            "{\"name\":\"claude-code\",\"reason\":\"The roles run on Claude Code.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
+    }
+
+    [Fact]
+    public async Task Unset_default_takes_no_name()
+    {
+        using var cli = new CliRun("{\"execution_profile\":null}");
+
+        var exit = await cli.RunAsync("profile", "unset-default", "--reason", "No default any more.", "--actor", "human:person-1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ProfileUnsetDefault,
+            "{\"reason\":\"No default any more.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
+    }
+
+    [Fact]
+    public async Task Set_default_without_a_name_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", "set-default");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+    }
+
+    [Theory]
+    [InlineData("{\"execution_profile\":\"claude-code\"}", "Default profile: claude-code")]
+    [InlineData("{\"execution_profile\":null}", "Default profile: none")]
+    public async Task The_default_is_said_in_one_line_for_a_person(string answer, string line)
+    {
+        using var cli = new CliRun(answer);
+
+        var exit = await cli.RunAsync("profile", "set-default", "claude-code", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(line, cli.Text.Trim());
+    }
+
     /// <summary>
     /// The CLI composes a body and nothing more. Which hosts exist is the runtime's vocabulary, and a copy of it
     /// here would be a second place to update when a host is added — and the place that got it wrong meanwhile.
