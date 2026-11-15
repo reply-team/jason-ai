@@ -837,7 +837,9 @@ In a period, removed people included, so a past period does not change when some
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
 - `bounced` — A provider's event said in the period that a message to them bounced, hard or soft: an event does not
   always say which, so each counts. A bounce is dated by the moment the provider gives it, as a reply is, and a person
-  who bounced twice counts once; only the provider's events are read, and an event that names nobody counts nobody.
+  who bounced twice counts once; only the provider's events are read, and an event that names nobody counts nobody. A
+  direct email's bounce names no provider campaign, so it reaches every campaign that holds the person as a member at
+  that plugin and counts them in each, one that never wrote to them included, as `replied` does.
 - `opted_out` — One of their addresses was put on the do-not-contact register in the period, other than by the runtime
   for a bounce. It is read from the journal, so an entry lifted since still counts; an entry the runtime wrote for a
   bounce (`system:bounce`) says the address is dead, not that the person asked to be left alone, and never counts. An
