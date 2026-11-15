@@ -15,7 +15,7 @@ import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
 import { attention } from './needs';
-import { chats, clock, conversations, currentChat, lines, setup, setupBusy, streamState } from './state';
+import { chats, clock, conversations, currentChat, here, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -44,15 +44,19 @@ function pending(fake: FakeApi): FakeApi {
         .answer('campaign.summary', 'campaign.summary/all');
 }
 
-/** Shows a panel in the area the way a person does, from the sidebar. */
+/**
+ * The panels Live's sidebar does not draw, by the name the sidebar gives each in the demo. A panel is brought forward
+ * the way a link or the palette does, since no row of the sidebar reaches it in Live.
+ */
+const hidden = { Agents: 'campaigns', Activity: 'activity', Connect: 'connect' } as const;
+
+/** Shows a panel in the area the way a person does, from the sidebar; Live's sidebar reaches Needs you and Settings. */
 function show(name: string): void {
-    const side = within(document.querySelector<HTMLElement>('.side')!);
-    // What has no row of its own is under More: the menu opens, and the entry is chosen by its title.
-    if (['Activity', 'Connect'].includes(name)) {
-        fireEvent.click(side.getByRole('button', { name: 'More' }));
-        fireEvent.click(side.getByRole('menuitem', { name: new RegExp(`^${name}`) }));
+    if (name in hidden) {
+        flush(() => here().dock.show(hidden[name as keyof typeof hidden]));
         return;
     }
+    const side = within(document.querySelector<HTMLElement>('.side')!);
     fireEvent.click(side.getByRole('button', { name }));
 }
 
@@ -168,7 +172,7 @@ describe('the console', () => {
     it('lists the campaigns with the runtime counts, and opens a chat about one', async () => {
         const fake = pending(new FakeApi());
         renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        await waitFor(() => screen.getByRole('button', { name: 'Needs you' }));
         show('Agents');
         await waitFor(() => within(panel('Agents')).getByText('Summer referrals'));
         const spring = within(panel('Agents')).getByText('Spring').closest('tr')!;
@@ -189,7 +193,7 @@ describe('the console', () => {
             .answer('decision.list', 'decision.list/pending')
             .answer('campaign.list', 'campaign.list/screen-empty');
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        await waitFor(() => screen.getByRole('button', { name: 'Needs you' }));
         show('Agents');
         await waitFor(() =>
             expect(words(panel('Agents'))).toContain(
@@ -207,7 +211,7 @@ describe('the console', () => {
     it('draws a hostile campaign name as text, in the list and in a chat about it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
+        await waitFor(() => screen.getByRole('button', { name: 'Needs you' }));
         show('Agents');
         await waitFor(() => within(panel('Agents')).getByText('Spring'));
         // A person may name a campaign anything; the next read brings that name back, to the desktop as well.
@@ -250,7 +254,7 @@ describe('the console', () => {
 
     it('describes the Activity panel by the roles, not by agents', async () => {
         renderConsole(pending(new FakeApi()));
-        await waitFor(() => screen.getByRole('button', { name: 'More' }));
+        await waitFor(() => screen.getByRole('button', { name: 'Needs you' }));
         show('Activity');
         const activity = await waitFor(() => panel('Activity'));
         expect(words(activity)).toContain('What Jason and its roles do, as the journal records it.');

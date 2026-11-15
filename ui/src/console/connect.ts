@@ -1200,6 +1200,49 @@ export function accountsReplyView(): Html {
 /** The Accounts page stopped painting the card: a dialog it held open is dropped. */
 export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
 
+/** The AI hosts' card and, when there are any, the model keys' card: what Connect holds for the AI. */
+function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
+    return html`<div class="card">
+            <div class="hd"><b>AI</b></div>
+            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
+        </div>
+        ${
+            providers.length
+                ? html`<div class="card">
+                      <div class="hd">
+                          <b>Model keys</b>
+                          <span class="meta">Run through Claude Code; kept in the system keychain.</span>
+                      </div>
+                      <div class="bd">${providers.map((each) => provider(each, disabled))}</div>
+                  </div>`
+                : null
+        }`;
+}
+
+/**
+ * The AI hosts and the model keys alone, for Settings' Models section: the same cards, with the same acts, that Connect
+ * draws, read from the same `setup.status()` answer. Connect keeps them as well.
+ */
+export function modelsView(): Html {
+    const state = setup.value;
+    const busy = setupBusy.value;
+    const failure = setupError.value;
+    const disabled = busy === null ? null : html`disabled`;
+    return html`${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
+    ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+    ${
+        state
+            ? aiCards(
+                  state.hosts.filter((each) => each.kind === 'program'),
+                  state.hosts.filter((each) => each.kind === 'provider'),
+                  disabled,
+              )
+            : failure
+              ? null
+              : html`<div class="empty">Reading what is set up…</div>`
+    }`;
+}
+
 export function connectView(): Html {
     const state = setup.value;
     const busy = setupBusy.value;
@@ -1220,22 +1263,8 @@ export function connectView(): Html {
     return html`<div class="panel-body">
         ${header} ${busy ? html`<div class="note" role="status"><span class="spin"></span>${busy}</div>` : null}
         ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
-        <div class="card">
-            <div class="hd"><b>AI</b></div>
-            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
-        </div>
-        ${
-            providers.length
-                ? html`<div class="card">
-                      <div class="hd">
-                          <b>Model keys</b>
-                          <span class="meta">Run through Claude Code; kept in the system keychain.</span>
-                      </div>
-                      <div class="bd">${providers.map((each) => provider(each, disabled))}</div>
-                  </div>`
-                : null
-        }
-        ${reply(state.reply, disabled)} ${state.plugins.length ? plugins(state, disabled) : null}
+        ${aiCards(programs, providers, disabled)} ${reply(state.reply, disabled)}
+        ${state.plugins.length ? plugins(state, disabled) : null}
         <div class="meta versions">
             Jason Desktop ${state.bundleVersion} · runtime ${state.runtimeVersion ?? 'not running'}
         </div>

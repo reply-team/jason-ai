@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { stubDesktop } from '../test/desktop';
 import { FakeApi } from '../test/fake-api';
 import { renderApp } from '../test/render-app';
+import { firstCampaignTab, parseRoute, route } from '../router';
 import { loadMode, mode, modePreparing, modeRefusal, modeUnopened, switchMode } from './mode';
 
 // The mode is which installation the desktop runs on, and the page learns it from the desktop alone, once, as it loads.
@@ -13,6 +14,7 @@ afterEach(() => {
     modePreparing.value = false;
     modeRefusal.value = null;
     modeUnopened.value = null;
+    firstCampaignTab.value = 'sequence';
     history.replaceState(null, '', '/ui/');
 });
 
@@ -24,6 +26,18 @@ describe('the mode read as the page loads', () => {
         expect(mode.value).toBe('demo');
         desktop.modeKept = 'live';
         expect(await loadMode(desktop)).toBe('live');
+    });
+
+    it('makes People the first tab of an agent in Live and Sequence the first in the demo', async () => {
+        const desktop = stubDesktop();
+        desktop.modeKept = 'live';
+        await loadMode(desktop);
+        expect(firstCampaignTab.value).toBe('people');
+        desktop.modeKept = 'demo';
+        await loadMode(desktop);
+        expect(firstCampaignTab.value).toBe('sequence');
+        await loadMode();
+        expect(firstCampaignTab.value).toBe('people');
     });
 
     it('carries the desktop’s sentence when the demo could not be opened, and the run is Live', async () => {
@@ -154,5 +168,27 @@ describe('switching', () => {
         await switchMode('demo');
         expect(location.href).toBe(`${location.origin}/ui/#/people`);
         expect(modeRefusal.value).toBeNull();
+    });
+});
+
+describe('a reload on an agent’s bare address', () => {
+    it('opens People in the console’s Live, the address being read again once the mode is known', async () => {
+        history.replaceState(null, '', '/ui/#/campaigns/cmp_x');
+        // The router read the address as it loaded, before the first tab was known.
+        route.value = parseRoute(location.hash);
+        expect(route.value).toMatchObject({ id: 'cmp_x', tab: 'sequence' });
+        const desktop = stubDesktop();
+        desktop.modeKept = 'live';
+        await loadMode(desktop);
+        expect(route.value).toMatchObject({ id: 'cmp_x', tab: 'people' });
+    });
+
+    it('opens Sequence in the demo', async () => {
+        history.replaceState(null, '', '/ui/#/campaigns/cmp_x');
+        route.value = parseRoute(location.hash);
+        const desktop = stubDesktop();
+        desktop.modeKept = 'demo';
+        await loadMode(desktop);
+        expect(route.value).toMatchObject({ id: 'cmp_x', tab: 'sequence' });
     });
 });

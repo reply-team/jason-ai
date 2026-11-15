@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { firstCampaignTab, parseRoute, route } from '../router';
 import { t } from './i18n';
 import { can, cannotHere } from './places';
 
@@ -74,6 +75,10 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
             ? (kept as { mode?: unknown; unopened?: unknown; preparing?: unknown })
             : { mode: kept };
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
+    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : 'people';
+    // The address was read when the router loaded, before the first tab was known: an agent's bare address is read again.
+    if (typeof location !== 'undefined' && route.value.screen === 'campaigns' && route.value.id !== undefined)
+        route.value = parseRoute(location.hash);
     if (mode.value === 'live' && typeof answer.unopened === 'string' && answer.unopened !== '')
         modeUnopened.value = answer.unopened;
     if (mode.value === 'demo') modePreparing.value = heard ?? answer.preparing === true;

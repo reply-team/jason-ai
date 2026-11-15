@@ -4,7 +4,8 @@ import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { registry } from '../platform/slots';
-import { route } from '../router';
+import { mode, type Mode } from '../platform/mode';
+import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
@@ -12,18 +13,22 @@ import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
-import { chats, conversations } from './state';
+import { chats, conversations, here } from './state';
 
 // The sidebar: the button that makes an agent and its caret's menu, the rows in their order, the number on Needs you,
 // More and what is under it, the conversations under Recent, and Settings in the foot. Read against the recorded
 // exchanges of the runtime's own tests.
 
-function renderConsole(desktop: StubDesktop = stubDesktop()): StubDesktop {
+function renderConsole(desktop: StubDesktop = stubDesktop(), where: Mode = 'demo'): StubDesktop {
+    mode.value = where;
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
-        .answer('campaign.summary', 'campaign.summary/all');
+        .answer('campaign.summary', 'campaign.summary/all')
+        .answer('plugin.list', 'plugin.list/none')
+        .answer('route.list', 'route.list/empty')
+        .answer('ui.tokens', 'ui.tokens/none');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -47,6 +52,7 @@ const more = () => side().getByRole('button', { name: 'More' });
 const entries = (name: string) => within(side().getByRole('menu', { name })).getAllByRole('menuitem');
 
 beforeEach(() => {
+    mode.value = 'live';
     chats.value = {};
     conversations.value = [];
     attention.loaded.value = false;
@@ -56,6 +62,49 @@ beforeEach(() => {
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
+});
+
+describe('the sidebar in Live', () => {
+    it('draws the brand, New GTM agent, Search, Needs you with its count, Recent and Settings, and nothing else', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        await waitFor(() => expect(side().getByText('Recent')).toBeTruthy());
+        expect(side().getAllByRole('img', { name: 'Jason AI, GTM Harness', hidden: true }).length).toBeGreaterThan(0);
+        expect(side().getByRole('button', { name: 'New GTM agent' })).toBeTruthy();
+        const names = () =>
+            within(menu())
+                .getAllByRole('button')
+                .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, ''));
+        await waitFor(() =>
+            expect(
+                within(menu())
+                    .getByRole('button', { name: /^Needs you/ })
+                    .querySelector('.count')?.textContent,
+            ).toBe('4'),
+        );
+        expect(names()).toEqual(['SearchCtrl K', 'Needs you']);
+        for (const gone of ['Feed', 'Dashboard', 'People', 'Agents', 'Accounts', 'More'])
+            expect(side().queryByRole('button', { name: gone }), gone).toBeNull();
+        expect(side().getByRole('navigation', { name: 'Conversations' })).toBeTruthy();
+        expect(document.querySelector('.sfoot')?.textContent?.trim()).toBe('Settings');
+    });
+
+    it('keeps every page it does not draw at its route, and its panels one link away', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        // A page the sidebar does not draw opens at the address its screen registers.
+        const address = registry
+            .list('screen')
+            .find((each) => each.id === 'system')!
+            .href();
+        flush(() => here().dock.page(parseRoute(address)));
+        await waitFor(() => expect(inFront()).toBe('page:system'));
+        flush(() => here().dock.show('campaigns'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
+        flush(() => here().dock.show('connect'));
+        await waitFor(() => expect(inFront()).toBe('Connect'));
+    });
 });
 
 describe('the sidebar', () => {

@@ -6,7 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { inFront } from '../test/area';
+import { inFront, bringForward } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -91,9 +91,7 @@ describe('a link the desktop hands the console', () => {
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
         await waitFor(() => expect(inFront()).toBe('Agents'));
-        const side = within(document.querySelector<HTMLElement>('.side')!);
-        fireEvent.click(side.getByRole('button', { name: 'More' }));
-        fireEvent.click(side.getByRole('menuitem', { name: /^Activity/ }));
+        bringForward('Activity');
         desktop.link({ page: 'needs' });
         await waitFor(() => expect(inFront()).toBe('Needs you'));
     });

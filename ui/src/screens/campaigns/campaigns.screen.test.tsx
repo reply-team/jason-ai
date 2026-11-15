@@ -6,7 +6,9 @@ import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
 import { CampaignChat } from './campaign-chat';
 import { stageWord } from '../people/standing';
-import { href, parseRoute, route, type Route } from '../../router';
+import { consoleShell } from '../../platform/console-shell';
+import { mode } from '../../platform/mode';
+import { firstCampaignTab, href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
 const recordedAt = new Date('2026-10-16T09:00:00Z');
@@ -17,6 +19,9 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.useRealTimers();
+    mode.value = 'live';
+    consoleShell.loaded = false;
+    firstCampaignTab.value = 'sequence';
 });
 
 const table: Route = { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
@@ -787,6 +792,56 @@ describe('A campaign’s people', () => {
         expect(await screen.findByRole('button', { name: /^New\s*1$/ })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Sequence/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /^Out/ })).toBeNull();
+    });
+});
+
+describe('The campaign panel in Live', () => {
+    const spring: Route = { ...table, id: 'cmp_1', tab: 'settings' };
+    const api = () =>
+        new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
+            .answer('approval.list', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/by-campaign-pending')
+            .answer('journal.list', 'journal.list/by-campaign', 'journal.list/by-campaign-changes');
+
+    it('draws People, Inbox and Settings, and Sequence and Results only in the demo', async () => {
+        consoleShell.loaded = true;
+        open(api(), spring);
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+    });
+
+    it('still opens a tab it does not draw at the address that names it', async () => {
+        consoleShell.loaded = true;
+        open(api(), { ...table, id: 'cmp_1', tab: 'sequence' });
+        expect(await screen.findByText('Waiting for you')).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+    });
+
+    it('draws every tab in the classic shell, which is not the console, and opens a bare agent address on Sequence', async () => {
+        expect(mode.value).toBe('live');
+        expect(consoleShell.loaded).toBe(false);
+        open(api(), parseRoute('#/campaigns/cmp_1'));
+        expect(await screen.findByText('Waiting for you')).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'Sequence',
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
+        expect(screen.getByRole('tab', { name: 'Sequence' }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('opens People first for an address that names no tab, once Live is known, and Sequence first in the demo', () => {
+        expect(parseRoute('#/campaigns/cmp_1')).toMatchObject({ tab: 'sequence' });
+        firstCampaignTab.value = 'people';
+        expect(parseRoute('#/campaigns/cmp_1')).toMatchObject({ tab: 'people' });
+        expect(parseRoute('#/campaigns/cmp_1/sequence')).toMatchObject({ tab: 'sequence' });
+        expect(parseRoute('#/campaigns/cmp_1/results')).toMatchObject({ tab: 'results' });
     });
 });
 

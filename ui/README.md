@@ -137,7 +137,8 @@ only with a recording whose request equals the one sent, and a request a test re
 even when the screen caught the error; the console's source makes markup only with its tag, writes it into the page
 only through its painter, and carries no inline handler or style attribute in markup or JSX
 (`tests/guards/console-templates.test.ts`, which reads the source as TypeScript); the desktop seam's members are
-named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build, and every use of one is held to the bridge's table or to the one question (`tests/guards/desktop-calls.test.ts`); only
+named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build, and every use of one is held to the bridge's table or to the one question (`tests/guards/desktop-calls.test.ts`); the classic shell's chunk
+reaches no console file but the few it shares (`tests/guards/classic-chunk.test.ts`); only
 `tests/e2e/harness.ts` may start a process, and it gives each runtime a data directory and a harness root of its own;
 the CI job runs all of it on every push.
 

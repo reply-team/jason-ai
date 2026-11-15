@@ -2,6 +2,7 @@ import { signal } from '@preact/signals-react';
 import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
+import { mode } from '../platform/mode';
 import { act, define } from './actions';
 import { html, type Html } from './html';
 import { offUnless } from './off';
@@ -14,7 +15,9 @@ import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } fr
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot.
+// conversations under "Recent", and Settings in the foot. Live draws the essentials alone: the brand, the button, Search,
+// Needs you, Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code, and
+// Search finds every page in both modes. Demo draws the whole list.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -154,6 +157,7 @@ export function sideView(): Html {
                   ${svg(icon, 15)}<span>${label}</span>
               </button>`;
     };
+    const full = mode.value === 'demo';
     const accounts = pageOf('accounts');
     const settings = pageOf('settings');
     return html`${
@@ -220,7 +224,7 @@ export function sideView(): Html {
                 ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
             </button>
             ${
-                feed === null
+                !full || feed === null
                     ? null
                     : html`<button
                           class="item"
@@ -232,48 +236,60 @@ export function sideView(): Html {
                           ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
                       </button>`
             }
-            <button class="item" type="button" ${marked('dashboard')} ${act('side.show', 'dashboard')}>
-                ${svg('home', 15)}<span>${t('dash.title')}</span>
-            </button>
+            ${
+                full
+                    ? html`<button class="item" type="button" ${marked('dashboard')} ${act('side.show', 'dashboard')}>
+                          ${svg('home', 15)}<span>${t('dash.title')}</span>
+                      </button>`
+                    : null
+            }
             <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
                 ${svg('att', 15)}<span>Needs you</span>
                 ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
             </button>
-            ${pageRow('people', 'People', 'people')}
-            <button class="item" type="button" ${marked('campaigns')} ${act('side.show', 'campaigns')}>
-                ${svg('camp', 15)}<span>Agents</span>
-            </button>
-            ${pageRow('accounts', 'Accounts', 'plug')}
-            <div class="menuwrap">
-                <button
-                    class="item"
-                    type="button"
-                    aria-haspopup="menu"
-                    aria-expanded="${menu === 'more' ? 'true' : 'false'}"
-                    ${marked('more')}
-                    ${act('side.menu', 'more')}
-                >
-                    ${svg('more', 15)}<span>More</span>
-                </button>
-                ${
-                    menu === 'more'
-                        ? html`<div class="menu" role="menu" aria-label="More">
-                              ${more.map((each) => {
-                                  const href = each.screen === undefined ? null : pageOf(each.screen);
-                                  if (each.screen !== undefined && href === null) return null;
-                                  return entry(
-                                      each.label,
-                                      each.hint,
-                                      each.panel !== undefined
-                                          ? act('side.show', each.panel)
-                                          : act('side.page', href ?? ''),
-                                      each.icon,
-                                  );
-                              })}
-                          </div>`
-                        : null
-                }
-            </div>
+            ${full ? pageRow('people', 'People', 'people') : null}
+            ${
+                full
+                    ? html`<button class="item" type="button" ${marked('campaigns')} ${act('side.show', 'campaigns')}>
+                          ${svg('camp', 15)}<span>Agents</span>
+                      </button>`
+                    : null
+            }
+            ${full ? pageRow('accounts', 'Accounts', 'plug') : null}
+            ${
+                full
+                    ? html`<div class="menuwrap">
+                          <button
+                              class="item"
+                              type="button"
+                              aria-haspopup="menu"
+                              aria-expanded="${menu === 'more' ? 'true' : 'false'}"
+                              ${marked('more')}
+                              ${act('side.menu', 'more')}
+                          >
+                              ${svg('more', 15)}<span>More</span>
+                          </button>
+                          ${
+                              menu === 'more'
+                                  ? html`<div class="menu" role="menu" aria-label="More">
+                                        ${more.map((each) => {
+                                            const href = each.screen === undefined ? null : pageOf(each.screen);
+                                            if (each.screen !== undefined && href === null) return null;
+                                            return entry(
+                                                each.label,
+                                                each.hint,
+                                                each.panel !== undefined
+                                                    ? act('side.show', each.panel)
+                                                    : act('side.page', href ?? ''),
+                                                each.icon,
+                                            );
+                                        })}
+                                    </div>`
+                                  : null
+                          }
+                      </div>`
+                    : null
+            }
         </nav>
         ${recentView()}
         ${
