@@ -250,6 +250,8 @@ export async function openItem(api: Api, id: string): Promise<void> {
  * not, a few rows at a time as it reads every holder's, and lets go of what it kept for an approval no longer listed.
  */
 function list(api: Api, waitingFor: ApprovalSummary[]): void {
+    // An item opened again is read again: what failed the last time is not shown while the new read runs.
+    reads.unread.value = {};
     reads.store.approvals.value = waitingFor;
     void fillApprovals(api, reads);
 }

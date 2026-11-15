@@ -37,6 +37,9 @@ beforeEach(() => {
     vi.setSystemTime(recordedAt);
     forgetWaiting();
     store.closeItem();
+    // The page's own holder of whole reads outlives a closed item, so each row starts with none kept.
+    store.reads.approvals.value = {};
+    store.reads.unread.value = {};
 });
 afterEach(() => {
     vi.useRealTimers();
@@ -189,6 +192,26 @@ describe.each(shells)('Work items in %s: Approve by the rule', (_, listed, open)
         expect(within(panel()).queryByText(doubtWords(doubted.preview)!.heading)).toBeNull();
         expect(within(panel()).queryByText(body)).toBeNull();
         expect(rejectButton().disabled).toBe(false);
+    });
+
+    it('says what a person does to read an unread approval again, and clears the old failure once that read starts', async () => {
+        const fake = doubtedSend(listed);
+        const reachable = fake.unreachable('approval.get');
+        await open(fake);
+        await waitFor(() => expect(words(panel())).toContain('Failed to fetch'));
+        expect(words(panel())).toContain('close this item and open it again to read it again');
+
+        reachable();
+        const release = fake.hold('approval.get');
+        await flush(async () => {
+            store.closeItem();
+            await store.openItem(fake, item.id);
+        });
+        await waitFor(() => expect(words(panel())).toContain(readingSentence('needs')));
+        expect(words(panel())).not.toContain('Failed to fetch');
+        expect(approveButton().disabled).toBe(true);
+        release();
+        await waitFor(() => expect(approveButton().disabled).toBe(false));
     });
 
     it('approves nothing when the message moved after its approval was read, says so, and reads the item again', async () => {

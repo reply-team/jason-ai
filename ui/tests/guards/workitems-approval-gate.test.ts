@@ -70,6 +70,31 @@ function insideCallOf(node: ts.Node, callee: string): boolean {
     return false;
 }
 
+/** The members of object literals in a source file that carry one of these names, as the gate's answer does. */
+function gateMembers(file: ts.SourceFile): string[] {
+    const found: string[] = [];
+    walk(file, (node) => {
+        if (!ts.isObjectLiteralExpression(node)) return;
+        for (const member of node.properties)
+            if (
+                (ts.isPropertyAssignment(member) || ts.isShorthandPropertyAssignment(member)) &&
+                ts.isIdentifier(member.name) &&
+                ['live', 'reading'].includes(member.name.text)
+            )
+                found.push(member.name.text);
+    });
+    return found;
+}
+
+/** The calls in a source file whose callee is named so. */
+function callsOf(file: ts.SourceFile, callee: string): number {
+    let count = 0;
+    walk(file, (node) => {
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === callee) count++;
+    });
+    return count;
+}
+
 describe('the Work items page approves through the shared gate', () => {
     it('imports the gate’s pieces from the console’s gate, where the chat’s cards and Needs you take them', () => {
         const names = imported();
@@ -89,6 +114,32 @@ describe('the Work items page approves through the shared gate', () => {
         const sends = literals('approval.approve');
         expect(sends.map((each) => each.name)).toEqual(['store.ts']);
         expect(insideCallOf(sends[0]!.node, 'approveWhole')).toBe(true);
+    });
+
+    it('asks the gate whether Approve is live and never states its answer again', () => {
+        const calls = sources().reduce((sum, { file }) => sum + callsOf(file, 'approvalGate'), 0);
+        expect(calls).toBeGreaterThan(0);
+        expect(sources().flatMap(({ name, file }) => gateMembers(file).map((member) => `${name}: ${member}`))).toEqual(
+            [],
+        );
+    });
+
+    it('sees a copy of the gate stated on the page, and a page that does not ask it', () => {
+        const copy = ts.createSourceFile(
+            'x.tsx',
+            "import { approvalGate } from 'gate'; void approvalGate; const gate = whole ? { live: true } : { live: false, reading: true };",
+            ts.ScriptTarget.Latest,
+            true,
+        );
+        expect(callsOf(copy, 'approvalGate')).toBe(0);
+        expect(gateMembers(copy)).toEqual(['live', 'live', 'reading']);
+        const asks = ts.createSourceFile(
+            'x.tsx',
+            'const gate = approvalGate(whole, unread);',
+            ts.ScriptTarget.Latest,
+            true,
+        );
+        expect([callsOf(asks, 'approvalGate'), gateMembers(asks)]).toEqual([1, []]);
     });
 
     it('sees a send outside the gate when there is one', () => {

@@ -63,4 +63,11 @@ describe('the classic shell’s chunk', () => {
         const settings = closure(join(src, 'console', 'console.tsx'));
         expect([...settings].some((file) => file.endsWith('connect.ts'))).toBe(true);
     });
+
+    it('is counted in the comment of main.tsx as many as the list holds', () => {
+        const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+        const stated = (text: string) =>
+            [...text.matchAll(/\b(\w+)\s+(?:\/\/\s*)?small modules\b/g)].map((match) => match[1]);
+        expect(stated(readFileSync(join(src, 'main.tsx'), 'utf8'))).toEqual([words[shared.length]]);
+    });
 });

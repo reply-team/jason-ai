@@ -26,11 +26,11 @@ const checkingSentence = 'This message is being checked against its work item be
 
 /**
  * What the panel says of an approval it could not read, before what the runtime said, or before the words that say it
- * did not answer in time: the gate's own sentence names a Details control this panel does not draw, and here the item
- * opened again reads it again.
+ * did not answer in time: the gate's own sentence names a Details control this panel does not draw. Here a person closes
+ * the item and opens it again, which reads the approval again; the failure shown is cleared when that read starts.
  */
 const unreadSentence = (said: Said): string =>
-    `This approval could not be read, so it cannot be approved here; opening this item again reads it again.${
+    `This approval could not be read, so it cannot be approved here; close this item and open it again to read it again.${
         said.unanswered === true ? '' : ' The runtime said:'
     }`;
 
