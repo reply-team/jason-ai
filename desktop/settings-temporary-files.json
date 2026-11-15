@@ -1,0 +1,19 @@
+{
+  "written_from": "SettingsTemporaryFiles, by DesktopSettingsTemporaryFilesTests in dotnet/tests/Jason.Cli.Tests; change the C# and rerun that test with JASON_UPDATE_FIXTURES=1, never this file by hand",
+  "name": "the name of the file written, a dot, the id, the suffix",
+  "suffix": ".tmp",
+  "shapes": [
+    {
+      "writer": "runtime",
+      "digits": "0123456789abcdef",
+      "fewest_digits": 32,
+      "most_digits": 32
+    },
+    {
+      "writer": "desktop",
+      "digits": "0123456789",
+      "fewest_digits": 1,
+      "most_digits": 10
+    }
+  ]
+}

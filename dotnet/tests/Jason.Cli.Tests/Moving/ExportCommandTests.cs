@@ -784,13 +784,21 @@ public sealed class ExportCommandTests
         Assert.DoesNotContain(manifest.RootElement.GetProperty("entries").EnumerateArray(), entry => entry.GetProperty("path").GetString()!.EndsWith(".tmp", StringComparison.Ordinal) && entry.GetProperty("path").GetString()!.Contains("settings.json.", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// In layout 2 the secrets are kept apart, in <c>config/secrets.json</c>, and a write of it that stopped part way leaves
+    /// its temporary file beside it: neither that one nor the one beside <c>setup/settings.json</c> is carried, and the
+    /// help names both.
+    /// </summary>
     [Fact]
-    public async Task In_layout_two_the_temporary_files_beside_setup_s_settings_file_are_never_carried()
+    public async Task In_layout_two_the_temporary_files_beside_the_settings_file_and_the_secrets_file_are_never_carried()
     {
         using var machine = new MovingMachine();
         machine.PlantData("state/jason.db");
         machine.PlantData("setup/settings.json", "{}");
         machine.PlantData("setup/settings.json.4242.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
+        machine.PlantData("config/secrets.json", "{}");
+        machine.PlantData("config/secrets.json.0123456789abcdef0123456789abcdef.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
+        machine.PlantData("config/secrets.json.4242.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
 
         var env = machine.Env() with { Paths = new Contracts.Discovery.JasonPaths(machine.Data, 2) };
         var exit = await ExportCommand.RunAsync(env, Plain, new StoppedClock(Now), Ct);
@@ -798,7 +806,11 @@ public sealed class ExportCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         var names = Names(Path.Combine(machine.Here, DefaultName));
         Assert.Contains("data/setup/settings.json", names);
-        Assert.DoesNotContain("data/setup/settings.json.4242.tmp", names);
+        Assert.Contains("data/config/secrets.json", names);
+        Assert.DoesNotContain(names, name => name.EndsWith(".tmp", StringComparison.Ordinal));
+        Assert.Equal(
+            "data/setup/settings.json.<id>.tmp and data/config/secrets.json.<id>.tmp",
+            ExportCommand.SettingsTemporaryInWords(env.Paths));
     }
 
     [Fact]

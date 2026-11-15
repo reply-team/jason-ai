@@ -1,4 +1,5 @@
 using System.Security;
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
 
 namespace Jason.Runtime.Configuration;
@@ -11,18 +12,28 @@ internal sealed record SettingsTemporarySweepReport(int Removed, int Kept, int R
 {
     /// <summary>How many files of the writers' shapes the sweep found.</summary>
     public int Found => Removed + Kept + Refused;
+
+    /// <summary>Two sweeps' counts as one.</summary>
+    public static SettingsTemporarySweepReport operator +(SettingsTemporarySweepReport left, SettingsTemporarySweepReport right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return new(left.Removed + right.Removed, left.Kept + right.Kept, left.Refused + right.Refused);
+    }
 }
 
 /// <summary>
-/// The runtime's start removes the temporary files a settings writer left beside the settings file — the runtime's own and
-/// the desktop's, by the two shapes <see cref="SettingsTemporaryFiles"/> names and no other file of the folder — when no
-/// writer can still be at work on one.
+/// The runtime's start removes the temporary files a settings writer left beside the file it writes — the settings file,
+/// and the secrets file where the layout keeps it apart (<see cref="SettingsTemporaryFiles.WrittenFiles"/>); the
+/// runtime's own and the desktop's, by the two shapes <see cref="SettingsTemporaryFiles"/> names and no other file of the
+/// folder — when no writer can still be at work on one. It runs only once the start holds this data directory's instance
+/// lock: a start the lock refuses owns nothing of the installation another runtime runs on, and removes nothing of it.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>The rule.</b> A file is removed only when its last write is at least <see cref="MinimumAge"/> old by the clock, and
-/// then only through an open that shares nothing and deletes the file as it closes, so the check and the removal are one
-/// act on the file itself. Either writer holds its file for well under a second: it creates it, writes and flushes it,
+/// then only through an open that shares nothing and deletes the file as it closes. On Windows the check that no handle
+/// holds the file and its removal are that one act; the age is read from the folder's listing just before. Either writer holds its file for well under a second: it creates it, writes and flushes it,
 /// closes it and renames it over the settings file (the runtime tries the rename five times a tenth of a second apart).
 /// </para>
 /// <para>
@@ -46,6 +57,22 @@ internal static class SettingsTemporarySweep
 {
     /// <summary>How old a stray file's last write must be before the sweep takes it: ten minutes, far above any write's duration.</summary>
     internal static readonly TimeSpan MinimumAge = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Sweeps beside every file <see cref="SettingsTemporaryFiles.WrittenFiles"/> names for <paramref name="paths"/>, each by
+    /// <see cref="Sweep(string, DateTimeOffset, Action{string}?)"/>, and adds up what each did.
+    /// </summary>
+    internal static SettingsTemporarySweepReport Sweep(JasonPaths paths, DateTimeOffset now, Action<string>? remove = null)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        var report = new SettingsTemporarySweepReport(0, 0, 0);
+        foreach (var file in SettingsTemporaryFiles.WrittenFiles(paths))
+        {
+            report += Sweep(file, now, remove);
+        }
+
+        return report;
+    }
 
     /// <summary>
     /// Sweeps the folder of <paramref name="settingsFile"/>; never throws for a file it could not remove or a folder it could

@@ -1,3 +1,4 @@
+using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
 
 namespace Jason.Contracts.Tests.Files;
@@ -34,6 +35,33 @@ public sealed class SettingsTemporaryFilesTests
     [InlineData("settings.json.4242.TMP")]
     public void Any_other_name_is_not(string name) =>
         Assert.False(SettingsTemporaryFiles.IsOne("settings.json", name));
+
+    /// <summary>The runtime's writer takes its name from here, so the name it makes is one by construction.</summary>
+    [Fact]
+    public void The_runtime_s_name_for_a_write_is_one_and_carries_the_write_s_id()
+    {
+        var id = Guid.Parse("0123456789abcdef0123456789abcdef");
+
+        var name = SettingsTemporaryFiles.NameFor("settings.json", id);
+
+        Assert.Equal("settings.json.0123456789abcdef0123456789abcdef.tmp", name);
+        Assert.True(SettingsTemporaryFiles.IsOne("settings.json", name));
+    }
+
+    /// <summary>
+    /// The files whose writes leave such names: in layout 1 the one settings file, which holds the secrets; in layout 2
+    /// the settings file a person may change and the secrets file beside the configuration, each in its own folder.
+    /// </summary>
+    [Fact]
+    public void The_written_files_are_the_settings_file_and_where_the_layout_keeps_the_secrets_file_apart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jason-written-files");
+
+        Assert.Equal([Path.Combine(root, "config", "settings.json")], SettingsTemporaryFiles.WrittenFiles(new JasonPaths(root, 1)));
+        Assert.Equal(
+            [Path.Combine(root, "setup", "settings.json"), Path.Combine(root, "config", "secrets.json")],
+            SettingsTemporaryFiles.WrittenFiles(new JasonPaths(root, 2)));
+    }
 
     [Fact]
     public void The_shape_in_words_names_the_settings_file() =>

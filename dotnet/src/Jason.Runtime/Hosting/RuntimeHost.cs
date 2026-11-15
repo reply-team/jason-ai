@@ -74,10 +74,6 @@ public static class RuntimeHost
             throw new DataDirectoryUnusableException(paths.Root, cause);
         }
 
-        // Before the settings file is first read: a writer that stopped between its temporary file and the rename left that
-        // file beside it, the settings' secrets in it. Removed once no writer can be at work on it; said once there is a log.
-        var swept = SettingsTemporarySweep.Sweep(paths.UserSettingsFile, (options.Clock ?? TimeProvider.System).GetUtcNow(), options.SettingsTemporaryRemoval);
-
         // Declared ahead of the configuration, which is built before there is a log: the handler it is given is for
         // an edit made while the runtime runs, and by then the logger is the one assigned below. An edit in the
         // moment between the two has nowhere to be said, and the next one is not affected by that.
@@ -134,12 +130,17 @@ public static class RuntimeHost
 
             var info = RuntimeInfo.Create();
             logger.Information("Jason runtime {Version} starting as {InstanceId} (pid {Pid}) with data directory {DataDir}", info.RuntimeVersion, info.InstanceId, info.Pid, paths.Root);
+            // Only once this start holds the instance lock, and so owns the installation, and there is a log to say it in: a
+            // writer that stopped between its temporary file and the rename left that file beside the file it wrote, the
+            // settings' secrets in it. Removed once no writer can be at work on it. A start the lock refuses, or one that
+            // fails before, removes nothing. Nothing earlier reads such a file, so nothing needs it gone sooner.
+            var swept = SettingsTemporarySweep.Sweep(paths, (options.Clock ?? TimeProvider.System).GetUtcNow(), options.SettingsTemporaryRemoval);
             if (swept.Found > 0)
             {
-                // By counts and the shape alone: a name carries the writer's id, and a byte of the file a secret.
+                // By counts and the shapes alone: a name carries the writer's id, and a byte of the file a secret.
                 logger.Write(
                     swept.Refused > 0 ? LogEventLevel.Warning : LogEventLevel.Information,
-                    "Temporary files the settings writers left beside the settings file (settings.json.<id>.tmp) swept at start: {Count} removed, {Skipped} kept as younger than ten minutes or held open, {Refused} could not be removed",
+                    "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, secrets.json.<id>.tmp) swept at start: {Removed} removed, {Kept} kept as younger than ten minutes, held open or a link, {Refused} could not be removed",
                     swept.Removed,
                     swept.Kept,
                     swept.Refused);

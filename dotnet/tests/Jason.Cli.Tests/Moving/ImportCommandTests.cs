@@ -374,6 +374,25 @@ public sealed class ImportCommandTests
         Assert.Equal(ExitCodes.Success, exit);
         var config = Path.Combine(to.Data, "config");
         Assert.Equal(["notes.tmp", "settings.json"], Directory.GetFiles(config).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        var said = to.Error.ToString();
+        Assert.Contains(ImportCommand.SettingsTemporarySkipped(2) + Environment.NewLine, said, StringComparison.Ordinal);
+        Assert.Equal(
+            "2 temporary files a write of the settings left beside the settings file, carried by an export before 0.44.0, were held to their listed digests and not placed.",
+            ImportCommand.SettingsTemporarySkipped(2));
+        Assert.DoesNotContain("4242", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("fake-token-not-a-secret", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_archive_with_no_settings_writer_s_temporary_file_says_nothing_of_one()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+
+        var exit = await Import(to, Options(new MovingArchive(from).Installation().Write()));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("temporary file", to.Error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

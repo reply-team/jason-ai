@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname } from 'node:path';
 import { demoDirectory } from './mode.ts';
 import { dataLayout } from './paths.ts';
+import { settingsTemporary } from './settings-temporary.ts';
 
 /** The cadence the demo's manager is left with: the slowest `Manager:ReviewSeconds` allows, a week. */
 export const demoReviewSeconds = 604800;
@@ -73,7 +74,7 @@ export function writeDemoSettings(demo: string, personHarnessRoot: string): void
     }
     const next = mergeSettings(settings, demoSettingsValues(demoDirectory(personHarnessRoot)));
     mkdirSync(dirname(file), { recursive: true });
-    const temporary = `${file}.${process.pid}.tmp`;
+    const temporary = settingsTemporary(file);
     try {
         writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`);
         renameSync(temporary, file);

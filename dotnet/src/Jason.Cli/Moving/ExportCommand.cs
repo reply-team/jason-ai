@@ -114,10 +114,11 @@ public static class ExportCommand
 
     /// <summary>
     /// Whether <paramref name="name"/>, an archive's name for a file, is a temporary file a settings writer left beside the
-    /// settings file (<see cref="SettingsTemporaryFiles"/>): never carried, whatever its age, and never placed by an import.
+    /// settings file, or beside the secrets file where the layout keeps it apart (<see cref="SettingsTemporaryFiles"/>):
+    /// never carried, whatever its age, and never placed by an import.
     /// </summary>
     internal static bool SettingsTemporary(JasonPaths paths, string name) =>
-        SettingsTemporaryBeside(ExportManifest.DataPrefix + Under(paths, paths.UserSettingsFile), name);
+        SettingsTemporaryFiles.WrittenFiles(paths).Any(file => SettingsTemporaryBeside(ExportManifest.DataPrefix + Under(paths, file), name));
 
     /// <summary>
     /// Whether <paramref name="name"/> is a settings writer's temporary file beside <paramref name="settingsEntry"/>, the
@@ -132,9 +133,9 @@ public static class ExportCommand
             && SettingsTemporaryFiles.IsOne(settingsEntry[(slash + 1)..], name[folder.Length..]);
     }
 
-    /// <summary>The settings writers' temporary files as the help names them, beside the settings file of this layout.</summary>
+    /// <summary>The settings writers' temporary files as the help names them, beside each file of this layout they write.</summary>
     internal static string SettingsTemporaryInWords(JasonPaths paths) =>
-        "data/" + Under(paths, Path.GetDirectoryName(paths.UserSettingsFile)!) + "/" + SettingsTemporaryFiles.Shape(Path.GetFileName(paths.UserSettingsFile));
+        string.Join(" and ", SettingsTemporaryFiles.WrittenFiles(paths).Select(file => "data/" + Under(paths, Path.GetDirectoryName(file)!) + "/" + SettingsTemporaryFiles.Shape(Path.GetFileName(file))));
 
     /// <summary>The database's files, each carried when it is there.</summary>
     internal static readonly string[] DatabaseFiles = ["state/jason.db", "state/jason.db-wal", "state/jason.db-shm"];
