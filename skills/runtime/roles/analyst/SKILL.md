@@ -31,8 +31,8 @@ jason campaign activity cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --since 2026-10-09T00:00:
 The work items say what was attempted and how it ended. The chronicle says what happened and when. The reports
 are somebody's word about effects produced outside Jason — an admission, not a measurement, and never evidence
 that something arrived. The campaign's activity is Jason's own count of people — added, worked on, contacted,
-replied for the first time, opted out, removed — each defined once in the runtime's own words, and one of those
-counts over time is a day or a week at a time:
+replied for the first time, bounced, opted out, removed — each defined once in the runtime's own words, and one of
+those counts over time is a day or a week at a time:
 
 ```
 jason campaign activity-by-period cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --count replied --period day --since 2026-10-09T00:00:00Z --until now

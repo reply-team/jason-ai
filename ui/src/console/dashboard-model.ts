@@ -203,6 +203,8 @@ export interface Tile {
     value: number | string | null;
     /** The line under the number; under a dash, what is known though the number is not, or null for "no data yet". */
     sub: string | null;
+    /** What the dash says to a screen reader where a line under it says what is known; "no data yet" when absent. */
+    none?: string;
     /** What the number is, said on hover; absent for a tile that needs none. */
     hint?: string;
     /** How the number moved over the last 24 hours; absent where no trend is shown. */
@@ -222,6 +224,7 @@ export function bounceTile(activity: ActivityRead | null): Tile {
         label: t('dash.tile.bounce'),
         value: rate,
         sub: known ? t('dash.bounced', { n: String(activity.bounced) }) : null,
+        ...(known && rate === null ? { none: t('dash.tile.bounce.none') } : {}),
     };
 }
 

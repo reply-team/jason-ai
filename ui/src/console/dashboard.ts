@@ -384,7 +384,8 @@ function tiles(): Html {
                     <span class="label">${tile.label}</span>
                     ${
                         tile.value === null
-                            ? html`<b class="dash-none" aria-label="${t('dash.tile.none')}">${t('dash.dash')}</b
+                            ? html`<b class="dash-none" aria-label="${tile.none ?? t('dash.tile.none')}"
+                                      >${t('dash.dash')}</b
                                   ><span class="rel">${tile.sub ?? t('dash.tile.none')}</span>`
                             : html`<b>${tile.value}</b
                                   >${trendView(tile.trend ?? null)}${tile.sub === null ? null : html`<span class="rel">${tile.sub}</span>`}`

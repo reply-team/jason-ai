@@ -160,7 +160,12 @@ describe('the tiles', () => {
         // A bounce of a message sent before the window, against the window's contacted.
         expect(bounce(1, 3)).toEqual({ label: 'Bounce rate', value: '300%', sub: '3 bounced' });
         // Nobody contacted: no rate, and the count under the dash only when somebody bounced.
-        expect(bounce(0, 3)).toEqual({ label: 'Bounce rate', value: null, sub: '3 bounced' });
+        expect(bounce(0, 3)).toEqual({
+            label: 'Bounce rate',
+            value: null,
+            sub: '3 bounced',
+            none: 'no rate: nobody was contacted',
+        });
         expect(bounce(0, 0)).toEqual({ label: 'Bounce rate', value: null, sub: null });
         expect(tilesOf({ approvals: 0, questions: 0, waitingKnown: true, activity: null })[5]).toEqual({
             label: 'Bounce rate',

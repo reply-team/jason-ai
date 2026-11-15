@@ -102,7 +102,7 @@ public sealed record CountedIn(
 /// would do as <c>text</c>). <c>question</c>: the question that does (<c>decision_id</c>, and the question as
 /// <c>text</c>). <c>failure</c>: how their latest work ended (<c>code</c>, the error's message as <c>text</c>, and
 /// <c>at</c>). <c>activity</c>: when it happened in the period (<c>at</c>) and what (<c>code</c>: the operation or role of
-/// the work, the channel of a reply, a bounce or an opt-out, <c>added</c> for an addition); under the <c>people</c> count,
+/// the work, the channel of a reply or an opt-out, <c>added</c> for an addition); under the <c>people</c> count,
 /// the latest of what happened, with <c>text</c> naming its count (<c>added</c>, <c>worked_on</c>, <c>replied</c>,
 /// <c>bounced</c>, <c>opted_out</c> or <c>removed</c>).
 /// </summary>

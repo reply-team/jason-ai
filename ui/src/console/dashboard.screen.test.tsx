@@ -293,15 +293,20 @@ describe('the Dashboard', () => {
         expect(tile(panel, 'Replied').querySelector('.rel')).toBeNull();
         expect(part('Bounce rate', 'b')).toBe('–');
         expect(part('Bounce rate', '.rel')).toBe('no data yet');
+        expect(tile(panel, 'Bounce rate').querySelector('b')!.getAttribute('aria-label')).toBe('no data yet');
     });
 
     it('shows how many bounced under the dash when nobody was contacted but somebody bounced', async () => {
         renderConsole({ unread: true });
-        await open();
+        const panel = await open();
         await settled();
         dashboard.activity.value = { total: { contacted: 0, replied: 0, bounced: 3 }, byCampaign: {} };
         await waitFor(() => expect(part('Bounce rate', '.rel')).toBe('3 bounced'));
         expect(part('Bounce rate', 'b')).toBe('–');
+        // A screen reader hears why there is no number, never "no data yet" beside a count.
+        expect(tile(panel, 'Bounce rate').querySelector('b')!.getAttribute('aria-label')).toBe(
+            'no rate: nobody was contacted',
+        );
     });
 });
 
