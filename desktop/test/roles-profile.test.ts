@@ -10,6 +10,7 @@ import { dataLayout } from '../src/paths.ts';
 import { programsOn } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { lastChosenHost, profileProgram, roleHostOf } from '../src/roles-profile.ts';
+import { withDefaultProfile } from '../src/setup-model.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import { Setup, type SetupDeps } from '../src/setup.ts';
 import { bench, fakeBox, memoryLog, type Bench } from './harness.ts';
@@ -48,10 +49,11 @@ const installationSettings = (b: Bench) => JSON.parse(readFileSync(settingsFile(
 const profilesFile = (b: Bench) => join(b.root, 'profiles.json');
 
 interface StubProfile {
+    id?: string;
     name: string;
     disabled: boolean;
     revision: { host: string | null; program: string | null };
-    mark_when_made?: string | null;
+    mark_when_made?: { name: string; id?: string } | null;
 }
 
 const profiles = (b: Bench): StubProfile[] => (existsSync(profilesFile(b)) ? (JSON.parse(readFileSync(profilesFile(b), 'utf8')) as StubProfile[]) : []);
@@ -118,7 +120,7 @@ test('a fresh installation with Claude Code connected gets one profile for it, n
     const [made] = profiles(b);
     assert.deepEqual(profiles(b).map((each) => each.name), ['claude-code']);
     assert.deepEqual(made?.revision, { host: 'claude_code', program: programOf(b, 'claude') });
-    assert.equal(made?.mark_when_made, 'claude-code', "the desktop's mark is written before the profile is made");
+    assert.deepEqual(made?.mark_when_made, { name: 'claude-code' }, "the desktop's mark is written before the profile is made, with no id yet");
     assert.deepEqual(asked(b, 'profile create')[0]?.args, ['profile', 'create', 'claude-code', '--host', 'claude_code', '--program', programOf(b, 'claude')]);
     assert.deepEqual(installationSettings(b), { Routes: { Default: { Plugin: 'reply' } }, Roles: { MaxStdoutBytes: 1000, DefaultExecutionProfile: 'claude-code' } });
     assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined, 'the mark is taken away once the default is written');
@@ -205,50 +207,82 @@ test('a runtime that does not answer leaves it for the next turn, and a refused 
     b.env.STUB_PROFILE_CREATE_FAILS = 'yes';
     assert.equal(await setup.connectRoles(null), 'create_refused');
     assert.equal(await setup.connectRoles(null), 'settled', 'a refusal is not asked again in the same run');
-    assert.equal(readSettings(b.paths.settings).rolesProfilePending, 'claude-code');
+    assert.deepEqual(readSettings(b.paths.settings).rolesProfilePending, { name: 'claude-code' }, 'a mark with no id: nothing was shown to be made');
 
     delete b.env.STUB_PROFILE_CREATE_FAILS;
     assert.equal(await setupOn(b).connectRoles(null), 'made', 'the next start makes it, nothing having been made');
     assert.deepEqual(profiles(b).map((each) => each.name), ['claude-code']);
 });
 
-test('the half-done case: made and not named, the next start names it and never makes a second profile', async (t) => {
-    // The settings write fails after the create succeeded.
+test('the half-done case: made and not named, the next start names the profile its mark shows it made, and never makes a second', async (t) => {
+    // The settings write fails after the create succeeded: the mark holds the made profile's id by then.
     const b = bench(t, { programs: ['claude'], env: { STUB_PROFILE_CREATE_BREAKS_SETTINGS: 'yes' } });
     writeInstallationSettings(b, {});
     assert.equal(await setupOn(b).connectRoles(null), 'default_unwritten');
-    assert.equal(readSettings(b.paths.settings).rolesProfilePending, 'claude-code', 'the mark stays');
+    const [made] = profiles(b);
+    assert.match(made?.id ?? '', /^[a-z]{2,8}_[0-9A-HJKMNP-TV-Z]{26}$/);
+    assert.deepEqual(readSettings(b.paths.settings).rolesProfilePending, { name: 'claude-code', id: made?.id }, 'the mark stays, with the id the create answered');
     delete b.env.STUB_PROFILE_CREATE_BREAKS_SETTINGS;
     writeInstallationSettings(b, { Routes: { Default: { Plugin: 'reply' } } });
 
     const next = setupOn(b);
-    assert.equal(await next.connectRoles(null), 'named');
+    assert.equal(await next.connectRoles('claude-api-key'), 'named', 'no host is needed to finish');
     assert.equal(asked(b, 'profile create').length, 1, 'never a second create');
     assert.deepEqual(profiles(b).map((each) => each.name), ['claude-code']);
     assert.deepEqual(installationSettings(b), { Routes: { Default: { Plugin: 'reply' } }, Roles: { DefaultExecutionProfile: 'claude-code' } });
     assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined);
+});
 
-    // The create's answer lost on its way: made, and the next start names it, with no host needed to finish.
+test('a mark that cannot show the profile is the desktop\'s is let go and nothing is written: a lost answer, or a person\'s own profile of the same name', async (t) => {
+    // The create's answer lost on its way: the profile is there, but the mark never got its id.
     const lost = bench(t, { programs: ['claude'], env: { STUB_PROFILE_CREATE_LOST: 'yes' } });
     assert.equal(await setupOn(lost).connectRoles(null), 'create_refused');
+    assert.deepEqual(readSettings(lost.paths.settings).rolesProfilePending, { name: 'claude-code' });
     delete lost.env.STUB_PROFILE_CREATE_LOST;
-    assert.equal(await setupOn(lost).connectRoles('claude-api-key'), 'named');
-    assert.equal(asked(lost, 'profile create').length, 1);
-    assert.equal((installationSettings(lost).Roles as Record<string, unknown>).DefaultExecutionProfile, 'claude-code');
+    assert.equal(await setupOn(lost).connectRoles('claude'), 'profiles_exist');
+    assert.equal(asked(lost, 'profile create').length, 1, 'never a second create');
+    assert.equal(existsSync(settingsFile(lost)), false, 'no default written');
+    assert.equal(readSettings(lost.paths.settings).rolesProfilePending, undefined, 'the mark is let go');
 
-    // A mark beside a profile a person made, or beside more than the marked one, is no half-done case: nothing is touched.
+    // A refused create left a mark with no id; the person then typed the repair jason status prints, of the same name.
     const theirs = bench(t, { programs: ['claude'] });
-    writeSettings(theirs.paths.settings, { ...readSettings(theirs.paths.settings), rolesProfilePending: 'claude-code' });
-    holdProfiles(theirs, [{ name: 'mine', disabled: false, revision: { host: 'claude_code', program: 'claude' } }]);
+    writeSettings(theirs.paths.settings, { ...readSettings(theirs.paths.settings), rolesProfilePending: { name: 'claude-code' } });
+    holdProfiles(theirs, [{ id: 'exp_01JD0000000000000000000000', name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } }]);
     assert.equal(await setupOn(theirs).connectRoles(null), 'profiles_exist');
-    holdProfiles(theirs, [
-        { name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } },
-        { name: 'mine', disabled: false, revision: { host: 'claude_code', program: 'claude' } },
-    ]);
-    writeSettings(theirs.paths.settings, { ...readSettings(theirs.paths.settings), rolesProfilePending: 'claude-code' });
-    assert.equal(await setupOn(theirs).connectRoles(null), 'profiles_exist');
-    assert.equal(existsSync(settingsFile(theirs)), false, 'no settings written');
-    assert.equal(readSettings(theirs.paths.settings).rolesProfilePending, undefined, 'the mark is let go');
+    assert.equal(existsSync(settingsFile(theirs)), false, "a person's profile is never named the default by the desktop");
+    assert.equal(readSettings(theirs.paths.settings).rolesProfilePending, undefined);
+
+    // A mark with an id that is not the one profile there, or beside more than one, is no half-done case either.
+    for (const held of [
+        [{ id: 'exp_01JD0000000000000000000001', name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } }],
+        [
+            { id: 'exp_01JD0000000000000000000000', name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } },
+            { id: 'exp_01JD0000000000000000000002', name: 'mine', disabled: false, revision: { host: 'claude_code', program: 'claude' } },
+        ],
+        [{ id: 'exp_01JD0000000000000000000000', name: 'claude-code', disabled: true, revision: { host: 'claude_code', program: 'claude' } }],
+    ]) {
+        const other = bench(t, { programs: ['claude'] });
+        writeSettings(other.paths.settings, { ...readSettings(other.paths.settings), rolesProfilePending: { name: 'claude-code', id: 'exp_01JD0000000000000000000000' } });
+        holdProfiles(other, held);
+        assert.equal(await setupOn(other).connectRoles(null), 'profiles_exist', JSON.stringify(held));
+        assert.equal(existsSync(settingsFile(other)), false);
+        assert.equal(readSettings(other.paths.settings).rolesProfilePending, undefined);
+    }
+});
+
+test('a default a person names between the look and the write is kept, and the outcome says the profile was made and not named', async (t) => {
+    // The stub's create writes the person's default into the settings file, as a person editing it at that moment would.
+    const b = bench(t, { programs: ['claude'], env: { STUB_PROFILE_CREATE_NAMES_DEFAULT: 'house' } });
+    writeInstallationSettings(b, { Roles: { MaxStdoutBytes: 1000 } });
+    assert.equal(await setupOn(b).connectRoles(null), 'made_unnamed');
+    assert.deepEqual(installationSettings(b), { Roles: { MaxStdoutBytes: 1000, DefaultExecutionProfile: 'house' } });
+    assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined, 'nothing is left to finish');
+
+    // The same at the write itself, in any case of the keys and with a null too: the value is the person's.
+    for (const theirs of [{ roles: { defaultexecutionprofile: 'house' } }, { Roles: { DefaultExecutionProfile: null } }, { Roles: { DefaultExecutionProfile: '' } }]) {
+        assert.deepEqual(withDefaultProfile(structuredClone(theirs), 'claude-code'), theirs, JSON.stringify(theirs));
+    }
+    assert.deepEqual(withDefaultProfile({ Roles: { MaxStdoutBytes: 1 } }, 'claude-code'), { Roles: { MaxStdoutBytes: 1, DefaultExecutionProfile: 'claude-code' } });
 });
 
 test('the host the default profile runs on says so, by the profile name, and no other host does', async (t) => {

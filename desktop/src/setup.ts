@@ -57,7 +57,7 @@ import {
     type ReplyCliChannel,
     type ReplyCliPending,
 } from './reply-cli-account.ts';
-import type { DesktopSettings } from './settings.ts';
+import type { DesktopSettings, RolesMark } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
@@ -275,8 +275,8 @@ const profileLimit = 60_000;
 /**
  * What one call of `connectRoles` came to: nothing to do in the demo, already settled in this run, a settings file it
  * cannot read, a default already named, profiles it could not read, profiles that are there, no connected host, no
- * mark it could write, a create refused, a default it could not write, a profile made and named, or a profile made
- * earlier named now.
+ * mark it could write, a create refused, a default it could not write, a profile made and named, a profile made beside a
+ * default a person named meanwhile, which is kept, or a profile made earlier named now.
  */
 export type RolesOutcome =
     | 'demo'
@@ -290,6 +290,7 @@ export type RolesOutcome =
     | 'create_refused'
     | 'default_unwritten'
     | 'made'
+    | 'made_unnamed'
     | 'named';
 const installLimit = 5 * 60_000;
 
@@ -963,10 +964,12 @@ export class Setup {
      * name no `Roles:DefaultExecutionProfile` and the runtime holds no execution profile at all, a disabled one included:
      * the desktop's mark is written, one profile is made with `jason profile create` for the host `roleHostOf` picks (its
      * name, its host word and its program, the verb's own defaults for the rest), and the default is written into the
-     * settings file the Connect cards edit, which the runtime reads without a restart; then the mark is taken away. A
-     * start that finds the marked profile alone and no default writes the default only. Never in the demo; a profile or
-     * a default a person made is never touched, now or at any later start. Each end but a runtime that did not answer and
-     * no connected host settles it for this run.
+     * settings file the Connect cards edit, which the runtime reads without a restart; then the mark is taken away. The
+     * mark holds the profile's name, and once the create succeeded the id it answered: a start that finds the one profile
+     * there with that id and no default writes the default only. A mark that cannot show the profile there is the
+     * desktop's — no id, or another — is let go and nothing is written. Never in the demo; a profile or a default a person
+     * made is never touched, now or at any later start, a default named between the look and the write included. Each end
+     * but a runtime that did not answer and no connected host settles it for this run.
      */
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
         if (this.#deps.demo === true) return Promise.resolve('demo');
@@ -999,16 +1002,23 @@ export class Setup {
             if (next.why === 'profiles_exist') this.#mark(null);
             return next.why;
         }
-        if (next.kind === 'name') return this.#nameDefault(next.name) ? 'named' : 'default_unwritten';
+        if (next.kind === 'name') {
+            const named = this.#nameDefault(next.name);
+            return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : 'default_unwritten';
+        }
 
         const { name, host } = roleProfiles[next.host];
         const found = this.#deps.programs.find(next.host);
         if (found === null) return 'no_host';
         // The mark first: a profile made and never named is finished by the next start, and only then.
-        if (!this.#mark(name)) return 'unmarked';
+        if (!this.#mark({ name })) return 'unmarked';
         const made = await this.#deps.cli.run(['profile', 'create', name, '--host', host, '--program', profileProgram(next.host, found)], { timeoutMs: profileLimit });
         if (made.exit !== 0) return 'create_refused';
-        return this.#nameDefault(name) ? 'made' : 'default_unwritten';
+        // Then the id it answered, the one proof a later start has that the profile there is the desktop's own.
+        const id = readProfile(made.stdout)?.id ?? null;
+        if (id !== null) this.#mark({ name, id });
+        const named = this.#nameDefault(name);
+        return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : 'default_unwritten';
     }
 
     /** Whether Claude Code and Codex are connected as the cards say it: found, and Claude Code at its floor. */
@@ -1019,30 +1029,33 @@ export class Setup {
 
     /**
      * Writes `Roles:DefaultExecutionProfile` into the settings file as it is just before the write, where it names none,
-     * then takes the mark away and has the cards read again; false where the file could not be read or written, the mark
-     * kept.
+     * then takes the mark away and has the cards read again: `written`, or `theirs` where the file names one by then, which
+     * is kept; `unwritten` where the file could not be read or written, the mark kept.
      */
-    #nameDefault(name: string): boolean {
+    #nameDefault(name: string): 'written' | 'theirs' | 'unwritten' {
+        let written: boolean;
         try {
             const { file, settings } = this.#readForEdit();
-            if (!defaultProfileOf(settings).named) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}\n`);
+            written = !defaultProfileOf(settings).named;
+            if (written) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}\n`);
         } catch {
-            return false;
+            return 'unwritten';
         }
         this.#mark(null);
         this.#changed();
-        return true;
+        return written ? 'written' : 'theirs';
     }
 
     /** Writes the mark, or takes it away; false where it could not be written. */
-    #mark(name: string | null): boolean {
+    #mark(mark: RolesMark | null): boolean {
         const save = this.#deps.saveSettings;
-        if (save === undefined) return name === null;
+        if (save === undefined) return mark === null;
         const settings = this.#deps.settings();
-        if ((settings.rolesProfilePending ?? null) === name) return true;
+        const held = settings.rolesProfilePending ?? null;
+        if (held?.name === mark?.name && held?.id === mark?.id) return true;
         const { rolesProfilePending: _, ...rest } = settings;
         try {
-            save(name === null ? rest : { ...rest, rolesProfilePending: name });
+            save(mark === null ? rest : { ...rest, rolesProfilePending: mark });
         } catch {
             this.#deps.log.warn('roles_profile_unmarked', {});
             return false;

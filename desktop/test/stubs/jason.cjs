@@ -137,7 +137,9 @@ if (args[0] === 'status') {
     // test reads): each { name, disabled, revision: { host, program } }, plus what the desktop's own settings file held when
     // it was made. STUB_PROFILE_LIST_FAILS=yes answers as an unreachable runtime does; STUB_PROFILE_CREATE_FAILS=yes refuses
     // the create; STUB_PROFILE_CREATE_LOST=yes makes the profile and still exits 1, as an answer lost on its way would;
-    // STUB_PROFILE_CREATE_BREAKS_SETTINGS=yes makes it and leaves the installation's settings file unreadable.
+    // STUB_PROFILE_CREATE_BREAKS_SETTINGS=yes makes it and leaves the installation's settings file unreadable;
+    // STUB_PROFILE_CREATE_NAMES_DEFAULT=<name> makes it and names that default in the installation's settings file, as a
+    // person editing the file at that moment would. A made profile gets an id of the runtime's shape.
     const store = join(require('node:path').dirname(process.env.STUB_RECORD), 'profiles.json');
     let profiles = [];
     try {
@@ -168,11 +170,22 @@ if (args[0] === 'status') {
         try {
             mark = JSON.parse(readFileSync(join(data, 'desktop', 'settings.json'), 'utf8')).roles_profile_pending ?? null;
         } catch {}
-        const made = { name, disabled: false, revision: { host: option('--host'), program: option('--program') }, mark_when_made: mark };
+        const id = `exp_01JD${String(profiles.length + 1).padStart(22, '0')}`;
+        const made = { id, name, disabled: false, revision: { host: option('--host'), program: option('--program') }, mark_when_made: mark };
         writeFileSync(store, JSON.stringify([...profiles, made]));
         if (process.env.STUB_PROFILE_CREATE_BREAKS_SETTINGS === 'yes') {
             mkdirSync(join(data, 'config'), { recursive: true });
             writeFileSync(join(data, 'config', 'settings.json'), '{ not json');
+        }
+        if (process.env.STUB_PROFILE_CREATE_NAMES_DEFAULT) {
+            const file = join(data, 'config', 'settings.json');
+            let held = {};
+            try {
+                held = JSON.parse(readFileSync(file, 'utf8'));
+            } catch {}
+            held.Roles = { ...(held.Roles ?? {}), DefaultExecutionProfile: process.env.STUB_PROFILE_CREATE_NAMES_DEFAULT };
+            mkdirSync(join(data, 'config'), { recursive: true });
+            writeFileSync(file, JSON.stringify(held, null, 2));
         }
         if (process.env.STUB_PROFILE_CREATE_LOST === 'yes') {
             process.stderr.write('No answer came back.\n');

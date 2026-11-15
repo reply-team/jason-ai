@@ -7,6 +7,7 @@
  */
 
 import type { Conversation } from './chat-conversations.ts';
+import type { RolesMark } from './settings.ts';
 
 /** The hosts the roles are put on: the two that drive the chat. */
 export type RoleHost = 'claude' | 'codex';
@@ -45,6 +46,7 @@ export function lastChosenHost(conversations: readonly Pick<Conversation, 'updat
 
 /** A profile as `jason profile list` and `jason profile get` print it: the fields read here. */
 export interface ListedProfile {
+    id: string | null;
     name: string;
     disabled: boolean;
     host: string | null;
@@ -52,9 +54,9 @@ export interface ListedProfile {
 
 function profileOf(value: unknown): ListedProfile | null {
     if (typeof value !== 'object' || value === null) return null;
-    const { name, disabled, revision } = value as { name?: unknown; disabled?: unknown; revision?: { host?: unknown } };
+    const { id, name, disabled, revision } = value as { id?: unknown; name?: unknown; disabled?: unknown; revision?: { host?: unknown } };
     if (typeof name !== 'string') return null;
-    return { name, disabled: disabled === true, host: typeof revision?.host === 'string' ? revision.host : null };
+    return { id: typeof id === 'string' ? id : null, name, disabled: disabled === true, host: typeof revision?.host === 'string' ? revision.host : null };
 }
 
 /** One page of `jason profile list`, and whether more follow; null where it is not one. */
@@ -87,13 +89,15 @@ export type RolesNext =
 
 /**
  * Pure: with no default named, what the profiles say to do. None at all: make one for the host, where there is one. The
- * one profile the desktop's mark names, enabled and alone: the profile was made and the default never written, so it is
- * written now, with no host needed and never a second profile. Anything else is a person's, and is left.
+ * one profile there, enabled, with the id the desktop's mark recorded when its create succeeded: the profile was made and
+ * the default never written, so it is written now, with no host needed and never a second profile. Anything else is a
+ * person's, or cannot be shown to be the desktop's — a mark with no id included — and is left.
  */
-export function rolesNext(profiles: readonly ListedProfile[], more: boolean, pending: string | null, host: RoleHost | null): RolesNext {
+export function rolesNext(profiles: readonly ListedProfile[], more: boolean, pending: RolesMark | null, host: RoleHost | null): RolesNext {
     if (profiles.length === 0 && !more) return host === null ? { kind: 'leave', why: 'no_host' } : { kind: 'create', host };
     const [only] = profiles;
-    if (pending !== null && !more && profiles.length === 1 && only?.name === pending && !only.disabled) return { kind: 'name', name: pending };
+    const ours = pending?.id !== undefined && only?.id === pending.id && only.name === pending.name;
+    if (ours && !more && profiles.length === 1 && !only.disabled) return { kind: 'name', name: only.name };
     return { kind: 'leave', why: 'profiles_exist' };
 }
 

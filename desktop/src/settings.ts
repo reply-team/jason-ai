@@ -32,15 +32,32 @@ export interface DesktopSettings {
      */
     dailyTrends?: boolean;
     /**
-     * The name of the execution profile the desktop is making for the agents' roles, written before `jason profile create`
-     * and taken away once `Roles:DefaultExecutionProfile` names it (`Setup.connectRoles`): a start that finds it beside
-     * that one profile alone finishes the naming and never makes a second. The name alone; absent otherwise.
+     * The execution profile the desktop is making for the agents' roles (`Setup.connectRoles`): its name, written before
+     * `jason profile create`, and the id the create answered, written once it succeeded; taken away once
+     * `Roles:DefaultExecutionProfile` names it. A start that finds the one profile there with that id finishes the naming
+     * and never makes a second; a mark with no id cannot show the desktop made a profile that is there, and is let go.
+     * Absent otherwise.
      */
-    rolesProfilePending?: string;
+    rolesProfilePending?: RolesMark;
+}
+
+/** The desktop's mark of a profile it is making for the agents' roles. */
+export interface RolesMark {
+    name: string;
+    id?: string;
 }
 
 /** A profile name as the runtime takes one. */
 const profileName = /^[a-z][a-z0-9-]{0,63}$/;
+/** A public id as the runtime writes one: a lowercase prefix, an underscore and a ULID. */
+const publicId = /^[a-z]{2,8}_[0-9A-HJKMNP-TV-Z]{26}$/;
+
+function rolesMarkOf(value: unknown): RolesMark | null {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+    const { name, id } = value as { name?: unknown; id?: unknown };
+    if (typeof name !== 'string' || !profileName.test(name)) return null;
+    return typeof id === 'string' && publicId.test(id) ? { name, id } : { name };
+}
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -70,12 +87,13 @@ export function parseSettings(text: string | null): DesktopSettings {
         return { ...defaultSettings };
     }
     const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown; roles_profile_pending?: unknown };
+    const mark = rolesMarkOf(value.roles_profile_pending);
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
         theme: isTheme(value.theme) ? value.theme : null,
         ...(typeof value.daily_trends === 'boolean' ? { dailyTrends: value.daily_trends } : {}),
-        ...(typeof value.roles_profile_pending === 'string' && profileName.test(value.roles_profile_pending) ? { rolesProfilePending: value.roles_profile_pending } : {}),
+        ...(mark === null ? {} : { rolesProfilePending: mark }),
         ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
@@ -103,13 +121,13 @@ export function settingsAtStart(file: string, newInstallation: boolean): Desktop
 /** Writes the settings whole, through a file beside them renamed over them. */
 export function writeSettings(file: string, settings: DesktopSettings): void {
     mkdirSync(dirname(file), { recursive: true });
-    const body: Record<string, string | boolean> = {};
+    const body: Record<string, string | boolean | RolesMark> = {};
     if (settings.feed !== null) body.feed = settings.feed;
     if (settings.skillsDeployedFor !== null) body.skills_deployed_for = settings.skillsDeployedFor;
     if (settings.theme !== null) body.theme = settings.theme;
     if (settings.openIn !== undefined) body.open_in = settings.openIn;
     if (settings.dailyTrends !== undefined) body.daily_trends = settings.dailyTrends;
-    if (settings.rolesProfilePending !== undefined) body.roles_profile_pending = settings.rolesProfilePending;
+    if (settings.rolesProfilePending !== undefined) body.roles_profile_pending = { ...settings.rolesProfilePending };
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);
