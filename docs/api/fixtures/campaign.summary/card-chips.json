@@ -1,0 +1,95 @@
+{
+  "operation": "campaign.summary",
+  "case": "card-chips",
+  "request": {
+    "campaign_ids": [
+      "cmp_1",
+      "cmp_2",
+      "cmp_3",
+      "cmp_5",
+      "cmp_6"
+    ],
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 12,
+        "waiting": 2,
+        "failed": 0,
+        "working": 2,
+        "new": 8,
+        "idle": 1,
+        "sequence": 0,
+        "out": 1,
+        "removed": 0,
+        "sequence_linked": true
+      },
+      {
+        "campaign_id": "cmp_2",
+        "people": 2,
+        "waiting": 2,
+        "failed": 0,
+        "working": 1,
+        "new": 0,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      },
+      {
+        "campaign_id": "cmp_3",
+        "people": 0,
+        "waiting": 0,
+        "failed": 0,
+        "working": 0,
+        "new": 0,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      },
+      {
+        "campaign_id": "cmp_5",
+        "people": 2,
+        "waiting": 0,
+        "failed": 0,
+        "working": 0,
+        "new": 2,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      },
+      {
+        "campaign_id": "cmp_6",
+        "people": 1,
+        "waiting": 0,
+        "failed": 0,
+        "working": 1,
+        "new": 0,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      }
+    ],
+    "total": {
+      "people": 17,
+      "waiting": 4,
+      "failed": 0,
+      "working": 4,
+      "new": 10,
+      "idle": 1,
+      "sequence": 0,
+      "out": 1,
+      "removed": 0
+    }
+  }
+}

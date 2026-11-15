@@ -150,7 +150,10 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
 
     /// <summary>
     /// Set before the first recording by a test whose ids the runtime made and the test did not fix: the cursors it
-    /// records are then written with the scrubbed ids in them, as the ids themselves are.
+    /// records are then written with the scrubbed ids in them, as the ids themselves are. A scrubbed cursor is only a
+    /// token for matching one recorded request to the page it asked for: it is the base64url of a numbered id such as
+    /// <c>apr_50</c>, never a value a live runtime would accept, so a recording is replayed against recorded exchanges
+    /// and never sent to a runtime.
     /// </summary>
     public bool ScrubCursors { get; set; }
 
@@ -189,14 +192,23 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
 
     private void Hold(string operation, string @case, string requestJson, int status, string responseJson)
     {
-        var exchange = new JsonObject
+        JsonObject exchange;
+        try
         {
-            ["operation"] = operation,
-            ["case"] = @case,
-            ["request"] = Scrubber.Scrub(JsonNode.Parse(requestJson)),
-            ["status"] = status,
-            ["response"] = Scrubber.Scrub(JsonNode.Parse(responseJson)),
-        };
+            exchange = new JsonObject
+            {
+                ["operation"] = operation,
+                ["case"] = @case,
+                ["request"] = Scrubber.Scrub(JsonNode.Parse(requestJson)),
+                ["status"] = status,
+                ["response"] = Scrubber.Scrub(JsonNode.Parse(responseJson)),
+            };
+        }
+        catch (CursorNotScrubbableException problem)
+        {
+            Assert.Fail($"The recording {ApiFixtures.PathOf(operation + "/" + @case)} cannot be written: {problem.Message}");
+            throw;
+        }
         ApiFixtures.Hold(operation + "/" + @case, exchange);
     }
 

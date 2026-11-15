@@ -29,6 +29,7 @@ public static class ApiFixtures
         "approval.get/card-invitation",
         "approval.get/card-message",
         "approval.get/card-message-reasked",
+        "approval.get/card-message-withdrawn",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -55,6 +56,8 @@ public static class ApiFixtures
         "approval.list/card-message-reasked",
         "approval.list/card-messages-first-page",
         "approval.list/card-messages-next-page",
+        "approval.list/card-needs-all",
+        "approval.list/card-status-waiting",
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/messages-pending",
@@ -89,6 +92,7 @@ public static class ApiFixtures
         "campaign.activity/all-today",
         "campaign.activity/audience",
         "campaign.activity/audience-nobody-landed",
+        "campaign.activity/card-status-30-days",
         "campaign.activity/last-7-days",
         "campaign.activity/many",
         "campaign.activity/many-one",
@@ -122,6 +126,9 @@ public static class ApiFixtures
         "campaign.audience/three-audiences",
         "campaign.audience/unknown-campaign",
         "campaign.get/archived",
+        "campaign.get/card-plan-draft",
+        "campaign.get/card-status",
+        "campaign.get/card-status-draft",
         "campaign.get/details",
         "campaign.get/gone",
         "campaign.get/gone-here",
@@ -138,6 +145,7 @@ public static class ApiFixtures
         "campaign.get/unlinked",
         "campaign.list/by-project",
         "campaign.list/campaigns-for-picker",
+        "campaign.list/card-chips",
         "campaign.list/first-page",
         "campaign.list/for-picker",
         "campaign.list/inbox",
@@ -162,6 +170,10 @@ public static class ApiFixtures
         "campaign.list_contacts/audience-activity-replied",
         "campaign.list_contacts/audience-summary-waiting",
         "campaign.list_contacts/audience-unknown",
+        "campaign.list_contacts/card-people-empty",
+        "campaign.list_contacts/card-people-first",
+        "campaign.list_contacts/card-people-query",
+        "campaign.list_contacts/card-people-waiting",
         "campaign.list_contacts/everyone",
         "campaign.list_contacts/from-a-search",
         "campaign.list_contacts/query",
@@ -189,6 +201,11 @@ public static class ApiFixtures
         "campaign.summary/audience-two-campaigns",
         "campaign.summary/audience-unknown",
         "campaign.summary/audience-without-archived",
+        "campaign.summary/card-chips",
+        "campaign.summary/card-plan-draft",
+        "campaign.summary/card-status",
+        "campaign.summary/card-status-draft",
+        "campaign.summary/card-unknown-campaign",
         "campaign.summary/everyone",
         "campaign.summary/everyone-without-archived",
         "campaign.summary/everyone-without-archived-empty",
@@ -235,6 +252,9 @@ public static class ApiFixtures
         "contact.list/by-campaign-without-archived",
         "contact.list/campaign-picker",
         "contact.list/campaign-picker-zoe",
+        "contact.list/card-people-everyone",
+        "contact.list/card-people-nobody",
+        "contact.list/card-people-query",
         "contact.list/first-page",
         "contact.list/gone-campaign",
         "contact.list/many",
@@ -267,8 +287,10 @@ public static class ApiFixtures
         "decision.get/for-campaign-row",
         "decision.get/pending-with-options",
         "decision.list/by-campaign-pending",
+        "decision.list/card-needs-all",
         "decision.list/card-questions-after-answer",
         "decision.list/card-questions-pending",
+        "decision.list/card-status-waiting",
         "decision.list/decided",
         "decision.list/empty",
         "decision.list/pending",
@@ -297,6 +319,7 @@ public static class ApiFixtures
         "operation.describe/campaign-get",
         "operation.describe/on-a-channel",
         "operation.describe/unknown-channel",
+        "plugin.list/card-accounts",
         "plugin.list/none",
         "preference.list/mode-automatic-voice-unset",
         "preference.list/modes-every-message",
@@ -345,8 +368,11 @@ public static class ApiFixtures
         "rolenote.set/client",
         "rolenote.set/project",
         "rolenote.set/two-levels",
+        "route.list/card-accounts",
         "route.list/channel-routes",
         "route.list/empty",
+        "route.resolve/card-plan-message-send",
+        "route.resolve/card-plan-no-route",
         "route.resolve/elsewhere",
         "route.resolve/elsewhere-first",
         "route.resolve/global-default",
@@ -356,6 +382,9 @@ public static class ApiFixtures
         "route.resolve/unknown-channel",
         "route.resolve/unrouted-first",
         "route.set/orphans-search",
+        "sender.list/card-message-sender",
+        "sender.list/card-sender-other",
+        "sender.list/card-sender-unread",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",
         "subscription.rewind/since-without-offset",
@@ -537,6 +566,10 @@ public static class ApiFixtures
     }
 }
 
+/// <summary>A cursor under a scrubbing that numbers cursors is not the base64url of an id: the recording row cannot write it.</summary>
+public sealed class CursorNotScrubbableException(string cursor)
+    : Exception($"The cursor '{cursor}' is not the base64url of an id, so it cannot be numbered like the ids it holds.");
+
 /// <summary>
 /// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests in order of
 /// first appearance, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
@@ -632,6 +665,11 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
 
     private string Cursor(string cursor)
     {
+        if (!System.Buffers.Text.Base64Url.IsValid(cursor))
+        {
+            throw new CursorNotScrubbableException(cursor);
+        }
+
         var id = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(cursor));
         return System.Buffers.Text.Base64Url.EncodeToString(System.Text.Encoding.UTF8.GetBytes(Text(id, null)));
     }
