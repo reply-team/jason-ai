@@ -15,9 +15,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Jason.Runtime.Tests.Dispatch;
 
 /// <summary>
-/// Two reads, in two campaigns, that find bounces of one address at the same moment. Each read the register before the
-/// other had saved, so each staged the address; the register keeps one entry per pair, and the save that lands second is
-/// refused. That refusal says the address is already on the register: the read is decided once more, stages nothing, and
+/// A read that finds a bounce of an address while another writer puts the same address on the register: the read read the
+/// register before the other had saved, so it staged the address; the register keeps one entry per pair, and the save that
+/// lands second, the read's, is refused. That refusal says the address is already on the register: the read is decided once more, stages nothing, and
 /// ends as it answered — never a failed read and never a repeated one.
 /// </summary>
 public class BounceStopRaceTests

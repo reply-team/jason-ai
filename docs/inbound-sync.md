@@ -70,11 +70,12 @@ writes nothing for it.
 at most 100 a campaign a scan, each in one short transaction with the watermark's guarded move, and acts on those whose
 kind is `bounce`. For each such line it queues a read of each of the campaign's own sends the bounce could be of: the
 campaign's emails to the contact the line names, sent through the plugin the bounce was read at, that succeeded with a
-reference, finished no earlier than 45 days before the bounce and not yet said to have bounced, newest first, at most 3
+reference, finished no earlier than 45 days before the bounce and of which no bounce that stops has been said, newest first, at most 3
 of them; one finished after the bounce's moment is not left out, since that moment is another clock's and a read of a
 send that did not bounce decides nothing. A read is a `message.status` `provider_op` whose input names the send and
 nothing else, created by the dispatcher as root work at one below `Responder:Priority`, so a person's reply is read
-before a mail server's notice and both before the sends, and never a second one for a send that already has an open
+before a mail server's notice and both before the sends while `Responder:Priority` sits above the sends' own, and
+never a second one for a send that already has an open
 read the runtime made. Each read decides alone, when it ends: a read that finds the send bounced says
 `message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
 do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
@@ -90,7 +91,8 @@ campaign by id and code; a line the step passes is not read again, and a later b
 | `bounce_read_not_routed` | No route active now takes a read of the send where it ran, its plugin and its account, so the claim would refuse one. |
 
 A line the database or a domain rule refuses is passed over alone, and any other failure stops that campaign for the
-scan, as in the respond step. A paused campaign's bounces wait, and so do the reads they ask for: the step does not
+scan, as in the respond step. While a campaign's bounce reads wait, its sends and its manager's check-in wait behind
+them. A paused campaign's bounces wait, and so do the reads they ask for: the step does not
 read a paused campaign, and its watermark holds until the campaign is live again. The bounce step runs whatever
 `Inbound:Enabled` says, since its lines come from the events' read, not from sync.
 

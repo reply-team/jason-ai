@@ -10,9 +10,10 @@ namespace Jason.Runtime.Tests.Execution;
 
 /// <summary>
 /// What a read of a send says when it finds the message came back as a bounce. Every read decides alone, at its own end:
-/// one <c>message_bounce_observed</c> line per send, whoever made the read, and for a hard bounce or one with no kind the
-/// stop, the contact's email put on the register by <c>system:bounce</c> in the same change set. A soft bounce stops
-/// nothing; a read that says false, or cannot say, decides nothing.
+/// one <c>message_bounce_observed</c> line per send, whoever made the read, and once more where the first said soft and a
+/// later read says hard or names no kind; for a hard bounce or one with no kind the stop, the contact's email put on the
+/// register by <c>system:bounce</c> in the same change set. A soft bounce stops nothing; a read that says false, or cannot
+/// say, decides nothing.
 /// </summary>
 public class BounceFactsTests
 {
@@ -142,24 +143,110 @@ public class BounceFactsTests
         Assert.False(await db.Suppressions.AnyAsync(Ct));
     }
 
-    /// <summary>Rule 2: once per send. A second read that finds the same bounce says nothing more and stages nothing more.</summary>
-    [Fact]
-    public async Task A_second_read_that_finds_the_bounce_says_nothing_more()
+    /// <summary>
+    /// Once, and once more: a send first said soft whose later read, anybody's, says hard or names no kind is said a second
+    /// time, under <c>&lt;send&gt;/stop</c>, with the later read's members, and that line stops the address, its reason
+    /// naming it. A delay notice before the final failure is the ordinary case, and the provider's latest notice wins.
+    /// </summary>
+    [Theory]
+    [InlineData("hard", "hard", "a hard bounce")]
+    [InlineData(null, "unknown", "a bounce the provider named no kind for")]
+    public async Task A_send_said_soft_and_then_found_hard_is_said_once_more_and_stopped(string? kind, string? word, string said)
     {
         using var database = new TestDatabase();
         using var db = database.Open();
         var (send, read) = await SeedAsync(db);
-        Assert.True(await Facts().SayBounceAsync(db, read, "reply", Input(send), Bounced("soft", "soft"), Ct));
+        Assert.True(await Facts().SayBounceAsync(db, read, "reply", Input(send), Bounced("soft", "mailboxFull"), Ct));
+        await db.SaveChangesAsync(Ct);
+        Assert.False(await db.Suppressions.AnyAsync(Ct));
+
+        var again = await AnotherReadAsync(db, send);
+        Assert.True(await Facts().SayBounceAsync(db, again, "reply", Input(send), Bounced(kind, word), Ct));
         await db.SaveChangesAsync(Ct);
 
-        var again = WorkItemFactory.NewProviderOp(send.Campaign!, "message.status", Noon.UtcDateTime);
-        db.WorkItems.Add(again);
+        var lines = await db.Journal.AsNoTracking().Where(entry => entry.Kind == JournalKinds.MessageBounceObserved).OrderBy(entry => entry.Id).ToListAsync(Ct);
+        Assert.Equal([send.PublicId, send.PublicId + SentFacts.StopKeySuffix], lines.Select(line => line.Key));
+        var second = lines[1];
+        Assert.Equal((send.PublicId, send.ContactId), (second.WorkItemId, second.ContactId));
+        Assert.Equal((kind, word, again.PublicId), ((string?)second.New!["bounce"], (string?)second.New["bounce_code"], (string?)second.New["read_work_item"]));
+        Assert.Empty(JournalKindCatalog.Find(JournalKinds.MessageBounceObserved)!.CheckBody(second.Key, second.Old, second.New));
+
+        var entry = await db.Suppressions.AsNoTracking().SingleAsync(Ct);
+        var campaign = await db.Campaigns.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal(
+            $"Bounced: {said}, line {second.PublicId} of send {send.PublicId} in campaign {campaign.PublicId}. The address taken is the email Jason would send this contact to when the bounce was read.",
+            entry.Reason);
+    }
+
+    /// <summary>A send said soft and read soft again is said once: the second read writes nothing and stops nothing.</summary>
+    [Fact]
+    public async Task A_send_said_soft_and_read_soft_again_is_said_once()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var (send, read) = await SeedAsync(db);
+        Assert.True(await Facts().SayBounceAsync(db, read, "reply", Input(send), Bounced("soft", "mailboxFull"), Ct));
         await db.SaveChangesAsync(Ct);
 
-        Assert.False(await Facts().SayBounceAsync(db, again, "reply", Input(send), Bounced("hard", "hard"), Ct));
+        Assert.False(await Facts().SayBounceAsync(db, await AnotherReadAsync(db, send), "reply", Input(send), Bounced("soft", "spamRejection"), Ct));
         await db.SaveChangesAsync(Ct);
+
         Assert.Equal(1, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct));
         Assert.False(await db.Suppressions.AnyAsync(Ct));
+    }
+
+    /// <summary>
+    /// After a line that stops, the first or the second, nothing more is said of the send, whatever a later read finds,
+    /// and nothing more is staged. The kinds read before are listed in order, an empty one for no kind.
+    /// </summary>
+    [Theory]
+    [InlineData("hard", "soft")]
+    [InlineData("hard", "hard")]
+    [InlineData("hard", null)]
+    [InlineData("", "hard")]
+    [InlineData("soft,hard", "hard")]
+    [InlineData("soft,hard", "soft")]
+    [InlineData("soft,", null)]
+    public async Task After_a_line_that_stops_nothing_more_is_said_of_the_send(string before, string? later)
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var (send, _) = await SeedAsync(db);
+        var reads = before.Split(',');
+        foreach (var said in reads)
+        {
+            var kind = said.Length == 0 ? null : said;
+            Assert.True(await Facts().SayBounceAsync(db, await AnotherReadAsync(db, send), "reply", Input(send), Bounced(kind, kind ?? "unknown"), Ct));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        Assert.False(await Facts().SayBounceAsync(db, await AnotherReadAsync(db, send), "reply", Input(send), Bounced(later, later ?? "unknown"), Ct));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(reads.Length, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct));
+        Assert.Equal(1, await db.Suppressions.CountAsync(Ct));
+        Assert.Equal(1, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.SuppressionAdded, Ct));
+    }
+
+    /// <summary>A stop a person lifted is never put back by the same send: a later read that finds it hard again says nothing.</summary>
+    [Fact]
+    public async Task A_stop_a_person_lifted_is_never_put_back_by_the_same_send()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var (send, read) = await SeedAsync(db);
+        Assert.True(await Facts().SayBounceAsync(db, read, "reply", Input(send), Bounced("soft", "mailboxFull"), Ct));
+        await db.SaveChangesAsync(Ct);
+        Assert.True(await Facts().SayBounceAsync(db, await AnotherReadAsync(db, send), "reply", Input(send), Bounced("hard", "hard"), Ct));
+        await db.SaveChangesAsync(Ct);
+        await db.Suppressions.ExecuteDeleteAsync(Ct);
+
+        Assert.False(await Facts().SayBounceAsync(db, await AnotherReadAsync(db, send), "reply", Input(send), Bounced("hard", "hard"), Ct));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.False(await db.Suppressions.AnyAsync(Ct));
+        Assert.Equal(2, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct));
+        Assert.Equal(1, await db.Journal.CountAsync(entry => entry.Kind == JournalKinds.SuppressionAdded, Ct));
     }
 
     /// <summary>
@@ -253,6 +340,15 @@ public class BounceFactsTests
     }
 
     private static SentFacts Facts() => new(new JournalWriter(new FixedClock(Noon)));
+
+    /// <summary>One more read of the send, made by anybody.</summary>
+    private static async Task<WorkItem> AnotherReadAsync(JasonDbContext db, WorkItem send)
+    {
+        var again = WorkItemFactory.NewProviderOp(send.Campaign!, "message.status", Noon.UtcDateTime);
+        db.WorkItems.Add(again);
+        await db.SaveChangesAsync(Ct);
+        return again;
+    }
 
     internal static async Task<(WorkItem Send, WorkItem Read)> SeedAsync(JasonDbContext db)
     {

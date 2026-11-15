@@ -4,6 +4,7 @@ using Jason.Contracts.Ids;
 using Jason.Contracts.Plugins;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
@@ -130,6 +131,72 @@ public class BounceStepTests
         Assert.False(await db.WorkItems.AnyAsync(item => item.Operation == "message.status", Ct));
         Assert.Equal(await LastLineAsync(db, campaign), (await db.Campaigns.SingleAsync(c => c.Id == campaign.Id, Ct)).BounceWatermark);
         Assert.DoesNotContain(harness.Logs.All, line => line.StartsWith("The bounce step queued no read", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A send whose only line says soft stays one a bounce could be of: the person's next bounce asks for a read of it, and
+    /// a read that finds it hard then says so once more and stops the address.
+    /// </summary>
+    [Fact]
+    public async Task A_send_said_soft_is_read_again_at_the_person_s_next_bounce()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var (campaign, ada) = await SceneAsync(harness);
+        var send = await SendAsync(harness, campaign, ada, Noon.AddDays(-1));
+        await SaidAsync(harness, send, ("", "soft"));
+        await BounceAsync(harness, campaign, ada);
+
+        Assert.Equal(1, await harness.BounceAsync(Ct));
+
+        await using var db = harness.Open();
+        var read = await db.WorkItems.SingleAsync(item => item.Operation == "message.status", Ct);
+        Assert.Equal(send, (string?)read.Context["input"]!["send"]);
+    }
+
+    /// <summary>
+    /// After a line that stops, the first one with a kind that is not soft or the second one, the send is none a bounce
+    /// could be of: a later bounce of the person asks for no read of it.
+    /// </summary>
+    [Theory]
+    [InlineData("hard")]
+    [InlineData(null)]
+    [InlineData("soft,hard")]
+    public async Task A_send_whose_bounce_stopped_is_not_read_again(string? said)
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var (campaign, ada) = await SceneAsync(harness);
+        var send = await SendAsync(harness, campaign, ada, Noon.AddDays(-1));
+        await SaidAsync(harness, send, said is null ? [("", null)] : [.. said.Split(',').Select((kind, n) => (n == 0 ? "" : SentFacts.StopKeySuffix, (string?)kind))]);
+        await BounceAsync(harness, campaign, ada);
+
+        Assert.Equal(0, await harness.BounceAsync(Ct));
+
+        await using var db = harness.Open();
+        Assert.False(await db.WorkItems.AnyAsync(item => item.Operation == "message.status", Ct));
+    }
+
+    /// <summary>
+    /// A stop a person lifted is never put back by the same send: with the entry gone from the register, a later bounce of
+    /// the person asks for no read of that send, and nothing is staged.
+    /// </summary>
+    [Fact]
+    public async Task A_lifted_stop_and_a_later_bounce_ask_no_read_of_that_send_and_stage_nothing()
+    {
+        using var harness = new DispatchHarness(Noon);
+        Routed(harness);
+        var (campaign, ada) = await SceneAsync(harness);
+        var send = await SendAsync(harness, campaign, ada, Noon.AddDays(-1));
+        await SaidAsync(harness, send, ("", "soft"), (SentFacts.StopKeySuffix, "hard"));
+        await BounceAsync(harness, campaign, ada, at: Noon.AddMinutes(5));
+
+        Assert.Equal(0, await harness.BounceAsync(Ct));
+
+        await using var db = harness.Open();
+        Assert.False(await db.WorkItems.AnyAsync(item => item.Operation == "message.status", Ct));
+        Assert.False(await db.Suppressions.AnyAsync(Ct));
+        Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.SuppressionAdded, Ct));
     }
 
     /// <summary>A bounce that names no contact asks for nothing, and the campaign is said skipped for it once.</summary>
@@ -291,6 +358,25 @@ public class BounceStepTests
         new JournalWriter(harness.Clock).Append(
             db, Actors.Dispatcher, JournalKinds.ProviderEventObserved, campaign, key: "sha256:" + PublicId.New("key"), updated: said, contactId: contact?.Id);
         await db.SaveChangesAsync(Ct);
+    }
+
+    /// <summary>The bounce lines a read said of the send, in order: each its key's suffix after the send's id and its kind.</summary>
+    private static async Task SaidAsync(DispatchHarness harness, string send, params (string Suffix, string? Bounce)[] lines)
+    {
+        await using var db = harness.Open();
+        var item = await db.WorkItems.SingleAsync(candidate => candidate.PublicId == send, Ct);
+        foreach (var (suffix, bounce) in lines)
+        {
+            new JournalWriter(harness.Clock).Append(
+                db, Actors.Dispatcher, JournalKinds.MessageBounceObserved, campaign: null, key: send + suffix,
+                updated: new JsonObject
+                {
+                    ["plugin"] = Reply, ["reference"] = "email-1001", ["channel"] = "email", ["message_id"] = null, ["bounce"] = bounce,
+                    ["bounce_code"] = bounce, ["bounced_at"] = null, ["read_work_item"] = PublicId.New("wi"),
+                },
+                workItem: item);
+            await db.SaveChangesAsync(Ct);
+        }
     }
 
     /// <summary>A reply the inbound read saw on a thread of the campaign's own, at the routed plugin and account.</summary>

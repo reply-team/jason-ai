@@ -34,19 +34,25 @@ const LOST_TRACK = "directSend.dispatchInterrupted";
 // The one state that still holds the send and that a cancel can no longer stop: Reply is sending it now.
 const SENDING = "sending";
 
-// Reply's kinds of bounce, told in the document's two words. Only a dead address is `hard`. A full mailbox is `soft`, and so
-// is every kind that speaks of the sender's own limits or of the receiving server's judgement of the message: none says the
-// address is dead. `unknown`, and a word Reply adds later, name no kind the document can tell, and are null.
+// Reply's nine kinds of bounce, told in the document's two words, each keyed by its spelling folded (see `folded`). Only a
+// dead address is `hard`. A full mailbox is `soft`, and so is every kind that speaks of the sender's own limits or of the
+// receiving server's judgement of the message: none says the address is dead. Reply's own `unknown` names no kind, and is
+// null, as a bounce with no word at all is. A stop comes only from what Reply says outright, so a word this package does
+// not know, a word Reply adds later or a text that is not one word, is `soft`: recorded, and it stops nothing.
 const BOUNCES = {
   "hard": "hard",
   "soft": "soft",
-  "mailboxFull": "soft",
-  "gmailApiLimitWarning": "soft",
-  "office365LimitWarning": "soft",
-  "authenticationFailure": "soft",
-  "spamRejection": "soft",
-  "policyViolation": "soft",
+  "mailboxfull": "soft",
+  "gmailapilimitwarning": "soft",
+  "office365limitwarning": "soft",
+  "authenticationfailure": "soft",
+  "spamrejection": "soft",
+  "policyviolation": "soft",
+  "unknown": null,
 };
+
+// The kind a word is told in where this package does not know it.
+const UNKNOWN_WORD = "soft";
 
 // What a cancel answer that is not a cancelled send says became of it, in the word the refusal's details carry.
 const NOT_PENDING = { "sent": "sent", "sending": "sent", "failed": "failed" };
@@ -143,12 +149,24 @@ function bounceOf(record) {
   const word = typeof record.bounce_type === "string" && record.bounce_type.length > 0 ? record.bounce_type : null;
   return {
     bounced: true,
-    bounce: word === null ? null : lookup(BOUNCES, word) ?? null,
+    bounce: word === null ? null : kindOf(word),
     bounced_at: momentOrNull(record.bounced_at),
     // Reply's own word, as given and never interpreted: one word of its vocabulary, never a server's text, so anything
     // else, and one the document cannot carry whole, is none.
     bounce_code: word === null || !WORD.test(word) ? null : copyOf(word, LONGEST_CODE),
   };
+}
+
+// The kind a word of Reply's says, matched ignoring case and separators, so `mailbox_full`, `MailboxFull` and `mailbox-full`
+// are all `mailboxFull`: a word respelt is never turned into a stop.
+function kindOf(word) {
+  const kind = lookup(BOUNCES, folded(word));
+  return kind === undefined ? UNKNOWN_WORD : kind;
+}
+
+// A word with its case and its separators, underscores, hyphens, dots and spaces, taken out.
+function folded(word) {
+  return word.toLowerCase().replace(/[\s._-]+/g, "");
 }
 
 // The channel a reference names by its prefix, or undefined for one in no channel's spelling.

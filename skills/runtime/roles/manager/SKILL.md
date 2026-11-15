@@ -180,8 +180,10 @@ itself: it reads the campaign's own emails to that person the bounce could be of
 bounced writes `message_bounce_observed` about that send. For a hard bounce, or one the provider named no kind for, the
 same read puts the person's email on the do-not-contact register as `system:bounce`: you do not add it, and you do not
 lift it; a person does. A soft bounce (`bounce` is `soft`, and `bounce_code` carries the provider's own word) stops
-nothing and is yours to weigh with what else the campaign knows of the person. A bounce the runtime finds no send of
-this campaign for, a sequence's email at the provider or a mail written by hand, stays the event's line alone.
+nothing and is yours to weigh with what else the campaign knows of the person. A send said soft is read again at the
+person's next bounce, and a later read that finds it hard says so once more and stops the address. A bounce the
+runtime finds no send of this campaign for, a sequence's email at the provider or a mail written by hand, stays the
+event's line alone.
 
 You record no verdict of your own reading: a verdict is the responder's reading of a reply, and one that looks wrong to
 you is a question for the person, with the line's id. The one you do record is a person's answer. Below its confidence

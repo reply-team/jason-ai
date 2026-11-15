@@ -22,7 +22,7 @@ namespace Jason.Runtime.Dispatch;
 /// detail of the campaign's own sends that could be the one. For each <c>provider_event_observed</c> line of kind
 /// <c>bounce</c> above the campaign's own watermark it queues a read of each such send (<c>message.status</c>): the
 /// campaign's emails to that contact through the plugin the bounce was read at, succeeded with a reference, finished no
-/// earlier than 45 days before the bounce, with no bounce said of them yet, newest first, at most three, and never a
+/// earlier than 45 days before the bounce, with no bounce that stops said of them, newest first, at most three, and never a
 /// second read for a send that already has an open read the runtime made. One finished after the bounce's moment is not
 /// left out, since that moment is another clock's and a read of a send that did not bounce decides nothing.
 /// <para>
@@ -36,7 +36,8 @@ namespace Jason.Runtime.Dispatch;
 /// </para>
 /// <para>
 /// The reads sit <see cref="BelowResponders"/> below <c>Responder:Priority</c>: a person's reply is read and answered
-/// before a mail server's notice, and both before the sends. With one claim per campaign per scan, a resumed campaign's
+/// before a mail server's notice, and both before the sends while <c>Responder:Priority</c> sits above the sends' own.
+/// With one claim per campaign per scan, a resumed campaign's
 /// bounces could otherwise queue a few hundred reads ahead of every reply's read.
 /// </para>
 /// </summary>

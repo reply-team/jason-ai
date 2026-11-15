@@ -232,7 +232,9 @@ public static class AttemptHandler
             // register between this one's read of it and its save. The address is already on the register, so deciding
             // again stages nothing and the read ends as it answered. One refusal is decided once more; a second refusal
             // in that decision, a block's race after the register's or the other way round, is left to the lease, and
-            // the read is made again.
+            // the read is made again. So is a third refusal, by the bounce line's own index, a second line under one key:
+            // the read is held to the lease and made again, and the repeat finds the line said. The claim never lets two
+            // items of one campaign be processing at once, so that one is not reached through it.
             await RecordAsync(scopes, work, outcome, logger, again: true).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)

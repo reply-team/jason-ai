@@ -2,7 +2,7 @@
   "kind": "message_bounce_observed",
   "version": 1,
   "since": "0.43.0",
-  "summary": "A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it.",
+  "summary": "A read of a send found that the message came back as a bounce, with its kind, the moment and the provider's own word for it; said once per send, and once more where a bounce first said soft is found to stop.",
   "subscribable": true,
   "entities": {
     "campaign": { "at": "/campaign_id", "presence": "always" },
@@ -16,7 +16,7 @@
     "additionalProperties": false,
     "required": ["key", "old", "new"],
     "properties": {
-      "key": { "type": "string", "pattern": "^wi_", "description": "The work item that made the send: one line per send." },
+      "key": { "type": "string", "pattern": "^wi_[0-9A-Za-z]+(/stop)?$", "description": "The work item that made the send. A send is said once, under its id, and once more, under its id and `/stop`, where the first line says soft and a later read says hard or names no kind: that line stops the address. After a line that stops, nothing more is said of the send." },
       "old": { "type": "null" },
       "new": {
         "type": "object",
@@ -27,7 +27,7 @@
           "reference": { "type": "string", "minLength": 1, "description": "The provider's reference for the send, as the send returned it." },
           "channel": { "type": "string", "enum": ["email", "linkedin"] },
           "message_id": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message that went, or null where it gives none." },
-          "bounce": { "type": ["null", "string"], "enum": ["hard", "soft", null], "description": "The kind of bounce: `hard` where the address does not take mail, `soft` where it may still, null where the provider named no kind the plugin can tell." },
+          "bounce": { "type": ["null", "string"], "enum": ["hard", "soft", null], "description": "The kind of bounce: `hard` where the address does not take mail, `soft` for every other kind the provider names, one the plugin does not know included, null only where the provider said the message bounced and named no kind." },
           "bounce_code": { "type": ["null", "string"], "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$", "description": "The provider's own word for the kind, uninterpreted: one word of the provider's vocabulary, never a server's text; null where it gives none." },
           "bounced_at": { "type": ["null", "string"], "format": "date-time", "description": "When the bounce notice came, or null where the provider gives no moment." },
           "read_work_item": { "type": "string", "pattern": "^wi_", "description": "The work item that read the send's status." }

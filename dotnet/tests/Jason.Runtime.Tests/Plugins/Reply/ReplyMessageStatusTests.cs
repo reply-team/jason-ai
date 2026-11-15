@@ -394,8 +394,10 @@ public class ReplyMessageStatusTests
 
     /// <summary>
     /// Reply's kinds of bounce told in the document's two words: only a dead address is <c>hard</c>; a full mailbox, the
-    /// sender's own limits and the receiving server's judgement of the message are <c>soft</c>; <c>unknown</c>, a word Reply
-    /// adds later and none at all name no kind. Reply's own word is carried beside, as given, and so is the moment.
+    /// sender's own limits and the receiving server's judgement of the message are <c>soft</c>, and so is a word this
+    /// package does not know, since a stop comes only from what Reply says outright; Reply's own <c>unknown</c>, and a
+    /// bounce with no word at all, name no kind. Reply's nine words are matched ignoring case and separators, so a word
+    /// respelt never turns a soft bounce into a stop. Reply's own word is carried beside, as given, and so is the moment.
     /// </summary>
     [Theory]
     [InlineData("hard", "hard")]
@@ -407,7 +409,14 @@ public class ReplyMessageStatusTests
     [InlineData("spamRejection", "soft")]
     [InlineData("policyViolation", "soft")]
     [InlineData("unknown", null)]
-    [InlineData("somethingLater", null)]
+    [InlineData("mailbox_full", "soft")]
+    [InlineData("MailboxFull", "soft")]
+    [InlineData("mailbox-full", "soft")]
+    [InlineData("spam_rejection", "soft")]
+    [InlineData("HARD", "hard")]
+    [InlineData("Unknown", null)]
+    [InlineData("somethingLater", "soft")]
+    [InlineData("hard_bounce", "soft")]
     [InlineData(null, null)]
     public async Task Reply_s_kind_of_bounce_is_told_in_the_document_s_two_words(string? word, string? bounce)
     {
@@ -455,8 +464,9 @@ public class ReplyMessageStatusTests
     }
 
     /// <summary>
-    /// A bounce word the document cannot carry is none given, never cut or cleaned, and the kind is none either: one past
-    /// the document's bound, and a mail server's text, which is not one word and may name an address.
+    /// A bounce word the document cannot carry is none given, never cut or cleaned, and the read still succeeds: it says
+    /// the send bounced, and a kind this package cannot tell is <c>soft</c>, which stops nothing. One past the document's
+    /// bound, and a mail server's text, which is not one word and may name an address.
     /// </summary>
     [Theory]
     [InlineData(129, null)]
@@ -470,7 +480,7 @@ public class ReplyMessageStatusTests
 
         var read = ReplyOperations.Succeeded(Operation, await ReplyOperations.InvokeAsync(api, Operation, Input(), Ct));
 
-        Assert.Equal((true, null, null), ((bool?)read["bounced"], (string?)read["bounce"], (string?)read["bounce_code"]));
+        Assert.Equal((true, "soft", null), ((bool?)read["bounced"], (string?)read["bounce"], (string?)read["bounce_code"]));
     }
 
     /// <summary>The input the runtime composes: the work item that made the send, and the reference it holds for it.</summary>

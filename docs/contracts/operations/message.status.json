@@ -155,7 +155,7 @@
       "bounce": {
         "type": ["string", "null"],
         "enum": ["hard", "soft", null],
-        "description": "What kind of bounce it was, where `bounced` is true: `hard` only where the provider says the address itself does not take mail, `soft` for every other kind it names that says the address may still take mail, null where it names none, names one the plugin cannot tell, or there was no bounce. Absent reads as null."
+        "description": "`hard` only where the provider says the address itself does not take mail; `soft` for every other kind it names, one the plugin does not know included; null only where the provider says the message bounced and names no kind, or there was no bounce. Absent reads as null."
       },
       "bounced_at": {
         "type": ["string", "null"],

@@ -2,8 +2,10 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
+using Jason.Runtime.Tests.Approvals;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Dispatch;
@@ -65,8 +67,8 @@ public class BounceCandidatesTests
             db, Actors.Dispatcher, JournalKinds.MessageBounceObserved, campaign: null, key: said.PublicId,
             updated: new JsonObject
             {
-                ["plugin"] = "reply", ["reference"] = "email-1001", ["channel"] = "email", ["message_id"] = null, ["bounce"] = "soft",
-                ["bounce_code"] = "soft", ["bounced_at"] = null, ["read_work_item"] = "wi_01JC000000000000000000000E",
+                ["plugin"] = "reply", ["reference"] = "email-1001", ["channel"] = "email", ["message_id"] = null, ["bounce"] = "hard",
+                ["bounce_code"] = "hard", ["bounced_at"] = null, ["read_work_item"] = "wi_01JC000000000000000000000E",
             },
             workItem: said);
         await db.SaveChangesAsync(Ct);
@@ -74,6 +76,52 @@ public class BounceCandidatesTests
         var found = await BounceCandidates.ReadAsync(db, scene.Campaign.Id, scene.Ada.Id, "reply", Bounced, Ct);
 
         Assert.Equal([kept.PublicId], found.Select(candidate => candidate.WorkItem));
+    }
+
+    /// <summary>
+    /// Only a line that stops leaves a send out: one whose only line says soft is still one of them, and one said soft and
+    /// then once more is not.
+    /// </summary>
+    [Fact]
+    public async Task A_send_said_soft_is_one_of_them_and_one_said_once_more_is_not()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var scene = await SceneAsync(db);
+        var soft = Send(db, scene.Campaign, scene.Ada, Bounced.AddDays(-1));
+        var stopped = Send(db, scene.Campaign, scene.Ada, Bounced.AddDays(-2));
+        var noKind = Send(db, scene.Campaign, scene.Ada, Bounced.AddDays(-3));
+        await db.SaveChangesAsync(Ct);
+        Said(db, soft, soft.PublicId, "soft");
+        Said(db, stopped, stopped.PublicId, "soft");
+        Said(db, stopped, stopped.PublicId + SentFacts.StopKeySuffix, "hard");
+        Said(db, noKind, noKind.PublicId, null);
+        await db.SaveChangesAsync(Ct);
+
+        var found = await BounceCandidates.ReadAsync(db, scene.Campaign.Id, scene.Ada.Id, "reply", Bounced, Ct);
+
+        Assert.Equal([soft.PublicId], found.Select(candidate => candidate.WorkItem));
+    }
+
+    /// <summary>
+    /// The read seeks: the sends by the index on the campaign and the contact, and each of the two stopping lines by the
+    /// unique index on the campaign, the kind and the key. No table is scanned.
+    /// </summary>
+    [Fact]
+    public async Task The_read_seeks_the_sends_and_the_stopping_lines_by_their_indexes()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var scene = await SceneAsync(db);
+
+        var plan = await QueryPlans.PlanAsync(db, BounceCandidates.Query(db, scene.Campaign.Id, scene.Ada.Id, "reply", Bounced).ToQueryString(), Ct);
+
+        var shown = string.Join(" | ", plan);
+        Assert.Contains("SEARCH s USING INDEX ix_work_items_campaign_id_contact_id (campaign_id=? AND contact_id=?)", plan);
+        Assert.Equal(2, plan.Count(detail => detail.StartsWith("SEARCH j USING ", StringComparison.Ordinal)
+            && detail.Contains("INDEX ix_journal_campaign_kind_key_bounces (campaign_id=? AND kind=? AND key=?)", StringComparison.Ordinal)));
+        Assert.DoesNotContain(plan, detail => detail.StartsWith("SCAN ", StringComparison.Ordinal) && !detail.Contains("CONSTANT ROW", StringComparison.Ordinal));
+        Assert.True(plan.Count > 0, shown);
     }
 
     /// <summary>
@@ -186,6 +234,16 @@ public class BounceCandidatesTests
         db.Attempts.Add(attempt);
         return send;
     }
+
+    private static void Said(JasonDbContext db, WorkItem send, string key, string? bounce) =>
+        new JournalWriter(new FixedClock(new DateTimeOffset(Bounced))).Append(
+            db, Actors.Dispatcher, JournalKinds.MessageBounceObserved, campaign: null, key: key,
+            updated: new JsonObject
+            {
+                ["plugin"] = "reply", ["reference"] = "email-1001", ["channel"] = "email", ["message_id"] = null, ["bounce"] = bounce,
+                ["bounce_code"] = bounce, ["bounced_at"] = null, ["read_work_item"] = "wi_01JC000000000000000000000E",
+            },
+            workItem: send);
 
     private static void Read(JasonDbContext db, Campaign campaign, WorkItem send, WorkItemStatus status, ActorType by)
     {

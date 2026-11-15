@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.WorkItems;
@@ -11,7 +12,8 @@ namespace Jason.Runtime.Dispatch;
 /// <summary>
 /// The sends of a campaign a bounce of one of its people could be of: the campaign's own emails to that contact through the
 /// plugin the bounce was read at, which succeeded with the provider's reference, finished no earlier than the window
-/// before the bounce, and of which no bounce has been said yet; newest first, at most <see cref="Most"/>. A send of a
+/// before the bounce, and of which no bounce that stops has been said: a send whose only line says soft is still one of
+/// them, read again at the person's next bounce; newest first, at most <see cref="Most"/>. A send of a
 /// provider's own sequence, one written by hand or one older than the window is none of them, so a bounce of it finds
 /// nothing here. One finished after the bounce's moment is not left out, since that moment is another clock's and a read
 /// of a send that did not bounce decides nothing.
@@ -41,11 +43,12 @@ internal static class BounceCandidates
     public const string StatusOperation = "message.status";
 
     /// <summary>
-    /// One read. The seek is the index on the campaign and the contact; the bounce line's absence is asked of the unique
-    /// index on the campaign, the kind and the key. SQLite's date functions read both the stored moments and the bound one,
-    /// so the comparison is of moments rather than of text.
+    /// One read. The seek is the index on the campaign and the contact; the absence of a line that stops — the first one
+    /// with a kind that is not soft, or the once more — is asked of the unique index on the campaign, the kind and the key,
+    /// one seek each. SQLite's date functions read both the stored moments and the bound one, so the comparison is of
+    /// moments rather than of text.
     /// </summary>
-    private const string Sql = """
+    private const string Sql = $$"""
         SELECT s.public_id AS WorkItem, s.operation AS Operation,
                json_extract(a.provenance_json, '$.plugin_id') AS PluginId,
                json_extract(a.provenance_json, '$.binding_identity') AS BindingIdentity
@@ -59,7 +62,9 @@ internal static class BounceCandidates
           AND json_extract(a.provenance_json, '$.plugin_id') = {4}
           AND json_extract(a.provenance_json, '$.external_ids_returned.send') IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM journal AS j WHERE j.campaign_id = s.campaign_id
-                          AND j.kind = {5} AND j.key = s.public_id)
+                          AND j.kind = {5} AND j.key = s.public_id AND json_extract(j.new_json, '$.bounce') IS NOT 'soft')
+          AND NOT EXISTS (SELECT 1 FROM journal AS j WHERE j.campaign_id = s.campaign_id
+                          AND j.kind = {5} AND j.key = s.public_id || '{{SentFacts.StopKeySuffix}}')
         ORDER BY julianday(s.finished_at) DESC, s.id DESC
         LIMIT {6}
         """;
@@ -74,11 +79,14 @@ internal static class BounceCandidates
         ArgumentNullException.ThrowIfNull(db);
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
 
+        return await Query(db, campaignId, contactId, pluginId, bouncedAt).ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The read <see cref="ReadAsync"/> runs, as a query: its plan is asked of it by a test.</summary>
+    internal static IQueryable<BounceCandidate> Query(JasonDbContext db, int campaignId, int contactId, string pluginId, DateTime bouncedAt)
+    {
         var since = bouncedAt.ToUniversalTime().Subtract(Window).ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
-        return await db.Database
-            .SqlQueryRaw<BounceCandidate>(Sql, campaignId, contactId, SendOperation, since, pluginId, JournalKinds.MessageBounceObserved, Most)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        return db.Database.SqlQueryRaw<BounceCandidate>(Sql, campaignId, contactId, SendOperation, since, pluginId, JournalKinds.MessageBounceObserved, Most);
     }
 
     /// <summary>

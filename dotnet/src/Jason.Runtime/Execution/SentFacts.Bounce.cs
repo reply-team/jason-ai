@@ -12,20 +12,33 @@ namespace Jason.Runtime.Execution;
 /// <summary>
 /// What a read of a send says when it finds the message came back as a bounce: one
 /// <see cref="JournalKinds.MessageBounceObserved"/> line about the work item that made the send, whoever made the read,
-/// and, for a hard bounce or one the provider named no kind for, the stop: the email Jason would send that contact to,
-/// put on the do-not-contact register by <see cref="Actors.Bounce"/>, in the same change set.
+/// and once more where that line said soft and a later read says hard or names no kind; and, with a line of a hard
+/// bounce or one the provider named no kind for, the stop: the email Jason would send that contact to, put on the
+/// do-not-contact register by <see cref="Actors.Bounce"/>, in the same change set.
 /// </summary>
 /// <remarks>
 /// Every read decides alone, at its own end. A read that says the send did not bounce, or cannot say, decides nothing and
 /// stops nothing, and so does a read that fails: "no kind" means the provider said the message bounced and gave no kind,
 /// never that nothing could find out. A soft bounce is recorded and stops nothing. The line is said once per send, under
-/// the key of the item that made it, and the database is what says so: the key is looked up here first, and a second
-/// line under it is refused by <c>ix_journal_campaign_kind_key_bounces</c>.
+/// the key of the item that made it, and once more, under that key and <see cref="StopKeySuffix"/>, where the first said
+/// soft and this read stops: a mail server's delay notice often comes before its final failure, and the provider's
+/// latest notice wins. After a line that stops nothing more is said, so a stop a person lifted is never put back by the
+/// same send. The database is what says so: the keys are looked up here first, and a second line under either is
+/// refused by <c>ix_journal_campaign_kind_key_bounces</c>.
 /// </remarks>
 public sealed partial class SentFacts
 {
     /// <summary>The one channel a bounce stops: a bounce is an email's.</summary>
     private const string Email = "email";
+
+    /// <summary>
+    /// What follows the send's id in the key of the once more: the line that says a send first said soft has bounced in a
+    /// way that stops. A slash, as the journal's composite keys are written.
+    /// </summary>
+    public const string StopKeySuffix = "/stop";
+
+    /// <summary>The one kind that stops nothing.</summary>
+    private const string Soft = "soft";
 
     /// <summary>
     /// Adds the line, and the stop where its kind asks for one, to the context's change set (not saved here), where
@@ -68,26 +81,41 @@ public sealed partial class SentFacts
         }
 
         // Read, then written, as the sent line is: a campaign has at most one item scheduled or processing, so two reads of
-        // one send never end at once, and the unique key on the campaign, the kind and the send is the floor beneath that.
+        // one send never end at once, and the unique key on the campaign, the kind and the key is the floor beneath that.
+        var once = send.PublicId;
+        var onceMore = send.PublicId + StopKeySuffix;
         var said = await db.Journal
             .AsNoTracking()
-            .AnyAsync(
-                entry => entry.CampaignId == send.CampaignId && entry.Kind == JournalKinds.MessageBounceObserved && entry.Key == send.PublicId,
-                cancellationToken)
+            .Where(entry => entry.CampaignId == send.CampaignId && entry.Kind == JournalKinds.MessageBounceObserved
+                && (entry.Key == once || entry.Key == onceMore))
+            .Select(entry => new { entry.Key, entry.New })
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-        if (said)
+
+        var kind = result["bounce"]?.GetValue<string>();
+        string key;
+        if (said.Count == 0)
+        {
+            key = once;
+        }
+        else if (kind != Soft && said.Count == 1 && said[0].Key == once && said[0].New?["bounce"]?.GetValue<string>() == Soft)
+        {
+            // Once more: the first line said soft, and this read says hard or names no kind. The provider's latest notice
+            // wins, so the address is stopped now, by a line of its own that says so; after it, nothing more is said.
+            key = onceMore;
+        }
+        else
         {
             return false;
         }
 
-        var kind = result["bounce"]?.GetValue<string>();
         var channel = result["channel"]?.GetValue<string>();
         var line = journal.Append(
             db,
             Actors.Dispatcher,
             JournalKinds.MessageBounceObserved,
             campaign: null,
-            key: send.PublicId,
+            key: key,
             updated: new JsonObject
             {
                 ["plugin"] = pluginId,
@@ -101,7 +129,7 @@ public sealed partial class SentFacts
             },
             workItem: send);
 
-        if (kind != "soft" && channel == Email && send.ContactId is { } contactId)
+        if (kind != Soft && channel == Email && send.ContactId is { } contactId)
         {
             await StopAsync(db, line, send, contactId, kind, cancellationToken).ConfigureAwait(false);
         }

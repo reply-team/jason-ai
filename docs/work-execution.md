@@ -825,7 +825,9 @@ In a period, removed people included, so a past period does not change when some
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
 - `opted_out` — One of their addresses was put on the do-not-contact register in the period, other than by the runtime
   for a bounce. It is read from the journal, so an entry lifted since still counts; an entry the runtime wrote for a
-  bounce (`system:bounce`) says the address is dead, not that the person asked to be left alone, and never counts.
+  bounce (`system:bounce`) says the address is dead, not that the person asked to be left alone, and never counts. An
+  opt-out of an address a bounce already stopped writes no entry of its own and is not counted; the claim's opt-out
+  lock still holds the person.
 - `removed` — They were taken out of the campaign in the period, whether added back since or not.
 
 The same counts over time: `jason campaign activity-by-period` (`campaign.activity_by_period`) takes the campaigns named
