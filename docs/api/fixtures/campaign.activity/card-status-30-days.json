@@ -1,0 +1,38 @@
+{
+  "operation": "campaign.activity",
+  "case": "card-status-30-days",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ],
+    "since": "2026-09-17T00:00:00.000Z",
+    "until": "2026-10-16T09:05:00.000Z",
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 12,
+        "added": 12,
+        "worked_on": 1,
+        "contacted": 1,
+        "replied": 1,
+        "bounced": 0,
+        "opted_out": 0,
+        "removed": 0
+      }
+    ],
+    "total": {
+      "people": 12,
+      "added": 12,
+      "worked_on": 1,
+      "contacted": 1,
+      "replied": 1,
+      "bounced": 0,
+      "opted_out": 0,
+      "removed": 0
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "operation": "journal.list",
+  "case": "card-choice-acts",
+  "request": {
+    "campaign_id": "cmp_1",
+    "kinds": [
+      "campaign_started",
+      "campaign_paused",
+      "approval_approved",
+      "approval_rejected",
+      "decision_answered"
+    ],
+    "since": "2026-10-16T09:05:00.000Z",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_11",
+        "ts": "2026-10-16T09:07:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "campaign_paused",
+        "campaign_id": "cmp_1",
+        "work_item_id": null,
+        "attempt_id": null,
+        "key": "status",
+        "old": "active",
+        "new": "paused",
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "work_item_kind": null,
+        "work_item_role": null,
+        "work_item_operation": null,
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

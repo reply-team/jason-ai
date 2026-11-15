@@ -1,0 +1,78 @@
+{
+  "operation": "plugin.list",
+  "case": "card-accounts",
+  "request": {},
+  "status": 200,
+  "response": {
+    "snapshot": {
+      "id": "snp_1",
+      "loaded_at": "2026-10-16T09:00:00.000Z",
+      "source": "startup",
+      "plugin_count": 1
+    },
+    "routing_snapshot_id": "rts_1",
+    "plugins": [
+      {
+        "id": "reply",
+        "version": "1.0.0",
+        "kind": "provider",
+        "name": null,
+        "description": null,
+        "homepage": null,
+        "root": "<data>/plugins/reply",
+        "digest": "sha256:0",
+        "contracts": {
+          "protocol": [
+            1
+          ],
+          "operations": [
+            1
+          ],
+          "events": []
+        },
+        "operations": [
+          "campaign.create",
+          "conversation.list",
+          "message.send",
+          "social_invitation.send",
+          "sender.list"
+        ],
+        "entry": {
+          "module": "main.js",
+          "function": "invoke"
+        },
+        "capabilities": {
+          "exec": null,
+          "http": null,
+          "env": null,
+          "api": null,
+          "subscriptions": null
+        },
+        "limits": {
+          "timeout_ms": 20000,
+          "memory_mb": 64
+        },
+        "binding_schema": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string"
+            }
+          }
+        },
+        "status": "valid",
+        "problems": [],
+        "audience_definition": null
+      }
+    ],
+    "last_reload": {
+      "at": "2026-10-16T09:00:00.000Z",
+      "source": "startup",
+      "activated": true,
+      "candidates": [],
+      "routes": [],
+      "subscriptions": []
+    },
+    "activated": true
+  }
+}
