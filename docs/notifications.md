@@ -129,9 +129,9 @@ reached anybody** — counted from that one's line, so a notification that reach
 those blocks, only the ones still open when it is sent, with the work items they hold then; how many items wait on a
 daily limit, counted when it is sent, as approvals are; and where to look. Said beside anything else, a hold, a
 provider block, an account whose events were not read or an email that bounced makes where to look the commands of
-each thing alone, in the order they are said — "Ask your agent, or run jason approval list, jason decision list,
-jason workitem list --status failed --status expired, jason block list and jason events sources." — and failed
-protective work and a hold share one command, jason workitem list --status failed --status expired --status waiting.
+each thing alone, in the order they are said — "Ask your agent, or run jason approval list, jason decision list, jason
+workitem list --status failed --status expired, jason block list and jason events sources." — and failed protective
+work and a hold share one command, jason workitem list --status failed --status expired --status waiting.
 A bounce has no command of its own: the journal's list of provider events shows the replies found and the invitations
 accepted beside the bounces, so a bounce is left to the agent, alone and beside anything else. The commands are named
 in the order the things are said until the next would not fit the message the delivery contract takes, and the things
