@@ -128,17 +128,17 @@ manager is woken by under the default `Manager:Triggers`; an `inbound_reply_obse
   does, is a sequence's thread, never a direct send's — does the mark go to the one campaign, of those not archived,
   that had written to the person through the plugin before the reply, where the reply was found in that campaign: a
   provider operation whose `reach` is `act` without a condition (a message, an invitation, an answer in a thread) about
-  the person, that succeeded there, its attempt finished at or before the moment the event gives. A campaign that first
-  wrote after that moment neither gets the mark nor counts against another, however late the reply is read, a span read
-  again included. The two moments come from two clocks, the provider's and this machine's, compared with no tolerance:
-  a send that finished within their difference of the reply may be counted on the wrong side of it. A send the provider
-  took for later counts from the moment it was taken, when its attempt finished, even where it is taken back later; one
-  that ended `ambiguous` does not. The mark is decided once: a campaign that writes to the person later, or one archived
-  later, changes no line already said, and a line written before 0.43.0 has none. The inbound read's own line
-  carries none of the three, since the thread it names is the campaign's own by the read that listed it. It is keyed as
-  the inbound read keys it, by the plugin, the thread and the moment, so a move both reads found is said once.
-  A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a reply
-  is said again, as the inbound read says it.
+  the person, that succeeded there, its attempt finished at or before the moment the event gives. By this clause, a
+  campaign that first wrote after that moment neither gets the mark nor counts against another, however late the reply
+  is read, a span read again included. The two moments come from two clocks, the provider's and this machine's, compared
+  with no tolerance: a send that finished within their difference of the reply may be counted on the wrong side of it. A
+  send the provider took for later counts from the moment it was taken, when its attempt finished, even where it is
+  taken back later; one that ended `ambiguous` does not. The mark is decided once: a campaign that writes to the person
+  later, or one archived later, changes no line already said, and a line written before 0.43.0 has none. The inbound
+  read's own line carries none of the three, since the thread it names is the campaign's own by the read that listed it.
+  It is keyed as the inbound read keys it, by the plugin, the thread and the moment, so a move both reads found is said
+  once. A move the provider cannot say who made reads as a reply, so a follow-up sent into a thread that already has a
+  reply is said again, as the inbound read says it.
 - **`provider_event_observed`** carries the event, the person it is about, `attributed_by`, and the kind's own
   identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
   by the event's own key.

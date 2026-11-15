@@ -24,11 +24,12 @@ namespace Jason.Runtime.Events;
 /// </para>
 /// <para>
 /// Before the reply: the attempt that succeeded finished at or before the moment the provider gives the reply. A
-/// campaign whose first send finished after it had not written when the person replied, and neither marks the reply nor
-/// counts against another campaign, however soon after the reply it wrote and however late the page is read, a backfill's
-/// included. The two moments come from two clocks, the provider's and this machine's, and are compared as they stand, with
-/// no tolerance: where the two differ, a send that finished within that difference of the reply can fall on the wrong side
-/// of it, which can cost a campaign that alone had written its mark, and can count a send against it, or not, wrongly.
+/// campaign whose first send finished after it had not written when the person replied, and by this clause neither
+/// marks the reply nor counts against another campaign, however soon after the reply it wrote and however late the page
+/// is read, a backfill's included; a thread a campaign already holds stays its own by the first clause, whenever its
+/// first send finished. The two moments come from two clocks, the provider's and this machine's, and are compared as
+/// they stand, with no tolerance: where the two differ, a send that finished within that difference of the reply can
+/// fall on the wrong side of it, which can give a campaign a mark or cost it one.
 /// </para>
 /// <para>
 /// A send the provider took for later succeeded when it was taken (<c>accepted</c>), and it counts from then: from the
