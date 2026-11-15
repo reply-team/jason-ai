@@ -178,15 +178,17 @@ own record and a release of reply-cli prints it; neither is out yet. Until then,
 campaign's activity and on the Dashboard, and notified, and nothing is stopped: each read a bounce asks for answers that
 it cannot say whether the email bounced.
 
-A campaign's bounce reads sit just below its responder and above its sends, and a campaign's work is claimed one item a
-scan, so while many bounces' reads wait, a storm of them after a bad list say, that campaign's sends and its manager's
-check-in wait behind them. Each bounce asks for up to three reads.
+A campaign's bounce reads sit just below its responder and, while `Responder:Priority` stays above the sends' own
+priority, above its sends; a campaign's work is claimed one item a scan, so while many bounces' reads wait, a storm of
+them after a bad list say, that campaign's sends and its manager's check-in wait behind them. Each bounce asks for up to
+three reads.
 
 A bounce stops an address only where it is of an email the campaign itself sent directly through Jason, through the
 plugin the bounce was read at, no earlier than 45 days before the bounce, and only the newest three such sends are
 read, so for a bounce read long after it happened, a span read again say, they may be sends made after it, and the one
 that bounced is not read. A bounce of a sequence's email at the provider, of a mail written by hand or of an older send
-is counted and notified, wakes the campaign's manager, and stops nothing.
+is counted and notified, wakes the campaign's manager, and stops nothing. So is a bounce of a send whose campaign's
+route has since moved to another plugin or account: no route takes a read of the send where it ran.
 
 Through Reply, a bounce on a thread that Reply's change feed also flags as holding a reply, an automatic reply or an
 absence, flags that stay once set, is still read as a move of the thread: it raises the responder against the mail
