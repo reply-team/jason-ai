@@ -56,20 +56,38 @@ public class CriticalTierTableTests
     }
 
     /// <summary>
-    /// The ceiling bounds what the tier costs to run, so it reads rows: the tier's rows each assembly recorded, every row of
-    /// a class the tier carries whole among them, over the suite's executed rows. The table's counted cases, which count a
+    /// The ceiling bounds what the tier costs to run, so it reads rows: the most rows each assembly's tier may run, a tenth
+    /// over what it recorded, every row of a class the tier carries whole among them, over the suite's executed rows. The table's counted cases, which count a
     /// method of such a class once, answer another question and are not read here.
     /// </summary>
     [Fact]
     [Critical(Family.B7, "the tier stays a fast loop: at most 15 % of the suite's executed rows")]
     public void The_tier_is_at_most_15_percent_of_the_suite_s_executed_rows()
     {
-        var tier = CriticalTier.Sizes.Sum(size => size.TierRows);
-        var suite = CriticalTier.Sizes.Sum(size => CriticalTier.CasesAtLeast(size.Cases));
+        var (tier, suite) = CriticalTier.RowsShare(CriticalTier.Sizes);
 
         Assert.True(
             CriticalTier.WithinCeiling(tier, suite),
             $"The tier runs {tier} of the suite's {suite} executed rows, over the ceiling of {CriticalTier.Ceiling} % of the rows.");
+    }
+
+    /// <summary>
+    /// The ceiling reads the most each assembly may run, a tenth over what it recorded, so a tier recorded just under 15 %
+    /// whose bounds are over it is refused, and one whose bounds are under it is not.
+    /// </summary>
+    [Fact]
+    public void The_ceiling_reads_what_the_tier_may_run_and_not_only_what_it_recorded()
+    {
+        // 9000 executed rows at least; 1340 recorded is 14.9 %, its bound of 1474 is 16.4 %.
+        var (tier, suite) = CriticalTier.RowsShare([(100, 1000, 10_000, 1_340)]);
+        Assert.False(
+            CriticalTier.WithinCeiling(tier, suite),
+            $"{tier} of {suite} rows is within the ceiling, though the tier may run a tenth more than it recorded.");
+
+        var (lowTier, lowSuite) = CriticalTier.RowsShare([(100, 1000, 10_000, 1_200)]);
+        Assert.True(
+            CriticalTier.WithinCeiling(lowTier, lowSuite),
+            $"{lowTier} of {lowSuite} rows is over the ceiling, though its bound of 1320 is under 15 % of 9000.");
     }
 
     /// <summary>

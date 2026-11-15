@@ -25,7 +25,7 @@ namespace Jason.Runtime.Tests;
 /// </para>
 /// <para>
 /// The ceiling reads rows, not counted cases: each assembly records its tier's rows in <see cref="Sizes"/> and runs at
-/// most a tenth more, and the ceiling sums the recorded rows over the suite's executed rows.
+/// most a tenth more, and the ceiling sums what each may run, the tenth included, over the suite's executed rows.
 /// </para>
 /// <para>
 /// This file is linked into every test project, so each assembly holds its own column; the checks over the whole table
@@ -137,7 +137,7 @@ internal static partial class CriticalTier
 
     /// <summary>
     /// The tier's rows an assembly may run, of the ones it recorded: a tenth more, so a line added to a page moves nothing,
-    /// and the ceiling's sum of the recorded rows is never short of what the tier runs by more than that.
+    /// and the ceiling reads this bound for each assembly, so it holds for whatever the tier may run, the tenth included.
     /// </summary>
     public static int TierRowsAtMost(int recorded) => recorded + (recorded / 10);
 
@@ -170,6 +170,16 @@ internal static partial class CriticalTier
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// The tier's rows and the suite's executed rows the ceiling divides, over the sizes of the assemblies: the most each
+    /// assembly's tier may run, a tenth over what it recorded, and the least of the suite.
+    /// </summary>
+    public static (int Tier, int Suite) RowsShare(IEnumerable<(int TierMethods, int Methods, int Cases, int TierRows)> sizes)
+    {
+        var all = sizes.ToList();
+        return (all.Sum(size => TierRowsAtMost(size.TierRows)), all.Sum(size => CasesAtLeast(size.Cases)));
     }
 
     /// <summary>Whether a tier of this many is at most <see cref="Ceiling"/> per cent of a suite of that many.</summary>
