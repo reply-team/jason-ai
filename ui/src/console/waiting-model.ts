@@ -25,8 +25,14 @@ export function approvalGate(whole: Approval | undefined, unread: Said | undefin
     return unread === undefined ? { live: false, reading: true } : { live: false, unread };
 }
 
-/** What a held Approve says while its approval is being read. */
-export const readingSentence = 'This approval is being read; it cannot be approved until it is shown here whole.';
+/**
+ * What a held Approve says while its approval is being read, in the words true where it is drawn: a chat's card shows
+ * the approval whole once read; Needs you's row reads it whole and keeps its words for Details.
+ */
+export const readingSentence = (where: 'chat' | 'needs'): string =>
+    `This approval is being read; it cannot be approved until it ${
+        where === 'chat' ? 'is shown here whole' : 'has been read whole'
+    }.`;
 
 /**
  * What a held Approve says when its approval could not be read, before what the runtime said; and where the person can

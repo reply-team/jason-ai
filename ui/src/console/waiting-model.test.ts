@@ -4,6 +4,7 @@ import { fixtures } from '../test/fixtures';
 import {
     approvalGate,
     keptAndMissing,
+    readingSentence,
     stillAsking,
     toApprovalCard,
     toQuestionCard,
@@ -82,6 +83,15 @@ describe('when an approval may be approved where it is drawn', () => {
     it('says what the runtime said while the read failed, and a whole read outweighs an earlier failure', () => {
         expect(approvalGate(undefined, failed)).toEqual({ live: false, unread: failed });
         expect(approvalGate(enroll, failed)).toEqual({ live: true });
+    });
+
+    it('says an approval is being read in the words of where it is drawn: a card shows it whole, a row reads it', () => {
+        expect(readingSentence('chat')).toBe(
+            'This approval is being read; it cannot be approved until it is shown here whole.',
+        );
+        expect(readingSentence('needs')).toBe(
+            'This approval is being read; it cannot be approved until it has been read whole.',
+        );
     });
 
     it('says where the person can still open an approval it could not read', () => {

@@ -97,7 +97,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             {!gate.live && (
                 <div className="note am" role="status">
                     {'reading' in gate ? (
-                        readingSentence
+                        readingSentence('chat')
                     ) : (
                         <>
                             {unreadSentence('chat')} {gate.unread.code !== null && <code>{gate.unread.code}</code>}{' '}

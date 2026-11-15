@@ -12,7 +12,8 @@ import { keptAndMissing, stillAsking, type Reasked, type Said } from './waiting-
 // the next read no longer lists its item, whether this chat decided it or anything else did.
 //
 // The whole reads of approvals are what Needs you's rows share with the cards: a holder's listed approvals, each read
-// whole once a reload, and approved only once read and, for a message, checked against its work item at the press.
+// whole once, a few at a time, and approved only once read and, for a message, checked against its work item at the
+// press.
 
 export type { Said } from './waiting-model';
 
@@ -26,8 +27,6 @@ export interface WholeReads {
     readonly approvals: Signal<Readonly<Record<string, Approval>>>;
     /** Why a listed item could not be read whole, by its id: what the runtime said, until a read of it succeeds. */
     readonly unread: Signal<Readonly<Record<string, Said>>>;
-    /** How many times the lists were read again: a whole read still unanswered from an earlier time is sent again. */
-    round: number;
 }
 
 export interface Waiting extends WholeReads {
@@ -45,14 +44,17 @@ export interface Waiting extends WholeReads {
 
 /** The whole reads of a holder's approvals, none read yet. */
 export function wholeReads(key: string, store: AttentionStore): WholeReads {
-    return { key, store, approvals: signal({}), unread: signal({}), round: 0 };
+    return { key, store, approvals: signal({}), unread: signal({}) };
 }
 
 const held = new Map<string, Waiting>();
 /** How many chats of each campaign are drawn: a journal line reads again only the campaigns drawn. */
 const drawn = new Map<string, number>();
-/** The whole reads under way, each with the reload it was sent on, so a row is read at most once a reload. */
-const reading = new Map<string, number>();
+/** The whole reads under way, by holder, kind and id: one the runtime has not answered is never sent beside itself. */
+const reading = new Map<string, object>();
+
+/** How many approvals one fill reads whole at once: a long list is read a few rows at a time, in turn. */
+const READS_AT_ONCE = 8;
 
 export function waitingOf(campaignId: string): Waiting {
     let waiting = held.get(campaignId);
@@ -79,9 +81,10 @@ const without = <T>(record: Readonly<Record<string, T>>, id: string): Record<str
     Object.fromEntries(Object.entries(record).filter(([each]) => each !== id));
 
 /**
- * One whole read of a listed item, sent at most once a reload: what it read is kept while the lists still hold the
- * item, and what the runtime said when it failed is kept beside the item until a read of it succeeds. A read the
- * runtime has not answered is sent again by the next reload.
+ * One whole read of a listed item, never sent while another read of it is under way: what it read is kept while the
+ * lists still hold the item, and what the runtime said when it failed is kept beside the item until a read of it
+ * succeeds. A read the runtime has not answered holds its item until it is answered; a failed one is sent again by the
+ * next fill.
  */
 function readOnce<T>(
     reads: WholeReads,
@@ -91,9 +94,9 @@ function readOnce<T>(
     keep: (item: T) => void,
 ): Promise<void> {
     const key = `${reads.key}/${kind}/${id}`;
-    const round = reads.round;
-    if (reading.get(key) === round) return Promise.resolve();
-    reading.set(key, round);
+    if (reading.has(key)) return Promise.resolve();
+    const mark = {};
+    reading.set(key, mark);
     return read()
         .then(
             (item) => {
@@ -106,14 +109,23 @@ function readOnce<T>(
             },
         )
         .finally(() => {
-            if (reading.get(key) === round) reading.delete(key);
+            if (reading.get(key) === mark) reading.delete(key);
         });
 }
 
+/** Does each id's work, at most `READS_AT_ONCE` of them at a time, in the order given. */
+async function inTurn(ids: readonly string[], each: (id: string) => Promise<void>): Promise<void> {
+    let next = 0;
+    const lane = async (): Promise<void> => {
+        while (next < ids.length) await each(ids[next++]!);
+    };
+    await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, ids.length) }, lane));
+}
+
 /**
- * Reads whole each approval the holder lists and has not read yet, and lets go of the reads, and of what the runtime
- * said, of the items the lists no longer hold. A read that fails leaves its approval drawn from the list's row with
- * what the runtime said, and is sent again by the next fill.
+ * Reads whole each approval the holder lists and has not read yet, a few at a time, and lets go of the reads, and of
+ * what the runtime said, of the items the lists no longer hold. A read that fails leaves its approval drawn from the
+ * list's row with what the runtime said, and is sent again by the next fill.
  */
 export async function fillApprovals(api: Api, reads: WholeReads): Promise<void> {
     const approvals = keptAndMissing(
@@ -123,16 +135,17 @@ export async function fillApprovals(api: Api, reads: WholeReads): Promise<void> 
     const listed = listedIds(reads.store);
     reads.approvals.value = approvals.kept;
     reads.unread.value = Object.fromEntries(Object.entries(reads.unread.value).filter(([id]) => listed.has(id)));
-    await Promise.all(
-        approvals.missing.map((id) =>
-            readOnce(
-                reads,
-                'apr',
-                id,
-                () => api.call<Approval>('approval.get', { approval_id: id }),
-                (item) => keepWhole(reads, item),
-            ),
-        ),
+    // A row read whole, or gone from the lists, while it waited its turn is not read again.
+    await inTurn(approvals.missing, (id) =>
+        Object.hasOwn(reads.approvals.value, id) || !reads.store.approvals.value.some((row) => row.id === id)
+            ? Promise.resolve()
+            : readOnce(
+                  reads,
+                  'apr',
+                  id,
+                  () => api.call<Approval>('approval.get', { approval_id: id }),
+                  (item) => keepWhole(reads, item),
+              ),
     );
 }
 
@@ -170,7 +183,7 @@ export async function approveWhole(
 /**
  * Reads whole each row the lists hold and this chat has not read yet, and lets go of the rows they no longer hold. A
  * read that fails leaves its card drawn from the list's row with what the runtime said, and is sent again by the next
- * fill; one the runtime has not answered is sent again by the next reload.
+ * fill; one the runtime has not answered is not sent again while it is under way.
  */
 async function fill(api: Api, waiting: Waiting): Promise<void> {
     const questions = keptAndMissing(
@@ -201,7 +214,6 @@ async function fill(api: Api, waiting: Waiting): Promise<void> {
  * longer hold goes, as that item's card did.
  */
 export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
-    waiting.round += 1;
     await waiting.store.load(api, false);
     const refused = waiting.refused.value;
     if (refused !== null && !listedIds(waiting.store).has(refused.id)) waiting.refused.value = null;

@@ -1,9 +1,11 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
+import type { ApprovalSummary } from '../api/types';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
+import { attentionStore } from '../screens/attention/store';
 import { whyWords } from '../screens/send-modes/doubts';
 import { journalLine, stubDesktop, stubStream, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
@@ -12,7 +14,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention, filter, reads } from './needs';
 import { chats, lines } from './state';
-import { forgetWaiting } from './waiting';
+import { fillApprovals, forgetWaiting, wholeReads } from './waiting';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -272,6 +274,8 @@ describe('Needs you', () => {
             fake.calls.filter((each) => each.operation === operation).map((each) => each.body);
         const reads = (fake: FakeApi, id: string) =>
             sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === id);
+        /** Lets every answer the fake gave be taken in: its answers are promises, all settled within one task. */
+        const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
         /** A journal line, as the runtime writes one when something waits: the console reads what waits again. */
         const line = (journal: StubStream, id: string) =>
             flush(() => {
@@ -289,15 +293,21 @@ describe('Needs you', () => {
                 'approval.get/park-doubted',
                 'approval.get/linkedin-message',
             );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
             await renderConsole(fake);
-            await waitFor(() => expect(row('apr_1')).toBeTruthy());
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
             const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
             const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
-            // Whenever Approve is live, the doubt already stands on the row.
-            if (live(approve('apr_1'))) expect(within(row('apr_1')).queryByText(doubted)).not.toBeNull();
-            const doubt = await waitFor(() => within(row('apr_1')).getByText(doubted));
-            expect(within(row('apr_1')).getByText(`Their words: ${doubts[0]!.note}`)).toBeTruthy();
+            // Before the whole read Approve is held and there is no doubt to draw; the moment it is live, the doubt stands.
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(within(row('apr_1')).queryByText(doubted)).toBeNull();
+            release();
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            const doubt = within(row('apr_1')).getByText(doubted);
+            expect(within(row('apr_1')).getByText(`Their words: ${doubts[0]!.note}`)).toBeTruthy();
             expect(doubt.compareDocumentPosition(approve('apr_1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         });
 
@@ -330,7 +340,7 @@ describe('Needs you', () => {
             expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
         });
 
-        it('says a message is being read while its read is unanswered, keeps Details, and asks again at the next reload', async () => {
+        it('says a message is being read while its read is unanswered, keeps Details, and does not ask again while it is', async () => {
             const journal = stubStream();
             const fake = messages().answer(
                 'approval.get',
@@ -343,7 +353,8 @@ describe('Needs you', () => {
             );
             await renderConsole(fake, journal);
             await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
-            expect(words(row('apr_1'))).toContain('cannot be approved until it is shown here whole');
+            expect(words(row('apr_1'))).toContain('cannot be approved until it has been read whole');
+            expect(words(row('apr_1'))).not.toContain('shown here');
             expect(live(approve('apr_1'))).toBe(false);
             expect(live(details('apr_1'))).toBe(true);
             fireEvent.click(approve('apr_1'));
@@ -351,8 +362,11 @@ describe('Needs you', () => {
             expect(sent(fake, 'approval.approve')).toEqual([]);
             expect(reads(fake, 'apr_1')).toHaveLength(1);
 
+            const listed = sent(fake, 'approval.list').length;
             line(journal, 'jrn_302');
-            await waitFor(() => expect(reads(fake, 'apr_1')).toHaveLength(2), { timeout: 3000 });
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(listed), { timeout: 3000 });
+            await settle();
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
             release();
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
         });
@@ -392,7 +406,8 @@ describe('Needs you', () => {
             );
             await renderConsole(fake);
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
-            expect(words(row('apr_2'))).toContain('cannot be approved until it is shown here whole');
+            expect(words(row('apr_2'))).toContain('cannot be approved until it has been read whole');
+            expect(words(row('apr_2'))).not.toContain('shown here');
             expect(live(approve('apr_2'))).toBe(false);
             expect(live(details('apr_2'))).toBe(true);
             release();
@@ -455,6 +470,44 @@ describe('Needs you', () => {
             await waitFor(() => within(row('apr_1')).getByText('Notes from the meetup'));
             await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
             expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
+        });
+
+        it('holds only the row whose message is being checked, and that row says so', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-send')
+                .answer('approval.approve', 'approval.approve/approved');
+            const release = fake.hold('workitem.get');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => expect(sent(fake, 'workitem.get')).toHaveLength(1));
+            await settle();
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(words(row('apr_1'))).toContain('This message is being checked against its work item');
+            expect(live(approve('apr_2'))).toBe(true);
+            expect(words(row('apr_2'))).not.toContain('being checked');
+            fake.answer('approval.list', 'approval.list/empty');
+            release();
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]));
+            await waitFor(() => expect(needs().querySelector('[data-id="apr_1"]')).toBeNull());
+        });
+
+        it('reads at most eight rows whole at once, and reads every row in turn', async () => {
+            const fake = new FakeApi().answerAnyRequest('approval.get', 'approval.get/email-message');
+            const release = fake.hold('approval.get');
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = Array.from({ length: 20 }, (_, index) => ({ ...first!, id: `apr_${index + 1}` }));
+            const filled = fillApprovals(fake, wholeReads('long-list', store));
+            await settle();
+            expect(sent(fake, 'approval.get')).toHaveLength(8);
+            release();
+            await flush(() => filled);
+            expect(sent(fake, 'approval.get').map((body) => (body as { approval_id: string }).approval_id)).toEqual(
+                Array.from({ length: 20 }, (_, index) => `apr_${index + 1}`),
+            );
         });
     });
 });

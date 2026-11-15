@@ -276,7 +276,7 @@ describe('what waits in an agent’s chat', () => {
         expect(within(card(pane, 'apr_1')!).queryByText(/could not be read/)).toBeNull();
     });
 
-    it('says a message is being read while its read is unanswered, and reads it again at the next reload', async () => {
+    it('says a message is being read while its read is unanswered, and does not read it again while it is', async () => {
         springApprovals = 'approval.list/messages-pending';
         const journal = stubStream();
         const { fake } = renderConsole(undefined, journal);
@@ -290,11 +290,15 @@ describe('what waits in an agent’s chat', () => {
         const reads = () =>
             sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === 'apr_1');
         expect(reads()).toHaveLength(1);
+        const listed = sent(fake, 'approval.list').length;
         flush(() => {
             journal.open();
             journal.send(journalLine({ id: 'jrn_203', kind: 'approval_requested' }));
         });
-        await waitFor(() => expect(reads()).toHaveLength(2), { timeout: 3000 });
+        await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(listed), { timeout: 3000 });
+        // Every answer the fake gave is taken in within one task: the reload's fill has run by then.
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(reads()).toHaveLength(1);
         release();
         await drawn(pane, 'apr_1');
     });

@@ -18,15 +18,28 @@ export const attention = attentionStore();
 
 /**
  * The panel's approvals read whole, as an agent's chat reads its cards': while the panel is drawn, each listed approval
- * is read once a reload, and its row's Approve is live only once it has been read (`approvalGate`).
+ * is read once, a few at a time, and its row's Approve is live only once it has been read (`approvalGate`).
  */
 export const reads = wholeReads('needs', attention);
 
 /** How many drawings of the panel there are: its rows are read whole only while it is drawn. */
 let drawn = 0;
 
-/** The row whose message is being checked against its work item, at the press of its Approve. */
-const checking = signal<string | null>(null);
+/**
+ * The rows whose message is being checked against its work item, at the press of their Approve: a check the runtime
+ * has not answered holds its own row and no other.
+ */
+const checking = signal<ReadonlySet<string>>(new Set());
+
+/** What a row says while its message is being checked, before it is approved. */
+const checkingSentence = 'This message is being checked against its work item before it is approved.';
+
+const checked = (id: string, on: boolean): void => {
+    const rows = new Set(checking.value);
+    if (on) rows.add(id);
+    else rows.delete(id);
+    checking.value = rows;
+};
 
 /** Why a row's last Approve approved nothing, by the row's id: until its next press, or until the row leaves. */
 const unapproved = signal<Readonly<Record<string, string>>>({});
@@ -66,9 +79,8 @@ async function fill(): Promise<void> {
     if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
-/** Reads what waits again; a whole read still unanswered from an earlier reload is sent again. */
+/** Reads what waits again, then each row not read whole yet and not being read. */
 export async function reload(): Promise<void> {
-    reads.round += 1;
     await attention.load(here().api, false);
     await fill();
 }
@@ -110,7 +122,7 @@ define('needs.open', ([kind, id]) => {
 
 // Approve acts only on an approval read whole, a message checked against its work item first: the chat's cards' rule.
 define('needs.approve', ([id]) => {
-    if (typeof id !== 'string' || checking.value !== null) return;
+    if (typeof id !== 'string' || checking.value.has(id)) return;
     const api = here().api;
     if (Object.hasOwn(unapproved.value, id))
         unapproved.value = Object.fromEntries(Object.entries(unapproved.value).filter(([each]) => each !== id));
@@ -118,7 +130,7 @@ define('needs.approve', ([id]) => {
         api,
         reads.approvals.value[id],
         () => attention.approve(api, id),
-        (on) => (checking.value = on ? id : null),
+        (on) => checked(id, on),
     )
         .then((why) => {
             if (why !== null) unapproved.value = { ...unapproved.value, [id]: why };
@@ -177,7 +189,7 @@ function doubts(preview: Record<string, unknown>): Html | null {
 /** Why a row's Approve is held: its approval is being read, or could not be read, with what the runtime said. */
 function heldNote(gate: ApprovalGate): Html | null {
     if (gate.live) return null;
-    if ('reading' in gate) return html`<div class="note am" role="status">${readingSentence}</div>`;
+    if ('reading' in gate) return html`<div class="note am" role="status">${readingSentence('needs')}</div>`;
     const { code, message } = gate.unread;
     return html`<div class="note am" role="status">
         ${unreadSentence('needs')} ${code === null ? null : html`<code>${code}</code>`} ${message}
@@ -193,7 +205,7 @@ function approvals(now: number, busy: boolean): Html {
     const wholes = reads.approvals.value;
     const unread = reads.unread.value;
     const said = unapproved.value;
-    const pressing = checking.value !== null;
+    const pressing = checking.value;
     const rowOf = (summary: ApprovalSummary): ApprovalRow =>
         toApprovalRow(
             summary,
@@ -206,6 +218,7 @@ function approvals(now: number, busy: boolean): Html {
         // Approve is live only once the approval has been read whole, whatever it does: the rule is the row's.
         const gate = approvalGate(whole, unread[row.id]);
         const why = said[row.id];
+        const inCheck = pressing.has(row.id);
         return html`<div class="ask" data-id="${row.id}">
             <div class="ask-h">
                 <span class="b amber">${row.what}</span>
@@ -213,13 +226,14 @@ function approvals(now: number, busy: boolean): Html {
                 <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
             </div>
             ${whole === undefined ? null : doubts(whole.preview)} ${approvalDetail(row.id)} ${heldNote(gate)}
+            ${inCheck ? html`<div class="note" role="status">${checkingSentence}</div>` : null}
             ${why === undefined ? null : html`<div class="note am" role="status">${why}</div>`}
             <div class="ask-a">
                 <button class="btn sm" type="button" ${act('needs.open', 'approvals', row.id)}>Details</button>
                 <button
                     class="btn sm p"
                     type="button"
-                    ${busy || pressing || !gate.live ? html`disabled` : null}
+                    ${busy || inCheck || !gate.live ? html`disabled` : null}
                     ${act('needs.approve', row.id)}
                 >
                     Approve
