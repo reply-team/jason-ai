@@ -1,9 +1,22 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type FocusEvent,
+    type KeyboardEvent,
+    type MouseEvent as PressEvent,
+    type ReactNode,
+    type RefObject,
+} from 'react';
 import { can, cannotHere } from '../platform/places';
 import type { DesktopChatMode, DesktopEffort } from '../platform/desktop';
 import { fullAccessStanding, readStandingAgain, takeBackWords } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { hostOf, heldHostOf } from './chat';
+import { setVariable } from './html';
+import { accessMarks } from './icons';
 import {
     anotherModel,
     effortChosen,
@@ -43,8 +56,23 @@ export const modeSays: Readonly<Record<DesktopChatMode, string>> = {
     full_access: 'Runs commands on this computer without asking, except those Jason cannot read.',
 };
 
+type Mark = keyof typeof accessMarks;
+
+/** Each access mode's mark on the button; a mode word this page does not know, which a newer desktop may write, has none. */
+const markOf: Readonly<Record<DesktopChatMode, Mark>> = {
+    full_access: 'accFull',
+    ask_first: 'accAsk',
+    auto_edit: 'accEdit',
+    plan_only: 'accPlan',
+};
+
+/** The mark of a chat's access mode, drawn where the mode is named: the plain shield for a mode this page does not know. */
+export function ModeMark({ mode }: { mode: DesktopChatMode }) {
+    return <Glyph name={(markOf as Partial<Record<string, Mark>>)[mode] ?? 'shield'} size={15} />;
+}
+
 /** The line icons the composer's row draws, on the console's 24-unit grid, stroked in the current colour. */
-export function Glyph({ name, size = 14 }: { name: 'shield' | 'chev' | 'up' | 'stop'; size?: number }) {
+export function Glyph({ name, size = 14 }: { name: 'shield' | 'chev' | 'up' | 'stop' | Mark; size?: number }) {
     return (
         <svg
             className={`glyph-${name}`}
@@ -59,6 +87,7 @@ export function Glyph({ name, size = 14 }: { name: 'shield' | 'chev' | 'up' | 's
             aria-hidden="true"
         >
             {name === 'shield' && <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />}
+            {name in accessMarks && accessMarks[name as Mark].map((each) => <path key={each} d={each} />)}
             {name === 'chev' && <path d="M6 9l6 6 6-6" />}
             {name === 'up' && <path d="M12 19V5M5 12l7-7 7 7" />}
             {name === 'stop' && <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" />}
@@ -99,6 +128,19 @@ export function MenuButton({
     const button = buttonRef ?? ownButton;
     const menu = useRef<HTMLDivElement>(null);
     const id = useId();
+    // Upward over the button, as a composer's menus open; downward where there is no room above for it and more below.
+    const [down, setDown] = useState(false);
+    useLayoutEffect(() => {
+        if (!open || !menu.current || !root.current) {
+            setDown(false);
+            return;
+        }
+        const at = root.current.getBoundingClientRect();
+        const area = root.current.closest('.painted')?.getBoundingClientRect();
+        const above = at.top - Math.max(0, area?.top ?? 0);
+        const below = Math.min(window.innerHeight, area?.bottom ?? window.innerHeight) - at.bottom;
+        setDown(menu.current.getBoundingClientRect().height + 6 > above && below > above);
+    }, [open]);
     useEffect(() => {
         if (!open) return;
         const away = (event: MouseEvent) => {
@@ -128,6 +170,14 @@ export function MenuButton({
     const close = () => {
         setOpen(false);
         button.current?.focus();
+    };
+    // The menu closes whenever the focus leaves it, by a key, by the page or by the window losing it, as a select's list
+    // does; a press inside it keeps the focus where it is, so a browser that focuses no button on a click still chooses.
+    const left = (event: FocusEvent<HTMLSpanElement>) => {
+        if (open && !root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+    };
+    const held = (event: PressEvent<HTMLDivElement>) => {
+        if ((event.target as HTMLElement).tagName !== 'INPUT') event.preventDefault();
     };
     const move = (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key === 'Escape') {
@@ -166,7 +216,7 @@ export function MenuButton({
         items[to]!.focus();
     };
     return (
-        <span className={`cmenu ${className}`} ref={root}>
+        <span className={`cmenu ${className}`} ref={root} onBlur={left}>
             <button
                 ref={button}
                 className="cpick"
@@ -191,10 +241,11 @@ export function MenuButton({
                 <div
                     id={id}
                     ref={menu}
-                    className={`menu cmenu-panel ${menuClassName}`}
+                    className={`menu cmenu-panel ${menuClassName}${down ? ' down' : ''}`}
                     role="menu"
                     aria-label={ariaLabel}
                     onKeyDown={move}
+                    onMouseDown={held}
                 >
                     {children(close)}
                 </div>
@@ -215,6 +266,7 @@ function Item({
     disabled,
     small,
     className = 'mi',
+    command = false,
     onChoose,
 }: {
     label: string;
@@ -225,6 +277,8 @@ function Item({
     disabled?: boolean | undefined;
     small?: string | null | undefined;
     className?: string;
+    /** A command, not one of the choices: a menu item with nothing to check. */
+    command?: boolean;
     onChoose: () => void;
 }) {
     const said = useId();
@@ -232,9 +286,9 @@ function Item({
         <button
             className={`${className}${checked ? ' on' : ''}`}
             type="button"
-            role="menuitemradio"
+            role={command ? 'menuitem' : 'menuitemradio'}
             tabIndex={-1}
-            aria-checked={checked}
+            aria-checked={command ? undefined : checked}
             aria-disabled={disabled ? true : undefined}
             aria-label={label}
             aria-describedby={small ? said : undefined}
@@ -282,7 +336,7 @@ export function AccessButton({
         <MenuButton
             label={
                 <>
-                    <Glyph name="shield" />
+                    <ModeMark mode={chat.mode} />
                     {current}
                 </>
             }
@@ -329,6 +383,7 @@ export function AccessButton({
                                 label={takeBackWords}
                                 value="take_back"
                                 checked={false}
+                                command
                                 disabled={!can('fullAccess.takeBack')}
                                 small={can('fullAccess.takeBack') ? undefined : cannotHere()}
                                 onChoose={() => {
@@ -595,4 +650,17 @@ export function ModelButton({
             )}
         </MenuButton>
     );
+}
+
+/**
+ * A composer's box as tall as its words: it starts at its rows and grows with what is typed up to the sheet's
+ * `max-height`, past which it scrolls. The height is set through the CSSOM, never a style attribute.
+ */
+export function useFit(box: RefObject<HTMLTextAreaElement>, words: string): void {
+    useLayoutEffect(() => {
+        const element = box.current;
+        if (!element) return;
+        setVariable(element, '--fit', 'auto');
+        setVariable(element, '--fit', `${element.scrollHeight}px`);
+    }, [box, words]);
 }

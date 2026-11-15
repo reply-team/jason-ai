@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -8,7 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
-import { choicesOf, chooseIn, menuButton } from '../test/menus';
+import { choicesOf, chooseIn, currentOf, menuButton, waitForMenus } from '../test/menus';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
@@ -227,6 +227,121 @@ describe('a composer’s menus, as a select was', () => {
         expect(focused()).toBe(model());
         expect(model().getAttribute('aria-label')).toBe('Model: claude-opus-5-5');
         expect(calls(desktop, 'chat.send')).toEqual([]);
+    });
+});
+
+describe('a composer’s menus, beyond what a select gave', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('closes when the focus leaves it any other way: moved by the page, or the window left', async () => {
+        renderConsole();
+        await waitFor(() => access());
+        fireEvent.click(access());
+        expect(open()).not.toBeNull();
+        // Moved by the page, with no key and no click: the menu goes.
+        act(() => screen.getByRole('textbox', { name: 'Your message' }).focus());
+        expect(open()).toBeNull();
+        // The window left: the focus goes nowhere in the page, and the menu goes as a select's list does.
+        fireEvent.click(model());
+        const item = within(screen.getByRole('menu', { name: /^Model/ })).getAllByRole('menuitemradio')[0]!;
+        fireEvent.blur(item, { relatedTarget: null });
+        expect(open()).toBeNull();
+    });
+
+    it('keeps the focus where it is on a press inside the menu, so a browser that moves no focus on a click still chooses', async () => {
+        const desktop = renderConsole();
+        await waitFor(() => access());
+        fireEvent.click(access());
+        const plan = screen.getByRole('menuitemradio', { name: 'Plan only' });
+        // A mousedown the menu lets through would take the focus off the item, and the menu with it, before the click.
+        expect(fireEvent.mouseDown(plan)).toBe(false);
+        expect(fireEvent.mouseDown(screen.getByRole('menu'))).toBe(false);
+        fireEvent.click(plan);
+        await waitFor(() => expect(calls(desktop, 'chat.setMode')).toHaveLength(1));
+        // The typed model name takes its own press, which places the caret.
+        fireEvent.click(model());
+        fireEvent.click(screen.getByRole('menuitemradio', { name: 'Another model…' }));
+        const name = await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
+        expect(fireEvent.mouseDown(name)).toBe(true);
+    });
+
+    it('opens downward where there is no room for it above the button, and upward where there is', async () => {
+        renderConsole();
+        await waitFor(() => access());
+        let buttonTop = 120;
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+            const box = (top: number, height: number) =>
+                ({ top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top }) as DOMRect;
+            if (this.classList.contains('cmenu-panel')) return box(0, 320);
+            if (this.classList.contains('cmenu')) return box(buttonTop, 32);
+            return box(0, 600);
+        });
+        // At the desktop's smallest window the start screen's box sits 120 px down: a 320 px menu has no room above.
+        fireEvent.click(model());
+        expect(screen.getByRole('menu', { name: /^Model/ }).classList.contains('down')).toBe(true);
+        key(screen.getByRole('menu', { name: /^Model/ }), 'Escape');
+        buttonTop = 500;
+        fireEvent.click(access());
+        expect(screen.getByRole('menu').classList.contains('down')).toBe(false);
+    });
+
+    it('offers the take-back as a command, not as a choice that could be checked', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: false };
+        renderConsole(desktop);
+        await waitFor(() => access());
+        fireEvent.click(access());
+        const back = await waitFor(() => screen.getByRole('menuitem', { name: 'Full access: ask each time again' }));
+        expect(back.hasAttribute('aria-checked')).toBe(false);
+        expect(within(screen.getByRole('menu')).getAllByRole('menuitemradio')).toHaveLength(4);
+        // The keys still reach it, after the modes.
+        key(screen.getByRole('menu'), 'End');
+        expect(focused()).toBe(back);
+    });
+
+    it('draws the access mode’s own mark on the button: a shield with ! or ?, a pencil, an eye', async () => {
+        renderConsole();
+        await waitFor(() => access());
+        const mark = () => access().querySelector('svg')?.getAttribute('class');
+        expect(mark()).toBe('glyph-accAsk');
+        chooseIn('Access mode', 'mode', 'plan_only');
+        await waitFor(() => expect(mark()).toBe('glyph-accPlan'));
+        chooseIn('Access mode', 'mode', 'auto_edit');
+        await waitFor(() => expect(mark()).toBe('glyph-accEdit'));
+        chooseIn('Access mode', 'mode', 'full_access');
+        await waitFor(() => expect(mark()).toBe('glyph-accFull'));
+        const paths = (name: string) =>
+            [...document.querySelectorAll(`svg.glyph-${name} path`)].map((each) => each.getAttribute('d'));
+        expect(paths('accFull')).toHaveLength(3);
+    });
+
+    it('keeps the chat’s box at one line, growing with its words to the sheet’s limit and scrolling past it', async () => {
+        renderConsole();
+        const box = await waitFor(() => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' }));
+        expect(box.getAttribute('rows')).toBe('1');
+        // The box is as tall as its words: the page measures them and sets the height the sheet caps.
+        let words = 26;
+        Object.defineProperty(box, 'scrollHeight', { configurable: true, get: () => words });
+        words = 130;
+        fireEvent.change(box, { target: { value: ['One', 'Two', 'Three', 'Four', 'Five'].join('\n') } });
+        expect(box.style.getPropertyValue('--fit')).toBe('130px');
+        words = 26;
+        fireEvent.change(box, { target: { value: '' } });
+        expect(box.style.getPropertyValue('--fit')).toBe('26px');
+        const sheet = readFileSync('src/console/composer.css', 'utf8');
+        expect(sheet).toMatch(/[.]composer textarea [{][^}]*height: var[(]--fit, auto[)]/);
+    });
+
+    it('reads a closed menu inside a wait that fails as a failure, not as a wait that never ends', async () => {
+        renderConsole();
+        await waitFor(() => access());
+        // Each read of a closed menu opens it and closes it again; a wait that re-ran on every change to the page would
+        // read again on its own change, never reaching its time limit.
+        await expect(
+            waitForMenus(() => expect(currentOf('Access mode', 'mode')).toBe('never_a_mode'), { timeout: 200 }),
+        ).rejects.toThrow();
     });
 });
 

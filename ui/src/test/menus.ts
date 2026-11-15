@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within, type waitForOptions } from '@testing-library/react';
 
 // The two menus in a composer's row, read and used as a person does: open the button, read or click an item, close.
 // An item says what it chooses by `data-kind` (a mode, a host, a model, an effort) and `data-value`.
@@ -68,3 +68,12 @@ export function chooseIn(menu: MenuName, kind: ItemKind, value: string, root: HT
     fireEvent.click(item);
     closeMenu(menu);
 }
+
+/**
+ * Waits for a check that reads a menu. A read of a closed menu opens it and closes it again, which changes the page; the
+ * library's own wait runs its check again on every change to the page, and so on the change the check itself made, in
+ * a loop that never yields to its timer: a check that keeps failing never reaches its time limit and runs the test out
+ * of memory. This wait watches an element nothing changes, so the check runs on the timer alone and fails in time.
+ */
+export const waitForMenus = <T>(check: () => T, options: Omit<waitForOptions, 'container'> = {}): Promise<T> =>
+    waitFor(check, { ...options, container: document.createElement('div') });

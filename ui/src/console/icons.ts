@@ -1,5 +1,23 @@
 import { html, type Html } from './html';
 
+const shieldLine = 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z';
+
+/**
+ * The marks of the four access modes, as path data, so the composer's row (drawn in JSX) and this table draw the same
+ * lines: Full access a shield with "!", Ask first a shield with "?", Auto-edit a pencil, Plan only an eye.
+ */
+export const accessMarks = {
+    accFull: [shieldLine, 'M12 7.8v4.9', 'M12 16.2h.01'],
+    accAsk: [shieldLine, 'M9.7 9.7a2.4 2.4 0 014.6 1c0 1.6-2.3 1.9-2.3 3.2', 'M12 16.9h.01'],
+    accEdit: ['M4 20h4L19.3 8.7a2.1 2.1 0 00-3-3L5 17z', 'M14.6 7.4l3 3'],
+    accPlan: [
+        'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z',
+        'M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    ],
+} as const;
+
+const lines = (paths: readonly string[]): Html => html`${paths.map((each) => html`<path d="${each}" />`)}`;
+
 // The console's line icons: paths on a 24-unit grid, stroked in the current colour.
 const icons = {
     home: html`<path d="M3 11l9-7 9 7v9H3z" />`,
@@ -11,7 +29,11 @@ const icons = {
     work: html`<path d="M4 6h16M4 12h16M4 18h10" />`,
     perf: html`<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />`,
     plus: html`<path d="M12 5v14M5 12h14" />`,
-    shield: html`<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />`,
+    shield: lines([shieldLine]),
+    accFull: lines(accessMarks.accFull),
+    accAsk: lines(accessMarks.accAsk),
+    accEdit: lines(accessMarks.accEdit),
+    accPlan: lines(accessMarks.accPlan),
     journal: html`<path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h4" />`,
     plug: html`<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0zM12 18v4" />`,
     ops: html`<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />`,

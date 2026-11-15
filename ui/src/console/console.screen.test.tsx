@@ -12,7 +12,7 @@ import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, typ
 import { readdirSync, readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
 import { nothingWaitsInChats } from '../test/waiting';
-import { choicesOf, chooseIn, currentOf, menuButton, openMenu } from '../test/menus';
+import { choicesOf, chooseIn, currentOf, menuButton, openMenu, waitForMenus } from '../test/menus';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
@@ -349,7 +349,7 @@ describe('the console', () => {
             ),
         });
         renderConsole(fake, desktop);
-        await waitFor(() => expect(currentOf('Model', 'host')).toBe('codex'));
+        await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('codex'));
         expect(choicesOf('Model', 'model')).toEqual([]);
         expect(choicesOf('Model', 'effort')).toEqual([]);
         expect(menuButton('Model').getAttribute('aria-label')).toBe('Model: Codex default');
@@ -394,7 +394,7 @@ describe('the console', () => {
     it('sends a turn to the host that drives the chat, and draws what the agent says as text', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);
-        await waitFor(() => expect(currentOf('Model', 'host')).toBe('claude'));
+        await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('claude'));
         const hosts = choicesOf('Model', 'host');
         expect(hosts.find((each) => each.text === 'Gemini CLI')).toMatchObject({
             disabled: true,
@@ -755,7 +755,7 @@ describe('the console', () => {
             const fake = pending(new FakeApi());
             const desktop = chatDesktop(withClaude(old(), true));
             renderConsole(fake, desktop);
-            await waitFor(() => expect(currentOf('Model', 'host')).toBe('codex'));
+            await waitForMenus(() => expect(currentOf('Model', 'host')).toBe('codex'));
             expect(choicesOf('Model', 'host').find((each) => each.value === 'claude')).toMatchObject({
                 text: 'Claude Code',
                 disabled: true,
@@ -809,7 +809,7 @@ describe('the console', () => {
             async function heldAfterATurn(sentence: string): Promise<{ desktop: StubDesktop; id: string }> {
                 const desktop = chatDesktop(withClaude(null, true));
                 renderConsole(pending(new FakeApi()), desktop);
-                await waitFor(() => expect(hostChosen()).toBe('claude'));
+                await waitForMenus(() => expect(hostChosen()).toBe('claude'));
                 fireEvent.change(box(), { target: { value: 'Go' } });
                 fireEvent.click(screen.getByRole('button', { name: 'Send' }));
                 await waitFor(() => expect(sends(desktop)).toHaveLength(1));
@@ -881,7 +881,7 @@ describe('the console', () => {
                 const { desktop } = await heldAfterATurn(old());
                 await waitFor(() => expect(document.querySelector('.composer .host-held')).toBeTruthy());
                 chooseIn('Model', 'host', 'codex');
-                await waitFor(() => expect(hostChosen()).toBe('codex'));
+                await waitForMenus(() => expect(hostChosen()).toBe('codex'));
                 expect(document.querySelector('.composer .host-held')).toBeNull();
                 fireEvent.change(box(), { target: { value: 'Next' } });
                 fireEvent.click(screen.getByRole('button', { name: 'Send' }));

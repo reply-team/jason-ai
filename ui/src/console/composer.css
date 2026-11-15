@@ -74,6 +74,12 @@
 .jc-console .composer .crow {
     margin-top: 4px;
 }
+/* The box is as tall as its words, from one row in a chat (two on the start screen) to the console's max-height, past
+   which it scrolls: the page measures the words and sets --fit. */
+.jc-console .composer textarea {
+    height: var(--fit, auto);
+    overflow-y: auto;
+}
 
 /* A button in the row that opens a menu: quiet, its value and a chevron; the access mode with its shield. */
 .jc-console .cmenu {
@@ -117,9 +123,12 @@
 .jc-console .cmenu.acc-plan > .cpick {
     color: #2563eb;
 }
-/* In a tab the mode is said, not chosen. */
+/* In a tab the mode is said, not chosen: no ground under it on a hover. */
 .jc-console span.cpick.mode-label {
     cursor: default;
+}
+.jc-console span.cpick.mode-label:hover {
+    background: none;
 }
 .jc-console .cpick .mdl-e {
     margin-left: 2px;
@@ -149,6 +158,10 @@
     box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
     text-align: left;
     white-space: normal;
+}
+.jc-console .menu.cmenu-panel.down {
+    top: calc(100% + 6px);
+    bottom: auto;
 }
 .jc-console .menu.cmenu-panel.accmenu {
     width: 372px;
@@ -320,25 +333,18 @@
     text-decoration: none;
 }
 
-/* The line under the box: how the AI may act in this chat, and what Codex reads and reaches; quiet and centred. */
+/* The line under the box: how the AI may act in this chat, and what Codex reads and reaches; quiet, centred, side by
+   side and wrapping where narrow. */
 .jc-console .cform > .under {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px 14px;
     max-width: 780px;
     margin: 6px auto 0;
     color: var(--faint);
     font-size: 12px;
     text-align: center;
-}
-.jc-console .under .lk {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--teal);
-    font: inherit;
-    cursor: pointer;
 }
 
 /* The note under the start screen's box: a quiet bordered note, its lead in ink, closed by a plain cross. */

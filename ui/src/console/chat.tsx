@@ -50,7 +50,7 @@ import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
-import { AccessButton, Glyph, ModelButton, modeSays } from './start-menus';
+import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
@@ -752,7 +752,7 @@ export function ChatControls({
         <>
             {inTab() ? (
                 <span className="cpick acc mode mode-label" aria-label="Access mode">
-                    <Glyph name="shield" />
+                    <ModeMark mode={chat.mode} />
                     {modeChoices(hostOf(chat), chat.main === true).find((each) => each.mode === chat.mode)?.label ??
                         chat.mode}
                 </span>
@@ -781,27 +781,22 @@ const lineOf = (mode: DesktopChatMode, label: string): string | null => {
 };
 
 /**
- * The line under a composer: what the chat's access mode lets the AI do (Full access and Auto-edit as the desktop holds
- * them, with Change, which takes the person to the menu), and what Codex reads and reaches where Codex runs the chat.
+ * The line under a composer: what the chat's access mode lets the AI do, the mode's name, a dot and what it does (Full
+ * access and Auto-edit in their own words, as the desktop holds them), with no link, since the menu beside it changes
+ * the mode; and what Codex reads and reaches where Codex runs the chat.
  */
-export function ChatNotes({ chat, modeMenu }: { chat: Chat; modeMenu: RefObject<HTMLElement> }) {
+export function ChatNotes({ chat }: { chat: Chat }) {
     const host = hostOf(chat);
     const label = modeChoices(host, chat.main === true).find((each) => each.mode === chat.mode)?.label ?? chat.mode;
     return (
         <div className="under">
             {chat.mode === 'full_access' ? (
                 <span className="accline full-access" role="status" aria-label="Full access is on">
-                    {fullAccessLine}{' '}
-                    <button className="lk" type="button" onClick={() => modeMenu.current?.focus()}>
-                        Change
-                    </button>
+                    {fullAccessLine}
                 </span>
             ) : chat.mode === 'auto_edit' ? (
                 <span className="accline auto-edit" role="status" aria-label="Auto-edit is on">
-                    {autoEditLine}{' '}
-                    <button className="lk" type="button" onClick={() => modeMenu.current?.focus()}>
-                        Change
-                    </button>
+                    {autoEditLine}
                 </span>
             ) : (
                 lineOf(chat.mode, label) !== null && <span className="accline">{lineOf(chat.mode, label)}</span>
@@ -828,6 +823,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const keepButton = useRef<HTMLButtonElement>(null);
     const nameBox = useRef<HTMLInputElement>(null);
     const modeMenu = useRef<HTMLButtonElement>(null);
+    const messageBox = useRef<HTMLTextAreaElement>(null);
     const renameButton = useRef<HTMLButtonElement>(null);
     const wasRemoving = useRef(false);
     const wasRenaming = useRef(false);
@@ -868,6 +864,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     useEffect(() => {
         if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
     }, [draftCampaignId]);
+    useFit(messageBox, record?.draft ?? '');
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
@@ -1089,7 +1086,8 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
                     {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                     <textarea
-                        rows={2}
+                        ref={messageBox}
+                        rows={1}
                         disabled={chat.removing || tabLocked}
                         placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
                         aria-label="Your message"
@@ -1145,7 +1143,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         )}
                     </div>
                 </div>
-                <ChatNotes chat={chat} modeMenu={modeMenu} />
+                <ChatNotes chat={chat} />
             </form>
         </div>
     );

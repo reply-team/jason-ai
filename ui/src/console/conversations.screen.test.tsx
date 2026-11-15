@@ -12,7 +12,7 @@ import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
-import { choicesOf, currentOf, menuButton } from '../test/menus';
+import { choicesOf, currentOf, menuButton, waitForMenus } from '../test/menus';
 
 // The conversations the desktop keeps: listed in the sidebar, reopened with what the page drew, a set-up chat handed
 // over to the campaign its turn made or to the one the person picks, a fresh session said in one line, and a
@@ -135,7 +135,7 @@ describe('the desktop’s conversations', () => {
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const panel = hero.closest<HTMLElement>('.chat-panel')!;
-        await waitFor(() => expect(currentOf('Model', 'model', panel)).toBe('sonnet'));
+        await waitForMenus(() => expect(currentOf('Model', 'model', panel)).toBe('sonnet'));
         expect(currentOf('Model', 'effort', panel)).toBe('low');
         expect(menuButton('Model', panel).getAttribute('aria-label')).toBe('Model: Sonnet, Low effort');
         const id = await send(desktop, 'And now?', panel);

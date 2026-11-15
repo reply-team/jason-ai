@@ -10,7 +10,7 @@ import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
 import { Painted } from './painted';
-import { AccessButton, Glyph, ModelButton } from './start-menus';
+import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
 import { voiceSectionId } from '../screens/settings/voice-id';
 import { voiceKnown } from '../screens/settings/voice-state';
@@ -273,6 +273,7 @@ function StartChat() {
     useEffect(() => {
         if (!held) box.current?.focus();
     }, [held]);
+    useFit(box, startDraft.value);
     const send = (event?: FormEvent) => {
         event?.preventDefault();
         submitStart(startDraft.value);
@@ -364,7 +365,7 @@ function StartChat() {
                             </button>
                         </div>
                     </div>
-                    <ChatNotes chat={startChatNow()} modeMenu={modeMenu} />
+                    <ChatNotes chat={startChatNow()} />
                 </form>
                 {askable && voiceKnown.value === 'none' && (
                     <div className="start-note uinote" role="note" aria-label={t('start.voice.name')}>
