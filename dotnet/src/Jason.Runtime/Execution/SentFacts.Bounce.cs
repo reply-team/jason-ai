@@ -42,8 +42,10 @@ public sealed partial class SentFacts
 
     /// <summary>
     /// Adds the line, and the stop where its kind asks for one, to the context's change set (not saved here), where
-    /// <paramref name="result"/> says the send bounced and the campaign has not said it of that send yet, and answers
-    /// whether it did.
+    /// <paramref name="result"/> says the send bounced, and answers whether it did. A send is said once, keyed by its
+    /// work item; where that line said <c>soft</c> and a later read finds a kind that stops (hard, or none named), it is
+    /// said once more, keyed with <see cref="StopKeySuffix"/>, with its stop; after a line that stopped, or a soft read
+    /// after a soft line, nothing is said.
     /// </summary>
     /// <param name="read">The work item that read the send.</param>
     /// <param name="pluginId">Which plugin answered the read, as the claim pinned it.</param>
