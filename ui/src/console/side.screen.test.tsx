@@ -365,10 +365,10 @@ describe('the sidebar’s look', () => {
         expect(drawn(needs.querySelector('svg')!)).toEqual(['circle 12,12 r10', 'path M8.5 11.8l2.6 2.6 4.6-5']);
         const settings = side().getByRole('button', { name: 'Settings' });
         expect(drawn(settings.querySelector('svg')!)).toEqual([
-            'path M9.7 4.8L10.5 2.1L13.5 2.1L14.3 4.8L15.5 5.3L17.9 3.9L20.1 6.1L18.7 8.5L19.2 9.7L21.9 10.5L21.9 13.5' +
-                'L19.2 14.3L18.7 15.5L20.1 17.9L17.9 20.1L15.5 18.7L14.3 19.2L13.5 21.9L10.5 21.9L9.7 19.2L8.5 18.7' +
-                'L6.1 20.1L3.9 17.9L5.3 15.5L4.8 14.3L2.1 13.5L2.1 10.5L4.8 9.7L5.3 8.5L3.9 6.1L6.1 3.9L8.5 5.3z',
-            'circle 12,12 r3',
+            'path M9.6 4.4L10.4 1.5L13.6 1.5L14.4 4.4L15.7 4.9L18.3 3.5L20.5 5.7L19.1 8.3L19.6 9.6L22.5 10.4L22.5 13.6' +
+                'L19.6 14.4L19.1 15.7L20.5 18.3L18.3 20.5L15.7 19.1L14.4 19.6L13.6 22.5L10.4 22.5L9.6 19.6L8.3 19.1' +
+                'L5.7 20.5L3.5 18.3L4.9 15.7L4.4 14.4L1.5 13.6L1.5 10.4L4.4 9.6L4.9 8.3L3.5 5.7L5.7 3.5L8.3 4.9z',
+            'circle 12,12 r3.5',
         ]);
         const filter = side().getByRole('button', { name: 'Filter' });
         expect(drawn(filter.querySelector('svg')!)).toEqual([
