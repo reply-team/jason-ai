@@ -3,7 +3,7 @@ namespace Jason.Runtime.Tests;
 /// <summary>
 /// The checks over the critical tier's whole table, which every test assembly holds to what it discovers
 /// (<see cref="CriticalTierTests"/>): every family has a critical case, and the tier is at most 15 % of the suite, of its
-/// methods and of its executed cases. There is no floor on the share: most changes add regression tests only, and the
+/// methods and of its executed rows. There is no floor on the share: most changes add regression tests only, and the
 /// share may fall as the suite grows.
 /// </summary>
 public class CriticalTierTableTests
@@ -55,16 +55,47 @@ public class CriticalTierTableTests
             $"The tier has {tier} of the suite's {suite} methods, over the ceiling of {CriticalTier.Ceiling} % of the methods.");
     }
 
+    /// <summary>
+    /// The ceiling bounds what the tier costs to run, so it reads rows: the tier's rows each assembly recorded, every row of
+    /// a class the tier carries whole among them, over the suite's executed rows. The table's counted cases, which count a
+    /// method of such a class once, answer another question and are not read here.
+    /// </summary>
     [Fact]
-    [Critical(Family.B7, "the tier stays a fast loop: at most 15 % of the suite's executed cases")]
-    public void The_tier_is_at_most_15_percent_of_the_suite_s_executed_cases()
+    [Critical(Family.B7, "the tier stays a fast loop: at most 15 % of the suite's executed rows")]
+    public void The_tier_is_at_most_15_percent_of_the_suite_s_executed_rows()
     {
-        var tier = CriticalTier.Cases.Values.Sum(row => row.Sum());
+        var tier = CriticalTier.Sizes.Sum(size => size.TierRows);
         var suite = CriticalTier.Sizes.Sum(size => CriticalTier.CasesAtLeast(size.Cases));
 
         Assert.True(
             CriticalTier.WithinCeiling(tier, suite),
-            $"The tier has {tier} of the suite's {suite} executed cases, over the ceiling of {CriticalTier.Ceiling} % of the cases.");
+            $"The tier runs {tier} of the suite's {suite} executed rows, over the ceiling of {CriticalTier.Ceiling} % of the rows.");
+    }
+
+    /// <summary>
+    /// An assembly's tier may run up to a tenth more rows than it recorded, so one more line on a page moves nothing; past
+    /// that the check names what moved it and what to re-record.
+    /// </summary>
+    [Theory]
+    [InlineData(200, 200, false)]
+    [InlineData(220, 200, false)]
+    [InlineData(221, 200, true)]
+    [InlineData(9, 9, false)]
+    [InlineData(10, 9, true)]
+    [InlineData(0, 0, false)]
+    public void An_assembly_s_tier_rows_are_held_to_a_tenth_over_what_it_recorded(int discovered, int recorded, bool refused)
+    {
+        var problem = CriticalTier.TierRowsProblem(discovered, recorded);
+
+        Assert.True((problem is not null) == refused, $"{discovered} rows against {recorded} recorded: '{problem}'.");
+        if (problem is not null)
+        {
+            Assert.Contains($"{discovered} row(s)", problem, StringComparison.Ordinal);
+            Assert.Contains($"the {recorded} it recorded", problem, StringComparison.Ordinal);
+            Assert.Contains("the pages print more commands", problem, StringComparison.Ordinal);
+            Assert.Contains("a class the tier carries whole", problem, StringComparison.Ordinal);
+            Assert.Contains("re-record", problem, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

@@ -24,6 +24,10 @@ namespace Jason.Runtime.Tests;
 /// so an edit to a page, which moves those rows, leaves the table as it is.
 /// </para>
 /// <para>
+/// The ceiling reads rows, not counted cases: each assembly records its tier's rows in <see cref="Sizes"/> and runs at
+/// most a tenth more, and the ceiling sums the recorded rows over the suite's executed rows.
+/// </para>
+/// <para>
 /// This file is linked into every test project, so each assembly holds its own column; the checks over the whole table
 /// — every family has a critical case, the tier's share stays under its ceiling — run once, in this project.
 /// </para>
@@ -101,22 +105,24 @@ internal static partial class CriticalTier
     };
 
     /// <summary>
-    /// Per test assembly, in the order of the columns: the tier's methods, exactly, and the suite's methods and executed
-    /// cases when this table was last written. Discovery must find at least as many methods, and at least
-    /// <see cref="CasesAtLeast"/> of the cases, so the tier's share measured on them is never smaller than its share of
-    /// the suite as it is. A commit that removes test methods, or drops more than a tenth of an assembly's cases,
-    /// re-measures that assembly's entry in the same commit, from the sizes the guard prints.
+    /// Per test assembly, in the order of the columns: the tier's methods, exactly, the suite's methods and executed
+    /// cases, and the tier's rows, when this table was last written. Discovery must find at least as many methods, and at
+    /// least <see cref="CasesAtLeast"/> of the cases, so the tier's share measured on them is never smaller than its share
+    /// of the suite as it is; and at most <see cref="TierRowsAtMost"/> of the tier's rows, every row of a class the tier
+    /// carries whole among them, so the ceiling, which reads these rows, never reads fewer than the tier runs by more than
+    /// a tenth. A commit that removes test methods, drops more than a tenth of an assembly's cases, or grows its tier's
+    /// rows by more than a tenth re-measures that assembly's entry in the same commit, from the sizes the guard prints.
     /// </summary>
-    public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
+    public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
-        (29, 415, 676),       // Jason.App.Tests
-        (165, 2780, 5270),    // Jason.Cli.Tests
-        (105, 864, 4589),     // Jason.Contracts.Tests
-        (48, 302, 479),       // Jason.PluginHost.Tests
-        (719, 6123, 12274),   // Jason.Runtime.Tests
+        (29, 415, 676, 32),      // Jason.App.Tests
+        (165, 2780, 5270, 382),  // Jason.Cli.Tests
+        (105, 864, 4589, 136),   // Jason.Contracts.Tests
+        (48, 302, 479, 54),      // Jason.PluginHost.Tests
+        (719, 6123, 12274, 908), // Jason.Runtime.Tests
     ];
 
-    /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>
+    /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>
     public const int Ceiling = 15;
 
     /// <summary>The families a table gives no critical case in any assembly, a family it has no row for among them.</summary>
@@ -129,11 +135,28 @@ internal static partial class CriticalTier
     /// </summary>
     public static int CasesAtLeast(int measured) => measured - (measured / 10);
 
+    /// <summary>
+    /// The tier's rows an assembly may run, of the ones it recorded: a tenth more, so a line added to a page moves nothing,
+    /// and the ceiling's sum of the recorded rows is never short of what the tier runs by more than that.
+    /// </summary>
+    public static int TierRowsAtMost(int recorded) => recorded + (recorded / 10);
+
+    /// <summary>
+    /// What is wrong when an assembly's tier runs more than a tenth over the rows it recorded, which the ceiling reads; null
+    /// when it does not.
+    /// </summary>
+    public static string? TierRowsProblem(int discovered, int recorded) =>
+        discovered <= TierRowsAtMost(recorded)
+            ? null
+            : $"the tier runs {discovered} row(s), more than a tenth over the {recorded} it recorded, which the ceiling reads: "
+                + "the pages print more commands, or cases were added to a class the tier carries whole; "
+                + "re-record the tier's rows, the last of the sizes printed below, in its entry of Sizes, and the ceiling reads the new figure";
+
     /// <summary>How the guard's failure says an assembly's discovery differs from its column of the table.</summary>
     public const string Differs = "differs from its column of the critical tier's table (a commit that marks, unmarks or removes tests rewrites it; a method of a class the tier carries whole counts once, however many rows it runs)";
 
     /// <summary>What is wrong when a suite is smaller than the table measured its ceiling on.</summary>
-    public static List<string> FloorProblems(int methods, int cases, (int TierMethods, int Methods, int Cases) sizes)
+    public static List<string> FloorProblems(int methods, int cases, (int TierMethods, int Methods, int Cases, int TierRows) sizes)
     {
         var problems = new List<string>();
         if (methods < sizes.Methods)
@@ -199,8 +222,8 @@ internal static partial class CriticalTier
     /// The rows of such a method are, today, the lines the pages print, which move with every edit of a page; counted
     /// case by case, the table would move with them, and two units that each add a printed command from one base would
     /// merge cleanly into a count neither of them wrote. <see cref="OutsideTheTier"/> holds those classes to the tier
-    /// completely, so the exact count adds nothing for them but that churn. The ceiling's share of cases is therefore
-    /// measured with each such method once.
+    /// completely, so the exact count adds nothing for them but that churn. The ceiling does not read these counted cases:
+    /// it bounds what the tier costs to run, so it reads the tier's rows each assembly records in <see cref="Sizes"/>.
     /// </remarks>
     public static Dictionary<Family, int> Counted(IEnumerable<(string Class, string Method, Family Family)> cases)
     {
@@ -452,11 +475,18 @@ public sealed class CriticalTierTests
 
         problems.AddRange(CriticalTier.FloorProblems(methods, cases.Count, sizes));
 
+        // Where the rows alone moved, the table is as it was, so the failure does not send its reader to look for marked tests.
+        var said = problems.Count == 0 ? $"{name}: its entry of Sizes records fewer of the tier's rows than it runs" : $"{name} {CriticalTier.Differs}";
+        if (CriticalTier.TierRowsProblem(critical.Count, sizes.TierRows) is { } rows)
+        {
+            problems.Add(rows);
+        }
+
         Assert.True(
             problems.Count == 0,
-            $"{name} {CriticalTier.Differs}:\n{string.Join('\n', problems)}\n"
+            $"{said}:\n{string.Join('\n', problems)}\n"
             + $"Discovered, as the table writes it: {string.Join(" · ", byFamily.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key} {pair.Value}"))}; "
-            + $"sizes ({tierMethods}, {methods}, {cases.Count}).");
+            + $"sizes ({tierMethods}, {methods}, {cases.Count}, {critical.Count}).");
     }
 
     /// <summary>
