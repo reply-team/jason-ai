@@ -8,6 +8,7 @@ import { browserPlugins } from '../plugins';
 import { Console } from './console';
 import './console.css';
 import './harness.css';
+import './chat-cards.css';
 import './harness-palette.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */
