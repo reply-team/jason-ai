@@ -363,6 +363,12 @@ public class CardExchangesTests
             Assert.Equal(0, byCampaign[summer.Campaign].People);
             Assert.True(byCampaign[autumn.Campaign].Waiting > 0);
             Assert.True(byCampaign[push.Campaign] is { Working: > 0, Waiting: 0 });
+
+            // Later: one more person put in the first campaign through the API, and the same counts asked again, so a card's
+            // Refresh has a newer answer to draw. Recorded last, so no earlier file of the story sees the new member.
+            await spring.PersonAsync("Vera", "Lund", "email", "vera@example.test");
+            var later = Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-status-later", new { campaign_ids = new[] { spring.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns);
+            Assert.Equal((13, row.Waiting, row.Working, row.Out), (later.People, later.Waiting, later.Working, later.Out));
         }
         finally
         {
