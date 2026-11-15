@@ -19,6 +19,15 @@ namespace Jason.Runtime.Tests;
 /// is a change to this table, made on purpose.
 /// </para>
 /// <para>
+/// A class the tier carries whole (<see cref="CarriedWhole"/>) is held otherwise: every method of it is in the tier, by
+/// its class's name, and the table counts each of its methods once, however many rows it runs (<see cref="Counted"/>),
+/// so an edit to a page, which moves those rows, leaves the table as it is.
+/// </para>
+/// <para>
+/// The ceiling reads rows, not counted cases: each assembly records its tier's rows in <see cref="Sizes"/> and runs at
+/// most a tenth more, and the ceiling sums what each may run, the tenth included, over the suite's executed rows.
+/// </para>
+/// <para>
 /// This file is linked into every test project, so each assembly holds its own column; the checks over the whole table
 /// — every family has a critical case, the tier's share stays under its ceiling — run once, in this project.
 /// </para>
@@ -29,7 +38,10 @@ internal static partial class CriticalTier
     public static readonly string[] Assemblies =
         ["Jason.App.Tests", "Jason.Cli.Tests", "Jason.Contracts.Tests", "Jason.PluginHost.Tests", "Jason.Runtime.Tests"];
 
-    /// <summary>The critical cases of each family, in each test assembly, as discovery finds them.</summary>
+    /// <summary>
+    /// The critical cases of each family, in each test assembly, as discovery finds them and <see cref="Counted"/> counts
+    /// them: a method of a class the tier carries whole once.
+    /// </summary>
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
@@ -39,7 +51,7 @@ internal static partial class CriticalTier
         [Family.B4] =  [  0,   0,   0,   0,   7],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
-        [Family.B7] =  [  3,   3,   3,   3,  13],
+        [Family.B7] =  [  4,   4,   4,   4,  14],
         [Family.B8] =  [  0,   0,   0,   0,   1],
         [Family.B9] =  [  3,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
@@ -54,7 +66,7 @@ internal static partial class CriticalTier
         [Family.W10] = [  0,   0,   0,   0,  15],
         [Family.W11] = [  0,   0,   0,   0,  17],
         [Family.P1] =  [  0,   0,   0,   0,  12],
-        [Family.P2] =  [  0,   2,   0,   0,  12],
+        [Family.P2] =  [  0,   2,   0,   0,  97],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  25],
         [Family.S2] =  [  2,   1,  10,   0,  75],
@@ -84,7 +96,7 @@ internal static partial class CriticalTier
         [Family.N1] =  [  0,   0,   0,   0,   7],
         [Family.N2] =  [  0,   0,   0,   0,  24],
         [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1,   4,   0,   0,   1],
+        [Family.D1] =  [  1,   7,   0,   0,   1],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   2],
         [Family.X1] =  [  0,  10,   3,   1,  14],
@@ -93,22 +105,24 @@ internal static partial class CriticalTier
     };
 
     /// <summary>
-    /// Per test assembly, in the order of the columns: the tier's methods, exactly, and the suite's methods and executed
-    /// cases when this table was last written. Discovery must find at least as many methods, and at least
-    /// <see cref="CasesAtLeast"/> of the cases, so the tier's share measured on them is never smaller than its share of
-    /// the suite as it is. A commit that removes test methods, or drops more than a tenth of an assembly's cases,
-    /// re-measures that assembly's entry in the same commit, from the sizes the guard prints.
+    /// Per test assembly, in the order of the columns: the tier's methods, exactly, the suite's methods and executed
+    /// cases, and the tier's rows, when this table was last written. Discovery must find at least as many methods, and at
+    /// least <see cref="CasesAtLeast"/> of the cases, so the tier's share measured on them is never smaller than its share
+    /// of the suite as it is; and at most <see cref="TierRowsAtMost"/> of the tier's rows, every row of a class the tier
+    /// carries whole among them, so the ceiling, which reads these rows, never reads fewer than the tier runs by more than
+    /// a tenth. A commit that removes test methods, drops more than a tenth of an assembly's cases, or grows its tier's
+    /// rows by more than a tenth re-measures that assembly's entry in the same commit, from the sizes the guard prints.
     /// </summary>
-    public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
+    public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
-        (28, 375, 607),       // Jason.App.Tests
-        (161, 2606, 4761),    // Jason.Cli.Tests
-        (104, 804, 3890),     // Jason.Contracts.Tests
-        (47, 282, 450),       // Jason.PluginHost.Tests
-        (633, 6076, 12194),   // Jason.Runtime.Tests
+        (29, 415, 676, 32),      // Jason.App.Tests
+        (165, 2780, 5270, 382),  // Jason.Cli.Tests
+        (105, 864, 4589, 136),   // Jason.Contracts.Tests
+        (48, 302, 479, 54),      // Jason.PluginHost.Tests
+        (719, 6123, 12274, 908), // Jason.Runtime.Tests
     ];
 
-    /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>
+    /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>
     public const int Ceiling = 15;
 
     /// <summary>The families a table gives no critical case in any assembly, a family it has no row for among them.</summary>
@@ -121,11 +135,28 @@ internal static partial class CriticalTier
     /// </summary>
     public static int CasesAtLeast(int measured) => measured - (measured / 10);
 
+    /// <summary>
+    /// The tier's rows an assembly may run, of the ones it recorded: a tenth more, so a line added to a page moves nothing,
+    /// and the ceiling reads this bound for each assembly, so it holds for whatever the tier may run, the tenth included.
+    /// </summary>
+    public static int TierRowsAtMost(int recorded) => recorded + (recorded / 10);
+
+    /// <summary>
+    /// What is wrong when an assembly's tier runs more than a tenth over the rows it recorded, which the ceiling reads; null
+    /// when it does not.
+    /// </summary>
+    public static string? TierRowsProblem(int discovered, int recorded) =>
+        discovered <= TierRowsAtMost(recorded)
+            ? null
+            : $"the tier runs {discovered} row(s), more than a tenth over the {recorded} it recorded, which the ceiling reads: "
+                + "the pages print more commands, or cases were added to a class the tier carries whole; "
+                + "re-record the tier's rows, the last of the sizes printed below, in its entry of Sizes, and the ceiling reads the new figure";
+
     /// <summary>How the guard's failure says an assembly's discovery differs from its column of the table.</summary>
-    public const string Differs = "differs from its column of the critical tier's table (a commit that marks, unmarks or removes tests rewrites it)";
+    public const string Differs = "differs from its column of the critical tier's table (a commit that marks, unmarks or removes tests rewrites it; a method of a class the tier carries whole counts once, however many rows it runs)";
 
     /// <summary>What is wrong when a suite is smaller than the table measured its ceiling on.</summary>
-    public static List<string> FloorProblems(int methods, int cases, (int TierMethods, int Methods, int Cases) sizes)
+    public static List<string> FloorProblems(int methods, int cases, (int TierMethods, int Methods, int Cases, int TierRows) sizes)
     {
         var problems = new List<string>();
         if (methods < sizes.Methods)
@@ -141,6 +172,16 @@ internal static partial class CriticalTier
         return problems;
     }
 
+    /// <summary>
+    /// The tier's rows and the suite's executed rows the ceiling divides, over the sizes of the assemblies: the most each
+    /// assembly's tier may run, a tenth over what it recorded, and the least of the suite.
+    /// </summary>
+    public static (int Tier, int Suite) RowsShare(IEnumerable<(int TierMethods, int Methods, int Cases, int TierRows)> sizes)
+    {
+        var all = sizes.ToList();
+        return (all.Sum(size => TierRowsAtMost(size.TierRows)), all.Sum(size => CasesAtLeast(size.Cases)));
+    }
+
     /// <summary>Whether a tier of this many is at most <see cref="Ceiling"/> per cent of a suite of that many.</summary>
     public static bool WithinCeiling(int tier, int suite) => 100L * tier <= (long)Ceiling * suite;
 
@@ -154,6 +195,72 @@ internal static partial class CriticalTier
 
     /// <summary>The method a case runs, by its class and name.</summary>
     public static string Method(ITestCase testCase) => $"{testCase.TestClassName}.{testCase.TestMethodName}";
+
+    /// <summary>
+    /// Whether a method belongs to a class the tier carries whole, a class a unit can turn red without touching it: in
+    /// <c>Jason.Runtime.Tests.Persistence</c>, every class whose name ends in <c>MigrationTests</c>,
+    /// <c>MigrationHistoryTests</c>, <c>DatabaseMigratorTests</c>, and the three classes whose only subject is one
+    /// migration's <c>Up</c> over a seeded database; in <c>Jason.Cli.Tests.Documentation</c>,
+    /// <c>DocumentedPageCommandsTests</c>, except its <c>doctor --output</c> rows, whose lines are the test's own and not a
+    /// page's.
+    /// </summary>
+    /// <remarks>
+    /// A name cannot hold the upgrade methods inside the schema classes — a test that migrates to the previous migration,
+    /// seeds, and migrates to the head, in a class whose other methods hold the schema at the head — so a unit that adds
+    /// one to a schema class marks it itself.
+    /// </remarks>
+    public static bool CarriedWhole(string @class, string method)
+    {
+        var dot = @class.LastIndexOf('.');
+        var space = dot < 0 ? string.Empty : @class[..dot];
+        var name = @class[(dot + 1)..];
+        return space switch
+        {
+            "Jason.Runtime.Tests.Persistence" => name.EndsWith("MigrationTests", StringComparison.Ordinal)
+                || name is "MigrationHistoryTests" or "DatabaseMigratorTests" or "LineageBackfillTests" or "BounceStepSchemaTests" or "ResponderWatermarkSchemaTests",
+            "Jason.Cli.Tests.Documentation" => name == "DocumentedPageCommandsTests"
+                && method != "A_file_a_printed_command_writes_lands_in_this_tests_own_directory",
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// The critical cases of each family as the table counts them: every case once, except that a method of a class the
+    /// tier carries whole counts once for its family however many rows it runs.
+    /// </summary>
+    /// <remarks>
+    /// The rows of such a method are, today, the lines the pages print, which move with every edit of a page; counted
+    /// case by case, the table would move with them, and two units that each add a printed command from one base would
+    /// merge cleanly into a count neither of them wrote. <see cref="OutsideTheTier"/> holds those classes to the tier
+    /// completely, so the exact count adds nothing for them but that churn. The ceiling does not read these counted cases:
+    /// it bounds what the tier costs to run, so it reads the tier's rows each assembly records in <see cref="Sizes"/>.
+    /// </remarks>
+    public static Dictionary<Family, int> Counted(IEnumerable<(string Class, string Method, Family Family)> cases)
+    {
+        var counted = new Dictionary<Family, int>();
+        var whole = new HashSet<(string, string, Family)>();
+        foreach (var testCase in cases)
+        {
+            if (CarriedWhole(testCase.Class, testCase.Method) && !whole.Add(testCase))
+            {
+                continue;
+            }
+
+            counted[testCase.Family] = counted.GetValueOrDefault(testCase.Family) + 1;
+        }
+
+        return counted;
+    }
+
+    /// <summary>
+    /// The methods, by class and name, that a class the tier carries whole holds outside the tier: each method once, in the
+    /// order the cases come, however many of its cases are outside.
+    /// </summary>
+    public static List<string> OutsideTheTier(IEnumerable<(string Class, string Method, bool Critical)> cases) =>
+        [.. cases
+            .Where(testCase => !testCase.Critical && CarriedWhole(testCase.Class, testCase.Method))
+            .Select(testCase => $"{testCase.Class[(testCase.Class.LastIndexOf('.') + 1)..]}.{testCase.Method}")
+            .Distinct(StringComparer.Ordinal)];
 
     /// <summary>Whether a data row's traits, names and values in turn, put it in the tier.</summary>
     public static bool MarksTheTier(string[]? traits) =>
@@ -342,20 +449,21 @@ public sealed class CriticalTierTests
         var critical = cases.Where(CriticalTier.IsCritical).ToList();
 
         var problems = new List<string>();
-        var byFamily = new Dictionary<Family, int>();
+        var named = new List<(string Class, string Method, Family Family)>();
         foreach (var testCase in critical)
         {
-            var named = testCase.Traits.TryGetValue(CriticalAttribute.FamilyTrait, out var values) ? values.ToList() : [];
-            if (named is [var one] && Enum.GetNames<Family>().Contains(one, StringComparer.Ordinal))
+            var families = testCase.Traits.TryGetValue(CriticalAttribute.FamilyTrait, out var values) ? values.ToList() : [];
+            if (families is [var one] && Enum.GetNames<Family>().Contains(one, StringComparer.Ordinal))
             {
-                var family = Enum.Parse<Family>(one);
-                byFamily[family] = byFamily.GetValueOrDefault(family) + 1;
+                named.Add((testCase.TestClassName ?? string.Empty, testCase.TestMethodName ?? string.Empty, Enum.Parse<Family>(one)));
             }
             else
             {
-                problems.Add($"{testCase.TestCaseDisplayName} names the families [{string.Join(", ", named)}], not one of Family's members");
+                problems.Add($"{testCase.TestCaseDisplayName} names the families [{string.Join(", ", families)}], not one of Family's members");
             }
         }
+
+        var byFamily = CriticalTier.Counted(named);
 
         foreach (var family in Enum.GetValues<Family>())
         {
@@ -377,11 +485,35 @@ public sealed class CriticalTierTests
 
         problems.AddRange(CriticalTier.FloorProblems(methods, cases.Count, sizes));
 
+        // Where the rows alone moved, the table is as it was, so the failure does not send its reader to look for marked tests.
+        var said = problems.Count == 0 ? $"{name}: its entry of Sizes records fewer of the tier's rows than it runs" : $"{name} {CriticalTier.Differs}";
+        if (CriticalTier.TierRowsProblem(critical.Count, sizes.TierRows) is { } rows)
+        {
+            problems.Add(rows);
+        }
+
         Assert.True(
             problems.Count == 0,
-            $"{name} {CriticalTier.Differs}:\n{string.Join('\n', problems)}\n"
+            $"{said}:\n{string.Join('\n', problems)}\n"
             + $"Discovered, as the table writes it: {string.Join(" · ", byFamily.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key} {pair.Value}"))}; "
-            + $"sizes ({tierMethods}, {methods}, {cases.Count}).");
+            + $"sizes ({tierMethods}, {methods}, {cases.Count}, {critical.Count}).");
+    }
+
+    /// <summary>
+    /// Every method of a class the tier carries whole is in the tier, so a migration's or a page's test added without its
+    /// mark is named here rather than left for the whole suite to find.
+    /// </summary>
+    [Fact]
+    [Critical(Family.B7, "a test of a class the tier carries whole, added without its mark, which a run of the tier cannot see, turns this red")]
+    public async Task Every_method_of_a_class_the_tier_carries_whole_is_in_it()
+    {
+        var cases = await CriticalTier.ThisAssembly();
+
+        var outside = CriticalTier.OutsideTheTier(cases.Select(testCase => (testCase.TestClassName ?? string.Empty, testCase.TestMethodName ?? string.Empty, CriticalTier.IsCritical(testCase))));
+
+        Assert.True(
+            outside.Count == 0,
+            $"{typeof(CriticalTierTests).Assembly.GetName().Name} holds methods of classes the tier carries whole outside the tier; mark each with [Critical]:\n{string.Join('\n', outside)}");
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ public class JournalVerdictsByThreadMigrationTests
     private const string Index = "ix_journal_campaign_verdict_thread";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Up_adds_the_verdicts_thread_index_alone()
     {
         using var dir = AtThePreviousMigration();
@@ -45,6 +46,7 @@ public class JournalVerdictsByThreadMigrationTests
     }
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Down_drops_the_verdicts_thread_index_and_leaves_the_rest_as_it_stood()
     {
         using var dir = AtThePreviousMigration();

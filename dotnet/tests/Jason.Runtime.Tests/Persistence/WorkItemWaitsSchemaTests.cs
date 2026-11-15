@@ -20,6 +20,7 @@ public class WorkItemWaitsSchemaTests
 
     /// <summary>An installation that upgrades keeps its work, waits for nothing, and has both tables and every column the wait needs, the provider block it may be parked on among them.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_database_keeps_its_work_and_has_the_wait_tables_empty()
     {
         using var dir = new TempDataDir();

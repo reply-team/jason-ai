@@ -37,6 +37,7 @@ public class ChannelRoutesMigrationTests
     /// there with the definition it had; and what the migration adds is the new table, exactly.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_keeps_every_row_and_gains_the_channel_table_alone()
     {
         using var dir = Seeded();
@@ -92,6 +93,7 @@ public class ChannelRoutesMigrationTests
     /// operation routes do, while another campaign's stay.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_channel_table_refuses_what_the_model_refuses_and_goes_with_its_campaign()
     {
         using var dir = Seeded();
@@ -126,6 +128,7 @@ public class ChannelRoutesMigrationTests
     /// so the operations' own routes and the defaults mean what they meant before any channel route was set.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Down_drops_the_channel_table_and_leaves_the_installation_as_it_stood()
     {
         using var dir = Seeded();
@@ -159,6 +162,7 @@ public class ChannelRoutesMigrationTests
     /// scope and the plugin it answered before, with no channel route anywhere.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task An_upgraded_installations_routes_resolve_as_they_did_before()
     {
         string[] campaigns = [];

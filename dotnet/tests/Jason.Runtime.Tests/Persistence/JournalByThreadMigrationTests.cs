@@ -24,6 +24,7 @@ public class JournalByThreadMigrationTests
     private const string Index = "ix_journal_campaign_thread";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Up_adds_the_thread_index_alone()
     {
         using var dir = AtThePreviousMigration();
@@ -45,6 +46,7 @@ public class JournalByThreadMigrationTests
     }
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Down_drops_the_thread_index_and_leaves_the_rest_as_it_stood()
     {
         using var dir = AtThePreviousMigration();
@@ -66,6 +68,7 @@ public class JournalByThreadMigrationTests
     /// a scan.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_claim_s_read_of_where_a_thread_was_seen_seeks_by_the_index()
     {
         using var database = new TestDatabase();

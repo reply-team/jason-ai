@@ -18,6 +18,7 @@ public class BounceStepSchemaTests
     private const string PreviousMigration = "20261114190252_ProviderBlockChannels";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Migration_BounceStep_StartsAtJournalMax_AndSaysABounceOncePerCampaign()
     {
         using var dir = new TempDataDir();

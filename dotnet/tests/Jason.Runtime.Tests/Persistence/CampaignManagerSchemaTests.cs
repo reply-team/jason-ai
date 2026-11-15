@@ -73,6 +73,7 @@ public class CampaignManagerSchemaTests
     /// cadence would measure from a moment that is not on record and the campaign would never be due at all.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_owes_no_review_of_its_history()
     {
         using var dir = new TempDataDir();

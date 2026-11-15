@@ -37,6 +37,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// a LinkedIn-looking value, and an email, are not touched.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Stored_links_become_their_keys_and_what_the_rule_refuses_is_left_as_it_stands()
     {
         using var dir = Seeded(
@@ -75,6 +76,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// whichever entry holds the key covers the person. The chronicle is not written to.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Entries_that_share_a_key_leave_one_holding_it_and_the_others_as_they_stood()
     {
         using var dir = Seeded(
@@ -107,6 +109,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// primary, then the lowest id — and the others are left as they stood, labels and data with them. Nothing is deleted.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_contact_s_rows_that_share_a_key_leave_one_holding_it_and_the_others_as_they_stood()
     {
         using var dir = Seeded(
@@ -181,6 +184,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// it is left as it stood. The contact keeps exactly one primary, and the start does not fail.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_contact_whose_primary_the_rule_refuses_and_whose_other_rows_share_a_key_keeps_its_one_primary()
     {
         using var dir = Seeded(
@@ -208,6 +212,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// is re-keyed by the channel's own rule, which bounds a key by its name, and its stop covers the contact written now.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_link_stored_longer_than_a_value_may_be_given_becomes_its_key_and_its_stop_covers_the_person()
     {
         var stored = "https://www.linkedin.com/in/" + string.Concat(Enumerable.Repeat("%d0%b0", 30)) + "?trk=" + new string('x', 300);
@@ -267,6 +272,7 @@ public partial class LinkedInOneKeyMigrationTests
 
     /// <summary>Two contacts holding one profile both take its key: contacts are not merged here, and a stop covers both.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Two_contacts_holding_one_profile_both_take_its_key()
     {
         using var dir = Seeded(
@@ -375,6 +381,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// none can stand in for another unnoticed. A start that applied nothing says nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_start_that_re_keys_counts_what_it_left_and_a_later_start_counts_nothing()
     {
         using var dir = AtTheMigrationBefore();
@@ -413,6 +420,7 @@ public partial class LinkedInOneKeyMigrationTests
 
     /// <summary>A database this start makes holds nothing to re-key, so a first start counts nothing.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_first_start_counts_nothing()
     {
         using var dir = new TempDataDir();
@@ -429,6 +437,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// register it is refused loudly, by name, and changes nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_script_calls_only_functions_the_runtime_registers_and_fails_loudly_without_them()
     {
         var called = FunctionCall().Matches(LinkedInOneKey.Script).Select(match => match.Value).ToHashSet(StringComparer.Ordinal);
@@ -536,6 +545,7 @@ public partial class LinkedInOneKeyMigrationTests
     /// ran it.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_table_of_keys_and_its_indexes_are_temporary_and_the_script_leaves_nothing_behind()
     {
         using var dir = AtTheMigrationBefore();

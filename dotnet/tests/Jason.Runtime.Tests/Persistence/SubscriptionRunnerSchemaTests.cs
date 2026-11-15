@@ -22,6 +22,7 @@ public class SubscriptionRunnerSchemaTests
 
     /// <summary>An installation upgrading has no subscriber yet, so it has no position and no run: both tables arrive empty.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_has_no_position_and_no_run()
     {
         using var dir = new TempDataDir();

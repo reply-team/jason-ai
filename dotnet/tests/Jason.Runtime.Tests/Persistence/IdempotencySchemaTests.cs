@@ -69,6 +69,7 @@ public class IdempotencySchemaTests
     /// before can be answered as somebody's repeat.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_keeps_every_row_and_none_of_them_has_a_key()
     {
         using var dir = new TempDataDir();

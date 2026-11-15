@@ -22,6 +22,7 @@ public class ApprovalsAutomaticByDayMigrationTests
     private const string ThisMigration = "20261114084851_ApprovalsAutomaticByDay";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Up_adds_the_automatic_releases_index_alone()
     {
         using var dir = AtThePreviousMigration();
@@ -47,6 +48,7 @@ public class ApprovalsAutomaticByDayMigrationTests
     /// may hold, so the database is exactly what it was at the migration before.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Down_drops_the_index_alone_and_leaves_the_rest_as_it_stood()
     {
         using var dir = AtThePreviousMigration();
