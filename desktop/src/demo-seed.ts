@@ -28,6 +28,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { demoReviewSeconds } from './demo-settings.ts';
 import { demoDirectory } from './mode.ts';
 import { dataLayout } from './paths.ts';
+import { settingsTemporary } from './settings-temporary.ts';
 import { parseStory, type Story, type StoryPerson, type StorySend } from './demo-story.ts';
 
 /** Raised when the story changes in a way a seeded directory must not be kept through. */
@@ -644,7 +645,7 @@ export function seedDepsOnDisk(parts: { cli: Cli; places: DemoPlaces; scratch: s
             // Through a file beside it renamed over it: a cut write leaves the earlier text whole, and a runtime that watches
             // the settings file never reads a half.
             mkdirSync(dirname(file), { recursive: true });
-            const temporary = `${file}.${process.pid}.tmp`;
+            const temporary = settingsTemporary(file);
             try {
                 writeFileSync(temporary, text, { encoding: 'utf8' });
                 renameSync(temporary, file);

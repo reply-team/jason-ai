@@ -158,6 +158,25 @@ describe('the start screen', () => {
         expect(startForm().contains(note)).toBe(false);
     });
 
+    it('says in the demo what the demo is, and that Live has the essentials', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => screen.getByRole('note'));
+        flush(() => {
+            mode.value = 'demo';
+        });
+        try {
+            const note = await waitFor(() => screen.getByRole('note'));
+            expect(note.querySelector('strong')!.textContent).toBe('This interface is optional.');
+            expect(note.textContent).toContain(
+                'This interface is optional. It shows the main things the Jason harness can do, and the harness runs fine without it, from Claude Code, Codex or any other agent. What you see in Demo is an example of what you can build; Live has the essentials. Jason is open source: get the code at github.com/reply-team/jason-ai and have your coding agent build the pages you need.',
+            );
+        } finally {
+            flush(() => {
+                mode.value = 'live';
+            });
+        }
+    });
+
     it('has no subline under the title', async () => {
         renderConsole(stubDesktop());
         await waitFor(() => startForm());

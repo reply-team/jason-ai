@@ -160,7 +160,7 @@ opening a dialog with an optional reason. **Pause** stops Jason releasing an act
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
+any other tab it no longer has opens its Sequence (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab and is unchanged). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and

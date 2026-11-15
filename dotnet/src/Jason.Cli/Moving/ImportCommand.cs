@@ -351,7 +351,12 @@ public static class ImportCommand
 
                 try
                 {
-                    (dataFiles, harnessFiles) = archive.Place(env.Paths.Root, root.Path, settings);
+                    int temporaryLeft;
+                    (dataFiles, harnessFiles, temporaryLeft) = archive.Place(env.Paths.Root, root.Path, settings);
+                    if (temporaryLeft > 0)
+                    {
+                        warnings.Add(SettingsTemporarySkipped(temporaryLeft));
+                    }
                 }
                 catch (ImportRefusal refused)
                 {
@@ -943,6 +948,16 @@ public static class ImportCommand
         public string Code { get; } = code;
     }
 
+    /// <summary>
+    /// The line an import says when the archive carried settings writers' temporary files it did not place: their count,
+    /// never a name, since a name carries a writer's id.
+    /// </summary>
+    internal static string SettingsTemporarySkipped(int count) =>
+        count.ToString(CultureInfo.InvariantCulture)
+        + (count == 1 ? " temporary file" : " temporary files")
+        + " a write of the settings left beside the settings file or the secrets file, carried by an export before 0.44.0, "
+        + (count == 1 ? "was held to its listed digest and not placed." : "were held to their listed digests and not placed.");
+
     /// <summary>The archive, read whole and checked before anything is written.</summary>
     private sealed class Archive : IDisposable
     {
@@ -951,12 +966,15 @@ public static class ImportCommand
 
         private readonly string _settingsName;
 
-        private Archive(string file, ZipArchive zip, ExportManifest manifest, string settingsName)
+        private readonly JasonPaths _paths;
+
+        private Archive(string file, ZipArchive zip, ExportManifest manifest, string settingsName, JasonPaths paths)
         {
             _file = file;
             _zip = zip;
             Manifest = manifest;
             _settingsName = settingsName;
+            _paths = paths;
         }
 
         public ExportManifest Manifest { get; }
@@ -985,7 +1003,7 @@ public static class ImportCommand
                 var manifest = Listing(file, zip);
                 Check(file, zip, manifest, trees);
                 Stamp(file, zip, manifest);
-                return new Archive(file, zip, manifest, settingsName);
+                return new Archive(file, zip, manifest, settingsName, env.Paths);
             }
             catch
             {
@@ -1235,10 +1253,13 @@ public static class ImportCommand
             return reader.ReadToEnd();
         }
 
-        /// <summary>Writes every directory and file into its place, the settings file as rewritten; never over anything.</summary>
-        public (int Data, int Harness) Place(string dataDirectory, string root, SettingsRewritten settings)
+        /// <summary>
+        /// Writes every directory and file into its place, the settings file as rewritten; never over anything. Says how many
+        /// settings writers' temporary files it checked and did not place.
+        /// </summary>
+        public (int Data, int Harness, int TemporaryLeft) Place(string dataDirectory, string root, SettingsRewritten settings)
         {
-            int data = 0, harness = 0;
+            int data = 0, harness = 0, temporaryLeft = 0;
             var settingsName = _settingsName;
             try
             {
@@ -1253,6 +1274,14 @@ public static class ImportCommand
                 {
                     if (entry.FullName == ExportManifest.FileName || ArchiveNames.IsDirectory(entry))
                     {
+                        continue;
+                    }
+
+                    // A settings writer's temporary file an export before 0.44.0 could carry: its digest was held to the
+                    // listing with every other file's, and no copy of the settings' secrets is placed beside the settings file.
+                    if (ExportCommand.SettingsTemporary(_paths, entry.FullName))
+                    {
+                        temporaryLeft++;
                         continue;
                     }
 
@@ -1297,7 +1326,7 @@ public static class ImportCommand
                     $"The archive {_file} could not be placed in full ({failure.Message}); what was written stays in {dataDirectory} and {root}. Import it again with --replace once the cause is gone.");
             }
 
-            return (data, harness);
+            return (data, harness, temporaryLeft);
         }
 
         private static string Target(string dataDirectory, string root, string name) =>
@@ -1384,6 +1413,8 @@ public static class ImportCommand
             + "to the runtime's rule for a root before anything is placed, and the placed settings file names it. A project "
             + "folder outside the harness root does not travel: each project whose recorded folder is not here is said, and "
             + "listed as folders_not_here." + nl
+            + "A temporary file a write of the settings file left beside it (settings.json.<id>.tmp, or secrets.json.<id>.tmp where the secrets are a file of their own), which an export before 0.44.0 "
+            + "could carry, is held to its listed digest and not placed." + nl
             + "The settings file: every absolute path under the other machine's home directory, data directory or harness root "
             + "is rewritten to the same path here, each rewrite said, Harness:Root first; a path outside those three that is not "
             + "on this machine is said and left as written; every other value, a secret among them, is placed as it was." + nl

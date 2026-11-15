@@ -13,21 +13,26 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { activePanel, changeChat, chats, conversations, currentChat, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting } from './start';
+import { bringForward } from '../test/area';
 
 // "Open in", the split button of the console's top bar: in Live and in Demo, the main part opens the default place, the
 // arrow lists the places the desktop says this computer has, and the page sends a place's name and a campaign's id, never
 // a path. The places, the default and the folder's name are the desktop's, as the stand-in answers them.
 
 function api(): FakeApi {
-    return nothingWaitsInChats(new FakeApi())
-        .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
-        .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
-        .answer('campaign.list', 'campaign.list/screen')
-        .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
-        .answer('campaign.get', 'campaign.get/details')
-        .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
-        .answer('journal.list', 'journal.list/by-campaign')
-        .answer('route.resolve', 'route.resolve/global-default');
+    return (
+        nothingWaitsInChats(new FakeApi())
+            .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
+            .answer('journal.list', 'journal.list/by-campaign')
+            // Live opens an agent on People, which reads its people.
+            .answer('campaign.list_contacts', 'campaign.list_contacts/everyone')
+            .answer('route.resolve', 'route.resolve/global-default')
+    );
 }
 
 async function renderConsole(kept: 'live' | 'demo', desktop: StubDesktop = chatDesktop()): Promise<StubDesktop> {
@@ -316,7 +321,7 @@ describe('Open in with a campaign’s chat in front', () => {
     it('sends the campaign’s id with the act and asks for its folder, and never a path', async () => {
         const desktop = await renderConsole('live');
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
         const tabs = await waitFor(() => {
@@ -338,8 +343,7 @@ describe('Open in with a campaign’s chat in front', () => {
     it('opens the harness root again once Agents is in front after a chat', async () => {
         const desktop = await renderConsole('live');
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        const side = () => within(document.querySelector<HTMLElement>('.side')!);
-        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
         const tabs = await waitFor(() => {
@@ -349,7 +353,7 @@ describe('Open in with a campaign’s chat in front', () => {
         });
         fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
         await waitFor(() => expect(targets(desktop).some((each) => each.args[0] === 'cmp_1')).toBe(true));
-        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         await waitFor(() => expect(targets(desktop).at(-1)!.args[0]).toBeUndefined());
         fireEvent.click(mainPart());
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
@@ -477,7 +481,7 @@ describe('Continue this chat in a terminal', () => {
                 ? answer
                 : { ...answer, continue: { host: 'claude', label: 'Claude Code', running: false } };
         };
-        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         await waitFor(() => expect(targets(desktop).at(-1)!.args).toEqual([undefined, undefined]));
         fireEvent.click(arrow());
         await waitFor(() => expect(within(menu()).getAllByRole('menuitem').length).toBeGreaterThan(1));

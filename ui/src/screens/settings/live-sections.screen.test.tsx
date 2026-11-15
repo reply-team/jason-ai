@@ -1,0 +1,111 @@
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { session } from '../../api/session';
+import { here, chats, conversations } from '../../console/state';
+import { Console } from '../../console/console';
+import { attention } from '../../console/needs';
+import * as consoleCampaigns from '../../console/campaigns';
+import { mode, type Mode } from '../../platform/mode';
+import { activatePlugins } from '../../platform/plugin';
+import { browserPlugins } from '../../plugins';
+import { route } from '../../router';
+import { stubDesktop, stubStream, type StubDesktop } from '../../test/desktop';
+import { FakeApi, watch } from '../../test/fake-api';
+
+// Settings in Live gains Models, what Connect holds for the AI hosts and keys, and Runtime, what System holds of the
+// runtime, beside the sections it has. Both are the same cards over the same answers; Connect and System keep them.
+
+function renderSettings(where: Mode): { desktop: StubDesktop; fake: FakeApi } {
+    mode.value = where;
+    const desktop = stubDesktop();
+    const fake = new FakeApi()
+        .answer('approval.list', 'approval.list/pending')
+        .answer('decision.list', 'decision.list/pending')
+        .answer('preference.list', 'preference.list/none')
+        .answer('campaign.list', 'campaign.list/screen')
+        .answer('campaign.summary', 'campaign.summary/all');
+    watch(fake);
+    activatePlugins(browserPlugins);
+    localStorage.clear();
+    location.hash = '';
+    route.value = { screen: 'attention' };
+    session.clear();
+    localStorage.setItem(
+        'jason.ui.session',
+        JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
+    );
+    fake.answer('system.info', 'system.info/with-ui');
+    render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
+    return { desktop, fake };
+}
+
+const settings = async () => {
+    await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+    const side = within(document.querySelector<HTMLElement>('.side')!);
+    fireEvent.click(side.getByRole('button', { name: 'Settings' }));
+    await screen.findByRole('heading', { name: 'Settings', level: 1 });
+};
+
+beforeEach(() => {
+    chats.value = {};
+    conversations.value = [];
+    attention.loaded.value = false;
+    attention.approvals.value = [];
+    attention.questions.value = [];
+    consoleCampaigns.campaigns.value = [];
+    consoleCampaigns.read.value = false;
+});
+afterEach(() => {
+    cleanup();
+    mode.value = 'live';
+});
+
+describe('Settings in Live', () => {
+    it('keeps the sections it has and adds Models and Runtime after them', async () => {
+        renderSettings('live');
+        await settings();
+        const headings = () => screen.getAllByRole('heading', { level: 2 }).map((each) => each.textContent?.trim());
+        await waitFor(() => expect(headings()).toContain('Models'));
+        await waitFor(() => expect(headings().some((each) => each?.startsWith('Runtime'))).toBe(true));
+        const order = headings();
+        for (const kept of ['Appearance', 'Your name and tone']) expect(order, kept).toContain(kept);
+        expect(order.indexOf('Models')).toBeGreaterThan(order.indexOf('Appearance'));
+        expect(order.findIndex((each) => each?.startsWith('Runtime'))).toBeGreaterThan(order.indexOf('Models'));
+    });
+
+    it('draws in Models what Connect draws of the AI hosts and the keys, from the answer the console already holds', async () => {
+        const { desktop } = renderSettings('live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.status')).toBe(true));
+        const read = desktop.calls.filter((each) => each.name === 'setup.status').length;
+        await settings();
+        const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
+        await waitFor(() => expect(within(models).getByText('Drives the chat')).toBeTruthy());
+        expect(within(models).getByText('Not found')).toBeTruthy();
+        expect(desktop.calls.filter((each) => each.name === 'setup.status')).toHaveLength(read);
+        // Connect keeps the same cards: nothing it had is taken away.
+        flush(() => here().dock.show('connect'));
+        const connect = await waitFor(() => document.querySelector<HTMLElement>('[data-pane="connect"]')!);
+        expect(within(connect).getByText('Drives the chat')).toBeTruthy();
+    });
+
+    it('draws in Runtime what System draws, from the system.info the page already read', async () => {
+        const { fake } = renderSettings('live');
+        await settings();
+        const runtime = await waitFor(() => document.querySelector<HTMLElement>('[data-section="runtime"]')!);
+        for (const label of ['Version', 'Started', 'Address', 'Data directory', 'Database'])
+            expect(within(runtime).getByText(label, { selector: 'dt' }), label).toBeTruthy();
+        expect(fake.calls.filter((each) => each.operation === 'system.info').length).toBeGreaterThan(0);
+        expect(fake.calls.filter((each) => each.operation === 'plugin.list')).toEqual([]);
+    });
+
+    it('has neither in the demo, which keeps Connect and System in its sidebar', async () => {
+        renderSettings('demo');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const side = within(document.querySelector<HTMLElement>('.side')!);
+        fireEvent.click(side.getByRole('button', { name: 'Settings' }));
+        await screen.findByRole('heading', { name: 'Settings', level: 1 });
+        expect(document.querySelector('[data-section="models"]')).toBeNull();
+        expect(document.querySelector('[data-section="runtime"]')).toBeNull();
+    });
+});

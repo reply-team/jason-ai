@@ -294,6 +294,33 @@ public class BusinessPackTests
     }
 
     /// <summary>
+    /// The agent that drafts a campaign's copy with the user keeps a first message short and builds it on what is known
+    /// about the person, the user's word included; a search's criteria are never such a fact, and what the user states of
+    /// everyone on a list they brought is; a template is judged as it renders for one person and for one whose fields
+    /// fall back; the user's own word on length and content holds once the agent has said what nothing known supports.
+    /// Length and depth are answered; the openers to avoid, subject lines and the ask stay open for an expert.
+    /// </summary>
+    [Fact]
+    public void Campaign_launch_keeps_a_first_message_short_and_built_on_what_is_known_about_the_person()
+    {
+        var skill = Flat("campaign-launch");
+
+        Assert.Contains("**A first message is short, and built on what is known about the person**", skill, StringComparison.Ordinal);
+        Assert.Contains("held in their record or stated by the user", skill, StringComparison.Ordinal);
+        Assert.Contains("never the criteria a search drew the list by: they say how people were chosen, not what is true of any one of them.", skill, StringComparison.Ordinal);
+        Assert.Contains("What the user states as true of everyone on a list they brought is a fact about each.", skill, StringComparison.Ordinal);
+        Assert.Contains("With such a fact, build the message on it, and say who writes and ask one thing.", skill, StringComparison.Ordinal);
+        Assert.Contains("With little known, keep it very short: who writes, why this person, one ask,", skill, StringComparison.Ordinal);
+        Assert.Contains("What is known decides what the message is built on, never its length.", skill, StringComparison.Ordinal);
+        Assert.Contains("A template is held to this as `message.draft` renders it for one person, and for one whose fields fall back: a fallback is no fact.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the user says how long it is or what it must hold, theirs holds; where that claims what nothing known supports, say so first.", skill, StringComparison.Ordinal);
+        Assert.Contains("TODO(expert): which openers to avoid beyond one that claims to know the person; subject lines; what the one ask should be.", skill, StringComparison.Ordinal);
+        Assert.Contains("cadence, channel mix, what makes an opener fail, subject lines and the ask — is", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("never the campaign's targeting", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("structure, length, personalisation depth", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The skill's definition of a standing approval is mapped onto Jason's: per campaign and category, its operations, its
     /// expiry and ceiling, how it is read, what each act it authorised leaves, and that only a person sets one. The sentence
     /// on which categories to set it on is the decided one, and the principle it follows from is stated with it. The

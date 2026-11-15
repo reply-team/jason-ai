@@ -1,8 +1,9 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
+import { mode } from '../platform/mode';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
@@ -12,7 +13,7 @@ import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
-import { chats, conversations, feedId } from './state';
+import { chats, conversations, feedId, here } from './state';
 
 // The search palette: its row in the sidebar and the key it names, the shortcut, the box, what it finds and where each
 // kind of entry goes. The people it finds come from `contact.list` as the pickers ask it, recorded by the runtime's own
@@ -87,6 +88,7 @@ function kept(): StubDesktop {
 }
 
 beforeEach(() => {
+    mode.value = 'live';
     chats.value = {};
     conversations.value = [];
     attention.loaded.value = false;
@@ -99,7 +101,17 @@ beforeEach(() => {
 });
 
 describe('the Search row', () => {
-    it('is the first row of the menu, before Feed, with the key named as Ctrl K here', async () => {
+    it('is the first row of the menu, before Needs you in Live and before Feed in the demo, with the key named as Ctrl K here', async () => {
+        renderConsole();
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => within(menu()).getByRole('button', { name: /^Needs you/ }));
+        expect(
+            within(menu())
+                .getAllByRole('button')
+                .map((each) => each.textContent?.replace(/\s+/g, ' ').trim().replace(/ \d+$/, '')),
+        ).toEqual(['SearchCtrl K', 'Needs you']);
+        cleanup();
+        mode.value = 'demo';
         renderConsole();
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         await waitFor(() => within(menu()).getByRole('button', { name: /^Feed/ }));
@@ -172,7 +184,7 @@ describe('the palette', () => {
         expect(fake.calls.filter((each) => each.operation === 'contact.list')).toEqual([]);
     });
 
-    it('has a Page, Settings and Action entry for each place and act the sidebar has, and none of what is not here', async () => {
+    it('has a Page, Settings and Action entry for every page and act, in Live too, where the sidebar draws fewer, and none of what is not here', async () => {
         renderConsole({ desktop: kept() });
         await opened();
         await waitFor(() => expect(conversations.value.length).toBe(3));
@@ -415,7 +427,7 @@ describe('where each kind goes', () => {
     it('opens the actions as the button and the caret do: Start, and a new chat', async () => {
         const { desktop } = renderConsole();
         await opened();
-        fireEvent.click(side().getByRole('button', { name: 'Agents' }));
+        flush(() => here().dock.show('campaigns'));
         await waitFor(() => expect(inFront()).toBe('Agents'));
         fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
         await waitFor(() => expect(box()).not.toBeNull());

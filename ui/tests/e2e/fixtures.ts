@@ -14,9 +14,17 @@ export const test = base.extend<{ jason: Jason }>({
 
 export { expect };
 
-/** Opens the System screen in the console's area, from the sidebar's More menu, as a person does. */
+/**
+ * Opens a page Live's sidebar draws no row for through Search, as a person does: the sidebar's own Search row (found by
+ * its action, since Recent's "Search agents" button shares the name's prefix), the query, Enter on the first result.
+ */
+export async function openBySearch(page: Page, text: string): Promise<void> {
+    await page.locator('.jc-console .side [data-action="side.search"]').click();
+    await page.getByPlaceholder('Search agents, people, pages and settings').fill(text);
+    await page.keyboard.press('Enter');
+}
+
+/** Opens the System screen in the console's area, through Search. */
 export async function openSystem(page: Page): Promise<void> {
-    const side = page.locator('.jc-console .side');
-    await side.getByRole('button', { name: 'More', exact: true }).click();
-    await side.getByRole('menuitem', { name: /^System/ }).click();
+    await openBySearch(page, 'System');
 }

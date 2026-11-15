@@ -1,6 +1,7 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import type { DesktopLineEntry } from '../platform/desktop';
 import { browserPlugins } from '../plugins';
@@ -63,7 +64,9 @@ const kept = (fields: Partial<DesktopLineEntry> = {}): DesktopLineEntry => ({
     ...fields,
 });
 
+// The Feed's row is in the demo's sidebar; Live's does not draw it.
 beforeEach(() => {
+    mode.value = 'demo';
     chats.value = {};
     conversations.value = [];
     lines.value = [];

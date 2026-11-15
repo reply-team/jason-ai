@@ -46,6 +46,10 @@ internal static class ReviewedLogProperties
         // above is the number of links there).
         "Keys", "Refused", "LeftBeside", "SharedKeys",
 
+        // The start's sweep of the settings writers' temporary files: how many it removed and how many it kept, counts
+        // (RuntimeHost; Refused above is the number it could not remove).
+        "Removed", "Kept",
+
         // Where a settings file stopped parsing: a line and a byte within it (RuntimeHost).
         "LineNumber", "BytePositionInLine",
 
