@@ -83,8 +83,8 @@ nothing the caller wrote. Three refusals come before anything is run, each perma
   cannot tell. `bounced_at` is when the bounce notice came, and
   `bounce_code` the provider's own word for the kind, uninterpreted: one word of the provider's vocabulary, a letter or
   digit first and then letters, digits, dots, underscores and hyphens, never a server's text, which the schema refuses.
-  The four are optional: a plugin that does not
-  return them is read as returning null for each.
+  A plugin gives null where the provider's word is not one word, so the read still answers whether and how it bounced.
+  The four are optional: a plugin that does not return them is read as returning null for each.
 
 ## What the runtime does with a send that went
 

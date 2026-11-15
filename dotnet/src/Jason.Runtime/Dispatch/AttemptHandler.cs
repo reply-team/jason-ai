@@ -230,7 +230,9 @@ public static class AttemptHandler
             // stand: a block opened first is met again instead of opened, and one cleared first is not cleared twice.
             // The same holds of the register: a read that found a bounce staged the address another writer put on the
             // register between this one's read of it and its save. The address is already on the register, so deciding
-            // again stages nothing and the read ends as it answered: never a failed or a repeated read.
+            // again stages nothing and the read ends as it answered. One refusal is decided once more; a second refusal
+            // in that decision, a block's race after the register's or the other way round, is left to the lease, and
+            // the read is made again.
             await RecordAsync(scopes, work, outcome, logger, again: true).ConfigureAwait(false);
         }
         catch (DbUpdateConcurrencyException)

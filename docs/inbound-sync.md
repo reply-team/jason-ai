@@ -79,9 +79,10 @@ read the runtime made. Each read decides alone, when it ends: a read that finds 
 `message_bounce_observed`, and for a hard bounce, or one the provider named no kind for, puts the contact's email on the
 do-not-contact register as `system:bounce` ([`message.status`](contracts/operations/message.status.md)). The step
 itself writes no line and no register entry, and a bounce of a send Jason did not make — a sequence's own email at the
-provider, a mail written by hand, a send older than the window — asks for no read and stops nothing; a campaign with no
-send the bounce could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each
-logged once per campaign by id and code:
+provider, a mail written by hand, a send older than the window — stops nothing: where the campaign has no send it could
+be of, it asks for no read, and a read of a send that did not bounce decides nothing; a campaign with no send the bounce
+could be of is no skip. The step queues no read for a line, or for one send, for these reasons, each logged once per
+campaign by id and code; a line the step passes is not read again, and a later bounce of the same person asks again:
 
 | Code | Why |
 |---|---|
@@ -90,9 +91,10 @@ logged once per campaign by id and code:
 
 A line the database or a domain rule refuses is passed over alone, and any other failure stops that campaign for the
 scan, as in the respond step. A paused campaign's bounces wait, and so do the reads they ask for: the step does not
-read a paused campaign, and its watermark holds until the campaign is live again.
+read a paused campaign, and its watermark holds until the campaign is live again. The bounce step runs whatever
+`Inbound:Enabled` says, since its lines come from the events' read, not from sync.
 
-It runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
+Sync runs whenever the dispatcher scans, draining included — a drain stops claims, not bookkeeping: reads are accounted
 for, and a read started during a drain waits until claims resume — and does nothing when `Inbound:Enabled` is false.
 A runtime with no dispatch loop reads nothing.
 
