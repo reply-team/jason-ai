@@ -369,6 +369,18 @@ public class CardExchangesTests
             await spring.PersonAsync("Vera", "Lund", "email", "vera@example.test");
             var later = Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-status-later", new { campaign_ids = new[] { spring.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns);
             Assert.Equal((13, row.Waiting, row.Working, row.Out), (later.People, later.Waiting, later.Working, later.Out));
+
+            // What a person did to the campaign since a moment: asked first, when nobody has done anything yet, then again
+            // after a person pauses the campaign through the API (the act the card's choice follows).
+            string[] acts = ["campaign_started", "campaign_paused", "approval_approved", "approval_rejected", "decision_answered"];
+            var since = clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            clock.Advance(TimeSpan.FromMinutes(1));
+            Assert.Empty((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "card-choice-acts-none", new { campaign_id = spring.Campaign, kinds = acts, since, limit = 50 }, Ct)).Items);
+            clock.Advance(TimeSpan.FromMinutes(1));
+            await api.PostOkAsync<CampaignDto>(Operations.CampaignPause, new { campaign_id = spring.Campaign, actor = Ada }, Ct);
+            var choice = Assert.Single((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "card-choice-acts", new { campaign_id = spring.Campaign, kinds = acts, since, limit = 50 }, Ct)).Items);
+            Assert.Equal("campaign_paused", choice.Kind);
+            Assert.Equal("human", choice.Actor.Type.ToString().ToLowerInvariant());
         }
         finally
         {

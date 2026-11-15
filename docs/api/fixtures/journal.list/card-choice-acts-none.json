@@ -1,0 +1,21 @@
+{
+  "operation": "journal.list",
+  "case": "card-choice-acts-none",
+  "request": {
+    "campaign_id": "cmp_1",
+    "kinds": [
+      "campaign_started",
+      "campaign_paused",
+      "approval_approved",
+      "approval_rejected",
+      "decision_answered"
+    ],
+    "since": "2026-10-16T09:05:00.000Z",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

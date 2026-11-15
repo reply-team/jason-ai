@@ -32,7 +32,8 @@ public static class ApiFixtures
     //                     decision.answer card-free-text.
     //   many messages:    approval.list card-messages-first-page|-next-page.
     //   status:           campaign.get|summary card-status, campaign.summary
-    //                     card-status-later (the same request after one more member), campaign.activity card-status-30-days,
+    //                     card-status-later (the same request after one more member), journal.list
+    //                     card-choice-acts|-none (a person's pause since a moment, and none), campaign.activity card-status-30-days,
     //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
     //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
     //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
@@ -349,6 +350,8 @@ public static class ApiFixtures
         "journal.list/by-failed-item",
         "journal.list/by-succeeded-item",
         "journal.list/by-work-item",
+        "journal.list/card-choice-acts",
+        "journal.list/card-choice-acts-none",
         "journal.list/oli",
         "journal.list/summer",
         "operation.describe/audience-search",
