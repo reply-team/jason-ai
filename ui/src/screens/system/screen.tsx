@@ -12,6 +12,7 @@ import { Notice } from '../../layout/notice';
 import { t } from '../../platform/i18n';
 import { modeWords } from '../send-modes/model';
 import { sourceWords } from '../send-modes/agent-modes';
+import { RuntimeCard } from './runtime-card';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -79,7 +80,6 @@ export function SystemScreen() {
     const now = new Date();
     const info = store.info.value;
     const ui = info?.ui;
-    const listening = info?.listening;
     return (
         <div className="main single">
             <div className="list" style={{ borderRight: 0 }}>
@@ -113,37 +113,7 @@ export function SystemScreen() {
                 )}
                 {info && (
                     <div className="sys">
-                        <section className="card">
-                            <h2>
-                                Runtime <span className="badge success">running</span>
-                            </h2>
-                            <dl className="facts">
-                                <dt>Version</dt>
-                                <dd>
-                                    {info.runtime_version} · API {info.api_version}
-                                </dd>
-                                <dt>Started</dt>
-                                <dd>
-                                    {relative(new Date(info.started_at), now)} · instance{' '}
-                                    <span className="mono">{info.instance_id}</span>
-                                </dd>
-                                <dt>Address</dt>
-                                <dd>
-                                    <span className="mono">http://127.0.0.1:{listening?.port ?? '?'}</span>
-                                    {listening &&
-                                        listening.configured_port !== 0 &&
-                                        listening.configured_port !== listening.port &&
-                                        ` (${listening.configured_port} was taken)`}
-                                    {listening && listening.configured_port === 0 && ' (chosen by the OS)'}
-                                </dd>
-                                <dt>Data directory</dt>
-                                <dd>
-                                    <span className="mono">{info.data_dir}</span>
-                                </dd>
-                                <dt>Database</dt>
-                                <dd>{info.database.applied_migrations.length} migrations applied</dd>
-                            </dl>
-                        </section>
+                        <RuntimeCard info={info} now={now} />
 
                         <FullAccessCard />
 

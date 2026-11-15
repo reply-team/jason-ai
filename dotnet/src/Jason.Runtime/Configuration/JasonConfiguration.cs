@@ -1,4 +1,5 @@
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Files;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Plugins.Subscriptions;
 using Microsoft.Extensions.Configuration;
@@ -307,7 +308,7 @@ public static class JasonConfiguration
     {
         failure = SettingsCommit.Committed;
         var directory = Path.GetDirectoryName(settingsFile)!;
-        var temporary = Path.Combine(directory, $"{Path.GetFileName(settingsFile)}.{Guid.NewGuid():N}.tmp");
+        var temporary = Path.Combine(directory, SettingsTemporaryFiles.NameFor(Path.GetFileName(settingsFile), Guid.NewGuid()));
         try
         {
             var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };

@@ -118,7 +118,7 @@ public class CriticalReasonsTests
     [Fact]
     public void A_suite_smaller_than_the_table_measured_is_told_to_re_measure_and_not_that_it_runs_another_tier()
     {
-        var problems = CriticalTier.FloorProblems(184, 269, (22, 185, 300));
+        var problems = CriticalTier.FloorProblems(184, 269, (22, 185, 300, 40));
 
         Assert.Equal(
             [
@@ -128,7 +128,7 @@ public class CriticalReasonsTests
             problems);
         Assert.Contains("removes tests rewrites it", CriticalTier.Differs, StringComparison.Ordinal);
         Assert.DoesNotContain("tier other than", CriticalTier.Differs, StringComparison.Ordinal);
-        Assert.Empty(CriticalTier.FloorProblems(185, 271, (22, 185, 300)));
+        Assert.Empty(CriticalTier.FloorProblems(185, 271, (22, 185, 300, 40)));
     }
 
     [Fact]

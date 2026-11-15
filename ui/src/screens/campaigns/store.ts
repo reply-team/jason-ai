@@ -23,6 +23,7 @@ import { mergePage } from '../../lists/paging';
 import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { periodWindow } from '../../time/periods';
+import { createBody, unfinishedCreate } from './kind';
 
 /**
  * What every read of a campaign's people or counts on the campaign screens adds, the Results and the Performance page
@@ -607,4 +608,22 @@ export function addPeople(api: Api, id: string, people: string[], reason?: strin
     const body: Record<string, unknown> = { campaign_id: id, contacts: people.map((contact_id) => ({ contact_id })) };
     if (reason) body['reason'] = reason;
     return api.call<AddContactsResult>('campaign.add_contacts', body, 'write');
+}
+
+/** Whether the open campaign has a `campaign.create` unfinished, for the campaign it was asked of; none until it is answered. */
+export const creating = signal<{ id: string; open: boolean } | null>(null);
+let creatingGeneration = 0;
+
+/**
+ * The one read behind the agent's kind: a page of the campaign's unfinished provider operations, asked only of a started
+ * agent with no pin. A failed read says nothing: the kind then stays unsaid, and no failure is shown for it.
+ */
+export async function loadCreating(api: Api, id: string): Promise<void> {
+    const mine = ++creatingGeneration;
+    try {
+        const page = await api.call<Page<WorkItemSummary>>('workitem.list', createBody(id));
+        if (mine === creatingGeneration) creating.value = { id, open: unfinishedCreate(page.items) };
+    } catch {
+        if (mine === creatingGeneration) creating.value = null;
+    }
 }

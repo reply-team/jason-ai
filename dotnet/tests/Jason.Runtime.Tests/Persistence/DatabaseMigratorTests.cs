@@ -67,6 +67,7 @@ public class DatabaseMigratorTests
     }
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Older_backups_are_pruned_to_the_retention_limit()
     {
         using var dir = new TempDataDir();
@@ -125,6 +126,7 @@ public class DatabaseMigratorTests
     /// part way.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_start_that_fails_keeps_every_backup()
     {
         using var dir = new TempDataDir();
@@ -146,6 +148,7 @@ public class DatabaseMigratorTests
     /// a start straight after one that failed would write over the copy that one took.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_backup_never_takes_the_place_of_another()
     {
         using var dir = new TempDataDir();
@@ -167,6 +170,7 @@ public class DatabaseMigratorTests
     /// a backup exists, and the half-made file is gone so the next start begins from nothing.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_migration_that_fails_on_a_database_this_start_made_says_it_held_nothing_and_removes_it()
     {
         using var dir = new TempDataDir();
@@ -197,6 +201,7 @@ public class DatabaseMigratorTests
     /// start reads — and nothing escapes it.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_start_whose_migration_fails_is_refused_in_its_own_words()
     {
         using var dir = new TempDataDir();
@@ -220,6 +225,7 @@ public class DatabaseMigratorTests
     /// and migrates, and says that it did.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_migration_lock_a_stopped_start_left_is_cleared_and_the_next_start_migrates()
     {
         using var dir = new TempDataDir();
@@ -239,6 +245,7 @@ public class DatabaseMigratorTests
 
     /// <summary>A start that finds the migration lock free deletes nothing from it and says nothing of it.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_start_with_no_stale_migration_lock_clears_nothing()
     {
         using var dir = new TempDataDir();
@@ -258,6 +265,7 @@ public class DatabaseMigratorTests
     /// has succeeded, so the next start does not read it as a start stopped part way.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task The_record_a_start_writes_before_it_migrates_is_gone_once_it_has_succeeded()
     {
         using var dir = new TempDataDir();
@@ -272,6 +280,7 @@ public class DatabaseMigratorTests
 
     /// <summary>A start that put its own copy back is done with its record: the database is as it found it.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task The_record_is_gone_once_a_start_has_put_its_own_copy_back()
     {
         using var dir = new TempDataDir();
@@ -287,6 +296,7 @@ public class DatabaseMigratorTests
 
     /// <summary>A record found where this start made the database from nothing points at a copy of a database that is gone.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_record_found_by_a_start_that_made_the_database_is_deleted()
     {
         using var dir = new TempDataDir();
@@ -306,6 +316,7 @@ public class DatabaseMigratorTests
     /// With anything still to migrate the record stays, since that start may have been stopped inside a later migration.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_start_with_nothing_to_migrate_deletes_a_record_whose_migration_the_history_holds()
     {
         using var dir = new TempDataDir();
@@ -324,6 +335,7 @@ public class DatabaseMigratorTests
     /// it, and says so once in the log, without what the record holds.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_record_naming_a_migration_this_version_does_not_know_is_left_and_said_once()
     {
         using var dir = new TempDataDir();
@@ -347,6 +359,7 @@ public class DatabaseMigratorTests
     /// once, without the reason the file system gave.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_record_that_cannot_be_written_is_said_once_and_the_start_migrates()
     {
         using var dir = new TempDataDir();
@@ -369,6 +382,7 @@ public class DatabaseMigratorTests
     /// is left exactly as it is, never written over, and the log says once that it could not be read, without its text.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_record_that_cannot_be_read_is_left_as_it_is_and_said_once()
     {
         using var dir = new TempDataDir();
@@ -394,6 +408,7 @@ public class DatabaseMigratorTests
     /// stopped inside: the record stays, the pointer to the copy from before that start with it.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_record_whose_last_migration_this_version_does_not_know_survives_a_start_with_nothing_to_migrate()
     {
         using var dir = new TempDataDir();
@@ -412,6 +427,7 @@ public class DatabaseMigratorTests
     /// copy it names is not let go of with the older backups: a record still on disk keeps the copy it points to.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_record_that_cannot_be_deleted_after_a_success_is_said_and_its_copy_kept()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "A file held open without leave to delete it refuses its delete on Windows alone; elsewhere the delete goes through.");
@@ -445,6 +461,7 @@ public class DatabaseMigratorTests
     /// succeeds lets go of none of them: every backup is kept and the record is left as it is until a person looks.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task No_backup_is_let_go_of_while_a_record_that_cannot_be_read_is_on_disk()
     {
         using var dir = new TempDataDir();

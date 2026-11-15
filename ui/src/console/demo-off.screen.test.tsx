@@ -1,18 +1,19 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopSetup } from '../platform/desktop';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
+import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
-import { route } from '../router';
+import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
-import { chats, lines, setup, setupError } from './state';
+import { chats, here, lines, setup, setupError } from './state';
 
 // In the demo the page's acts that connect or change a real account are off and say why, once per card; in Live they
 // are on. Reads stay: the accounts shown are whatever the installation holds. Connecting an AI is not one of them.
@@ -53,13 +54,16 @@ async function renderAt(
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
     render(<Console api={fake} desktop={desktop} stream={stubStream().stream} />);
-    const side = () => within(document.querySelector<HTMLElement>('.side')!);
-    // Connect is under More; Accounts has a row of its own.
-    await waitFor(() => side().getByRole('button', { name: panel === 'Connect' ? 'More' : panel }));
-    if (panel === 'Connect') {
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
-    } else fireEvent.click(side().getByRole('button', { name: panel }));
+    // Live's sidebar draws neither row, so each is brought forward as a link does it.
+    await waitFor(() => screen.getByRole('button', { name: /^Needs you/ }));
+    if (panel === 'Connect') flush(() => here().dock.show('connect'));
+    else {
+        const address = registry
+            .list('screen')
+            .find((each) => each.id === 'accounts')!
+            .href();
+        flush(() => here().dock.page(parseRoute(address)));
+    }
     await waitFor(() => {
         if (panel === 'Connect') expect(document.querySelector('.plugin')).not.toBeNull();
         else expect(document.querySelector('.acct')).not.toBeNull();
@@ -202,7 +206,7 @@ describe('The Accounts page in the demo', () => {
 describe('The same screens in Live', () => {
     it('say nothing of the demo and keep every act on the Connect panel', async () => {
         await renderAt('live', 'Connect');
-        expect(screen.queryByText('Nothing here is real or sent.')).toBeNull();
+        expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
         for (const name of ['Sign in', 'Connect', 'Add account']) expect(button(card, name).disabled).toBe(false);
@@ -214,7 +218,7 @@ describe('The same screens in Live', () => {
 
     it('keep the Accounts page Reply card on, with no sentence', async () => {
         await renderAt('live', 'Accounts');
-        expect(screen.queryByText('Nothing here is real or sent.')).toBeNull();
+        expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         expect(button(replyCard(), 'Add account').disabled).toBe(false);
     });

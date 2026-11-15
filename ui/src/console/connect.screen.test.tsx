@@ -15,6 +15,7 @@ import { Painted } from './painted';
 import { Console } from './console';
 import { attention } from './needs';
 import { bind, chats, lines, setup, setupError } from './state';
+import { bringForward } from '../test/area';
 
 // The Connect panel's Reply card, its accounts grouped by channel with the state Reply reports, and Disconnect on the
 // cards of the notification plugins.
@@ -53,9 +54,7 @@ function renderConnect(status: DesktopSetup, firstReadMs = 0): StubDesktop {
 
 async function openConnect(): Promise<HTMLElement> {
     await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
-    const side = within(document.querySelector<HTMLElement>('.side')!);
-    fireEvent.click(side.getByRole('button', { name: 'More' }));
-    fireEvent.click(side.getByRole('menuitem', { name: /^Connect/ }));
+    bringForward('Connect');
     return waitFor(() => {
         const panel = screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
         expect(panel.querySelector('.plugin')).not.toBeNull();

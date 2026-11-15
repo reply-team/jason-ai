@@ -19,6 +19,7 @@ public class CampaignSendModesMigrationTests
     private const string PreviousMigration = "20261114031653_JournalVerdictsByThread";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task An_upgraded_campaign_holds_no_mode_of_its_own_and_every_send_waits_for_a_person()
     {
         using var dir = new TempDataDir();

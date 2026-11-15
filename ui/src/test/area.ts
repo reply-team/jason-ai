@@ -1,5 +1,7 @@
-import { chats } from '../console/state';
-import { route } from '../router';
+import { act as flush } from '@testing-library/react';
+import { chats, here } from '../console/state';
+import { registry } from '../platform/slots';
+import { parseRoute, route } from '../router';
 
 // What the console's one area shows, read from the page as a person sees it: the one pane not hidden.
 
@@ -31,4 +33,30 @@ export function inFront(): string | undefined {
     if (pane.startsWith('chat:')) return chats.value[pane.slice('chat:'.length)]?.title ?? pane;
     if (pane === 'page') return `page:${route.value.screen}`;
     return names[pane] ?? pane;
+}
+
+const panels = { Agents: 'campaigns', Dashboard: 'dashboard', Activity: 'activity', Connect: 'connect' } as const;
+const pages = {
+    People: 'people',
+    Accounts: 'accounts',
+    Performance: 'performance',
+    'Work items': 'workitems',
+    System: 'system',
+} as const;
+
+/**
+ * Brings a panel or a page forward the way a link or the palette does, for the places Live's sidebar does not draw a
+ * row for (the demo's sidebar does, and `side.screen.test.tsx` holds both lists).
+ */
+export function bringForward(name: keyof typeof panels | keyof typeof pages): void {
+    flush(() => {
+        if (name in panels) here().dock.show(panels[name as keyof typeof panels]);
+        else {
+            const address = registry
+                .list('screen')
+                .find((each) => each.id === pages[name as keyof typeof pages])!
+                .href();
+            here().dock.page(parseRoute(address));
+        }
+    });
 }

@@ -10,6 +10,7 @@ using Jason.Cli.Files;
 using Jason.Cli.Logs;
 using Jason.Cli.Skills;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Files;
 using Jason.Contracts.Harness;
 
 namespace Jason.Cli.Moving;
@@ -110,6 +111,31 @@ public static class ExportCommand
 
     /// <summary>A path of the data directory by its name under it, with <c>/</c> between its parts, as an archive names it.</summary>
     internal static string Under(JasonPaths paths, string path) => Path.GetRelativePath(paths.Root, path).Replace(Path.DirectorySeparatorChar, '/');
+
+    /// <summary>
+    /// Whether <paramref name="name"/>, an archive's name for a file, is a temporary file a settings writer left beside the
+    /// settings file, or beside the secrets file where the layout keeps it apart (<see cref="SettingsTemporaryFiles"/>):
+    /// never carried, whatever its age, and never placed by an import.
+    /// </summary>
+    internal static bool SettingsTemporary(JasonPaths paths, string name) =>
+        SettingsTemporaryFiles.WrittenFiles(paths).Any(file => SettingsTemporaryBeside(ExportManifest.DataPrefix + Under(paths, file), name));
+
+    /// <summary>
+    /// Whether <paramref name="name"/> is a settings writer's temporary file beside <paramref name="settingsEntry"/>, the
+    /// settings file by its name in an archive: in the same folder, and of the writers' shapes for that file's name.
+    /// </summary>
+    internal static bool SettingsTemporaryBeside(string settingsEntry, string name)
+    {
+        var slash = settingsEntry.LastIndexOf('/');
+        var folder = settingsEntry[..(slash + 1)];
+        return name.StartsWith(folder, StringComparison.Ordinal)
+            && name.IndexOf('/', folder.Length) < 0
+            && SettingsTemporaryFiles.IsOne(settingsEntry[(slash + 1)..], name[folder.Length..]);
+    }
+
+    /// <summary>The settings writers' temporary files as the help names them, beside each file of this layout they write.</summary>
+    internal static string SettingsTemporaryInWords(JasonPaths paths) =>
+        string.Join(" and ", SettingsTemporaryFiles.WrittenFiles(paths).Select(file => "data/" + Under(paths, Path.GetDirectoryName(file)!) + "/" + SettingsTemporaryFiles.Shape(Path.GetFileName(file))));
 
     /// <summary>The database's files, each carried when it is there.</summary>
     internal static readonly string[] DatabaseFiles = ["state/jason.db", "state/jason.db-wal", "state/jason.db-shm"];
@@ -457,7 +483,7 @@ public static class ExportCommand
                     Judge(path, dataReal, harnessReal);
                 }
 
-                Walk(path, ExportManifest.DataPrefix + tree, items, leftOut);
+                Walk(path, ExportManifest.DataPrefix + tree, items, leftOut, below => SettingsTemporary(env.Paths, below));
             }
         }
 
@@ -511,7 +537,8 @@ public static class ExportCommand
     /// A directory and everything in it, each name checked, every link inside refused: the top is the caller's to judge, a
     /// link there followed.
     /// </summary>
-    private static void Walk(string directory, string name, List<Item> items, IReadOnlySet<string>? leftOut = null)
+    /// <param name="leftOutFile">A plain file never carried by its name, a settings writer's temporary file; a link of that name is still refused.</param>
+    private static void Walk(string directory, string name, List<Item> items, IReadOnlySet<string>? leftOut = null, Func<string, bool>? leftOutFile = null)
     {
         items.Add(new Item(name + "/", directory, Directory: true));
 
@@ -528,7 +555,8 @@ public static class ExportCommand
         foreach (var entry in entries)
         {
             var below = name + "/" + entry.Name;
-            if (leftOut?.Contains(below) == true)
+            if (leftOut?.Contains(below) == true
+                || (entry is FileInfo { LinkTarget: null } && leftOutFile?.Invoke(below) == true))
             {
                 continue;
             }
@@ -543,7 +571,7 @@ public static class ExportCommand
             Refuse(entry);
             if (entry is DirectoryInfo)
             {
-                Walk(entry.FullName, below, items, leftOut);
+                Walk(entry.FullName, below, items, leftOut, leftOutFile);
             }
             else
             {
@@ -744,7 +772,8 @@ public static class ExportCommand
             + "with a warning when the root is not there; and export.json at the root, naming the Jason version, "
             + "the layout it carries, the moment, the operating system, the data directory, the harness root, the home directory, whether the runtime "
             + "starts at logon, and every file with its size and SHA-256." + nl
-            + "Never carried: " + string.Join(", ", NeverCarried) + ", and anything outside the data directory and the harness root." + nl
+            + "Never carried: " + string.Join(", ", NeverCarried) + ", " + SettingsTemporaryInWords(paths)
+            + ", a temporary file a write of the settings file left behind, whatever its age, and anything outside the data directory and the harness root." + nl
             + "The harness root: " + InstallationPlaces.RootVariable + ", else the Harness:Root the settings file names, else "
             + InstallationPlaces.DefaultFolder + " in the home directory, held to the runtime's rule for a root." + nl
             + "Secrets travel whole. " + SecretsLine + nl

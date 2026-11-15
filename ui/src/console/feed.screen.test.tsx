@@ -1,6 +1,7 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
+import { mode } from '../platform/mode';
 import { activatePlugins } from '../platform/plugin';
 import type { DesktopLineEntry } from '../platform/desktop';
 import { browserPlugins } from '../plugins';
@@ -9,6 +10,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, clock, conversations, feedId, feedUnseen, lines } from './state';
@@ -19,8 +21,10 @@ import { chats, clock, conversations, feedId, feedUnseen, lines } from './state'
 // Feed that is neither renamed nor removed.
 
 function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDesktop; journal: StubStream } {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
+        // Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
@@ -62,7 +66,9 @@ const kept = (fields: Partial<DesktopLineEntry> = {}): DesktopLineEntry => ({
     ...fields,
 });
 
+// The Feed's row is in the demo's sidebar; Live's does not draw it.
 beforeEach(() => {
+    mode.value = 'demo';
     chats.value = {};
     conversations.value = [];
     lines.value = [];

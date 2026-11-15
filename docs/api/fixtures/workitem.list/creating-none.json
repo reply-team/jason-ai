@@ -1,0 +1,22 @@
+{
+  "operation": "workitem.list",
+  "case": "creating-none",
+  "request": {
+    "campaign_id": "cmp_2",
+    "kind": "provider_op",
+    "status": [
+      "created",
+      "awaiting_approval",
+      "scheduled",
+      "processing",
+      "waiting"
+    ],
+    "order": "created",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

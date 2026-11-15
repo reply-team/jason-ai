@@ -6,7 +6,9 @@ import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
 import { CampaignChat } from './campaign-chat';
 import { stageWord } from '../people/standing';
-import { href, parseRoute, route, type Route } from '../../router';
+import { consoleShell } from '../../platform/console-shell';
+import { mode } from '../../platform/mode';
+import { firstCampaignTab, href, parseRoute, route, type Route } from '../../router';
 
 // The recordings were made at 09:00 UTC on 16 October; the page reads "now" from the clock, in UTC here.
 const recordedAt = new Date('2026-10-16T09:00:00Z');
@@ -17,9 +19,19 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.useRealTimers();
+    mode.value = 'live';
+    consoleShell.loaded = false;
+    firstCampaignTab.value = 'sequence';
 });
 
 const table: Route = { screen: 'campaigns', tab: 'sequence', view: 'summary', period: '7d', filters: {} };
+
+/**
+ * A started agent's header asks, for the campaign it opens, whether a provider campaign is still being made: a request
+ * with the opened campaign's own id, which no recording was made for in every campaign's case. Each of those answers it
+ * with the one recorded exchange of a page without a `campaign.create`; the cases that matter are the kind tests'.
+ */
+const startedAgents = () => new FakeApi().answerAnyRequest('workitem.list', 'workitem.list/creating-none');
 
 /** Opens the screen the way an address does: renderApp clears the address, and its late change event must agree with ours. */
 function open(api: FakeApi, to: Route = table) {
@@ -161,7 +173,7 @@ describe('Campaigns', () => {
     });
 
     it('a number opens the campaign’s people under that count, a zero opens nothing, and the rest of the row opens the campaign', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
             .answer('campaign.get', 'campaign.get/summer')
@@ -368,7 +380,7 @@ describe('A campaign’s people', () => {
      * table's are asked for, and again with each list it reads after.
      */
     function peopleApi(...lists: Parameters<FakeApi['answer']>[1][]) {
-        return new FakeApi()
+        return startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/some', 'campaign.summary/all', 'campaign.summary/some')
             .answer(
@@ -579,7 +591,7 @@ describe('A campaign’s people', () => {
 
     it('pages on with the cursor it was given, for the period the list was opened with', async () => {
         const crowded = fixtures['campaign.get/many'].response;
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen-many')
             .answer(
                 'campaign.activity',
@@ -772,7 +784,7 @@ describe('A campaign’s people', () => {
 
     it('an unlinked campaign’s People tab has no Sequence or Out, as its table row has none', async () => {
         const autumn = fixtures['campaign.get/unlinked'].response.id;
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer(
                 'campaign.summary',
@@ -787,6 +799,56 @@ describe('A campaign’s people', () => {
         expect(await screen.findByRole('button', { name: /^New\s*1$/ })).toBeTruthy();
         expect(screen.queryByRole('button', { name: /^Sequence/ })).toBeNull();
         expect(screen.queryByRole('button', { name: /^Out/ })).toBeNull();
+    });
+});
+
+describe('The campaign panel in Live', () => {
+    const spring: Route = { ...table, id: 'cmp_1', tab: 'settings' };
+    const api = () =>
+        new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/details')
+            .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
+            .answer('approval.list', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/by-campaign-pending')
+            .answer('journal.list', 'journal.list/by-campaign', 'journal.list/by-campaign-changes');
+
+    it('draws People, Inbox and Settings, and Sequence and Results only in the demo', async () => {
+        consoleShell.loaded = true;
+        open(api(), spring);
+        await screen.findByRole('heading', { level: 2, name: 'Spring' });
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+    });
+
+    it('still opens a tab it does not draw at the address that names it', async () => {
+        consoleShell.loaded = true;
+        open(api(), { ...table, id: 'cmp_1', tab: 'sequence' });
+        expect(await screen.findByText('Waiting for you')).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+    });
+
+    it('draws every tab in the classic shell, which is not the console, and opens a bare agent address on Sequence', async () => {
+        expect(mode.value).toBe('live');
+        expect(consoleShell.loaded).toBe(false);
+        open(api(), parseRoute('#/campaigns/cmp_1'));
+        expect(await screen.findByText('Waiting for you')).toBeTruthy();
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'Sequence',
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
+        expect(screen.getByRole('tab', { name: 'Sequence' }).getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('opens People first for an address that names no tab, once Live is known, and Sequence first in the demo', () => {
+        expect(parseRoute('#/campaigns/cmp_1')).toMatchObject({ tab: 'sequence' });
+        firstCampaignTab.value = 'people';
+        expect(parseRoute('#/campaigns/cmp_1')).toMatchObject({ tab: 'people' });
+        expect(parseRoute('#/campaigns/cmp_1/sequence')).toMatchObject({ tab: 'sequence' });
+        expect(parseRoute('#/campaigns/cmp_1/results')).toMatchObject({ tab: 'results' });
     });
 });
 
@@ -908,7 +970,7 @@ describe('A campaign’s Inbox', () => {
     const pilot: Route = { ...table, id: fixtures['campaign.get/inbox'].request.campaign_id, tab: 'inbox' };
 
     function inboxApi() {
-        return new FakeApi()
+        return startedAgents()
             .answer('campaign.list', 'campaign.list/inbox')
             .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-one')
             .answer('campaign.get', 'campaign.get/inbox')
@@ -970,7 +1032,7 @@ describe('A campaign’s Inbox', () => {
     });
 
     it('a campaign no reply was observed in says so, and reads nothing else', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/inbox')
             .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
             .answer('campaign.get', 'campaign.get/inbox-quiet')
@@ -984,7 +1046,7 @@ describe('A campaign’s Inbox', () => {
     });
 
     it('asks again from an empty Inbox, which has its Refresh as every Inbox does', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/inbox')
             .answer('campaign.summary', 'campaign.summary/inbox-all', 'campaign.summary/inbox-quiet')
             .answer('campaign.get', 'campaign.get/inbox-quiet')
@@ -1035,7 +1097,7 @@ describe('A campaign’s Results', () => {
     }
 
     it('shows four figures as the runtime counts them: its people now, and the period’s contacted, replied and opted out', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
             .answer('campaign.get', 'campaign.get/details')
@@ -1059,7 +1121,7 @@ describe('A campaign’s Results', () => {
     });
 
     it('asks both of its reads with archived people left out, as the table beside it does', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
             .answer('campaign.get', 'campaign.get/details')
@@ -1084,7 +1146,7 @@ describe('A campaign’s Results', () => {
     });
 
     it('a campaign nothing has happened in yet shows its zeros, not blanks', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
             .answer('campaign.get', 'campaign.get/summer')
@@ -1101,7 +1163,7 @@ describe('A campaign’s Results', () => {
     });
 
     function resultsApi() {
-        return new FakeApi()
+        return startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
             .answer('campaign.get', 'campaign.get/details')
@@ -1169,7 +1231,7 @@ describe('What the panel does', () => {
     function actionsApi(get: 'campaign.get/details' | 'campaign.get/archived' = 'campaign.get/details', writes = 0) {
         const panel = get === 'campaign.get/archived' ? 'campaign.summary/archived' : 'campaign.summary/some';
         const again = Array.from({ length: writes }, () => [panel, 'campaign.summary/all'] as const).flat();
-        return new FakeApi()
+        return startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', panel, ...again)
             .answer('campaign.get', get);
@@ -1258,7 +1320,7 @@ describe('What the panel does', () => {
     });
 
     it('the header’s move is offered and done on a tab other than Settings, and the tab stays', async () => {
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/some', 'campaign.summary/all')
             .answer('campaign.get', 'campaign.get/details')
@@ -1289,7 +1351,7 @@ describe('What the panel does', () => {
 
     it("a draft is started from the campaign's header, saying that its work is released for the first time", async () => {
         const autumn = fixtures['campaign.get/unlinked'].response;
-        const api = new FakeApi()
+        const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
             .answer('campaign.get', 'campaign.get/unlinked');

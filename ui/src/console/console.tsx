@@ -7,7 +7,9 @@ import { CurrentPage } from '../app';
 import { can, earlier } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
+import { consoleShell } from '../platform/console-shell';
 import { registry } from '../platform/slots';
+import { LiveSettingsSections } from './settings-sections';
 import { navigate, parseRoute, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
@@ -24,6 +26,7 @@ import * as connect from './connect';
 import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
+import { reloadWaiting } from './waiting';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
@@ -46,6 +49,11 @@ import {
     type Dock,
     type PanelName,
 } from './state';
+
+// Loading the console is what makes this page the console: the classic shell never loads this module, so the parts that
+// are the console's alone (Live's essentials, the extra Settings sections) are drawn nowhere else.
+consoleShell.loaded = true;
+consoleShell.settingsSections = LiveSettingsSections;
 
 // The desktop's shell: a sidebar and one area. The sidebar's menu, its Recent and the palette are the only way about, and
 // the area shows exactly one thing: Start, one chat, one of the panels the console draws itself from the Runtime API, or
@@ -89,10 +97,16 @@ function DashboardPanel({ inSight }: { inSight: boolean }) {
     return <Painted className="painted" view={dashboard.dashboardView} />;
 }
 
+/** Needs you, whose rows are read whole while it is drawn, so that an approval is approved only once it has been. */
+function NeedsPanel() {
+    useEffect(() => needs.drawNeeds(), []);
+    return <Painted className="painted" view={needs.needsView} />;
+}
+
 const panels: Readonly<Record<PanelName, (inSight: boolean) => ReactNode>> = {
     start: () => <StartPanel />,
     dashboard: (inSight) => <DashboardPanel inSight={inSight} />,
-    needs: () => <Painted className="painted" view={needs.needsView} />,
+    needs: () => <NeedsPanel />,
     campaigns: () => <Painted className="painted" view={campaigns.campaignsView} />,
     activity: () => <Painted className="painted" view={activityView} />,
     connect: () => (
@@ -319,6 +333,7 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 pending = setTimeout(() => {
                     pending = null;
                     void needs.reload();
+                    reloadWaiting(api);
                     void campaigns.reload();
                     dashboard.reloadIfOpen();
                 }, reloadDelay);

@@ -17,6 +17,16 @@ afterEach(() => {
 });
 
 describe('Settings', () => {
+    it('in the classic shell draws neither Models nor Runtime, which are the console’s in Live', async () => {
+        renderApp(new FakeApi().answer('preference.list', 'preference.list/none'));
+        route.value = { screen: 'settings' };
+        await waitFor(() => screen.getByRole('heading', { name: 'Appearance' }));
+        const headings = screen.getAllByRole('heading', { level: 2 }).map((each) => each.textContent?.trim() ?? '');
+        expect(headings).not.toContain('Models');
+        expect(headings.some((each) => each.startsWith('Runtime'))).toBe(false);
+        expect(document.querySelector('[data-section="models"], [data-section="runtime"]')).toBeNull();
+    });
+
     it('draws no language choice, and reads none that this browser stored before', async () => {
         localStorage.setItem('jason.ui.locale', 'uk');
         try {

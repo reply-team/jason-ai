@@ -24,6 +24,7 @@ public class ProviderBlocksSchemaTests
     /// with every column a block needs.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_database_keeps_its_waits_and_has_the_block_table_empty()
     {
         using var dir = new TempDataDir();
@@ -77,6 +78,7 @@ public class ProviderBlocksSchemaTests
     /// cleared alike, and the index is built over them in the same start.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_database_keeps_its_blocks_and_has_them_in_the_listing_index()
     {
         using var dir = new TempDataDir();
@@ -209,6 +211,7 @@ public class ProviderBlocksSchemaTests
     /// another sender with no trial under way draws its own.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task An_upgraded_database_keeps_its_blocks_each_on_every_channel()
     {
         using var dir = new TempDataDir();

@@ -13,8 +13,8 @@ metadata:
 > two disagree, the contract is what decides.
 
 > **Partly an expert skeleton.** The launch procedure and its gates are complete. Message
-> strategy — cadence, channel mix, what makes an opener work — is marked `TODO(expert)` and
-> needs validation by outbound experts before this skill leaves `draft`.
+> strategy — cadence, channel mix, what makes an opener fail, subject lines and the ask — is
+> marked `TODO(expert)` and needs validation by outbound experts before this skill leaves `draft`.
 
 ## Purpose
 
@@ -66,8 +66,19 @@ Settle with the user before building anything:
    count matters, but the count is not what the user approves; the preview names them.
 4. **The content, written with the user.** Never invent outreach copy silently and never send
    copy the user has not read. Drafting together is part of the work, not a preliminary.
-   - TODO(expert): what makes a first message earn a reply — structure, length,
-     personalisation depth, and which openers to avoid.
+   - **A first message is short, and built on what is known about the person**: something that
+     happened to them or that they said, held in their record or stated by the user — not a title
+     or a company's name alone, and never the criteria a search drew the list by: they say how
+     people were chosen, not what is true of any one of them. What the user states as true of
+     everyone on a list they brought is a fact about each. With such a fact, build the message on
+     it, and say who writes and ask one thing. With little known, keep it very short: who writes,
+     why this person, one ask, and no interest, familiarity or praise that nothing known supports.
+     What is known decides what the message is built on, never its length. A template is held to
+     this as `message.draft` renders it for one person, and for one whose fields fall back: a
+     fallback is no fact. Where the user says how long it is or what it must hold, theirs holds;
+     where that claims what nothing known supports, say so first.
+   - TODO(expert): which openers to avoid beyond one that claims to know the person; subject
+     lines; what the one ask should be.
 5. **Cadence and channel mix.** A step is channel × execution mode × kind, and the three are
    independent (E9); every interval carries a unit, a stated basis — calendar days, working days
    or sending days — and whose calendar (E7).
@@ -266,6 +277,8 @@ different gate from anything on this page. Full rules: `approval-boundaries`.
 
 ## Changelog
 
+- 3.1.0 (2026-11-15): a first message is short and built on what is known about the person, never
+  on a search's criteria; the openers to avoid, subject lines and the ask stay marked for an expert.
 - 3.0.0 (2026-08-10): breaking, against the 325-operation contract. Every operation this skill
   named was renamed: `sequence.create` → `campaign.create`, `sequence.add-step` → `step.add`,
   `sequence.assign-sender` → `sender_binding.set`, `sequence.assign-schedule` → `schedule.set`,

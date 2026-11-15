@@ -8,6 +8,7 @@ import { mode } from '../platform/mode';
 import { route } from '../router';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import type { FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -48,8 +49,10 @@ function renderConsole(
     routed: FixtureName | null = toReply,
     prepare: (fake: FakeApi) => void = () => undefined,
 ): StubDesktop {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
+        // Needs you reads each approval it lists whole, for its row's Approve.
+        .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
@@ -155,6 +158,25 @@ describe('the start screen', () => {
             'This interface is optional. It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
         );
         expect(startForm().contains(note)).toBe(false);
+    });
+
+    it('says in the demo what the demo is, and that Live has the essentials', async () => {
+        renderConsole(stubDesktop());
+        await waitFor(() => screen.getByRole('note'));
+        flush(() => {
+            mode.value = 'demo';
+        });
+        try {
+            const note = await waitFor(() => screen.getByRole('note'));
+            expect(note.querySelector('strong')!.textContent).toBe('This interface is optional.');
+            expect(note.textContent).toContain(
+                'This interface is optional. It shows the main things the Jason harness can do, and the harness runs fine without it, from Claude Code, Codex or any other agent. What you see in Demo is an example of what you can build; Live has the essentials. Jason is open source: get the code at github.com/reply-team/jason-ai and have your coding agent build the pages you need.',
+            );
+        } finally {
+            flush(() => {
+                mode.value = 'live';
+            });
+        }
     });
 
     it('has no subline under the title', async () => {

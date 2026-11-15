@@ -18,6 +18,7 @@ import { Console } from './console';
 import { attention } from './needs';
 import { startDraft, startMaking, startMode, startPick, startWaiting, submitStart } from './start';
 import { chats, conversations, lines, setup, setupError } from './state';
+import { bringForward } from '../test/area';
 
 // The console in a browser tab the desktop opened: the console over the tab's object, drawn as the window draws it.
 // What the bridge's table does not carry is drawn off, in its place, with one sentence; Open in is not drawn at all; and
@@ -86,9 +87,8 @@ async function renderTab({ panel = 'Connect', keep = [], standing = false }: Opt
     render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
     const side = () => within(document.querySelector<HTMLElement>('.side')!);
     if (panel === 'Connect') {
-        await waitFor(() => side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
+        await waitFor(() => side().getByRole('button', { name: /^Needs you/ }));
+        bringForward('Connect');
         await waitFor(() => expect(document.querySelector('.plugin')).not.toBeNull());
     } else {
         await waitFor(() => screen.getByRole('form', { name: 'Start' }));

@@ -19,6 +19,7 @@ import { claimDemoFolder } from './demo-folders.ts';
 import { mergeSettings } from './demo-settings.ts';
 import { openDirectory } from './mode.ts';
 import { dataLayout, readLayoutStamp, stampRefuses } from './paths.ts';
+import { settingsTemporary } from './settings-temporary.ts';
 
 export interface DemoStartDeps {
     /** Makes and marks the demo's harness root, or uses it when marked; throws on a folder of that name that is not ours. */
@@ -77,7 +78,7 @@ export function writeDemoRoute(data: string): void {
     }
     const next = mergeSettings(settings, { Routes: { Default: { Plugin: 'demo' } } });
     mkdirSync(dirname(file), { recursive: true });
-    const temporary = `${file}.${process.pid}.tmp`;
+    const temporary = settingsTemporary(file);
     try {
         writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`);
         renameSync(temporary, file);

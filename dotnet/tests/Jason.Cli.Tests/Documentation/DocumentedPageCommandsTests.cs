@@ -94,15 +94,12 @@ public class DocumentedPageCommandsTests
         return data;
     }
 
-    // Critical: a printed command parses.
-    public static TheoryData<string, string> CriticalDocumentedCommands() =>
-        CriticalRows.Mark(DocumentedCommands(), Family.D1, data => data is [string page, "jason update check"] && page == Path.Combine("docs", "handbook.md"));
-
     private static IEnumerable<(string Page, string Command)> Printed() =>
         Pages.SelectMany(page => Commands(page).Select(line => (page, line)));
 
     [Theory]
-    [MemberData(nameof(CriticalDocumentedCommands))]
+    [MemberData(nameof(DocumentedCommands))]
+    [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public async Task Every_documented_command_is_understood(string page, string command)
     {
         using var dir = new TempPaths();
@@ -118,6 +115,7 @@ public class DocumentedPageCommandsTests
 
     /// <summary>At least one line, or the theory above asserts nothing at all.</summary>
     [Fact]
+    [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public void The_pages_carry_commands_to_check() => Assert.NotEmpty(DocumentedCommands());
 
     /// <summary>
@@ -162,6 +160,7 @@ public class DocumentedPageCommandsTests
     /// </summary>
     [Theory]
     [MemberData(nameof(GuardedNouns))]
+    [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public void Every_guarded_noun_is_printed_by_a_page(string noun) =>
         Assert.Contains(Printed(), printed => printed.Command.StartsWith(noun, StringComparison.Ordinal));
 
@@ -172,6 +171,7 @@ public class DocumentedPageCommandsTests
     /// sentence saying so is a fact this test keeps rather than a claim in a commit message.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public void Every_jason_line_the_install_page_prints_is_typed()
     {
         var printed = Printed().Where(line => line.Page == Path.Combine("docs", "INSTALL.md")).Select(line => line.Command).ToHashSet(StringComparer.Ordinal);

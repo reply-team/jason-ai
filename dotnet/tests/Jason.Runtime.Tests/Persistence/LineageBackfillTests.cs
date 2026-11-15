@@ -20,6 +20,7 @@ public class LineageBackfillTests
     private const string PreviousMigration = "20260917203003_Reports";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Work_from_before_profiles_is_root_when_a_person_created_it_and_unresolved_when_a_run_did()
     {
         using var dir = new TempDataDir();

@@ -73,7 +73,8 @@ choose again still has the words you typed and did not send, what arrived meanwh
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
 link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
-without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
+without it, from Claude Code, Codex or any other agent; in the demo it adds that what the demo shows is an example of what
+you can build, that Live has the essentials, and that Jason is open source, so your coding agent can build the pages you need. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -81,12 +82,22 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
-  **Open your agents**.
+  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
+  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
+  could not be, and **Details** stays. With nothing waiting it says you are caught up and offers **Open your agents**.
+- An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
+  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
+  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
+  and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
+  answer. A card leaves once the item is decided, there or anywhere else.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
-  header, beside Add people, so they are there from every tab.
-- The sidebar lists, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds
-  pages, agents, chats and people; the **Feed**, the desktop's main chat (below); **Dashboard**, numbers the page computes
+  header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
+- In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
+  macOS) and finds every page, agent, chat and person; **Needs you**, with the number of approvals and questions waiting;
+  the other conversations under **Recent**; and **Settings** alone at the foot. The pages it does not draw keep their
+  addresses and are found by **Search**; an agent opens on its **Chat** (in the desktop), **People**, **Inbox** and
+  **Settings**, and **Settings** also holds **Models**, what Connect holds for the AI and its keys, and **Runtime**, what
+  System holds. The demo's sidebar lists the whole set, under **New GTM agent**: **Search**; the **Feed**, the desktop's main chat (below); **Dashboard**, numbers the page computes
   from what it already reads; **Needs you**, with the number of approvals and questions waiting; **People**; **Agents**;
   **Accounts**; and **More**, which holds Performance, Activity, Work items, Connect and System. The other conversations
   follow under **Recent**, and **Settings** stands alone at the foot.
@@ -291,7 +302,8 @@ starts on it, and nothing of your own installation is made until you choose **Li
 own installation for the first time, as a first start without the demo would, in the Light theme a new installation meets.
 An installation that already existed, with a record or without, and one updated from an earlier version open where they
 did. A top bar heads every screen in both modes: in your own installation a green dot and **Live**; in the demo an amber
-dot, **Demo data** and "Nothing here is real or sent." (in a narrow window, "Sample data. Nothing is sent."). On its right
+dot and "Demo: an example of what you can build on Jason. The data is samples, and nothing is sent." (in a narrow window,
+"Sample data. Nothing is sent."). On its right
 the **Demo | Live** switch marks the mode in force; choosing the other writes the mode and starts the desktop again on that
 installation, and **Back to Your Own Installation** in the tray and the Jason menu does what **Live** does, for a demo
 whose start failed. The first time the demo opens, its sample is placed rather than made: the application carries the
@@ -602,8 +614,9 @@ access asks about this one", which waits thirty minutes and then is not run, and
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is
 not a tool of the chat. Jason does not read a program the AI writes to a file and runs, nor your own shell
-configuration (aliases, shell options), so such a program can still act as you. None of your own MCP servers or
-connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
+configuration (aliases, shell options), so such a program can still act as you, which is why an empty chat in Full
+access does not carry the line "Nothing written here reaches a person without your approval." that the empty chat draws
+in the other modes. None of your own MCP servers or connectors reaches a turn. The AI works in a folder of its own; when Full access ends, the chat says where it is,
 with an Open folder button, and Jason removes it after seven days. The host keeps a session by the folder it began in,
 so the first turn after a change into or out of Full access starts a fresh session, with a recap of the last words.
 Added campaign or project folders whose `.claude` holds skills, subagents or commands are left out of a turn, said once.

@@ -1,4 +1,4 @@
-import { ApiError, type Api } from '../../api/client';
+import { ApiError, Unpaired, type Api } from '../../api/client';
 import type { Approval, ApprovalSummary, Page, WorkItem } from '../../api/types';
 
 /** The two operations that put a person text in front of an approver: a first message, and a reply in a thread. */
@@ -101,6 +101,31 @@ export const sentence = (error: unknown): string => (error instanceof ApiError ?
 
 export const readItem = (api: Api, id: string): Promise<WorkItem> =>
     api.call<WorkItem>('workitem.get', { work_item_id: id });
+
+/** What a person is told when the message's text moved since its approval was asked. */
+export const STALE_SENTENCE =
+    'The text of this message changed after this approval was asked, so Jason will ask again with the new text.';
+
+/** What a person is told when the message could not be read against its work item: the runtime's own words follow. */
+export const uncheckedSentence = (why: string): string =>
+    `The message could not be checked against its work item, so it cannot be approved now: ${why}`;
+
+/** What the check of a message before it is approved found. */
+export type Checked = { item: WorkItem; stale: boolean } | { unchecked: string };
+
+/**
+ * The check that guards the approval of a message: its work item is read again, and a message whose text moved since
+ * the approval was asked is stale, since the runtime asks again with the new text; a read that fails says why. Null
+ * when the pairing has ended, which the session answers for. An approval that is not a message needs no check.
+ */
+export async function checkMessage(api: Api, approval: Approval): Promise<Checked | null> {
+    try {
+        const item = await readItem(api, approval.work_item_id);
+        return { item, stale: isStale(approval, item) };
+    } catch (error) {
+        return error instanceof Unpaired ? null : { unchecked: sentence(error) };
+    }
+}
 
 /** The text moved under the editor: what the item holds now is not what the editor opened with. */
 export class TextMoved extends Error {

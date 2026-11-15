@@ -140,8 +140,9 @@ or `--activity` with the period),
 each with why: a person waiting for you opens the approval or the question in place, as on Attention, anybody else
 opens the person's panel in place, with the page's address left as the campaign's, and a failure shows the reason the
 runtime recorded, with nothing on the page that retries it. Opening a campaign shows its status,
-its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
-add-contacts`). A campaign opens on its **Sequence**, which puts what is planned, what waits for you and what is running
+with its kind beside it: **Sequence** where a provider campaign is pinned to it, **Adaptive** where the agent has been started, no provider campaign is pinned and none is being made (every message it sends is Jason's own; the page reads one page of its unfinished provider operations to know none is being made, and says nothing if that read fails), and nothing otherwise, a draft included; a pin whose provider campaign has gone since still reads Sequence;
+it shows its people and the provider campaign it is linked to; **Add people** finds people and adds them (`jason campaign
+add-contacts`). A campaign opens on its first tab, named **Sequence** where its kind is Sequence and **Paths** otherwise, which puts what is planned, what waits for you and what is running
 above the now line, and ends with **What happened**, the campaign's journal (`jason journal list --campaign`),
 narrowed by chips to replies, work, decisions or changes; its **People** are listed by the same counts with a search, Removed among them
 (`--summary removed`), each row saying where the person stands in this campaign, its Stage word from `standing`; in Activity the tab is **People Activity**, and everything it lists is the period's, All being
@@ -160,7 +161,7 @@ opening a dialog with an optional reason. **Pause** stops Jason releasing an act
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
 `jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its Sequence. Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
+any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
@@ -174,7 +175,12 @@ next message there, as records. One whose turn still runs opens running, with St
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
 of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. In a browser the console is the same, and a campaign's Chat
+the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. An agent's chat shows,
+under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
+from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
+text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
+in Needs you; a question's card has its options as buttons and a box for your own answer. A card leaves once the item is
+decided, there or anywhere else. In a browser the console is the same, and a campaign's Chat
 and the Start screen work only in a tab the desktop opened; any other tab says where the chat is
 ([below](#settings-and-chat-in-the-browser)).
 

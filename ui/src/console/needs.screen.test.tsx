@@ -1,20 +1,24 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
+import type { ApprovalSummary } from '../api/types';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
-import { stubDesktop, stubStream } from '../test/desktop';
+import { attentionStore } from '../screens/attention/store';
+import { whyWords } from '../screens/send-modes/doubts';
+import { journalLine, stubDesktop, stubStream, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { attention, filter } from './needs';
+import { attention, filter, reads } from './needs';
 import { chats, lines } from './state';
+import { READ_LIMIT_MS, fillApprovals, forgetWaiting, wholeReads } from './waiting';
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
-async function renderConsole(fake: FakeApi): Promise<void> {
+async function renderConsole(fake: FakeApi, journal: StubStream = stubStream()): Promise<void> {
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -28,7 +32,7 @@ async function renderConsole(fake: FakeApi): Promise<void> {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
+    render(<Console api={fake} desktop={stubDesktop()} stream={journal.stream} />);
     // Needs you is a page of the sidebar's menu, chosen as a person chooses it once the window has read what waits.
     await waitFor(() => expect(attention.loaded.value).toBe(true));
     fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: /^Needs you/ }));
@@ -46,12 +50,16 @@ beforeEach(() => {
     attention.detail.value = null;
     attention.approvals.value = [];
     attention.questions.value = [];
+    reads.approvals.value = {};
+    reads.unread.value = {};
+    forgetWaiting();
     filter.value = 'all';
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
 });
 
 afterEach(() => {
+    vi.useRealTimers();
     delete (window as { hit?: number }).hit;
 });
 
@@ -92,9 +100,10 @@ describe('Needs you', () => {
     it('filters to approvals or to questions, and says in a line of its own when a filter holds nothing', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
-        await waitFor(() => expect(row('apr_1')).toBeTruthy());
+        await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
         expect(pressed()).toEqual(['All']);
         const asked = fake.calls.length;
         const hash = location.hash;
@@ -116,7 +125,8 @@ describe('Needs you', () => {
         await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/messages-pending')
-                .answer('decision.list', 'decision.list/empty'),
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message'),
         );
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         const waiting = attention.approvals.value;
@@ -145,22 +155,27 @@ describe('Needs you', () => {
         await waitFor(() => expect(row('dec_1')).toBeTruthy());
     });
 
-    it('says on each row who the message goes to, from what the row carries and with no read per row', async () => {
+    it('says on each row who the message goes to, from what the row carries, before its whole read answers', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const release = fake.hold('approval.get');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('to Ines Duarte');
         expect(words(row('apr_2').querySelector('.needs-who')!)).toBe('to Noor Haddad');
-        expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(0);
+        // Each row is read whole once, for its Approve; the name never waits for that read.
+        await waitFor(() => expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(2));
+        release();
+        await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
     });
 
     it('names a row that carries no contact by the address its own preview highlights, once its details are open', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
-            .answer('approval.get', 'approval.get/email-message');
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         attention.approvals.value = attention.approvals.value.map((each) => ({ ...each, contact_name: null }));
@@ -177,7 +192,8 @@ describe('Needs you', () => {
         await renderConsole(
             new FakeApi()
                 .answer('approval.list', 'approval.list/pending')
-                .answer('decision.list', 'decision.list/empty'),
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending'),
         );
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         expect(words(row('apr_1').querySelector('.needs-who')!)).toBe('Ada Lovelace');
@@ -213,7 +229,7 @@ describe('Needs you', () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/pending')
             .answer('decision.list', 'decision.list/empty')
-            .answer('approval.get', 'approval.get/pending-with-preview');
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Details' }));
@@ -226,7 +242,8 @@ describe('Needs you', () => {
     it('draws a hostile sender, channel and recipient as text', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/messages-pending')
-            .answer('decision.list', 'decision.list/empty');
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         await renderConsole(fake);
         await waitFor(() => expect(row('apr_1')).toBeTruthy());
         const recorded = fixtures['approval.get/email-message'].response;
@@ -248,5 +265,324 @@ describe('Needs you', () => {
         await waitFor(() => expect(within(row('apr_1')).getAllByText(hostile).length).toBe(3));
         expect(needs().querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
+    });
+
+    describe('approves only what it has read whole', () => {
+        const approve = (id: string) => within(row(id)).getByRole('button', { name: 'Approve' });
+        const details = (id: string) => within(row(id)).getByRole('button', { name: 'Details' });
+        const live = (button: HTMLElement) => !button.hasAttribute('disabled');
+        const sent = (fake: FakeApi, operation: string) =>
+            fake.calls.filter((each) => each.operation === operation).map((each) => each.body);
+        const reads = (fake: FakeApi, id: string) =>
+            sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === id);
+        /** Lets every answer the fake gave be taken in: its answers are promises, all settled within one task. */
+        const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        /** A journal line, as the runtime writes one when something waits: the console reads what waits again. */
+        const line = (journal: StubStream, id: string) =>
+            flush(() => {
+                journal.open();
+                journal.send(journalLine({ id, kind: 'approval_requested' }));
+            });
+        const messages = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/messages-pending')
+                .answer('decision.list', 'decision.list/empty');
+
+        it('holds Approve on a doubted message until the doubt is drawn on its row, above Approve', async () => {
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/park-doubted',
+                'approval.get/linkedin-message',
+            );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
+            const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
+            // Before the whole read Approve is held and there is no doubt to draw; the moment it is live, the doubt stands.
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(within(row('apr_1')).queryByText(doubted)).toBeNull();
+            release();
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            const doubt = within(row('apr_1')).getByText(doubted);
+            expect(within(row('apr_1')).getByText(`Their words: ${doubts[0]!.note}`)).toBeTruthy();
+            expect(doubt.compareDocumentPosition(approve('apr_1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        it('says why a message it could not read cannot be approved, keeps Details, and reads it again at the next reload', async () => {
+            const journal = stubStream();
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const reachable = fake.unreachable(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(row('apr_1')).toBeTruthy());
+            const said = await waitFor(() =>
+                within(row('apr_1')).getByText(/could not be read, so it cannot be approved here/),
+            );
+            expect(words(said)).toContain('Failed to fetch');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            fireEvent.click(approve('apr_1'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+
+            reachable();
+            line(journal, 'jrn_301');
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true), { timeout: 3000 });
+            expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
+        });
+
+        // The clock is a fake one that also moves on its own, so waiting for the page still works and the limit is jumped.
+        it('says a message is being read while its read is unanswered, keeps Details, does not ask again while it is, and asks once at the next reload after its time ran out', async () => {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+            const journal = stubStream();
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            expect(words(row('apr_1'))).toContain('cannot be approved until it has been read whole');
+            expect(words(row('apr_1'))).not.toContain('shown here');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            fireEvent.click(approve('apr_1'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+
+            const listed = sent(fake, 'approval.list').length;
+            line(journal, 'jrn_302');
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(listed), { timeout: 3000 });
+            await settle();
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+
+            await flush(() => vi.advanceTimersByTimeAsync(READ_LIMIT_MS));
+            expect(words(row('apr_1'))).toContain(
+                'This approval could not be read, so it cannot be approved here; Details reads it again. The runtime did not answer within 30 seconds.',
+            );
+            expect(words(row('apr_1'))).not.toContain('The runtime said');
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(live(details('apr_1'))).toBe(true);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+            line(journal, 'jrn_303');
+            await waitFor(() => expect(reads(fake, 'apr_1')).toHaveLength(2), { timeout: 3000 });
+            await settle();
+            expect(reads(fake, 'apr_1')).toHaveLength(2);
+            release();
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+        });
+
+        const enrolments = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/pending')
+                .answer('decision.list', 'decision.list/empty');
+
+        // The rule is the row's, not a list of kinds: whatever an approval does, Approve waits for its whole read.
+        it('holds Approve on an enrolment it could not read, says why, keeps Details, and approves nothing', async () => {
+            const fake = enrolments().answer('approval.get', 'approval.get/pending-with-preview');
+            fake.unreachable('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            const said = await waitFor(() =>
+                within(row('apr_2')).getByText(/could not be read, so it cannot be approved here/),
+            );
+            expect(words(said)).toContain('Details reads it again');
+            expect(words(said)).toContain('Failed to fetch');
+            expect(live(approve('apr_2'))).toBe(false);
+            expect(live(details('apr_2'))).toBe(true);
+            fireEvent.click(approve('apr_2'));
+            await flush(() => Promise.resolve());
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+        });
+
+        it('holds Approve on an enrolment while its read is unanswered, and says so', async () => {
+            const fake = enrolments().answer(
+                'approval.get',
+                'approval.get/pending-with-preview',
+                'approval.get/other-pending',
+            );
+            const release = fake.hold(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_2',
+            );
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            expect(words(row('apr_2'))).toContain('cannot be approved until it has been read whole');
+            expect(words(row('apr_2'))).not.toContain('shown here');
+            expect(live(approve('apr_2'))).toBe(false);
+            expect(live(details('apr_2'))).toBe(true);
+            release();
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            expect(words(row('apr_2'))).not.toContain('cannot be approved');
+        });
+
+        it('draws the doubts of an enrolment a person was asked to look at, as it draws a message’s', async () => {
+            const fake = enrolments().answer('approval.get', 'approval.get/with-doubts', 'approval.get/other-pending');
+            await renderConsole(fake);
+            const asked = await waitFor(() =>
+                within(row('apr_1')).getByText(`A person asked you to look at this: ${whyWords('sensitive_topic')}`),
+            );
+            expect(within(row('apr_1')).getByText('Their words: She asks about a price.')).toBeTruthy();
+            expect(live(approve('apr_1'))).toBe(true);
+            expect(asked.compareDocumentPosition(approve('apr_1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(row('apr_2').querySelector('.send-doubts')).toBeNull();
+        });
+
+        it('approves a message it has read through approval.approve, after checking it against its work item', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-send')
+                .answer('approval.approve', 'approval.approve/approved');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fake.answer('approval.list', 'approval.list/empty');
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]));
+            expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
+            await waitFor(() => expect(needs().querySelector('[data-id="apr_1"]')).toBeNull());
+        });
+
+        it('does not approve a message whose text moved since it was asked, and says so on its row', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-edited-send');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => within(row('apr_1')).getByText(/changed after this approval was asked/));
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+            expect(live(approve('apr_1'))).toBe(true);
+        });
+
+        it('approves a row whose own read failed once Details has read it whole', async () => {
+            const fake = messages().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/linkedin-message',
+            );
+            const reachable = fake.unreachable(
+                'approval.get',
+                (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+            );
+            await renderConsole(fake);
+            await waitFor(() => within(row('apr_1')).getByText(/could not be read/));
+            reachable();
+            fireEvent.click(details('apr_1'));
+            await waitFor(() => within(row('apr_1')).getByText('Notes from the meetup'));
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            expect(within(row('apr_1')).queryByText(/could not be read/)).toBeNull();
+        });
+
+        it('holds only the row whose message is being checked, and that row says so', async () => {
+            const fake = messages()
+                .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
+                .answer('workitem.get', 'workitem.get/parked-send')
+                .answer('approval.approve', 'approval.approve/approved');
+            const release = fake.hold('workitem.get');
+            await renderConsole(fake);
+            await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
+            await waitFor(() => expect(live(approve('apr_1'))).toBe(true));
+            fireEvent.click(approve('apr_1'));
+            await waitFor(() => expect(sent(fake, 'workitem.get')).toHaveLength(1));
+            await settle();
+            expect(live(approve('apr_1'))).toBe(false);
+            expect(words(row('apr_1'))).toContain('This message is being checked against its work item');
+            expect(live(approve('apr_2'))).toBe(true);
+            expect(words(row('apr_2'))).not.toContain('being checked');
+            fake.answer('approval.list', 'approval.list/empty');
+            release();
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]));
+            await waitFor(() => expect(needs().querySelector('[data-id="apr_1"]')).toBeNull());
+        });
+
+        it('reads at most eight rows whole at once, and reads every row in turn', async () => {
+            const fake = new FakeApi().answerAnyRequest('approval.get', 'approval.get/email-message');
+            const release = fake.hold('approval.get');
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = Array.from({ length: 20 }, (_, index) => ({ ...first!, id: `apr_${index + 1}` }));
+            const filled = fillApprovals(fake, wholeReads('long-list', store));
+            await settle();
+            expect(sent(fake, 'approval.get')).toHaveLength(8);
+            release();
+            await flush(() => filled);
+            expect(sent(fake, 'approval.get').map((body) => (body as { approval_id: string }).approval_id)).toEqual(
+                Array.from({ length: 20 }, (_, index) => `apr_${index + 1}`),
+            );
+        });
+
+        // The limit, staged on a fake clock: the first read is held past it, the read sent after it answers at once, and
+        // the first answers last. Only the read under way may write; one whose time ran out writes nothing, ever.
+        it('lets a read unanswered within the limit hold its row, counts it not answered after, sends it once again, and keeps no late answer', async () => {
+            vi.useFakeTimers();
+            const fake = new FakeApi().answer(
+                'approval.get',
+                'approval.get/email-message',
+                'approval.get/park-doubted',
+            );
+            let calls = 0;
+            const release = fake.hold('approval.get', () => ++calls === 1);
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = [first!];
+            const held = wholeReads('limit', store);
+            let filled = false;
+            void fillApprovals(fake, held).then(() => (filled = true));
+            await vi.advanceTimersByTimeAsync(READ_LIMIT_MS - 1);
+            await fillApprovals(fake, held);
+            expect(reads(fake, 'apr_1')).toHaveLength(1);
+            expect(held.unread.value).toEqual({});
+            expect(filled).toBe(false);
+
+            await vi.advanceTimersByTimeAsync(1);
+            expect(filled).toBe(true);
+            expect(held.unread.value['apr_1']).toMatchObject({
+                code: null,
+                message: 'The runtime did not answer within 30 seconds.',
+                unanswered: true,
+            });
+            expect(held.approvals.value).toEqual({});
+
+            await fillApprovals(fake, held);
+            expect(reads(fake, 'apr_1')).toHaveLength(2);
+            expect(held.approvals.value['apr_1']).toEqual(fixtures['approval.get/email-message'].response);
+            expect(held.unread.value).toEqual({});
+
+            release();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(held.approvals.value['apr_1']).toEqual(fixtures['approval.get/email-message'].response);
+            expect(held.unread.value).toEqual({});
+        });
+
+        it('never makes Approve live on an answer that came after its time ran out', async () => {
+            vi.useFakeTimers();
+            const fake = new FakeApi().answer('approval.get', 'approval.get/email-message');
+            const release = fake.hold('approval.get');
+            const store = attentionStore();
+            const [first] = fixtures['approval.list/messages-pending'].response.items as ApprovalSummary[];
+            store.approvals.value = [first!];
+            const held = wholeReads('late', store);
+            void fillApprovals(fake, held);
+            await vi.advanceTimersByTimeAsync(READ_LIMIT_MS);
+            release();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(held.approvals.value).toEqual({});
+            expect(held.unread.value['apr_1']?.unanswered).toBe(true);
+        });
     });
 });

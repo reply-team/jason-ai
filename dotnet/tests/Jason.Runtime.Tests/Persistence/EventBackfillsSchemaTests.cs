@@ -20,6 +20,7 @@ public class EventBackfillsSchemaTests
 
     /// <summary>A source an installation already holds when it upgrades was never asked to be read sooner, and has no span asked for.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_source_has_no_signal_and_no_span_asked_for()
     {
         using var dir = new TempDataDir();

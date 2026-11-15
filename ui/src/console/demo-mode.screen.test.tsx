@@ -85,8 +85,10 @@ describe('Demo in the desktop', () => {
         const console = document.querySelector('.jc-console')!;
         expect(shown.parentElement).toBe(console);
         expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(shown.querySelector('.mode-mark')?.textContent).toBe('Demo data Nothing here is real or sent.');
-        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Demo data');
+        expect(shown.querySelector('.mode-mark')?.textContent).toBe(
+            'Demo: an example of what you can build on Jason. The data is samples, and nothing is sent.',
+        );
+        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Demo:');
         expect(shown.textContent).not.toMatch(/fresh/i);
         expect(shown.classList.contains('mode-demo')).toBe(true);
     });
@@ -189,7 +191,7 @@ describe('Live in the desktop', () => {
         const shown = await waitFor(() => strip()!);
         expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Live');
         expect(shown.classList.contains('mode-live')).toBe(true);
-        expect(shown.textContent).not.toMatch(/Nothing here is real/);
+        expect(shown.textContent).not.toMatch(/an example of what you can build/);
         expect(shown.querySelector('[data-slot="open-in"]')).not.toBeNull();
         const group = within(shown).getByRole('group', { name: 'Data' });
         expect(within(group).getByRole('button', { name: 'Live' }).getAttribute('aria-pressed')).toBe('true');

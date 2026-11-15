@@ -1,7 +1,15 @@
 import type { CampaignActivityRow, CampaignSummary, CampaignSummaryRow } from '../../api/types';
 import { More } from '../../lists/more';
 import type { LoadMore } from '../../lists/use-cursor-list';
-import { href, navigate, type CampaignFilters, type CampaignTab, type CampaignView, type Period } from '../../router';
+import {
+    firstCampaignTab,
+    href,
+    navigate,
+    type CampaignFilters,
+    type CampaignTab,
+    type CampaignView,
+    type Period,
+} from '../../router';
 import { activityColumns, atTheProvider, summaryColumns, tone, unlinked } from './labels';
 
 const number = new Intl.NumberFormat('en-US');
@@ -48,7 +56,7 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                             view === 'summary' ? summary[campaign.id] : activity[campaign.id];
                         const linked = view === 'activity' || summary[campaign.id]?.sequence_linked !== false;
                         const at = { screen: 'campaigns' as const, id: campaign.id, view, period, filters };
-                        const opened = { ...at, ...(opens ?? { tab: 'sequence' as const }) };
+                        const opened = { ...at, ...(opens ?? { tab: firstCampaignTab.value }) };
                         return (
                             <tr
                                 key={campaign.id}

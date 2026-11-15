@@ -2,6 +2,7 @@ import { html } from '../../console/html';
 import { svg } from '../../console/icons';
 import { Painted } from '../../console/painted';
 import { t } from '../../platform/i18n';
+import { consoleShell, essentials } from '../../platform/console-shell';
 import { setTheme, themeChoice, type ThemeChoice } from '../../platform/theme';
 import { SendModesSettings } from '../send-modes/settings-section';
 import { VoiceSection } from './voice';
@@ -14,6 +15,9 @@ const appearance = () => html`<h2>${svg('theme', 16, 'settings-icon')} <span>${t
 
 /** What this browser keeps for itself: the theme. The runtime never hears of it. */
 export function SettingsScreen() {
+    // the console in Live gains what Connect holds for the AI and what System holds of the runtime, beside the sections it
+    // has; the demo has both pages in its sidebar already, and the classic shell is not the console.
+    const Added = essentials() ? consoleShell.settingsSections : null;
     return (
         <div className="settings">
             <h1>{t('settings.title')}</h1>
@@ -35,6 +39,7 @@ export function SettingsScreen() {
             </section>
             <VoiceSection />
             <SendModesSettings />
+            {Added && <Added />}
         </div>
     );
 }

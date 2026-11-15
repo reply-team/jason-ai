@@ -6,7 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { inFront } from '../test/area';
+import { inFront, bringForward } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -53,14 +53,21 @@ describe('a link the desktop hands the console', () => {
             .answer('decision.list', 'decision.list/empty')
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all')
-            .answer('approval.get', 'approval.get/email-message');
+            .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
         renderConsole(desktop, fake);
         const needs = await waitFor(() => panel('Needs you'));
         await waitFor(() => within(needs).getByText('Notes from the meetup'));
         expect(calls(desktop, 'links.take')).toHaveLength(1);
-        expect(fake.calls.filter((each) => each.operation === 'approval.get').map((each) => each.body)).toEqual([
-            { approval_id: 'apr_1' },
-        ]);
+        expect(attention.detail.value?.item.id).toBe('apr_1');
+        // The link opens the approval it names; each row is read whole once besides, for its Approve.
+        const read = (id: string) =>
+            fake.calls.filter(
+                (each) =>
+                    each.operation === 'approval.get' && (each.body as { approval_id?: string }).approval_id === id,
+            );
+        await waitFor(() => expect(read('apr_2')).toHaveLength(1));
+        expect(read('apr_1')).toHaveLength(2);
+        expect(fake.calls.filter((each) => each.operation === 'approval.get')).toHaveLength(3);
         // Opened, never decided: the approval still waits, and no turn was sent.
         expect(
             fake.calls.some((each) => each.operation === 'approval.approve' || each.operation === 'approval.reject'),
@@ -72,6 +79,7 @@ describe('a link the desktop hands the console', () => {
         const desktop = stubDesktop();
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
             .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
@@ -91,9 +99,7 @@ describe('a link the desktop hands the console', () => {
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
         await waitFor(() => expect(inFront()).toBe('Agents'));
-        const side = within(document.querySelector<HTMLElement>('.side')!);
-        fireEvent.click(side.getByRole('button', { name: 'More' }));
-        fireEvent.click(side.getByRole('menuitem', { name: /^Activity/ }));
+        bringForward('Activity');
         desktop.link({ page: 'needs' });
         await waitFor(() => expect(inFront()).toBe('Needs you'));
     });
@@ -130,6 +136,7 @@ describe('a link the desktop hands the console', () => {
             .answer('decision.list', 'decision.list/pending')
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all')
+            .answer('approval.get', 'approval.get/pending-with-preview', 'approval.get/other-pending')
             .answer('decision.get', 'decision.get/pending-with-options');
         renderConsole(desktop, fake);
         await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));

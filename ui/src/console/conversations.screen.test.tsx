@@ -6,8 +6,9 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
-import { inFront, shownPane } from '../test/area';
+import { inFront, shownPane, bringForward } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
@@ -19,7 +20,7 @@ import { chats, conversations } from './state';
 const hostile = '<img src=x onerror="window.hit=1">';
 
 function renderConsole(desktop: StubDesktop = chatDesktop()): { desktop: StubDesktop; fake: FakeApi } {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')
@@ -275,8 +276,8 @@ describe('the desktop’s conversations', () => {
 
     it('sends a turn with the host alone: the conversation the desktop keeps decides the campaign', async () => {
         const { desktop } = renderConsole();
-        await waitFor(() => screen.getByRole('button', { name: 'Agents' }));
-        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
+        await waitFor(() => screen.getByRole('button', { name: /^Needs you/ }));
+        bringForward('Agents');
         const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
@@ -303,7 +304,7 @@ describe('the desktop’s conversations', () => {
         expect(chats.value[id]).toMatchObject({ campaignId: 'cmp_2', title: 'Autumn' });
         await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Autumn' })).toBeTruthy());
         // From now on it is that campaign's conversation: the Campaigns list's Chat opens it, and no other.
-        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         const autumn = await waitFor(() => screen.getByText('Autumn', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(autumn).getByRole('button', { name: 'Chat' }));
         await waitFor(() => expect(calls(desktop, 'chat.create').at(-1)!.args).toEqual(['cmp_2']));
@@ -522,7 +523,7 @@ describe('the desktop’s conversations', () => {
     it('opens one conversation for two quick clicks on a campaign’s Chat', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(within(side()).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));

@@ -23,6 +23,7 @@ export const en = {
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
     'settings.appearance': 'Appearance',
+    'settings.models': 'Models',
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
@@ -60,6 +61,9 @@ export const en = {
     'start.note.lead': 'This interface is optional.',
     'start.note.body':
         'It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+    'start.note.demo.lead': 'This interface is optional.',
+    'start.note.demo.body':
+        'It shows the main things the Jason harness can do, and the harness runs fine without it, from Claude Code, Codex or any other agent. What you see in Demo is an example of what you can build; Live has the essentials. Jason is open source: get the code at github.com/reply-team/jason-ai and have your coding agent build the pages you need.',
     'start.access.header': 'What new chats start with on this computer',
     'start.model.header': 'Model for this new chat',
     'start.model.default': '{host} default',
@@ -84,8 +88,8 @@ export const en = {
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
     'mode.strip': 'Mode bar',
-    'mode.strip.name': 'Demo data',
-    'mode.strip.long': 'Nothing here is real or sent.',
+    'mode.strip.name': 'Demo:',
+    'mode.strip.long': 'an example of what you can build on Jason. The data is samples, and nothing is sent.',
     'mode.strip.short': 'Sample data. Nothing is sent.',
     'mode.switch': 'Data',
     'mode.switch.demo': 'Demo',
@@ -337,6 +341,10 @@ export const en = {
     'modes.system.note': 'An agent may set its own; it is shown under its Settings tab.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
+    'agent.kind.sequence': 'Sequence',
+    'agent.kind.adaptive': 'Adaptive',
+    'agent.kind.paths': 'Paths',
+    'waiting.unanswered': 'The runtime did not answer within {seconds} seconds.',
 } as const;
 
 export type MessageKey = keyof typeof en;

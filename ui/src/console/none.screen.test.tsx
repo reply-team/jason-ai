@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
@@ -7,11 +7,12 @@ import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
-import { shown } from '../test/area';
+import { shown, bringForward } from '../test/area';
 import { stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
+import { closeMenus } from './side';
 import { attention } from './needs';
 import { chats, conversationsFailure, conversations, lines, setup, setupError } from './state';
 
@@ -58,6 +59,7 @@ async function renderNone(waits: 'pending' | 'empty' = 'pending'): Promise<FakeA
 }
 
 beforeEach(() => {
+    closeMenus();
     setup.value = null;
     setupError.value = null;
     chats.value = {};
@@ -131,7 +133,7 @@ describe('The console in a tab with no desktop', () => {
 
     it('reads the runtime as ever: the agents are listed, and their Chat buttons are off', async () => {
         await renderNone();
-        fireEvent.click(side().getByRole('button', { name: /^Agents/ }));
+        bringForward('Agents');
         await waitFor(() => expect(document.querySelectorAll('table.t tbody tr').length).toBeGreaterThan(0));
         for (const chat of screen.getAllByRole('button', { name: 'Chat' }) as HTMLButtonElement[]) {
             expect(chat.disabled).toBe(true);
@@ -143,8 +145,7 @@ describe('The console in a tab with no desktop', () => {
 
     it('says in Connect that it needs Jason Desktop, and offers no act', async () => {
         await renderNone();
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
+        bringForward('Connect');
         await waitFor(() => expect(screen.getAllByText(needs).length).toBeGreaterThan(0));
         expect(document.querySelector('.plugin')).toBeNull();
     });
@@ -181,13 +182,17 @@ describe('The console in a tab with no desktop', () => {
         expect(screen.queryByRole('form', { name: 'Start' })).toBeNull();
         fireEvent.keyDown(box, { key: 'Escape' });
         // The Dashboard's New.
-        fireEvent.click(side().getByRole('button', { name: 'Dashboard' }));
+        bringForward('Dashboard');
         const dash = await waitFor(() => screen.getAllByRole('button', { name: /^New/ }));
         for (const each of dash as HTMLButtonElement[]) expect(each.disabled, words(each)).toBe(true);
     });
 
     it('leaves live everything that does not go through the desktop: the agents, Needs you, Settings, System', async () => {
+        // Rows only the demo's sidebar draws; a tab with no desktop is Live, so the list is asked for as the demo draws it.
         await renderNone();
+        flush(() => {
+            mode.value = 'demo';
+        });
         for (const name of ['Dashboard', /^Needs you/, 'Agents']) {
             const each = side().getByRole('button', { name }) as HTMLButtonElement;
             expect(each.disabled, String(name)).toBe(false);

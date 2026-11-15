@@ -6,7 +6,7 @@ import type { Contact, ContactCampaign } from '../../../api/types';
 import { Notice } from '../../../layout/notice';
 import { CampaignPicker } from '../../../pickers/campaign-picker';
 import { displayName } from '../../../pickers/search';
-import { href } from '../../../router';
+import { firstCampaignTab, href } from '../../../router';
 import { shortDate } from '../../../time/format';
 import * as panel from './store';
 
@@ -81,7 +81,7 @@ export function SequencesTab({ person, now, zone }: Props) {
                                 href={href({
                                     screen: 'campaigns',
                                     id: campaign.campaign_id,
-                                    tab: 'sequence',
+                                    tab: firstCampaignTab.value,
                                     view: 'summary',
                                     period: '7d',
                                     filters: {},

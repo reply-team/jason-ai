@@ -7,9 +7,11 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
+import { bringForward } from '../test/area';
 
 // A campaign's Chat tab, in the desktop's one area: it opens the campaign's one conversation the desktop keeps,
 // made on first use, as the Campaigns list's Chat does.
@@ -35,7 +37,7 @@ const creates = (desktop: StubDesktop, campaignId: string) =>
 
 /** The console, and Spring opened in the area on its Sequence, as the Campaigns panel's Open does. */
 function springApi(): FakeApi {
-    return new FakeApi()
+    return nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
         .answer('preference.list', 'preference.list/set')
@@ -52,7 +54,7 @@ async function openSpring(): Promise<HTMLElement> {
     await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
     // The sidebar brings the Campaigns panel forward, since a chat opened from it takes the front.
     const spring = async () => {
-        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         return (await waitFor(() => within(painted('Agents')).getByText('Spring'))).closest('tr')!;
     };
     fireEvent.click(within(await spring()).getByRole('button', { name: 'Open' }));
@@ -106,7 +108,7 @@ describe('a campaign’s Chat tab in the desktop', () => {
         renderConsole(springApi(), desktop);
         // The list's Chat first: the campaign's one conversation, opened with its kept words.
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
-        fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Agents' }));
+        bringForward('Agents');
         const row = (await waitFor(() => within(painted('Agents')).getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         expect(await screen.findByText('The kept words about Spring')).toBeTruthy();

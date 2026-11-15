@@ -123,6 +123,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// it adds is exactly what it says.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_keeps_every_row_and_every_campaign_lands_in_the_default_project()
     {
         using var dir = Seeded();
@@ -199,6 +200,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// SQLite's sequence for campaigns — the promise never to give an id again — is what it was.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_campaigns_are_changed_where_they_stand_and_never_rebuilt()
     {
         using var dir = Seeded();
@@ -227,6 +229,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// about them is its routing snapshot, which names plugins this installation does not have.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task A_runtime_started_on_an_upgraded_installation_answers_from_every_table_the_rebuild_touched()
     {
         State? before = null;
@@ -269,6 +272,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// touched yet: no projects, no project column, every campaign and every route.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_backup_is_the_installation_as_it_stood_before_the_rebuild()
     {
         using var dir = Seeded();
@@ -292,6 +296,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// journal line cannot be changed or deleted, and a finished work item's result cannot be rewritten.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void After_the_rebuild_the_journal_and_a_finished_result_still_refuse_to_change()
     {
         using var dir = Seeded();
@@ -317,6 +322,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// refused; and a project a campaign is in cannot be deleted.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_migrated_tables_refuse_what_the_model_refuses()
     {
         using var dir = Seeded();
@@ -351,6 +357,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// deleted.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_role_note_is_at_one_level_and_there_is_one_per_role_there()
     {
         using var dir = Seeded();
@@ -394,6 +401,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// the migration runs, never written into it, so two installations never share one.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Every_installation_gets_a_default_project_of_its_own()
     {
         using var one = new TempDataDir();
@@ -427,6 +435,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// refuse a campaign without a project.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_backfill_passes_over_the_campaigns_once_and_reads_the_default_once()
     {
         using var dir = Seeded();
@@ -467,6 +476,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// and says so. The next start migrates that file as though nothing had happened, and only then is the copy let go.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_start_interrupted_after_the_first_commit_is_put_back_and_the_next_start_migrates_cleanly()
     {
         using var dir = Seeded();
@@ -558,6 +568,7 @@ public class ProjectsAndPreferencesMigrationTests
 
     /// <summary>A line that cannot be read is not a line that stands still: the copy is not put back.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_stopped_start_is_not_put_back_when_the_chronicle_cannot_be_read()
     {
         using var dir = Seeded();
@@ -574,6 +585,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// Whatever reading the chronicle's line throws, the line is not known to stand still: the copy is not put back.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_stopped_start_is_not_put_back_when_reading_the_chronicle_throws_anything()
     {
         using var dir = Seeded();
@@ -588,6 +600,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// the installation back as it stood, and where the backups that are left are kept.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_stopped_start_whose_copy_is_gone_is_not_put_back_and_says_where_the_backups_are()
     {
         using var dir = Seeded();
@@ -616,6 +629,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// left exactly as it is, and the file it names is never copied over the database.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_record_naming_a_copy_outside_the_backups_is_never_put_back()
     {
         using var dir = Seeded();
@@ -640,6 +654,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// installation as it stood: the record it writes before it begins carries the first copy and the first line forward.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_second_stopped_start_carries_the_first_copy_and_line_forward()
     {
         using var dir = Seeded();
@@ -660,6 +675,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// second and puts back the copy taken before the first, not its own copy of what the stopped start left.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_start_stopped_inside_its_second_migration_is_put_back_from_before_its_first()
     {
         using var dir = new TempDataDir();
@@ -727,6 +743,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// back, and carries none of the failure's own words; the refusal is said where the start was asked for.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task The_log_of_a_put_back_stopped_start_names_the_migration_and_never_the_cause()
     {
         using var dir = Seeded();
@@ -755,6 +772,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// restore to the same line.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_stopped_start_put_back_leaves_an_update_record_as_it_was_at_the_same_line()
     {
         using var dir = Seeded();
@@ -904,6 +922,7 @@ public class ProjectsAndPreferencesMigrationTests
     /// every row, index, trigger, column and reference — and it migrates again.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Taken_back_on_an_installation_with_campaigns_it_is_as_it_stood_and_migrates_again()
     {
         using var dir = Seeded();

@@ -26,6 +26,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Core;
+using Serilog.Events;
 
 namespace Jason.Runtime.Hosting;
 
@@ -129,6 +130,22 @@ public static class RuntimeHost
 
             var info = RuntimeInfo.Create();
             logger.Information("Jason runtime {Version} starting as {InstanceId} (pid {Pid}) with data directory {DataDir}", info.RuntimeVersion, info.InstanceId, info.Pid, paths.Root);
+            // Only once this start holds the instance lock, and so owns the installation, and there is a log to say it in: a
+            // writer that stopped between its temporary file and the rename left that file beside the file it wrote, the
+            // settings' secrets in it. Removed once no writer can be at work on it. A start the lock refuses, or one that
+            // fails before, removes nothing. Nothing earlier reads such a file, so nothing needs it gone sooner.
+            var swept = SettingsTemporarySweep.Sweep(paths, (options.Clock ?? TimeProvider.System).GetUtcNow(), options.SettingsTemporaryRemoval);
+            if (swept.Found > 0)
+            {
+                // By counts and the shapes alone: a name carries the writer's id, and a byte of the file a secret.
+                logger.Write(
+                    swept.Refused > 0 ? LogEventLevel.Warning : LogEventLevel.Information,
+                    "Temporary files writes of the settings left beside their files (settings.json.<id>.tmp, and secrets.json.<id>.tmp where the secrets are a file of their own) swept at start: {Removed} removed, {Kept} kept as younger than ten minutes, held open or a link, {Refused} could not be removed",
+                    swept.Removed,
+                    swept.Kept,
+                    swept.Refused);
+            }
+
             if (options.ConsoleAtStart is { } console)
             {
                 // Written down once there is somewhere to write it: whether this Windows honoured the executable's

@@ -18,6 +18,7 @@ public class JournalByPersonMigrationTests
     private const string ThisMigration = "JournalByPerson";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_old_journal_keeps_its_lines_without_a_person_and_stays_append_only()
     {
         using var dir = new TempDataDir();

@@ -17,6 +17,7 @@ import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import * as classicCampaigns from '../campaigns/store';
 import * as store from './store';
+import { bringForward } from '../../test/area';
 
 // The Accounts page: the provider's accounts by the Reply card's own code inside the desktop, nothing of them in a
 // browser, and the notification channels as system.info says them, read only in both.
@@ -200,8 +201,8 @@ function inDesktop(info: NotificationsInfo | null, status: DesktopSetup = setupF
 const side = () => within(document.querySelector<HTMLElement>('.side')!);
 
 async function openAccounts(): Promise<HTMLElement> {
-    await waitFor(() => side().getByRole('button', { name: 'Accounts' }));
-    fireEvent.click(side().getByRole('button', { name: 'Accounts' }));
+    await waitFor(() => side().getByRole('button', { name: /^Needs you/ }));
+    bringForward('Accounts');
     return waitFor(() => {
         const page = screen.getByRole('heading', { name: 'Accounts', level: 1 }).closest<HTMLElement>('.main')!;
         expect(page.querySelector('.card .acct')).not.toBeNull();
@@ -276,8 +277,7 @@ describe('Accounts inside the desktop', () => {
         fireEvent.click(within(row(page)).getByRole('button', { name: 'Pause' }));
         await waitFor(() => expect(words(within(cardIn(page)).getByRole('dialog'))).toMatch(/Done\./));
         // Connect is under More.
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^Connect/ }));
+        bringForward('Connect');
         const connect = await waitFor(() => {
             const panel = screen.getByRole('heading', { name: 'Connect', level: 1 }).closest<HTMLElement>('.painted')!;
             expect(panel.querySelector('.acct')).not.toBeNull();
@@ -297,10 +297,9 @@ describe('Accounts inside the desktop', () => {
         const card = () => within(page).getByText('Reply', { selector: 'b' }).closest<HTMLElement>('.card')!;
         fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
         await waitFor(() => within(card()).getByRole('button', { name: 'Gmail' }));
-        fireEvent.click(side().getByRole('button', { name: 'More' }));
-        fireEvent.click(side().getByRole('menuitem', { name: /^System/ }));
+        bringForward('System');
         await waitFor(() => expect(screen.queryByRole('heading', { name: 'Accounts', level: 1 })).toBeNull());
-        fireEvent.click(side().getByRole('button', { name: 'Accounts' }));
+        bringForward('Accounts');
         const again = await openAccounts();
         expect(within(again).queryByRole('button', { name: 'Gmail' })).toBeNull();
     });

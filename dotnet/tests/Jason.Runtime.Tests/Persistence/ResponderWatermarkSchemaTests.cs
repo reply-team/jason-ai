@@ -17,6 +17,7 @@ public class ResponderWatermarkSchemaTests
     private const string PreviousMigration = "20261029150321_SentFacts";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Migration_ResponderWatermark_StartsAtJournalMax()
     {
         using var dir = new TempDataDir();
