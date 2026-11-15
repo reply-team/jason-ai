@@ -47,7 +47,8 @@ public static class StatusCommand
                                         asks for | a route is configured | a binding names an account | a
                                         provider CLI you name answers | the skill packs are deployed to an agent
                                         harness, and the files their record names are there | every enabled
-                                        profile names an agent host detected on this machine | autostart is
+                                        profile names an agent host detected on this machine | an enabled
+                                        execution profile exists for the AI roles to run on | autostart is
                                         registered | notifications reach you | a UI is installed, and the
                                         default one is this release's | the harness root can take the first
                                         project or campaign
@@ -81,6 +82,13 @@ public static class StatusCommand
         never 'jason runtime start': a runtime started any other way would run outside the update and leave
         its last steps undone, so 'jason runtime start' refuses then, and so does the start a sign-in
         registration makes. An update ledger that cannot be read fails the runtime check and names the file.
+
+        The roles check reads the same profiles. With no enabled one, a role's work fails at its claim with
+        role_not_launchable, unless the role has an entry command of its own or Roles:DefaultEntryCommand
+        names one, which the check does not read; it is absent then, and names the repair: jason profile
+        create claude-code --host claude_code --program claude, then "Roles": {"DefaultExecutionProfile":
+        "claude-code"} in the settings file, which the runtime reads without a restart. With one, it is ok:
+        which profile a role runs on is decided at its claim. It never decides readiness.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

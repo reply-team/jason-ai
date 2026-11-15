@@ -165,6 +165,17 @@ internal static class StatusChecks
             $"jason profile update {profile} --host {AgentHosts.Word(host)} --program {AgentHosts.Of(host).CommandWord}";
 
         /// <summary>
+        /// The repair where no enabled profile exists for the AI roles to run on: one profile for Claude Code, by its
+        /// command word. It runs nothing until a level names it, so the fact gives <see cref="NameRolesProfile"/> after it:
+        /// the one line of settings that makes it the default. No verb names the default, so that half is a line a person
+        /// writes, never a repair.
+        /// </summary>
+        public const string CreateRolesProfile = "jason profile create claude-code --host claude_code --program claude";
+
+        /// <summary>The line of settings, printed in a fact, that names <see cref="CreateRolesProfile"/>'s profile the default.</summary>
+        public const string NameRolesProfile = "\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}";
+
+        /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
         /// default, or the one builds before 0.33.0 had: the line that moves a harness deployment its record pins to this build's tag.
         /// </summary>
@@ -276,6 +287,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             var profiles = client is null ? default : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false);
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
+            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1779,6 +1791,43 @@ internal static class StatusChecks
         var profile = names ? astray.Name : "<name>";
         var host = detected[0].Kind;
         return new StatusCheck(Name, false, CheckState.Failed, hosts + " " + said, Repair.MoveProfile(profile, host));
+    }
+
+    /// <summary>
+    /// Whether an enabled execution profile exists for the AI roles to run on, from the same answer <c>agent_hosts</c>
+    /// reads. With none, a role's work fails at its claim with <c>role_not_launchable</c> — unless a role's own entry
+    /// command or <c>Roles:DefaultEntryCommand</c> starts it, which this check does not read — and the fact names the
+    /// command and the line of <paramref name="settingsFile"/> that repair it. Never required: <c>ready</c> says whether
+    /// the installation can start work, and a role is one kind of work. Which profile a role runs on is decided at its
+    /// claim, by names this check does not read, so with a profile there is nothing to fail.
+    /// </summary>
+    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile)
+    {
+        const string Name = "roles_launchable";
+        if (profiles is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, "Whether a role can run is not known: the profiles could not be read: " + (unread ?? "the runtime did not answer") + ".", null);
+        }
+
+        if (profiles.Count == 0)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Absent,
+                "No enabled execution profile exists, so no AI role can run on one: a role's work fails at its claim with role_not_launchable, "
+                + "unless the role has an entry command of its own or Roles:DefaultEntryCommand names one. "
+                + $"`{Repair.CreateRolesProfile}`, then `{Repair.NameRolesProfile}` in {settingsFile}, which the runtime reads without a restart, run the roles on Claude Code.",
+                Repair.CreateRolesProfile);
+        }
+
+        var count = profiles.Count == 1 ? "1 enabled execution profile" : string.Create(CultureInfo.InvariantCulture, $"{profiles.Count} enabled execution profiles");
+        return new StatusCheck(
+            Name,
+            false,
+            CheckState.Ok,
+            count + ". A role's work runs on the one its work item, its campaign, its role or Roles:DefaultExecutionProfile names, and fails at its claim where none names one.",
+            null);
     }
 
     /// <summary>The most pages of profiles the check reads; past them the answer is not one it can read whole.</summary>

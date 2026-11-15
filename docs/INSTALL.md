@@ -438,6 +438,7 @@ otherwise: half of what it reports is not the runtime's to know.
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | every enabled profile names an agent host detected on this machine |
+| | an enabled execution profile exists for the AI roles to run on |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |
