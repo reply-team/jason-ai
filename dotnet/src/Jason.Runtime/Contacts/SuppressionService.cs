@@ -31,7 +31,12 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
             cancellationToken);
     }
 
-    /// <summary>Idempotent: an existing pair answers with the entry that is already there and writes no second chronicle line.</summary>
+    /// <summary>
+    /// Idempotent: an existing pair answers with the entry that is already there and writes no second chronicle line. That
+    /// holds of a pair another writer — an opt-out's stop, a bounce's — puts on the register between this one's read and its
+    /// save: the register's index of a pair refuses the save, and the add answers the entry that writer saved, with nothing
+    /// it staged left on the context.
+    /// </summary>
     public async Task<SuppressionDto> AddAsync(SuppressionAddRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -47,8 +52,20 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
             return ToDto(existing);
         }
 
-        var suppression = Stage(db, journal, clock.GetUtcNow().UtcDateTime, actor, channel!, value!, request.Reason);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var suppression = Stage(db, journal, clock.GetUtcNow().UtcDateTime, actor, channel!, value!, request.Reason, out var line);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException failure) when (HeldFirstElsewhere(failure))
+        {
+            // The save was refused whole, so neither the entry nor its line is in the database; they are let go of here so
+            // the context, which a request scope may ask again, saves nothing of this add later.
+            db.Entry(suppression).State = EntityState.Detached;
+            db.Entry(line).State = EntityState.Detached;
+            var held = await FindAsync(channel!, value!, cancellationToken).ConfigureAwait(false);
+            return ToDto(held!);
+        }
 
         return ToDto(suppression);
     }
@@ -96,7 +113,10 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
     /// <summary>What SQLite says when the register's index of a pair refuses an entry.</summary>
     private const string OnePairRefused = "UNIQUE constraint failed: suppressions.channel, suppressions.value";
 
-    private static Suppression Stage(JasonDbContext db, JournalWriter journal, DateTime at, ActorRef actor, string channel, string value, string? reason)
+    private static Suppression Stage(JasonDbContext db, JournalWriter journal, DateTime at, ActorRef actor, string channel, string value, string? reason) =>
+        Stage(db, journal, at, actor, channel, value, reason, out _);
+
+    private static Suppression Stage(JasonDbContext db, JournalWriter journal, DateTime at, ActorRef actor, string channel, string value, string? reason, out JournalEntry line)
     {
         var suppression = new Suppression
         {
@@ -111,7 +131,7 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
 
         // The chronicle is authoritative domain history a role reads, not a log line: what was suppressed is
         // the whole point of the entry, so the value belongs in it.
-        journal.Append(db, actor, JournalKinds.SuppressionAdded, campaign: null, key: channel, updated: Pair(channel, value), reason: reason);
+        line = journal.Append(db, actor, JournalKinds.SuppressionAdded, campaign: null, key: channel, updated: Pair(channel, value), reason: reason);
         return suppression;
     }
 
