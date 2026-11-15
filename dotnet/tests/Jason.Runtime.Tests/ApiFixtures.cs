@@ -18,6 +18,40 @@ public static class ApiFixtures
 {
     public const string UpdateVariable = "JASON_UPDATE_FIXTURES";
 
+    // The "card-" files are the desktop chat's cards' exchanges, recorded as stories (CardExchangesTests and
+    // CardAccountsReplyExchangesTests). The list below is sorted by operation, so a story's files are not together;
+    // this says which files belong to which. Ids are numbered afresh in each story, so cmp_1, cnt_1 or wi_1 mean other
+    // things in one story than in another: a screen test stays inside ONE story's files and never mixes two.
+    //
+    //   message waiting:  approval.list card-message-pending|-after-edit|-reasked, approval.get card-message|
+    //                     -withdrawn|-reasked, workitem.get card-message-parked, workitem.update card-message-edited,
+    //                     sender.list card-message-sender|card-sender-other.
+    //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
+    //                     card-invitation-parked.
+    //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
+    //                     decision.answer card-free-text.
+    //   many messages:    approval.list card-messages-first-page|-next-page.
+    //   status:           campaign.get|summary card-status, campaign.activity card-status-30-days,
+    //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
+    //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
+    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
+    //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
+    //                     card-chips, plugin.list|route.list card-accounts.
+    //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
+    //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
+    //
+    // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
+    // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
+    // its content is invented: (1) the test plugin of the message, invitation, status and no-route stories is a bare
+    // one (version 1.0.0, digest sha256 recorded-1, null name, description and homepage, five operations, an invented
+    // binding {workspace: a}), so plugin.list/card-accounts and the binding in route.list/card-accounts and
+    // route.resolve/card-plan-message-send show a stand-in's content, not a real package's; (2) the provider's own
+    // answers are a stand-in's: the external id c_7714 in campaign.get/card-status, and every account (name, address,
+    // vendor block) in sender.list/card-message-sender and card-sender-other. The accounts (Reply) story is the
+    // exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
+    // the plugin host), and only the vendor's command-line tool is the test harness's fake, holding invented accounts, so
+    // plugin.list|route.list|sender.list card-accounts-reply are what an installation with that package would answer
+    // (the executable's path is recorded as <bin>/reply). A card that shows plugins or accounts is drawn from the -reply files.
     /// <summary>Every recorded case, as <c>operation/case</c>. A recording not listed here fails; a file not listed here fails the catalog test.</summary>
     public static readonly string[] Cases =
     [
@@ -320,6 +354,7 @@ public static class ApiFixtures
         "operation.describe/on-a-channel",
         "operation.describe/unknown-channel",
         "plugin.list/card-accounts",
+        "plugin.list/card-accounts-reply",
         "plugin.list/none",
         "preference.list/mode-automatic-voice-unset",
         "preference.list/modes-every-message",
@@ -369,6 +404,7 @@ public static class ApiFixtures
         "rolenote.set/project",
         "rolenote.set/two-levels",
         "route.list/card-accounts",
+        "route.list/card-accounts-reply",
         "route.list/channel-routes",
         "route.list/empty",
         "route.resolve/card-plan-message-send",
@@ -382,6 +418,7 @@ public static class ApiFixtures
         "route.resolve/unknown-channel",
         "route.resolve/unrouted-first",
         "route.set/orphans-search",
+        "sender.list/card-accounts-reply",
         "sender.list/card-message-sender",
         "sender.list/card-sender-other",
         "sender.list/card-sender-unread",
@@ -657,6 +694,14 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null,
         if (text.Contains(dataDir, StringComparison.Ordinal))
         {
             return text.Replace(dataDir, "<data>", StringComparison.Ordinal).Replace('\\', '/');
+        }
+
+        // A program the test tree holds, such as the stand-in a provider's package resolves its executable to, is a
+        // program on this machine's disk: it is recorded by its name alone, with no folder and no platform's extension.
+        var tree = AppContext.BaseDirectory;
+        if (text.StartsWith(tree, StringComparison.OrdinalIgnoreCase))
+        {
+            return "<bin>/" + Path.GetFileNameWithoutExtension(text);
         }
 
         // An id inside a longer text, such as a URL or a message, is mapped the same way.
