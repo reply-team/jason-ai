@@ -92,6 +92,7 @@ public class DecisionSchemaTests
     /// migration that moved either would have every installation owing a review it had already had.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgrade_adds_the_table_and_leaves_the_loop_where_it_was()
     {
         using var dir = new TempDataDir();

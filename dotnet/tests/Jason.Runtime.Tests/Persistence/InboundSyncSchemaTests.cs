@@ -106,6 +106,7 @@ public class InboundSyncSchemaTests
     /// be again, has nothing to start from until it goes live.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_reads_its_live_campaigns_from_the_upgrade_and_no_others()
     {
         using var dir = new TempDataDir();

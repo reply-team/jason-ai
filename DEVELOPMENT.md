@@ -114,7 +114,9 @@ what changed, why, how it was verified. The release's own pull request into `mai
 one commit per release, and after it the one that moves `main` to the next version.
 
 **What CI runs, by stage.** Before a push, the critical tier is run locally: the tests that carry the `Critical` trait,
-run with `--filter-trait "Category=Critical"`, about two minutes on a workstation. A pull request into
+run with `--filter-trait "Category=Critical"`, about three minutes on a workstation. The tier holds the test of each
+family that goes red first and two kinds a change can turn red without touching them: the tests that run a migration's
+`Up` or `Down` or hold the migrations' history, and the tests of the commands the pages print. A pull request into
 a release branch runs the Linux set — the version check, the linux-x64 build with the critical tier, the install script
 on Ubuntu, an update on linux-x64, the UI's checks and the desktop's — and merges on green; a change under `dotnet/`
 has run the whole suite locally before that. The release's pull request into `main` runs every check, the whole suite included, on Linux,

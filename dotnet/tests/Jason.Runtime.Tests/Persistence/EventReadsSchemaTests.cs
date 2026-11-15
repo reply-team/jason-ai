@@ -26,6 +26,7 @@ public class EventReadsSchemaTests
     /// failed, nothing more to read. Its cursor is kept as it was.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_source_keeps_its_cursor_and_has_read_nothing_yet()
     {
         using var dir = new TempDataDir();

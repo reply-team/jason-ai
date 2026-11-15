@@ -128,6 +128,7 @@ public class EventStoreSchemaTests
     /// or never will be again, has nothing said until it goes live. Everything that refers to a campaign still does.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void An_upgraded_installation_gives_events_from_to_its_live_and_paused_campaigns_and_no_others()
     {
         using var dir = new TempDataDir();

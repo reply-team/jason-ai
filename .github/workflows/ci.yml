@@ -536,8 +536,9 @@ jobs:
           }
 
           # A draft's push tests the critical tier alone, the tests that go red first when a rule the product rests on
-          # breaks, and so do a pull request into a release branch and the version pull request when they are ready: for
-          # them the tier is the ready run, by rule. The whole suite's run per release is the release's pull request's,
+          # breaks and the tests a change can turn red without touching them (the migrations' own, the pages' printed
+          # commands), and so do a pull request into a release branch and the version pull request when they are ready:
+          # for them the tier is the ready run, by rule. The whole suite's run per release is the release's pull request's,
           # and a change under dotnet/ ran the whole suite locally before it was marked ready. Every other run tests the
           # whole suite.
           $draft = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'

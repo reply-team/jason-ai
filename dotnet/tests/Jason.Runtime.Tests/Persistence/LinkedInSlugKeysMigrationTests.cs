@@ -28,6 +28,7 @@ public partial class LinkedInSlugKeysMigrationTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_stored_linkedin_key_is_lowercased_on_linkedin_hosts_and_nothing_else_is_touched()
     {
         using var dir = Seeded(
@@ -85,6 +86,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// database held no line, and holds none after it.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Two_spellings_of_one_person_become_that_person_s_one_stop_and_the_earliest_stays()
     {
         using var dir = Seeded(
@@ -113,6 +115,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// written first — and the same value on two contacts stays on both: contacts are not merged here.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_contact_s_linkedin_channels_are_rewritten_with_the_register_and_one_contact_keeps_one_of_two_spellings()
     {
         using var dir = Seeded(
@@ -148,6 +151,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// two, and never none where it had one, whichever of the spellings was primary and whatever else it holds.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_collapse_leaves_every_contact_exactly_the_one_primary_it_had()
     {
         using var dir = Seeded(
@@ -250,6 +254,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// the rule this migration rewrote to stored for the same link as it was written, one contact a row.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Every_key_the_rule_before_stored_becomes_the_key_the_rule_of_this_migration_stored()
     {
         var rows = KeysAroundThisMigration;
@@ -284,6 +289,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// well could still scan another table once for each of them.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void Every_statement_over_the_keys_reads_them_through_an_index_and_never_once_per_row()
     {
         var statements = LinkedInSlugKeys.Statements;
@@ -354,6 +360,7 @@ public partial class LinkedInSlugKeysMigrationTests
     /// with it, so the database the runtime keeps holds none of them, and neither does the connection that ran it.
     /// </summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_table_of_keys_and_its_indexes_are_temporary_and_the_script_leaves_nothing_behind()
     {
         using var dir = AtTheMigrationBefore();

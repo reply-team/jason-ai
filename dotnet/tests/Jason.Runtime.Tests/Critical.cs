@@ -13,6 +13,12 @@ namespace Jason.Runtime.Tests;
 /// CI. What else a family holds stays in the suite; the tier takes the test that would fail first.
 /// </para>
 /// <para>
+/// It also takes, method by method, two kinds of test a unit can turn red without touching them, which a tier of first
+/// failures alone leaves for the whole suite to find: the tests that run a migration's <c>Up</c> or <c>Down</c> over a
+/// database they seeded or hold the migrations' history, which a later migration breaks, and the tests of the commands
+/// the pages print, which an edit to a page breaks. Each gives one of the reasons of <see cref="BrokenUntouched"/>.
+/// </para>
+/// <para>
 /// On a fact, or on a theory whose every row belongs to the tier, the attribute marks the method. A theory of which only
 /// some rows belong marks those rows instead and carries no attribute: an <c>InlineData</c> row takes
 /// <c>Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.X1)]</c>, a member's row is marked through
@@ -42,6 +48,19 @@ public sealed class CriticalAttribute(Family family, string why) : Attribute, IT
 
     public IReadOnlyCollection<KeyValuePair<string, string>> GetTraits() =>
         [KeyValuePair.Create(Trait, Value), KeyValuePair.Create(FamilyTrait, Family.ToString())];
+}
+
+/// <summary>
+/// The reasons of the tests the tier carries because a unit can turn them red without touching them, rather than because
+/// they fail first. A test that also fails first for a family of its own keeps that family and its own reason.
+/// </summary>
+public static class BrokenUntouched
+{
+    /// <summary>A test that runs a migration's <c>Up</c> or <c>Down</c> over a database it seeded, or holds the migrations' history.</summary>
+    public const string Migration = "a later migration turns it red without touching it";
+
+    /// <summary>A test of the commands and lines a page prints.</summary>
+    public const string PrintedCommand = "an edit to a page turns it red without touching it";
 }
 
 /// <summary>

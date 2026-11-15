@@ -54,7 +54,7 @@ internal static partial class CriticalTier
         [Family.W10] = [  0,   0,   0,   0,  15],
         [Family.W11] = [  0,   0,   0,   0,  17],
         [Family.P1] =  [  0,   0,   0,   0,  12],
-        [Family.P2] =  [  0,   2,   0,   0,  12],
+        [Family.P2] =  [  0,   2,   0,   0,  97],
         [Family.P3] =  [  0,   0,   0,   0,   3],
         [Family.S1] =  [  0,   1,   9,   0,  25],
         [Family.S2] =  [  2,   1,  10,   0,  75],
@@ -84,7 +84,7 @@ internal static partial class CriticalTier
         [Family.N1] =  [  0,   0,   0,   0,   7],
         [Family.N2] =  [  0,   0,   0,   0,  24],
         [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1,   4,   0,   0,   1],
+        [Family.D1] =  [  1, 190,   0,   0,   1],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   2],
         [Family.X1] =  [  0,  10,   3,   1,  14],
@@ -102,10 +102,10 @@ internal static partial class CriticalTier
     public static readonly (int TierMethods, int Methods, int Cases)[] Sizes =
     [
         (28, 375, 607),       // Jason.App.Tests
-        (161, 2606, 4761),    // Jason.Cli.Tests
+        (164, 2779, 5269),    // Jason.Cli.Tests
         (104, 804, 3890),     // Jason.Contracts.Tests
         (47, 282, 450),       // Jason.PluginHost.Tests
-        (633, 6076, 12194),   // Jason.Runtime.Tests
+        (718, 6121, 12272),   // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed cases.</summary>

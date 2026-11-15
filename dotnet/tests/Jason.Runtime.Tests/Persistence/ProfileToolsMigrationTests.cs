@@ -20,6 +20,7 @@ public class ProfileToolsMigrationTests
     private const string ThisMigration = "20261026142432_ProfileTools";
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_revision_written_before_the_grant_existed_grants_nothing()
     {
         using var dir = Seeded();
@@ -33,6 +34,7 @@ public class ProfileToolsMigrationTests
 
     /// <summary>The triggers that freeze a revision are the ones it had before, and they refuse a rewrite of the new column too.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void The_triggers_that_freeze_a_revision_survive_the_column_being_added()
     {
         using var dir = Seeded();
@@ -50,6 +52,7 @@ public class ProfileToolsMigrationTests
 
     /// <summary>The other half of the freeze: a revision that existed before the column cannot be removed either.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_revision_written_before_the_grant_cannot_be_deleted()
     {
         using var dir = Seeded();
@@ -64,6 +67,7 @@ public class ProfileToolsMigrationTests
 
     /// <summary>The column holds JSON, like the two lists beside it, and its check says so by name.</summary>
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public void A_grant_that_is_not_json_is_refused_by_its_check()
     {
         using var dir = Seeded();
