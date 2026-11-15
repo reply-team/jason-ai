@@ -30,9 +30,11 @@ public static class BounceLines
     /// <summary>
     /// How many events said a bounce in the lines of the kind in <c>(after, upTo]</c>: counted by the database, by the key
     /// every line of one event carries, so a window that grows while no pointer reaches anybody is never read into memory.
-    /// The payload's <c>$.kind</c> is the one <see cref="Bounced"/> reads, and SQLite's <c>=</c> keeps exactly the payloads
-    /// it keeps: a number, a boolean, an object, an array, a null or an absent kind is never the bounce's text. Read through
-    /// the kind index, bounded by the window on both sides.
+    /// The payload's <c>$.kind</c> is the one <see cref="Bounced"/> reads, and SQLite's <c>=</c> keeps what it keeps for
+    /// every payload the journal's writers make: a number, a boolean, an object, an array, a null or an absent kind is never
+    /// the bounce's text. It differs only for shapes no writer makes: a payload that is not a JSON object at the top, a JSON
+    /// null, or an object with duplicate keys, which the converter and SQLite read differently. Read through the kind
+    /// index, bounded by the window on both sides.
     /// </summary>
     public static IQueryable<int> Count(JasonDbContext db, int after, int upTo)
     {
