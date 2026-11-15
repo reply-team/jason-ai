@@ -163,6 +163,70 @@ public class ProviderOutcomeRecorderTests
         Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.MessageSentObserved, Ct));
     }
 
+    /// <summary>
+    /// Rules 2 and 3 at the read's end: a read that says the send bounced hard writes the bounce line about the send and
+    /// stages the stop in the change set that ends the read, so the line, the register entry and the read's success commit
+    /// together, whatever made the read.
+    /// </summary>
+    [Fact]
+    public async Task A_read_that_finds_a_hard_bounce_says_it_and_stops_the_address_as_it_succeeds()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.status");
+        var send = WorkItemFactory.NewProviderOp(scene.Campaign, "message.send", Noon);
+        send.Contact = scene.Contact;
+        scene.Contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@northwind.example", IsPrimary = true });
+        db.WorkItems.Add(send);
+        await db.SaveChangesAsync(Ct);
+        var bounced = Read("sent").AsObject();
+        bounced["bounced"] = true;
+        bounced["bounce"] = "hard";
+        bounced["bounced_at"] = null;
+        bounced["bounce_code"] = "hard";
+
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, Status, TestPlugins.FakeProviderId, false, Succeeded(bounced, null), Ct, ReadOf(send));
+        Assert.True(db.ChangeTracker.Entries<Suppression>().Single().State == EntityState.Added, "The stop is staged in the read's own change set.");
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Succeeded, scene.Item.Status);
+        var line = await db.Journal.AsNoTracking().SingleAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct);
+        Assert.Equal((send.PublicId, send.PublicId, scene.Item.PublicId), (line.WorkItemId, line.Key, (string?)line.New!["read_work_item"]));
+        Assert.Equal("ada@northwind.example", (await db.Suppressions.AsNoTracking().SingleAsync(Ct)).Value);
+    }
+
+    /// <summary>
+    /// Rule 4 at the read's end: a read that fails decides nothing, and so does an answer outside the contract, whatever it
+    /// says of a bounce.
+    /// </summary>
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("invalid")]
+    public async Task A_read_that_fails_or_answers_outside_the_contract_decides_no_bounce(string how)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var scene = await SeedAsync(db, operation: "message.status");
+        var send = WorkItemFactory.NewProviderOp(scene.Campaign, "message.send", Noon);
+        send.Contact = scene.Contact;
+        scene.Contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@northwind.example", IsPrimary = true });
+        db.WorkItems.Add(send);
+        await db.SaveChangesAsync(Ct);
+        var bounced = Read("sent").AsObject();
+        bounced["bounced"] = true;
+        bounced["bounce"] = "mailboxFull";
+
+        var answer = how == "failed"
+            ? Failed(new OutcomeError(FailureClass.Permanent, "send_not_found", "Reply holds no direct send email-1001.", null, null))
+            : Succeeded(bounced, null);
+        await scene.Recorder.RecordAsync(db, scene.Item, scene.Attempt, Status, TestPlugins.FakeProviderId, false, answer, Ct, ReadOf(send));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Equal(WorkItemStatus.Failed, scene.Item.Status);
+        Assert.False(await db.Journal.AnyAsync(entry => entry.Kind == JournalKinds.MessageBounceObserved, Ct));
+        Assert.False(await db.Suppressions.AnyAsync(Ct));
+    }
+
     private static OperationContract Status => OperationCatalog.Find("message.status")!;
 
     /// <summary>What a read of a send answers, in one of the document's words.</summary>

@@ -34,6 +34,14 @@ absorbed by a release of this package alone.
   A refusal that names a record of the send names a dead one, which is no longer kept as the work item's `send`; the
   send a later trial makes is. A command run from no sending account ends `sender_limit_reached`, permanent. Against a
   Reply that never answers these codes nothing changes.
+- `message.status` also says whether an email came back as a bounce, of which kind, when, and Reply's own word for the
+  kind. Only a dead address is a `hard` bounce; a full mailbox, a limit of the sender's own and the receiving server's
+  refusal of the message are `soft`, and so is a word this package does not know, since a stop comes only from what
+  Reply says outright; Reply's own `unknown`, or a bounce with no word, is none. Reply's words are matched ignoring case
+  and separators. Each of the four is null where the installed reply-cli does not print them, which says nothing either
+  way. Reply's word is given only where it is one word, never a server's text.
+- The README says a global route can be set with `jason route set --global`, which writes the settings file and reloads
+  in one act, as it can since Jason 0.42.0; it said the CLI refused a global route.
 
 ## 0.15.1
 

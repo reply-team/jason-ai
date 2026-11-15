@@ -15,16 +15,16 @@ namespace Jason.Runtime.Tests.Documentation;
 public partial class InboundSyncDocTests
 {
     [Fact]
-    public void The_page_and_the_work_execution_contract_name_the_scan_s_twelve_steps_in_the_order_the_scan_runs_them()
+    public void The_page_and_the_work_execution_contract_name_the_scan_s_thirteen_steps_in_the_order_the_scan_runs_them()
     {
-        const string steps = "twelve short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
+        const string steps = "thirteen short steps: **expire**, **enforce**, **events**, **sync**, **poll**, **respond**, **bounce**, **reserve**, **summon**, **resume**, **claim**, **notify**, **subscribe**";
 
         Assert.Contains(steps, Flattened(Read("inbound-sync.md")), StringComparison.Ordinal);
         Assert.Contains(steps, Flattened(Read("work-execution.md")), StringComparison.Ordinal);
 
         // And the order the page states is the order the scan runs them in.
         var scan = File.ReadAllText(Path.Combine(SourceDirectory(), "Dispatch", "ScanRunner.cs"));
-        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<SearchPoll,", "<Responder,", "<ReserveCounter,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
+        var order = new[] { "<Expirer,", "<LeaseEnforcer,", "<EventScan,", "<InboundSync,", "<SearchPoll,", "<Responder,", "<BounceStep,", "<ReserveCounter,", "<Summoner,", "<Resumer,", "<Claimer,", "<Notifier," }
             .Select(step => scan.IndexOf(step, StringComparison.Ordinal))
             .ToList();
         Assert.All(order, at => Assert.True(at >= 0));
@@ -109,6 +109,31 @@ public partial class InboundSyncDocTests
         var printed = codes.Values.OrderBy(code => page.IndexOf($"| `{code}` |", StringComparison.Ordinal)).ToList();
         Assert.All(codes.Values, code => Assert.Contains($"| `{code}` |", page, StringComparison.Ordinal));
         Assert.Equal(asked, printed);
+    }
+
+    /// <summary>
+    /// The bounce step's paragraph: every reason it logs is a row of its table, and only those; the numbers it runs by are
+    /// the step's own; and a paused campaign's bounces are said to wait.
+    /// </summary>
+    [Fact]
+    public void The_bounce_step_s_codes_and_numbers_are_the_step_s_own()
+    {
+        var page = Flattened(Read("inbound-sync.md"));
+        var codes = typeof(BounceSkipCodes).GetFields().Select(field => (string)field.GetRawConstantValue()!).ToList();
+        var start = page.IndexOf("**Bounce**", StringComparison.Ordinal);
+        Assert.True(start >= 0, "The page has no paragraph on the bounce step.");
+        var section = page[start..page.IndexOf("## 2.", start, StringComparison.Ordinal)];
+
+        Assert.Equal(2, codes.Count);
+        Assert.All(codes, code => Assert.Contains($"| `{code}` |", section, StringComparison.Ordinal));
+        Assert.Equal(codes.Count, Regex.Matches(section, @"\| `[a-z_]+` \|").Count);
+        Assert.Contains($"at most {BounceStep.LinesPerScan} a campaign a scan", section, StringComparison.Ordinal);
+        Assert.Contains($"at most {BounceCandidates.Most} of them", section, StringComparison.Ordinal);
+        Assert.Contains($"finished no earlier than {BounceCandidates.Window.TotalDays.ToString(CultureInfo.InvariantCulture)} days before the bounce", section, StringComparison.Ordinal);
+        Assert.Contains("one finished after the bounce's moment is not left out", section, StringComparison.Ordinal);
+        Assert.Equal(1, BounceStep.BelowResponders);
+        Assert.Contains("one below `Responder:Priority`", section, StringComparison.Ordinal);
+        Assert.Contains("A paused campaign's bounces wait, and so do the reads they ask for", section, StringComparison.Ordinal);
     }
 
     [Fact]

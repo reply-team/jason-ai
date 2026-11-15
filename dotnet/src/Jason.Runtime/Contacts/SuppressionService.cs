@@ -6,6 +6,7 @@ using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Contacts;
@@ -81,6 +82,19 @@ public sealed class SuppressionService(JasonDbContext db, JournalWriter journal,
 
         return staged;
     }
+
+    /// <summary>
+    /// Whether a save was refused because a pair it puts on the register is already there — put there by another writer
+    /// that read the register before this one saved and saved first. Only the register's one index of a pair answers yes;
+    /// any other refusal, of this table or another, is not this one. A writer that stages an entry in an act's change set
+    /// decides that act once more, and the pair it finds held is "already on the register".
+    /// </summary>
+    public static bool HeldFirstElsewhere(DbUpdateException failure) =>
+        failure?.InnerException is SqliteException { SqliteErrorCode: 19 } refused
+        && refused.Message.Contains(OnePairRefused, StringComparison.Ordinal);
+
+    /// <summary>What SQLite says when the register's index of a pair refuses an entry.</summary>
+    private const string OnePairRefused = "UNIQUE constraint failed: suppressions.channel, suppressions.value";
 
     private static Suppression Stage(JasonDbContext db, JournalWriter journal, DateTime at, ActorRef actor, string channel, string value, string? reason)
     {

@@ -1420,6 +1420,37 @@ public class ReplyPackageTests
     }
 
     /// <summary>
+    /// The same section, 0.16.0, also says a read of a direct send says whether an email bounced, of which kind, when and
+    /// in Reply's own word, only a dead address being hard and a word this package does not know soft, and null for each
+    /// where reply-cli does not print them; and that the README says a global route is set with the command line.
+    /// </summary>
+    [Fact]
+    public void The_changelog_s_0_16_0_says_a_read_of_a_send_says_whether_it_bounced()
+    {
+        var section = Flat(ChangelogSection(0));
+
+        Assert.StartsWith(" ## 0.16.0 ", section, StringComparison.Ordinal);
+        Assert.All(
+            ["`message.status`", "Only a dead address is a `hard` bounce", "`soft`", "a word this package does not know", "null where the installed reply-cli does not print them"],
+            word => Assert.Contains(word, section, StringComparison.Ordinal));
+        Assert.Contains("`jason route set --global`", section, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The README says a global route can be set from the command line, as it can since Jason 0.42.0, beside the settings
+    /// file and the reload, and no longer that the CLI refuses one.
+    /// </summary>
+    [Fact]
+    public void The_readme_says_a_global_route_is_set_from_the_command_line_too()
+    {
+        var readme = Flat(File.ReadAllText(Path.Combine(ReplyPlugins.PackageSource, "README.md")));
+
+        Assert.Contains("jason route set --global --plugin reply --binding", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("deliberately no global", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("refuses `route set` without `--campaign`", readme, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The changelog opens with 0.16.0, a bounce notice read as a <c>bounce</c> and not as the other side's move: the flag it
     /// is read from, the event's members, the moment that keeps it one event, the line the events read no longer says and
     /// the read of the threads that is unchanged, the thread with a bounce and another flag that stays a moved thread, the

@@ -17,15 +17,16 @@ namespace Jason.Runtime.Dispatch;
 /// <paramref name="Resumed"/> the waiting items it released into the queue, <paramref name="Responded"/> the responders
 /// a reply woke, <paramref name="Subscribed"/> the subscribed kinds it offered the subscription runner, and
 /// <paramref name="Reserved"/> the lines it said about a campaign's reserve of untouched people, <paramref name="Polled"/>
-/// the reads of searches' people it made, and <paramref name="Stalled"/> the searches it ended because their reads landed
-/// nobody for too long.
+/// the reads of searches' people it made, <paramref name="Stalled"/> the searches it ended because their reads landed
+/// nobody for too long, and <paramref name="Bounced"/> the reads of sends a bounce asked for.
 /// </summary>
-public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0, int Subscribed = 0, int Reserved = 0, int Polled = 0, int Stalled = 0);
+public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed, int Notified = 0, int Synced = 0, int Observed = 0, int EventReads = 0, int Resumed = 0, int Responded = 0, int Subscribed = 0, int Reserved = 0, int Polled = 0, int Stalled = 0, int Bounced = 0);
 
 /// <summary>
 /// One pass of the dispatcher: give up what is overdue, take back what is lost, hand the reader the next read of an
 /// account's events, read the live campaigns' conversations, read the people of the searches their audiences are filled
 /// by — or end a search whose reads have landed nobody for too long — wake a responder for a reply about a campaign's own thread,
+/// ask for the reads of a campaign's own sends a bounce could be of,
 /// say once per crossing that a campaign's reserve of untouched people fell under its threshold or is back above it,
 /// summon a manager where a campaign wants one, release the
 /// waiting work whose wait is over, hand out what is ready, say once that something waits for a person — after the
@@ -36,6 +37,7 @@ public sealed record ScanReport(int Expired, int Lost, int Summoned, int Claimed
 /// their source is healthy. The read comes before the respond step and the summon so that a reply it says wakes the
 /// responder and the manager in the same scan, and before the claim so that a read it starts is claimed in the same
 /// scan. The respond step comes before the summon, so the responder is queued ahead of the check-in the same reply wakes.
+/// The bounce step comes right after it and before the claim, so a read a bounce asks for is claimed in the same scan.
 /// The reserve count comes before the summon too, so a line saying the reserve is low summons the review in the same
 /// scan, and so does the poll of searches, so a search it ends summons the review and a read it makes is claimed in the
 /// same scan. The summon comes before the claim
@@ -140,6 +142,7 @@ public sealed class ScanRunner(
         var inbound = await InScopeAsync<InboundSync, InboundReport>((step, db) => step.SyncAsync(db, ct)).ConfigureAwait(false);
         var polled = await InScopeAsync<SearchPoll, SearchPollReport>((step, db) => step.PollAsync(db, ct)).ConfigureAwait(false);
         var responded = await InScopeAsync<Responder, int>((step, db) => step.RespondAsync(db, ct)).ConfigureAwait(false);
+        var bounced = await InScopeAsync<BounceStep, int>((step, db) => step.BounceAsync(db, ct)).ConfigureAwait(false);
         var reserved = await InScopeAsync<ReserveCounter, int>((step, db) => step.CountAsync(db, ct)).ConfigureAwait(false);
         var summoned = await InScopeAsync<Summoner, int>((step, db) => step.SummonAsync(db, ct)).ConfigureAwait(false);
         var resumed = await InScopeAsync<Resumer, int>((step, db) => step.ResumeAsync(db, ct)).ConfigureAwait(false);
@@ -211,7 +214,7 @@ public sealed class ScanRunner(
         }
 
         Scanned(logger, status.Scans, expired, lost, summoned, claimed.Count, null);
-        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded, subscribed, reserved, polled.Read, polled.Stalled);
+        return new ScanReport(expired, lost, summoned, claimed.Count, notified, inbound.Synced, inbound.Observed, events, resumed, responded, subscribed, reserved, polled.Read, polled.Stalled, bounced);
     }
 
     private async Task<TResult> InScopeAsync<TStep, TResult>(Func<TStep, JasonDbContext, Task<TResult>> step)

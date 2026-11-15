@@ -142,6 +142,10 @@ public sealed class ProviderOutcomeRecorder(
                     // A read that finds the send gone says so in the change set that ends the read, so the line and the
                     // read's success commit together or not at all.
                     await sent.SayAsync(db, item, pluginId, input, succeeded.Result, cancellationToken).ConfigureAwait(false);
+
+                    // So does a read that finds the message came back, with the stop its kind asks for: whoever made the
+                    // read, the line, the register entry and the read's success commit together or not at all.
+                    await sent.SayBounceAsync(db, item, pluginId, input, succeeded.Result, cancellationToken).ConfigureAwait(false);
                 }
 
                 // A search's row, the people a page carried and a search's end commit with the answer, or not at all.

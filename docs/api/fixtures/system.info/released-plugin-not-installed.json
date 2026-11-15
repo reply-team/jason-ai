@@ -50,7 +50,8 @@
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
         "20261114084851_ApprovalsAutomaticByDay",
-        "20261114190252_ProviderBlockChannels"
+        "20261114190252_ProviderBlockChannels",
+        "20261114215710_BounceStep"
       ],
       "newly_applied": [
         "20260913233702_InitialCreate",
@@ -91,7 +92,8 @@
         "20261114050917_CampaignSendModes",
         "20261114064450_WorkItemDoubtNotes",
         "20261114084851_ApprovalsAutomaticByDay",
-        "20261114190252_ProviderBlockChannels"
+        "20261114190252_ProviderBlockChannels",
+        "20261114215710_BounceStep"
       ],
       "backup_file": null
     },

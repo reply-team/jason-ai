@@ -23,6 +23,12 @@ public static class Actors
     /// </summary>
     public static ActorRef OptOut { get; } = new(ActorType.System, "opt_out");
 
+    /// <summary>
+    /// The stop a bounce makes: the register entry the runtime writes itself when a read of a send says the email came back
+    /// hard, or with no kind, so a reader of the register tells it apart from the entries an opt-out, a person or a role added.
+    /// </summary>
+    public static ActorRef Bounce { get; } = new(ActorType.System, "bounce");
+
     /// <summary>A running executor. Work it creates stays traceable to the attempt that asked for it.</summary>
     public static ActorRef ForAttempt(Attempt attempt)
     {

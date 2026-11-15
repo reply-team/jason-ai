@@ -114,7 +114,8 @@ For each campaign it concerns, a stored event says at most one line, written in 
 
 Both lines are written by `system:dispatcher`, name the campaign and no work item or attempt, and are trigger kinds a
 manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
-`campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder
+`campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder, and a
+`provider_event_observed` line of a `bounce` asks for reads of the campaign's own sends it could be of
 ([inbound sync](inbound-sync.md) §1).
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with the fields
@@ -141,7 +142,8 @@ manager is woken by under the default `Manager:Triggers`; an `inbound_reply_obse
   reply is said again, as the inbound read says it.
 - **`provider_event_observed`** carries the event, the person it is about, `attributed_by`, and the kind's own
   identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
-  by the event's own key.
+  by the event's own key. A bounce's line is counted by each notification until one reaches anybody, once by that
+  key however many campaigns the bounce reached ([notifications](notifications.md)).
 
 **Said once.** A campaign says each line once under its key, and the database refuses a second; one key may be said in
 two campaigns, and the rule that found a campaign is no part of the key. **History is not said.** An event that
