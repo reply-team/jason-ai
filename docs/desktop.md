@@ -83,6 +83,11 @@ shows before anything is typed and what you send waits, while the window is open
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. With nothing waiting it says you are caught up and offers
   **Open your agents**.
+- An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
+  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
+  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
+  and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
+  answer. A card leaves once the item is decided, there or anywhere else.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab.
 - The sidebar lists, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on macOS) and finds

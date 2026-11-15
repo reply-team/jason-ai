@@ -11,6 +11,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { readdirSync, readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
@@ -36,7 +37,7 @@ function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop(), jour
 }
 
 function pending(fake: FakeApi): FakeApi {
-    return fake
+    return nothingWaitsInChats(fake)
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')

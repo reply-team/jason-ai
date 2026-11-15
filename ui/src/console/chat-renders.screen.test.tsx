@@ -7,6 +7,7 @@ import { route } from '../router';
 import { shown } from '../test/area';
 import { stubDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as chatModel from './chat-model';
 import { Console } from './console';
 import { attention } from './needs';
@@ -26,7 +27,7 @@ async function renderConsole(): Promise<void> {
     const desktop = stubDesktop();
     desktop.keep({ id: 'conv_a', campaignId: 'cmp_1', title: 'Q4 push', updatedAt: new Date().toISOString() });
     desktop.keep({ id: 'conv_b', title: 'North list', updatedAt: new Date(Date.now() - 60_000).toISOString() });
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')

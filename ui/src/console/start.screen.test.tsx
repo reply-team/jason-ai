@@ -8,6 +8,7 @@ import { mode } from '../platform/mode';
 import { route } from '../router';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import type { FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -48,7 +49,7 @@ function renderConsole(
     routed: FixtureName | null = toReply,
     prepare: (fake: FakeApi) => void = () => undefined,
 ): StubDesktop {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')

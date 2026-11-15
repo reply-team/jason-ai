@@ -7,6 +7,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
@@ -35,7 +36,7 @@ const creates = (desktop: StubDesktop, campaignId: string) =>
 
 /** The console, and Spring opened in the area on its Sequence, as the Campaigns panel's Open does. */
 function springApi(): FakeApi {
-    return new FakeApi()
+    return nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
         .answer('preference.list', 'preference.list/set')

@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -22,7 +23,7 @@ const placeholder = 'Search agents, people, pages and settings';
 function renderConsole(options: { platform?: 'darwin' | 'win32'; desktop?: StubDesktop } = {}) {
     const desktop = options.desktop ?? stubDesktop();
     if (options.platform) Object.assign(desktop, { platform: options.platform });
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
         .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
         .answer('preference.list', 'preference.list/set')

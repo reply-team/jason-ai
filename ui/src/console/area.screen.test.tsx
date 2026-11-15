@@ -9,6 +9,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { shown, shownPane } from '../test/area';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -26,7 +27,7 @@ async function renderConsole(
 ): Promise<StubDesktop> {
     const desktop = stubDesktop();
     seed(desktop);
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', `approval.list/${waits}`)
         .answer('decision.list', `decision.list/${waits}`)
         .answer('preference.list', 'preference.list/set')

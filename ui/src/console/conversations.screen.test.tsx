@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront, shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
@@ -19,7 +20,7 @@ import { chats, conversations } from './state';
 const hostile = '<img src=x onerror="window.hit=1">';
 
 function renderConsole(desktop: StubDesktop = chatDesktop()): { desktop: StubDesktop; fake: FakeApi } {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')
