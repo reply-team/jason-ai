@@ -165,15 +165,17 @@ internal static class StatusChecks
             $"jason profile update {profile} --host {AgentHosts.Word(host)} --program {AgentHosts.Of(host).CommandWord}";
 
         /// <summary>
-        /// The repair where no enabled profile exists for the AI roles to run on: one profile for Claude Code, by its
-        /// command word. It runs nothing until a level names it, so the fact gives <see cref="NameRolesProfile"/> after it:
-        /// the one line of settings that makes it the default. No verb names the default, so that half is a line a person
-        /// writes, never a repair.
+        /// The repair where no role's work would find a profile by the default: one profile for Claude Code, by its command
+        /// word. It runs nothing until a level names it, so the fact gives <see cref="RolesDefaultLine"/> beside it, the one
+        /// line of settings that makes it the default. No verb names the default, so that half is a line a person writes,
+        /// never a repair.
         /// </summary>
         public const string CreateRolesProfile = "jason profile create claude-code --host claude_code --program claude";
 
-        /// <summary>The line of settings, printed in a fact, that names <see cref="CreateRolesProfile"/>'s profile the default.</summary>
-        public const string NameRolesProfile = "\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}";
+        /// <summary>The line of settings, printed in a fact, that names a profile the default.</summary>
+        public static string RolesDefaultLine(string profile) => $$"""
+            "Roles": {"DefaultExecutionProfile": "{{profile}}"}
+            """;
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
@@ -287,7 +289,7 @@ internal static class StatusChecks
             checks.Add(Harnesses(env));
             var profiles = client is null ? default : await ProfilesAsync(client, cancellationToken).ConfigureAwait(false);
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
-            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile));
+            checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env)));
             checks.Add(Autostart(env));
             checks.Add(Notifications(info));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
@@ -1794,40 +1796,127 @@ internal static class StatusChecks
     }
 
     /// <summary>
-    /// Whether an enabled execution profile exists for the AI roles to run on, from the same answer <c>agent_hosts</c>
-    /// reads. With none, a role's work fails at its claim with <c>role_not_launchable</c> — unless a role's own entry
-    /// command or <c>Roles:DefaultEntryCommand</c> starts it, which this check does not read — and the fact names the
-    /// command and the line of <paramref name="settingsFile"/> that repair it. Never required: <c>ready</c> says whether
-    /// the installation can start work, and a role is one kind of work. Which profile a role runs on is decided at its
-    /// claim, by names this check does not read, so with a profile there is nothing to fail.
+    /// Whether a role's work would find a profile by <c>Roles:DefaultExecutionProfile</c>, the claim's own rule for work
+    /// nothing else names a profile for: ok only where the default (<paramref name="named"/>, as
+    /// <see cref="DefaultProfileOf"/> reads it) names one of the enabled profiles <c>agent_hosts</c> reads, compared as the
+    /// claim compares a name. Otherwise absent, and the fact says what the claim would end the work with and names whichever
+    /// of the repair's two halves is still missing — the command that makes <c>claude-code</c> (the fix) and the line of
+    /// <paramref name="settingsFile"/> that names it, or the name of the person's own profile where they have one and name
+    /// none — with the fix null where only the line is missing, since a line is no command. It does not read a profile a work
+    /// item, a campaign's policy or a role's policy names, nor an entry command, and says so. Never required: <c>ready</c>
+    /// says whether the installation can start work, and a role is one kind of work.
     /// </summary>
-    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile)
+    internal static StatusCheck RolesLaunchableCheck(IReadOnlyList<ProfileHost>? profiles, string? unread, string settingsFile, DefaultProfileSetting named)
     {
         const string Name = "roles_launchable";
+        const string Ours = "claude-code";
+        const string NotRead = "This check reads that default alone: not a profile a work item, a campaign's policy or a role's policy names, nor an entry command.";
         if (profiles is null)
         {
             return new StatusCheck(Name, false, CheckState.Unknown, "Whether a role can run is not known: the profiles could not be read: " + (unread ?? "the runtime did not answer") + ".", null);
         }
 
-        if (profiles.Count == 0)
+        if (named.Unread is { } why)
         {
-            return new StatusCheck(
-                Name,
-                false,
-                CheckState.Absent,
-                "No enabled execution profile exists, so no AI role can run on one: a role's work fails at its claim with role_not_launchable, "
-                + "unless the role has an entry command of its own or Roles:DefaultEntryCommand names one. "
-                + $"`{Repair.CreateRolesProfile}`, then `{Repair.NameRolesProfile}` in {settingsFile}, which the runtime reads without a restart, run the roles on Claude Code.",
-                Repair.CreateRolesProfile);
+            return new StatusCheck(Name, false, CheckState.Unknown, $"Whether a role can run is not known: the settings file at {settingsFile} cannot be read ({why}), so the default profile it may name is not known.", null);
         }
 
-        var count = profiles.Count == 1 ? "1 enabled execution profile" : string.Create(CultureInfo.InvariantCulture, $"{profiles.Count} enabled execution profiles");
-        return new StatusCheck(
-            Name,
-            false,
-            CheckState.Ok,
-            count + ". A role's work runs on the one its work item, its campaign, its role or Roles:DefaultExecutionProfile names, and fails at its claim where none names one.",
-            null);
+        // Compared as the claim looks a profile up, by its exact name.
+        var enabled = profiles.Select(profile => profile.Name).ToList();
+        if (named.Name is { } name && enabled.Contains(name, StringComparer.Ordinal))
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, $"Roles:DefaultExecutionProfile names {name}, an enabled execution profile, so a role's work that nothing else names a profile for runs on it. {NotRead}", null);
+        }
+
+        string said;
+        if (named.Name is { } absent)
+        {
+            said = $"Roles:DefaultExecutionProfile names {absent}, which is not an enabled execution profile here, so a role's work that nothing else names a profile for fails at its claim with profile_not_found or profile_disabled.";
+        }
+        else
+        {
+            var exist = enabled.Count switch
+            {
+                0 => "No enabled execution profile exists",
+                1 => "1 enabled execution profile exists",
+                _ => string.Create(CultureInfo.InvariantCulture, $"{enabled.Count} enabled execution profiles exist"),
+            };
+            said = exist + " and Roles:DefaultExecutionProfile names none, so a role's work that nothing else names a profile for fails at its claim with role_not_launchable, "
+                + "unless the role has an entry command of its own or Roles:DefaultEntryCommand names one.";
+        }
+
+        // The profile the repair names: the person's own where they have profiles and name none, unless one of them is
+        // ours, and ours otherwise. A name already given is replaced only by ours.
+        var ours = enabled.Contains(Ours, StringComparer.Ordinal);
+        var target = named.Name is null && enabled.Count > 0 && !ours
+            ? (enabled.Count == 1 ? enabled[0] : null)
+            : Ours;
+        var make = target == Ours && !ours;
+        var instead = named.Name is null ? string.Empty : " in place of the name it gives";
+        string repair;
+        if (make && named.Name == Ours)
+        {
+            repair = $"`{Repair.CreateRolesProfile}` makes it, or `jason profile enable {Ours}` where it is there and disabled, and the roles run on Claude Code.";
+        }
+        else if (make)
+        {
+            repair = $"`{Repair.CreateRolesProfile}`, then `{Repair.RolesDefaultLine(Ours)}` in {settingsFile}{instead}, which the runtime reads without a restart, run the roles on Claude Code.";
+        }
+        else if (target is null)
+        {
+            repair = $"`{Repair.RolesDefaultLine("<name>")}` in {settingsFile}, with the name of one of them ({string.Join(", ", enabled)}), which the runtime reads without a restart, runs the roles on it.";
+        }
+        else
+        {
+            repair = $"`{Repair.RolesDefaultLine(target)}` in {settingsFile}{instead}, which the runtime reads without a restart, runs the roles on {target}.";
+        }
+
+        return new StatusCheck(Name, false, CheckState.Absent, $"{said} {repair} {NotRead}", make ? Repair.CreateRolesProfile : null);
+    }
+
+    /// <summary>
+    /// <c>Roles:DefaultExecutionProfile</c> as the runtime would read it from this environment and the settings file: the
+    /// name, trimmed, or null where none is given or it is blank; or why the file could not be read.
+    /// </summary>
+    internal sealed record DefaultProfileSetting(string? Name, string? Unread);
+
+    /// <summary>The variable the runtime reads <c>Roles:DefaultExecutionProfile</c> from, over the settings file.</summary>
+    internal const string DefaultProfileVariable = "JASON_Roles__DefaultExecutionProfile";
+
+    /// <summary>
+    /// <c>Roles:DefaultExecutionProfile</c> read the way <c>export</c> and <c>import</c> read the harness root
+    /// (<see cref="Moving.InstallationPlaces"/>): <see cref="DefaultProfileVariable"/>, by any case of its name, over the
+    /// settings file's key in any case, a blank value being none — a blank variable hides the file's, as it does for the
+    /// runtime. A runtime started with another environment than this command's may read another; the check says what this
+    /// one would.
+    /// </summary>
+    internal static DefaultProfileSetting DefaultProfileOf(CliEnvironment env)
+    {
+        static string? Given(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        if (Moving.InstallationPlaces.Variable(env, DefaultProfileVariable) is { } variable)
+        {
+            return new DefaultProfileSetting(Given(variable), null);
+        }
+
+        string? text;
+        try
+        {
+            text = File.Exists(env.Paths.UserSettingsFile) ? File.ReadAllText(env.Paths.UserSettingsFile) : null;
+        }
+        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return new DefaultProfileSetting(null, unreadable.Message);
+        }
+
+        try
+        {
+            return new DefaultProfileSetting(Given(Moving.InstallationPlaces.SettingsText(text, "Roles:DefaultExecutionProfile")), null);
+        }
+        catch (JsonException notJson)
+        {
+            return new DefaultProfileSetting(null, "it is not JSON the configuration reads: " + notJson.Message);
+        }
     }
 
     /// <summary>The most pages of profiles the check reads; past them the answer is not one it can read whole.</summary>

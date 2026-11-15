@@ -473,12 +473,7 @@ public class ProfileLaunchTests
         Assert.Equal(WorkItemStatus.Failed, failed.Status);
         Assert.Equal(AttemptErrors.RoleNotLaunchable, failed.LastError!.Code);
 
-        var status = new StringWriter();
-        await Jason.Cli.CliApp.RunAsync(
-            ["status"],
-            new Jason.Cli.CliEnvironment(status, new StringWriter(), host.Paths, Harnesses: Jason.Cli.Skills.HarnessLocators.At(Path.Combine(host.Paths.Root, "no-harness-here"))),
-            Ct);
-        var check = JsonNode.Parse(status.ToString())!["checks"]!.AsArray().Single(each => (string?)each!["name"] == "roles_launchable")!;
+        var check = await RolesCheckAsync(host);
         Assert.Equal("absent", (string?)check["state"]);
         var repair = ((string?)check["fix"])!.Split(' ');
         Assert.Equal(["jason", "profile", "create", "claude-code", "--host", "claude_code", "--program", "claude"], repair);
@@ -487,6 +482,10 @@ public class ProfileLaunchTests
         var error = new StringWriter();
         var exit = await Jason.Cli.CliApp.RunAsync([.. repair[1..^1], ProfileFixture.Program], new Jason.Cli.CliEnvironment(made, error, host.Paths), Ct);
         Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, error.ToString()));
+
+        // Made and not yet named: every role's work would still fail, so the check is not ok, and the line is the step left.
+        var half = await RolesCheckAsync(host);
+        Assert.Equal(("absent", null), ((string?)half["state"], (string?)half["fix"]));
 
         // The line between the fact's second pair of backticks, written into the file beside the dispatcher's settings.
         var line = ((string?)check["fact"])!.Split('`')[3];
@@ -506,6 +505,23 @@ public class ProfileLaunchTests
         Assert.Equal("claude-code", agent.ProfileName);
         Assert.Equal(AgentHostKind.ClaudeCode, agent.Host);
         Assert.NotNull(done.Attempts[0].Launch);
+        Assert.Equal("ok", (string?)(await RolesCheckAsync(host))["state"]);
+    }
+
+    /// <summary>The <c>roles_launchable</c> check as <c>jason status</c> prints it against this runtime, with no variable of the suite's own read.</summary>
+    private static async Task<JsonNode> RolesCheckAsync(FakeHostRuntime host)
+    {
+        var status = new StringWriter();
+        await Jason.Cli.CliApp.RunAsync(
+            ["status"],
+            new Jason.Cli.CliEnvironment(
+                status,
+                new StringWriter(),
+                host.Paths,
+                Harnesses: Jason.Cli.Skills.HarnessLocators.At(Path.Combine(host.Paths.Root, "no-harness-here")),
+                Variables: new Dictionary<string, string>()),
+            Ct);
+        return JsonNode.Parse(status.ToString())!["checks"]!.AsArray().Single(each => (string?)each!["name"] == "roles_launchable")!;
     }
 
     private static async Task UnresolveAsync(FakeHostRuntime host, string workItemId)

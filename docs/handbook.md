@@ -243,7 +243,7 @@ answer "am I ready to work?", because the runtime is not the authority on the ma
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
 | | every enabled profile names an agent host detected on this machine |
-| | an enabled execution profile exists for the AI roles to run on |
+| | a default execution profile is named for the AI roles to run on, and is enabled |
 | | autostart is registered |
 | | notifications reach you |
 | | a UI is installed, and the default one is this release's |

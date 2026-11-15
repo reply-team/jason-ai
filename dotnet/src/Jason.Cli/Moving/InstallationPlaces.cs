@@ -50,16 +50,22 @@ internal static class InstallationPlaces
     /// The variable's value when it is set, by any spelling of its name the configuration reads as the same key; null when
     /// it is not set.
     /// </summary>
-    public static string? Variable(CliEnvironment env)
+    public static string? Variable(CliEnvironment env) => Variable(env, RootVariable);
+
+    /// <summary>
+    /// The value of the variable <paramref name="variable"/> names, by any case of its name, as the configuration reads it;
+    /// null when it is not set. Read from <see cref="CliEnvironment.Variables"/> when they are handed in.
+    /// </summary>
+    public static string? Variable(CliEnvironment env, string variable)
     {
         if (env.Variables is { } variables)
         {
-            return variables.FirstOrDefault(variable => string.Equals(variable.Key, RootVariable, StringComparison.OrdinalIgnoreCase)).Value;
+            return variables.FirstOrDefault(each => string.Equals(each.Key, variable, StringComparison.OrdinalIgnoreCase)).Value;
         }
 
         foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
         {
-            if (entry.Key is string name && string.Equals(name, RootVariable, StringComparison.OrdinalIgnoreCase) && entry.Value is string value)
+            if (entry.Key is string name && string.Equals(name, variable, StringComparison.OrdinalIgnoreCase) && entry.Value is string value)
             {
                 return value;
             }
@@ -107,7 +113,14 @@ internal static class InstallationPlaces
     /// allowed, keys compared without case, a key spelt with a colon the same as the section it names. Null when it gives
     /// none.
     /// </summary>
-    public static string? SettingsRoot(string? settings)
+    public static string? SettingsRoot(string? settings) => SettingsText(settings, RootSetting);
+
+    /// <summary>
+    /// The text the settings file gives the setting <paramref name="key"/> (sections joined by colons), read as
+    /// <see cref="SettingsRoot"/> reads the root's; null when it gives none.
+    /// </summary>
+    /// <exception cref="JsonException">The text is not JSON the configuration reads.</exception>
+    public static string? SettingsText(string? settings, string key)
     {
         if (settings is null)
         {
@@ -116,18 +129,18 @@ internal static class InstallationPlaces
 
         using var document = JsonDocument.Parse(settings, Reading);
         string? found = null;
-        Walk(document.RootElement, string.Empty, ref found);
+        Walk(document.RootElement, string.Empty, key, ref found);
         return found;
     }
 
     /// <summary>How the configuration reads a settings file.</summary>
     internal static JsonDocumentOptions Reading { get; } = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
 
-    private static void Walk(JsonElement element, string path, ref string? found)
+    private static void Walk(JsonElement element, string path, string key, ref string? found)
     {
         if (element.ValueKind != JsonValueKind.Object)
         {
-            if (string.Equals(path, RootSetting, StringComparison.OrdinalIgnoreCase) && element.ValueKind == JsonValueKind.String)
+            if (string.Equals(path, key, StringComparison.OrdinalIgnoreCase) && element.ValueKind == JsonValueKind.String)
             {
                 found = element.GetString();
             }
@@ -137,7 +150,7 @@ internal static class InstallationPlaces
 
         foreach (var property in element.EnumerateObject())
         {
-            Walk(property.Value, path.Length == 0 ? property.Name : path + ":" + property.Name, ref found);
+            Walk(property.Value, path.Length == 0 ? property.Name : path + ":" + property.Name, key, ref found);
         }
     }
 }
