@@ -502,6 +502,7 @@ public partial class InteractiveSkillTests
 
         Assert.Contains("One that says emails bounced names no command and leaves them to you: a bounce is a `provider_event_observed` line in the journal whose `new.kind` is `bounce`, one in each campaign it reached, naming its campaign, and its contact where one is pinned;", skill, StringComparison.Ordinal);
         Assert.Contains("`jason journal list --kind provider_event_observed` lists those lines beside the replies the provider detected and the invitations accepted, so keep the bounces and say in which campaigns they were and, where a line names a contact, whose email it was.", skill, StringComparison.Ordinal);
+        Assert.Contains("You may also read the period's `bounced` count with `jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
