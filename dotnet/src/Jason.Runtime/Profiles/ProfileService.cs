@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Ids;
+using Jason.Runtime.Configuration;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Execution.Hosts;
@@ -21,7 +22,12 @@ namespace Jason.Runtime.Profiles;
 /// points at is not the runtime's to remove; a profile that should not be used again is disabled.
 /// </para>
 /// </summary>
-public sealed class ProfileService(JasonDbContext db, JournalWriter journal, TimeProvider clock, IEnumerable<IAgentHost> hosts)
+public sealed class ProfileService(
+    JasonDbContext db,
+    JournalWriter journal,
+    TimeProvider clock,
+    IEnumerable<IAgentHost> hosts,
+    LiveSettings<RolesOptions> roles)
 {
     public const string IdPrefix = "prf";
 
@@ -316,7 +322,11 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
     /// The registry, ordered by public id — the order the profiles were added. A disabled profile is out of
     /// service and left out unless it is asked for: the question a listing answers is "what can run work now".
     /// </summary>
-    public async Task<Page<ExecutionProfileDto>> ListAsync(ProfileListRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// A page of profiles, and the configured default in force: the settings the claim reads, never the file, so a value a
+    /// person's edit broke is answered as the one still in force.
+    /// </summary>
+    public async Task<ProfilePageDto> ListAsync(ProfileListRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         var limit = Paging.ResolveLimit(request.Limit);
@@ -335,7 +345,8 @@ public sealed class ProfileService(JasonDbContext db, JournalWriter journal, Tim
 
         var fetched = await query.OrderBy(p => p.PublicId).Take(limit + 1).ToListAsync(cancellationToken).ConfigureAwait(false);
         var revisions = await CurrentRevisionsAsync(fetched, cancellationToken).ConfigureAwait(false);
-        return Paging.ToPage(fetched, limit, p => p.PublicId, profile => Dto(profile, revisions[profile.Id]));
+        var page = Paging.ToPage(fetched, limit, p => p.PublicId, profile => Dto(profile, revisions[profile.Id]));
+        return new ProfilePageDto(page.Items, page.NextCursor, roles.Current.DefaultExecutionProfile);
     }
 
     /// <summary>Out of service. The revisions stay exactly where they are; what changes is whether new work resolves to them.</summary>

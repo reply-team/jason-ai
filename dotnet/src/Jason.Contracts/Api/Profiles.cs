@@ -91,6 +91,13 @@ public sealed record ProfileGetRequest(string? Name, int? Revision);
 /// <summary>Disabled profiles are out of service, so a listing leaves them out unless they are asked for.</summary>
 public sealed record ProfileListRequest(bool? IncludeDisabled, int? Limit, string? Cursor);
 
+/// <summary>
+/// One page of <c>profile.list</c>: the profiles, the cursor that continues the listing, and the configured default execution
+/// profile in force, <c>Roles:DefaultExecutionProfile</c>, by name or null. The default is said on every page whatever the
+/// page holds, and a name that answers no profile is said too: it is what every claim that falls back to it refuses on.
+/// </summary>
+public sealed record ProfilePageDto(IReadOnlyList<ExecutionProfileDto> Items, string? NextCursor, string? DefaultExecutionProfile);
+
 /// <summary>The body of <c>profile.disable</c> and <c>profile.enable</c>.</summary>
 public sealed record ProfileToggleRequest(string? Name, ActorRef? Actor, string? Reason);
 

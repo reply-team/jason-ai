@@ -39,6 +39,9 @@ public class DefaultProfileTests
 
     private static readonly object Ada = new { type = "human", id = "ada" };
 
+    /// <summary>The recordings' moment, so a recorded profile's timestamps are the same on every run.</summary>
+    private static readonly DateTimeOffset Nine = new(2026, 10, 16, 9, 0, 0, TimeSpan.Zero);
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -316,15 +319,58 @@ public class DefaultProfileTests
         Assert.Equal(ProfileResolutionSource.RoleEntryCommand, ranOwnAgain.Attempts![0].Provenance!.Agent!.ResolutionSource);
     }
 
+    /// <summary>
+    /// <c>profile.list</c> says which name is the default in force, on every page and whatever the listing leaves out, and
+    /// says a name that answers no profile too: written by hand, it is what every claim that falls back to it will refuse on.
+    /// </summary>
+    [Fact]
+    public async Task The_listing_says_the_default_in_force_even_where_it_names_no_profile()
+    {
+        await using var api = await StartAsync();
+        await ProfileAsync(api, "house");
+        await ProfileAsync(api, "night-shift");
+
+        var none = await api.PostOkAsync<ProfilePageDto>(Operations.ProfileList, new { }, Ct);
+        Assert.Null(none.DefaultExecutionProfile);
+
+        await api.PostOkAsync<ProfileDefaultDto>(Operations.ProfileSetDefault, new { name = "house" }, Ct);
+        var named = await api.PostOkAsync<ProfilePageDto>(Operations.ProfileList, new { limit = 1, cursor = (await api.PostOkAsync<ProfilePageDto>(Operations.ProfileList, new { limit = 1 }, Ct)).NextCursor }, Ct);
+        Assert.Equal(["night-shift"], named.Items.Select(profile => profile.Name));
+        Assert.Equal("house", named.DefaultExecutionProfile);
+
+        await api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileDisable, new { name = "house" }, Ct);
+        Assert.Equal("house", (await api.PostOkAsync<ProfilePageDto>(Operations.ProfileList, new { }, Ct)).DefaultExecutionProfile);
+
+        File.WriteAllText(api.Paths.UserSettingsFile, WithHouse.Replace("\"house\"", "\"nobody-made-this\"", StringComparison.Ordinal), new UTF8Encoding(false));
+        Assert.Null(api.Resolve<SettingsFile>().Read());
+        var dangling = await api.PostOkAsync<ProfilePageDto>(Operations.ProfileList, new { include_disabled = true }, Ct);
+        Assert.Equal("nobody-made-this", dangling.DefaultExecutionProfile);
+        Assert.DoesNotContain(dangling.Items, profile => profile.Name == "nobody-made-this");
+    }
+
     [Fact]
     public async Task The_exchanges_are_recorded()
     {
-        await using var api = await StartAsync();
+        await using var api = await StartAsync(clock: new FixedClock(Nine));
         await ProfileAsync(api, "house");
 
         await api.RecordAsync<ProfileDefaultDto>(Operations.ProfileSetDefault, "set", new { name = "house", reason = "the roles run on the house host" }, Ct);
         await api.RecordErrorAsync(Operations.ProfileSetDefault, "profile-not-found", new { name = "never-registered" }, HttpStatusCode.NotFound, Ct);
         await api.RecordAsync<ProfileDefaultDto>(Operations.ProfileUnsetDefault, "unset", new { reason = "no default any more" }, Ct);
+        await api.RecordAsync<ProfilePageDto>(Operations.ProfileList, "no-default", new { }, Ct);
+    }
+
+    [Fact]
+    public async Task The_listing_exchanges_are_recorded()
+    {
+        await using var api = await StartAsync(WithHouse, new FixedClock(Nine));
+        await ProfileAsync(api, "house");
+
+        await api.RecordAsync<ProfilePageDto>(Operations.ProfileList, "with-default", new { }, Ct);
+
+        File.WriteAllText(api.Paths.UserSettingsFile, WithHouse.Replace("\"house\"", "\"nobody-made-this\"", StringComparison.Ordinal), new UTF8Encoding(false));
+        Assert.Null(api.Resolve<SettingsFile>().Read());
+        await api.RecordAsync<ProfilePageDto>(Operations.ProfileList, "default-names-no-profile", new { }, Ct);
     }
 
     private static string? InForce(RuntimeApiFixture api) => api.Resolve<LiveSettings<RolesOptions>>().Current.DefaultExecutionProfile;
@@ -335,6 +381,6 @@ public class DefaultProfileTests
     private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
         api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.DefaultProfileUpdated }, Ct);
 
-    private static Task<RuntimeApiFixture> StartAsync(string settings = Original) =>
-        RuntimeApiFixture.StartAsync(Ct, prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false)));
+    private static Task<RuntimeApiFixture> StartAsync(string settings = Original, TimeProvider? clock = null) =>
+        RuntimeApiFixture.StartAsync(Ct, prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false)), clock: clock);
 }

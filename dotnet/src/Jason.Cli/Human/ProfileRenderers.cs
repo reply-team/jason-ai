@@ -60,7 +60,10 @@ public static class ProfileRenderers
     /// The default in force after <c>set-default</c> or <c>unset-default</c>, in one line: the profile's name, or none. A body
     /// without the field is not this answer.
     /// </summary>
-    public static string? Default(string json)
+    public static string? Default(string json) => Named(json, "execution_profile");
+
+    /// <summary>The line that says the default a body names under <paramref name="member"/>, or null where it names none there.</summary>
+    private static string? Named(string json, string member)
     {
         JsonObject? body;
         try
@@ -72,7 +75,7 @@ public static class ProfileRenderers
             return null;
         }
 
-        if (body is null || !body.TryGetPropertyValue("execution_profile", out var named))
+        if (body is null || !body.TryGetPropertyValue(member, out var named))
         {
             return null;
         }
@@ -85,7 +88,10 @@ public static class ProfileRenderers
         };
     }
 
-    /// <summary>The registry as a table: what can launch work, what it starts, and which revision is in force.</summary>
+    /// <summary>
+    /// The registry as a table: what can launch work, what it starts, and which revision is in force; then the configured
+    /// default in force, by name or none, where the answer says it.
+    /// </summary>
     public static string? ProfileList(string json)
     {
         var page = RenderText.Read<Page<ExecutionProfileDto>>(json);
@@ -106,7 +112,13 @@ public static class ProfileRenderers
                 profile.Id);
         }
 
-        return RenderText.WithCursor(table.Render(), page.NextCursor);
+        var rendered = table.Render();
+        if (Named(json, "default_execution_profile") is { } named)
+        {
+            rendered += Environment.NewLine + named;
+        }
+
+        return RenderText.WithCursor(rendered, page.NextCursor);
     }
 
     /// <summary>The revision on the page, and the one in force when they are not the same one.</summary>

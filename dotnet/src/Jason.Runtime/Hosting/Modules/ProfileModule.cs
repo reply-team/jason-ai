@@ -31,7 +31,7 @@ public static class ProfileModule
             Operations.ProfileUpdate, (service, request, cancellationToken) => service.UpdateAsync(request, cancellationToken));
         app.MapOperation<ProfileService, ProfileGetRequest, ExecutionProfileDto>(
             Operations.ProfileGet, (service, request, cancellationToken) => service.GetAsync(request, cancellationToken));
-        app.MapOperation<ProfileService, ProfileListRequest, Page<ExecutionProfileDto>>(
+        app.MapOperation<ProfileService, ProfileListRequest, ProfilePageDto>(
             Operations.ProfileList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<ProfileService, ProfileToggleRequest, ExecutionProfileDto>(
             Operations.ProfileDisable, (service, request, cancellationToken) => service.DisableAsync(request, cancellationToken));

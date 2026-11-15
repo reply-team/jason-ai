@@ -492,7 +492,9 @@ that is not that attempt does not call them.
 - `profile.create`: a profile and the first revision of it, written together.
 - `profile.update`: an edit, which is a new revision.
 - `profile.get`: one profile, at the revision in force or at the one asked for.
-- `profile.list`: the profiles in the order they were added; a disabled one only when it is asked for.
+- `profile.list`: the profiles in the order they were added; a disabled one only when it is asked for. Beside `items` and
+  `next_cursor`, every page carries `default_execution_profile`: the configured default in force, by name, or `null`
+  where none is named, said even where the name answers no profile.
 - `profile.disable`: out of service; the revisions stay, and new work no longer resolves to them.
 - `profile.enable`
 - `profile.set_default`: names the profile agent work runs on when nothing more specific names one, the setting

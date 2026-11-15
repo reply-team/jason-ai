@@ -131,6 +131,9 @@ one the next claim reads: no restart, no reload. Writing the line by hand is sti
   desktop's chat does not run the verbs.
 - **Each change is journaled** as `default_profile_updated`, naming the profile before and after, with the actor and
   the reason.
+- **`jason profile list` says which one it is.** Every page of `profile.list` carries `default_execution_profile`, the
+  name in force or `null`, and `--human` prints it under the table. A name written by hand that no profile answers is said
+  as it stands, since it is what every claim that falls back to it refuses on.
 
 ## 4. Causal lineage
 

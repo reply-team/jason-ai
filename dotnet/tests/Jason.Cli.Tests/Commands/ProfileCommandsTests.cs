@@ -39,6 +39,36 @@ public class ProfileCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("\"claude-code\"", "Default profile: claude-code")]
+    [InlineData("null", "Default profile: none")]
+    public async Task Profile_list_human_says_which_profile_is_the_default(string named, string line)
+    {
+        var page = JsonSerializer.Serialize(new ProfilePageDto([Profile("local-claude", revision: 3)], "cHJmX0E", null), JasonJson.Options)
+            .Replace("\"default_execution_profile\":null", "\"default_execution_profile\":" + named, StringComparison.Ordinal);
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("profile", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n').Select(row => row.TrimEnd('\r')).Where(row => row.Length > 0).ToList();
+        Assert.Equal(line, lines[^2]);
+        Assert.Equal("next cursor: cHJmX0E", lines[^1].Trim());
+    }
+
+    /// <summary>An answer that carries no default, as a runtime before the field answered, prints the table as it always did.</summary>
+    [Fact]
+    public async Task Profile_list_human_from_an_answer_without_the_field_adds_no_line()
+    {
+        var page = JsonSerializer.Serialize(new Page<ExecutionProfileDto>([Profile("local-claude", revision: 3)], null), JasonJson.Options);
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("profile", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("Default profile", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Create_sends_every_field_it_was_given()
     {
