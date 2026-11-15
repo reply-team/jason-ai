@@ -129,7 +129,7 @@ public class CountEqualsListTests
         var row = Assert.Single((await api.PostOkAsync<CampaignActivityResponse>(
             Operations.CampaignActivity, new { CampaignIds = new[] { world.Spring.PublicId }, Since, Until }, Ct)).Campaigns);
         var listed = await WalkAsync(api, new { CampaignId = world.Spring.PublicId, Activity = filter, Since, Until });
-        Assert.Equal(Of(filter, new CampaignActivityTotal(row.People, row.Added, row.WorkedOn, row.Contacted, row.Replied, row.OptedOut, row.Removed)), listed.Count);
+        Assert.Equal(Of(filter, new CampaignActivityTotal(row.People, row.Added, row.WorkedOn, row.Contacted, row.Replied, row.Bounced, row.OptedOut, row.Removed)), listed.Count);
         Assert.Equal(listed.Count, listed.Distinct().Count());
 
         // Across both campaigns, Hal worked on in each: the total is the people listed, each once.
@@ -148,6 +148,7 @@ public class CountEqualsListTests
         CampaignActivityFilter.WorkedOn => counts.WorkedOn,
         CampaignActivityFilter.Contacted => counts.Contacted,
         CampaignActivityFilter.Replied => counts.Replied,
+        CampaignActivityFilter.Bounced => counts.Bounced,
         CampaignActivityFilter.OptedOut => counts.OptedOut,
         CampaignActivityFilter.Removed => counts.Removed,
         _ => throw new ArgumentOutOfRangeException(nameof(filter), filter, "A count with no field in the row."),

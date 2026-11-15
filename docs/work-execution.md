@@ -831,6 +831,9 @@ In a period, removed people included, so a past period does not change when some
   an enrollment into a provider campaign not live yet; research never counts.
 - `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
+- `bounced` — A provider's event said in the period that a message to them bounced, hard or soft: an event does not
+  always say which, so each counts. A bounce is dated by the moment the provider gives it, as a reply is, and a person
+  who bounced twice counts once; only the provider's events are read, and an event that names nobody counts nobody.
 - `opted_out` — One of their addresses was put on the do-not-contact register in the period. It is read from the
   journal, so an entry lifted since still counts.
 - `removed` — They were taken out of the campaign in the period, whether added back since or not.

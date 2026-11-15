@@ -158,10 +158,10 @@ public sealed record CampaignActivityRequest(
 /// What happened to one campaign's people in the period, each count a number of people, removed ones included:
 /// <c>people</c> is everyone anything happened to.
 /// </summary>
-public sealed record CampaignActivityRow(string CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
+public sealed record CampaignActivityRow(string CampaignId, int People, int Added, int WorkedOn, int Contacted, int Replied, int Bounced, int OptedOut, int Removed);
 
 /// <summary>The period's counts across every campaign asked, each person counted once however many of them count the person.</summary>
-public sealed record CampaignActivityTotal(int People, int Added, int WorkedOn, int Contacted, int Replied, int OptedOut, int Removed);
+public sealed record CampaignActivityTotal(int People, int Added, int WorkedOn, int Contacted, int Replied, int Bounced, int OptedOut, int Removed);
 
 /// <summary>A row per campaign asked, and <c>total</c> across them.</summary>
 public sealed record CampaignActivityResponse(IReadOnlyList<CampaignActivityRow> Campaigns, CampaignActivityTotal Total);

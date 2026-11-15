@@ -70,13 +70,13 @@ describe('Campaigns', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
 
-        await waitFor(async () => expect(await cells('Spring')).toEqual(['Spring', '2', '9', '4', '2', '2']));
+        await waitFor(async () => expect(await cells('Spring')).toEqual(['Spring', '2', '9', '4', '2', '2', '2']));
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/last-7-days'].request]);
         expect(location.hash).toBe('#/campaigns?view=activity');
 
         fireEvent.click(screen.getByRole('button', { name: 'Today' }));
 
-        await waitFor(async () => expect(await cells('Spring')).toEqual(['Spring', '0', '0', '0', '0', '0']));
+        await waitFor(async () => expect(await cells('Spring')).toEqual(['Spring', '0', '0', '0', '0', '0', '0']));
         expect(sent(api, 'campaign.activity')[1]).toEqual(fixtures['campaign.activity/today'].request);
         expect(location.hash).toBe('#/campaigns?view=activity&period=today');
     });
@@ -531,11 +531,12 @@ describe('A campaign’s people', () => {
             ]),
         );
         expect(screen.getByRole('tab', { name: 'People Activity' }).getAttribute('aria-selected')).toBe('true');
-        expect((await screen.findByRole('button', { name: /^All\s*14$/ })).getAttribute('aria-pressed')).toBe('true');
+        expect((await screen.findByRole('button', { name: /^All\s*16$/ })).getAttribute('aria-pressed')).toBe('true');
         expect(await row('Quinn Example')).toBeTruthy();
         // Each row says the latest thing that happened, by the count it was.
         expect((await row('Oli Example')).textContent).toContain('replied by email');
         expect((await row('Kit Example')).textContent).toContain('opted out of email');
+        expect((await row('Max Example')).textContent).toContain('bounced');
         // New, and nothing happened to him this week.
         expect(screen.queryByText('Hal Example')).toBeNull();
     });

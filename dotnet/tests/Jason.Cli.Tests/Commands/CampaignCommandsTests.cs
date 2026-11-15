@@ -500,8 +500,8 @@ public class CampaignCommandsTests
     {
         var activity = JsonSerializer.Serialize(
             new CampaignActivityResponse(
-                [new CampaignActivityRow("cmp_A", 14, 2, 9, 4, 2, 2, Removed: 1), new CampaignActivityRow("cmp_B", 1, 0, 1, 0, 0, 0, Removed: 0)],
-                new CampaignActivityTotal(14, 2, 9, 4, 2, 2, Removed: 1)),
+                [new CampaignActivityRow("cmp_A", 16, 2, 9, 4, 2, 3, 2, Removed: 1), new CampaignActivityRow("cmp_B", 1, 0, 1, 0, 0, 0, 0, Removed: 0)],
+                new CampaignActivityTotal(16, 2, 9, 4, 2, 3, 2, Removed: 1)),
             JasonJson.Options);
         using var cli = new FolderRun(null, Answer(activity, Campaigns(("cmp_A", "Spring outreach"), ("cmp_B", "Partners"))));
 
@@ -509,10 +509,10 @@ public class CampaignCommandsTests
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
-        Assert.Equal(["Spring outreach", "cmp_A", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[2]));
-        Assert.Equal(["Partners", "cmp_B", "1", "0", "1", "0", "0", "0", "0"], Cells(lines[3]));
-        Assert.Equal(["TOTAL", "-", "14", "2", "9", "4", "2", "2", "1"], Cells(lines[^1]));
+        Assert.Equal(["CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "BOUNCED", "OPTED OUT", "REMOVED"], Cells(lines[0]));
+        Assert.Equal(["Spring outreach", "cmp_A", "16", "2", "9", "4", "2", "3", "2", "1"], Cells(lines[2]));
+        Assert.Equal(["Partners", "cmp_B", "1", "0", "1", "0", "0", "0", "0", "0"], Cells(lines[3]));
+        Assert.Equal(["TOTAL", "-", "16", "2", "9", "4", "2", "3", "2", "1"], Cells(lines[^1]));
     }
 
     /// <summary>
@@ -757,8 +757,8 @@ public class CampaignCommandsTests
             JasonJson.Options)
         : JsonSerializer.Serialize(
             new CampaignActivityResponse(
-                [.. ids.Select(id => new CampaignActivityRow(id, 1, 1, 0, 0, 0, 0, Removed: 0))],
-                new CampaignActivityTotal(ids.Length, ids.Length, 0, 0, 0, 0, Removed: 0)),
+                [.. ids.Select(id => new CampaignActivityRow(id, 1, 1, 0, 0, 0, 0, 0, Removed: 0))],
+                new CampaignActivityTotal(ids.Length, ids.Length, 0, 0, 0, 0, 0, Removed: 0)),
             JasonJson.Options);
 
     private static string Operation(string verb) => verb == "summary" ? Operations.CampaignSummary : Operations.CampaignActivity;

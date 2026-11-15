@@ -160,16 +160,16 @@ describe('the Dashboard', () => {
         expect(document.querySelector('.dash')).toBeTruthy();
     });
 
-    it('draws six tiles in order, and the one no read gives a fact for is a dash, never a zero', async () => {
+    it('draws six tiles in order, each with the fact its read gives, never a zero', async () => {
         renderConsole();
         const panel = await open();
         const labels = [...panel.querySelectorAll('.dash-tile')].map((each) => each.getAttribute('data-tile'));
         expect(labels).toEqual(['Needs you', 'Contacted', 'Replied', 'Interested', 'Meetings booked', 'Bounce rate']);
-        expect(part('Bounce rate', 'b')).toBe('–');
-        expect(part('Bounce rate', '.rel')).toBe('no data yet');
-        // The tiles with a fact show it, and no tile reads zero.
+        // The tiles with a fact show it, and no tile reads zero. Bounce rate: two of the eleven contacted bounced.
         await waitFor(() => expect(part('Contacted', 'b')).toBe('11'));
         expect(part('Replied', 'b')).toBe('3');
+        expect(part('Bounce rate', 'b')).toBe('18.2%');
+        expect(part('Bounce rate', '.rel')).toBe('2 bounced');
         expect(
             [...dash().querySelectorAll('.dash-tile b')].map((each) => words(each)).filter((each) => each === '0'),
         ).toEqual([]);
@@ -288,9 +288,25 @@ describe('the Dashboard', () => {
         renderConsole({ unread: true });
         const panel = await open();
         await settled();
-        dashboard.activity.value = { total: { contacted: 0, replied: 0 }, byCampaign: {} };
+        dashboard.activity.value = { total: { contacted: 0, replied: 0, bounced: 0 }, byCampaign: {} };
         await waitFor(() => expect(part('Replied', 'b')).toBe('0'));
         expect(tile(panel, 'Replied').querySelector('.rel')).toBeNull();
+        expect(part('Bounce rate', 'b')).toBe('–');
+        expect(part('Bounce rate', '.rel')).toBe('no data yet');
+        expect(tile(panel, 'Bounce rate').querySelector('b')!.getAttribute('aria-label')).toBe('no data yet');
+    });
+
+    it('shows how many bounced under the dash when nobody was contacted but somebody bounced', async () => {
+        renderConsole({ unread: true });
+        const panel = await open();
+        await settled();
+        dashboard.activity.value = { total: { contacted: 0, replied: 0, bounced: 3 }, byCampaign: {} };
+        await waitFor(() => expect(part('Bounce rate', '.rel')).toBe('3 bounced'));
+        expect(part('Bounce rate', 'b')).toBe('–');
+        // A screen reader hears why there is no number, never "no data yet" beside a count.
+        expect(tile(panel, 'Bounce rate').querySelector('b')!.getAttribute('aria-label')).toBe(
+            'no rate for this period',
+        );
     });
 });
 
