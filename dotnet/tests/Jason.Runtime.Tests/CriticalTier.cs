@@ -19,6 +19,11 @@ namespace Jason.Runtime.Tests;
 /// is a change to this table, made on purpose.
 /// </para>
 /// <para>
+/// A class the tier carries whole (<see cref="CarriedWhole"/>) is held otherwise: every method of it is in the tier, by
+/// its class's name, and the table counts each of its methods once, however many rows it runs (<see cref="Counted"/>),
+/// so an edit to a page, which moves those rows, leaves the table as it is.
+/// </para>
+/// <para>
 /// This file is linked into every test project, so each assembly holds its own column; the checks over the whole table
 /// — every family has a critical case, the tier's share stays under its ceiling — run once, in this project.
 /// </para>
@@ -29,7 +34,10 @@ internal static partial class CriticalTier
     public static readonly string[] Assemblies =
         ["Jason.App.Tests", "Jason.Cli.Tests", "Jason.Contracts.Tests", "Jason.PluginHost.Tests", "Jason.Runtime.Tests"];
 
-    /// <summary>The critical cases of each family, in each test assembly, as discovery finds them.</summary>
+    /// <summary>
+    /// The critical cases of each family, in each test assembly, as discovery finds them and <see cref="Counted"/> counts
+    /// them: a method of a class the tier carries whole once.
+    /// </summary>
     public static readonly IReadOnlyDictionary<Family, int[]> Cases = new Dictionary<Family, int[]>
     {
         //              App  Cli  Contracts  PluginHost  Runtime
@@ -84,7 +92,7 @@ internal static partial class CriticalTier
         [Family.N1] =  [  0,   0,   0,   0,   7],
         [Family.N2] =  [  0,   0,   0,   0,  24],
         [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1, 190,   0,   0,   1],
+        [Family.D1] =  [  1,   7,   0,   0,   1],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   2],
         [Family.X1] =  [  0,  10,   3,   1,  14],
@@ -122,7 +130,7 @@ internal static partial class CriticalTier
     public static int CasesAtLeast(int measured) => measured - (measured / 10);
 
     /// <summary>How the guard's failure says an assembly's discovery differs from its column of the table.</summary>
-    public const string Differs = "differs from its column of the critical tier's table (a commit that marks, unmarks or removes tests rewrites it)";
+    public const string Differs = "differs from its column of the critical tier's table (a commit that marks, unmarks or removes tests rewrites it; a method of a class the tier carries whole counts once, however many rows it runs)";
 
     /// <summary>What is wrong when a suite is smaller than the table measured its ceiling on.</summary>
     public static List<string> FloorProblems(int methods, int cases, (int TierMethods, int Methods, int Cases) sizes)
@@ -181,6 +189,34 @@ internal static partial class CriticalTier
                 && method != "A_file_a_printed_command_writes_lands_in_this_tests_own_directory",
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// The critical cases of each family as the table counts them: every case once, except that a method of a class the
+    /// tier carries whole counts once for its family however many rows it runs.
+    /// </summary>
+    /// <remarks>
+    /// The rows of such a method are, today, the lines the pages print, which move with every edit of a page; counted
+    /// case by case, the table would move with them, and two units that each add a printed command from one base would
+    /// merge cleanly into a count neither of them wrote. <see cref="OutsideTheTier"/> holds those classes to the tier
+    /// completely, so the exact count adds nothing for them but that churn. The ceiling's share of cases is therefore
+    /// measured with each such method once.
+    /// </remarks>
+    public static Dictionary<Family, int> Counted(IEnumerable<(string Class, string Method, Family Family)> cases)
+    {
+        var counted = new Dictionary<Family, int>();
+        var whole = new HashSet<(string, string, Family)>();
+        foreach (var testCase in cases)
+        {
+            if (CarriedWhole(testCase.Class, testCase.Method) && !whole.Add(testCase))
+            {
+                continue;
+            }
+
+            counted[testCase.Family] = counted.GetValueOrDefault(testCase.Family) + 1;
+        }
+
+        return counted;
     }
 
     /// <summary>
@@ -380,20 +416,21 @@ public sealed class CriticalTierTests
         var critical = cases.Where(CriticalTier.IsCritical).ToList();
 
         var problems = new List<string>();
-        var byFamily = new Dictionary<Family, int>();
+        var named = new List<(string Class, string Method, Family Family)>();
         foreach (var testCase in critical)
         {
-            var named = testCase.Traits.TryGetValue(CriticalAttribute.FamilyTrait, out var values) ? values.ToList() : [];
-            if (named is [var one] && Enum.GetNames<Family>().Contains(one, StringComparer.Ordinal))
+            var families = testCase.Traits.TryGetValue(CriticalAttribute.FamilyTrait, out var values) ? values.ToList() : [];
+            if (families is [var one] && Enum.GetNames<Family>().Contains(one, StringComparer.Ordinal))
             {
-                var family = Enum.Parse<Family>(one);
-                byFamily[family] = byFamily.GetValueOrDefault(family) + 1;
+                named.Add((testCase.TestClassName ?? string.Empty, testCase.TestMethodName ?? string.Empty, Enum.Parse<Family>(one)));
             }
             else
             {
-                problems.Add($"{testCase.TestCaseDisplayName} names the families [{string.Join(", ", named)}], not one of Family's members");
+                problems.Add($"{testCase.TestCaseDisplayName} names the families [{string.Join(", ", families)}], not one of Family's members");
             }
         }
+
+        var byFamily = CriticalTier.Counted(named);
 
         foreach (var family in Enum.GetValues<Family>())
         {

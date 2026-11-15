@@ -96,6 +96,38 @@ public class CriticalTierTableTests
     }
 
     /// <summary>
+    /// The table counts a method of a class the tier carries whole once for its family, however many rows it runs, so a
+    /// page that prints one more command, or one fewer, leaves the table as it is; every other case counts once, a
+    /// theory's rows each, and a method of the same name in a class not carried whole is counted row by row.
+    /// </summary>
+    [Fact]
+    public void A_method_of_a_class_the_tier_carries_whole_counts_once_however_many_rows_it_runs()
+    {
+        const string Pages = "Jason.Cli.Tests.Documentation.DocumentedPageCommandsTests";
+        const string Migrations = "Jason.Runtime.Tests.Persistence.FooMigrationTests";
+        var cases = new (string Class, string Method, Family Family)[]
+        {
+            (Pages, "Every_documented_command_is_understood", Family.D1),
+            (Pages, "Every_documented_command_is_understood", Family.D1),
+            (Pages, "Every_documented_command_is_understood", Family.D1),
+            (Pages, "Every_guarded_noun_is_printed_by_a_page", Family.D1),
+            (Pages, "Every_guarded_noun_is_printed_by_a_page", Family.D1),
+            (Migrations, "Down_restores_the_table", Family.P2),
+            (Migrations, "Down_restores_the_table", Family.P2),
+            (Migrations, "Up_keeps_the_rows", Family.F1),
+            ("Jason.Cli.Tests.Documentation.OtherPageTests", "Every_documented_command_is_understood", Family.D1),
+            ("Jason.Cli.Tests.Documentation.OtherPageTests", "Every_documented_command_is_understood", Family.D1),
+            ("Jason.Runtime.Tests.Hosting.FooMigrationTests", "Down_restores_the_table", Family.P2),
+        };
+
+        var counted = CriticalTier.Counted(cases);
+
+        Assert.Equal(
+            [(Family.P2, 2), (Family.F1, 1), (Family.D1, 4)],
+            counted.OrderBy(pair => pair.Key).Select(pair => (pair.Key, pair.Value)));
+    }
+
+    /// <summary>
     /// The classes the tier carries whole are held by their names: a method of one outside the tier is named by its class
     /// and its name, once however many of its rows are outside, and a class of another name or another namespace is not.
     /// </summary>

@@ -18,7 +18,9 @@ namespace Jason.Runtime.Tests;
 /// database they seeded or hold the migrations' history, which a later migration breaks, and the tests of the commands
 /// the pages print, which an edit to a page breaks. Each gives one of the reasons of <see cref="BrokenUntouched"/>.
 /// The guard holds every method of those classes to the tier by the classes' names (<see cref="CriticalTier.CarriedWhole"/>);
-/// an upgrade method inside a schema class has no name to be held by, and the unit that adds one marks it.
+/// an upgrade method inside a schema class has no name to be held by, and the unit that adds one marks it. The tier's
+/// table counts each method of those classes once, however many rows it runs, so a line added to a page, or any row
+/// added to a theory of theirs, moves no count in it; a method added to or taken from those classes does.
 /// </para>
 /// <para>
 /// On a fact, or on a theory whose every row belongs to the tier, the attribute marks the method. A theory of which only
