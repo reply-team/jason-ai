@@ -294,6 +294,28 @@ public class BusinessPackTests
     }
 
     /// <summary>
+    /// The agent that drafts a campaign's copy with the user keeps a first message short and builds it on what is known
+    /// about the person; the criteria the list was drawn by are never such a fact; a template is judged as it renders for
+    /// one person; the user's own word on length and content holds. Length and depth are answered, so only the openers to
+    /// avoid stay open for an expert.
+    /// </summary>
+    [Fact]
+    public void Campaign_launch_keeps_a_first_message_short_and_built_on_what_is_known_about_the_person()
+    {
+        var skill = Flat("campaign-launch");
+
+        Assert.Contains("**A first message is short, and built on what is known about the person**", skill, StringComparison.Ordinal);
+        Assert.Contains("never the campaign's targeting: the criteria the list was drawn by say how people were chosen, not what is true of any one of them.", skill, StringComparison.Ordinal);
+        Assert.Contains("With little known, keep it very short: who writes, why this person, one ask,", skill, StringComparison.Ordinal);
+        Assert.Contains("What is known decides what the message is built on, never its length.", skill, StringComparison.Ordinal);
+        Assert.Contains("A template is held to this as `message.draft` renders it for one person, where a fallback is no fact.", skill, StringComparison.Ordinal);
+        Assert.Contains("Where the user says how long it is or what it must hold, theirs holds.", skill, StringComparison.Ordinal);
+        Assert.Contains("TODO(expert): which openers to avoid beyond one that claims to know the person.", skill, StringComparison.Ordinal);
+        Assert.Contains("cadence, channel mix, what makes an opener fail — is marked `TODO(expert)`", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("structure, length, personalisation depth", skill, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The skill's definition of a standing approval is mapped onto Jason's: per campaign and category, its operations, its
     /// expiry and ceiling, how it is read, what each act it authorised leaves, and that only a person sets one. The sentence
     /// on which categories to set it on is the decided one, and the principle it follows from is stated with it. The
