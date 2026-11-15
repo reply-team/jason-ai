@@ -1,5 +1,9 @@
+using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
+using Jason.Contracts.Ids;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Journal;
+using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jason.Runtime.Tests.Campaigns;
@@ -12,7 +16,7 @@ public class CampaignPeopleActivityTests
     public async Task People_is_everyone_anything_happened_to_in_the_period()
     {
         Assert.Equal(
-            ["Ada", "Ben", "Cleo", "Ivy", "Kit", "Lou", "Oli", "Pia", "Quinn", "Rae", "Tess", "Uma", "Vic", "Wes"],
+            ["Ada", "Ben", "Cleo", "Ivy", "Kit", "Lou", "Max", "Ned", "Oli", "Pia", "Quinn", "Rae", "Tess", "Uma", "Vic", "Wes"],
             await TheWeekAsync(CampaignActivityFilter.People));
     }
 
@@ -48,6 +52,55 @@ public class CampaignPeopleActivityTests
     {
         Assert.Equal(["Oli", "Rae"], await TheWeekAsync(CampaignActivityFilter.Replied));
         Assert.Equal(["Sam"], await HappenedAsync(CampaignActivityFilter.Replied, Utc(2026, 3, 10), Utc(2026, 3, 11)));
+    }
+
+    [Fact]
+    public async Task Bounced_counts_the_people_a_bounce_names_hard_or_soft()
+    {
+        Assert.Equal(["Max", "Ned"], await TheWeekAsync(CampaignActivityFilter.Bounced));
+    }
+
+    [Fact]
+    public async Task Bounced_dates_a_bounce_by_the_provider_moment()
+    {
+        // Both bounces happened at seven on the 13th and were written at ten.
+        var seven = new DateTime(2026, 10, 13, 7, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(["Max", "Ned"], await HappenedAsync(CampaignActivityFilter.Bounced, seven, seven.AddMinutes(1)));
+        Assert.Empty(await HappenedAsync(CampaignActivityFilter.Bounced, seven.AddMinutes(1), seven.AddHours(4)));
+    }
+
+    [Fact]
+    public async Task A_bounce_that_names_nobody_counts_nobody()
+    {
+        using var database = new TestDatabase();
+        using var db = database.Open();
+        var world = await CampaignWorld.WriteAsync(db, Ct);
+        db.Journal.Add(new JournalEntry
+        {
+            PublicId = PublicId.New("jrn"),
+            Key = "sha256:" + new string('b', 64),
+            Ts = new DateTime(2026, 10, 14, 10, 0, 0, DateTimeKind.Utc),
+            ActorType = ActorType.System,
+            Kind = JournalKinds.ProviderEventObserved,
+            CampaignId = world.Spring.Id,
+            New = new JsonObject
+            {
+                ["kind"] = "bounce",
+                ["plugin"] = "reply",
+                ["event_id"] = PublicId.New("evt"),
+                ["occurred_at"] = "2026-10-14T08:00:00.000Z",
+                ["channel"] = null,
+                ["contact_id"] = null,
+                ["attributed_by"] = "campaign_pin",
+                ["message"] = "m-nobody",
+                ["bounce"] = "hard",
+            },
+        });
+        await db.SaveChangesAsync(Ct);
+
+        var counts = await CampaignPeople.ActivityCountsAsync(db, [world.Spring.Id], CampaignWorld.Since, CampaignWorld.Until, audience: null, withoutArchived: false, Ct);
+        Assert.Equal(2, counts[world.Spring.Id].Bounced);
+        Assert.Equal(2, (await CampaignPeople.MomentsAsync(db, [world.Spring.Id], CampaignActivityFilter.Bounced, CampaignWorld.Since, CampaignWorld.Until, null, false, Ct)).Count);
     }
 
     [Fact]

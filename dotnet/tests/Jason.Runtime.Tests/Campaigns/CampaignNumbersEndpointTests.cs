@@ -112,12 +112,12 @@ public class CampaignNumbersEndpointTests
 
         Assert.Equal(
             [
-                new CampaignActivityRow(world.Spring.PublicId, 15, 2, 10, 4, 2, 2, Removed: 1),
-                new CampaignActivityRow(world.Autumn.PublicId, 1, 0, 1, 0, 0, 0, Removed: 0),
+                new CampaignActivityRow(world.Spring.PublicId, 17, 2, 10, 4, 2, 2, 2, Removed: 1),
+                new CampaignActivityRow(world.Autumn.PublicId, 1, 0, 1, 0, 0, 0, 0, Removed: 0),
             ],
             activity.Campaigns);
         // Hal, worked on in both campaigns this week, is in both rows and once in the total.
-        Assert.Equal(new CampaignActivityTotal(15, 2, 10, 4, 2, 2, Removed: 1), activity.Total);
+        Assert.Equal(new CampaignActivityTotal(17, 2, 10, 4, 2, 2, 2, Removed: 1), activity.Total);
     }
 
     [Fact]

@@ -188,19 +188,19 @@ public static class CampaignRenderers
             return null;
         }
 
-        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "OPTED OUT", "REMOVED");
+        var table = new HumanTable("CAMPAIGN", "ID", "PEOPLE", "ADDED", "WORKED ON", "CONTACTED", "REPLIED", "BOUNCED", "OPTED OUT", "REMOVED");
         foreach (var row in activity.Campaigns)
         {
             table.Row(
-                names.GetValueOrDefault(row.CampaignId), row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.OptedOut),
-                Count(row.Removed));
+                names.GetValueOrDefault(row.CampaignId), row.CampaignId, Count(row.People), Count(row.Added), Count(row.WorkedOn), Count(row.Contacted), Count(row.Replied), Count(row.Bounced),
+                Count(row.OptedOut), Count(row.Removed));
         }
 
         if (activity.Total is { } total)
         {
             table.Row(
-                "TOTAL", null, Count(total.People), Count(total.Added), Count(total.WorkedOn), Count(total.Contacted), Count(total.Replied), Count(total.OptedOut),
-                Count(total.Removed));
+                "TOTAL", null, Count(total.People), Count(total.Added), Count(total.WorkedOn), Count(total.Contacted), Count(total.Replied), Count(total.Bounced),
+                Count(total.OptedOut), Count(total.Removed));
         }
 
         return table.Render();

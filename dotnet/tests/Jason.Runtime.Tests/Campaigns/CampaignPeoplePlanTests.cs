@@ -25,7 +25,7 @@ public partial class CampaignPeoplePlanTests
         await db.Database.OpenConnectionAsync(Ct);
         var scans = new StringBuilder();
 
-        string[] why = [CampaignWhy.FirstReplies, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
+        string[] why = [CampaignWhy.FirstReplies, CampaignWhy.Bounces, CampaignWhy.FinishedWork, CampaignWhy.Additions, CampaignWhy.Removals, CampaignWhy.OptOuts];
         foreach (var sql in CampaignPeople.Everyone.All.Concat(CampaignPeople.OneAudience.All).Append(CampaignPeople.UntouchedCountSql).Append(CampaignPeople.StandingSql).Concat(why))
         {
             // {0} is the campaigns asked (or the one campaign), {1} and {2} the period, or {1} the page's people and {2}

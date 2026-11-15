@@ -56,8 +56,8 @@ public class AudienceFilterEndpointTests
             new { campaign_ids = new[] { spring }, audience = 1, count = "replied", period = "day", since = Week.Since, until = Week.Until },
             Ct);
 
-        Assert.Equal([new CampaignActivityRow(spring, 5, 2, 2, 0, 1, 0, Removed: 1)], activity.Campaigns);
-        Assert.Equal(new CampaignActivityTotal(5, 2, 2, 0, 1, 0, Removed: 1), activity.Total);
+        Assert.Equal([new CampaignActivityRow(spring, 5, 2, 2, 0, 1, 0, 0, Removed: 1)], activity.Campaigns);
+        Assert.Equal(new CampaignActivityTotal(5, 2, 2, 0, 1, 0, 0, Removed: 1), activity.Total);
         Assert.Equal(
             [("2026-10-14", 1)],
             byDay.Buckets.Where(bucket => bucket.Value > 0).Select(bucket => (bucket.Start.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture), bucket.Value)));
@@ -111,13 +111,13 @@ public class AudienceFilterEndpointTests
             Operations.CampaignActivity,
             new { campaign_ids = new[] { spring }, audience = 1, since = Week.Since, until = Week.Until, exclude_archived_contacts = true },
             Ct)).Campaigns);
-        Assert.Equal([new CampaignActivityRow(spring, 5, 2, 2, 0, 1, 0, Removed: 1)], counted.Campaigns);
+        Assert.Equal([new CampaignActivityRow(spring, 5, 2, 2, 0, 1, 0, 0, Removed: 1)], counted.Campaigns);
         Assert.Equal((0, 0), (left.Replied, left.Removed));
 
         var counts = new Dictionary<string, int>
         {
             ["people"] = left.People, ["added"] = left.Added, ["worked_on"] = left.WorkedOn, ["contacted"] = left.Contacted,
-            ["replied"] = left.Replied, ["opted_out"] = left.OptedOut, ["removed"] = left.Removed,
+            ["replied"] = left.Replied, ["bounced"] = left.Bounced, ["opted_out"] = left.OptedOut, ["removed"] = left.Removed,
         };
         foreach (var (activity, number) in counts)
         {
@@ -162,7 +162,7 @@ public class AudienceFilterEndpointTests
 
         Assert.Equal([new CampaignSummaryRow(spring, 0, 0, 0, 0, 0, 0, 0, 0, Removed: 0, SequenceLinked: true)], summary.Campaigns);
         Assert.Equal(new CampaignSummaryTotal(0, 0, 0, 0, 0, 0, 0, 0, Removed: 0), summary.Total);
-        Assert.Equal([new CampaignActivityRow(spring, 0, 0, 0, 0, 0, 0, Removed: 0)], activity.Campaigns);
+        Assert.Equal([new CampaignActivityRow(spring, 0, 0, 0, 0, 0, 0, 0, Removed: 0)], activity.Campaigns);
         Assert.Empty(members.Items);
     }
 
