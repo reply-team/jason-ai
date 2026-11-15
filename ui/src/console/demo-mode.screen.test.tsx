@@ -8,13 +8,15 @@ import { route } from '../router';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations, lines, setup, setupError } from './state';
 import { startDraft, startMaking, startWaiting } from './start';
 
-// The desktop's console: the top bar above every panel in both modes, its switch asking the desktop through the seam;
-// in Demo one short sentence says the data is sample, in Live a mark.
+// The desktop's console: the top strip right of the sidebar, above every panel in both modes, its switch asking the
+// desktop through the seam; in Demo one short sentence says the data is sample, and Live says nothing but its pressed
+// segment.
 
 async function renderConsole(
     kept: 'live' | 'demo',
@@ -51,6 +53,16 @@ async function renderConsole(
 }
 
 const strip = () => screen.queryByRole('region', { name: 'Mode bar' });
+
+/** The strip heads the column right of the sidebar: the sidebar runs the window's height, the area is under the strip. */
+function expectBesideTheSidebar(shown: HTMLElement): void {
+    const column = shown.parentElement!;
+    expect(column.classList.contains('mainc')).toBe(true);
+    expect(column.previousElementSibling?.classList.contains('side')).toBe(true);
+    expect(column.parentElement?.classList.contains('shell')).toBe(true);
+    expect(column.parentElement?.parentElement).toBe(document.querySelector('.jc-console'));
+    expect(shown.nextElementSibling?.classList.contains('area')).toBe(true);
+}
 const offer = () => screen.queryByRole('button', { name: 'See Jason with sample data' });
 const modeSets = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'mode.set');
 
@@ -75,16 +87,14 @@ afterEach(() => {
 });
 
 describe('Demo in the desktop', () => {
-    it('draws the bar once, above the sidebar and every panel of the area', async () => {
+    it('draws the bar once, right of the sidebar and above every panel of the area', async () => {
         await renderConsole('demo');
         const shown = await waitFor(() => {
             expect(strip()).not.toBeNull();
             return strip()!;
         });
         expect(screen.getAllByRole('region', { name: 'Mode bar' })).toHaveLength(1);
-        const console = document.querySelector('.jc-console')!;
-        expect(shown.parentElement).toBe(console);
-        expect(shown.nextElementSibling?.classList.contains('shell')).toBe(true);
+        expectBesideTheSidebar(shown);
         expect(shown.querySelector('.mode-mark')?.textContent).toBe(
             'Demo: an example of what you can build on Jason. The data is samples, and nothing is sent.',
         );
@@ -186,10 +196,11 @@ describe('A demo whose sample is being made', () => {
 });
 
 describe('Live in the desktop', () => {
-    it('draws the bar with a Live mark and no demo sentence, the Live button marked', async () => {
+    it('draws the bar with no mark and no demo sentence, the Live segment pressed', async () => {
         await renderConsole('live');
         const shown = await waitFor(() => strip()!);
-        expect(shown.querySelector('.mode-mark strong')?.textContent).toBe('Live');
+        expect(shown.querySelector('.mode-mark')).toBeNull();
+        expect(shown.querySelector('.mode-dot')).toBeNull();
         expect(shown.classList.contains('mode-live')).toBe(true);
         expect(shown.textContent).not.toMatch(/an example of what you can build/);
         expect(shown.querySelector('[data-slot="open-in"]')).not.toBeNull();
@@ -232,8 +243,8 @@ describe('A demo the desktop could not open', () => {
         const said = note()!;
         expect(said.textContent).toMatch(/^The demo could not be opened, so Jason opened your own installation\./);
         expect(strip()!.contains(said)).toBe(true);
-        expect(strip()!.nextElementSibling?.classList.contains('shell')).toBe(true);
-        expect(strip()!.querySelector('.mode-mark strong')?.textContent).toBe('Live');
+        expectBesideTheSidebar(strip()!);
+        expect(strip()!.querySelector('.mode-mark')).toBeNull();
         expect(offer()).toBeNull();
     });
 
@@ -243,5 +254,90 @@ describe('A demo the desktop could not open', () => {
         fireEvent.click(within(said).getByRole('button', { name: 'Close' }));
         await waitFor(() => expect(note()).toBeNull());
         expect(strip()).not.toBeNull();
+    });
+});
+
+describe('The strip’s look', () => {
+    it('stands 38 px high right of the 284 px sidebar, white in Live with a line under it, and is the window’s drag region', async () => {
+        await renderConsole('live');
+        const shown = await waitFor(() => strip()!);
+        expectBesideTheSidebar(shown);
+        expect(styleOf(document.querySelector('.jc-console .side')!)).toMatchObject({ width: '284px' });
+        expect(styleOf(shown)).toMatchObject({
+            height: '38px',
+            'box-sizing': 'border-box',
+            padding: '0 12px 0 16px',
+            background: 'var(--bg)',
+            'border-bottom': '1px solid var(--line)',
+            color: 'var(--mute)',
+            '-webkit-app-region': 'drag',
+        });
+    });
+
+    it('keeps every control in it out of the drag region, the Open in menu included', async () => {
+        await renderConsole('live');
+        const shown = await waitFor(() => strip()!);
+        const split = await waitFor(() => within(shown).getByRole('group', { name: 'Open in' }));
+        fireEvent.click(within(split).getByRole('button', { name: 'More places to open' }));
+        const menu = await waitFor(() => within(shown).getByRole('menu'));
+        const controls = [
+            ...Array.from(shown.querySelectorAll('button')),
+            within(shown).getByRole('group', { name: 'Data' }),
+            split,
+            menu,
+        ];
+        expect(controls.length).toBeGreaterThan(5);
+        for (const control of controls)
+            expect(styleOf(control)['-webkit-app-region'], control.outerHTML.slice(0, 80)).toBe('no-drag');
+    });
+
+    it('draws Demo | Live as one segmented control: a quiet track, the mode in force a white pill', async () => {
+        await renderConsole('live');
+        const group = await waitFor(() => within(strip()!).getByRole('group', { name: 'Data' }));
+        expect(styleOf(group)).toMatchObject({
+            background: 'var(--seg-track)',
+            'border-radius': '7px',
+            padding: '2px',
+        });
+        const live = within(group).getByRole('button', { name: 'Live' });
+        const demo = within(group).getByRole('button', { name: 'Demo' });
+        expect(styleOf(demo)).toMatchObject({
+            border: '0',
+            background: 'none',
+            'border-radius': '5px',
+            'font-size': '12px',
+        });
+        expect(styleOf(live)).toMatchObject({
+            background: 'var(--seg-on)',
+            color: 'var(--seg-on-ink)',
+            'font-weight': '600',
+        });
+        expect(tokenOf('--seg-track')).toBe('rgba(20, 33, 43, 0.08)');
+        expect(tokenOf('--seg-on')).toBe('#fff');
+        // Open in sits beside it on the same quiet track, its parts plain until pointed at.
+        const split = await waitFor(() => within(strip()!).getByRole('group', { name: 'Open in' }));
+        expect(styleOf(split)).toMatchObject({
+            background: 'var(--seg-track)',
+            'border-radius': '7px',
+            padding: '2px',
+        });
+        for (const part of within(split).getAllByRole('button'))
+            expect(styleOf(part)).toMatchObject({ border: '0', background: 'none', 'font-size': '12px' });
+    });
+
+    it('is the demo’s warm strip in Demo, its dot amber', async () => {
+        await renderConsole('demo');
+        const shown = await waitFor(() => strip()!);
+        expect(styleOf(shown)).toMatchObject({
+            background: 'var(--demo-bg)',
+            'border-bottom': '1px solid var(--demo-line)',
+            color: 'var(--demo-ink)',
+        });
+        expect([tokenOf('--demo-bg'), tokenOf('--demo-line'), tokenOf('--demo-ink')]).toEqual([
+            '#fff4d6',
+            '#f2dc9c',
+            '#6b4e00',
+        ]);
+        expect(styleOf(shown.querySelector('.mode-dot')!)).toMatchObject({ background: '#e0a100' });
     });
 });
