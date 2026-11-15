@@ -18,10 +18,12 @@ export const accessMarks = {
 
 const lines = (paths: readonly string[]): Html => html`${paths.map((each) => html`<path d="${each}" />`)}`;
 
-// The console's line icons: paths on a 24-unit grid, stroked in the current colour.
+// The console's line icons: paths on a 24-unit grid, stroked in the current colour. Needs you is a check in a circle,
+// Settings a cog and Recent's filter two sliders, as the console's look draws them.
 const icons = {
     home: html`<path d="M3 11l9-7 9 7v9H3z" />`,
     att: html`<path d="M12 3v12M12 19v.5" /><circle cx="12" cy="12" r="10" />`,
+    needs: html`<circle cx="12" cy="12" r="10" /><path d="M8.5 11.8l2.6 2.6 4.6-5" />`,
     camp: html`<path d="M4 4h16v6H4zM4 14h10v6H4z" />`,
     people: html`<circle cx="9" cy="8" r="4" /><path
             d="M2 21c1-4 4-6 7-6s6 2 7 6M17 11a3 3 0 100-6M22 21c-.5-2.5-2-4-4-4.6"
@@ -37,12 +39,16 @@ const icons = {
     journal: html`<path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h4" />`,
     plug: html`<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0zM12 18v4" />`,
     ops: html`<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />`,
-    gear: html`<circle cx="12" cy="12" r="3" /><path
-            d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"
-        />`,
+    gear: html`<path
+            d="M9.6 4.4L10.4 1.5L13.6 1.5L14.4 4.4L15.7 4.9L18.3 3.5L20.5 5.7L19.1 8.3L19.6 9.6L22.5 10.4L22.5 13.6L19.6 14.4L19.1 15.7L20.5 18.3L18.3 20.5L15.7 19.1L14.4 19.6L13.6 22.5L10.4 22.5L9.6 19.6L8.3 19.1L5.7 20.5L3.5 18.3L4.9 15.7L4.4 14.4L1.5 13.6L1.5 10.4L4.4 9.6L4.9 8.3L3.5 5.7L5.7 3.5L8.3 4.9z"
+        /><circle cx="12" cy="12" r="3.5" />`,
     plusc: html`<circle cx="12" cy="12" r="10" /><path d="M12 8v8M8 12h8" />`,
     search: html`<circle cx="11" cy="11" r="7" /><path d="M16 16l5 5" />`,
-    filter: html`<path d="M3 5h18l-7 8v6l-4 2v-8z" />`,
+    filter: html`<path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle
+            cx="8"
+            cy="17"
+            r="2"
+        />`,
     check: html`<path d="M5 12l5 5 9-10" />`,
     chev: html`<path d="M6 9l6 6 6-6" />`,
     more: html`<circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" />`,
