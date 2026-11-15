@@ -7,6 +7,7 @@ import { bindDesktopTheme, startTheme } from '../platform/theme';
 import { browserPlugins } from '../plugins';
 import { Console } from './console';
 import './console.css';
+import './composer.css';
 import './harness.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */

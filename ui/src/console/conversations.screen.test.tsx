@@ -12,6 +12,7 @@ import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
+import { choicesOf, currentOf, menuButton } from '../test/menus';
 
 // The conversations the desktop keeps: listed in the sidebar, reopened with what the page drew, a set-up chat handed
 // over to the campaign its turn made or to the one the person picks, a fresh session said in one line, and a
@@ -134,10 +135,9 @@ describe('the desktop’s conversations', () => {
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const panel = hero.closest<HTMLElement>('.chat-panel')!;
-        await waitFor(() =>
-            expect(within(panel).getByRole('combobox', { name: 'Model' })).toHaveProperty('value', 'sonnet'),
-        );
-        expect(within(panel).getByRole('combobox', { name: 'Effort' })).toHaveProperty('value', 'low');
+        await waitFor(() => expect(currentOf('Model', 'model', panel)).toBe('sonnet'));
+        expect(currentOf('Model', 'effort', panel)).toBe('low');
+        expect(menuButton('Model', panel).getAttribute('aria-label')).toBe('Model: Sonnet, Low effort');
         const id = await send(desktop, 'And now?', panel);
         expect(calls(desktop, 'chat.send').at(-1)!.args).toEqual([
             id,
@@ -178,7 +178,7 @@ describe('the desktop’s conversations', () => {
         });
         expect(note.textContent).toContain('The version of Claude Code could not be read');
         expect(within(note).getByRole('button', { name: 'Check again' })).toBeTruthy();
-        expect(within(panel).getByRole('combobox', { name: 'AI host' })).toHaveProperty('value', 'claude');
+        expect(currentOf('Model', 'host', panel)).toBe('claude');
         expect(within(panel).getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
         fireEvent.change(within(panel).getByRole('textbox', { name: 'Your message' }), {
             target: { value: 'And now?' },
@@ -209,12 +209,16 @@ describe('the desktop’s conversations', () => {
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const panel = hero.closest<HTMLElement>('.chat-panel')!;
-        const model = await waitFor(() => within(panel).getByRole('combobox', { name: 'Model' }));
-        expect(model).toHaveProperty('value', 'gpt-5-old');
-        expect(within(model).getByRole('option', { selected: true }).textContent).toBe(
-            "gpt-5-old: no longer listed, so the turn uses Codex's own model with no effort",
-        );
-        expect(within(panel).queryByRole('combobox', { name: 'Effort' })).toBeNull();
+        await waitFor(() => menuButton('Model', panel));
+        expect(choicesOf('Model', 'model', panel).find((each) => each.checked)).toEqual({
+            value: 'gpt-5-old',
+            text: 'gpt-5-old',
+            said: "No longer listed, so the turn uses Codex's own model with no effort.",
+            disabled: false,
+            checked: true,
+        });
+        expect(menuButton('Model', panel).getAttribute('aria-label')).toBe('Model: gpt-5-old');
+        expect(choicesOf('Model', 'effort', panel)).toEqual([]);
         const id = await send(desktop, 'And now?', panel);
         expect(calls(desktop, 'chat.send').at(-1)!.args).toEqual([id, 'And now?', { host: 'codex' }]);
     });

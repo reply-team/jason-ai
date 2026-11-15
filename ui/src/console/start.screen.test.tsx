@@ -301,13 +301,8 @@ describe('the start screen', () => {
         expect(within(menu).getByText('What new chats start with on this computer')).toBeTruthy();
         const names = within(menu)
             .getAllByRole('menuitemradio')
-            .map((each) => each.textContent);
-        expect(names.map((each) => each!.split(':')[0])).toEqual([
-            'Full access',
-            'Ask first',
-            'Auto-edit',
-            'Plan only',
-        ]);
+            .map((each) => each.getAttribute('aria-label'));
+        expect(names).toEqual(['Full access', 'Ask first', 'Auto-edit', 'Plan only']);
     });
 
     it('sends the model and mode the buttons chose with the chat it makes', async () => {
@@ -383,8 +378,11 @@ describe('the start screen', () => {
         renderConsole(stubDesktop(demo));
         await ready();
         const full = item(openMenu(/Access mode/), /^Full access/) as HTMLButtonElement;
-        expect(full.disabled).toBe(true);
+        expect(full.getAttribute('aria-disabled')).toBe('true');
         expect(full.textContent).toContain(refusal);
+        // Chosen all the same, it does nothing: the menu stays open on the mode the chat starts in.
+        fireEvent.click(full);
+        expect(within(startForm()).getByRole('button', { name: 'Access mode: Ask first' })).toBeTruthy();
     });
 
     it('sends nothing for an empty message', async () => {

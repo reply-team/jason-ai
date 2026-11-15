@@ -1,0 +1,415 @@
+/* The start screen and the composer, in the console's own look: the heading, the box, the two menus in its row (the
+   access mode, and the host, model and effort), the line under the box, and the note under that. The chat's own
+   composer and the start screen's are one box. Every colour is a console token, so the dark theme follows; the few
+   literal values have their dark counterparts at the end. */
+
+/* The start screen: one question, centred in the area. */
+.jc-console .painted.start {
+    display: flex;
+    flex-direction: column;
+}
+.jc-console .start .panel-body {
+    width: min(820px, 100%);
+    margin: auto;
+    padding: 24px 24px 10vh;
+}
+.jc-console .start .start-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 0 0 26px;
+}
+.jc-console .start .start-mark {
+    width: 38px;
+    height: 38px;
+    flex: none;
+}
+.jc-console .start .start-title h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+.jc-console .start .start-title .alpha {
+    align-self: flex-start;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: #e8edfb;
+    color: #2b3f8f;
+    font-family: var(--m);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.jc-console .start .start-ai,
+.jc-console .start .start-waiting {
+    margin: 0 0 14px;
+}
+
+/* The box: the words, and the row under them. The form holds the box and the line under it. */
+.jc-console .cform {
+    max-width: 780px;
+    margin: 0 auto;
+}
+.jc-console .start .cform {
+    max-width: none;
+}
+.jc-console .start .composer {
+    max-width: none;
+    margin: 0;
+    padding: 14px 12px 10px 18px;
+}
+.jc-console .chat-panel .cform {
+    width: calc(100% - 32px);
+    margin: 0 auto 12px;
+}
+.jc-console .chat-panel .composer {
+    width: auto;
+    margin: 0;
+}
+.jc-console .composer > .note {
+    margin-bottom: 8px;
+}
+.jc-console .composer .crow {
+    margin-top: 4px;
+}
+
+/* A button in the row that opens a menu: quiet, its value and a chevron; the access mode with its shield. */
+.jc-console .cmenu {
+    position: relative;
+    display: inline-flex;
+    min-width: 0;
+}
+.jc-console .cpick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--mute);
+    font: inherit;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: pointer;
+}
+.jc-console .cpick:hover:not(:disabled) {
+    background: var(--hover);
+}
+.jc-console .cpick:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.jc-console .cpick svg {
+    flex: none;
+}
+.jc-console .cpick .glyph-chev {
+    opacity: 0.75;
+}
+.jc-console .cmenu.acc-full > .cpick {
+    color: var(--amber);
+}
+.jc-console .cmenu.acc-plan > .cpick {
+    color: #2563eb;
+}
+/* In a tab the mode is said, not chosen. */
+.jc-console span.cpick.mode-label {
+    cursor: default;
+}
+.jc-console .cpick .mdl-e {
+    margin-left: 2px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--teal-2);
+    color: var(--teal);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+.jc-console .composer .send svg {
+    display: block;
+}
+
+/* The menu over the button: the console's menu, opening upward from the row. */
+.jc-console .menu.cmenu-panel {
+    position: absolute;
+    z-index: 30;
+    top: auto;
+    right: auto;
+    bottom: calc(100% + 6px);
+    left: 0;
+    display: block;
+    min-width: 210px;
+    padding: 5px;
+    border-radius: 12px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+    text-align: left;
+    white-space: normal;
+}
+.jc-console .menu.cmenu-panel.accmenu {
+    width: 372px;
+    max-width: min(372px, calc(100vw - 16px));
+}
+.jc-console .menu.cmenu-panel.mdlmenu {
+    left: auto;
+    right: 0;
+    width: 380px;
+    max-width: min(380px, calc(100vw - 16px));
+}
+.jc-console .cmenu-panel .ml {
+    padding: 6px 10px 2px;
+    color: var(--faint);
+    font-size: 11.5px;
+}
+.jc-console .cmenu-panel hr {
+    margin: 4px 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+}
+.jc-console .cmenu-panel :is(.mi, .accmi) {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 7px 30px 7px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--ink);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+}
+.jc-console .cmenu-panel :is(.mi, .accmi).on {
+    background: var(--panel-2);
+}
+.jc-console .cmenu-panel :is(.mi, .accmi):hover,
+.jc-console .cmenu-panel :is(.mi, .accmi):focus-visible {
+    background: var(--hover);
+}
+.jc-console .cmenu-panel [role='menuitemradio']:focus-visible {
+    outline-offset: -2px;
+}
+.jc-console .cmenu-panel :is(.mi, .accmi) b {
+    display: block;
+    font-weight: 600;
+}
+.jc-console .cmenu-panel :is(.mi, .accmi) small {
+    display: block;
+    margin-top: 2px;
+    color: var(--mute);
+    font-size: 12px;
+    line-height: 1.4;
+}
+.jc-console .cmenu-panel .acck {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--teal);
+    font-style: normal;
+}
+.jc-console .cmenu-panel [aria-disabled='true'] {
+    cursor: default;
+}
+.jc-console .cmenu-panel [aria-disabled='true']:hover {
+    background: none;
+}
+.jc-console .cmenu-panel [aria-disabled='true'] b {
+    color: var(--faint);
+}
+
+/* The model menu: the hosts as tabs, the models with the one chosen checked, the effort as a row of steps. */
+.jc-console .mdltabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 4px;
+    padding: 4px;
+    border-radius: 9px;
+    background: var(--panel-2);
+}
+.jc-console .mdltabs button {
+    flex: 1;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--mute);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+.jc-console .mdltabs button.on {
+    background: var(--panel);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.jc-console .mdlmenu .mdllist {
+    max-height: min(340px, calc(100vh - 300px));
+    overflow-y: auto;
+}
+.jc-console .composer .cmenu-panel .model-name {
+    display: block;
+    width: calc(100% - 20px);
+    max-width: none;
+    margin: 4px 10px 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.jc-console .effrow {
+    padding: 8px 10px 6px;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+}
+.jc-console .effh {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.jc-console .effh b {
+    color: var(--teal);
+}
+.jc-console .effbar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 4px;
+}
+.jc-console .cmenu-panel .effdot {
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: #e3e6ee;
+    cursor: pointer;
+}
+.jc-console .cmenu-panel .effdot.fill {
+    background: #c7d2fe;
+}
+.jc-console .cmenu-panel .effdot.cur {
+    background: var(--teal);
+}
+.jc-console .cmenu-panel .effdot:hover {
+    outline: 2px solid var(--accent-line);
+}
+.jc-console .effrow small {
+    display: block;
+    margin-top: 6px;
+    color: var(--mute);
+    font-size: 11.5px;
+}
+.jc-console .effdef {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mute);
+    font-size: 11.5px;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.jc-console .effdef.on {
+    color: var(--teal);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+/* The line under the box: how the AI may act in this chat, and what Codex reads and reaches; quiet and centred. */
+.jc-console .cform > .under {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    max-width: 780px;
+    margin: 6px auto 0;
+    color: var(--faint);
+    font-size: 12px;
+    text-align: center;
+}
+.jc-console .under .lk {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--teal);
+    font: inherit;
+    cursor: pointer;
+}
+
+/* The note under the start screen's box: a quiet bordered note, its lead in ink, closed by a plain cross. */
+.jc-console .start .start-note.uinote {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 10px 12px 10px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: none;
+    color: var(--mute);
+    font-size: 13px;
+    line-height: 1.5;
+}
+.jc-console .uinote strong {
+    color: var(--ink);
+    font-weight: 600;
+}
+.jc-console .uinote .start-note-close {
+    flex: none;
+    margin-left: auto;
+}
+.jc-console .uinote > button.start-note-close {
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: var(--mute);
+    font-size: 16px;
+    line-height: 1.2;
+}
+
+/* The dark theme: the few literal values above, drawn from the dark tokens. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .start .start-title .alpha {
+        background: var(--teal-2);
+        color: var(--teal);
+    }
+    :root:not([data-theme='light']) .jc-console .cmenu.acc-plan > .cpick {
+        color: var(--teal);
+    }
+    :root:not([data-theme='light']) .jc-console .cmenu-panel .effdot {
+        background: var(--line);
+    }
+    :root:not([data-theme='light']) .jc-console .cmenu-panel .effdot.fill {
+        background: var(--accent-line);
+    }
+    :root:not([data-theme='light']) .jc-console .cmenu-panel .effdot.cur {
+        background: var(--teal);
+    }
+    :root:not([data-theme='light']) .jc-console .menu.cmenu-panel {
+        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+    }
+}
+:root[data-theme='dark'] .jc-console .start .start-title .alpha {
+    background: var(--teal-2);
+    color: var(--teal);
+}
+:root[data-theme='dark'] .jc-console .cmenu.acc-plan > .cpick {
+    color: var(--teal);
+}
+:root[data-theme='dark'] .jc-console .cmenu-panel .effdot {
+    background: var(--line);
+}
+:root[data-theme='dark'] .jc-console .cmenu-panel .effdot.fill {
+    background: var(--accent-line);
+}
+:root[data-theme='dark'] .jc-console .cmenu-panel .effdot.cur {
+    background: var(--teal);
+}
+:root[data-theme='dark'] .jc-console .menu.cmenu-panel {
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
