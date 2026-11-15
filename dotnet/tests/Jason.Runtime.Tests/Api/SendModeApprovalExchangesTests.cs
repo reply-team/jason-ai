@@ -109,7 +109,8 @@ public class SendModeApprovalExchangesTests
         Assert.StartsWith("jrn_", (string?)facts["review"]);
     }
 
-    private static async Task<(string Approval, string Item)> SeedAsync(RuntimeApiFixture api, string reason, string? temperature)
+    /// <summary>A message parked under one reason, as the claim parks it; the Work items panel's recordings seed it the same way.</summary>
+    internal static async Task<(string Approval, string Item)> SeedAsync(RuntimeApiFixture api, string reason, string? temperature)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();

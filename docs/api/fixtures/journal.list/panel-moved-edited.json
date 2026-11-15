@@ -1,0 +1,108 @@
+{
+  "operation": "journal.list",
+  "case": "panel-moved-edited",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_1",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "workitem_released",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "status",
+        "old": "awaiting_approval",
+        "new": "created",
+        "reason": "input_changed",
+        "contact_id": "cnt_1",
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "message.send",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_2",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "approval_superseded",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "approval",
+        "old": null,
+        "new": {
+          "id": "apr_1",
+          "operation": "message.send",
+          "subject_hash": "sha256:recorded-2"
+        },
+        "reason": "input_changed",
+        "contact_id": "cnt_1",
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "message.send",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_3",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "human",
+          "id": "ada"
+        },
+        "kind": "workitem_context_updated",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "input",
+        "old": {
+          "channel": "email",
+          "sender": {
+            "external_id": "s_12",
+            "address": "owner@example.test"
+          },
+          "message": {
+            "format": "email",
+            "subject": "Notes from the meetup",
+            "body": "Hi Ines, thanks for the talk at the meetup."
+          }
+        },
+        "new": {
+          "channel": "email",
+          "sender": {
+            "external_id": "s_12",
+            "address": "owner@example.test"
+          },
+          "message": {
+            "format": "email",
+            "subject": "Notes from the meetup",
+            "body": "Hi Ines, thanks for the talk at the meetup. Shall we talk on Tuesday?"
+          }
+        },
+        "reason": "Edited in the chat.",
+        "contact_id": "cnt_1",
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "message.send",
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}

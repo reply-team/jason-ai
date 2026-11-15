@@ -2,9 +2,9 @@ import type { LoadMore } from '../../lists/use-cursor-list';
 import { useState } from 'react';
 import type { Attempt, JournalEntry, WorkItem } from '../../api/types';
 import { More } from '../../lists/more';
-import { href } from '../../router';
 import { clock, dayKey, dayLabel, relative } from '../../time/format';
 import { DecideDialog } from '../attention/decide-dialog';
+import { ApprovalSection, type Read } from './approval-section';
 import { CancelDialog, type Ran } from './cancel-dialog';
 import { creator, mark, plannedNote, what } from './labels';
 import type { Patch } from './store';
@@ -16,8 +16,12 @@ type Props = {
     item: WorkItem;
     history: JournalEntry[];
     approvalId: string | null;
-    notice: string | null;
+    /** The approval it waits for, as the shared gate read it. */
+    read: Read;
     busy: boolean;
+    /** The press of Approve is checking the message against its work item. */
+    checking: boolean;
+    notice: string | null;
     now: Date;
     zone: string;
     moreHistory: LoadMore | null;
@@ -61,29 +65,15 @@ export function WorkItemPanel(props: Props) {
             <div className="panel-body">
                 {notice && <Notice>{notice}</Notice>}
                 {item.status === 'awaiting_approval' && approvalId && (
-                    <div className="section waiting">
-                        <a className="notice" href={href({ screen: 'attention', kind: 'approvals', id: approvalId })}>
-                            Waiting for your approval ›
-                        </a>
-                        <ActionsRow>
-                            <button
-                                className="btn primary"
-                                type="button"
-                                disabled={busy}
-                                onClick={() => props.onApprove(approvalId)}
-                            >
-                                Approve
-                            </button>
-                            <button
-                                className="btn danger"
-                                type="button"
-                                disabled={busy}
-                                onClick={() => setRejecting(true)}
-                            >
-                                Reject
-                            </button>
-                        </ActionsRow>
-                    </div>
+                    <ApprovalSection
+                        item={item}
+                        approvalId={approvalId}
+                        read={props.read}
+                        busy={busy}
+                        checking={props.checking}
+                        onApprove={() => props.onApprove(approvalId)}
+                        onReject={() => setRejecting(true)}
+                    />
                 )}
                 {item.status === 'failed' && <Failed item={item} now={now} zone={zone} />}
                 <Facts item={item} now={now} zone={zone} />
