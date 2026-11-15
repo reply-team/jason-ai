@@ -334,15 +334,15 @@ jobs:
         run: |
           # Documentation is Markdown a build compiles nothing of: outside the C# tree, the workflows and the plugins, a
           # plain file before and after. Read is documentation, run is code: a page a test merely reads (the publication,
-          # page-claims and documented-commands tests read every published page) is documentation. Those tests are mostly
-          # outside the critical tier, which is all a documentation change on a pull request into a release branch, draft
-          # or ready, runs (a ready pull request into main that is not the release's, an unrecorded push to a release
-          # branch and a pull request into another branch run the whole suite on linux-x64). So a branch that changes
-          # docs/ or skills/ runs the whole suite locally before its pull request opens, and the release's pull request,
-          # where the whole suite runs, is the first place CI reads those pages. One page differs in kind and stays code: the
-          # wiring check's page, docs/golden-path.md, whose step 3 line, `jason plugin install reply`, a test runs through the
-          # program, and whose other commands the wiring check's tests read their arguments from, so a change to it runs the
-          # three legs. LICENSE, which every archive the legs package carries, is not Markdown, so it is code already.
+          # page-claims and documented-commands tests read every published page) is documentation. The critical tier is
+          # all a documentation change on a pull request into a release branch, draft or ready, runs (a ready pull request
+          # into main that is not the release's, an unrecorded push to a release branch and a pull request into another
+          # branch run the whole suite on linux-x64). The documented-commands tests are in the tier, so every page edit's
+          # pull request types the commands its pages print; most of the publication and page-claims tests are not, and the
+          # release's pull request, where the whole suite runs, is the first place CI reads the pages with them. One page
+          # differs in kind and stays code: the wiring check's page, docs/golden-path.md, whose step 3 line, `jason plugin
+          # install reply`, a test runs through the program, and whose other commands the wiring check's tests read their
+          # arguments from, so a change to it runs the three legs. LICENSE, which every archive the legs package carries, is not Markdown, so it is code already.
           $runAsCode = @('docs/golden-path.md')
           function Documentation([string] $path, $kinds) {
             ($path -cmatch '\.md$') -and ($path -cnotmatch '^(dotnet|\.github|plugins)/') -and ($runAsCode -cnotcontains $path) -and
@@ -1171,9 +1171,10 @@ jobs:
           if-no-files-found: warn
 
       # The part's test reports, every attempt's TRX, a week: the run's own record of how long each test took on each
-      # platform. Named test-results-, which the platform's check's tests-* never fetches.
+      # platform, kept for a part whose tests failed too, and never on a run that was cancelled. Named test-results-,
+      # which the platform's check's tests-* never fetches.
       - name: Keep this part's test reports
-        if: needs.version.outputs.tier != 'true'
+        if: ${{ !cancelled() && needs.version.outputs.tier != 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.rid }}-${{ matrix.part }}

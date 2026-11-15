@@ -2068,7 +2068,8 @@ public class CiRunsTests
     /// A part of the whole suite keeps its test reports, the TRX files the test script writes under its results directory,
     /// every attempt's among them, as an artifact of its own named by its platform and its part, a week, so the run says how
     /// long each test took on each platform. Its name starts <c>test-results-</c>, which the platform's check's
-    /// <c>tests-*</c> never fetches; it is kept on the same runs as what the part ran, after it, and a part that wrote no
+    /// <c>tests-*</c> never fetches; it is kept on the same runs as what the part ran, after it, and also when the part's
+    /// tests failed, the run whose reports are wanted most, though never on a run that was cancelled; a part that wrote no
     /// report leaves a warning rather than failing.
     /// </summary>
     [Fact]
@@ -2078,7 +2079,8 @@ public class CiRunsTests
         var uploads = steps.Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true).ToList();
         var ran = Assert.Single(uploads, step => Scalar(Mapping(step, "with"), "name") == "tests-ran-${{ matrix.rid }}-${{ matrix.part }}");
         var reports = Assert.Single(uploads, step => Scalar(Mapping(step, "with"), "name") == "test-results-${{ matrix.rid }}-${{ matrix.part }}");
-        Assert.Equal(Scalar(ran, "if"), Scalar(reports, "if"));
+        Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(ran, "if"));
+        Assert.Equal("${{ !cancelled() && needs.version.outputs.tier != 'true' }}", Scalar(reports, "if"));
         var with = Mapping(reports, "with");
         Assert.Equal(
             ("${{ runner.temp }}/test-results/**/*.trx", "7", "warn"),
