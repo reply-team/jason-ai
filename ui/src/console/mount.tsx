@@ -8,6 +8,7 @@ import { browserPlugins } from '../plugins';
 import { Console } from './console';
 import './console.css';
 import './harness.css';
+import './harness-palette.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */
 export async function mount(element: HTMLElement, desktop: JasonDesktop, bootstrapped = false): Promise<void> {
