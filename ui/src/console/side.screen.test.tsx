@@ -10,6 +10,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { styleOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -295,5 +296,106 @@ describe('the sidebar', () => {
         await waitFor(() => expect(inFront()).toBe('Connect'));
         fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
+    });
+});
+
+describe('the sidebar’s look', () => {
+    /** The console drawn, and what waits read: the sidebar is painted afresh no more. */
+    const settled = async () => {
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        await waitFor(() => side().getByText('Recent'));
+    };
+
+    it('is 284 px wide, and marks the row in front bold on the hover ground', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = document.querySelector<HTMLElement>('.jc-console .side')!;
+        expect(styleOf(aside)).toMatchObject({ width: '284px', flex: '0 0 284px', background: 'var(--side-bg)' });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        const needs = within(menu()).getByRole('button', { name: /^Needs you/ });
+        expect(needs.getAttribute('aria-current')).toBe('true');
+        expect(styleOf(needs)).toMatchObject({ background: 'var(--hover)', 'font-weight': '600' });
+        expect(styleOf(within(menu()).getByRole('button', { name: /^Search/ }))['font-weight']).toBeUndefined();
+    });
+
+    it('counts what waits on Needs you in red with white figures, and a conversation’s in amber', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const count = await waitFor(() => {
+            const found = within(menu())
+                .getByRole('button', { name: /^Needs you/ })
+                .querySelector('.count');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(styleOf(count)).toMatchObject({
+            background: 'var(--red)',
+            color: '#fff',
+            'font-size': '11px',
+            'font-weight': '700',
+            'border-radius': '9px',
+            'line-height': '17px',
+        });
+        const row = document.createElement('button');
+        row.className = 'item recent-row';
+        row.innerHTML = '<span class="count">1</span>';
+        document.querySelector('.jc-console .side nav[aria-label="Conversations"]')!.append(row);
+        expect(styleOf(row.querySelector('.count')!)).toMatchObject({
+            background: 'var(--amber-2)',
+            color: 'var(--amber)',
+            'font-weight': '700',
+        });
+    });
+
+    it('heads the sidebar with the mark and the wordmark at the brand’s height', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        // The sidebar is painted afresh as what it shows changes: each element is read once it has settled.
+        const brand = document.querySelector<HTMLElement>('.jc-console .side .brand')!;
+        expect(styleOf(brand)).toMatchObject({ padding: '18px 18px 12px' });
+        expect(styleOf(brand.querySelector('.mark')!)).toMatchObject({ width: '20px', height: '20px' });
+        expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
+    });
+
+    it('draws New GTM agent as one full-width box, its caret a quiet end of the same box', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        const button = () => side().getByRole('button', { name: 'New GTM agent' });
+        const row = () => button().closest<HTMLElement>('.newrow')!;
+        expect(row().contains(caret())).toBe(true);
+        // Start is in front: the whole box is marked, the caret's end with it.
+        expect(button().getAttribute('aria-current')).toBe('true');
+        expect(styleOf(row())).toMatchObject({ background: 'var(--hover)', 'border-color': 'var(--accent-line)' });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        expect(styleOf(row())).toMatchObject({
+            margin: '2px 14px 8px',
+            border: '1px solid var(--line)',
+            'border-radius': '12px',
+            background: 'var(--panel)',
+        });
+        expect(styleOf(button())).toMatchObject({ border: '0', background: 'none', flex: '1' });
+        expect(styleOf(caret())).toMatchObject({ border: '0', background: 'none' });
+    });
+
+    it('heads Recent quietly, scrolls the rows, and keeps Settings at the foot of the window', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await waitFor(() => side().getByText('Recent'));
+        const header = document.querySelector<HTMLElement>('.jc-console .side .recent')!;
+        expect(styleOf(header)).toMatchObject({
+            padding: '14px 10px 4px',
+            color: 'var(--faint)',
+            'font-size': '13px',
+            'font-weight': '400',
+        });
+        const body = document.querySelector<HTMLElement>('.jc-console .side .side-body')!;
+        expect(styleOf(body)).toMatchObject({ display: 'flex', 'flex-direction': 'column', flex: '1' });
+        const scroll = body.querySelector<HTMLElement>(':scope > .sscroll')!;
+        expect(styleOf(scroll)).toMatchObject({ flex: '1', 'overflow-y': 'auto', padding: '0 8px 10px' });
+        expect(scroll.contains(menu())).toBe(true);
+        expect(scroll.contains(side().getByRole('navigation', { name: 'Conversations' }))).toBe(true);
+        expect(body.lastElementChild?.classList.contains('sfoot')).toBe(true);
     });
 });

@@ -15,9 +15,10 @@ import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } fr
 
 // The console's sidebar, top to bottom: the brand, the button that makes an agent (and the caret's menu), Search, the Feed,
 // Needs you with the number of what waits, People, Agents, Accounts, More (the screens with no row of their own), the
-// conversations under "Recent", and Settings in the foot. Live draws the essentials alone: the brand, the button, Search,
-// Needs you, Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code, and
-// Search finds every page in both modes. Demo draws the whole list.
+// conversations under "Recent", and Settings in the foot. The menu and Recent scroll between the button and the foot, so
+// Settings stays at the foot of the window. Live draws the essentials alone: the brand, the button, Search, Needs you,
+// Recent and Settings. The rows left out are only not drawn: each page keeps its route and its code, and Search finds
+// every page in both modes. Demo draws the whole list.
 
 /** Which of the sidebar's two menus is open. */
 const open = signal<'create' | 'more' | null>(null);
@@ -219,79 +220,91 @@ export function sideView(): Html {
                     : null
             }
         </div>
-        <nav class="list" aria-label="Menu">
-            <button class="item" type="button" aria-keyshortcuts="${paletteShortcut()}" ${act('side.search')}>
-                ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
-            </button>
-            ${
-                !full || feed === null
-                    ? null
-                    : html`<button
-                          class="item"
-                          type="button"
-                          ${feed === currentChat.value ? html`aria-current="true"` : null}
-                          ${act('side.feed')}
-                      >
-                          ${svg('pulse', 15)}<span>Feed</span>
-                          ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
-                      </button>`
-            }
-            ${
-                full
-                    ? html`<button class="item" type="button" ${marked('dashboard')} ${act('side.show', 'dashboard')}>
-                          ${svg('home', 15)}<span>${t('dash.title')}</span>
-                      </button>`
-                    : null
-            }
-            <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
-                ${svg('att', 15)}<span>Needs you</span>
-                ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
-            </button>
-            ${full ? pageRow('people', 'People', 'people') : null}
-            ${
-                full
-                    ? html`<button class="item" type="button" ${marked('campaigns')} ${act('side.show', 'campaigns')}>
-                          ${svg('camp', 15)}<span>Agents</span>
-                      </button>`
-                    : null
-            }
-            ${full ? pageRow('accounts', 'Accounts', 'plug') : null}
-            ${
-                full
-                    ? html`<div class="menuwrap">
-                          <button
+        <div class="sscroll">
+            <nav class="list" aria-label="Menu">
+                <button class="item find" type="button" aria-keyshortcuts="${paletteShortcut()}" ${act('side.search')}>
+                    ${svg('search', 15)}<span>${t('palette.search')}</span><span class="kbd">${paletteHint()}</span>
+                </button>
+                ${
+                    !full || feed === null
+                        ? null
+                        : html`<button
                               class="item"
                               type="button"
-                              aria-haspopup="menu"
-                              aria-expanded="${menu === 'more' ? 'true' : 'false'}"
-                              ${marked('more')}
-                              ${act('side.menu', 'more')}
+                              ${feed === currentChat.value ? html`aria-current="true"` : null}
+                              ${act('side.feed')}
                           >
-                              ${svg('more', 15)}<span>More</span>
-                          </button>
-                          ${
-                              menu === 'more'
-                                  ? html`<div class="menu" role="menu" aria-label="More">
-                                        ${more.map((each) => {
-                                            const href = each.screen === undefined ? null : pageOf(each.screen);
-                                            if (each.screen !== undefined && href === null) return null;
-                                            return entry(
-                                                each.label,
-                                                each.hint,
-                                                each.panel !== undefined
-                                                    ? act('side.show', each.panel)
-                                                    : act('side.page', href ?? ''),
-                                                each.icon,
-                                            );
-                                        })}
-                                    </div>`
-                                  : null
-                          }
-                      </div>`
-                    : null
-            }
-        </nav>
-        ${recentView()}
+                              ${svg('pulse', 15)}<span>Feed</span>
+                              ${feedUnseen.value ? html`<span class="dot w" aria-label="New lines in the Feed"></span>` : null}
+                          </button>`
+                }
+                ${
+                    full
+                        ? html`<button
+                              class="item"
+                              type="button"
+                              ${marked('dashboard')}
+                              ${act('side.show', 'dashboard')}
+                          >
+                              ${svg('home', 15)}<span>${t('dash.title')}</span>
+                          </button>`
+                        : null
+                }
+                <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
+                    ${svg('att', 15)}<span>Needs you</span>
+                    ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
+                </button>
+                ${full ? pageRow('people', 'People', 'people') : null}
+                ${
+                    full
+                        ? html`<button
+                              class="item"
+                              type="button"
+                              ${marked('campaigns')}
+                              ${act('side.show', 'campaigns')}
+                          >
+                              ${svg('camp', 15)}<span>Agents</span>
+                          </button>`
+                        : null
+                }
+                ${full ? pageRow('accounts', 'Accounts', 'plug') : null}
+                ${
+                    full
+                        ? html`<div class="menuwrap">
+                              <button
+                                  class="item"
+                                  type="button"
+                                  aria-haspopup="menu"
+                                  aria-expanded="${menu === 'more' ? 'true' : 'false'}"
+                                  ${marked('more')}
+                                  ${act('side.menu', 'more')}
+                              >
+                                  ${svg('more', 15)}<span>More</span>
+                              </button>
+                              ${
+                                  menu === 'more'
+                                      ? html`<div class="menu" role="menu" aria-label="More">
+                                            ${more.map((each) => {
+                                                const href = each.screen === undefined ? null : pageOf(each.screen);
+                                                if (each.screen !== undefined && href === null) return null;
+                                                return entry(
+                                                    each.label,
+                                                    each.hint,
+                                                    each.panel !== undefined
+                                                        ? act('side.show', each.panel)
+                                                        : act('side.page', href ?? ''),
+                                                    each.icon,
+                                                );
+                                            })}
+                                        </div>`
+                                      : null
+                              }
+                          </div>`
+                        : null
+                }
+            </nav>
+            ${recentView()}
+        </div>
         ${
             settings === null
                 ? null

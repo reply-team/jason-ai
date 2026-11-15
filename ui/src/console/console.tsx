@@ -367,19 +367,22 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         <div ref={root} className={`jc-console${desktop.platform === 'darwin' ? ' desktop-mac' : ''}`}>
             {bound && (
                 <>
-                    <ModeStrip
-                        openIn={
-                            can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
-                                <OpenIn desktop={desktop} />
-                            ) : undefined
-                        }
-                    />
+                    {/* The sidebar runs the window's height; the strip heads the column right of it, over the area. */}
                     <div className="shell">
                         <aside className="side">
                             <Painted className="side-body" view={sideView} />
                             <SideFailure />
                         </aside>
-                        <Area />
+                        <div className="mainc">
+                            <ModeStrip
+                                openIn={
+                                    can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
+                                        <OpenIn desktop={desktop} />
+                                    ) : undefined
+                                }
+                            />
+                            <Area />
+                        </div>
                     </div>
                     <Palette system={desktop.platform} />
                 </>

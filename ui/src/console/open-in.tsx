@@ -22,6 +22,48 @@ import { activePanel, chats, currentChat } from './state';
 
 const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
+/** The places that are a command line: the main part draws a prompt's glyph before their name. */
+const terminalPlaces: readonly DesktopOpenInPlace[] = ['claude', 'codex', 'terminal'];
+
+/** A command line's prompt, drawn before the name of a place that is one. */
+function TerminalGlyph() {
+    return (
+        <svg
+            className="oi-glyph"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <path d="M4 7l5 5-5 5M12 18h8" />
+        </svg>
+    );
+}
+
+/** The arrow's chevron. */
+function Chevron() {
+    return (
+        <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            <path d="M6 9l6 6 6-6" />
+        </svg>
+    );
+}
+
 const refused = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && 'refused' in answer;
 
@@ -207,6 +249,8 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const agents = places.filter((each) => each.id === 'claude' || each.id === 'codex');
     const editors = places.filter((each) => (editorIds as readonly string[]).includes(each.id));
     const rest = places.filter((each) => !agents.includes(each) && !editors.includes(each));
+    // The main part's words; a narrow window draws its glyph alone, and the words stay its name.
+    const mainWords = t('openIn.main', { place: main === undefined ? '' : nameOf(main) });
     const item = (place: { id: DesktopOpenInPlace; label: string }, subtitle?: string, text?: string) => (
         <button
             key={place.id}
@@ -231,6 +275,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     type="button"
                     className="open-in-main"
                     disabled={main === undefined}
+                    aria-label={mainWords}
                     title={
                         main === undefined
                             ? undefined
@@ -238,7 +283,8 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     }
                     onClick={() => main !== undefined && void open(main.id)}
                 >
-                    {t('openIn.main', { place: main === undefined ? '' : nameOf(main) })}
+                    {main !== undefined && terminalPlaces.includes(main.id) && <TerminalGlyph />}
+                    <span className="oi-l">{mainWords}</span>
                 </button>
                 <button
                     type="button"
@@ -252,7 +298,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         if (!menu) void read();
                     }}
                 >
-                    ▾
+                    <Chevron />
                 </button>
             </div>
             {toast !== null && (
