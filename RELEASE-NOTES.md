@@ -30,8 +30,9 @@ opens at once as a sample page, and the console has a new look.
   answering) now run on it. In Live, where the installation has no execution profile at all and its settings name no
   default one, the desktop makes one profile for the AI its chat runs on, `claude-code` or `codex`, and names it the
   default, and Connect says so in one line beside that AI: "Your agents' roles run on Claude Code, by the execution
-  profile claude-code." That is all it writes: one profile, and one key, `Roles:DefaultExecutionProfile`, in
-  `~/.jason/config/settings.json`, which the runtime reads without a restart. An installation that already has a
+  profile claude-code." Of Jason's settings it writes only one profile and one key, `Roles:DefaultExecutionProfile`, in
+  `~/.jason/config/settings.json`, which the runtime reads without a restart (while it works the desktop also keeps a
+  mark of its own, the profile's name and id, in its own settings, and removes it when done). An installation that already has a
   profile, or already names a default, is not touched, and neither is one set up by hand. An AI reached by a model key
   never gets a profile, since a profile holds no credential. If you install from the command line, the install guide
   gives the two steps the desktop does for you: `jason profile create claude-code --host claude_code --program claude`,
@@ -108,7 +109,6 @@ is when the whole message is open, once the approval has been read whole.
 
 The status check `roles_launchable` reads the default execution profile alone. It does not look at a profile a work
 item, a campaign's policy or a role's policy names, nor at an entry command, so it can say `ok` for a role that is
-launched on another profile that fails.
 
 
 A Needs you row can still be approved without opening the message: its subject and body show only in Details. Approve
