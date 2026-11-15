@@ -321,9 +321,7 @@ page, which nothing is asked about, is undone by loading the page again. No host
 else of the desktop in Demo, so it cannot even ask your network's name server about one. Every permission it asks for is
 denied: the camera, the microphone, your location, notifications, reading the clipboard, the screen and any device. Its
 content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
-What you give it stays in it: what you type, a file you drop onto it or pick in a file chooser it opens on your click,
-and the colour of a point of the screen you pick with a colour picker it opens on your click reach the page's own script
-and nothing beyond it, since the page has no way out of its view to send them anywhere.
+What you type into it stays in it. A file you drop onto it can be read by the page's script, which can send it nowhere.
 
 **What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH and no Remove What Jason Placed:
