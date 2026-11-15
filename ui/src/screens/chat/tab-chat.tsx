@@ -11,6 +11,7 @@ import { followStanding } from '../../platform/full-access';
 import { t } from '../../platform/i18n';
 import '../../console/console.css';
 import '../../console/harness.css';
+import '../../console/chat-cards.css';
 import './tab-chat.css';
 
 // The console's chat, in a browser tab, over the bridge the desktop opened for it. The same chat state and the same

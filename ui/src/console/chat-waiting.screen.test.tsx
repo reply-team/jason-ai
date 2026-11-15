@@ -1,4 +1,5 @@
 import { cleanup, act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -204,6 +205,86 @@ describe('what waits in an agent’s chat', () => {
         expect(within(question).getByRole('button', { name: 'Keep going' })).toBeTruthy();
         expect(within(question).getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
         expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
+    });
+
+    it('draws Approve green and Reject red, Details quiet at the end, the words clamped, and a question’s options as pills', async () => {
+        const { fake } = renderConsole();
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        const button = (name: string) => within(email).getByRole('button', { name });
+        expect(button('Approve').className).toBe('btn sm ok');
+        expect(button('Edit').className).toBe('btn sm');
+        expect(button('Reject').className).toBe('btn sm no');
+        expect(button('Details').className).toBe('btn sm ghost lk');
+        // The message's words are the card's body, which the sheet clamps to four lines.
+        expect(within(email).getByText('Hi Ines, thanks for the talk at the meetup.').classList.contains('ask-b')).toBe(
+            true,
+        );
+        // Asked once before it rejects: the question's Reject is red too.
+        fireEvent.click(button('Reject'));
+        const asking = within(email).getByRole('alertdialog');
+        expect(within(asking).getByRole('button', { name: 'Reject' }).className).toBe('btn sm no');
+        // A question's options are pills in a row of their own; the free answer stays below them.
+        const question = await waitFor(() => {
+            const found = card(pane, 'dec_1')!;
+            within(found).getByRole('button', { name: 'Keep going' });
+            return found;
+        });
+        const options = question.querySelector('.ui-opts')!;
+        expect([...options.querySelectorAll('button')].map((each) => [each.className, each.textContent])).toEqual([
+            ['ui-opt', 'Pause until the news'],
+            ['ui-opt', 'Keep going'],
+        ]);
+        expect(options.compareDocumentPosition(within(question).getByRole('textbox', { name: 'Your answer' }))).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+    });
+
+    it('holds Approve on a message longer than its four lines until the card has shown it whole', async () => {
+        // The page measures the clamp: here a body runs past its four lines until the card opens it.
+        const runsOver = (box: HTMLElement) => box.classList.contains('ask-b') && !box.classList.contains('open');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return runsOver(this) ? 240 : 0;
+            },
+        });
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return runsOver(this) ? 96 : 0;
+            },
+        });
+        try {
+            const { fake } = renderConsole();
+            fake.answer('workitem.get', 'workitem.get/parked-send');
+            const pane = await openChat('Spring');
+            const email = await waitFor(() => {
+                const found = card(pane, 'apr_1')!;
+                within(found).getByRole('button', { name: 'Show the whole message' });
+                return found;
+            });
+            const approve = within(email).getByRole('button', { name: 'Approve' });
+            expect(approve.hasAttribute('disabled')).toBe(true);
+            expect(words(email)).toContain('Approve waits until the whole message is shown.');
+            // Edit and Reject are not held by it; neither is the enrolment beside it, which has no words to clamp.
+            expect(within(email).getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(false);
+            expect(within(email).getByRole('button', { name: 'Reject' }).hasAttribute('disabled')).toBe(false);
+            await drawn(pane, 'apr_2');
+            fireEvent.click(approve);
+            expect(sent(fake, 'workitem.get')).toEqual([]);
+
+            fireEvent.click(within(email).getByRole('button', { name: 'Show the whole message' }));
+            const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
+            expect(body.classList.contains('open')).toBe(true);
+            expect(within(email).queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+            expect(words(email)).not.toContain('Approve waits until');
+            expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
+        } finally {
+            delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+            delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+        }
     });
 
     it('draws exactly the runtime’s cards, whatever the AI writes to look like one', async () => {
@@ -584,5 +665,50 @@ describe('what waits in an agent’s chat', () => {
         await waitFor(() => expect(card(pane, 'apr_2')).toBeNull(), { timeout: 3000 });
         expect(card(pane, 'apr_1')).toBeNull();
         expect(card(pane, 'dec_1')).not.toBeNull();
+    });
+});
+
+describe('the sheet of the chat and its cards', () => {
+    // Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
+    const sheet = readFileSync('src/console/chat-cards.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+    const rules = Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g), (rule) => ({
+        selectors: rule[1]!.split(',').map((each) => each.trim()),
+        body: rule[2]!.replace(/\s+/g, ' ').trim(),
+    }));
+    const body = (selector: string, under = (each: string) => each === selector) =>
+        rules.filter((rule) => rule.selectors.some(under)).map((rule) => rule.body);
+
+    it('reaches nothing outside the console: every rule is under its root, the dark theme included', () => {
+        expect(rules.length).toBeGreaterThan(0);
+        for (const rule of rules)
+            for (const selector of rule.selectors)
+                expect(selector).toMatch(
+                    /^(:root(:not\(\[data-theme='light'\]\)|\[data-theme='dark'\]) )?\.jc-console /,
+                );
+    });
+
+    it('draws Approve green, Reject red and the body clamped to four lines, in both themes', () => {
+        expect(body('.jc-console .btn.ok').join(' ')).toMatch(/background: var\(--green\)/);
+        expect(body('.jc-console .btn.no').join(' ')).toMatch(/color: var\(--red\)/);
+        expect(body('.jc-console .ask-b').join(' ')).toMatch(/-webkit-line-clamp: 4/);
+        expect(body('.jc-console .ask-b.open').join(' ')).toMatch(/display: block/);
+        // What the dark theme changes, it changes the same way whether the system or the person chose it.
+        const dark = (selector: string, theme: 'system' | 'chosen') =>
+            body(
+                selector,
+                (each) =>
+                    each ===
+                    (theme === 'system'
+                        ? `:root:not([data-theme='light']) ${selector}`
+                        : `:root[data-theme='dark'] ${selector}`),
+            );
+        for (const selector of [
+            '.jc-console .btn.ok',
+            '.jc-console .ask-b',
+            '.jc-console .waiting-card .send-doubts',
+        ]) {
+            expect(dark(selector, 'system')).not.toEqual([]);
+            expect(dark(selector, 'system')).toEqual(dark(selector, 'chosen'));
+        }
     });
 });

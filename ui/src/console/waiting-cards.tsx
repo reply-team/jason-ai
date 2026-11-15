@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
@@ -43,9 +43,29 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
+    // A message's words are clamped to four lines. One that runs past them is shown whole only once the person opens it,
+    // and Approve waits for that: the card never approves words it has not shown. Measured in the page, and again as the
+    // card's width changes; a body that fits changes nothing.
+    const bodyBox = useRef<HTMLDivElement>(null);
+    const [overflows, setOverflows] = useState(false);
+    const [opened, setOpened] = useState<string | null>(null);
+    const open = card.body !== null && opened === card.body;
+    useLayoutEffect(() => {
+        const box = bodyBox.current;
+        if (box === null || open) return;
+        const measure = () => setOverflows(box.scrollHeight > box.clientHeight + 1);
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const resized = new ResizeObserver(measure);
+        resized.observe(box);
+        return () => resized.disconnect();
+    }, [card.body, open]);
+    const unopened = card.body !== null && overflows && !open;
     // Every approval, whatever it does, is decided only once it has been read whole (`approvalGate`, which Needs you's
     // rows follow too): its doubts, its words or what will happen, and the person it reaches all come from that read.
-    const held = busy || checking || !gate.live;
+    const unread = busy || checking || !gate.live;
+    // Edit opens the message whole in its editor, so only Approve waits for the clamp.
+    const held = unread || unopened;
 
     // A message is checked against its work item at the press, and one whose text moved since the approval was asked is
     // not approved, since the runtime asks again with the new text.
@@ -91,7 +111,19 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
             {whole !== undefined && <Doubts preview={whole.preview} />}
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
-            {card.body !== null && <div className="said waiting-body">{card.body}</div>}
+            {card.body !== null && (
+                <div ref={bodyBox} className={open ? 'ask-b open said waiting-body' : 'ask-b said waiting-body'}>
+                    {card.body}
+                </div>
+            )}
+            {unopened && (
+                <div className="waiting-more">
+                    <button className="btn sm ghost" type="button" onClick={() => setOpened(card.body)}>
+                        Show the whole message
+                    </button>{' '}
+                    <span className="meta">Approve waits until the whole message is shown.</span>
+                </div>
+            )}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
             {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}
             {!gate.live && (
@@ -150,24 +182,24 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                         <button className="btn sm" type="button" onClick={() => setRejecting(false)}>
                             Cancel
                         </button>
-                        <button className="btn sm am" type="submit" disabled={busy}>
+                        <button className="btn sm no" type="submit" disabled={busy}>
                             Reject
                         </button>
                     </div>
                 </form>
             ) : (
                 <div className="ask-a">
-                    <button className="btn sm p" type="button" disabled={held} onClick={() => void approve()}>
+                    <button className="btn sm ok" type="button" disabled={held} onClick={() => void approve()}>
                         Approve
                     </button>
                     {whole !== undefined && editable(whole) && (
-                        <button className="btn sm" type="button" disabled={held} onClick={() => void edit()}>
+                        <button className="btn sm" type="button" disabled={unread} onClick={() => void edit()}>
                             Edit
                         </button>
                     )}
                     <button
                         ref={rejectButton}
-                        className="btn sm"
+                        className="btn sm no"
                         type="button"
                         disabled={busy || checking}
                         onClick={() => {
@@ -177,8 +209,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                     >
                         Reject
                     </button>
-                    <span className="grow" />
-                    <button className="btn sm" type="button" onClick={details}>
+                    <button className="btn sm ghost lk" type="button" onClick={details}>
                         Details
                     </button>
                 </div>
@@ -205,11 +236,11 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
             </div>
             <div className="ask-s">{card.question}</div>
             {card.options.length > 0 && (
-                <div className="ask-a">
+                <div className="ui-opts">
                     {card.options.map((option) => (
                         <button
                             key={option.label}
-                            className="btn sm"
+                            className="ui-opt"
                             type="button"
                             title={option.detail ?? undefined}
                             disabled={busy}

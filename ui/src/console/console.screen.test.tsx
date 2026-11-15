@@ -429,6 +429,44 @@ describe('the console', () => {
         expect(document.querySelector('.vsteps b, .vsteps img, .vsteps [onclick]')).toBeNull();
     });
 
+    it('names the speaker over the agent’s first words of a turn, and marks the trail of steps live while the turn runs', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        const message = await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(message, { target: { value: 'What waits?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        flush(() => desktop.emit(id, { kind: 'step', text: 'Ran a jason command' }));
+        // While the turn runs its trail is open and live, so it draws no arrow to turn.
+        await waitFor(() => expect(document.querySelector('details.vsteps')?.classList.contains('live')).toBe(true));
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: 'Two approvals wait.' });
+            desktop.emit(id, { kind: 'step', text: 'Read the approvals' });
+            desktop.emit(id, { kind: 'text', text: 'Both are emails.' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => screen.getByText('Both are emails.'));
+        // The person's words in their bubble; the agent's under one label for the turn.
+        expect(document.querySelector('.thread .m.user .bub')?.textContent).toBe('What waits?');
+        const label = (each: Element) => each.querySelector(':scope > .who')?.textContent ?? null;
+        expect([...document.querySelectorAll('.thread .m.ai')].map(label)).toEqual(['Jason', null]);
+        expect([...document.querySelectorAll('details.vsteps')].map((each) => each.className)).toEqual([
+            'vsteps',
+            'vsteps',
+        ]);
+        // The next turn is labelled again.
+        fireEvent.change(message, { target: { value: 'Approve the first' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.filter((each) => each.name === 'chat.send')).toHaveLength(2));
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: 'It waits on your yes.' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => screen.getByText('It waits on your yes.'));
+        expect([...document.querySelectorAll('.thread .m.ai')].map(label)).toEqual(['Jason', null, 'Jason']);
+    });
+
     it('shows the Windows check of Codex’s sandbox, whole and open, while the turn waits on it', async () => {
         const fake = pending(new FakeApi());
         const desktop = chatDesktop({
