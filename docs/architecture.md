@@ -1686,13 +1686,14 @@ condition that requires semantic action.
 **In this build:** the synchronization is a scan step that reads each linked active campaign's conversations on a
 cadence and writes one `inbound_reply_observed` line for each thread that moved. A respond step after it reads that line
 and, for a thread that is the campaign's own — by its own pin, or by the person's pin where the thread was already its
-own or, where no other campaign the reply was found in held it, it alone had written to them through that plugin —
-queues a read of the thread (`conversation.get`) and the responder's work created waiting on it — one open responder a
-thread, a further move recorded on it — so the reply is answered without waiting for a review. The kind is also a
-default manager trigger, so the same line releases a manager check-in, queued after the responder, which decides at its
-review what the campaign as a whole calls for (`docs/inbound-sync.md`). A plugin that reads its accounts' events says
-the same line from the provider's own record, and a bounce, a reply the provider detected or an accepted invitation as
-`provider_event_observed`, which releases a check-in the same way and wakes no responder (`docs/events.md`).
+own or, on a reply that named no provider campaign and a thread no other campaign the reply was found in held, it alone
+had written to them through that plugin before the reply — queues a read of the thread (`conversation.get`) and the
+responder's work created waiting on it — one open responder a thread, a further move recorded on it — so the reply is
+answered without waiting for a review. The kind is also a default manager trigger, so the same line releases a manager
+check-in, queued after the responder, which decides at its review what the campaign as a whole calls for
+(`docs/inbound-sync.md`). A plugin that reads its accounts' events says the same line from the provider's own record,
+and a bounce, a reply the provider detected or an accepted invitation as `provider_event_observed`, which releases a
+check-in the same way and wakes no responder (`docs/events.md`).
 
 ### 17.6 Scheduled campaign-management review
 

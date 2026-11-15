@@ -22,8 +22,9 @@ said them — this read or the events store, which say a move under one key — 
 short transaction with the watermark's guarded move. For a line about a thread that is the campaign's own — every line
 this read says, an events line whose `attributed_by` is `campaign_pin`, and one whose `attributed_by` is `contact_pin`
 and that says `campaign_own`, because the thread was already the campaign's own or, where no campaign the reply was
-found in held it yet, the campaign was the only one, of those not archived, that had written to the person through that
-plugin ([events](events.md) §4) — it queues two work items:
+found in held it yet and the reply named no provider campaign, the campaign was the only one, of those not archived,
+that had written to the person through that plugin before the reply ([events](events.md) §4) — it queues two work
+items:
 
 - a read of the thread, a `conversation.get` `provider_op` whose input is the thread's identifier, a page of 20 and
   offset 0, made where the thread was seen: at the plugin the reply was read at, when a route names it, resolved as the

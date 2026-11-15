@@ -640,9 +640,9 @@ Where a contact stands in a campaign is read from that campaign's own chronicle 
 thread. Nothing is stored for it, another campaign's verdicts are never read, and nothing here reads a category, a
 reaction or the words of a reply. A thread the campaign's own read saw move is one its `inbound_reply_observed` lines
 say by the campaign's own read or its own pin, or by the person's pin where the line says `campaign_own`: when the line
-was written, the thread was already the campaign's own by such a line, or no campaign the reply was found in held it yet
-and this campaign was the only one, of those not archived, that had written to the person through that plugin
-([events](events.md) §4).
+was written, the thread was already the campaign's own by such a line, or no campaign the reply was found in held it yet,
+the reply named no provider campaign, and this campaign was the only one, of those not archived, that had written to the
+person through that plugin before the reply ([events](events.md) §4).
 
 - **Warm** is a verdict that stands in the campaign (no later verdict under its key), whose `nature` is `person`, whose
   body names this contact, on a thread the campaign's own read saw move. Once warm, always warm: no moment is read.
@@ -687,13 +687,14 @@ still go:
 - A reply the provider could not tie to one of the campaign's contacts, on a thread no verdict that stands names
   anybody on: until a verdict names the person, nothing holds a first message to them.
 - A reply the campaign heard of only through the contact's pin and whose line does not say `campaign_own`, because when
-  it was written the thread was not already the campaign's own and this campaign was not the one campaign that had
-  written to the person through that plugin; a verdict on its thread warms nobody here either, and the contact stays as
-  they were. So once two campaigns have written to a person, a reply on a thread that is neither's own holds nobody in
-  either, a person already warm in one of them included: automatic sends to them go on while the reply is not judged,
-  and only an opt-out verdict on it stops them, everywhere; the managers are woken by the reply. Nothing is marked after
-  the fact: a line written before 0.43.0 stays unmarked; only a later reply, marked when it is said, can make the person
-  warm.
+  it was written the thread was not already the campaign's own, and either another campaign the reply was found in held
+  it, or the reply named a provider campaign, or this campaign was not the only one, of those not archived, that had
+  written to the person through that plugin before the reply, one that has since excluded the person counting too; a
+  verdict on its thread warms nobody here either, and the contact stays as they were. So once two campaigns have written
+  to a person, a reply on a thread that is neither's own holds nobody in either, a person already warm in one of them
+  included: automatic sends to them go on while the reply is not judged, and only an opt-out verdict on it stops them,
+  everywhere; the managers are woken by the reply. Nothing is marked after the fact: a line written before 0.43.0 stays
+  unmarked; only a later reply, marked when it is said, can make the person warm.
 
 ## Leases and heartbeats
 

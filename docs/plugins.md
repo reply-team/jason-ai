@@ -1937,7 +1937,9 @@ the provider campaign a moved thread belongs to wherever the provider keeps one,
 and `null` only for a thread outside every provider campaign: the runtime leaves a campaign's inbound read to your
 plugin on the strength of that. A move that names no campaign reaches, by the person, every campaign that is not archived
 and holds them as a member; naming the campaign is still the right course, because the first rule decides alone when it
-finds one. Return no `external_ids`: a read pins nothing.
+finds one, and because a reply that names no campaign is taken as a campaign's own where that campaign alone had
+written to the person before it, as the reply to a direct send is: a sequence's thread left unnamed would be answered
+by a campaign that never wrote in it. Return no `external_ids`: a read pins nothing.
 
 **Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
 `until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and

@@ -158,6 +158,7 @@ public partial class RoleSkillTests
         Assert.Contains("Without `campaign_own`, the thread is yours: queue the read alone", skill, StringComparison.Ordinal);
         Assert.Contains("a provider event's line never says `campaign_own`", skill, StringComparison.Ordinal);
         Assert.Contains("Where the line also says `campaign_own` `true`, the thread is this campaign's own: when the line was written, it already was, or no campaign the reply was found in held it yet and this campaign was the only one", skill, StringComparison.Ordinal);
+        Assert.Contains("that had written to the person through that plugin before the reply — a message, an invitation or an answer that succeeded — and the reply named no provider campaign.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
