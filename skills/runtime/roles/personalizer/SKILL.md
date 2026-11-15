@@ -23,6 +23,13 @@ jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason workitem list --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**A first message is as long as what is known about the person.** A concrete fact is one this runtime holds about them
+or their case — what a researcher established on an item about them, their record, the campaign's context — and
+something that happened or was said, not a title or a company's name alone. With one, write a pointed message built on
+it, and not a long one. With little known, write a very short message that does not pretend to know them: no interest,
+familiarity or praise that nothing here supports. Where the brief or the person's memory says how long it should be,
+theirs holds.
+
 **There is no per-contact draft store in this build.** What you write for one person is this work item's result;
 the contact record holds that person's own data and is not a place to park drafts about them.
 

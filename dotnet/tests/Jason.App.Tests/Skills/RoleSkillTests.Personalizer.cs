@@ -43,4 +43,27 @@ public partial class RoleSkillTests
             StringComparison.Ordinal);
         Assert.Contains("A template is the copywriter's shape; yours is final text for one person.", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A first message built on something that happened to the person reads as written for them; one padded around a
+    /// title reads as pretending to know them. The personalizer is told that the length follows what this runtime holds
+    /// about the person, where that comes from, and that a length the person set is theirs to keep.
+    /// </summary>
+    [Fact]
+    public void The_personalizer_makes_a_first_message_as_long_as_what_is_known_about_the_person()
+    {
+        var skill = Flattened("personalizer");
+
+        Assert.Contains("**A first message is as long as what is known about the person.**", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "A concrete fact is one this runtime holds about them or their case — what a researcher established on an item about them, their record, the campaign's context — and something that happened or was said, not a title or a company's name alone.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("With one, write a pointed message built on it, and not a long one.", skill, StringComparison.Ordinal);
+        Assert.Contains(
+            "With little known, write a very short message that does not pretend to know them: no interest, familiarity or praise that nothing here supports.",
+            skill,
+            StringComparison.Ordinal);
+        Assert.Contains("Where the brief or the person's memory says how long it should be, theirs holds.", skill, StringComparison.Ordinal);
+    }
 }
