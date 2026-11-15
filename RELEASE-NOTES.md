@@ -62,7 +62,8 @@ Codex.
   the line named in the reason, so the claim refuses every later send to that address. A soft bounce, a full mailbox
   say, stops nothing and is the manager's to weigh; a send said soft and later found hard is said once more, and then
   stops. A person lifts a stop with `jason suppression remove`, and the same send never puts it back. The reads sit one
-  below `Responder:Priority`, so a person's reply is read before a mail server's notice, and both before the sends. See
+  below `Responder:Priority`, so a person's reply is read before a mail server's notice, and both before the sends
+  while `Responder:Priority` sits above the sends' own. See
   [inbound sync](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/inbound-sync.md#1-where-it-runs) and
   [`message.status`](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/contracts/operations/message.status.md).
   Through Reply, this waits for releases of Reply and of reply-cli that are not out yet: until then each read answers
