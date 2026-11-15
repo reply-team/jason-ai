@@ -116,12 +116,19 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
             (name) => (window as unknown as { menuCommand: (name: string) => void }).menuCommand(name),
             command,
         );
-        const body = page.locator('.jc-console .area > .pane:not([hidden]) .panel-body');
-        await expect(body.getByRole('heading', { name: title, level: 1 }), command).toBeVisible();
+        // Resolved from the stable `.painted` element: a repaint replaces everything inside it, so a `.panel-body`
+        // resolved before one is detached by the time it is measured. The screen's loading words are waited out, and the
+        // panel is found and measured in one evaluate, which no repaint can interrupt.
+        const painted = page.locator('.jc-console .area > .pane:not([hidden]) .painted');
+        await expect(painted.getByRole('heading', { name: title, level: 1 }), command).toBeVisible();
+        await expect(painted.getByText('Reading what waits…'), `${command}: still loading`).toHaveCount(0);
         // Measured against the panel it is drawn in, inside its scroll bar, so a panel long enough to scroll is
         // measured as a short one is.
-        const room = await body.evaluate((element) => {
-            const panel = element.closest<HTMLElement>('.painted')!;
+        const room = await painted.evaluate((panel) => {
+            const element = panel.querySelector<HTMLElement>('.panel-body');
+            if (element === null) {
+                return null;
+            }
             const drawn = element.getBoundingClientRect();
             const inner = panel.getBoundingClientRect().left + panel.clientLeft;
             return {
@@ -131,10 +138,15 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
                 right: inner + panel.clientWidth - drawn.right,
             };
         });
+        expect(room, `${command}: a panel body is drawn`).not.toBeNull();
         // Narrower than the panel, by a measure of its own, with as much room on its left as on its right.
-        expect(room.width, `${command}: its measure`).toBeLessThanOrEqual(880);
-        expect(room.width, `${command}: narrower than the panel`).toBeLessThan(room.panelWidth);
-        expect(Math.abs(room.left - room.right), `${command}: centred`).toBeLessThanOrEqual(2);
+        expect(room!.width, `${command}: its measure ${JSON.stringify(room)}`).toBeLessThanOrEqual(880);
+        expect(room!.width, `${command}: narrower than the panel ${JSON.stringify(room)}`).toBeLessThan(
+            room!.panelWidth,
+        );
+        expect(Math.abs(room!.left - room!.right), `${command}: centred ${JSON.stringify(room)}`).toBeLessThanOrEqual(
+            2,
+        );
     }
 });
 
