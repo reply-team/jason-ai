@@ -23,7 +23,6 @@ public sealed class BounceNotificationTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    [Critical(Family.N3, "bounces are told")]
     public async Task A_bounce_in_three_campaigns_wakes_one_pointer_that_counts_it_once()
     {
         using var harness = await StartedAsync();
