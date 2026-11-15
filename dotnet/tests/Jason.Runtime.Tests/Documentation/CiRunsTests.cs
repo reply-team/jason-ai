@@ -2042,13 +2042,18 @@ public class CiRunsTests
     /// <summary>
     /// A part of the whole suite keeps what it ran, after its tests, as an artifact of its own named by its platform and
     /// its part, three days, for the platform's check; a part that wrote nothing leaves a warning rather than failing. The
-    /// critical tier's part keeps nothing.
+    /// critical tier's part keeps nothing. Beside it the part keeps its test reports (the next test), and the job uploads
+    /// nothing else.
     /// </summary>
     [Fact]
     public void A_part_of_the_whole_suite_keeps_what_it_ran_for_the_platform_s_check()
     {
         var steps = Steps(Mapping(Jobs(), Testing));
-        var keeping = Assert.Single(steps, step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true);
+        var uploads = steps.Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true).ToList();
+        Assert.Equal(
+            ["tests-ran-${{ matrix.rid }}-${{ matrix.part }}", "test-results-${{ matrix.rid }}-${{ matrix.part }}"],
+            uploads.Select(step => Scalar(Mapping(step, "with"), "name")));
+        var keeping = uploads[0];
         Assert.Equal("needs.version.outputs.tier != 'true'", Scalar(keeping, "if"));
         var with = Mapping(keeping, "with");
         Assert.Equal(
@@ -2057,6 +2062,30 @@ public class CiRunsTests
         Assert.True(
             steps.IndexOf(keeping) > steps.FindIndex(step => Scalar(step, "if") == "needs.version.outputs.tier != 'true'" && Scalar(step, "run")?.Contains("Invoke-Tests.ps1", StringComparison.Ordinal) == true),
             "what the part ran is kept before its tests have run");
+    }
+
+    /// <summary>
+    /// A part of the whole suite keeps its test reports, the TRX files the test script writes under its results directory,
+    /// every attempt's among them, as an artifact of its own named by its platform and its part, a week, so the run says how
+    /// long each test took on each platform. Its name starts <c>test-results-</c>, which the platform's check's
+    /// <c>tests-*</c> never fetches; it is kept on the same runs as what the part ran, after it, and a part that wrote no
+    /// report leaves a warning rather than failing.
+    /// </summary>
+    [Fact]
+    public void A_part_of_the_whole_suite_keeps_its_test_reports_a_week()
+    {
+        var steps = Steps(Mapping(Jobs(), Testing));
+        var uploads = steps.Where(step => Scalar(step, "uses")?.StartsWith("actions/upload-artifact@", StringComparison.Ordinal) == true).ToList();
+        var ran = Assert.Single(uploads, step => Scalar(Mapping(step, "with"), "name") == "tests-ran-${{ matrix.rid }}-${{ matrix.part }}");
+        var reports = Assert.Single(uploads, step => Scalar(Mapping(step, "with"), "name") == "test-results-${{ matrix.rid }}-${{ matrix.part }}");
+        Assert.Equal(Scalar(ran, "if"), Scalar(reports, "if"));
+        var with = Mapping(reports, "with");
+        Assert.Equal(
+            ("${{ runner.temp }}/test-results/**/*.trx", "7", "warn"),
+            (Scalar(with, "path"), Scalar(with, "retention-days"), Scalar(with, "if-no-files-found")));
+        Assert.Equal(steps.IndexOf(ran) + 1, steps.IndexOf(reports));
+        Assert.Contains("-Results (Join-Path $env:RUNNER_TEMP 'test-results')", Scalar(Assert.Single(steps, step => Scalar(step, "if") == Scalar(ran, "if") && Scalar(step, "run")?.Contains("Invoke-Tests.ps1", StringComparison.Ordinal) == true), "run"), StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"^tests-", Scalar(with, "name")!);
     }
 
     /// <summary>

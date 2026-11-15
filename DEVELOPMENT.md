@@ -118,8 +118,9 @@ run with `--filter-trait "Category=Critical"`, about three minutes on a workstat
 family that goes red first and two kinds a change can turn red without touching them: the tests that run a migration's
 `Up` or `Down` or hold the migrations' history, and the tests of the commands the pages print. A pull request into
 a release branch runs the Linux set — the version check, the linux-x64 build with the critical tier, the install script
-on Ubuntu, an update on linux-x64, the UI's checks and the desktop's — and merges on green; a change under `dotnet/`
-has run the whole suite locally before that. The release's pull request into `main` runs every check, the whole suite included, on Linux,
+on Ubuntu, an update on linux-x64, the UI's checks and the desktop's — and merges on green. A change is cleared by the
+tests it touched, the classes that hold a list it moves, its two reviews and that Linux set; the whole suite runs once
+per release, at the release's pull request into `main`. That pull request runs every check, the whole suite included, on Linux,
 Windows and macOS, and the release merges only when that run is green. At the tag, the release workflow runs the
 critical tier again and packages and smoke-tests the executable for each platform; it does not run the whole suite
 again, since the tag is the tree that run tested. `.github/workflows/ci.yml` says which run each event gets,
