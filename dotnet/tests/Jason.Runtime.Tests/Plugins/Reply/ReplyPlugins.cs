@@ -72,6 +72,8 @@ public static class ReplyPlugins
             clock: clock,
             prepare: paths =>
             {
+                // Migrated once per test process rather than once per case (see MigratedDatabase).
+                MigratedDatabase.CopyTo(paths);
                 Install(paths);
                 TestPlugins.Grant(paths, PluginId, exec: [ExecutableName]);
                 prepare?.Invoke(paths);

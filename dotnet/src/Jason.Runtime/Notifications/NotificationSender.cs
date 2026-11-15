@@ -273,7 +273,8 @@ public sealed class NotificationSender(
     /// The emails that bounced in the same window as failed protective work: after the line the last notification that
     /// reached anybody covered, through the line this one covers. Counted by event — the key every line of one event
     /// carries, in each campaign it reached — and never by line. The lines of one event are written in one transaction, so
-    /// an event is never split across two windows.
+    /// an event is never split across two windows. The database counts them: a window grows for as long as no pointer
+    /// reaches anybody, and its lines are never read into memory.
     /// </summary>
     private async Task<int> BouncesAsync(NotificationRequest request, CancellationToken ct)
     {
@@ -291,8 +292,7 @@ public sealed class NotificationSender(
             return 0;
         }
 
-        var lines = await BounceLines.Of(db).Where(e => e.Id > after && e.Id <= upTo).Select(e => new { e.Key, e.New }).ToListAsync(ct).ConfigureAwait(false);
-        return lines.Where(line => BounceLines.Bounced(line.New)).Select(line => line.Key).Distinct(StringComparer.Ordinal).Count();
+        return await BounceLines.Count(db, after.Value, upTo.Value).SingleAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
