@@ -1251,7 +1251,9 @@ public static class ImportCommand
 
                 foreach (var entry in _zip.Entries)
                 {
-                    if (entry.FullName == ExportManifest.FileName || ArchiveNames.IsDirectory(entry))
+                    // A settings writer's temporary file an export before 0.44.0 could carry: its digest was held to the
+                    // listing with every other file's, and no copy of the settings' secrets is placed beside the settings file.
+                    if (entry.FullName == ExportManifest.FileName || ArchiveNames.IsDirectory(entry) || ExportCommand.SettingsTemporaryBeside(settingsName, entry.FullName))
                     {
                         continue;
                     }
@@ -1384,6 +1386,8 @@ public static class ImportCommand
             + "to the runtime's rule for a root before anything is placed, and the placed settings file names it. A project "
             + "folder outside the harness root does not travel: each project whose recorded folder is not here is said, and "
             + "listed as folders_not_here." + nl
+            + "A temporary file a write of the settings file left beside it (settings.json.<id>.tmp), which an export before 0.44.0 "
+            + "could carry, is held to its listed digest and not placed." + nl
             + "The settings file: every absolute path under the other machine's home directory, data directory or harness root "
             + "is rewritten to the same path here, each rewrite said, Harness:Root first; a path outside those three that is not "
             + "on this machine is said and left as written; every other value, a secret among them, is placed as it was." + nl

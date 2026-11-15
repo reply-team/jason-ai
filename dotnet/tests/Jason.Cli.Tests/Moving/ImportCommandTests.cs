@@ -352,6 +352,47 @@ public sealed class ImportCommandTests
         Assert.Equal("a database, made up", File.ReadAllText(Path.Combine(to.Data, "state", "jason.db")));
     }
 
+    /// <summary>
+    /// An export before 0.44 carried a settings writer's temporary file left beside the settings file. Its digest is held
+    /// to the listing like every file's, and it is not placed: the settings file is, and no copy of its secrets lands
+    /// beside it.
+    /// </summary>
+    [Fact]
+    public async Task A_settings_writer_s_temporary_file_an_older_export_carried_is_checked_and_not_placed()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var file = new MovingArchive(from)
+            .Installation()
+            .With("data/config/settings.json.0123456789abcdef0123456789abcdef.tmp", "{\"token\":\"fake-token-not-a-secret\"}")
+            .With("data/config/settings.json.4242.tmp", "{\"token\":\"fake-token-not-a-secret\"}")
+            .With("data/config/notes.tmp", "made up")
+            .Write();
+
+        var exit = await Import(to, Options(file));
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var config = Path.Combine(to.Data, "config");
+        Assert.Equal(["notes.tmp", "settings.json"], Directory.GetFiles(config).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_settings_writer_s_temporary_file_whose_digest_is_not_the_listed_one_is_still_refused()
+    {
+        using var from = new MovingMachine();
+        using var to = new MovingMachine();
+        var archive = new MovingArchive(from).Installation().With("data/config/settings.json.4242.tmp", "{}");
+        archive.Listing = manifest => manifest with
+        {
+            Entries = [.. manifest.Entries.Select(entry => entry.Path.EndsWith(".4242.tmp", StringComparison.Ordinal) ? entry with { Sha256 = new string('0', 64) } : entry)],
+        };
+
+        var exit = await Import(to, Options(archive.Write()));
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(File.Exists(Path.Combine(to.Data, "config", "settings.json")));
+    }
+
     // ---- layouts -----------------------------------------------------------------------------------------------------
 
     /// <summary>An archive written before the layout stamp says no layout, and carries layout 1: it is placed as it was.</summary>
@@ -1590,6 +1631,7 @@ public sealed class ImportCommandTests
         Assert.Contains("A project folder outside the harness root does not travel", help, StringComparison.Ordinal);
         Assert.Contains("needs the source harness root moved aside first", help, StringComparison.Ordinal);
         Assert.Contains("'jason project link <id> --path <folder>'", help, StringComparison.Ordinal);
+        Assert.Contains("A temporary file a write of the settings file left beside it (settings.json.<id>.tmp), which an export before 0.44.0 could carry, is held to its listed digest and not placed.", help, StringComparison.Ordinal);
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------------------

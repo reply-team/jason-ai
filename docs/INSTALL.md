@@ -711,8 +711,10 @@ folder, each whole, a `.git` included — with `export.json` listing every file'
 a fact: the import registers it again on a machine that can, and on one that cannot says "No logon registration,
 and this machine has no way to register one." **What does not:** the backups under `state/backups/`, the run and
 work directories, staged skills, the shipped UI under `ui/default/`, the copies an update keeps, anything an
-earlier import moved aside, the skills deployed into agent hosts (`jason skills install` deploys them again), and
-anything outside the data directory and the harness root. **The archive carries the settings file with
+earlier import moved aside, the skills deployed into agent hosts (`jason skills install` deploys them again), a
+temporary file a write of the settings file left beside it (`settings.json.<id>.tmp`, whatever its age; the runtime
+removes one at its start once it is ten minutes old and no writer holds it, and an import does not place one an older
+export carried), and anything outside the data directory and the harness root. **The archive carries the settings file with
 everything in it, a token under `Plugins:Config` included: keep the archive as you keep that file.**
 
 **Before anything is written**, the import refuses an archive it cannot read, a name in it that would land

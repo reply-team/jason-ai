@@ -755,6 +755,64 @@ public sealed class ExportCommandTests
         Assert.Contains(manifest.RootElement.GetProperty("entries").EnumerateArray(), entry => entry.GetProperty("path").GetString() == "data/layout.json");
     }
 
+    // ---- the settings writers' temporary files -----------------------------------------------------------------------
+
+    /// <summary>
+    /// A write of the settings file that stopped part way leaves its temporary file beside it, the settings' secrets in it.
+    /// No archive carries one, of either writer's shape and however young; the settings file and every other file of the
+    /// folder still travel.
+    /// </summary>
+    [Fact]
+    public async Task A_settings_writer_s_temporary_file_is_never_carried_whatever_its_age()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantData("config/settings.json", "{}");
+        machine.PlantData("config/settings.json.bak", "{}");
+        machine.PlantData("config/notes.tmp", "made up");
+        var old = machine.PlantData("config/settings.json.0123456789abcdef0123456789abcdef.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
+        File.SetLastWriteTimeUtc(old, DateTime.UtcNow - TimeSpan.FromDays(3));
+        machine.PlantData("config/settings.json.4242.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
+
+        var exit = await ExportCommand.RunAsync(machine.Env(), Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var archivePath = Path.Combine(machine.Here, DefaultName);
+        var config = Names(archivePath).Where(name => name.StartsWith("data/config/", StringComparison.Ordinal)).Order(StringComparer.Ordinal);
+        Assert.Equal(["data/config/", "data/config/notes.tmp", "data/config/settings.json", "data/config/settings.json.bak"], config);
+        using var manifest = Manifest(archivePath);
+        Assert.DoesNotContain(manifest.RootElement.GetProperty("entries").EnumerateArray(), entry => entry.GetProperty("path").GetString()!.EndsWith(".tmp", StringComparison.Ordinal) && entry.GetProperty("path").GetString()!.Contains("settings.json.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task In_layout_two_the_temporary_files_beside_setup_s_settings_file_are_never_carried()
+    {
+        using var machine = new MovingMachine();
+        machine.PlantData("state/jason.db");
+        machine.PlantData("setup/settings.json", "{}");
+        machine.PlantData("setup/settings.json.4242.tmp", "{\"token\":\"fake-token-not-a-secret\"}");
+
+        var env = machine.Env() with { Paths = new Contracts.Discovery.JasonPaths(machine.Data, 2) };
+        var exit = await ExportCommand.RunAsync(env, Plain, new StoppedClock(Now), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var names = Names(Path.Combine(machine.Here, DefaultName));
+        Assert.Contains("data/setup/settings.json", names);
+        Assert.DoesNotContain("data/setup/settings.json.4242.tmp", names);
+    }
+
+    [Fact]
+    public async Task Its_help_says_the_settings_writers_temporary_files_are_never_carried()
+    {
+        using var machine = new MovingMachine();
+
+        var exit = await CliApp.RunAsync(["export", "--help"], machine.Env(), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var help = machine.Out.ToString().ReplaceLineEndings(" ");
+        Assert.Contains("data/config/settings.json.<id>.tmp, a temporary file a write of the settings file left behind, whatever its age", help, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Where the paths answer by layout 2, the archive carries <c>setup/</c> whole but its staging, the secrets file under
     /// <c>config/</c>, and says layout 2; nothing of layout 1's places, which that layout no longer keeps.
