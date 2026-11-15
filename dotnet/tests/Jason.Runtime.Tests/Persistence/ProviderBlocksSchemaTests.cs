@@ -204,10 +204,12 @@ public class ProviderBlocksSchemaTests
     /// An installation that upgrades from the release before blocks were kept per channel keeps every block as it was, and
     /// each one names no channel, which is what it meant: the sender on every channel. The open ones stay held to the
     /// one-open rule, now in its every-channel half. Nothing is rewritten: the migration adds a column that may be null and
-    /// makes the sender's half of the rule again.
+    /// makes the sender's half of the rule again. A block whose trial was under way at the upgrade keeps it under way: it
+    /// still names its trial, which the resume step still reads as in flight, so it draws no second one, while a block of
+    /// another sender with no trial under way draws its own.
     /// </summary>
     [Fact]
-    public void An_upgraded_database_keeps_its_blocks_each_on_every_channel()
+    public async Task An_upgraded_database_keeps_its_blocks_each_on_every_channel()
     {
         using var dir = new TempDataDir();
         Directory.CreateDirectory(dir.Paths.StateDirectory);
@@ -221,10 +223,16 @@ public class ProviderBlocksSchemaTests
         Execute(
             dir.Paths.DatabaseFile,
             """
-            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at, cleared_at, cleared_by_type, cleared_by_id) VALUES
-              ('blk_1', 'fake', 'sha256:a', 'account', NULL, 'billing', 'cleared', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00', '2026-10-01 01:00:00', 'human', 'person_1'),
-              ('blk_2', 'fake', 'sha256:a', 'sender', '12', 'limit', 'open', '2026-10-01 02:00:00', 1, '2026-10-01 02:00:00', 3, '2026-10-01 02:15:00', NULL, NULL, NULL);
-            INSERT INTO work_item_waits (work_item_id, status, opened_at, provider_block_id) VALUES (1, 'open', '2026-10-01 02:00:00', 2);
+            INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at, cleared_at, cleared_by_type, cleared_by_id, trial_work_item_id) VALUES
+              ('blk_1', 'fake', 'sha256:a', 'account', NULL, 'billing', 'cleared', '2026-10-01 00:00:00', 1, '2026-10-01 00:00:00', 1, '2026-10-01 00:15:00', '2026-10-01 01:00:00', 'human', 'person_1', NULL),
+              ('blk_2', 'fake', 'sha256:a', 'sender', '12', 'limit', 'open', '2026-10-01 02:00:00', 1, '2026-10-01 02:00:00', 3, '2026-10-01 02:15:00', NULL, NULL, NULL, NULL),
+              ('blk_7', 'fake', 'sha256:a', 'sender', '17', 'limit', 'open', '2026-10-01 02:00:00', 1, '2026-10-01 02:00:00', 2, '2026-10-01 02:15:00', NULL, NULL, NULL, 2);
+            INSERT INTO work_item_waits (work_item_id, status, opened_at, provider_block_id, released_at, release_reason) VALUES
+              (1, 'open', '2026-10-01 02:00:00', 2, NULL, NULL),
+              (2, 'released', '2026-10-01 02:00:00', 3, '2026-10-01 02:15:00', 'block_trial');
+            UPDATE work_items SET status = 'processing', attempt_count = 1 WHERE id = 2;
+            INSERT INTO attempts (public_id, work_item_id, number, command, status, context_snapshot_json, claimed_at, lock_until)
+            VALUES ('att_2', 2, 1, 'provider_op', 'running', '{}', '2026-10-01 02:15:00', '2026-10-01 02:25:00');
             """);
         var before = Rows(dir.Paths.DatabaseFile, "SELECT * FROM provider_blocks ORDER BY id");
 
@@ -239,8 +247,14 @@ public class ProviderBlocksSchemaTests
             "INSERT INTO provider_blocks (public_id, plugin_id, binding_identity, scope, sender_external_id, reason, status, opened_at, opened_by_attempt_id, last_seen_at, seen_count, next_trial_at) "
             + "VALUES ('blk_3', 'fake', 'sha256:a', 'sender', '12', 'limit', 'open', '2026-10-02 00:00:00', 1, '2026-10-02 00:00:00', 1, '2026-10-02 00:15:00');"));
         Assert.Contains("UNIQUE", again.Message, StringComparison.Ordinal);
-        Assert.Equal(["1|open|2"], Rows(dir.Paths.DatabaseFile, "SELECT work_item_id, status, provider_block_id FROM work_item_waits"));
+        Assert.Equal(["1|open|2", "2|released|3"], Rows(dir.Paths.DatabaseFile, "SELECT work_item_id, status, provider_block_id FROM work_item_waits ORDER BY id"));
         Assert.Equal(["ok"], Rows(dir.Paths.DatabaseFile, "PRAGMA integrity_check"));
+
+        await using (var db = new JasonDbContext(options))
+        {
+            var due = await global::Jason.Runtime.Dispatch.Resumer.DueTrialsAsync(db, new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc), TestContext.Current.CancellationToken);
+            Assert.Equal([(2, (int?)1)], due.Select(row => (row.BlockId, row.WaitId)));
+        }
     }
 
     /// <summary>

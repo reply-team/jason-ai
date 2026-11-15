@@ -6,6 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { inFront, shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -47,14 +48,14 @@ const names = () =>
         .getAllByRole('button')
         .map((each) => each.querySelector('.rt')?.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
-const thread = () =>
-    document.querySelector<HTMLElement>('.dv-active-group .thread') ?? document.querySelector<HTMLElement>('.thread')!;
+/** The thread of the chat the area shows. */
+const thread = () => shownPane()!.querySelector<HTMLElement>('.thread')!;
 
 /** Types into a chat, the only one shown unless `panel` names it, and sends; resolves with the conversation it went to. */
 async function send(desktop: StubDesktop, text: string, panel?: HTMLElement): Promise<string> {
     const before = calls(desktop, 'chat.send').length;
     const scope = panel ? within(panel) : screen;
-    await waitFor(() => scope.getByRole('button', { name: 'Send' }));
+    await waitFor(() => scope.getByRole('textbox', { name: 'Your message' }));
     fireEvent.change(scope.getByRole('textbox', { name: 'Your message' }), { target: { value: text } });
     fireEvent.click(scope.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(before + 1));
@@ -107,7 +108,12 @@ describe('the desktop’s conversations', () => {
         expect(
             within(shown).getByText('Earlier messages of this conversation were let go to keep it within its size.'),
         ).toBeTruthy();
-        expect(Array.from(document.querySelectorAll('img')).filter((img) => !img.closest('.brand'))).toEqual([]);
+        // The only images of the page are the brand's own: the sidebar's and the start screen's mark.
+        expect(
+            Array.from(document.querySelectorAll('img')).filter(
+                (img) => !img.closest('.brand') && !img.classList.contains('start-mark'),
+            ),
+        ).toEqual([]);
         expect((window as { hit?: number }).hit).toBeUndefined();
         // Shown again, it is brought forward, not read again.
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
@@ -525,7 +531,7 @@ describe('the desktop’s conversations', () => {
         );
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         expect(Object.values(chats.value).filter((chat) => chat.campaignId === 'cmp_1')).toHaveLength(1);
-        expect(screen.getAllByText('Spring', { selector: '.dv-default-tab-content' })).toHaveLength(1);
+        expect(inFront()).toBe('Spring');
     });
 
     it('asks Remove as a dialog: focus on keeping it, Escape and Keep it close it back to Remove, nothing else usable meanwhile', async () => {
@@ -661,9 +667,9 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(current()).toEqual(['Autumn']));
     });
 
-    it('renames a conversation from its header: the tab and the sidebar follow, and nothing is asked before it is kept', async () => {
+    it('renames a conversation from its header: the sidebar follows, and nothing is asked before it is kept', async () => {
         const { desktop } = renderConsole();
-        await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', true);
         const id = await send(desktop, 'Help me start a new campaign.');
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
@@ -678,11 +684,7 @@ describe('the desktop’s conversations', () => {
             expect(calls(desktop, 'chat.rename').map((each) => each.args)).toEqual([[id, 'Spring plan']]),
         );
         await waitFor(() => expect(within(listed()).getByRole('button', { name: 'Spring plan' })).toBeTruthy());
-        await waitFor(() =>
-            expect([...document.querySelectorAll('.dv-default-tab-content')].map((each) => each.textContent)).toContain(
-                'Spring plan',
-            ),
-        );
+        expect(inFront()).toBe('Spring plan');
         expect(screen.queryByRole('textbox', { name: 'Conversation name' })).toBeNull();
         // Escape leaves the name as it was and asks nothing.
         fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
@@ -768,15 +770,11 @@ describe('the desktop’s conversations', () => {
         expect(desktop.kept.get(id)?.title).toBe('Summer picks');
     });
 
-    it('draws a tab title made of a person’s words as text', async () => {
+    it('draws a conversation’s title made of a person’s words as text in Recent', async () => {
         const { desktop } = renderConsole();
         await send(desktop, hostile);
-        await waitFor(() =>
-            expect([...document.querySelectorAll('.dv-default-tab-content')].map((each) => each.textContent)).toContain(
-                hostile,
-            ),
-        );
-        expect(document.querySelector('.dv-tabs-container img, .dv-tab img')).toBeNull();
+        await waitFor(() => expect(names()).toContain(hostile));
+        expect(listed().querySelector('img')).toBeNull();
         expect((window as { hit?: number }).hit).toBeUndefined();
     });
 });

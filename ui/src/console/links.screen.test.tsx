@@ -6,6 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
+import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -32,9 +33,6 @@ function renderConsole(desktop: StubDesktop, fake: FakeApi): void {
 }
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
-/** The titles of the dock's tabs in front, one a group. */
-const inFront = () =>
-    Array.from(document.querySelectorAll('.dv-tab.dv-active-tab')).map((tab) => tab.textContent?.trim());
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
 
 beforeEach(() => {
@@ -70,7 +68,7 @@ describe('a link the desktop hands the console', () => {
         expect(calls(desktop, 'chat.send')).toEqual([]);
     });
 
-    it('that comes while the window is open opens the screen it names in the page panel, and puts nothing into a chat', async () => {
+    it('that comes while the window is open opens the screen it names in the area, and puts nothing into a chat', async () => {
         const desktop = stubDesktop();
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
@@ -92,12 +90,12 @@ describe('a link the desktop hands the console', () => {
         expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
-        await waitFor(() => expect(inFront()).toContain('Agents'));
+        await waitFor(() => expect(inFront()).toBe('Agents'));
         const side = within(document.querySelector<HTMLElement>('.side')!);
         fireEvent.click(side.getByRole('button', { name: 'More' }));
         fireEvent.click(side.getByRole('menuitem', { name: /^Activity/ }));
         desktop.link({ page: 'needs' });
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
     });
 
     it('to an approval that no longer waits opens Needs you on its own empty card, and nothing else', async () => {
@@ -115,8 +113,7 @@ describe('a link the desktop hands the console', () => {
         await waitFor(() => expect(needs.querySelector('.needs-empty')).not.toBeNull());
         // The panel read the item the link names, and it is Needs you that is in front, no page of its own.
         await waitFor(() => expect(attention.detail.value?.item.id).toBe('apr_2'));
-        expect(inFront()).toContain('Needs you');
-        expect(inFront()).not.toContain('Page');
+        expect(inFront()).toBe('Needs you');
         // What the screen says when nothing waits, and no detail, no button to decide, no turn.
         expect(needs.querySelector('.ask-w')).toBeNull();
         expect(within(needs).queryByRole('button', { name: 'Approve' })).toBeNull();
@@ -146,7 +143,7 @@ describe('a link the desktop hands the console', () => {
         expect(before?.draft).toBe('Half a thought');
         for (const link of [{ page: 'campaigns' }, { page: 'needs' }, { page: 'question', id: 'dec_1' }] as const)
             desktop.link(link);
-        await waitFor(() => expect(inFront()).toContain('Needs you'));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
         expect(chats.value[id!]).toEqual(before);
         expect(calls(desktop, 'chat.send')).toEqual([]);
     });
@@ -161,7 +158,7 @@ describe('a link the desktop hands the console', () => {
             .answer('campaign.summary', 'campaign.summary/all');
         renderConsole(desktop, fake);
         await waitFor(() => screen.getByRole('heading', { name: 'The Feed' }));
-        expect(inFront()).toContain('Feed');
+        expect(inFront()).toBe('Feed');
         expect(calls(desktop, 'chat.send')).toEqual([]);
         expect(calls(desktop, 'chat.create')).toEqual([]);
     });

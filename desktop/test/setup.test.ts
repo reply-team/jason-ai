@@ -32,6 +32,7 @@ import {
 import { claudeCodeModels } from '../src/chat-models.ts';
 import { bench, fakeBox, memoryLog, snapshot, written, type Bench } from './harness.ts';
 import { dataLayout } from '../src/paths.ts';
+import { claudeWithSecrets, codexWithSecrets, plantedSecrets } from './own-servers-fixture.ts';
 
 function setupDeps(b: Bench, log: Logger = memoryLog(), settings: DesktopSettings = { feed: null, skillsDeployedFor: null, theme: null }): SetupDeps {
     return {
@@ -745,7 +746,7 @@ test('every host is listed, found or not; the missing ones name an install only 
     const b = bench(t, { programs: ['claude', 'gemini', 'npm'] });
     const { hosts } = await setupOn(b).status();
     const byId = new Map(hosts.map((host) => [host.id, host]));
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, autoEdit: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '10.9.2', drivesChat: true, install: null, belowFloor: null, fullAccess: null, autoEdit: null, models: claudeCodeModels('10.9.2'), typedModel: true, modelsUnread: null, ownServers: [] });
     assert.equal(byId.get('codex')?.found, false);
     assert.equal(byId.get('codex')?.install, 'codex');
     assert.equal(byId.get('gemini')?.found, true);
@@ -811,7 +812,7 @@ test('a Claude Code below the floor is listed and marked with the version found,
     const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
     const sentence = floorSentence('2.1.200');
     assert.ok(sentence);
-    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), autoEdit: null, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null });
+    assert.deepEqual(byId.get('claude'), { id: 'claude', label: 'Claude Code', kind: 'program', found: true, version: '2.1.200', drivesChat: true, install: null, belowFloor: sentence, fullAccess: fullAccessSentence('2.1.200'), autoEdit: null, models: claudeCodeModels('2.1.200'), typedModel: true, modelsUnread: null, ownServers: [] });
     assert.equal(byId.get('claude-api-key')?.belowFloor, sentence, 'a key provider runs on that same claude');
     assert.equal(byId.get('deepseek')?.belowFloor, sentence);
     assert.equal(byId.get('codex')?.belowFloor, null, 'only Claude Code has a floor');
@@ -1003,4 +1004,106 @@ test('a sign-in whose chat folder cannot be put right keeps its own result: the 
     await setup.connectReplyWithKey('planted-reply-key');
     assert.ok(log.lines.some((line) => line.name === 'agent_folder_unowned' && line.fields.Code === 'EBUSY'));
     assert.ok(!existsSync(join(b.paths.skillsRecords, 'reply.json')), 'nothing was recorded');
+});
+
+// ---- The person's own MCP servers ----------------------------------------------------------------------------------
+
+test('Claude Code and Codex found here name their own servers; every other host, a key provider and a host not found name none', async (t) => {
+    const b = bench(t, { programs: ['claude', 'gemini'] });
+    const home = join(b.root, 'person-home');
+    mkdirSync(join(home, '.codex'), { recursive: true });
+    writeFileSync(join(home, '.claude.json'), claudeWithSecrets);
+    writeFileSync(join(home, '.codex', 'config.toml'), codexWithSecrets);
+    const log = memoryLog();
+    const setup = new Setup({ ...setupDeps(b, log), ownServers: { env: {}, home } });
+    const state = await setup.status();
+    const byId = new Map(state.hosts.map((host) => [host.id, host]));
+    assert.deepEqual(byId.get('claude')?.ownServers, ['alpha', 'beta', 'gamma']);
+    assert.deepEqual(byId.get('codex')?.ownServers, [], 'Codex is not found here, whatever its file holds');
+    for (const host of state.hosts.filter((each) => each.id !== 'claude')) assert.deepEqual(host.ownServers, [], host.id);
+    // What the page is handed and what the log holds carry none of the planted values, and the log no name.
+    const handed = JSON.stringify(state);
+    const logged = JSON.stringify(log.lines);
+    for (const secret of [...plantedSecrets, 'planted', 'someone@example.invalid', 'project-local-server']) {
+        assert.ok(!handed.includes(secret), secret);
+        assert.ok(!logged.includes(secret), secret);
+    }
+    assert.ok(!/alpha|beta|gamma/.test(logged), 'a name is never logged');
+});
+
+test('a moved CLAUDE_CONFIG_DIR and CODEX_HOME are read where they point; a file that cannot be read is logged by program and kind only', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex'] });
+    const home = join(b.root, 'person-home');
+    const moved = join(b.root, 'moved-claude');
+    const codexHome = join(b.root, 'moved-codex');
+    mkdirSync(moved, { recursive: true });
+    mkdirSync(codexHome, { recursive: true });
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({ mcpServers: { not_this_one: {} } }));
+    writeFileSync(join(moved, '.claude.json'), JSON.stringify({ mcpServers: { moved_server: { env: { K: 'sk-planted-env-0123456789abcdef' } } } }));
+    writeFileSync(join(codexHome, 'config.toml'), '[mcp_servers.half_written\ncommand = "npx-planted-command"\n');
+    const log = memoryLog();
+    const setup = new Setup({ ...setupDeps(b, log), ownServers: { env: { CLAUDE_CONFIG_DIR: moved, CODEX_HOME: codexHome }, home } });
+    const byId = new Map((await setup.status()).hosts.map((host) => [host.id, host]));
+    assert.deepEqual(byId.get('claude')?.ownServers, ['moved_server']);
+    assert.deepEqual(byId.get('codex')?.ownServers, []);
+    assert.deepEqual(
+        log.lines.filter((line) => line.name === 'own_servers_unread'),
+        [{ level: 'info', name: 'own_servers_unread', fields: { Program: 'codex', Kind: 'malformed' } }],
+    );
+    assert.ok(!JSON.stringify(log.lines).includes('half_written'));
+});
+
+test('a file nested ten thousand deep never fails the listing: setup.status answers, every other row is there, and no line is drawn', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex'] });
+    const home = join(b.root, 'person-home');
+    mkdirSync(join(home, '.codex'), { recursive: true });
+    const depth = 10_000;
+    writeFileSync(join(home, '.claude.json'), `{"mcpServers": {"deep": ${'['.repeat(depth)}${']'.repeat(depth)}}}`);
+    writeFileSync(join(home, '.codex', 'config.toml'), `[mcp_servers.deep]\nargs = ${'['.repeat(depth)}${']'.repeat(depth)}\n`);
+    const log = memoryLog();
+    const state = await new Setup({ ...setupDeps(b, log), ownServers: { env: {}, home } }).status();
+    const byId = new Map(state.hosts.map((host) => [host.id, host]));
+    assert.equal(byId.get('claude')?.found, true);
+    assert.equal(byId.get('codex')?.found, true);
+    for (const host of state.hosts) assert.deepEqual(host.ownServers, [], host.id);
+    assert.deepEqual(
+        log.lines.filter((line) => line.name === 'own_servers_unread').map((line) => line.fields),
+        [
+            { Program: 'claude', Kind: 'malformed' },
+            { Program: 'codex', Kind: 'malformed' },
+        ],
+    );
+});
+
+test('an unread file is logged once while its kind stays, again when its kind changes, and its line goes at once when it is gone', async (t) => {
+    const b = bench(t, { programs: ['claude'] });
+    const home = join(b.root, 'person-home');
+    const file = join(home, '.claude.json');
+    mkdirSync(home, { recursive: true });
+    writeFileSync(file, '{"mcpServers": ');
+    const log = memoryLog();
+    const setup = new Setup({ ...setupDeps(b, log), ownServers: { env: {}, home } });
+    const kinds = () => log.lines.filter((line) => line.name === 'own_servers_unread').map((line) => line.fields['Kind']);
+    const claude = async () => (await setup.status()).hosts.find((host) => host.id === 'claude')?.ownServers;
+    for (let call = 0; call < 3; call++) assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed'], 'once for an unchanged file');
+    rmSync(file);
+    mkdirSync(file);
+    for (let call = 0; call < 3; call++) assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed', 'unreadable'], 'again when the kind changed');
+    rmSync(file, { recursive: true });
+    writeFileSync(file, JSON.stringify({ mcpServers: { now_read: {} } }));
+    assert.deepEqual(await claude(), ['now_read']);
+    rmSync(file);
+    assert.deepEqual(await claude(), [], 'a file gone lists nothing at once');
+    writeFileSync(file, '{"mcpServers": ');
+    assert.deepEqual(await claude(), []);
+    assert.deepEqual(kinds(), ['malformed', 'unreadable', 'malformed'], 'a kind after it listed is a change');
+});
+
+test('without the environment and home to read under, no file is read and no host names a server', async (t) => {
+    const b = bench(t, { programs: ['claude', 'codex'] });
+    const { hosts } = await setupOn(b).status();
+    for (const host of hosts) assert.deepEqual(host.ownServers, [], host.id);
 });

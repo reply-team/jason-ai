@@ -7,6 +7,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -257,7 +258,7 @@ describe('the Feed', () => {
         await waitFor(() => expect(document.querySelectorAll('.feed-line')).toHaveLength(3));
         expect(screen.getByText(/More happened while Jason was closed than is shown here/)).toBeTruthy();
         expect(calls(desktop, 'chat.send')).toEqual([]);
-        const feed = document.querySelector<HTMLElement>('.dv-active-group .chat-panel')!;
+        const feed = shownPane()!.querySelector<HTMLElement>('.chat-panel')!;
         expect(within(feed).queryByRole('button', { name: 'Rename' })).toBeNull();
         expect(within(feed).queryByRole('button', { name: 'Remove' })).toBeNull();
         expect(within(feed).getByRole('button', { name: 'Start afresh' })).toBeTruthy();

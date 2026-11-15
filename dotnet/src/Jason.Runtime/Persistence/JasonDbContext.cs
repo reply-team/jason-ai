@@ -627,6 +627,9 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             // being one value of the channel: SQLite holds nulls distinct, so an account block, which names no sender, and
             // a sender's block on every channel, which names no channel, are each held unique by an index of their own. The
             // sender's index keeps the plugin and the binding first, so the trial query reads an account's senders by it.
+            // No check holds that only a sender's block names a channel: SQLite adds a check to a table only by building
+            // the table again, which the migration that added the channel does not do. The one writer, ProviderBlocks.Meet,
+            // reads a channel only for a sender's block, and the block's contract refuses an account's block that names one.
             block.HasIndex(b => new { b.PluginId, b.BindingIdentity })
                 .IsUnique()
                 .HasFilter("status = 'open' AND scope = 'account'")

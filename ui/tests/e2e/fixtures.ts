@@ -14,7 +14,7 @@ export const test = base.extend<{ jason: Jason }>({
 
 export { expect };
 
-/** Opens the System screen in the console's Page tab, from the sidebar's More menu, as a person does. */
+/** Opens the System screen in the console's area, from the sidebar's More menu, as a person does. */
 export async function openSystem(page: Page): Promise<void> {
     const side = page.locator('.jc-console .side');
     await side.getByRole('button', { name: 'More', exact: true }).click();

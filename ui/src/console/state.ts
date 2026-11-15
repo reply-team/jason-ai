@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals-react';
+import { computed, signal, type ReadonlySignal } from '@preact/signals-react';
 import type { Api } from '../api/client';
 import { ApiError } from '../api/client';
 import type { JournalEntry } from '../api/types';
@@ -25,14 +25,14 @@ export const setupError = signal<string | null>(null);
 export const chats = signal<Readonly<Record<string, Chat>>>({});
 /** Every conversation the desktop keeps, newest first, as it listed them last. */
 export const conversations = signal<readonly DesktopConversation[]>([]);
-/** The conversation whose chat was brought to the front last, which the sidebar marks; null when none is open. */
+/** The conversation whose chat is shown, which the sidebar marks in Recent; null while anything else is shown. */
 export const currentChat = signal<string | null>(null);
 /** The Feed's id, once the desktop answered the first ask; null before. */
 export const feedId = signal<string | null>(null);
-/** Whether the Feed took a line since the person last brought it to the front: the sidebar marks it. Kept here only. */
+/** Whether the Feed took a line since the person last chose it: the sidebar marks it. Kept here only. */
 export const feedUnseen = signal(false);
 
-/** The id of the dock's panel in front: a panel's name, or `chat:<id>`; none before the dock is ready. */
+/** What the console's one area shows: a panel's name, or `chat:<id>`; none before the console is mounted. */
 export const activePanel = signal<string | null>(null);
 /** Why the conversations could not be listed or one opened, in the desktop's words; null when nothing failed. */
 export const conversationsFailure = signal<string | null>(null);
@@ -50,25 +50,39 @@ export function changeChat(id: string, change: (chat: Chat) => Chat): void {
     if (chat) chats.value = { ...chats.value, [id]: change(chat) };
 }
 
+const chatSignals = new Map<string, ReadonlySignal<Chat | undefined>>();
+
+/**
+ * One chat's record as a signal of its own: it tells only when that chat changed, so what draws one chat is not drawn
+ * again for a word typed in another.
+ */
+export function chatOf(id: string): ReadonlySignal<Chat | undefined> {
+    let held = chatSignals.get(id);
+    if (held === undefined) {
+        held = computed(() => chats.value[id]);
+        chatSignals.set(id, held);
+    }
+    return held;
+}
+
 export const messageOf = (error: unknown): string =>
     error instanceof ApiError || error instanceof Error ? error.message : String(error);
 
-/** The panels of the dock, by the name the dock knows each by. */
+/** The panels the console's one area shows, by their names; `page` holds the browser shell's screens. */
 export type PanelName = 'start' | 'dashboard' | 'needs' | 'campaigns' | 'activity' | 'connect' | 'page';
 
+/** The console's one area: it shows exactly one thing at a time, and nothing in it is closed, only chosen. */
 export interface Dock {
     show(panel: PanelName): void;
-    /** Takes a panel out of the dock. */
-    close(panel: PanelName): void;
     /**
      * Shows a conversation: the campaign's one, made on first use, when a campaign is given, else a new set-up chat.
      */
     chat(campaign?: { id: string; name: string }): void;
     /** Shows a chat that is open. */
     showChat(id: string): void;
-    /** Takes a chat's tab out of the dock. */
-    closeChat(id: string): void;
-    /** Shows one of the browser shell's screens in the page panel. */
+    /** Forgets a chat that was taken away; when it was the one shown, Start is shown. */
+    dropChat(id: string): void;
+    /** Shows one of the browser shell's screens. */
     page(to: Route): void;
 }
 

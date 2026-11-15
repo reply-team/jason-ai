@@ -1377,21 +1377,23 @@ work let through as a trial asks the person again where the attempt the block re
 pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
 holds nothing that could run now lets the next held item the claim meets through as its trial instead. The trial of a
 sender's block that names no channel is drawn among the items it holds whose channel has no open block of that
-sender, since that channel's block governs them: the trial of a sender's block on one channel is drawn from the items
+sender, since that channel's block governs them. The trial of a sender's block on one channel is drawn from the items
 the block that names no channel holds on that channel as well as from its own, as an account's is drawn from the items
 its senders' blocks hold. A block that names no channel may therefore sit open with nothing it may draw; it still
-holds every channel that has no block of its own until a send of any channel gets past it. A sender's block on one
-channel has its trials whether or not the block that names none is open: neither waits for the other, unlike a
-sender's block, which holds no trial of its own while its account's block is open. An item let through as the trial
-of the block that names no channel, which the claim then finds held by its channel's block, moves onto that block with
-no call, and that is no trial of the block that names none. What a trial of `reach: act` work answers decides the
-block:
+holds every channel that has no block of its own until a send of any channel gets past it or a person clears it. A
+sender's block on one channel has its trials whether or not the block that names none is open: neither waits for the
+other, unlike a sender's block, which holds no trial of its own while its account's block is open. An item let
+through as the trial of the block that names no channel, which the claim then finds held by its channel's block,
+moves onto that block with no call, and that is no trial of the block that names none. What a trial of
+`reach: act` work answers decides the block:
 
 - **it succeeded, or failed `permanent` or `validation`** — the provider judged the work, so the call got past the
   block: the block is cleared by that attempt, and the next resume step releases every wait on it with
   `block_cleared`. Any call of held `act` work the provider judged on the work clears its open block, a trial or not —
   the account's, and its sender's on its own channel and on every channel, never the same identifier's on another
-  channel — and a trial clears the block that let it through whether or not its input names a sender. Nothing else
+  channel — and a trial clears the block that let it through whether or not its input names a sender, a sender's
+  block on one channel only while the trial's input is still on that channel: work a patch moved to another channel
+  while it waited got past nothing of the channel it left, and that block's next trial is a cadence off. Nothing else
   clears a sender's block but a person: a block that opens on one channel clears nothing;
 - **it answered `blocked` again** — the trial parks once more on the block, which is seen again and its next trial
   put off; nobody is told twice. The account's trial that meets a sender's block has got past the account where the
@@ -1455,7 +1457,9 @@ open before a person's clear and writes after it writes nothing, and the person'
 A block answers its id, `plugin_id`, `binding_identity`, `scope`, `sender_external_id`, `channel`, `reason`, `link`, `clears_at`,
 `status`, `opened_at`, `last_seen_at`, `seen_count`, `next_trial_at`, `trial_work_item_id`, `opened_by_attempt_id`,
 `held_count` — the open waits parked on this block itself; an account's count leaves out what its senders' blocks
-hold — and `cleared_at` with `cleared_by_attempt_id` or `cleared_by_actor`.
+hold, and a sender's block on one channel leaves out the work on its channel that the sender's block that names no
+channel holds, from which its trial is drawn as well — and `cleared_at` with `cleared_by_attempt_id` or
+`cleared_by_actor`.
 `jason workitem list --block <id>` names the items it holds.
 
 ## Roles
