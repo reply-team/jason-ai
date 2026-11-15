@@ -22,9 +22,10 @@ import {
     onceEach,
     requestAllowed,
     sealView,
-    switchBounds,
+    demoGeometry,
+    demoLayout,
+    demoMacFrame,
     switchChoice,
-    switchSize,
     type DemoRefusal,
 } from '../src/demo-page.ts';
 import { persists } from '../src/window-pairing.ts';
@@ -399,20 +400,57 @@ test('our switch reads the person’s choice from the navigation its view refuse
 
 // ---- Our switch's place and page --------------------------------------------------------------------------------------
 
-test('our switch covers the right end of the page’s top strip, its full height, at every width the window allows', () => {
-    assert.deepEqual(switchSize, { width: 226, height: 37 });
-    assert.deepEqual(switchBounds(1440), { x: 1214, y: 0, width: 226, height: 37 });
-    assert.deepEqual(switchBounds(1100), { x: 874, y: 0, width: 226, height: 37 });
-    assert.deepEqual(switchBounds(884), { x: 658, y: 0, width: 226, height: 37 });
-    assert.deepEqual(switchBounds(100), { x: 0, y: 0, width: 100, height: 37 });
-    assert.deepEqual(switchBounds(0), { x: 0, y: 0, width: 0, height: 37 });
+test('the page’s strip is fixed: right of its 284-pixel sidebar, 38 high; on macOS a band of 26 lies above the page', () => {
+    assert.deepEqual(demoGeometry, { sidebar: 284, strip: 38, macBand: 26 });
 });
 
-test('our switch’s page holds no script and links only to the choice of Live', () => {
+test('elsewhere than macOS the page fills the content and our switch covers the strip, at every width the window allows', () => {
+    for (const platform of ['win32', 'linux'] as const) {
+        assert.deepEqual(demoLayout(platform, 1440, 900), { page: { x: 0, y: 0, width: 1440, height: 900 }, switch: { x: 284, y: 0, width: 1156, height: 38 }, band: null });
+        assert.deepEqual(demoLayout(platform, 900, 600), { page: { x: 0, y: 0, width: 900, height: 600 }, switch: { x: 284, y: 0, width: 616, height: 38 }, band: null });
+    }
+    // Narrower than the sidebar, which the window's least width never is, the switch has no width rather than a negative one.
+    assert.deepEqual(demoLayout('linux', 200, 100).switch, { x: 284, y: 0, width: 0, height: 38 });
+});
+
+test('on macOS the page and our switch start 26 below the window’s top, under our band, which is the whole width', () => {
+    assert.deepEqual(demoLayout('darwin', 1440, 900), {
+        page: { x: 0, y: 26, width: 1440, height: 874 },
+        switch: { x: 284, y: 26, width: 1156, height: 38 },
+        band: { x: 0, y: 0, width: 1440, height: 26 },
+    });
+    assert.equal(demoLayout('darwin', 900, 10).page.height, 0, 'never a negative height');
+});
+
+test('our switch’s page holds no script, links only to the choice of Live, and is the window’s drag region but for the switch', () => {
     const page = readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8');
     assert.ok(!/<script|on[a-z]+\s*=|javascript:/i.test(page), 'no script, no handler');
     assert.deepEqual([...page.matchAll(/href="([^"]*)"/g)].map((match) => match[1]), ['jason-switch://switch/live']);
     assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
+    const css = page.replace(/\s+/g, ' ');
+    assert.ok(/html, body \{[^}]*-webkit-app-region: drag;/.test(css), 'the strip drags the window');
+    assert.ok(/\.switch \{[^}]*-webkit-app-region: no-drag;/.test(css), 'the switch takes the click');
+    assert.ok(/body \{[^}]*background: #fff4d6;[^}]*border-bottom: 1px solid #f2dc9c;/.test(css), 'the Demo strip’s colours');
+});
+
+test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags', () => {
+    const page = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8');
+    assert.ok(!/<script|on[a-z]+\s*=|javascript:|href=|<a\b|<button|<input/i.test(page), 'no script and nothing to follow');
+    assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
+    const css = page.replace(/\s+/g, ' ');
+    assert.ok(/html \{[^}]*-webkit-app-region: drag;/.test(css));
+    assert.ok(/background: linear-gradient\(to right, #f3f5f9 0 284px, #fff4d6 284px\);/.test(css));
+    assert.ok(!/no-drag/.test(css), 'all of it drags');
+});
+
+test('the Demo window on macOS hides its title bar into our band, loads the band under its views, and elsewhere keeps its frame', () => {
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
+    assert.ok(demo.includes("...(process.platform === 'darwin' ? demoMacFrame : {}),"));
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.ok(window.includes("if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);"));
+    assert.ok(window.includes('const at = demoLayout(deps.platform, width, height);'));
+    assert.deepEqual(demoMacFrame.titleBarStyle, 'hidden');
 });
 
 // ---- What the Demo reaches --------------------------------------------------------------------------------------------

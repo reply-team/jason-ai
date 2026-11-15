@@ -323,15 +323,33 @@ export function switchChoice(url: string): 'live' | null {
 }
 
 /**
- * Where our switch stands: the right end of the page's top strip, where the page draws its own, whatever the width.
- * Measured from the page as the sealed view draws it at 1440, 1100 and 900 wide: the strip is 37 pixels high above a
- * one-pixel border, and what the page draws at its right end is 210 wide with 12 to spare on the right, at every width.
- * Ours covers that end and 4 pixels more, the strip's full height, and leaves the border to the page.
+ * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of it
+ * its top strip is 38 high (the strip and its one-pixel border), the window's drag region, where it draws its own switch.
+ * Ours covers that strip whole, from the sidebar to the window's right edge. On macOS the window's title bar is hidden,
+ * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
+ * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`).
  */
-export const switchSize = { width: 226, height: 37 } as const;
+export const demoGeometry = { sidebar: 284, strip: 38, macBand: 26 } as const;
 
-/** Pure: our switch's bounds in a window's content area of this width. */
-export function switchBounds(contentWidth: number): Rectangle {
-    const width = Math.max(0, Math.min(switchSize.width, contentWidth));
-    return { x: Math.max(0, contentWidth - width), y: 0, width, height: switchSize.height };
+/**
+ * The Demo window's frame on macOS: the title bar hidden into our band, with the traffic lights inside it. Elsewhere the
+ * window keeps its native frame and none of this applies.
+ */
+export const demoMacFrame = { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 7 } } as const;
+
+export interface DemoLayout {
+    page: Rectangle;
+    switch: Rectangle;
+    /** Our band above the page, on macOS; `null` elsewhere. */
+    band: Rectangle | null;
+}
+
+/** Pure: the Demo's views in a window's content area of this size, on this platform. */
+export function demoLayout(platform: NodeJS.Platform, width: number, height: number): DemoLayout {
+    const top = platform === 'darwin' ? demoGeometry.macBand : 0;
+    return {
+        page: { x: 0, y: top, width, height: Math.max(0, height - top) },
+        switch: { x: demoGeometry.sidebar, y: top, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
+        band: top === 0 ? null : { x: 0, y: 0, width, height: top },
+    };
 }

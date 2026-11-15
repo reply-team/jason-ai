@@ -281,8 +281,9 @@ the desktop's own log), and no record of a mode writes the record as the demo an
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
 
-**The switch.** On the right of the page's top bar is the **Demo | Live** switch, drawn by the desktop over the place
-where the page draws its own, in the page's colours, so you see one. Choosing **Live** writes the mode and starts the
+**The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
+colours, with the **Demo | Live** switch on its right, so you see one; you move the window by it. On macOS the window
+has no title bar of its own: a band of the page's colours above the page holds the window's buttons and moves the window. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
 carries the same switch, with **Demo** to come back.

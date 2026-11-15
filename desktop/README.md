@@ -547,9 +547,13 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   certificate error and an unload prompt are refused or cancelled, and every permission request and check, device chooser
   and screen capture is denied. Each kind refused is logged once a run (`demo_refused`), by its name alone.
   `test/demo-page.test.ts` holds each seal on stand-ins for the contents and the session.
-- The switch's view is the page's top bar's right end, 226 by 37 pixels at the window's right edge, measured on the page
-  as it is committed (`switchBounds`); it is laid out again at each resize and added after the page's view, so it is
-  drawn over it and takes the clicks there.
+- The switch's view covers the page's top strip on the page's own numbers (`demoLayout`): right of its 284-pixel sidebar
+  to the window's right edge, 38 high, the strip's colours, the window's drag region but for the switch. It is laid out
+  again at each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
+  Demo window hides its title bar (`demoMacFrame`) and both views start 26 pixels lower: the window's own contents show
+  our band above them (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's
+  beyond, all of it a drag region, where the traffic lights stand. On Windows and Linux the frame is the system's and the
+  views start at the top of the content.
 
 ## Links
 

@@ -42,7 +42,7 @@ import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './pa
 import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { demoSchemes } from './demo-page.ts';
+import { demoMacFrame, demoSchemes } from './demo-page.ts';
 import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
@@ -718,6 +718,8 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
+        // On macOS the title bar is hidden into our band above the page (demo-page.ts, demoMacFrame); elsewhere the frame is the system's.
+        ...(process.platform === 'darwin' ? demoMacFrame : {}),
         show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: lightBackground,
         webPreferences: {
@@ -768,6 +770,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     try {
         views = await openDemo(window, {
             appPath: app.getAppPath(),
+            platform: process.platform,
             refused: (view, kind) => log.warn('demo_refused', { View: view, Kind: kind }),
             live: () => backToLive(modeDeps),
             unshown: () => {

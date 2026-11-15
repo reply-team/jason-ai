@@ -1,18 +1,21 @@
 /**
  * The Demo in the window: the page the application carries, in a view of its own sealed by `demo-page.ts`, and over it
- * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, at the geometry where the
- * page draws a switch of its own (`switchBounds`). Nothing of an installation is here: no jason, no runtime, no chat, no
- * bridge, no folder made; the window's own contents stay empty under the two views.
+ * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip where the
+ * page draws a switch of its own (`demoLayout`). Nothing of an installation is here: no jason, no runtime, no chat, no
+ * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
+ * above the page (`shell/demo-band.html`, no script, the window's drag region).
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { demoPage, demoSwitch, demoViewPreferences, onceEach, sealView, switchBounds, switchChoice, type DemoRefusal } from './demo-page.ts';
+import { demoLayout, demoPage, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
 
 export interface DemoWindowDeps {
-    /** The application's folder, where `demo/index.html` and `shell/demo-switch.html` are. */
+    /** The application's folder, where `demo/index.html`, `shell/demo-switch.html` and `shell/demo-band.html` are. */
     appPath: string;
+    /** The platform the window is drawn on: on macOS the views start below our band. */
+    platform: NodeJS.Platform;
     /** Told what a view refused, by kind, once each. */
     refused(view: 'page' | 'switch', kind: DemoRefusal): void;
     /** The person chose Live on our switch. */
@@ -35,6 +38,7 @@ function fileOf(path: string): () => Uint8Array {
 export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Promise<DemoViews> {
     const pageFile = join(deps.appPath, 'demo', 'index.html');
     const switchFile = join(deps.appPath, 'shell', 'demo-switch.html');
+    const bandFile = join(deps.appPath, 'shell', 'demo-band.html');
     const none: DemoViews = { reload: () => undefined };
     try {
         readFileSync(pageFile);
@@ -58,8 +62,9 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     window.contentView.addChildView(ours);
     const layout = () => {
         const { width, height } = window.getContentBounds();
-        page.setBounds({ x: 0, y: 0, width, height });
-        ours.setBounds(switchBounds(width));
+        const at = demoLayout(deps.platform, width, height);
+        page.setBounds(at.page);
+        ours.setBounds(at.switch);
     };
     layout();
     window.on('resize', layout);
@@ -69,6 +74,8 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     };
     window.on('closed', close);
     try {
+        // The band is the window's own contents, which on macOS show above the views; elsewhere they stay empty.
+        if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);
         await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);
     } catch {
         window.contentView.removeChildView(ours);
