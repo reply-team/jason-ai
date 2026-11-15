@@ -11,13 +11,17 @@ type Props = {
     onSaved: (item: WorkItem) => void;
     /** The item as it is now, when its text moved while the editor was open. */
     onMoved: (item: WorkItem) => void;
+    /** Opens with the boxes shown, for a place whose own button asked for the edit; the default shows Edit message. */
+    startOpen?: boolean;
+    /** Told when the boxes close, by Cancel or by a save. */
+    onClose?: () => void;
 };
 
 /** Edits the subject and the body of the parked message, and nothing else; Save approves nothing. */
-export function MessageEditor({ approval, item, busy, onSaved, onMoved }: Props) {
+export function MessageEditor({ approval, item, busy, onSaved, onMoved, startOpen = false, onClose }: Props) {
     const api = useApi();
     const words = wordsOf(heldArgs(item), approval.operation);
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(startOpen);
     const [subject, setSubject] = useState(words.subject ?? '');
     const [body, setBody] = useState(words.body ?? '');
     const [saving, setSaving] = useState(false);
@@ -53,6 +57,7 @@ export function MessageEditor({ approval, item, busy, onSaved, onMoved }: Props)
         try {
             onSaved(await saveEdit(api, approval.operation, approval.work_item_id, subject, body, opened));
             setOpen(false);
+            onClose?.();
         } catch (error) {
             if (error instanceof Unpaired) throw error;
             if (error instanceof TextMoved) {
@@ -109,7 +114,15 @@ export function MessageEditor({ approval, item, busy, onSaved, onMoved }: Props)
                 <button className="btn primary" type="button" disabled={saving || busy} onClick={() => void save()}>
                     Save
                 </button>
-                <button className="btn ghost" type="button" disabled={saving} onClick={() => setOpen(false)}>
+                <button
+                    className="btn ghost"
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                        setOpen(false);
+                        onClose?.();
+                    }}
+                >
                     Cancel
                 </button>
             </div>

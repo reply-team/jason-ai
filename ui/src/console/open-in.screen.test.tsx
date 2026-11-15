@@ -8,6 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { activePanel, changeChat, chats, conversations, currentChat, lines, setup, setupError } from './state';
@@ -20,7 +21,7 @@ import { bringForward } from '../test/area';
 
 function api(): FakeApi {
     return (
-        new FakeApi()
+        nothingWaitsInChats(new FakeApi())
             .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
             .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
             .answer('campaign.list', 'campaign.list/screen')

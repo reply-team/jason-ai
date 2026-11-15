@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Unpaired } from '../../api/client';
 import { useApi } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { clock, relative } from '../../time/format';
@@ -16,7 +15,16 @@ import { Doubts } from '../send-modes/doubts';
 import { SendModesQuestion } from '../send-modes/question';
 import { ReleasedBySendMode } from '../send-modes/released';
 import { VoiceReminder } from '../send-modes/voice-reminder';
-import { REPLIES, awaitNewApproval, editable, isMessage, isStale, readItem, sentence } from './message-edit';
+import {
+    REPLIES,
+    STALE_SENTENCE,
+    awaitNewApproval,
+    checkMessage,
+    editable,
+    isMessage,
+    isStale,
+    uncheckedSentence,
+} from './message-edit';
 
 type Props = {
     approval: Approval;
@@ -66,10 +74,11 @@ export function ApprovalPanel({
         setSavedHere(false);
         if (!watched) return;
         let current = true;
-        readItem(api, approval.work_item_id).then(
-            (read) => current && setItem(read),
-            (error: unknown) => current && !(error instanceof Unpaired) && setUnread(sentence(error)),
-        );
+        void checkMessage(api, approval).then((checked) => {
+            if (!current || checked === null) return;
+            if ('unchecked' in checked) setUnread(checked.unchecked);
+            else setItem(checked.item);
+        });
         return () => {
             current = false;
         };
@@ -90,13 +99,11 @@ export function ApprovalPanel({
 
     async function approveChecked() {
         if (!watched) return onApprove();
-        try {
-            const fresh = await readItem(api, approval.work_item_id);
-            setItem(fresh);
-            if (!isStale(approval, fresh)) onApprove();
-        } catch (error) {
-            if (!(error instanceof Unpaired)) setUnread(sentence(error));
-        }
+        const checked = await checkMessage(api, approval);
+        if (checked === null) return;
+        if ('unchecked' in checked) return setUnread(checked.unchecked);
+        setItem(checked.item);
+        if (!checked.stale) onApprove();
     }
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
@@ -157,13 +164,12 @@ export function ApprovalPanel({
             <div className="panel-body">
                 {stale && (
                     <p className="notice" role="status">
-                        The text of this message changed after this approval was asked, so Jason will ask again with the
-                        new text.
+                        {STALE_SENTENCE}
                     </p>
                 )}
                 {unread && (
                     <p className="notice" role="alert">
-                        The message could not be checked against its work item, so it cannot be approved now: {unread}
+                        {uncheckedSentence(unread)}
                     </p>
                 )}
                 {pending && <Doubts preview={approval.preview} />}

@@ -56,6 +56,7 @@ import { markdownView } from './markdown-view';
 import { svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence } from './live';
 import { Painted } from './painted';
+import { WaitingCards } from './waiting-cards';
 import { offersReply, readEnrolRoute } from './enrol-route';
 import { can } from '../platform/places';
 import { chatPlace, dropDialogs, replyCardFor, replyDismissed, reload as listHosts } from './connect';
@@ -960,7 +961,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     // Remove's question is a dialog: focus goes to keeping the conversation, the rest of the panel takes nothing while it
     // asks, and once it is answered or dismissed focus goes back to Remove.
     useEffect(() => {
-        for (const part of panel.current?.querySelectorAll('.thread, .composer') ?? []) {
+        for (const part of panel.current?.querySelectorAll('.chat-scroll, .composer') ?? []) {
             if (removing) part.setAttribute('inert', '');
             else part.removeAttribute('inert');
         }
@@ -1115,7 +1116,11 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     </div>
                 </div>
             )}
-            <Painted className="thread" view={view} />
+            <div className="chat-scroll">
+                <Painted className="thread" view={view} />
+                {/* An agent's approvals and questions, from its campaign's lists and never from what the AI wrote. */}
+                {chat.campaignId !== null && !chat.main && <WaitingCards campaignId={chat.campaignId} />}
+            </div>
             {/* Reply is asked for only where the work needs a way to send: the chat of a campaign still a draft, while
                 Reply is not connected. It is an offer, so it is hidden only where the runtime says the campaign's enrolment is routed to
                 another plugin, or the campaign already runs; no route and a route that cannot be read leave it, and nothing shows

@@ -10,6 +10,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, clock, conversations, feedId, feedUnseen, lines } from './state';
@@ -20,7 +21,7 @@ import { chats, clock, conversations, feedId, feedUnseen, lines } from './state'
 // Feed that is neither renamed nor removed.
 
 function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDesktop; journal: StubStream } {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')

@@ -1,0 +1,564 @@
+import { cleanup, act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { session } from '../api/session';
+import { activatePlugins } from '../platform/plugin';
+import { browserPlugins } from '../plugins';
+import { route } from '../router';
+import { pendingMark } from '../shell/attention-mark';
+import { reasonLabel } from '../screens/attention/labels';
+import { whyWords } from '../screens/send-modes/doubts';
+import * as classicCampaigns from '../screens/campaigns/store';
+import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
+import { shown } from '../test/area';
+import { FakeApi, watch } from '../test/fake-api';
+import { fixtures, type FixtureName } from '../test/fixtures';
+import * as consoleCampaigns from './campaigns';
+import { Console } from './console';
+import { attention } from './needs';
+import { chats, conversations } from './state';
+import { forgetWaiting } from './waiting';
+
+// An agent's chat draws, under its conversation, the campaign's approvals and questions that wait on a person: read
+// with `approval.list` and `decision.list` of that campaign, decided through the calls Needs you makes, and gone once
+// the next read no longer lists them. Nothing the AI writes in the chat draws a card.
+
+const spring = 'conv_01JDKEPT0000000000000000W1';
+const summer = 'conv_01JDKEPT0000000000000000W3';
+
+/** What the runtime lists for the chat's campaign: its recorded pending ones, until a test says they were decided. */
+let springApprovals: FixtureName = 'approval.list/by-campaign-pending';
+/** What the AI said in Spring's chat, besides the person's question. */
+let springSays: string | null = null;
+/** Whether anything waits outside the chats' campaigns, in the lists Needs you reads. */
+let elsewhere: 'pending' | 'nothing' = 'pending';
+
+/** The console over a fake that knows Spring's pending approvals and questions, with Spring's and Summer's chats kept. */
+function renderConsole(
+    fake: FakeApi = new FakeApi(),
+    journal: StubStream = stubStream(),
+): { fake: FakeApi; desktop: StubDesktop; journal: StubStream } {
+    fake.answer('system.info', 'system.info/with-ui')
+        .answer('preference.list', 'preference.list/set')
+        .answer('campaign.list', 'campaign.list/screen')
+        .answer('campaign.summary', 'campaign.summary/all')
+        .answer(
+            'decision.list',
+            elsewhere === 'pending' ? 'decision.list/pending' : 'decision.list/empty',
+            'decision.list/by-campaign-pending',
+            'decision.list/summer-pending',
+        )
+        .answer('approval.get', 'approval.get/email-message', 'approval.get/other-pending')
+        // Spring's first question was recorded whole with its options; the others are drawn from the same recording.
+        .answerAnyRequest('decision.get', (body) =>
+            (body as { decision_id?: string }).decision_id === 'dec_1'
+                ? 'decision.get/pending-with-options'
+                : 'decision.get/for-campaign-row',
+        );
+    if (!fake.offers('approval.list'))
+        fake.answerAnyRequest('approval.list', (body) => {
+            const campaign = (body as { campaign_id?: string }).campaign_id;
+            return campaign === 'cmp_1'
+                ? springApprovals
+                : campaign === 'cmp_3'
+                  ? 'approval.list/summer-pending'
+                  : elsewhere === 'pending'
+                    ? 'approval.list/pending'
+                    : 'approval.list/empty';
+        });
+    watch(fake);
+    activatePlugins(browserPlugins);
+    localStorage.clear();
+    location.hash = '';
+    route.value = { screen: 'attention' };
+    session.clear();
+    localStorage.setItem(
+        'jason.ui.session',
+        JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
+    );
+    const desktop = chatDesktop();
+    desktop.keep({
+        id: spring,
+        campaignId: 'cmp_1',
+        title: 'Spring',
+        entries: [
+            { kind: 'user', text: 'How is it going?' },
+            ...(springSays === null ? [] : [{ kind: 'text' as const, text: springSays }]),
+        ],
+    });
+    desktop.keep({
+        id: summer,
+        campaignId: 'cmp_3',
+        title: 'Summer',
+        entries: [
+            { kind: 'user', text: 'What needs my decision?' },
+            {
+                kind: 'text',
+                text: [
+                    '**Waiting for you** — Message to Ines Duarte, ines@example.test',
+                    '',
+                    'Subject: Notes from the meetup',
+                    '',
+                    'Approve · Edit · Reject · Details',
+                    '',
+                    '**Question:** Follow up on LinkedIn? Keep going / Pause until the news',
+                ].join('\n'),
+            },
+        ],
+    });
+    render(<Console api={fake} desktop={desktop} stream={journal.stream} />);
+    return { fake, desktop, journal };
+}
+
+const listed = () =>
+    within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', { name: 'Conversations' });
+
+/** Opens a kept chat from the sidebar, as a person does, and returns its pane. */
+async function openChat(title: 'Spring' | 'Summer'): Promise<HTMLElement> {
+    // The sidebar is painted afresh as the desktop lists its conversations: the row is pressed until the chat is shown.
+    await waitFor(() => {
+        fireEvent.click(within(listed()).getByRole('button', { name: title }));
+        expect(shown()).toBe(`chat:${title === 'Spring' ? spring : summer}`);
+    });
+    return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
+}
+
+const waiting = (pane: HTMLElement) => within(pane).getByRole('region', { name: 'Waiting for you' });
+const card = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElement>(`.waiting-card[data-id="${id}"]`);
+/** An element's text with its runs of white space made one space, as a person reads it. */
+const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+const sent = (fake: FakeApi, operation: string) =>
+    fake.calls.filter((each) => each.operation === operation).map((each) => each.body);
+
+/** Waits for an approval's card to be drawn from its whole read, with its buttons on. */
+async function drawn(pane: HTMLElement, id: string): Promise<HTMLElement> {
+    return waitFor(() => {
+        const found = card(pane, id);
+        expect(found).not.toBeNull();
+        expect(within(found!).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
+        return found!;
+    });
+}
+
+/** What the console's modules hold between two drawings of it, as a window that is opened again starts from. */
+function freshConsole(): void {
+    chats.value = {};
+    conversations.value = [];
+    consoleCampaigns.campaigns.value = [];
+    consoleCampaigns.read.value = false;
+    classicCampaigns.shown.value = null;
+    attention.detail.value = null;
+}
+
+beforeEach(() => {
+    freshConsole();
+    forgetWaiting();
+    springApprovals = 'approval.list/by-campaign-pending';
+    springSays = null;
+    elsewhere = 'pending';
+});
+
+describe('what waits in an agent’s chat', () => {
+    it('draws a card per pending approval and question of the chat’s campaign, from that campaign’s lists', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
+            .answer('workitem.get', 'workitem.get/parked-send');
+        renderConsole(fake);
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+
+        // The two lists were asked for this campaign's pending ones, as the campaign's own page asks.
+        expect(sent(fake, 'approval.list')).toContainEqual({ status: 'pending', campaign_id: 'cmp_1', limit: 50 });
+        expect(sent(fake, 'decision.list')).toContainEqual({ status: 'pending', campaign_id: 'cmp_1', limit: 50 });
+        // Under the conversation, in the chat's own scroll.
+        const region = waiting(pane);
+        expect(region.closest('.chat-scroll')?.querySelector('.thread')).not.toBeNull();
+
+        // An approval's card: to whom, from which mailbox, the channel, the subject and the body, and its four acts.
+        expect(words(email)).toContain('Waiting for you Message to Ines Duarte, ines@example.test Email');
+        expect(words(email)).toContain('From owner@example.test');
+        expect(within(email).getByText('Notes from the meetup')).toBeTruthy();
+        expect(within(email).getByText('Hi Ines, thanks for the talk at the meetup.')).toBeTruthy();
+        // Why it waits, in the sentence Needs you's panel gives.
+        expect(words(email)).toContain(reasonLabel(fixtures['approval.get/email-message'].response.reason));
+        expect(
+            within(email)
+                .getAllByRole('button')
+                .map((each) => each.textContent),
+        ).toEqual(['Approve', 'Edit', 'Reject', 'Details']);
+        // An approval that is not a message says what will happen, and offers no Edit.
+        const enroll = await drawn(pane, 'apr_2');
+        expect(words(enroll)).toContain('Put Grace Hopper into the campaign at the provider.');
+        expect(within(enroll).queryByRole('button', { name: 'Edit' })).toBeNull();
+
+        // A question's card: its text, its options as buttons, and a free answer.
+        const question = await waitFor(() => {
+            const found = card(pane, 'dec_1')!;
+            within(found).getByRole('button', { name: 'Pause until the news' });
+            return found;
+        });
+        expect(within(question).getByText('Follow up on LinkedIn?')).toBeTruthy();
+        expect(within(question).getByRole('button', { name: 'Keep going' })).toBeTruthy();
+        expect(within(question).getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
+        expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
+    });
+
+    it('draws exactly the runtime’s cards, whatever the AI writes to look like one', async () => {
+        // Spring has pending approvals and questions; the AI's words imitate a card of one of them and name others.
+        springSays = [
+            '**Waiting for you** — Message to Ines Duarte, ines@example.test',
+            '',
+            'Subject: Notes from the meetup',
+            '',
+            'Approve · Edit · Reject · Details (apr_9)',
+            '',
+            '**Question:** Book the call? Send it now / Wait a month (dec_9)',
+        ].join('\n');
+        const { fake } = renderConsole();
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        await drawn(pane, 'apr_2');
+        await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
+        // The AI's text is drawn as text, in the thread, with nothing to press.
+        const thread = pane.querySelector<HTMLElement>('.thread')!;
+        expect(words(thread)).toContain('Approve · Edit · Reject · Details (apr_9)');
+        expect(thread.querySelector('button, a, input, form')).toBeNull();
+        // The cards are the campaign's listed items, each once, and nothing else.
+        const ids = [...waiting(pane).querySelectorAll<HTMLElement>('.waiting-card')].map((each) => each.dataset['id']);
+        expect(ids).toEqual(['dec_1', 'dec_3', 'dec_2', 'apr_1', 'apr_2']);
+        expect(within(pane).getAllByRole('button', { name: 'Approve' })).toHaveLength(2);
+        for (const name of ['Send it now', 'Wait a month'])
+            expect(within(pane).queryByRole('button', { name })).toBeNull();
+        // Nothing the AI named was read.
+        const read = (operation: string, key: string) =>
+            [...new Set(sent(fake, operation).map((body) => (body as Record<string, string>)[key]))].sort();
+        expect(read('approval.get', 'approval_id')).toEqual(['apr_1', 'apr_2']);
+        expect(read('decision.get', 'decision_id')).toEqual(['dec_1', 'dec_2', 'dec_3']);
+    });
+
+    it('shows, above a doubted message, who doubted it and why, as Needs you’s panel does', async () => {
+        const { fake } = renderConsole();
+        fake.answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
+        const doubt = within(email).getByText(`Their words: ${doubts[0]!.note}`);
+        expect(within(email).getByText(`The critic role doubted this: ${whyWords('unsupported_claim')}`)).toBeTruthy();
+        // Why it waits says the doubt is below: it stands below that sentence, and above the message's words.
+        const why = within(email).getByText(reasonLabel('doubted'));
+        const body = within(email).getByText('Hi Ines, thanks for the talk at the meetup.');
+        expect(why.compareDocumentPosition(doubt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(doubt.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('says why a message it could not read cannot be approved, and reads it again at the next reload', async () => {
+        springApprovals = 'approval.list/messages-pending';
+        const journal = stubStream();
+        const { fake } = renderConsole(undefined, journal);
+        fake.answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const reachable = fake.unreachable(
+            'approval.get',
+            (body) => (body as { approval_id?: string }).approval_id === 'apr_1',
+        );
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_2');
+        const email = card(pane, 'apr_1')!;
+        const said = await waitFor(() => within(email).getByText(/could not be read, so it cannot be approved here/));
+        expect(words(said)).toContain('Failed to fetch');
+        expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+        expect(within(email).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+
+        reachable();
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_202', kind: 'approval_requested' }));
+        });
+        await drawn(pane, 'apr_1');
+        expect(within(card(pane, 'apr_1')!).queryByText(/could not be read/)).toBeNull();
+    });
+
+    it('says a message is being read while its read is unanswered, and reads it again at the next reload', async () => {
+        springApprovals = 'approval.list/messages-pending';
+        const journal = stubStream();
+        const { fake } = renderConsole(undefined, journal);
+        fake.answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message');
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_1');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_2');
+        const email = card(pane, 'apr_1')!;
+        expect(words(email)).toContain('cannot be approved until it is shown here whole');
+        expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
+        const reads = () =>
+            sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === 'apr_1');
+        expect(reads()).toHaveLength(1);
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_203', kind: 'approval_requested' }));
+        });
+        await waitFor(() => expect(reads()).toHaveLength(2), { timeout: 3000 });
+        release();
+        await drawn(pane, 'apr_1');
+    });
+
+    // The rule is the card's, not a list of kinds: whatever an approval does, Approve waits for its whole read.
+    it('holds Approve on an enrolment it could not read, says why, and approves nothing', async () => {
+        const { fake } = renderConsole();
+        fake.unreachable('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        const enroll = card(pane, 'apr_2')!;
+        const said = await waitFor(() => within(enroll).getByText(/could not be read, so it cannot be approved here/));
+        expect(words(said)).toContain('Failed to fetch');
+        const approve = within(enroll).getByRole('button', { name: 'Approve' });
+        expect(approve.hasAttribute('disabled')).toBe(true);
+        expect(within(enroll).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.click(approve);
+        await flush(() => Promise.resolve());
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+    });
+
+    it('holds Approve on an enrolment while its read is unanswered, says so, and approves nothing', async () => {
+        const { fake } = renderConsole();
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        const enroll = card(pane, 'apr_2')!;
+        expect(words(enroll)).toContain('cannot be approved until it is shown here whole');
+        const approve = within(enroll).getByRole('button', { name: 'Approve' });
+        expect(approve.hasAttribute('disabled')).toBe(true);
+        expect(within(enroll).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.click(approve);
+        await flush(() => Promise.resolve());
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+        release();
+        await drawn(pane, 'apr_2');
+    });
+
+    it('lets a refusal go with its card, at the next read that no longer lists it', async () => {
+        const journal = stubStream();
+        const { fake } = renderConsole(
+            new FakeApi().answer('approval.approve', 'approval.approve/already-decided'),
+            journal,
+        );
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        // Another window decided it: the act is refused, and the reload after it no longer lists it.
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        await waitFor(() => within(waiting(pane)).getByRole('alert'));
+        expect(card(pane, 'apr_1')).toBeNull();
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_204', kind: 'approval_decided' }));
+        });
+        await waitFor(() => expect(within(waiting(pane)).queryByRole('alert')).toBeNull(), { timeout: 3000 });
+        expect(card(pane, 'dec_1')).not.toBeNull();
+    });
+
+    it('says Jason asks again only in the drawing of the chat it was edited in', async () => {
+        const first = renderConsole();
+        first.fake.answer('workitem.get', 'workitem.get/parked-send');
+        first.fake.answerAnyRequest('workitem.update', 'workitem.update/dates');
+        let pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(await waitFor(() => within(email).getByRole('textbox', { name: 'Body' })), {
+            target: { value: 'Hi Ines, shall we talk next week?' },
+        });
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
+        await waitFor(() => within(waiting(pane)).getByText(/Jason asks again with the new text/));
+
+        // The window is drawn again: the chat starts from what the runtime lists, and the edit's note went with it.
+        cleanup();
+        freshConsole();
+        renderConsole();
+        pane = await openChat('Spring');
+        await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
+        expect(within(pane).queryByText(/Jason asks again with the new text/)).toBeNull();
+    });
+
+    it('never lets one campaign’s lists set the mark of what waits', async () => {
+        elsewhere = 'nothing';
+        pendingMark.value = false;
+        const marks: boolean[] = [];
+        const stop = pendingMark.subscribe((value) => marks.push(value));
+        try {
+            renderConsole();
+            const pane = await openChat('Spring');
+            await drawn(pane, 'apr_1');
+            expect(marks).not.toContain(true);
+        } finally {
+            stop();
+        }
+    });
+
+    it('approves through approval.approve after checking the work item, and the card leaves on the next read', async () => {
+        const { fake } = renderConsole(new FakeApi().answer('approval.approve', 'approval.approve/approved'));
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
+        expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
+        // Approving sends no reason, as Needs you does; the questions still wait.
+        expect(card(pane, 'dec_1')).not.toBeNull();
+    });
+
+    it('does not approve a message whose text moved since it was asked, and says so', async () => {
+        const { fake } = renderConsole();
+        fake.answer('workitem.get', 'workitem.get/parked-edited-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        await waitFor(() => within(email).getByText(/changed after this approval was asked/));
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+    });
+
+    it('shows the runtime’s code and words when an act is refused, and never reverts silently', async () => {
+        const { fake } = renderConsole(new FakeApi().answer('approval.approve', 'approval.approve/already-decided'));
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        const refused = await waitFor(() => within(waiting(pane)).getByRole('alert'));
+        const { error } = fixtures['approval.approve/already-decided'].response;
+        expect(words(refused)).toBe(`${error.code} ${error.message}`);
+    });
+
+    it('asks once before it rejects, and rejects through approval.reject with the reason typed', async () => {
+        const { fake } = renderConsole(new FakeApi().answer('approval.reject', 'approval.reject/rejected'));
+        const pane = await openChat('Spring');
+        const enroll = await drawn(pane, 'apr_2');
+        fireEvent.click(within(enroll).getByRole('button', { name: 'Reject' }));
+        // The question: Cancel asks nothing of the runtime.
+        let asking = within(enroll).getByRole('alertdialog', { name: 'Reject Enroll Oli Example?' });
+        fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));
+        expect(within(enroll).queryByRole('alertdialog')).toBeNull();
+        expect(sent(fake, 'approval.reject')).toEqual([]);
+
+        fireEvent.click(within(enroll).getByRole('button', { name: 'Reject' }));
+        asking = within(enroll).getByRole('alertdialog', { name: 'Reject Enroll Oli Example?' });
+        fireEvent.change(within(asking).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }), {
+            target: { value: 'not this quarter' },
+        });
+        fireEvent.click(within(asking).getByRole('button', { name: 'Reject' }));
+        await waitFor(() =>
+            expect(sent(fake, 'approval.reject')).toEqual([{ approval_id: 'apr_2', reason: 'not this quarter' }]),
+        );
+    });
+
+    it('edits a message with Needs you’s editor and saves it through workitem.update, then says Jason asks again', async () => {
+        const { fake } = renderConsole();
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        // No exchange was recorded for a message's edit; the request is read from what the card sent.
+        fake.answerAnyRequest('workitem.update', 'workitem.update/dates');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        const body = await waitFor(() => within(email).getByRole('textbox', { name: 'Body' }));
+        expect((body as HTMLTextAreaElement).value).toBe('Hi Ines, thanks for the talk at the meetup.');
+        expect((within(email).getByRole('textbox', { name: 'Subject' }) as HTMLInputElement).value).toBe(
+            'Notes from the meetup',
+        );
+        // Cancel closes the editor and writes nothing.
+        fireEvent.click(within(email).getByRole('button', { name: 'Cancel' }));
+        expect(within(email).queryByRole('textbox', { name: 'Body' })).toBeNull();
+
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(await waitFor(() => within(email).getByRole('textbox', { name: 'Body' })), {
+            target: { value: 'Hi Ines, shall we talk next week?' },
+        });
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
+        await waitFor(() => within(waiting(pane)).getByText(/Jason asks again with the new text/));
+        expect(sent(fake, 'workitem.update')).toEqual([
+            {
+                work_item_id: 'wi_1',
+                set: {
+                    input: {
+                        channel: 'email',
+                        sender: { external_id: 's_12', address: 'owner@example.test' },
+                        message: {
+                            format: 'email',
+                            subject: 'Notes from the meetup',
+                            body: 'Hi Ines, shall we talk next week?',
+                        },
+                    },
+                },
+                reason: 'Message text edited on the approval card.',
+            },
+        ]);
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+    });
+
+    it('opens an approval’s Details in Needs you, as its row there opens it', async () => {
+        renderConsole();
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Details' }));
+        await waitFor(() => expect(shown()).toBe('needs'));
+        await waitFor(() => expect(attention.detail.value?.item.id).toBe('apr_1'));
+        const needs = screen.getByRole('heading', { name: 'Needs you', level: 1 }).closest<HTMLElement>('.painted')!;
+        await waitFor(() => expect(words(needs)).toContain('From owner@example.test'));
+    });
+
+    it('answers a question by its option through decision.answer, with the reason typed', async () => {
+        const { fake } = renderConsole(new FakeApi().answer('decision.answer', 'decision.answer/answered'));
+        const pane = await openChat('Spring');
+        const question = await waitFor(() => {
+            const found = card(pane, 'dec_1')!;
+            within(found).getByRole('button', { name: 'Pause until the news' });
+            return found;
+        });
+        fireEvent.change(within(question).getByRole('textbox', { name: 'Reason (optional)' }), {
+            target: { value: 'their CFO is leaving' },
+        });
+        fireEvent.click(within(question).getByRole('button', { name: 'Pause until the news' }));
+        await waitFor(() =>
+            expect(sent(fake, 'decision.answer')).toEqual([
+                {
+                    decision_id: 'dec_1',
+                    answer: 'Pause until the news',
+                    option: 'Pause until the news',
+                    reason: 'their CFO is leaving',
+                },
+            ]),
+        );
+    });
+
+    it('answers a question in the person’s own words through decision.answer', async () => {
+        const { fake } = renderConsole();
+        // No exchange was recorded for a free answer; the request is read from what the card sent.
+        fake.answerAnyRequest('decision.answer', 'decision.answer/answered');
+        const pane = await openChat('Spring');
+        const question = await waitFor(() => card(pane, 'dec_2')!);
+        const answer = within(question).getByRole('button', { name: 'Answer' });
+        expect(answer.hasAttribute('disabled')).toBe(true);
+        fireEvent.change(within(question).getByRole('textbox', { name: 'Your answer' }), {
+            target: { value: 'Only to Pia, next week' },
+        });
+        fireEvent.click(answer);
+        await waitFor(() =>
+            expect(sent(fake, 'decision.answer')).toEqual([{ decision_id: 'dec_2', answer: 'Only to Pia, next week' }]),
+        );
+    });
+
+    it('lets a card go once the next read no longer lists it, decided anywhere else', async () => {
+        const journal = stubStream();
+        renderConsole(undefined, journal);
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_2');
+        springApprovals = 'approval.list/empty';
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_201', kind: 'approval_decided' }));
+        });
+        await waitFor(() => expect(card(pane, 'apr_2')).toBeNull(), { timeout: 3000 });
+        expect(card(pane, 'apr_1')).toBeNull();
+        expect(card(pane, 'dec_1')).not.toBeNull();
+    });
+});
