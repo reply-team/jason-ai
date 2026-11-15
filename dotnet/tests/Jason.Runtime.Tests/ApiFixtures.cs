@@ -26,6 +26,9 @@ public static class ApiFixtures
         "approval.approve/approved-and-allowed",
         "approval.approve/from-campaign-row",
         "approval.approve/from-campaign-row-again",
+        "approval.get/card-invitation",
+        "approval.get/card-message",
+        "approval.get/card-message-reasked",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -46,6 +49,12 @@ public static class ApiFixtures
         "approval.get/with-doubts",
         "approval.list/by-campaign-pending",
         "approval.list/by-work-item",
+        "approval.list/card-invitation-pending",
+        "approval.list/card-message-after-edit",
+        "approval.list/card-message-pending",
+        "approval.list/card-message-reasked",
+        "approval.list/card-messages-first-page",
+        "approval.list/card-messages-next-page",
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/messages-pending",
@@ -252,9 +261,14 @@ public static class ApiFixtures
         "contact.update/person-refused",
         "contact.update/person-saved",
         "decision.answer/answered",
+        "decision.answer/card-free-text",
+        "decision.get/card-question-2",
+        "decision.get/card-question-3",
         "decision.get/for-campaign-row",
         "decision.get/pending-with-options",
         "decision.list/by-campaign-pending",
+        "decision.list/card-questions-after-answer",
+        "decision.list/card-questions-pending",
         "decision.list/decided",
         "decision.list/empty",
         "decision.list/pending",
@@ -415,6 +429,8 @@ public static class ApiFixtures
         "workitem.create/researcher-asked",
         "workitem.create/researcher-asked-plain",
         "workitem.get/awaiting",
+        "workitem.get/card-invitation-parked",
+        "workitem.get/card-message-parked",
         "workitem.get/expired",
         "workitem.get/failed",
         "workitem.get/open",
@@ -453,6 +469,7 @@ public static class ApiFixtures
         "workitem.list/summer-running",
         "workitem.list/tomas-now",
         "workitem.list/unknown-campaign",
+        "workitem.update/card-message-edited",
         "workitem.update/dates",
         "workitem.update/finished-meanwhile",
     ];
@@ -524,9 +541,11 @@ public static class ApiFixtures
 /// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests in order of
 /// first appearance, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
 /// reads as it would on a person's machine, <c>~/Jason/projects/…</c> — and the values the clock does not control by
-/// fixed ones.
+/// fixed ones. A page's cursor is the base64 of the id of the row it stopped at, so where the ids are the runtime's own
+/// and not fixed by the test (<paramref name="cursors"/>) a cursor is decoded, its ids numbered like any other, and
+/// written again; a test that fixes its ids leaves it off, and its files keep the cursor as the runtime wrote it.
 /// </summary>
-public sealed partial class FixtureScrubber(string dataDir, string? home = null)
+public sealed partial class FixtureScrubber(string dataDir, string? home = null, bool cursors = false)
 {
     public const string FixedMoment = "2026-10-16T09:00:00.000Z";
 
@@ -554,7 +573,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
             case JsonArray array:
                 return new JsonArray([.. array.Select(child => Scrub(child))]);
             case JsonValue value when value.TryGetValue<string>(out var text):
-                return JsonValue.Create(Text(text, key));
+                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Text(text, key));
             case JsonValue value when key == "pid" && value.TryGetValue<int>(out _):
                 return JsonValue.Create(4242);
             case JsonValue value when key is "port" or "configured_port" && value.TryGetValue<int>(out _):
@@ -609,6 +628,12 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
 
         // An id inside a longer text, such as a URL or a message, is mapped the same way.
         return Ulid().Replace(text, match => Id(match.Value));
+    }
+
+    private string Cursor(string cursor)
+    {
+        var id = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(cursor));
+        return System.Buffers.Text.Base64Url.EncodeToString(System.Text.Encoding.UTF8.GetBytes(Text(id, null)));
     }
 
     private string Id(string id)

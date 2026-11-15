@@ -148,7 +148,13 @@ public sealed class RuntimeApiFixture : IAsyncDisposable
 
     private FixtureScrubber? _scrubber;
 
-    private FixtureScrubber Scrubber => _scrubber ??= new FixtureScrubber(Paths.Root, _dir.Home);
+    /// <summary>
+    /// Set before the first recording by a test whose ids the runtime made and the test did not fix: the cursors it
+    /// records are then written with the scrubbed ids in them, as the ids themselves are.
+    /// </summary>
+    public bool ScrubCursors { get; set; }
+
+    private FixtureScrubber Scrubber => _scrubber ??= new FixtureScrubber(Paths.Root, _dir.Home, ScrubCursors);
 
     /// <summary>A recorded call that must succeed: the exchange is held to its file under docs/api/fixtures, and the answer comes back for the test's own assertions.</summary>
     public async Task<T> RecordAsync<T>(string operation, string @case, object? body, CancellationToken cancellationToken)
