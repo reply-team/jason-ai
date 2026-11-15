@@ -1746,9 +1746,6 @@ body,
 .jc-console .waiting-card .waiting-to {
     color: var(--mute);
 }
-.jc-console .waiting-card .waiting-from {
-    margin-top: 5px;
-}
 .jc-console .waiting-card .waiting-body,
 .jc-console .waiting-card .waiting-intent {
     margin-top: 4px;

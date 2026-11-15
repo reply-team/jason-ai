@@ -1,0 +1,48 @@
+/* Hover: the console's primary hover is filter: brightness(1.07) on #2f5be0; a token cannot carry a filter, so the
+   hover tokens carry the colour that filter gives (#3261f0). The control border is the console's --line, as its .btn.
+   The shell's bare form fields in Settings carry no class and no token, so the second rule gives them the console's
+   .inp look. The console's palette for the browser shell's screens it shows in its area (People, Accounts, Settings, an agent's
+   tabs, Work items, System, Performance). The screens keep their markup and their sheets; the tokens those sheets read
+   take the console's values here, inside the console's scope alone. The classic shell never loads this file. Light only:
+   the dark theme's tokens are the shell's own, set by dark.css, and this block does not match under data-theme='dark'. */
+:root[data-theme='light'] .jc-console .harness {
+    --text-base: 14px;
+    --control-h: 30px;
+
+    --text: var(--ink);
+    --text-secondary: var(--mute);
+    --text-muted: var(--faint);
+    --border: var(--line);
+    --border-strong: var(--line);
+    --bg-subtle: var(--panel-2);
+    --bg-muted: var(--gray-2);
+    --bg-hover: var(--hover);
+
+    --accent: var(--teal);
+    --accent-hover: #3261f0;
+    --accent-bg: var(--teal-2);
+    --accent-text: #23479f;
+    --primary-bg: var(--teal);
+    --primary-hover: #3261f0;
+    --primary-text: #fff;
+    --danger: var(--red);
+    --danger-bg: var(--red-2);
+
+    --radius: 9px;
+    --radius-sm: 7px; /* the console's own .inp and .sel radius */
+    --radius-panel: 14px;
+    --shadow-dialog: 0 12px 34px rgba(15, 23, 42, 0.16);
+
+    background: #f6f8fc;
+}
+
+:root[data-theme='light'] .jc-console .harness .settings .voice-part input,
+:root[data-theme='light'] .jc-console .harness .settings .voice-part select,
+:root[data-theme='light'] .jc-console .harness .settings .voice-part textarea {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+}

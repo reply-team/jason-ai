@@ -62,7 +62,7 @@
 }
 .card {
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel, 8px);
     padding: var(--space-4) var(--space-5);
     min-width: 0;
 }

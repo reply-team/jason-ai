@@ -622,10 +622,14 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             </div>`;
     const sentence = host && signInSentence(host);
     const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
+    // The speaker is named over the agent's first words of each turn: after the person's message, or at the start.
+    let named = false;
     const parts = shown(chat).map((entry) => {
+        if (entry.kind === 'user') named = false;
         switch (entry.kind) {
             case 'steps':
-                return html`<details class="vsteps" ${entry.open ? html`open` : null}>
+                // A trail still running is live: it is open, and draws no arrow to turn until the turn ends.
+                return html`<details class="${entry.open ? 'vsteps live' : 'vsteps'}" ${entry.open ? html`open` : null}>
                     <summary>
                         ${entry.open ? 'Working…' : entry.steps.length === 1 ? '1 action' : `${entry.steps.length} actions`}
                     </summary>
@@ -641,10 +645,15 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 </details>`;
             case 'user':
                 return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;
-            case 'text':
-                return entry.plan === true && !chat.main
-                    ? planCard(chat, entry, host)
-                    : html`<div class="m ai"><div class="bub">${markdownView(entry.text)}</div></div>`;
+            case 'text': {
+                if (entry.plan === true && !chat.main) return planCard(chat, entry, host);
+                const who = named ? null : html`<div class="who">Jason</div>`;
+                named = true;
+                return html`<div class="m ai">
+                    ${who}
+                    <div class="bub">${markdownView(entry.text)}</div>
+                </div>`;
+            }
             case 'permission':
                 return permission(chat, entry);
             case 'error':
