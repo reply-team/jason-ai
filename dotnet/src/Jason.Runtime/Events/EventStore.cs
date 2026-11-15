@@ -149,6 +149,31 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         var found = fresh
             .Select(entry => (entry.Read, entry.Key, Campaigns: Distinct(attribution.Attribute(entry.Read, pins))))
             .ToList();
+
+        // Beside the members the contact rule reads, two facts about the page's replies found by the person's pin, both
+        // decided now and carried by the line, never worked out again: which of the campaigns found already holds the
+        // thread as its own, and, for a reply that names no provider campaign, which campaigns had written to each person
+        // through the plugin that saw it, and from when.
+        var byThePerson = found
+            .Where(entry => Thread(entry.Read) is not null)
+            .SelectMany(entry => entry.Campaigns
+                .Where(attributed => string.Equals(attributed.Rule, EventAttributionRules.ContactPin, StringComparison.Ordinal))
+                .Select(attributed => (attributed.CampaignId, Thread: Thread(entry.Read)!)))
+            .ToList();
+        var owned = await CampaignOwnThreads.OfAsync(
+            db,
+            source.PluginId,
+            [.. byThePerson.Select(pair => pair.CampaignId).Distinct()],
+            [.. byThePerson.Select(pair => pair.Thread).Distinct(StringComparer.Ordinal)],
+            ct).ConfigureAwait(false);
+        var replied = found
+            .Where(entry => Thread(entry.Read) is not null && entry.Read.Campaign is null)
+            .Select(entry => pins.ContactOf(entry.Read))
+            .OfType<ContactPin>()
+            .Select(pin => pin.ContactId)
+            .Distinct()
+            .ToList();
+        var soleSenders = await SoleSenders.OfAsync(db, source.PluginId, replied, ct).ConfigureAwait(false);
         var campaignIds = found.SelectMany(entry => entry.Campaigns.Select(campaign => campaign.CampaignId)).Distinct().ToList();
         var campaigns = await db.Campaigns
             .Where(campaign => campaignIds.Contains(campaign.Id))
@@ -182,17 +207,36 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         var lines = 0;
         foreach (var (read, concerned, row, contact) in rows)
         {
+            // A reply found by the person's pin is the campaign's own, said campaign_own, by the first of two clauses that
+            // holds. A thread a campaign found here already holds as its own — by its own read, by its own pin, or marked —
+            // stays that campaign's, whoever has written to the person since and whatever the event names, and the second
+            // clause is not asked. Only a thread none of them holds yet, on a reply that names no provider campaign, goes to
+            // the one campaign, of those not archived, that alone had written to the person through the plugin at or before
+            // the reply's own moment, where the rule found that campaign: a writer it did not find (one that excluded the
+            // person) marks nobody. A reply that names a provider campaign reached the person's campaigns because no live
+            // campaign, or more than one, holds that campaign: it is a sequence's thread, never a direct send's, and the
+            // one that wrote directly did not start it.
+            var thread = Thread(read);
+            var owners = thread is null
+                ? []
+                : concerned.Where(attributed => owned.Contains((attributed.CampaignId, thread))).Select(attributed => attributed.CampaignId).ToHashSet();
             foreach (var attributed in concerned)
             {
                 db.EventAttributions.Add(new EventAttribution { EventId = row.Id, CampaignId = attributed.CampaignId, Rule = attributed.Rule });
 
+                var campaign = campaigns[attributed.CampaignId];
+                var campaignOwn = thread is not null
+                    && string.Equals(attributed.Rule, EventAttributionRules.ContactPin, StringComparison.Ordinal)
+                    && (owners.Count > 0
+                        ? owners.Contains(campaign.Id)
+                        : read.Campaign is null && contact is not null && soleSenders.SoleBefore(contact.ContactId, row.OccurredAt) == campaign.Id);
+
                 // What happened before the campaign went live, or before the person it was found by joined it, is history:
                 // kept, and found to concern it, and said by no line.
-                var campaign = campaigns[attributed.CampaignId];
                 if (campaign.EventsFrom is not { } from
                     || row.OccurredAt < from
                     || (attributed.SaidFrom is { } joined && row.OccurredAt < joined)
-                    || Line(source.PluginId, read, row, contact, attributed.Rule) is not { } line)
+                    || Line(source.PluginId, read, row, contact, attributed.Rule, campaignOwn) is not { } line)
                 {
                     continue;
                 }
@@ -201,6 +245,13 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
                 {
                     journal.Append(db, Actors.Dispatcher, line.Kind, campaign, line.Key, updated: line.New, contactId: contact?.ContactId);
                     lines++;
+
+                    // A line said here that makes the thread the campaign's own counts for the page's later replies as one
+                    // already stored does.
+                    if (thread is not null && (campaignOwn || string.Equals(attributed.Rule, EventAttributionRules.CampaignPin, StringComparison.Ordinal)))
+                    {
+                        owned.Add((campaign.Id, thread));
+                    }
                 }
             }
         }
@@ -266,30 +317,44 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
                 ct);
     }
 
+    /// <summary>The thread an event says a reply on — a thread the other side moved, or one no side is named for — or null.</summary>
+    private static string? Thread(ReadEvent read) =>
+        read.Kind == ReadEvent.ThreadMoved && read.MovedByTheOtherSide ? read.Text("thread") : null;
+
     /// <summary>
     /// The line an event says in a campaign, or none. A thread the other side moved — or one the provider cannot say who
     /// moved — is said as the inbound read says a reply, with the same fields and under the same key; a thread the
     /// account or the provider moved is no reply and says nothing; every other kind is said as a provider event, with
-    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>.
+    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>; a reply found by the contact's pin on
+    /// a thread that is the campaign's own also says <c>campaign_own</c>, true, and no other line carries it.
     /// </summary>
-    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule)
+    private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule, bool campaignOwn)
     {
         if (read.Kind == ReadEvent.ThreadMoved)
         {
-            return read.MovedByTheOtherSide
-                ? (JournalKinds.InboundReplyObserved, EventKeys.Line(pluginId, read), new JsonObject
-                {
-                    ["plugin"] = pluginId,
-                    ["thread"] = read.Text("thread"),
-                    ["channel"] = read.Text("channel"),
-                    ["last_activity_at"] = EventKeys.Moment(read),
-                    ["unread"] = read.Data["unread"]?.DeepClone(),
-                    ["has_meeting_intent"] = read.Data["has_meeting_intent"]?.DeepClone(),
-                    ["contact_id"] = contact?.ContactPublicId,
-                    ["event_id"] = row.PublicId,
-                    ["attributed_by"] = rule,
-                })
-                : null;
+            if (!read.MovedByTheOtherSide)
+            {
+                return null;
+            }
+
+            var reply = new JsonObject
+            {
+                ["plugin"] = pluginId,
+                ["thread"] = read.Text("thread"),
+                ["channel"] = read.Text("channel"),
+                ["last_activity_at"] = EventKeys.Moment(read),
+                ["unread"] = read.Data["unread"]?.DeepClone(),
+                ["has_meeting_intent"] = read.Data["has_meeting_intent"]?.DeepClone(),
+                ["contact_id"] = contact?.ContactPublicId,
+                ["event_id"] = row.PublicId,
+                ["attributed_by"] = rule,
+            };
+            if (campaignOwn)
+            {
+                reply["campaign_own"] = true;
+            }
+
+            return (JournalKinds.InboundReplyObserved, EventKeys.Line(pluginId, read), reply);
         }
 
         var updated = new JsonObject

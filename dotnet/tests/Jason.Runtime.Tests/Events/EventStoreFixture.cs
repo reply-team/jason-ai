@@ -1,6 +1,9 @@
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
+using Jason.Contracts.Plugins;
+using Jason.Runtime.Dispatch;
+using Jason.Runtime.Domain;
 using Jason.Runtime.Events;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
@@ -18,27 +21,42 @@ internal sealed class EventStoreFixture : IDisposable
 
     public static readonly DateTime Noon = new(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly TestDatabase _database = new();
+    private readonly TestDatabase? _database;
+
+    private readonly Func<JasonDbContext> _open;
 
     public EventStoreFixture(IEventAttribution? attribution = null)
     {
+        _database = new TestDatabase();
+        _open = _database.Open;
         Clock = new FixedClock(Noon);
         Store = new EventStore(new JournalWriter(Clock), Clock, attribution ?? EventAttributionSequence.OfThisVersion());
+    }
+
+    /// <summary>
+    /// The same over another's database and clock — the dispatch harness's — so the lines the store says are the ones the
+    /// dispatcher's own steps read. The database stays its owner's to dispose.
+    /// </summary>
+    public EventStoreFixture(Func<JasonDbContext> open, FixedClock clock)
+    {
+        _open = open;
+        Clock = clock;
+        Store = new EventStore(new JournalWriter(Clock), Clock, EventAttributionSequence.OfThisVersion());
     }
 
     public FixedClock Clock { get; }
 
     public EventStore Store { get; }
 
-    public string File => _database.File;
+    public string File => (_database ?? throw new InvalidOperationException("The store runs over another's database.")).File;
 
-    public JasonDbContext Open() => _database.Open();
+    public JasonDbContext Open() => _open();
 
     /// <summary>A context over the same database with interceptors of the test's beside the runtime's own.</summary>
     public JasonDbContext Open(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
     {
         var builder = new DbContextOptionsBuilder<JasonDbContext>();
-        JasonDbContext.Configure(builder, _database.File, JournalLines.Strict);
+        JasonDbContext.Configure(builder, File, JournalLines.Strict);
         builder.AddInterceptors(interceptors);
         return new JasonDbContext(builder.Options);
     }
@@ -117,6 +135,76 @@ internal sealed class EventStoreFixture : IDisposable
         var since = addedAt ?? Noon.AddDays(-1);
         db.CampaignContacts.Add(new CampaignContact { CampaignId = campaign.Id, ContactId = contact.Id, State = state, AddedAt = since, UpdatedAt = since });
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// A provider operation of the campaign about the contact, ended as said — a send that succeeded at the plugin unless
+    /// said otherwise — with its one attempt, whose provenance names the plugin that ran it, finished at
+    /// <paramref name="at"/>: the day before noon unless said.
+    /// </summary>
+    public async Task<WorkItem> SentAsync(
+        Contact contact,
+        Campaign campaign,
+        string operation = "message.send",
+        string plugin = Reader,
+        WorkItemStatus status = WorkItemStatus.Succeeded,
+        AttemptStatus attemptStatus = AttemptStatus.Succeeded,
+        FailureClass? failure = null,
+        JsonNode? result = null,
+        DateTime? at = null)
+    {
+        await using var db = Open();
+        var finished = at ?? Noon.AddDays(-1);
+        var started = at is null ? finished : finished.AddMinutes(-1);
+        var item = WorkItemFactory.NewProviderOp(campaign, operation, started);
+        item.Campaign = null;
+        item.CampaignId = campaign.Id;
+        item.ContactId = contact.Id;
+        item.Status = status;
+        item.Result = result;
+        var attempt = WorkItemFactory.NewAttempt(item, 1, attemptStatus, started);
+        attempt.FinishedAt = finished;
+        attempt.Provenance = new AttemptProvenanceDto(
+            plugin, "1.0.0", "sha256:0", PluginProtocol.CurrentVersion, PluginProtocol.OperationContractVersion,
+            operation, 1, PluginProtocol.SnapshotIdPrefix + "_01K5B7Q2WE5X3M9T0YH4C6RDNC", "rts_01K5B7Q2WE5X3M9T0YH4C6RDND",
+            RouteScope.CampaignDefault, "binding-a", CorrelationId: attempt.PublicId);
+        if (failure is { } failed)
+        {
+            attempt.Error = new AttemptErrorDto("provider_unknown", "The provider did not say whether it sent.", false, Class: failed);
+        }
+
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync();
+        return item;
+    }
+
+    /// <summary>
+    /// A line the campaign's own read says of a thread, as inbound sync writes it: no event, no rule, and the inbound read's
+    /// key. Answers the line.
+    /// </summary>
+    public async Task<JournalEntry> ObservedByTheCampaignAsync(Campaign campaign, string thread, DateTime moved, string plugin = Reader)
+    {
+        await using var db = Open();
+        var tracked = await db.Campaigns.SingleAsync(row => row.Id == campaign.Id);
+        var moment = InboundSync.Instant(new DateTimeOffset(moved));
+        var entry = new JournalWriter(Clock).Append(
+            db,
+            Actors.Dispatcher,
+            JournalKinds.InboundReplyObserved,
+            tracked,
+            key: InboundSync.ObservationKey(plugin, thread, moment),
+            updated: new JsonObject
+            {
+                ["plugin"] = plugin,
+                ["thread"] = thread,
+                ["channel"] = "email",
+                ["last_activity_at"] = moment,
+                ["unread"] = true,
+                ["has_meeting_intent"] = null,
+                ["contact_id"] = null,
+            });
+        await db.SaveChangesAsync();
+        return entry;
     }
 
     /// <summary>Stores a page through a context of its own, as the reader will.</summary>
@@ -230,5 +318,5 @@ internal sealed class EventStoreFixture : IDisposable
             .ToListAsync();
     }
 
-    public void Dispose() => _database.Dispose();
+    public void Dispose() => _database?.Dispose();
 }
