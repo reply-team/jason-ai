@@ -56,6 +56,8 @@ import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { readConversations } from './chat-conversations.ts';
+import { lastChosenHost } from './roles-profile.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
@@ -574,9 +576,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
-    registerSetup(
-        seam,
-        new Setup({
+    const setup = new Setup({
             paths,
             cli,
             programs,
@@ -586,6 +586,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             runtimeVersion: () => runtimeVersion,
             runtimeIsOurs: () => runtimeIsOurs,
             settings: () => settings,
+            // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
+            saveSettings: (next) => {
+                settings = next;
+                writeSettings(paths.settings, next);
+            },
             models,
             // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
             ownServers: { env: process.env, home },
@@ -606,11 +611,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             openLink: toBrowser,
             // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
             copyLink: (link) => clipboard.writeText(link),
-        }),
-        origin,
-        log,
-        () => toPage('setup.changed'),
-    );
+        });
+    registerSetup(seam, setup, origin, log, () => toPage('setup.changed'));
+    // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, and as each
+    // turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
+    const connectRoles = (chosen: string | null) => {
+        if (runOn.mode === 'live') void setup.connectRoles(chosen).catch(() => log.warn('roles_profile', { Outcome: 'failed' }));
+    };
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
     const chat = new Chat({
@@ -642,6 +649,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             return fullAccessAnswer(response, checkboxChecked);
         },
         ...loggedTurns(log),
+        started: (host, resumed, mode) => {
+            loggedTurns(log).started(host, resumed, mode);
+            connectRoles(host);
+        },
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
             loggedTurns(log).standingChanged(standing, why);
@@ -813,6 +824,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             }
         }
         log.info('window_loaded', { Origin: started.origin });
+        connectRoles(lastChosenHost(readConversations(paths.conversations).kept));
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();

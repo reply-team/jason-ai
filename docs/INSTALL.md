@@ -20,8 +20,15 @@ only that needs `git`.
 You also need a directory you can write to, and — if you want an agent harness taught — that
 harness installed, so §4 has somewhere to deploy.
 
+The background roles run on an agent host you installed and signed in to as yourself, through an execution profile, and
+an installation starts with none: until a profile is made and named the default, every AI role's work fails at its claim
+with `role_not_launchable`, and `jason status` says so under `roles_launchable`. For Claude Code, run
+`jason profile create claude-code --host claude_code --program claude`, then add
+`"Roles": {"DefaultExecutionProfile": "claude-code"}` to `~/.jason/config/settings.json`, which the runtime reads without
+a restart. Jason Desktop does both itself when its chat is on Claude Code or Codex ([desktop.md](desktop.md#connect)).
+
 To have a host other than Claude Code run the background roles, install it from its own documentation and sign in
-as yourself; Jason holds no key. For Cursor CLI, install it from
+as yourself; Jason holds no key, and the profile you make for it is named the default the same way. For Cursor CLI, install it from
 [its installation page](https://cursor.com/docs/cli/installation.md), run `agent login` and
 `jason profile create <name> --host cursor_cli --program agent`. On Windows, where `agent` is not found by the runtime's
 search path, name the launcher by its full path: `--program <full path of agent.cmd>`.

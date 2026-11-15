@@ -31,7 +31,16 @@ export interface DesktopSettings {
      * the person flips the switch and kept here. Absent until one was told, which the page reads as on.
      */
     dailyTrends?: boolean;
+    /**
+     * The name of the execution profile the desktop is making for the agents' roles, written before `jason profile create`
+     * and taken away once `Roles:DefaultExecutionProfile` names it (`Setup.connectRoles`): a start that finds it beside
+     * that one profile alone finishes the naming and never makes a second. The name alone; absent otherwise.
+     */
+    rolesProfilePending?: string;
 }
+
+/** A profile name as the runtime takes one. */
+const profileName = /^[a-z][a-z0-9-]{0,63}$/;
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -60,12 +69,13 @@ export function parseSettings(text: string | null): DesktopSettings {
     } catch {
         return { ...defaultSettings };
     }
-    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown };
+    const value = (raw ?? {}) as { feed?: unknown; skills_deployed_for?: unknown; theme?: unknown; open_in?: unknown; daily_trends?: unknown; roles_profile_pending?: unknown };
     return {
         feed: typeof value.feed === 'string' && isFeed(value.feed) ? value.feed : null,
         skillsDeployedFor: typeof value.skills_deployed_for === 'string' ? value.skills_deployed_for : null,
         theme: isTheme(value.theme) ? value.theme : null,
         ...(typeof value.daily_trends === 'boolean' ? { dailyTrends: value.daily_trends } : {}),
+        ...(typeof value.roles_profile_pending === 'string' && profileName.test(value.roles_profile_pending) ? { rolesProfilePending: value.roles_profile_pending } : {}),
         ...(isPlace(value.open_in) && !notFolderPlaces.includes(value.open_in) ? { openIn: value.open_in } : {}),
     };
 }
@@ -99,6 +109,7 @@ export function writeSettings(file: string, settings: DesktopSettings): void {
     if (settings.theme !== null) body.theme = settings.theme;
     if (settings.openIn !== undefined) body.open_in = settings.openIn;
     if (settings.dailyTrends !== undefined) body.daily_trends = settings.dailyTrends;
+    if (settings.rolesProfilePending !== undefined) body.roles_profile_pending = settings.rolesProfilePending;
     const temporary = `${file}.${process.pid}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);

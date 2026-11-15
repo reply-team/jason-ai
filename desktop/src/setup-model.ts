@@ -326,6 +326,31 @@ export function withReplyWired(settings: Json, profile: string): ReplyWiring {
     return { settings: next, routeWritten };
 }
 
+/**
+ * Whether the installation's settings name the default execution profile at all, in any case of its keys, as the
+ * runtime reads them, and the name where it is one. Any value counts as named, an empty or a null one too: it is the
+ * person's, and never written over.
+ */
+export function defaultProfileOf(settings: unknown): { named: boolean; name: string | null } {
+    const roles = at(settings, ['Roles']);
+    if (roles !== undefined && (typeof roles !== 'object' || roles === null || Array.isArray(roles))) return { named: roles !== null, name: null };
+    const value = at(settings, ['Roles', 'DefaultExecutionProfile']);
+    return { named: value !== undefined, name: typeof value === 'string' && value !== '' ? value : null };
+}
+
+/**
+ * The installation's settings with `Roles:DefaultExecutionProfile` naming the profile, written only where the file names
+ * none, beside every other key of `Roles` and of the file, as a person would write it; the input is not changed. A
+ * `Roles` that is not an object is refused.
+ */
+export function withDefaultProfile(settings: Json, name: string): Json {
+    const next = structuredClone(settings);
+    const roles = section(next, ['Roles']);
+    const key = keyOf(roles, 'DefaultExecutionProfile');
+    if (roles[key] === undefined) roles[key] = name;
+    return next;
+}
+
 const present = (value: unknown) => typeof value === 'string' && value !== '';
 
 /** Whether the settings carry what the plugin needs to be invoked: its target, and its token where it requires one. */

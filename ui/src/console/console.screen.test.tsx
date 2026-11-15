@@ -1038,6 +1038,42 @@ describe('the console', () => {
         });
     });
 
+    describe("the line that says the agents' roles run on a host", () => {
+        const withRoles = (claude: string | null, codex: string | null) => ({
+            ...setupFound,
+            hosts: setupFound.hosts.map((each) =>
+                each.id === 'claude'
+                    ? { ...each, runsRoles: claude }
+                    : each.id === 'codex'
+                      ? { ...each, found: true, version: '0.130.0', install: null, runsRoles: codex }
+                      : each,
+            ),
+        });
+        const rowOf = (connect: HTMLElement, label: string) =>
+            within(connect).getByText(label, { selector: 'b' }).closest<HTMLElement>('.setrow')!;
+        const openConnect = async (desktop: StubDesktop) => {
+            renderConsole(pending(new FakeApi()), desktop);
+            await waitFor(() => screen.getByRole('button', { name: 'Send' }));
+            show('Connect');
+            return waitFor(() => panel('Connect'));
+        };
+
+        it('is one line under the host the default profile runs on, naming the profile, and under no other', async () => {
+            const connect = await openConnect(chatDesktop(withRoles('claude-code', null)));
+            expect(rowOf(connect, 'Claude Code').querySelector('.runs-roles')?.textContent).toBe(
+                "Your agents' roles run on Claude Code, by the execution profile claude-code.",
+            );
+            expect(rowOf(connect, 'Codex').querySelector('.runs-roles')).toBeNull();
+            expect(connect.querySelectorAll('.runs-roles')).toHaveLength(1);
+        });
+
+        it('says nothing where no host runs them', async () => {
+            const connect = await openConnect(chatDesktop(withRoles(null, null)));
+            expect(connect.querySelectorAll('.runs-roles')).toHaveLength(0);
+            expect(connect.textContent).not.toContain('roles run on');
+        });
+    });
+
     it("says under the versions line, as text, that the runtime is not the bundle's version", async () => {
         const sentence = `The runtime is 0.33.0 and this desktop carries 0.34.0: run jason update. ${hostile}`;
         renderConsole(
