@@ -22,6 +22,7 @@ function agent(
     get:
         | 'campaign.get/details'
         | 'campaign.get/started'
+        | 'campaign.get/inbox-quiet'
         | 'campaign.get/making'
         | 'campaign.get/unlinked'
         | 'campaign.get/summer',
@@ -101,5 +102,60 @@ describe('the kind of an agent in its header', () => {
         await waitFor(() => expect(sent(api)).toHaveLength(1));
         expect(kind(head)).toBeNull();
         expect(screen.queryByText(/Failed to fetch/)).toBeNull();
+    });
+
+    it('says Adaptive for a paused agent with no pin, as for an active one', async () => {
+        const api = agent('campaign.get/inbox-quiet');
+        const head = await header('Re-engage Q2 no-replies');
+
+        await waitFor(() => expect(kind(head)).toBe('Adaptive'));
+        expect(firstTab()).toBe('Paths');
+        expect(sent(api)).toHaveLength(1);
+    });
+
+    it('does not carry the first agent answer to the next: after Running reads none, Making says nothing while its own read is open', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answerAnyRequest('campaign.summary', 'campaign.summary/all')
+            .answer('campaign.get', 'campaign.get/started', 'campaign.get/making')
+            .answerAnyRequest('workitem.list', (body) =>
+                (body as { campaign_id?: string }).campaign_id === fixtures['campaign.get/making'].request.campaign_id
+                    ? 'workitem.list/creating-open'
+                    : 'workitem.list/creating-none',
+            );
+        const first = { ...table, id: fixtures['campaign.get/started'].request.campaign_id };
+        renderApp(api);
+        location.hash = href(first);
+        route.value = first;
+        const running = await header('Running');
+        await waitFor(() => expect(kind(running)).toBe('Adaptive'));
+
+        const release = api.hold('workitem.list');
+        const second = { ...table, id: fixtures['campaign.get/making'].request.campaign_id };
+        location.hash = href(second);
+        route.value = second;
+        const making = await header('Making');
+        expect(kind(making)).toBeNull();
+        release();
+
+        await waitFor(() => expect(sent(api)).toHaveLength(2));
+        expect(kind(making)).toBeNull();
+    });
+
+    it('says Adaptive when a full first page holds no campaign.create: the page is the read, and nothing is asked of a second', async () => {
+        const api = new FakeApi()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answerAnyRequest('campaign.summary', 'campaign.summary/all')
+            .answer('campaign.get', 'campaign.get/started')
+            .answerAnyRequest('workitem.list', 'workitem.list/planned-many');
+        const to = { ...table, id: fixtures['campaign.get/started'].request.campaign_id };
+        renderApp(api);
+        location.hash = href(to);
+        route.value = to;
+        const head = await header('Running');
+
+        await waitFor(() => expect(kind(head)).toBe('Adaptive'));
+        expect(fixtures['workitem.list/planned-many'].response.items).toHaveLength(50);
+        expect(sent(api)).toHaveLength(1);
     });
 });

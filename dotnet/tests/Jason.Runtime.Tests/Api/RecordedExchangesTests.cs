@@ -737,10 +737,6 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
-    /// What a first start shows: a Campaigns list and a People list that hold nothing yet, asked as the screens and the
-    /// desktop's console ask them, and the People page's counts of its default view, which count nobody.
-    /// </summary>
-    /// <summary>
     /// A started agent with no provider campaign pinned: its header asks, once and for one page, whether a
     /// <c>campaign.create</c> is still unfinished, oldest first, before it says what kind of agent this is. One campaign
     /// has that work waiting; the other has been started with nothing of the kind.
@@ -775,6 +771,10 @@ public class RecordedExchangesTests
         Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "creating-none", Ask("cmp_01K7QN00000000000000000002"), Ct)).Items);
     }
 
+    /// <summary>
+    /// What a first start shows: a Campaigns list and a People list that hold nothing yet, asked as the screens and the
+    /// desktop's console ask them, and the People page's counts of its default view, which count nobody.
+    /// </summary>
     [Fact]
     public async Task Empty_lists_of_a_first_start()
     {
