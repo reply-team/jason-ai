@@ -122,7 +122,7 @@ describe('what a tab never says yes to', () => {
 
     it('shows the mode as a label, not a control', async () => {
         await shown();
-        expect(screen.queryByRole('combobox', { name: 'Access mode' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^Access mode/ })).toBeNull();
         const label = screen.getByLabelText('Access mode');
         expect(label.tagName).toBe('SPAN');
         expect(label.textContent).toBe('Ask first');

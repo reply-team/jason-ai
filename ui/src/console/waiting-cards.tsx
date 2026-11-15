@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
@@ -43,6 +43,24 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
+    // A message's words are clamped to four lines; one that runs past them offers to open them in place, and stays open
+    // for this card. Measured in the page, and again as the card's width changes; a body that fits changes nothing. The
+    // clamp holds no act: the gate below is the whole read's alone.
+    const bodyBox = useRef<HTMLDivElement>(null);
+    const [overflows, setOverflows] = useState(false);
+    const [opened, setOpened] = useState<string | null>(null);
+    const open = card.body !== null && opened === card.body;
+    useLayoutEffect(() => {
+        const box = bodyBox.current;
+        if (box === null || open) return;
+        const measure = () => setOverflows(box.scrollHeight > box.clientHeight + 1);
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const resized = new ResizeObserver(measure);
+        resized.observe(box);
+        return () => resized.disconnect();
+    }, [card.body, open]);
+    const unopened = card.body !== null && overflows && !open;
     // Every approval, whatever it does, is decided only once it has been read whole (`approvalGate`, which Needs you's
     // rows follow too): its doubts, its words or what will happen, and the person it reaches all come from that read.
     const held = busy || checking || !gate.live;
@@ -84,14 +102,26 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             <div className="ask-h">
                 <span className="b amber">Waiting for you</span> <b>{card.what}</b>{' '}
                 {card.to !== null && <span className="waiting-to">to {card.to}</span>}{' '}
-                <span className="meta">{[card.channel, card.age].filter(Boolean).join(' · ')}</span>
+                <span className="meta">
+                    {[card.channel, card.from !== null && `from ${card.from}`, card.age].filter(Boolean).join(' · ')}
+                </span>
             </div>
-            {card.from !== null && <div className="meta waiting-from">From {card.from}</div>}
             <div className="ask-w">{card.why}</div>
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
             {whole !== undefined && <Doubts preview={whole.preview} />}
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
-            {card.body !== null && <div className="said waiting-body">{card.body}</div>}
+            {card.body !== null && (
+                <div ref={bodyBox} className={open ? 'ask-b open said waiting-body' : 'ask-b said waiting-body'}>
+                    {card.body}
+                </div>
+            )}
+            {unopened && (
+                <div className="waiting-more">
+                    <button className="btn sm ghost" type="button" onClick={() => setOpened(card.body)}>
+                        Show the whole message
+                    </button>
+                </div>
+            )}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
             {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}
             {!gate.live && (
@@ -150,14 +180,14 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                         <button className="btn sm" type="button" onClick={() => setRejecting(false)}>
                             Cancel
                         </button>
-                        <button className="btn sm am" type="submit" disabled={busy}>
+                        <button className="btn sm no" type="submit" disabled={busy}>
                             Reject
                         </button>
                     </div>
                 </form>
             ) : (
                 <div className="ask-a">
-                    <button className="btn sm p" type="button" disabled={held} onClick={() => void approve()}>
+                    <button className="btn sm ok" type="button" disabled={held} onClick={() => void approve()}>
                         Approve
                     </button>
                     {whole !== undefined && editable(whole) && (
@@ -167,7 +197,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                     )}
                     <button
                         ref={rejectButton}
-                        className="btn sm"
+                        className="btn sm no"
                         type="button"
                         disabled={busy || checking}
                         onClick={() => {
@@ -177,8 +207,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                     >
                         Reject
                     </button>
-                    <span className="grow" />
-                    <button className="btn sm" type="button" onClick={details}>
+                    <button className="btn sm ghost lk" type="button" onClick={details}>
                         Details
                     </button>
                 </div>
@@ -193,6 +222,17 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
     const busy = waiting.store.busy.value;
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
+    // An answer of one's own and the reason sit behind one more pill, "Something else…", as the console's option card
+    // draws them, and open in place below the options; a question with no options takes no other answer, so they stand
+    // open. An option pressed while they are open carries the reason typed, and one pressed while they are shut, none.
+    const [other, setOther] = useState(false);
+    const own = card.options.length === 0 || other;
+    const ownBox = useRef<HTMLInputElement>(null);
+    const wasOther = useRef(false);
+    useEffect(() => {
+        if (other && !wasOther.current) ownBox.current?.focus();
+        wasOther.current = other;
+    }, [other]);
     const optional = (value: string) => value.trim() || undefined;
     const answer = (event: FormEvent) => {
         event.preventDefault();
@@ -205,42 +245,63 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
             </div>
             <div className="ask-s">{card.question}</div>
             {card.options.length > 0 && (
-                <div className="ask-a">
+                <div className="ui-opts">
                     {card.options.map((option) => (
                         <button
                             key={option.label}
-                            className="btn sm"
+                            className="ui-opt"
                             type="button"
                             title={option.detail ?? undefined}
                             disabled={busy}
                             onClick={() =>
-                                void answerWaiting(api, waiting, row.id, { option: option.label }, optional(reason))
+                                void answerWaiting(
+                                    api,
+                                    waiting,
+                                    row.id,
+                                    { option: option.label },
+                                    own ? optional(reason) : undefined,
+                                )
                             }
                         >
                             {option.label}
                         </button>
                     ))}
+                    <button
+                        className={other ? 'ui-opt on' : 'ui-opt'}
+                        type="button"
+                        aria-expanded={other}
+                        onClick={() => setOther(!other)}
+                    >
+                        Something else…
+                    </button>
                 </div>
             )}
-            <form className="ask-a" onSubmit={answer} aria-label="Answer in your own words">
-                <input
-                    className="inp"
-                    aria-label="Your answer"
-                    placeholder="Your answer"
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                />
-                <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
-                    Answer
-                </button>
-                <input
-                    className="inp"
-                    aria-label="Reason (optional)"
-                    placeholder="Reason (optional)"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                />
-            </form>
+            {own && (
+                <form
+                    className={card.options.length > 0 ? 'ask-a ui-other' : 'ask-a'}
+                    onSubmit={answer}
+                    aria-label="Answer in your own words"
+                >
+                    <input
+                        ref={ownBox}
+                        className="inp"
+                        aria-label="Your answer"
+                        placeholder="Your answer"
+                        value={text}
+                        onChange={(event) => setText(event.target.value)}
+                    />
+                    <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
+                        Answer
+                    </button>
+                    <input
+                        className="inp"
+                        aria-label="Reason (optional)"
+                        placeholder="Reason (optional)"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                    />
+                </form>
+            )}
         </div>
     );
 }

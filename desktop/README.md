@@ -24,6 +24,8 @@ that a person needs.
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
+| Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and the settings file names no `Roles:DefaultExecutionProfile`, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), the id it answered added to the mark, then `Roles:DefaultExecutionProfile` written into the settings file; where it lists one profile alone with the mark's id, the write alone; a mark with no id or another is let go (`src/roles-moments.ts` wires the two moments) |
+| Say which host the roles run on | `jason profile get <the default's name>`, where the settings file names one: its host and whether it is enabled; said under Claude Code or Codex only where found and at its floor |
 | Act on a Reply account, on the card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`): `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json` |
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
@@ -111,7 +113,9 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 
 ## Its own files
 
-- `<data>/desktop/settings.json`: the desktop's settings (`feed`, and the version whose skills were last deployed).
+- `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
+  `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
+  between its mark and the default's write).
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
@@ -152,7 +156,9 @@ The Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`, only where the g
 `reply`, so one you widened is kept) and, only where the file names no `Routes:Default` at
 all, `Routes:Default` with the profile signed in (`{"Plugin": "reply", "Binding": {"profile": "default"}}` unless
 `reply auth status` names another), as the golden path writes them by hand; a default you set is kept. No other
-`Routes` key is ever written, and every other key is kept as it was. Disconnect, on the `slack`, `telegram` and `ntfy`
+`Routes` key is ever written, and every other key is kept as it was. Outside the cards, the desktop writes
+`Roles:DefaultExecutionProfile` into the same file through the same writer, only where the file names none, in any case
+of its keys, and only after the profile it names was made (see the table above). Disconnect, on the `slack`, `telegram` and `ntfy`
 cards once configured, removes `Plugins:Config:<id>` and the plugin's entry under `Notifications:Plugins:<id>` whole, so
 the plugin is no longer a channel that is on; an entry whose `Enabled` is `false` keeps it and loses only its `Binding`.
 The plugin's grant under `Plugins:Grants:<id>` stays, except the Http grant derived from a server of the plugin's own,
@@ -536,6 +542,14 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   for only `clipboard-sanitized-write` is granted, to the runtime's origin alone, so a Copy button works.
 - The preload exposes `window.jasonDesktop` and nothing else. Every call is answered only when it comes from the top frame
   of a page at the runtime's origin (`src/ipc.ts`); a subframe, another origin and a `file:` page are refused.
+- On macOS the window has no title bar (`src/window-frame.ts`): its three buttons sit in a band of 26 pixels over the top
+  of the console's sidebar, which the console leaves empty in the desktop's own window (its `desktop-mac` class), and the
+  window is dragged by that band and by the console's top strip, every control on them excepted. So that the window
+  stays movable whatever it shows (a console older than this desktop, a custom one, a page that failed to load), the
+  desktop also adds a band of its own to every document the window loads: an empty element at the end of the document,
+  drawn over those 284 by 26 pixels as a drag region by a stylesheet of the user's origin whose every declaration is
+  important, which no stylesheet of a page outranks. The page shown while Jason starts has a drag band across its top.
+  Windows and Linux keep the native frame, and none of this is added there.
 - In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
   and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
