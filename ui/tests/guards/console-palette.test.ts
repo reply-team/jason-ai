@@ -18,9 +18,14 @@ function files(dir: string): string[] {
 }
 
 describe('the console palette sheet', () => {
-    it('has one rule, whose selector is the console light scope and nothing wider', () => {
+    it('has two rules, whose selectors are the console light scope and nothing wider', () => {
         const selectors = [...sheet.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{/g)].map((m) => m[1]!.trim());
-        expect(selectors).toEqual([scope]);
+        expect(selectors).toEqual([
+            scope,
+            `${scope} .settings .voice-part input,
+${scope} .settings .voice-part select,
+${scope} .settings .voice-part textarea`,
+        ]);
     });
 
     it('is loaded by the console mount alone, so the classic shell never receives it', () => {
@@ -44,7 +49,37 @@ describe('the console palette sheet', () => {
             '--radius-panel: 14px;',
             '--danger: var(--red);',
             'background: #f6f8fc;',
+            '--border-strong: var(--line);',
+            '--primary-hover: #3261f0;',
+            '--accent-hover: #3261f0;',
+            'border-radius: var(--radius-sm);',
         ])
             expect(sheet).toContain(line);
+    });
+
+    it('keeps the six panel rules of the classic shell as they were, and sets --radius-panel nowhere else', () => {
+        const css = (name: string) => readFileSync(join(src, 'styles', name), 'utf8');
+        const app = css('app.css');
+        const components = css('components.css');
+        const rules: [string, string, string][] = [
+            [app, '.card', '8px'],
+            [components, '.preview', 'var(--radius)'],
+            [components, '.dialog', '8px'],
+            [components, '.thread', 'var(--radius)'],
+            [components, '.timeline .msgs', 'var(--radius)'],
+            [components, '.tile', '8px'],
+        ];
+        for (const [text, selector, old] of rules) {
+            const start = text.indexOf('\n' + selector + ' {');
+            expect(start, selector).toBeGreaterThanOrEqual(0);
+            const body = text.slice(start, text.indexOf('}', start));
+            expect(body, selector).toContain(`border-radius: var(--radius-panel, ${old});`);
+        }
+        const setters = files(src).filter(
+            (file) => /\.css$/.test(file) && /--radius-panel\s*:/.test(readFileSync(file, 'utf8')),
+        );
+        expect(setters.map((file) => relative(src, file).split(sep).join('/'))).toEqual([
+            'console/harness-palette.css',
+        ]);
     });
 });
