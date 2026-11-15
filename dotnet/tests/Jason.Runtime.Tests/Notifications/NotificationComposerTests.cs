@@ -171,6 +171,164 @@ public sealed class NotificationComposerTests
         Assert.Equal(Approval, NotificationComposer.Compose(1, 0, item: Approval, held: 2).Item);
     }
 
+    /// <summary>A bounce alone says how many emails bounced and sends a person to their agent: no command lists bounces alone.</summary>
+    [Theory]
+    [InlineData(1, "1 email bounced.")]
+    [InlineData(2, "2 emails bounced.")]
+    [InlineData(10_000, "10k+ emails bounced.")]
+    public void A_bounce_alone_says_how_many_emails_bounced(int bounces, string summary)
+    {
+        var message = NotificationComposer.Compose(0, 0, bounces: bounces);
+
+        Assert.Equal((summary, NotificationComposer.LookAtBounces), (message.Summary, message.Look));
+        Assert.Equal("Ask your agent what bounced.", message.Look);
+        Assert.Equal(bounces, message.Bounces);
+        Assert.Null(NotificationComposer.LookAtBouncesCommand);
+    }
+
+    /// <summary>
+    /// Said last, and beside other things it names no command of its own: where to look is the commands of the others, and
+    /// the bounce is left to the agent the pointer names first.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, false, false, false, "2 approvals are waiting in Jason. 1 email bounced.", "Ask your agent, or run jason approval list and jason decision list.")]
+    [InlineData(false, true, false, false, false, "1 protective action failed in Jason, in cmp_A. 1 email bounced.", "Ask your agent, or run jason workitem list --status failed --status expired.")]
+    [InlineData(true, true, false, false, false, "2 approvals are waiting in Jason. 1 protective action failed in Jason, in cmp_A. 1 email bounced.", "Ask your agent, or run jason approval list, jason decision list and jason workitem list --status failed --status expired.")]
+    [InlineData(false, false, true, false, false, "3 items wait on a budget. 1 email bounced.", "Ask your agent, or run jason workitem list --status waiting.")]
+    [InlineData(false, true, true, false, false, "1 protective action failed in Jason, in cmp_A. 3 items wait on a budget. 1 email bounced.", "Ask your agent, or run jason workitem list --status failed --status expired --status waiting.")]
+    [InlineData(false, false, false, true, false, "1 provider block holds 2 work items. 1 email bounced.", "Ask your agent, or run jason block list.")]
+    [InlineData(false, false, false, false, true, "1 account has events Jason did not read. 1 email bounced.", "Ask your agent, or run jason events sources.")]
+    [InlineData(false, false, false, true, true, "1 provider block holds 2 work items. 1 account has events Jason did not read. 1 email bounced.", "Ask your agent, or run jason block list and jason events sources.")]
+    public void A_bounce_beside_other_things_is_said_last_and_left_to_the_agent(bool waiting, bool failed, bool held, bool blocked, bool gaps, string summary, string look)
+    {
+        var message = NotificationComposer.Compose(
+            waiting ? 2 : 0,
+            0,
+            failed ? new FailedProtectiveWork(1, ["cmp_A"], 0) : null,
+            gaps ? 1 : 0,
+            blocked ? new HeldByBlocks(1, 2) : null,
+            held: held ? 3 : 0,
+            bounces: 1);
+
+        Assert.Equal((summary, look), (message.Summary, message.Look));
+        Assert.Equal(1, message.Bounces);
+    }
+
+    /// <summary>No bounce says nothing: no sentence and no command.</summary>
+    [Fact]
+    public void No_bounce_is_no_sentence() =>
+        Assert.Equal(NotificationComposer.Compose(1, 0), NotificationComposer.Compose(1, 0, bounces: 0));
+
+    [Fact]
+    public void A_negative_bounce_count_is_not_a_pointer() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationComposer.Compose(0, 0, bounces: -1));
+
+    /// <summary>
+    /// The bound a pointer is composed against is the delivery contract's own, read from the contract: the composer keeps
+    /// no second copy of it.
+    /// </summary>
+    [Fact]
+    public void The_bound_is_the_delivery_contracts_own() =>
+        Assert.Equal(Bound, NotificationComposer.MessageBound);
+
+    /// <summary>
+    /// Every combination of the seven things a pointer says, every count at its longest and failed protective work with
+    /// three campaigns to name, fits the message the delivery contract takes; and where to look names the commands in the
+    /// order the things are said, until the next would pass the bound: the things said first keep their commands, a
+    /// command is left out only where naming it would pass the bound, and what is left out is the agent's.
+    /// </summary>
+    [Fact]
+    public void Every_combination_of_the_seven_fits_and_the_things_said_first_keep_their_commands()
+    {
+        const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
+        const int Count = int.MaxValue;
+        var cut = 0;
+        for (var mask = 1; mask < 1 << 7; mask++)
+        {
+            var bits = mask;
+            bool Has(int bit) => (bits & (1 << bit)) != 0;
+            var (approvals, decisions, failed, gaps, blocked, held, bounced) = (Has(0), Has(1), Has(2), Has(3), Has(4), Has(5), Has(6));
+            var pointer = NotificationComposer.Compose(
+                approvals ? Count : 0,
+                decisions ? Count : 0,
+                failed ? new FailedProtectiveWork(Count, [Id, Id, Id], Count) : null,
+                gaps ? Count : 0,
+                blocked ? new HeldByBlocks(Count, Count) : null,
+                held: held ? Count : 0,
+                bounces: bounced ? Count : 0);
+
+            Assert.True(pointer.Text.Length <= Bound, $"Combination {mask} is {pointer.Text.Length} characters; the delivery contract takes {Bound}: {pointer.Text}");
+
+            // Each thing's commands, in the order the things are said; failed protective work and a hold share one.
+            var groups = new List<string[]>();
+            if (approvals || decisions)
+            {
+                groups.Add(["jason approval list", "jason decision list"]);
+            }
+
+            if (failed)
+            {
+                groups.Add([held ? "jason workitem list --status failed --status expired --status waiting" : "jason workitem list --status failed --status expired"]);
+            }
+            else if (held)
+            {
+                groups.Add(["jason workitem list --status waiting"]);
+            }
+
+            if (blocked)
+            {
+                groups.Add(["jason block list"]);
+            }
+
+            if (gaps)
+            {
+                groups.Add(["jason events sources"]);
+            }
+
+            // Every command named, in whatever order a wording of its own puts them, leaves nothing out; otherwise what is
+            // named is the commands of the things said first, in their order.
+            var named = Named(pointer.Look);
+            var all = groups.SelectMany(group => group).Order(StringComparer.Ordinal);
+            if (Split(named).Order(StringComparer.Ordinal).SequenceEqual(all))
+            {
+                continue;
+            }
+
+            var kept = Enumerable.Range(0, groups.Count).Where(k => Joined(groups.Take(k)) == named).ToList();
+            Assert.True(kept.Count == 1, $"Combination {mask} names \"{named}\", which is not the commands of the things said first: {pointer.Look}");
+            cut++;
+            var longer = $"{pointer.Summary} Ask your agent, or run {Joined(groups.Take(kept[0] + 1))}.";
+            Assert.True(longer.Length > Bound, $"Combination {mask} leaves out a command that fits ({longer.Length} of {Bound}): {pointer.Text}");
+            Assert.StartsWith("Ask your agent, or run ", pointer.Look, StringComparison.Ordinal);
+        }
+
+        // The rule is seen at work: some combinations of the seven at their longest would not fit with every command named.
+        Assert.True(cut > 0, "No combination left a command out, so the rule that leaves one out was never seen at work.");
+
+        static string Named(string look)
+        {
+            var at = look.IndexOf(", or run ", StringComparison.Ordinal);
+            return at < 0 ? string.Empty : look[(at + ", or run ".Length)..^1];
+        }
+
+        // No command holds ", " or " and ", so the list splits back into its commands.
+        static IEnumerable<string> Split(string named) =>
+            named.Length == 0 ? [] : named.Split(", ").SelectMany(part => part.Split(" and "));
+
+        static string Joined(IEnumerable<string[]> groups)
+        {
+            var commands = groups.SelectMany(group => group).ToList();
+            return commands.Count switch
+            {
+                0 => string.Empty,
+                1 => commands[0],
+                _ => $"{string.Join(", ", commands.Take(commands.Count - 1))} and {commands[^1]}",
+            };
+        }
+    }
+
+    private static int Bound => Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>();
+
     /// <summary>
     /// The longest pointer the composer can make, whatever the counts — every count at four digits or far past them —
     /// still fits the message the delivery contract takes, read from the contract itself: a longer one would be refused
@@ -178,7 +336,8 @@ public sealed class NotificationComposerTests
     /// three campaigns and counts the rest, beside both waits and a gap; with a block beside them all, it names one. A count
     /// is never said in more than four characters, so the worst case is the same at 9999 as at the largest count there is,
     /// and each shape is held to its exact length, 399 and 396 of the 400, so that a wording that spends the characters
-    /// left is seen being spent.
+    /// left is seen being spent. A bounce beside either takes no command of its own, and its sentence leaves no room for
+    /// the gap's command, which is left to the agent: 398 and 395.
     /// </summary>
     [Theory]
     [Critical(Family.N3, "the message fits the contract")]
@@ -191,9 +350,11 @@ public sealed class NotificationComposerTests
         var failed = new FailedProtectiveWork(count, [id, id, id], count);
         var withoutBlock = NotificationComposer.Compose(count, count, failed, eventGaps: count);
         var withBlock = NotificationComposer.Compose(count, count, failed, eventGaps: count, blocks: new HeldByBlocks(count, count));
+        var withoutBlockBounced = NotificationComposer.Compose(count, count, failed, eventGaps: count, bounces: count);
+        var withBlockBounced = NotificationComposer.Compose(count, count, failed, eventGaps: count, blocks: new HeldByBlocks(count, count), bounces: count);
         var bound = Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>();
 
-        foreach (var (shape, pointer, length) in new[] { ("without a block", withoutBlock, 399), ("with a block", withBlock, 396) })
+        foreach (var (shape, pointer, length) in new[] { ("without a block", withoutBlock, 399), ("with a block", withBlock, 396), ("without a block, with a bounce", withoutBlockBounced, 398), ("with a block, with a bounce", withBlockBounced, 395) })
         {
             Assert.True(pointer.Text.Length <= bound, $"At {count} the longest pointer {shape} is {pointer.Text.Length} characters; the delivery contract takes {bound}: {pointer.Text}");
             Assert.True(pointer.Text.Length == length, $"At {count} the longest pointer {shape} is {pointer.Text.Length} characters, not {length}: {pointer.Text}");
@@ -201,29 +362,46 @@ public sealed class NotificationComposerTests
     }
 
     /// <summary>
-    /// Every shape a pointer with a hold can take, every count past four digits, held to its exact length. The longest two
-    /// are the hold beside both waits, failed protective work and a gap, which names one campaign, and those with a block
-    /// as well, which names none: 381 and 393 of the 400.
+    /// Every shape a pointer with a hold can take, a bounce beside it or not, every count past four digits, held to its
+    /// exact length. The longest two without a bounce are the hold beside both waits, failed protective work and a gap,
+    /// which names one campaign, and those with a block as well, which names none: 381 and 393 of the 400. With a bounce
+    /// beside each, the gap's command no longer fits and is left to the agent: 380 and 392.
     /// </summary>
     [Theory]
     [Critical(Family.N3, "the message fits the contract")]
-    [InlineData(false, false, false, false, 102)]
-    [InlineData(true, false, false, false, 190)]
-    [InlineData(false, true, false, false, 241)]
-    [InlineData(true, true, false, false, 313)]
-    [InlineData(false, false, true, false, 153)]
-    [InlineData(false, false, false, true, 160)]
-    [InlineData(false, false, true, true, 221)]
-    [InlineData(true, false, true, false, 251)]
-    [InlineData(true, false, false, true, 258)]
-    [InlineData(true, false, true, true, 319)]
-    [InlineData(false, true, true, false, 227)]
-    [InlineData(false, true, false, true, 283)]
-    [InlineData(false, true, true, true, 295)]
-    [InlineData(true, true, true, false, 325)]
-    [InlineData(true, true, false, true, 381)]
-    [InlineData(true, true, true, true, 393)]
-    public void Every_shape_of_a_pointer_with_a_hold_fits_the_delivery_contract(bool waiting, bool failed, bool blocked, bool gaps, int length)
+    [InlineData(false, false, false, false, false, 102)]
+    [InlineData(true, false, false, false, false, 190)]
+    [InlineData(false, true, false, false, false, 241)]
+    [InlineData(true, true, false, false, false, 313)]
+    [InlineData(false, false, true, false, false, 153)]
+    [InlineData(false, false, false, true, false, 160)]
+    [InlineData(false, false, true, true, false, 221)]
+    [InlineData(true, false, true, false, false, 251)]
+    [InlineData(true, false, false, true, false, 258)]
+    [InlineData(true, false, true, true, false, 319)]
+    [InlineData(false, true, true, false, false, 227)]
+    [InlineData(false, true, false, true, false, 283)]
+    [InlineData(false, true, true, true, false, 295)]
+    [InlineData(true, true, true, false, false, 325)]
+    [InlineData(true, true, false, true, false, 381)]
+    [InlineData(true, true, true, true, false, 393)]
+    [InlineData(false, false, false, false, true, 110)]
+    [InlineData(true, false, false, false, true, 211)]
+    [InlineData(false, true, false, false, true, 233)]
+    [InlineData(true, true, false, false, true, 334)]
+    [InlineData(false, false, true, false, true, 174)]
+    [InlineData(false, false, false, true, true, 181)]
+    [InlineData(false, false, true, true, true, 242)]
+    [InlineData(true, false, true, false, true, 272)]
+    [InlineData(true, false, false, true, true, 279)]
+    [InlineData(true, false, true, true, true, 340)]
+    [InlineData(false, true, true, false, true, 248)]
+    [InlineData(false, true, false, true, true, 304)]
+    [InlineData(false, true, true, true, true, 316)]
+    [InlineData(true, true, true, false, true, 346)]
+    [InlineData(true, true, false, true, true, 380)]
+    [InlineData(true, true, true, true, true, 392)]
+    public void Every_shape_of_a_pointer_with_a_hold_fits_the_delivery_contract(bool waiting, bool failed, bool blocked, bool gaps, bool bounced, int length)
     {
         const string Id = "cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD";
         const int Count = int.MaxValue;
@@ -233,7 +411,8 @@ public sealed class NotificationComposerTests
             failed ? new FailedProtectiveWork(Count, [Id, Id, Id], Count) : null,
             gaps ? Count : 0,
             blocked ? new HeldByBlocks(Count, Count) : null,
-            held: Count);
+            held: Count,
+            bounces: bounced ? Count : 0);
         var bound = Jason.Contracts.Notifications.DeliveryCatalog.Find("notification.send")!.InputSchema["properties"]!["message"]!["maxLength"]!.GetValue<int>();
 
         Assert.True(pointer.Text.Length <= bound, $"A pointer with a hold is {pointer.Text.Length} characters; the delivery contract takes {bound}: {pointer.Text}");
