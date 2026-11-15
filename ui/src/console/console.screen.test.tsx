@@ -1067,6 +1067,16 @@ describe('the console', () => {
             expect(connect.querySelectorAll('.runs-roles')).toHaveLength(1);
         });
 
+        it('is not drawn under a Claude Code below its floor, which the chat cannot use', async () => {
+            const below = withRoles('claude-code', null);
+            const held = {
+                ...below,
+                hosts: below.hosts.map((each) => (each.id === 'claude' ? { ...each, version: '2.1.200', belowFloor: 'Claude Code 2.1.200 is older than the chat needs.' } : each)),
+            };
+            const connect = await openConnect(chatDesktop(held));
+            expect(connect.querySelectorAll('.runs-roles')).toHaveLength(0);
+        });
+
         it('says nothing where no host runs them', async () => {
             const connect = await openConnect(chatDesktop(withRoles(null, null)));
             expect(connect.querySelectorAll('.runs-roles')).toHaveLength(0);

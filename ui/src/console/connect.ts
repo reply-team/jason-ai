@@ -832,11 +832,12 @@ export function ownServersLine(host: DesktopHost): string | null {
 }
 
 /**
- * The one line under a program found here that the agents' roles run on by default: the host and the profile's name, as
- * the desktop read them from the installation's settings and the runtime. Nothing for any other host.
+ * The one line under the program the agents' roles run on by default, where the chat can use it — it drives the chat, is
+ * found here and is at its version floor: the host and the profile's name, as the desktop read them from the
+ * installation's settings and the runtime. Nothing for any other host.
  */
 export function runsRolesLine(host: DesktopHost): string | null {
-    if (host.kind !== 'program' || !host.found || typeof host.runsRoles !== 'string') return null;
+    if (host.kind !== 'program' || !host.found || !host.drivesChat || host.belowFloor !== null || typeof host.runsRoles !== 'string') return null;
     return t('connect.runsRoles', { host: host.label, profile: host.runsRoles });
 }
 

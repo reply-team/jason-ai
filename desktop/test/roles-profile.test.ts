@@ -9,6 +9,7 @@ import { loggedCli } from '../src/installation.ts';
 import { dataLayout } from '../src/paths.ts';
 import { programsOn } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
+import { rolesMoments } from '../src/roles-moments.ts';
 import { lastChosenHost, profileProgram, roleHostOf } from '../src/roles-profile.ts';
 import { withDefaultProfile } from '../src/setup-model.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
@@ -104,6 +105,43 @@ test('the chat is set to run on the host its newest conversation last ran on', (
     assert.equal(lastChosenHost([at('2026-11-01T00:00:00Z')]), null);
     assert.equal(lastChosenHost([at('2026-11-01T00:00:00Z', 'claude'), at('2026-11-03T00:00:00Z', 'codex'), at('2026-11-02T00:00:00Z', 'claude')]), 'codex');
     assert.equal(lastChosenHost([at('2026-11-01T00:00:00Z', 'claude'), at('2026-11-03T00:00:00Z')]), 'claude');
+});
+
+// ---- The wiring --------------------------------------------------------------------------------------------------
+
+test('in Live the start connects with the host the chat holds and a turn with its own; in the demo nothing is asked or read', async () => {
+    const calls: (string | null)[] = [];
+    let read = 0;
+    let failed = 0;
+    const deps = (answer: () => Promise<unknown>) => ({
+        connect: (chosen: string | null) => {
+            calls.push(chosen);
+            return answer();
+        },
+        chosen: () => {
+            read++;
+            return 'codex';
+        },
+        failed: () => failed++,
+    });
+
+    const demo = rolesMoments('demo', deps(() => Promise.resolve('made')));
+    demo.atStart();
+    demo.atTurn('claude');
+    assert.deepEqual([calls, read], [[], 0], "the demo asks nothing, and does not read the chat's host");
+
+    const live = rolesMoments('live', deps(() => Promise.resolve('made')));
+    live.atStart();
+    live.atTurn('claude');
+    assert.deepEqual([calls, read], [['codex', 'claude'], 1], 'the start reads the host once; a turn brings its own');
+
+    // A failure, thrown or rejected, is told and stops neither moment.
+    const broken = rolesMoments('live', deps(() => Promise.reject(new Error('no runtime'))));
+    broken.atTurn('claude');
+    await new Promise((resolve) => setImmediate(resolve));
+    const throwing = rolesMoments('live', { ...deps(() => Promise.resolve()), chosen: () => { throw new Error('unreadable'); } });
+    throwing.atStart();
+    assert.equal(failed, 2);
 });
 
 // ---- Against the stub runtime ---------------------------------------------------------------------------------------
@@ -303,5 +341,18 @@ test('the host the default profile runs on says so, by the profile name, and no 
         writeInstallationSettings(b, { Roles: { DefaultExecutionProfile: name } });
         const lines = await status();
         assert.deepEqual([...lines].filter(([, line]) => line !== null), where === null ? [] : [[where, name]], name);
+    }
+
+    // Only under a host the chat can use: never under a Claude Code below its floor, nor under a host that drives no chat.
+    const held = bench(t, { programs: ['claude', 'gemini'] });
+    held.env.STUB_CLAUDE_VERSION_FILE = below(held).STUB_CLAUDE_VERSION_FILE;
+    holdProfiles(held, [
+        { name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } },
+        { name: 'gem', disabled: false, revision: { host: 'gemini_cli', program: 'gemini' } },
+    ]);
+    for (const name of ['claude-code', 'gem']) {
+        writeInstallationSettings(held, { Roles: { DefaultExecutionProfile: name } });
+        const hosts = (await setupOn(held, { programs: programsOn(held.env, null) }).status()).hosts;
+        assert.deepEqual(hosts.filter((host) => host.runsRoles !== null).map((host) => host.id), [], name);
     }
 });

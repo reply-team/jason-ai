@@ -56,8 +56,7 @@ import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
-import { readConversations } from './chat-conversations.ts';
-import { lastChosenHost } from './roles-profile.ts';
+import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
@@ -613,11 +612,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         copyLink: (link) => clipboard.writeText(link),
     });
     registerSetup(seam, setup, origin, log, () => toPage('setup.changed'));
-    // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, and as each
-    // turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
-    const connectRoles = (chosen: string | null) => {
-        if (runOn.mode === 'live') void setup.connectRoles(chosen).catch(() => log.warn('roles_profile', { Outcome: 'failed' }));
-    };
+    // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, with the host
+    // the chat holds, and as each turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
+    const roles = rolesMoments(runOn.mode, {
+        connect: (chosen) => setup.connectRoles(chosen),
+        chosen: () => chat.chosenHost(),
+        failed: () => log.warn('roles_profile', { Outcome: 'failed' }),
+    });
+    const turns = loggedTurns(log);
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
     const chat = new Chat({
@@ -648,14 +650,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
             return fullAccessAnswer(response, checkboxChecked);
         },
-        ...loggedTurns(log),
+        ...turns,
         started: (host, resumed, mode) => {
-            loggedTurns(log).started(host, resumed, mode);
-            connectRoles(host);
+            turns.started(host, resumed, mode);
+            roles.atTurn(host);
         },
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
-            loggedTurns(log).standingChanged(standing, why);
+            turns.standingChanged(standing, why);
             toPage('fullAccess.changed', standing);
         },
     });
@@ -824,7 +826,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             }
         }
         log.info('window_loaded', { Origin: started.origin });
-        connectRoles(lastChosenHost(readConversations(paths.conversations).kept));
+        roles.atStart();
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();

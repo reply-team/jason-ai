@@ -347,8 +347,8 @@ export interface DesktopHost {
     ownServers: string[];
     /**
      * The name of the execution profile the agents' roles run on by default, where `Roles:DefaultExecutionProfile` names an
-     * enabled profile on this program and the program is found here; null otherwise, and for every key provider. The
-     * Connect row says it in one line.
+     * enabled profile on this program and the chat can use the program: it drives the chat, is found here and is at its
+     * version floor. Null otherwise, and for every key provider. The Connect row says it in one line.
      */
     runsRoles: string | null;
 }

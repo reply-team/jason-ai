@@ -132,8 +132,9 @@ export interface HostState {
     ownServers: string[];
     /**
      * The name of the execution profile the agents' roles run on by default, where `Roles:DefaultExecutionProfile` names
-     * an enabled profile whose host is this program and the program is found here; null otherwise, and for every key
-     * provider, which runs no role. The Connect row says it in one line.
+     * an enabled profile whose host is this program and the chat can use this program: it drives the chat, is found here
+     * and is at its version floor. Null otherwise, and for every key provider, which runs no role. The Connect row says it
+     * in one line.
      */
     runsRoles: string | null;
 }
@@ -508,7 +509,8 @@ export class Setup {
                 autoEdit: autoEditOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
                 ownServers: await this.#ownServers(host.program, found),
-                runsRoles: found && roles !== null && hostWords[host.program] === roles.host ? roles.name : null,
+                // Said only under a host the chat can use, as the page counts it connected: found, and at its floor.
+                runsRoles: found && host.drivesChat && (own?.belowFloor ?? null) === null && roles !== null && hostWords[host.program] === roles.host ? roles.name : null,
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({

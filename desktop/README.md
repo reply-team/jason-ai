@@ -23,8 +23,8 @@ that a person needs.
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
-| Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and the settings file names no `Roles:DefaultExecutionProfile`, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), then `Roles:DefaultExecutionProfile` written into the settings file; where it lists the marked profile alone, the write alone |
-| Say which host the roles run on | `jason profile get <the default's name>`, where the settings file names one: its host and whether it is enabled |
+| Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and the settings file names no `Roles:DefaultExecutionProfile`, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), the id it answered added to the mark, then `Roles:DefaultExecutionProfile` written into the settings file; where it lists one profile alone with the mark's id, the write alone; a mark with no id or another is let go (`src/roles-moments.ts` wires the two moments) |
+| Say which host the roles run on | `jason profile get <the default's name>`, where the settings file names one: its host and whether it is enabled; said under Claude Code or Codex only where found and at its floor |
 | Act on a Reply account, on the card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`): `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json` |
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
@@ -113,7 +113,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 ## Its own files
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
-  `roles_profile_pending`, the name of the profile `connectRoles` is making, only between its mark and the default's write).
+  `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
+  between its mark and the default's write).
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.

@@ -25,7 +25,9 @@ an installation starts with none: until a profile is made and named the default,
 with `role_not_launchable`, and `jason status` says so under `roles_launchable`. For Claude Code, run
 `jason profile create claude-code --host claude_code --program claude`, then add
 `"Roles": {"DefaultExecutionProfile": "claude-code"}` to `~/.jason/config/settings.json`, which the runtime reads without
-a restart. Jason Desktop does both itself when its chat is on Claude Code or Codex ([desktop.md](desktop.md#connect)).
+a restart. Jason Desktop does both itself, in Live, where the installation holds no profile and names no default and
+Claude Code or Codex is connected there: on the one its chat is set to run on, else Claude Code, else Codex
+([desktop.md](desktop.md#connect)).
 
 To have a host other than Claude Code run the background roles, install it from its own documentation and sign in
 as yourself; Jason holds no key, and the profile you make for it is named the default the same way. For Cursor CLI, install it from

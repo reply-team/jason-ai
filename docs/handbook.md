@@ -436,7 +436,11 @@ attempt at a time, and whatever performs it reports what happened through the sa
 Which agent host runs a piece of AI work is named by an **execution profile**, and each attempt keeps the
 revision of the profile it ran under. The hosts a profile can name are those of the
 [host matrix](execution-profiles.md#12-the-hosts); a profile naming another is refused when it is written.
-When no profile can run a piece of AI work it waits, blocked, and everything else keeps running:
+A piece of AI work that nothing names a profile for — not the item, its campaign, its role or
+`Roles:DefaultExecutionProfile` in the settings file — fails at its claim with `role_not_launchable`, unless its role has
+an entry command; one whose profile is not there or is disabled fails with `profile_not_found` or `profile_disabled`.
+Everything else keeps running, and `jason status` says under `roles_launchable` whether the default names an enabled
+profile. Name one the default with `"Roles": {"DefaultExecutionProfile": "local-claude"}`, or name it on an item:
 
 ```sh
 jason profile create local-claude --host claude_code --program claude   --deny Write --host-version-verified 2.1.275
