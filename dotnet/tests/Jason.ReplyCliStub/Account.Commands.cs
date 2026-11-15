@@ -810,7 +810,13 @@ internal static partial class Account
         header["subject"] = latestEmail is not null && latestEmail["subject"] is JsonValue subject && subject.TryGetValue<string>(out var text)
             ? text
             : null;
-        var page = messages.Skip(offset).Take(limit).Select(message => (JsonNode)message.DeepClone()).ToList();
+        // A bounce notice's mark is the stand-in's alone: no message Reply sends says it is one.
+        var page = messages.Skip(offset).Take(limit).Select(message =>
+        {
+            var copy = message.DeepClone().AsObject();
+            copy.Remove(BounceMark);
+            return (JsonNode)copy;
+        }).ToList();
         return Done(new JsonObject
         {
             ["thread"] = header,

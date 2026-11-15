@@ -115,8 +115,9 @@ public class WarmthTests
     }
 
     /// <summary>
-    /// A line that reached the campaign only through the contact's pin parks nobody, and a verdict on its thread warms
-    /// nobody: the campaign holds the thread only through a person it may share.
+    /// A line that reached the campaign only through the contact's pin, unmarked, parks nobody, and a verdict on its thread
+    /// warms nobody: the campaign holds the thread only through a person it may share. A line written before the mark
+    /// existed is such a line, and stays as it was.
     /// </summary>
     [Fact]
     public async Task A_thread_heard_of_only_through_the_contacts_pin_neither_waits_nor_warms()
@@ -130,6 +131,43 @@ public class WarmthTests
         await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
 
         Assert.Equal(WarmthState.Cold, heard);
+        Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// A line found by the contact's pin and marked <c>campaign_own</c> is the campaign's own: unjudged, it makes the
+    /// contact wait, and a standing person verdict on its thread warms them.
+    /// </summary>
+    [Fact]
+    public async Task A_contact_pin_line_marked_the_campaigns_own_waits_and_warms_as_one()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", campaignOwn: true);
+
+        var waiting = await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct);
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Person);
+
+        Assert.Equal(WarmthState.AwaitingJudgement, waiting);
+        Assert.Equal(WarmthState.Warm, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
+    }
+
+    /// <summary>
+    /// The mark warms only on its own thread: a person verdict on a thread the campaign heard of through the contact's pin
+    /// unmarked warms nobody, though another thread of theirs was marked and judged.
+    /// </summary>
+    [Fact]
+    public async Task A_mark_on_one_thread_warms_nobody_by_a_verdict_on_an_unmarked_one()
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-1", "2026-09-14T11:30:00.000Z", attributedBy: "contact_pin", campaignOwn: true);
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-1", "msg-1", "2026-09-14T11:30:00.000Z", ReplyNature.Automatic);
+        await ObservedAsync(db, seed.Campaign, seed.Contact, "thr-2", "2026-09-14T11:40:00.000Z", attributedBy: "contact_pin");
+        await VerdictAsync(db, seed.Campaign, seed.Contact, "thr-2", "msg-2", "2026-09-14T11:40:00.000Z", ReplyNature.Person);
+
         Assert.Equal(WarmthState.Cold, await Warmth.OfAsync(db, seed.Campaign.Id, seed.Contact.Id, Ct));
     }
 
