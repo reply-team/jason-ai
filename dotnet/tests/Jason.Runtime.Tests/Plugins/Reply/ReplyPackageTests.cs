@@ -1459,7 +1459,7 @@ public class ReplyPackageTests
             readme,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Reply gives the same code to an email held for later that it takes while the mailbox already holds as many held emails as its daily limit;",
+            "Reply gives the same code to an email held for later while the mailbox already holds as many held emails as its daily limit;",
             readme,
             StringComparison.Ordinal);
     }

@@ -868,32 +868,32 @@ finds nothing, gets no answer, or answers for another send or in a shape this pa
 the send, and the window decides as it does without a reference.
 
 Wherever Reply names a send on an answer that is not a result — a refusal of a send it took, a lost answer — the
-reference it names is kept on the attempt as the work item's `send`, whatever the ending's class, so the send can be read
-back by it; but for a refusal of a direct email for one of Reply's two limits on it, which names a dead record. A send
-Reply answered with a failure is never repeated blind, as a lost answer is: Reply releases the key of a send it answered
-with a failure and keeps it only for a send it completed, so a repeat under the key would be a new send, made only where
-the failure is a block on the sender, below, and a trial gets past it. An answer of Reply's at a status of 400 to 499
-about the send it took or refused is final, since Reply's guard released the key: its own `directLinkedIn.unknown` in
-every shape and a 400 with no code of its own among them, whichever way reply-cli passes it on. Two answers in that
-range are not about such a send, and both are repeated safely, whichever way reply-cli passes them on.
-`idempotency_key.in_use` (409) is the one where the key is still held: it is the first request's claim, and Reply
-answers so until that request completes or releases the key. A 429 (`rate_limited`) under any code of Reply's but its
-two limits on a direct email is refused before the guard runs, so nothing was taken and no key was touched. Those two
-limits, the mailbox's daily limit (`contact.dailyLimitReached`) and the account's active contacts
-(`contact.activeContactsLimitReached`), are read by Reply's code on every refusal reply-cli explains, whatever its status
-and CLI code, and are about the sender: the mailbox's block. Reply may count them after it made a record of an email it
-sends now under the key; the record is failed and the key released with it, so the record is dead, never kept as the
-work item's `send`, and the send a later trial makes under the same key is a record of its own, the one kept. The
+reference it names is kept on the attempt as the work item's `send`, whatever the ending's class, so the send can be
+read back by it; but for a refusal of a direct email for one of Reply's two limits on it, which names a dead record. A
+send Reply answered with a failure is never repeated blind, as a lost answer is: Reply releases the key of a send it
+answered with a failure and keeps it only for a send it completed, so a repeat under the key would be a new send. One is
+made only where the failure is a block on the sender, below: as the block's trial, or once the block has cleared. An
+answer of Reply's at a status of 400 to 499 about the send it took or refused is final, since Reply's guard released the
+key: its own `directLinkedIn.unknown` in every shape and a 400 with no code of its own among them, whichever way
+reply-cli passes it on. Two answers in that range are not about such a send, and both are repeated safely, whichever way
+reply-cli passes them on. `idempotency_key.in_use` (409) is the one where the key is still held: it is the first
+request's claim, and Reply answers so until that request completes or releases the key. A 429 (`rate_limited`) under any
+code of Reply's but its two limits on a direct email is refused before the guard runs, so nothing was taken and no key
+was touched. Those two limits, the mailbox's daily limit (`contact.dailyLimitReached`) and the account's active contacts
+(`contact.activeContactsLimitReached`), are read by Reply's code on every refusal reply-cli explains, whatever its
+status and CLI code, and are about the sender: the mailbox's block. Reply may count them after it made a record of an
+email it sends now under the key; the record is failed and the key released with it, so the record is dead, never kept
+as the work item's `send`, and the send a later trial makes under the same key is a record of its own, the one kept. The
 LinkedIn account's own refusals in that range, its 409s (`linkedin.account_inactive`, `linkedin.invalid_cookie`) and its
 spent allowance at 429 (`linkedin.limit_reached`), are about the sender: the work is held on the sender's block and
 repeated once it clears. Every sender's block this package reports names the channel the send went on, `email` or
 `linkedin`, beside the sender's number: Reply numbers its mailboxes apart from its LinkedIn accounts, so mailbox 12 and
 LinkedIn account 12 are two accounts, and a block of one holds and clears nothing of the other. Only an ending with no
-answer of Reply's about the send — a timeout, a lost connection, a CLI that died, an answer cut off or unreadable, or one
-at 500 or above, whatever code it carries — is the lost answer, repeated under the key. A direct send that failed with
-Reply's own 500 was not recorded, since Reply records the effect as the send's last step, so the repeat under the key it
-released is the send that did not happen; and a 500 or above from in front of Reply, a gateway's 502, 503 or 504, leaves
-the key as the request left it: still held, answered `in_use`; completed, answered again; or never claimed.
+answer of Reply's about the send — a timeout, a lost connection, a CLI that died, an answer cut off or unreadable, or
+one at 500 or above, whatever code it carries — is the lost answer, repeated under the key. A direct send that failed
+with Reply's own 500 was not recorded, since Reply records the effect as the send's last step, so the repeat under the
+key it released is the send that did not happen; and a 500 or above from in front of Reply, a gateway's 502, 503 or 504,
+leaves the key as the request left it: still held, answered `in_use`; completed, answered again; or never claimed.
 
 ### `message.send`
 
@@ -917,7 +917,7 @@ the key as the request left it: still held, answered `in_use`; completed, answer
 | Reply holds the sender's account under another address than the arguments state, under one where they state none, or under none where they state one; an address Jason would not key matches nothing. Nothing is sent. | `sender_mismatch` | validation | Name the account by the identifier and the address `sender.list` returns. |
 | The sender's account is turned off or disconnected in Reply's list, or the send answered `linkedin.account_inactive` or `linkedin.invalid_cookie`; Reply's word is in the trace. The block is the sender's, for its `channel`; met by a command that ran from no sending account, such as a read on the way to the send, it is `sender_unavailable`, permanent, since a block names the account it holds. | `provider_blocked` | blocked | Put the account right at Reply — connect it again. The message waits on the block, with the rest of that sender's work, and goes once a trial gets past it. |
 | The LinkedIn account's daily or weekly allowance is spent (`linkedin.limit_reached`): reply-cli's word for Reply's 429 under `directLinkedIn.dailyLimitReached` or `directLinkedIn.weeklyLimitReached`, naming the send in the state `failed` or not, where a 429 under no such code is `rate_limited`; which one is under `limit` in the trace. The block is the sender's, for its `limit`, and clears at `clears_at` where the CLI said how long to wait, up to a year; met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. Reply answers so only for a send that goes now: one it holds for a moment ahead is not refused for the allowance when it is taken, and an allowance still spent when that send's window passes is the send's fate, which `message.status` reads. | `provider_blocked` | blocked | Nothing. The message waits on the block and goes once the allowance renews and a trial gets past it. |
-| The mailbox has sent as many direct emails today as Reply allows it: Reply's code `contact.dailyLimitReached`, read by that code alone on every refusal reply-cli explains, whatever its status and whatever code reply-cli gives it — `rate_limited` at 429 from every reply-cli the package takes, a word of its own in a later one — and never repeated blind as a wait on a busy Reply. Reply gives the same code to an email held for later that it takes while the mailbox already holds as many held emails as its daily limit; the block then holds every email from that mailbox, one that would go now included, until midnight UTC, or longer while the mailbox holds that many. The block is the mailbox's, on the `email` channel, for its `limit`, and clears at the next midnight UTC, since Reply counts a mailbox's day in UTC, or at `clears_at` where the CLI said how long to wait, up to a year; a mailbox whose daily limit is zero is refused so on every email, and tried once a day. A refusal that names a record of the send, in the state `failed`, names a dead one: it is not kept as the work item's `send`, and the send a later trial makes is. Met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. | `provider_blocked` | blocked | Nothing. The message waits on the block and goes once Reply's day turns and a trial gets past it. |
+| The mailbox has sent as many direct emails today as Reply allows it: Reply's code `contact.dailyLimitReached`, read by that code alone on every refusal reply-cli explains, whatever its status and whatever code reply-cli gives it — `rate_limited` at 429 from every reply-cli the package takes, a word of its own in a later one — and never repeated blind as a wait on a busy Reply. Reply gives the same code to an email held for later while the mailbox already holds as many held emails as its daily limit; the block then holds every email from that mailbox, one that would go now included, until midnight UTC, or longer while the mailbox holds that many. The block is the mailbox's, on the `email` channel, for its `limit`, and clears at the next midnight UTC, since Reply counts a mailbox's day in UTC, or at `clears_at` where the CLI said how long to wait, up to a year; a mailbox whose daily limit is zero is refused so on every email, and tried once a day. A refusal that names a record of the send, in the state `failed`, names a dead one: it is not kept as the work item's `send`, and the send a later trial makes is. Met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. | `provider_blocked` | blocked | Nothing. The message waits on the block and goes once Reply's day turns and a trial gets past it. |
 | The account has emailed as many contacts in its billing period as its plan allows: Reply's code `contact.activeContactsLimitReached`, read by that code alone on every refusal reply-cli explains, whatever its status and whatever code reply-cli gives it, as the daily limit is. The block is the mailbox's, on the `email` channel, for its `limit`, and clears at `clears_at` only where the CLI said how long to wait; otherwise it is tried at the runtime's own cadence. While the active-contacts block stands, every email send from that mailbox waits, people already in conversation included. A refusal that names a record of the send names a dead one, kept as nothing, as the daily limit's does. Met by a command that ran from no sending account, it is `sender_limit_reached`, permanent. | `provider_blocked` | blocked | Raise the limit at Reply, or wait for the billing period to renew. The messages wait on the block and go once a trial gets past it. |
 | The account lacks what the format needs (`linkedin.sales_navigator_required`, `linkedin.sales_navigator_disconnected`, `linkedin.voice_profile_missing`); Reply's word is in the trace. The same account still sends a plain message, so nothing is held. | `sender_unavailable` | permanent | Give the account Sales Navigator or a voice profile at Reply, or send another format, then propose the message again. |
 | The pinned contact identifier is not a Reply contact number, or no longer resolves there (`contact.not_found`). | `contact_not_found` | permanent | The pin has to be cleared before this person can be worked again. |
