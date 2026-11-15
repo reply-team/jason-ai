@@ -29,9 +29,9 @@ import {
 // An agent's chat, under its conversation: the campaign's approvals and questions that wait on a person, as cards.
 // Approve, Edit, Reject and an answer act through Needs you's holder; Details opens the item in Needs you.
 
-const readingSentence = 'This message is being read; it cannot be approved until its words are shown here.';
+const readingSentence = 'This approval is being read; it cannot be approved until it is shown here whole.';
 const unreadSentence =
-    'This message could not be read, so it cannot be approved here; Details opens it in Needs you. The runtime said:';
+    'This approval could not be read, so it cannot be approved here; Details opens it in Needs you. The runtime said:';
 
 function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSummary }) {
     const api = useApi();
@@ -53,15 +53,17 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
-    // A message is drawn and decided only once it has been read whole: its words, and the arguments it is checked by.
-    const unread = card.message && whole === undefined;
+    // Every approval, whatever it does, is decided only once it has been read whole: its doubts, its words or what will
+    // happen, and the person it reaches all come from that read. The rule is the card's, never a list of kinds.
+    const unread = whole === undefined;
     const held = busy || checking || unread;
 
     // The browser's approval panel's check, at the press: the work item is read again, and a message whose text moved
     // since the approval was asked is not approved, since the runtime asks again with the new text.
     async function approve() {
         setProblem(null);
-        if (whole !== undefined && card.message) {
+        if (whole === undefined) return;
+        if (card.message) {
             setChecking(true);
             const checked = await checkMessage(api, whole).finally(() => setChecking(false));
             if (checked === null) return;
@@ -109,7 +111,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
             {card.body !== null && <div className="said waiting-body">{card.body}</div>}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
-            {/* A message is approved only once its words are here: until then, the card says why it cannot be. */}
+            {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}
             {unread && (
                 <div className="note am" role="status">
                     {unreadWhy === undefined ? (

@@ -24,7 +24,7 @@ export interface ApprovalCard {
     /** Why it waits for a person, in a sentence. */
     why: string;
     age: string;
-    /** A message, which is checked against its work item before it is approved and which only a whole read can draw. */
+    /** A message, which is checked against its work item before it is approved; every approval waits for its whole read. */
     message: boolean;
 }
 

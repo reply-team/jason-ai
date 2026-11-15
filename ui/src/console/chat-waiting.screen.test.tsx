@@ -285,7 +285,7 @@ describe('what waits in an agent’s chat', () => {
         const pane = await openChat('Spring');
         await drawn(pane, 'apr_2');
         const email = card(pane, 'apr_1')!;
-        expect(words(email)).toContain('cannot be approved until its words are shown here');
+        expect(words(email)).toContain('cannot be approved until it is shown here whole');
         expect(within(email).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(true);
         const reads = () =>
             sent(fake, 'approval.get').filter((body) => (body as { approval_id: string }).approval_id === 'apr_1');
@@ -297,6 +297,40 @@ describe('what waits in an agent’s chat', () => {
         await waitFor(() => expect(reads()).toHaveLength(2), { timeout: 3000 });
         release();
         await drawn(pane, 'apr_1');
+    });
+
+    // The rule is the card's, not a list of kinds: whatever an approval does, Approve waits for its whole read.
+    it('holds Approve on an enrolment it could not read, says why, and approves nothing', async () => {
+        const { fake } = renderConsole();
+        fake.unreachable('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        const enroll = card(pane, 'apr_2')!;
+        const said = await waitFor(() => within(enroll).getByText(/could not be read, so it cannot be approved here/));
+        expect(words(said)).toContain('Failed to fetch');
+        const approve = within(enroll).getByRole('button', { name: 'Approve' });
+        expect(approve.hasAttribute('disabled')).toBe(true);
+        expect(within(enroll).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.click(approve);
+        await flush(() => Promise.resolve());
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+    });
+
+    it('holds Approve on an enrolment while its read is unanswered, says so, and approves nothing', async () => {
+        const { fake } = renderConsole();
+        const release = fake.hold('approval.get', (body) => (body as { approval_id?: string }).approval_id === 'apr_2');
+        const pane = await openChat('Spring');
+        await drawn(pane, 'apr_1');
+        const enroll = card(pane, 'apr_2')!;
+        expect(words(enroll)).toContain('cannot be approved until it is shown here whole');
+        const approve = within(enroll).getByRole('button', { name: 'Approve' });
+        expect(approve.hasAttribute('disabled')).toBe(true);
+        expect(within(enroll).getByRole('button', { name: 'Details' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.click(approve);
+        await flush(() => Promise.resolve());
+        expect(sent(fake, 'approval.approve')).toEqual([]);
+        release();
+        await drawn(pane, 'apr_2');
     });
 
     it('lets a refusal go with its card, at the next read that no longer lists it', async () => {
