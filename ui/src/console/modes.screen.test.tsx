@@ -1,4 +1,4 @@
-import { act as flush, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -14,13 +14,14 @@ import { chats, conversations } from './state';
 // A chat's access mode: the menu beside the composer, Full access disabled where the desktop says it cannot be chosen,
 // and the line under the composer, drawn from the mode the desktop holds and from nothing the page asked for.
 
-function renderConsole(desktop: StubDesktop = chatDesktop()): StubDesktop {
+function renderConsole(desktop: StubDesktop = chatDesktop(), more?: (fake: FakeApi) => void): StubDesktop {
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
+    more?.(fake);
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();
@@ -689,5 +690,110 @@ describe('Plan only’s plan card', () => {
             .filter((each) => each.name === 'chat.setMode' || each.name === 'chat.send');
         expect(asked).toEqual([]);
         expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Your message' }));
+    });
+});
+
+describe('the empty chat’s sentence about approval', () => {
+    const sentence = 'Nothing written here reaches a person without your approval.';
+    // The sentence of the hero under the heading, or null when that hero draws none.
+    const said = (heading = 'What should Jason work on?') => {
+        const text = screen.getByRole('heading', { name: heading }).closest('.hero')!.querySelector('p')?.textContent;
+        return text === sentence ? text : null;
+    };
+
+    it('is drawn in Ask first, Plan only and Auto-edit, and not in Full access, and follows a switch of mode both ways', async () => {
+        renderConsole();
+        await waitFor(() => menu());
+        expect(said()).not.toBeNull();
+        choose('plan_only');
+        await waitFor(() => expect(menu().value).toBe('plan_only'));
+        expect(said()).not.toBeNull();
+        choose('auto_edit');
+        await waitFor(() => expect(menu().value).toBe('auto_edit'));
+        expect(said()).not.toBeNull();
+        choose('full_access');
+        await waitFor(() => expect(line()).not.toBeNull());
+        expect(said()).toBeNull();
+        expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
+        choose('ask_first');
+        await waitFor(() => expect(line()).toBeNull());
+        expect(said()).not.toBeNull();
+    });
+
+    it('is not drawn in a new chat that starts in Full access by the standing choice, from its first moment', async () => {
+        const desktop = chatDesktop();
+        desktop.standing = { givenAt: '2026-11-11T09:00:00.000Z', newChats: true };
+        renderConsole(desktop);
+        await waitFor(() => expect(line()).not.toBeNull());
+        expect(menu().value).toBe('full_access');
+        expect(screen.getByRole('heading', { name: 'What should Jason work on?' })).toBeTruthy();
+        expect(said()).toBeNull();
+    });
+
+    it('is not drawn for a mode word this desktop does not know, which a newer desktop may write', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000C1',
+            campaignId: 'cmp_3',
+            title: 'Autumn',
+            mode: 'some_newer_mode' as never,
+        });
+        renderConsole(desktop, (fake) =>
+            fake
+                .answerAnyRequest('approval.list', () => 'approval.list/empty')
+                .answerAnyRequest('decision.list', () => 'decision.list/empty'),
+        );
+        const nav = () => document.querySelector<HTMLElement>('.side nav[aria-label="Conversations"]')!;
+        await waitFor(() => within(nav()).getByRole('button', { name: 'Autumn' }));
+        fireEvent.click(within(nav()).getByRole('button', { name: 'Autumn' }));
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Autumn?' }));
+        expect(said('What should Jason do in Autumn?')).toBeNull();
+    });
+
+    it('is drawn from the mode a reopened chat holds, never from an earlier drawing of it', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000A1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            mode: 'ask_first',
+        });
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000B1',
+            campaignId: 'cmp_2',
+            title: 'Summer',
+            mode: 'full_access',
+        });
+        // A chat of an agent reads what waits on a person in that agent's campaign; nothing does here.
+        renderConsole(desktop, (fake) =>
+            fake
+                .answerAnyRequest('approval.list', () => 'approval.list/empty')
+                .answerAnyRequest('decision.list', () => 'decision.list/empty'),
+        );
+        const nav = () => document.querySelector<HTMLElement>('.side nav[aria-label="Conversations"]')!;
+        const open = (name: string) => fireEvent.click(within(nav()).getByRole('button', { name }));
+        await waitFor(() => within(nav()).getByRole('button', { name: 'Spring' }));
+        open('Spring');
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        expect(said('What should Jason do in Spring?')).not.toBeNull();
+        open('Summer');
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Summer?' }));
+        expect(said('What should Jason do in Summer?')).toBeNull();
+        // Spring's mode moves while it is out of sight; it is drawn from the new mode the moment it is back.
+        flush(() => desktop.emit('conv_01JDKEPT0000000000000000A1', { kind: 'mode', mode: 'full_access' }));
+        // Every frame drawn from here on is watched: none may carry the sentence under Spring's heading.
+        let stale = false;
+        const watching = new MutationObserver(() => {
+            const heading = screen.queryByRole('heading', { name: 'What should Jason do in Spring?' });
+            if (heading?.closest('.hero')?.querySelector('p')?.textContent === sentence) stale = true;
+        });
+        watching.observe(document.body, { childList: true, subtree: true, characterData: true });
+        open('Spring');
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        watching.disconnect();
+        expect(stale).toBe(false);
+        expect(said('What should Jason do in Spring?')).toBeNull();
+        flush(() => desktop.emit('conv_01JDKEPT0000000000000000A1', { kind: 'mode', mode: 'plan_only' }));
+        expect(said('What should Jason do in Spring?')).not.toBeNull();
     });
 });
