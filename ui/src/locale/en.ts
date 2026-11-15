@@ -341,6 +341,9 @@ export const en = {
     'modes.system.note': 'An agent may set its own; it is shown under its Settings tab.',
     'shell.version':
         'This UI was built for API {ui}; the runtime speaks {runtime}. Reinstall the UI from a release that matches.',
+    'agent.kind.sequence': 'Sequence',
+    'agent.kind.adaptive': 'Adaptive',
+    'agent.kind.paths': 'Paths',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useApi } from '../../api/context';
 import type { Campaign, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
 import { campaignTabs, href, type CampaignTab, type Route } from '../../router';
 import { essentials } from '../../platform/console-shell';
@@ -8,6 +10,8 @@ import { ActionsRow } from '../../layout/actions-row';
 import { PanelHeader } from '../../layout/panel-header';
 import { Tabs } from '../../layout/tabs';
 import { transitions, verbs, type Transition } from './pause-dialog';
+import { agentKind, asksForCreate, firstTabName, kindWord } from './kind';
+import * as store from './store';
 
 type At = Extract<Route, { screen: 'campaigns' }>;
 
@@ -20,7 +24,7 @@ type Props = {
 };
 
 const tabNames: Record<CampaignTab, string> = {
-    sequence: 'Sequence',
+    sequence: 'Sequence', // drawn by firstTabName: Sequence where the label says Sequence, Paths otherwise
     people: 'People',
     inbox: 'Inbox',
     results: 'Results',
@@ -50,6 +54,14 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
         period: at.period,
         filters: at.filters,
     });
+    const api = useApi();
+    const asks = asksForCreate(campaign);
+    useEffect(() => {
+        if (asks) void store.loadCreating(api, campaign.id);
+    }, [api, campaign.id, asks]);
+    const open = store.creating.value?.id === campaign.id ? store.creating.value.open : null;
+    const kind = agentKind(campaign, asks ? open : false);
+    const word = kindWord(kind);
     const row = counted as Record<string, unknown> | null;
     // Activity's people are the period's, not the campaign's: the line under the name says how many it holds now.
     const people = at.view === 'summary' && typeof row?.['people'] === 'number' ? row['people'] : null;
@@ -68,6 +80,13 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                         <span className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
                             {campaign.status}
                         </span>{' '}
+                        {word && (
+                            <>
+                                <span className="badge outline kind" data-kind={kind}>
+                                    {word}
+                                </span>{' '}
+                            </>
+                        )}
                         {sub(campaign, people)}
                     </>
                 }
@@ -118,7 +137,12 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                         .filter((each) => !essentials() || !demoOnly.includes(each))
                         .map((each) => ({
                             key: each,
-                            label: each === 'people' && at.view === 'activity' ? 'People Activity' : tabNames[each],
+                            label:
+                                each === 'people' && at.view === 'activity'
+                                    ? 'People Activity'
+                                    : each === 'sequence'
+                                      ? firstTabName(kind)
+                                      : tabNames[each],
                         }))}
                     active={at.tab}
                     to={to}
