@@ -147,6 +147,16 @@ describe('the tiles', () => {
         expect(tiles[2]!.sub).toBe('12.5% reply rate');
         expect(tiles[5]!.sub).toBe('2 bounced');
     });
+    it('shows the dash and the count, never a rate above a hundred percent, where more bounced than were contacted', () => {
+        // Bounces of messages sent before the window, against the window's one contacted.
+        const tile = tilesOf({
+            approvals: 0,
+            questions: 0,
+            waitingKnown: true,
+            activity: { contacted: 1, replied: 0, bounced: 3 },
+        })[5]!;
+        expect(tile).toEqual({ label: 'Bounce rate', value: null, sub: '3 bounced', none: 'no rate for this period' });
+    });
     it('reads Bounce rate as bounced over contacted, how many bounced under it, and a dash where nobody was contacted', () => {
         const bounce = (contacted: number, bounced: number) =>
             tilesOf({
@@ -157,14 +167,13 @@ describe('the tiles', () => {
             })[5]!;
         expect(bounce(11, 2)).toEqual({ label: 'Bounce rate', value: '18.2%', sub: '2 bounced' });
         expect(bounce(5, 0)).toEqual({ label: 'Bounce rate', value: '0%', sub: '0 bounced' });
-        // A bounce of a message sent before the window, against the window's contacted.
-        expect(bounce(1, 3)).toEqual({ label: 'Bounce rate', value: '300%', sub: '3 bounced' });
+        expect(bounce(3, 3)).toEqual({ label: 'Bounce rate', value: '100%', sub: '3 bounced' });
         // Nobody contacted: no rate, and the count under the dash only when somebody bounced.
         expect(bounce(0, 3)).toEqual({
             label: 'Bounce rate',
             value: null,
             sub: '3 bounced',
-            none: 'no rate: nobody was contacted',
+            none: 'no rate for this period',
         });
         expect(bounce(0, 0)).toEqual({ label: 'Bounce rate', value: null, sub: null });
         expect(tilesOf({ approvals: 0, questions: 0, waitingKnown: true, activity: null })[5]).toEqual({

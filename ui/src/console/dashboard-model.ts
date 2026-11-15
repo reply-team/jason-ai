@@ -214,11 +214,13 @@ export interface Tile {
 /**
  * The Bounce rate tile: the window's bounced over its contacted as a percentage, with how many bounced under it; a dash
  * where nobody was contacted, with the count under it still when somebody bounced. No trend. Both are numbers of people
- * of the one window, so a bounce of a message sent before the window counts against the window's contacted, and a short
- * window can show a high rate.
+ * of the one window, so a bounce of a message sent before the window counts against the window's contacted: where more
+ * bounced than were contacted, the share means nothing, and the tile shows the dash and the count rather than a rate
+ * above a hundred percent.
  */
 export function bounceTile(activity: ActivityRead | null): Tile {
-    const rate = activity ? rateOf(activity.bounced, activity.contacted) : null;
+    const rate =
+        activity && activity.bounced <= activity.contacted ? rateOf(activity.bounced, activity.contacted) : null;
     const known = activity !== null && (rate !== null || activity.bounced > 0);
     return {
         label: t('dash.tile.bounce'),

@@ -193,7 +193,7 @@ export const en = {
     'dash.tile.interested': 'Interested',
     'dash.tile.meetings': 'Meetings booked',
     'dash.tile.bounce': 'Bounce rate',
-    'dash.tile.bounce.none': 'no rate: nobody was contacted',
+    'dash.tile.bounce.none': 'no rate for this period',
     'dash.tile.none': 'no data yet',
     'dash.rate': '{rate} reply rate',
     'dash.bounced': '{n} bounced',

@@ -305,7 +305,7 @@ describe('the Dashboard', () => {
         expect(part('Bounce rate', 'b')).toBe('–');
         // A screen reader hears why there is no number, never "no data yet" beside a count.
         expect(tile(panel, 'Bounce rate').querySelector('b')!.getAttribute('aria-label')).toBe(
-            'no rate: nobody was contacted',
+            'no rate for this period',
         );
     });
 });
