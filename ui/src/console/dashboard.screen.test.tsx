@@ -14,6 +14,7 @@ import * as dashboard from './dashboard';
 import { attention, filter } from './needs';
 import { chats, lines } from './state';
 import { bringForward } from '../test/area';
+import { nothingWaitsInChats } from '../test/waiting';
 
 // The Dashboard: opened from the sidebar row after the Feed, drawn from the reads the console already makes and two
 // reads of its own over one period: the counts and the replies a role judged, by category. The counts are recorded for
@@ -38,7 +39,7 @@ type Options = {
 };
 
 function renderConsole(options: Options = {}) {
-    const fake = new FakeApi()
+    const fake = nothingWaitsInChats(new FakeApi())
         .answer('approval.list', options.approvals ?? 'approval.list/pending')
         .answer(
             'decision.list',
