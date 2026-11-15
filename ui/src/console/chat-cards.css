@@ -9,6 +9,24 @@
     margin-bottom: 2px;
 }
 
+/* An empty chat: its mark over its question and promise, centred, and the chips under them. */
+.jc-console .thread .hero {
+    flex-direction: column;
+    gap: 8px;
+    margin: 28px 0 22px;
+    text-align: center;
+}
+.jc-console .thread .hero h2 {
+    font-size: 24px;
+}
+.jc-console .thread .hero p {
+    margin: 0;
+    color: var(--mute);
+}
+.jc-console .thread .sugs {
+    justify-content: center;
+}
+
 /* The trail of steps: an arrow that turns as the list opens, none while the turn still runs. */
 .jc-console .vsteps > summary::after {
     content: '▸';
@@ -130,6 +148,15 @@
 .jc-console .ui-opt:disabled {
     cursor: default;
     opacity: 0.55;
+}
+/* The answer in the person's own words, beside its button, with the optional reason on a line of its own beneath. */
+.jc-console .waiting-card form.ask-a .inp {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+.jc-console .waiting-card form.ask-a .inp:last-child {
+    flex-basis: 100%;
 }
 
 /* The dark theme, chosen by the system or by the person: the same values both ways. */
