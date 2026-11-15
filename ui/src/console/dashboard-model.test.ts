@@ -131,8 +131,8 @@ describe('the categories', () => {
 });
 
 describe('the tiles', () => {
-    const read: ActivityRead = { contacted: 40, replied: 5 };
-    it('gives six tiles in order, the three with no fact read holding no value', () => {
+    const read: ActivityRead = { contacted: 40, replied: 5, bounced: 2 };
+    it('gives six tiles in order, the two with no fact read holding no value', () => {
         const tiles = tilesOf({ approvals: 2, questions: 1, waitingKnown: true, activity: read });
         expect(tiles.map((each) => each.label)).toEqual([
             'Needs you',
@@ -142,9 +142,31 @@ describe('the tiles', () => {
             'Meetings booked',
             'Bounce rate',
         ]);
-        expect(tiles.map((each) => each.value)).toEqual([3, 40, 5, null, null, null]);
+        expect(tiles.map((each) => each.value)).toEqual([3, 40, 5, null, null, '5%']);
         expect(tiles[0]!.sub).toBe('2 approvals · 1 question');
         expect(tiles[2]!.sub).toBe('12.5% reply rate');
+        expect(tiles[5]!.sub).toBe('2 bounced');
+    });
+    it('reads Bounce rate as bounced over contacted, how many bounced under it, and a dash where nobody was contacted', () => {
+        const bounce = (contacted: number, bounced: number) =>
+            tilesOf({
+                approvals: 0,
+                questions: 0,
+                waitingKnown: true,
+                activity: { contacted, replied: 0, bounced },
+            })[5]!;
+        expect(bounce(11, 2)).toEqual({ label: 'Bounce rate', value: '18.2%', sub: '2 bounced' });
+        expect(bounce(5, 0)).toEqual({ label: 'Bounce rate', value: '0%', sub: '0 bounced' });
+        // A bounce of a message sent before the window, against the window's contacted.
+        expect(bounce(1, 3)).toEqual({ label: 'Bounce rate', value: '300%', sub: '3 bounced' });
+        // Nobody contacted: no rate, and the count under the dash only when somebody bounced.
+        expect(bounce(0, 3)).toEqual({ label: 'Bounce rate', value: null, sub: '3 bounced' });
+        expect(bounce(0, 0)).toEqual({ label: 'Bounce rate', value: null, sub: null });
+        expect(tilesOf({ approvals: 0, questions: 0, waitingKnown: true, activity: null })[5]).toEqual({
+            label: 'Bounce rate',
+            value: null,
+            sub: null,
+        });
     });
     it('fills Interested and Meetings booked from the threads of their words, each saying on hover what it counts', () => {
         const replies: ReplyCountRead = {
@@ -159,7 +181,7 @@ describe('the tiles', () => {
             },
         };
         const tiles = tilesOf({ approvals: 0, questions: 0, waitingKnown: true, activity: read, replies });
-        expect(tiles.map((each) => each.value)).toEqual([0, 40, 5, 2, 1, null]);
+        expect(tiles.map((each) => each.value)).toEqual([0, 40, 5, 2, 1, '5%']);
         expect(tiles[3]!.hint).toBe('Conversations the reply-reading role judged interested.');
         expect(tiles[4]!.hint).toBe('Conversations the reply-reading role judged to have a meeting booked.');
         expect(tiles[5]!.hint).toBeUndefined();
@@ -177,7 +199,7 @@ describe('the tiles', () => {
             approvals: 0,
             questions: 0,
             waitingKnown: true,
-            activity: { contacted: 0, replied: 0 },
+            activity: { contacted: 0, replied: 0, bounced: 0 },
         });
         expect(tiles.slice(0, 3).map((each) => each.value)).toEqual([0, 0, 0]);
         expect(tiles[2]!.sub).toBeNull();
@@ -242,8 +264,11 @@ describe('the daily trends', () => {
     it('compares contacted and replied, and the threads of the two words, between the windows', () => {
         const trends = tileTrendsOf(
             reads(
-                { activity: { contacted: 9, replied: 2 }, replies: replies(['interested', 4], ['meeting_booked', 1]) },
-                { activity: { contacted: 4, replied: 5 }, replies: replies(['interested', 4]) },
+                {
+                    activity: { contacted: 9, replied: 2, bounced: 1 },
+                    replies: replies(['interested', 4], ['meeting_booked', 1]),
+                },
+                { activity: { contacted: 4, replied: 5, bounced: 0 }, replies: replies(['interested', 4]) },
             ),
         );
         expect(trends.contacted).toEqual({ text: '+5', tone: 'up' });
@@ -262,7 +287,7 @@ describe('the daily trends', () => {
             tone: 'down',
         });
         const unread = tileTrendsOf(
-            reads({ activity: { contacted: 1, replied: 1 } }, { replies: replies(['interested', 2]) }),
+            reads({ activity: { contacted: 1, replied: 1, bounced: 0 } }, { replies: replies(['interested', 2]) }),
         );
         expect(unread).toEqual({ contacted: null, replied: null, interested: null, meetings: null });
         expect(tileTrendsOf(null).contacted).toBeNull();
@@ -279,7 +304,7 @@ describe('the daily trends', () => {
             approvals: 0,
             questions: 0,
             waitingKnown: true,
-            activity: { contacted: 5, replied: 1 },
+            activity: { contacted: 5, replied: 1, bounced: 1 },
             trends,
         });
         expect(tiles.map((each) => each.trend ?? null)).toEqual([

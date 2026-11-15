@@ -195,6 +195,7 @@ export const en = {
     'dash.tile.bounce': 'Bounce rate',
     'dash.tile.none': 'no data yet',
     'dash.rate': '{rate} reply rate',
+    'dash.bounced': '{n} bounced',
     'dash.approval.one': '{n} approval',
     'dash.approval.many': '{n} approvals',
     'dash.question.one': '{n} question',

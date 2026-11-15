@@ -340,6 +340,7 @@ export type CampaignActivityRow = {
     worked_on: number;
     contacted: number;
     replied: number;
+    bounced: number;
     opted_out: number;
     removed: number;
 };
