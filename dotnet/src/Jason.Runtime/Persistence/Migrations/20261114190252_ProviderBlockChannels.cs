@@ -47,7 +47,8 @@ namespace Jason.Runtime.Persistence.Migrations
             // Down cannot make the old index again once one sender has two blocks open, on two channels or on one and on
             // every channel, a mailbox and a LinkedIn account of one identifier say: the old index holds one open block a
             // sender, and the create fails. Where it succeeds, the column goes, and every block that named a channel names
-            // none again: each becomes its sender's block on every channel.
+            // none again: each becomes its sender's block on every channel. The column is dropped in place, once no index
+            // names it, rather than by rebuilding the table, which would write the table again in another column order.
             migrationBuilder.DropIndex(
                 name: "ix_provider_blocks_one_open_per_sender",
                 table: "provider_blocks");
@@ -56,9 +57,7 @@ namespace Jason.Runtime.Persistence.Migrations
                 name: "ix_provider_blocks_one_open_per_sender_on_every_channel",
                 table: "provider_blocks");
 
-            migrationBuilder.DropColumn(
-                name: "channel",
-                table: "provider_blocks");
+            migrationBuilder.Sql("ALTER TABLE provider_blocks DROP COLUMN channel;");
 
             migrationBuilder.CreateIndex(
                 name: "ix_provider_blocks_one_open_per_sender",
