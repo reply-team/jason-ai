@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
@@ -11,7 +12,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
-import { styleOf } from '../test/stylesheet';
+import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -332,7 +333,7 @@ describe('the sidebar’s look', () => {
             return found!;
         });
         expect(styleOf(count)).toMatchObject({
-            background: 'var(--red)',
+            background: 'var(--count-bg)',
             color: '#fff',
             'font-size': '11px',
             'font-weight': '700',
@@ -348,6 +349,87 @@ describe('the sidebar’s look', () => {
             color: 'var(--amber)',
             'font-weight': '700',
         });
+    });
+
+    it('draws Needs you as a check in a circle, Settings as a cog, and Recent’s filter as two sliders', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        // Each icon's lines, in the order the icon table draws them.
+        const drawn = (icon: Element) =>
+            [...icon.children].map((each) =>
+                each.tagName === 'circle'
+                    ? `circle ${each.getAttribute('cx')},${each.getAttribute('cy')} r${each.getAttribute('r')}`
+                    : `path ${each.getAttribute('d')}`,
+            );
+        const needs = within(menu()).getByRole('button', { name: /^Needs you/ });
+        expect(drawn(needs.querySelector('svg')!)).toEqual(['circle 12,12 r10', 'path M8.5 11.8l2.6 2.6 4.6-5']);
+        const settings = side().getByRole('button', { name: 'Settings' });
+        expect(drawn(settings.querySelector('svg')!)).toEqual([
+            'path M9.7 4.8L10.5 2.1L13.5 2.1L14.3 4.8L15.5 5.3L17.9 3.9L20.1 6.1L18.7 8.5L19.2 9.7L21.9 10.5L21.9 13.5' +
+                'L19.2 14.3L18.7 15.5L20.1 17.9L17.9 20.1L15.5 18.7L14.3 19.2L13.5 21.9L10.5 21.9L9.7 19.2L8.5 18.7' +
+                'L6.1 20.1L3.9 17.9L5.3 15.5L4.8 14.3L2.1 13.5L2.1 10.5L4.8 9.7L5.3 8.5L3.9 6.1L6.1 3.9L8.5 5.3z',
+            'circle 12,12 r3',
+        ]);
+        const filter = side().getByRole('button', { name: 'Filter' });
+        expect(drawn(filter.querySelector('svg')!)).toEqual([
+            'path M4 7h10M18 7h2M4 17h2M10 17h10',
+            'circle 16,7 r2',
+            'circle 8,17 r2',
+        ]);
+    });
+
+    it('gives the count on Needs you a ground its white figures read on, in the light theme and both dark ones', async () => {
+        renderConsole(stubDesktop(), 'live');
+        // The sidebar is painted afresh as what it shows changes: the count's style is read while it is drawn.
+        const style = await waitFor(() => {
+            const found = within(menu())
+                .getByRole('button', { name: /^Needs you/ })
+                .querySelector('.count');
+            expect(found).not.toBeNull();
+            const read = styleOf(found!);
+            expect(read.background).toBeDefined();
+            return read;
+        });
+        // Each dark theme's tokens, read from the file: the one the system asks for sits under `@media`, which the
+        // cascade reader leaves out. The run starts in ui/.
+        const sheet = readFileSync('src/console/console.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+        const darkTokens = (head: string) => {
+            const at = sheet.indexOf(head + ' {');
+            expect(at, head).toBeGreaterThanOrEqual(0);
+            const body = sheet.slice(sheet.indexOf('{', at) + 1, sheet.indexOf('}', at));
+            return Object.fromEntries(
+                [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((each) => [each[1]!, each[2]!.trim()]),
+            );
+        };
+        const system = darkTokens("    :root:not([data-theme='light']) .jc-console");
+        const chosen = darkTokens(":root[data-theme='dark'] .jc-console");
+        // The dark theme is the same whether the system or the person chose it, the strip's tokens included.
+        expect(system).toEqual(chosen);
+        const resolve = (value: string, dark: Record<string, string>): string => {
+            const named = /^var\((--[\w-]+)\)$/.exec(value);
+            return named ? resolve(dark[named[1]!] ?? tokenOf(named[1]!) ?? '', dark) : value;
+        };
+        const luminance = (hex: string) => {
+            const six = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join('') : hex.slice(1);
+            const [r, g, b] = [0, 2, 4].map((at) => {
+                const c = parseInt(six.slice(at, at + 2), 16) / 255;
+                return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            });
+            return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+        };
+        for (const [theme, dark] of [
+            ['light', {}],
+            ['dark', chosen],
+        ] as const) {
+            const ground = resolve(style.background!, dark);
+            const figures = resolve(style.color!, dark);
+            expect([ground, figures], theme).toEqual([
+                expect.stringMatching(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i),
+                expect.stringMatching(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i),
+            ]);
+            const [hi, lo] = [luminance(ground), luminance(figures)].sort((x, y) => y - x);
+            expect((hi! + 0.05) / (lo! + 0.05), theme).toBeGreaterThanOrEqual(4.5);
+        }
     });
 
     it('heads the sidebar with the mark and the wordmark at the brand’s height', async () => {

@@ -179,6 +179,18 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(opens(desktop)[1]!.args).toEqual(['vscode', undefined]);
     });
 
+    it('draws the main place’s glyph before its name: a prompt for a command line, brackets for an editor', async () => {
+        const desktop = await renderConsole(kept);
+        const glyph = () => mainPart().querySelector('svg.oi-glyph')?.getAttribute('data-glyph');
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        expect(glyph()).toBe('prompt');
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in VS Code'));
+        expect(glyph()).toBe('editor');
+        expect(opens(desktop)).toHaveLength(1);
+    });
+
     it('copies the path from the menu without making Copy path the default', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));

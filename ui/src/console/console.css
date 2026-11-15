@@ -304,6 +304,8 @@
     --demo-bg: #fff4d6;
     --demo-line: #f2dc9c;
     --demo-ink: #6b4e00;
+    /* The count on Needs you: white figures on it read at 4.5:1 or more in either theme. */
+    --count-bg: var(--red);
     color-scheme: light;
 }
 .jc-console {
@@ -536,7 +538,7 @@
     min-width: 17px;
     padding: 0 6px;
     border-radius: 9px;
-    background: var(--red);
+    background: var(--count-bg);
     color: #fff;
     font-size: 11px;
     font-weight: 700;
@@ -1030,6 +1032,13 @@
         --blue: #5cc1f5;
         --blue-2: #10283a;
         --gray-2: #1f1f24;
+        --seg-track: rgba(255, 255, 255, 0.08);
+        --seg-on: #2a2a30;
+        --seg-on-ink: var(--ink);
+        --demo-bg: var(--amber-2);
+        --demo-line: #4a3a1c;
+        --demo-ink: var(--amber);
+        --count-bg: #c2410c;
         color-scheme: dark;
     }
 }
@@ -1071,6 +1080,7 @@
     --demo-bg: var(--amber-2);
     --demo-line: #4a3a1c;
     --demo-ink: var(--amber);
+    --count-bg: #c2410c;
     color-scheme: dark;
 }
 html,

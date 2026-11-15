@@ -251,7 +251,7 @@ export function sideView(): Html {
                         : null
                 }
                 <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
-                    ${svg('att', 15)}<span>Needs you</span>
+                    ${svg('needs', 15)}<span>Needs you</span>
                     ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
                 </button>
                 ${full ? pageRow('people', 'People', 'people') : null}

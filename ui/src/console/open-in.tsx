@@ -20,16 +20,25 @@ import { activePanel, chats, currentChat } from './state';
 // which opens the person's own AI on Jason's roles and plugins: the page sends nothing, and names no host, which the
 // person's preference chooses as the entry is chosen.
 
-const editorIds = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
+const editorIds: readonly DesktopOpenInPlace[] = ['vscode', 'cursor', 'antigravity', 'windsurf', 'zed'];
 
 /** The places that are a command line: the main part draws a prompt's glyph before their name. */
 const terminalPlaces: readonly DesktopOpenInPlace[] = ['claude', 'codex', 'terminal'];
 
-/** A command line's prompt, drawn before the name of a place that is one. */
-function TerminalGlyph() {
+/** The glyph drawn before the main place's name: a prompt for a command line, a pair of brackets for an editor. */
+const glyphs = { prompt: 'M4 7l5 5-5 5M12 18h8', editor: 'M8 6l-6 6 6 6M16 6l6 6-6 6' } as const;
+
+function glyphOf(place: DesktopOpenInPlace): keyof typeof glyphs | undefined {
+    if (terminalPlaces.includes(place)) return 'prompt';
+    return editorIds.includes(place) ? 'editor' : undefined;
+}
+
+/** A place's glyph, before its name in the main part. */
+function PlaceGlyph({ glyph }: { glyph: keyof typeof glyphs }) {
     return (
         <svg
             className="oi-glyph"
+            data-glyph={glyph}
             width="16"
             height="16"
             viewBox="0 0 24 24"
@@ -40,7 +49,7 @@ function TerminalGlyph() {
             strokeLinejoin="round"
             aria-hidden="true"
         >
-            <path d="M4 7l5 5-5 5M12 18h8" />
+            <path d={glyphs[glyph]} />
         </svg>
     );
 }
@@ -283,7 +292,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     }
                     onClick={() => main !== undefined && void open(main.id)}
                 >
-                    {main !== undefined && terminalPlaces.includes(main.id) && <TerminalGlyph />}
+                    {main !== undefined && glyphOf(main.id) !== undefined && <PlaceGlyph glyph={glyphOf(main.id)!} />}
                     <span className="oi-l">{mainWords}</span>
                 </button>
                 <button
