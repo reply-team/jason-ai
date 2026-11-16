@@ -15,7 +15,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { nothingWaitsInChats } from '../test/waiting';
 import { clock } from '../time/format';
 import { acts } from './card-acts';
-import { accountsHeld } from './card-accounts';
+import { cardReads } from './card-frame';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -106,10 +106,22 @@ const read = (pane: HTMLElement) =>
     waitFor(() => {
         const shown = card(pane);
         expect(within(shown).getByText(/^As of /)).toBeTruthy();
-        expect(within(shown).queryByText('Reading…')).toBeNull();
+        expect(within(shown).queryByText('Reading...')).toBeNull();
         return shown;
     });
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+/** Reply's part of a card: the facts read from Reply now, under their own label. */
+const fromReply = (shown: HTMLElement): HTMLElement => {
+    const part = shown.querySelector<HTMLElement>('.card-facts.card-provider');
+    expect(part).not.toBeNull();
+    return part!;
+};
+/** The runtime's part of a card: its facts under "On record now". */
+const onRecord = (shown: HTMLElement): HTMLElement => {
+    const part = shown.querySelector<HTMLElement>('.card-facts:not(.card-provider)');
+    expect(part).not.toBeNull();
+    return part!;
+};
 const count = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name).length;
 const asked = (fake: FakeApi, operation: string) => fake.calls.filter((each) => each.operation === operation).length;
 const rows = (shown: HTMLElement) =>
@@ -119,7 +131,7 @@ beforeEach(() => {
     chats.value = {};
     conversations.value = [];
     acts.value = {};
-    accountsHeld.value = {};
+    cardReads.value = {};
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -155,7 +167,7 @@ describe('the accounts card', () => {
         expect(pane.textContent).not.toContain('"kind"');
         expect(within(pane).getByText('Here is where your accounts stand.')).toBeTruthy();
         expect(shown.querySelector('.who')).toBeNull();
-        const provider = within(shown).getByRole('region', { name: 'Read from Reply now' });
+        const provider = fromReply(shown);
         expect(words(provider)).toContain('Signed in to Reply as owner@example.test');
         expect(words(provider)).toContain('The runtime’s Reply plugin uses this sign-in');
         expect(words(provider)).toContain('9 accounts');
@@ -176,7 +188,7 @@ describe('the accounts card', () => {
             ['new@example.test', 'New inbox', 'Email', 'warmingUp'],
             ['quiet@example.test', 'Quiet inbox', 'Email', 'none given'],
         ]);
-        const record = within(shown).getByRole('region', { name: 'On record now' });
+        const record = onRecord(shown);
         expect(words(record)).toContain('Plugin that sends messages by default Reply (reply)');
         expect(words(record)).toContain('Its state: valid');
         // Nothing of the provider's stands under the runtime's facts, and nothing of the runtime's under Reply's.
@@ -188,7 +200,7 @@ describe('the accounts card', () => {
         renderConsole([setUp(turn())]);
         const pane = await openChat('Sending');
         const shown = await read(pane);
-        const captions = [...shown.querySelectorAll('.card-cap')];
+        const captions = [...shown.querySelectorAll('.card-head, .card-rec')];
         expect(captions.map((each) => words(each))).toEqual(['Accounts', 'Read from Reply now', 'On record now']);
         for (const caption of captions) {
             expect(caption.closest('b, strong')).toBeNull();
@@ -204,7 +216,7 @@ describe('the accounts card', () => {
         };
         renderConsole([setUp(turn())], stubDesktop(out));
         const pane = await openChat('Sending');
-        const provider = within(await read(pane)).getByRole('region', { name: 'Read from Reply now' });
+        const provider = fromReply(await read(pane));
         expect(words(provider)).toContain('Not signed in to Reply');
         expect(words(provider)).toContain('The runtime’s Reply plugin does not use a Reply sign-in yet');
         expect(words(provider)).toContain('No accounts');
@@ -225,7 +237,7 @@ describe('the accounts card', () => {
         };
         renderConsole([setUp(turn())], stubDesktop(partly));
         const pane = await openChat('Sending');
-        const provider = within(await read(pane)).getByRole('region', { name: 'Read from Reply now' });
+        const provider = fromReply(await read(pane));
         expect(
             within(provider).getByText('LinkedIn is not in this Reply account’s plan or role, so Reply lists none.'),
         ).toBeTruthy();
@@ -274,8 +286,8 @@ describe('the accounts card', () => {
         const fake = new FakeApi().answer('route.list', 'route.list/empty');
         renderConsole([setUp(turn())], stubDesktop(everyState), fake);
         const pane = await openChat('Sending');
-        expect(words(within(await read(pane)).getByRole('region', { name: 'On record now' }))).toBe(
-            'On record now No route sends messages: the runtime routes no plugin to send them.',
+        expect(words(onRecord(await read(pane)))).toBe(
+            'On record now No route sends messages: the runtime routes no plugin to send them. Open Accounts',
         );
     });
 
@@ -283,7 +295,7 @@ describe('the accounts card', () => {
         const fake = new FakeApi().answer('plugin.list', 'plugin.list/none');
         renderConsole([setUp(turn())], stubDesktop(everyState), fake);
         const pane = await openChat('Sending');
-        const record = words(within(await read(pane)).getByRole('region', { name: 'On record now' }));
+        const record = words(onRecord(await read(pane)));
         expect(record).toContain('reply');
         expect(record).toContain('The runtime does not list this plugin.');
         expect(record).not.toContain('sends messages');
@@ -318,9 +330,7 @@ describe('the accounts card', () => {
         };
         const pane = await openChat('Sending');
         const shown = await read(pane);
-        expect(words(within(shown).getByRole('region', { name: 'Read from Reply now' }))).toContain(
-            'Reply could not be read: The desktop could not answer.',
-        );
+        expect(words(fromReply(shown))).toContain('Reply could not be read: The desktop could not answer.');
         desktop.setup.status = status;
         fireEvent.click(within(shown).getByRole('button', { name: 'Refresh' }));
         await waitFor(() => within(card(pane)).getByText('sales@example.test'));
@@ -333,9 +343,32 @@ describe('the accounts card', () => {
         fake.unreachable('plugin.list');
         renderConsole([setUp(turn())], stubDesktop(everyState), fake);
         const pane = await openChat('Sending');
-        const record = words(within(await read(pane)).getByRole('region', { name: 'On record now' }));
+        const record = words(onRecord(await read(pane)));
         expect(record).toContain('The runtime’s routes could not be read: Failed to fetch');
         expect(record).toContain('The runtime’s plugins could not be read: Failed to fetch');
+    });
+
+    it('opened afresh, reads only its last card that reads; an earlier one stands as a stub until Show now', async () => {
+        const { fake } = renderConsole([
+            setUp([...turn(), { kind: 'user', text: 'And now?' }, asking(`Again.\n\n${fenced({ kind: 'accounts' })}`)]),
+        ]);
+        const pane = await openChat('Sending');
+        await waitFor(() => expect(within(pane).getAllByRole('group', { name: 'Accounts' })).toHaveLength(2));
+        await waitFor(() => {
+            const [earlier, later] = within(pane).getAllByRole('group', { name: 'Accounts' });
+            expect(within(later!).getByText(/^As of /)).toBeTruthy();
+            expect(within(earlier!).getByRole('button', { name: 'Show now' })).toBeTruthy();
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect([asked(fake, 'route.list'), asked(fake, 'plugin.list')]).toEqual([1, 1]);
+        const [earlier] = within(pane).getAllByRole('group', { name: 'Accounts' });
+        fireEvent.click(within(earlier!).getByRole('button', { name: 'Show now' }));
+        await waitFor(() =>
+            expect(
+                within(within(pane).getAllByRole('group', { name: 'Accounts' })[0]!).getByText(/^As of /),
+            ).toBeTruthy(),
+        );
+        expect([asked(fake, 'route.list'), asked(fake, 'plugin.list')]).toEqual([2, 2]);
     });
 
     it('is drawn in an agent’s chat as in a set-up chat, its turn’s words after it named as the speaker’s', async () => {
@@ -417,21 +450,19 @@ describe('the accounts card', () => {
         expect(within(card(pane)).getByText(`As of ${clock(new Date(at + 3 * 60_000), zone)}`)).toBeTruthy();
     });
 
-    it('says it is reading while a read is under way, with its Refresh off', async () => {
+    it('says it is reading while a read is under way, and when it read once it has', async () => {
         const fake = new FakeApi();
         const release = fake.hold('route.list');
         renderConsole([setUp(turn())], stubDesktop(everyState), fake);
         const pane = await openChat('Sending');
         const shown = await waitFor(() => {
             const each = card(pane);
-            expect(within(each).getByText('Reading…')).toBeTruthy();
+            expect(within(each).getByText('Reading...')).toBeTruthy();
             return each;
         });
-        expect(within(shown).getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(true);
         expect(within(shown).queryByText(/^As of /)).toBeNull();
         flush(() => release());
-        const done = await read(pane);
-        expect(within(done).getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(false);
+        expect(within(await read(pane)).getByText('sales@example.test')).toBeTruthy();
     });
 
     it('acts on nothing: its only buttons are Refresh and Open Accounts, which opens the Accounts page', async () => {
@@ -458,9 +489,7 @@ describe('the accounts card', () => {
         const { desktop } = renderConsole([setUp(turn())], stubDesktop(everyState), fake);
         const pane = await openChat('Sending');
         const shown = await read(pane);
-        expect(words(within(shown).getByRole('region', { name: 'On record now' }))).toContain(
-            'The runtime’s routes could not be read: Failed to fetch',
-        );
+        expect(words(onRecord(shown))).toContain('The runtime’s routes could not be read: Failed to fetch');
         expect(within(shown).getByText('sales@example.test')).toBeTruthy();
         // The desktop's read refused: the runtime's part stands, Reply's says it could not be read.
         back();
@@ -468,13 +497,9 @@ describe('the accounts card', () => {
         fireEvent.click(within(shown).getByRole('button', { name: 'Refresh' }));
         await waitFor(() => within(card(pane)).getByText(/^Reply could not be read/));
         const again = await read(pane);
-        expect(words(within(again).getByRole('region', { name: 'Read from Reply now' }))).toContain(
-            'Reply could not be read: The Reply CLI did not answer.',
-        );
+        expect(words(fromReply(again))).toContain('Reply could not be read: The Reply CLI did not answer.');
         expect(within(again).queryByText('sales@example.test')).toBeNull();
-        expect(words(within(again).getByRole('region', { name: 'On record now' }))).toContain(
-            'Plugin that sends messages by default Reply (reply)',
-        );
+        expect(words(onRecord(again))).toContain('Plugin that sends messages by default Reply (reply)');
     });
 });
 
@@ -517,11 +542,9 @@ describe('the accounts card in a browser tab', () => {
                     'Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason Desktop; a browser cannot do them.',
                 ),
             ).toBeTruthy();
-            expect(within(shown).queryByRole('region', { name: 'Read from Reply now' })).toBeNull();
+            expect(within(shown).queryByText('Read from Reply now')).toBeNull();
             expect(within(shown).queryByText('sales@example.test')).toBeNull();
-            expect(words(within(shown).getByRole('region', { name: 'On record now' }))).toContain(
-                'Plugin that sends messages by default Reply (reply)',
-            );
+            expect(words(onRecord(shown))).toContain('Plugin that sends messages by default Reply (reply)');
         } finally {
             cleanup();
             setPlace('window');

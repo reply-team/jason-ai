@@ -37,7 +37,7 @@ import { sharingVersionReads } from './host-version.ts';
 import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
-import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
+import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
 import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
@@ -191,10 +191,9 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
 
-/** The desktop's log before run() makes its own, under the data directory this start was given; held while the demo is placed. */
+/** The desktop's log before run() makes its own, under the data directory this start was given. */
 function startLog(): Logger {
-    const logs = desktopPaths(dataDirectory(process.env, homedir())).logs;
-    return logHold.logger(() => fileLines(logs));
+    return fileLogger(desktopPaths(dataDirectory(process.env, homedir())).logs);
 }
 
 /**
@@ -239,7 +238,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
-    const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile))));
+    const log = fileLogger(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile)));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
@@ -389,8 +388,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Never in
-    // a demo run: an act that removes an installation never runs with the demo's directory in this process's environment.
+    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Offered
+    // in Live alone (`offersOf`).
     const removal = offers.removal && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
@@ -464,8 +463,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     );
     handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: false }), refused);
     handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
-    // The demo is a page now, with nothing to start over; the seam's member stays until the earlier demo's code goes.
-    handle(seam, 'mode.startOver', origin, () => ({ refused: startOverGone }), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -492,8 +489,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         models,
         // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
         ownServers: { env: process.env, home },
-        // A demo run offers no Full access (`demoFullAccess`).
-        demo: runOn.mode === 'demo',
         // A box is closed, and read as a no, when its window is hidden or closed.
         confirm: (box) =>
             askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
@@ -526,8 +521,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         env,
         bundle,
         dataNamed,
-        // A demo run offers no Full access by any path, and applies no standing choice (`demoFullAccess`).
-        demo: runOn.mode === 'demo',
         bundleVersion: version,
         cli,
         programs,
@@ -563,8 +556,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // "Open in": the page names a place and, with a campaign's chat open, the campaign; the folder is read here from the
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
-    // in this run's chat folder, by this run's CLI: in a demo run, the demo's. "Change Jason itself" is offered in the
-    // person's own installation only, never in a demo run.
+    // in this run's chat folder, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
+    // which this run is.
     const openIn = new OpenIn({
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
@@ -580,8 +573,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                 log.warn('open_in_remember_failed', {});
             }
         },
-        // An editor or the file manager keeps the environment it is started with for its whole life: the person's, not a
-        // demo run's. The terminals are started by `jason session open` and keep the run's.
+        // An editor or the file manager keeps the environment it is started with for its whole life: the person's. The
+        // terminals are started by `jason session open` and keep the run's.
         start: (line) => startDetached(line, editorEnvironment(env, personEnvironment, process.platform)),
         copy: (text) => clipboard.writeText(text),
         terminalFlags,
@@ -594,7 +587,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
         changeJason: {
-            live: () => runOn.mode === 'live',
             flags: changeJasonFlags,
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
                 event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
@@ -724,7 +716,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
  */
 async function runDemo(_links: LinkPost): Promise<void> {
     const paths: DesktopPaths = desktopPaths(runOn.person);
-    const log = logHold.logger(() => fileLines(paths.logs));
+    const log = fileLogger(paths.logs);
     const form = linuxForm();
     log.info('desktop_started', { Version: bundleVersion(bundleDirectory()) ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
     // The page is drawn light, as it was built; the person's choice of theme is neither read nor written here.
@@ -825,12 +817,8 @@ const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), proc
 // else of a start resolves a path, and read only by what runs after it.
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
-/** The desktop's log, held until a run makes its own (`log.ts`). */
-const logHold = new LogHold();
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
-/** What the seam's Start the Demo Over answers: the demo is a page that keeps nothing, so there is nothing to start over. */
-const startOverGone = 'Start the Demo Over is no longer offered: the demo is a page that keeps nothing.';
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -941,11 +929,9 @@ function startDesktop(): void {
         if (fromArgs.kind === 'link') linkArrived(fromArgs.raw, links, early);
         app.on('activate', () => showWindow());
         app.on('window-all-closed', () => app.quit());
-        // However the run ends, and as the application quits, every line still held is written (`log.ts`).
-        releaseAtQuit(app, logHold);
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
-        void app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))));
+        void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }
 }

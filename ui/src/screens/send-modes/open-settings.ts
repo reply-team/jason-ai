@@ -1,9 +1,11 @@
 import { here } from '../../console/state';
 import { href } from '../../router';
+import { chosenSection } from '../settings/chosen';
 import { voiceSectionId } from '../settings/voice-id';
 
 /** Opens Settings at "Your name and tone": in the console's area where it is mounted, by the address otherwise. */
 export function openSettings(): void {
+    chosenSection.value = 'voice';
     try {
         here().dock.page({ screen: 'settings' });
     } catch {

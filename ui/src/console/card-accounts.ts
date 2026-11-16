@@ -1,62 +1,35 @@
-import { signal } from '@preact/signals-react';
-import { ApiError } from '../api/client';
 import type { Plugin, Routes } from '../api/types';
 import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
 import { can } from '../platform/places';
-import { clock } from '../time/format';
 import { act, define } from './actions';
+import { cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
+import type { Chat } from './chat-model';
 import { html, type Html } from './html';
-import { chats, here, inTab } from './state';
+import { here, inTab } from './state';
 
-// The accounts card the chat's AI asks for. It holds no member, so nothing on it is the AI's: what it shows is read when
-// it is first drawn, and again only on its own Refresh, from two readers, each in its own part. Reply's part is the
-// desktop's read of the provider now (`setup.status()`, the read the Connect card paints), with each account's state in
-// the word Reply wrote; in a browser tab, which reads no provider here, the part is the Accounts page's sentence about
-// where connecting is done. The runtime's part, under "On record now", is the plugin the global routes send messages
-// through and its state as `plugin.list` answers it. The card follows neither the journal nor the desktop's changes,
-// says when it read, and acts on nothing: its buttons are Refresh and Open Accounts.
+// The accounts card the chat's AI asks for. It holds no member, so nothing on it is the AI's: what it shows is read by
+// the shared frame's rule (when it is the conversation's last card that reads, and again on its Refresh), from two
+// readers, each in its own part. Reply's part is the desktop's read of the provider now (`setup.status()`, the read the
+// Connect card paints), with each account's state in the word Reply wrote; in a browser tab, which reads no provider
+// here, the part is the Accounts page's sentence about where connecting is done. The runtime's part, under "On record
+// now", is the plugin the global routes name for messages and its state as `plugin.list` answers it. The card follows
+// neither the journal nor the desktop's changes, and acts on nothing: its buttons are Refresh and Open Accounts.
 
-/** What one reader answered: its value, or why it did not answer, in its own words. */
-type Part<T> = { ok: true; value: T } | { ok: false; code: string | null; message: string };
+/** What one reader answered: its value, or what it said when it did not. */
+type Part<T> = { ok: true; value: T } | { ok: false; said: Said };
 
 /** A plugin as the card names it: its id, the name its manifest gives (null when none), and its state. */
 type Listed = Plugin & { name?: string | null };
 
-/** One drawn card's reads. */
-export interface AccountsHeld {
-    /**
-     * The words of the text entry the card stands after. A plan's mark put on or taken off makes that entry anew and
-     * keeps its words, so the card keeps its read; other words at that place are another card, which reads afresh.
-     */
-    text: string;
-    reading: boolean;
-    /** When the last read was answered, by the person's clock; null until one was. */
-    at: number | null;
-    /** Reply as the desktop read it; null where no desktop's read is made here. */
+/** The card's read: Reply as the desktop read it (null where no desktop's read is made here), and the runtime's two. */
+interface AccountsRead {
     reply: Part<DesktopReply> | null;
-    routes: Part<Routes> | null;
-    plugins: Part<Listed[]> | null;
+    routes: Part<Routes>;
+    plugins: Part<Listed[]>;
 }
 
-/**
- * By chat id, then by the index of the text entry each card stands after, each drawn accounts card's reads. A chat's
- * own record changes only when one of its cards does, so a read in one chat draws no other chat's thread again.
- */
-export const accountsHeld = signal<Readonly<Record<string, Readonly<Record<number, AccountsHeld>>>>>({});
-
-const heldAt = (chatId: string, index: number): AccountsHeld | undefined => accountsHeld.value[chatId]?.[index];
-const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-const put = (chatId: string, index: number, held: AccountsHeld): void => {
-    accountsHeld.value = { ...accountsHeld.value, [chatId]: { ...accountsHeld.value[chatId], [index]: held } };
-};
-
-const failed = (error: unknown): Part<never> =>
-    error instanceof ApiError
-        ? { ok: false, code: error.code, message: error.message }
-        : { ok: false, code: null, message: error instanceof Error ? error.message : String(error) };
-
 const answered = <T>(value: T): Part<T> => ({ ok: true, value });
+const failed = (error: unknown): Part<never> => ({ ok: false, said: saidOf(error) });
 
 /** `plugin.list` answers its plugins under `plugins`; only the list is read. */
 function listed(answer: unknown): Listed[] {
@@ -67,15 +40,8 @@ function listed(answer: unknown): Listed[] {
 /** Whether this place reads the provider through the desktop: Jason Desktop's own window, not a tab. */
 const readsProvider = (): boolean => !inTab() && can('setup.status');
 
-/** Reads the card's three answers, together, and keeps them under its key unless another read took its place. */
-function readFor(chatId: string, index: number, text: string): void {
-    const before = heldAt(chatId, index);
-    const kept = before?.text === text ? before : null;
-    if (kept?.reading === true) return;
-    const reading: AccountsHeld = kept
-        ? { ...kept, reading: true }
-        : { text, reading: true, at: null, reply: null, routes: null, plugins: null };
-    put(chatId, index, reading);
+/** The card's three reads, together; a refusal is said in its part and nothing throws. */
+async function readAccounts(): Promise<AccountsRead> {
     const { api, desktop } = here();
     // A desktop that throws rather than refuses is a read that failed, like one that refuses.
     const reply: Promise<Part<DesktopReply> | null> = readsProvider()
@@ -84,32 +50,17 @@ function readFor(chatId: string, index: number, text: string): void {
               failed,
           )
         : Promise.resolve(null);
-    void Promise.all([
+    const [replyPart, routes, plugins] = await Promise.all([
         reply,
         api.call<Routes>('route.list').then(answered, failed),
         api.call<unknown>('plugin.list').then((answer) => answered(listed(answer)), failed),
-    ]).then(([replyPart, routes, plugins]) => {
-        if (heldAt(chatId, index) !== reading) return;
-        put(chatId, index, { text, reading: false, at: Date.now(), reply: replyPart, routes, plugins });
-    });
+    ]);
+    return { reply: replyPart, routes, plugins };
 }
 
-/** The cards asked to read while a thread was being drawn, read once the drawing is done: a drawing writes nothing. */
-const asked = new Set<string>();
-function readSoon(chatId: string, index: number, text: string): void {
-    const key = `${chatId} ${index}`;
-    if (asked.has(key)) return;
-    asked.add(key);
-    queueMicrotask(() => {
-        asked.delete(key);
-        if (heldAt(chatId, index)?.text !== text) readFor(chatId, index, text);
-    });
-}
-
-define('card.accounts.refresh', ([chatId, index]) => {
-    if (typeof chatId !== 'string' || typeof index !== 'number') return;
-    const entry = chats.value[chatId]?.entries[index];
-    if (entry?.kind === 'text') readFor(chatId, index, entry.text);
+define('card.accounts', ([chatId, index]) => {
+    const at = cardAt(chatId, index, 'accounts');
+    if (at !== null) startRead(at.chat.id, index as number, at.now, readAccounts);
 });
 
 define('card.accounts.open', () => {
@@ -122,10 +73,6 @@ const channelOf = (channel: string): string =>
 
 const accountsWord = (n: number): string => (n === 0 ? 'No accounts' : n === 1 ? '1 account' : `${n} accounts`);
 
-/** A reader's refusal, in its words: the runtime's code before its message, as the waiting cards say one. */
-const refusal = (part: { code: string | null; message: string }): Html =>
-    html`${part.code === null ? null : html`<code>${part.code}</code> `}${part.message}`;
-
 function accountRow(account: DesktopReplyAccount): Html {
     return html`<tr>
         <td>${account.address}</td>
@@ -135,9 +82,9 @@ function accountRow(account: DesktopReplyAccount): Html {
     </tr>`;
 }
 
-/** Reply's part: its sign-in, how many accounts it holds, each one, and the channels it did not list, and why. */
-function replyPart(part: Part<DesktopReply>): Html {
-    if (!part.ok) return html`<div class="ask-w">Reply could not be read: ${part.message}</div>`;
+/** Reply's sign-in, how many accounts it listed, each one, and the channels it did not list, and why. */
+function replyFacts(part: Part<DesktopReply>): Html {
+    if (!part.ok) return html`<div class="ask-w">Reply could not be read: ${part.said.message}</div>`;
     const reply = part.value;
     const accounts = Array.isArray(reply.accounts) ? reply.accounts : [];
     const absent = Array.isArray(reply.absent) ? reply.absent : [];
@@ -191,6 +138,22 @@ function replyPart(part: Part<DesktopReply>): Html {
 }
 
 /**
+ * Reply's part, under its own label above the runtime's facts; in a place that reads no provider, the Accounts page's
+ * sentence about where connecting is done.
+ */
+function outside(read: AccountsRead): Html {
+    if (read.reply === null)
+        return html`<p class="ask-w card-provider">
+            Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason Desktop; a browser
+            cannot do them.
+        </p>`;
+    return html`<div class="card-facts card-provider">
+        <div class="card-rec">Read from Reply now</div>
+        ${replyFacts(read.reply)}
+    </div>`;
+}
+
+/**
  * The plugin a route for messages names, by its manifest's name and its id, and its state as the runtime lists it. It
  * is said to send only where the list names `message.send` among its operations.
  */
@@ -215,17 +178,29 @@ function routed(where: string, pluginId: string, plugins: readonly Listed[]): Ht
 }
 
 /**
- * The runtime's part: the plugin the global routes send messages through, an operation's own route over the default,
- * and any route of a channel beside it.
+ * The runtime's facts: the plugin the global routes name for messages, an operation's own route over the default, and
+ * any route of a channel beside it; each read that failed is said.
  */
-function runtimePart(routes: Part<Routes>, plugins: Part<Listed[]>): Html {
+function runtimeFacts(read: AccountsRead): Html {
+    return html`${routeFacts(read)}
+        <div class="ask-a">
+            <button class="btn sm" type="button" ${act('card.accounts.open')}>Open Accounts</button>
+        </div>`;
+}
+
+function routeFacts(read: AccountsRead): Html {
+    const { routes, plugins } = read;
     if (!routes.ok || !plugins.ok)
         return html`${
-            routes.ok ? null : html`<div class="ask-w">The runtime’s routes could not be read: ${refusal(routes)}</div>`
+            routes.ok
+                ? null
+                : html`<div class="ask-w">The runtime’s routes could not be read:</div>
+                      ${saidView(routes.said)}`
         }${
             plugins.ok
                 ? null
-                : html`<div class="ask-w">The runtime’s plugins could not be read: ${refusal(plugins)}</div>`
+                : html`<div class="ask-w">The runtime’s plugins could not be read:</div>
+                      ${saidView(plugins.said)}`
         }`;
     const global = routes.value.global;
     const sends = global.operations['message.send'] ?? global.default;
@@ -238,54 +213,17 @@ function runtimePart(routes: Part<Routes>, plugins: Part<Listed[]>): Html {
     ${byChannel.map(([channel, route]) => routed(`on ${channelOf(channel)}`, route.plugin_id, plugins.value))}`;
 }
 
-/** The card's header, when it read, and its Refresh, which is off while a read is under way. */
-function frame(chatId: string, index: number, header: string, held: AccountsHeld | undefined, body: Html): Html {
-    const reading = held === undefined || held.reading;
-    return html`<div class="ask chat-card card-accounts" role="group" aria-label="${header}">
-        <div class="ask-h">
-            <span class="card-cap">${header}</span>
-            <button
-                class="btn sm card-refresh"
-                type="button"
-                ${reading ? html`disabled` : act('card.accounts.refresh', chatId, index)}
-            >
-                Refresh
-            </button>
-        </div>
-        ${held?.at == null || held.reading ? null : html`<div class="meta card-asof">As of ${clock(new Date(held.at), zone)}</div>`}
-        ${body}
-        <div class="ask-a">
-            <button class="btn sm" type="button" ${act('card.accounts.open')}>Open Accounts</button>
-        </div>
-    </div>`;
-}
-
-/**
- * The accounts card after the text entry at `index` of the chat, whose words are `text`, under the header the cards'
- * list gives it: read once when first drawn, then on Refresh.
- */
-export function accountsView(chatId: string, index: number, text: string, header: string): Html {
-    const found = heldAt(chatId, index);
-    const held = found?.text === text ? found : undefined;
-    if (held === undefined) readSoon(chatId, index, text);
-    if (held === undefined || held.reading)
-        return frame(chatId, index, header, held, html`<div class="ask-w card-reading">Reading…</div>`);
-    const provider =
-        held.reply === null
-            ? html`<p class="ask-w">
-                  Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason Desktop; a
-                  browser cannot do them.
-              </p>`
-            : html`<section class="card-part" role="region" aria-label="Read from Reply now">
-                  <div class="card-cap">Read from Reply now</div>
-                  ${replyPart(held.reply)}
-              </section>`;
-    const record =
-        held.routes === null || held.plugins === null
-            ? null
-            : html`<section class="card-part" role="region" aria-label="On record now">
-                  <div class="card-cap">On record now</div>
-                  ${runtimePart(held.routes, held.plugins)}
-              </section>`;
-    return frame(chatId, index, header, held, html`${provider}${record}`);
+/** The accounts card, read when it is drawn as the conversation's last card that reads, and on its Refresh. */
+export function accountsCard(chat: Chat, index: number, last: number | null, header: string): Html {
+    const { held, stub } = drawn(chat, index, last, readAccounts);
+    return frame<AccountsRead>({
+        chatId: chat.id,
+        index,
+        head: cardHead(header),
+        action: 'card.accounts',
+        held,
+        stub,
+        outside,
+        facts: runtimeFacts,
+    });
 }

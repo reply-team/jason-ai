@@ -64,7 +64,7 @@ public sealed class MacOpenerTests
         try
         {
             var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
-            var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, folder, ["/bin/sh", "-c", "printf '%s' \"$JASON_DATA_DIR\""], "apr_1", dataDirectory);
+            var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, folder, ["/bin/sh", "-c", "printf '%s' \"$JASON_DATA_DIR\""], "apr_1", dataDirectory is null ? null : new OwnJason(dataDirectory, null, null));
             var script = Path.Combine(scriptFolder, launch.ScriptName!);
             File.WriteAllText(script, launch.Script);
 
@@ -92,6 +92,65 @@ public sealed class MacOpenerTests
             if (Directory.Exists(scriptFolder))
             {
                 Directory.Delete(scriptFolder, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The whole script run by <c>/bin/sh</c>, with another <c>jason</c> first on the shell's own PATH: the host it replaces
+    /// itself with types <c>jason</c> by name, and the one that answers is the one in the opening executable's folder,
+    /// named with a space and an apostrophe; what the shell's PATH held still follows it. Runs where <c>/bin/sh</c> is.
+    /// </summary>
+    [Fact]
+    public async Task Another_jason_earlier_on_terminals_path_loses_to_the_opening_executables_folder()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows() || !File.Exists("/bin/sh"), "The script is read by /bin/sh, which this machine does not have.");
+
+        var root = Directory.CreateTempSubdirectory("jason-script-path-").FullName;
+        var scriptFolder = Directory.CreateTempSubdirectory("jason-script-").FullName;
+        try
+        {
+            var planted = Directory.CreateDirectory(Path.Combine(root, "planted")).FullName;
+            var installed = Directory.CreateDirectory(Path.Combine(root, "marta's jason")).FullName;
+            Jason(planted, "planted");
+            Jason(installed, "own");
+            var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
+            var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, root, ["/bin/sh", "-c", "jason; printf ' %s' \"$PATH\""], "apr_1", new OwnJason(root, installed, "/ignored"));
+            var script = Path.Combine(scriptFolder, launch.ScriptName!);
+            File.WriteAllText(script, launch.Script);
+
+            var start = ChildProcess.StartInfo("/bin/sh", ChildKind.SpeaksToJason);
+            start.ArgumentList.Add(script);
+            start.WorkingDirectory = Path.GetTempPath();
+            start.Environment["PATH"] = planted + ":/usr/bin:/bin";
+            using var process = ChildProcess.Start(start);
+            Assert.NotNull(process);
+            process.StandardInput.Close();
+            var printed = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            var errors = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+            using var finished = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await process.WaitForExitAsync(finished.Token);
+
+            Assert.Equal(string.Empty, await errors);
+            Assert.Equal(0, process.ExitCode);
+            Assert.Equal("own " + installed + ":" + planted + ":/usr/bin:/bin", await printed);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            if (Directory.Exists(scriptFolder))
+            {
+                Directory.Delete(scriptFolder, recursive: true);
+            }
+        }
+
+        static void Jason(string folder, string says)
+        {
+            var path = Path.Combine(folder, "jason");
+            File.WriteAllText(path, "#!/bin/sh\nprintf '%s' '" + says + "'\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             }
         }
     }

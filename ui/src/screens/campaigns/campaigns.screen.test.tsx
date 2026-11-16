@@ -1296,7 +1296,13 @@ describe('What the panel does', () => {
         expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
-        expect(start.textContent).toContain("Jason releases this agent's work again.");
+        expect(start.textContent).toContain(
+            "Jason releases this agent's work again. Work waiting here for Reply, such as starting its sequence or adding people to it, runs once you resume this agent. Reply's sequence, once live, sends on its own schedule whether this agent runs or not.",
+        );
+        // Resuming lets the queued work go as starting does, so it says the same.
+        const rule = await within(start).findByRole('region', { name: 'What starting releases' });
+        expect(rule.textContent).toContain('22 people are in this agent.');
+        expect(rule.textContent).toContain('How messages go');
         // Another campaign is opened while Resume is on its way: the answer, and what is read after it, leave it open.
         const release = api.hold('campaign.start');
         fireEvent.click(within(start).getByRole('button', { name: 'Resume' }));
@@ -1363,6 +1369,72 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
         expect(start.textContent).toContain("Jason starts releasing this agent's work.");
+        // What starting lets go, read from the runtime as the dialog opens: the people it holds, and how messages go now,
+        // in Settings' own words.
+        const rule = await within(start).findByRole('region', { name: 'What starting releases' });
+        expect(rule.textContent).toContain('2 people are in this agent.');
+        expect(rule.textContent).toContain('How messages go');
+        expect(rule.textContent).toContain(
+            'People who have not replied yet: Every message waits for you · the default, since nothing is chosen',
+        );
+        expect(rule.textContent).toContain(
+            'People who have replied: Every message waits for you · the default, since nothing is chosen',
+        );
+        expect(rule.textContent).not.toContain('Goes automatically');
+        expect(sent(api, 'campaign.get').at(-1)).toEqual({ campaign_id: autumn.id });
+        expect(sent(api, 'campaign.summary').at(-1)).toEqual(fixtures['campaign.summary/unlinked'].request);
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(sent(api, 'campaign.start')).toEqual([]);
+    });
+
+    it('a draft whose first messages go automatically says so before it is started, beside the people it holds', async () => {
+        const spring = fixtures['campaign.get/send-mode-override'].response;
+        const api = startedAgents()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
+            .answer('campaign.get', 'campaign.get/send-mode-override');
+        open(api, { ...details, id: spring.id });
+        await screen.findByRole('heading', { level: 2, name: spring.name });
+
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
+        const start = await screen.findByRole('dialog', { name: `Start ${spring.name}` });
+        const rule = await within(start).findByRole('region', { name: 'What starting releases' });
+        expect(rule.textContent).toContain('22 people are in this agent.');
+        expect(rule.textContent).toContain('People who have not replied yet: Goes automatically · set for this agent');
+        expect(rule.textContent).toContain(
+            'People who have replied: Every message waits for you · the default, since nothing is chosen',
+        );
+        expect(rule.textContent).toContain(
+            'Jason sends it without asking you, unless a check or a reviewer holds it back for you.',
+        );
+        expect(within(start).getByRole('button', { name: 'Start' }).hasAttribute('disabled')).toBe(false);
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(sent(api, 'campaign.start')).toEqual([]);
+    });
+
+    it('Start waits for the rule to be read, and says so where it cannot be', async () => {
+        const autumn = fixtures['campaign.get/unlinked'].response;
+        const api = startedAgents()
+            .answer('campaign.list', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
+            .answer('campaign.get', 'campaign.get/unlinked');
+        open(api, { ...details, id: autumn.id });
+        await screen.findByRole('heading', { level: 2, name: autumn.name });
+
+        const release = api.hold('campaign.summary');
+        const gone = api.unreachable('campaign.get');
+        fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
+        const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
+        expect(start.textContent).toContain('Reading what is set.');
+        expect(within(start).getByRole('button', { name: 'Start' }).hasAttribute('disabled')).toBe(true);
+        release();
+        const rule = await within(start).findByRole('region', { name: 'What starting releases' });
+        await waitFor(() => expect(rule.textContent).toContain('The send modes could not be read.'));
+        expect(rule.textContent).toContain('2 people are in this agent.');
+        expect(within(start).getByRole('button', { name: 'Start' }).hasAttribute('disabled')).toBe(false);
+        gone();
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(sent(api, 'campaign.start')).toEqual([]);

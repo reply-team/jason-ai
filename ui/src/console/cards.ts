@@ -12,6 +12,12 @@
 import { fences } from './markdown';
 import { locksChoice, unseen, type Chat } from './chat-model';
 
+/**
+ * What a card's text may not hold: what the chat's titles leave out (`unseen`), and also a character that draws as
+ * nothing or as no character: the blank Braille pattern, half a surrogate pair, a private-use character.
+ */
+const cardUnseen = new RegExp(`${unseen.source.slice(0, -1)}\\p{Cs}\\p{Co}\\u2800]`, 'u');
+
 /** The kinds a card may be, in the order the chat's instructions list them. */
 export const cardKinds = ['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan'] as const;
 export type CardKind = (typeof cardKinds)[number];
@@ -31,25 +37,120 @@ export const depthLimit = 4;
 const campaignShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 
 /**
- * The words of the desktop's own controls for a person's acts: the waiting cards' buttons, the permission card's, the
- * Plan only card's, the Start dialog's verbs and the composer's Send. A choice's label that is one of them, trimmed and
- * case-folded, is refused: a button with Jason's own word for an act would look like that act. A word a later release
- * gives a control is added here in the same change.
+ * The words of the chat's controls that act: a button that approves, rejects, allows or refuses a permission, starts,
+ * resumes, pauses, stops, sends, saves, removes, renames, answers, connects, sets or changes the chat's mode or what it
+ * runs on, or approves and runs a plan. A choice's label that is one of them, folded as `foldLabel` folds, is refused: a
+ * click on it could be taken for that act. The chat's instructions name every one of them. A test reads the chat's
+ * buttons and fails while a word of theirs is in none of this list, `passiveWords` and `nameWords`, so a new button is
+ * classed by a person. Names a control draws from a value (a host's, a model's, a campaign's) are not held.
  */
 export const controlWords: readonly string[] = [
-    'approve',
-    'reject',
-    'edit',
-    'approve and run',
-    'keep planning',
-    'allow',
-    'allow for this chat',
-    "don't allow",
-    'start',
-    'resume',
-    'pause',
-    'send',
+    'Approve',
+    'Reject',
+    'Approve and run',
+    'Approving',
+    'Keep planning',
+    'Allow',
+    'Allow for this chat',
+    "Don't allow",
+    'Answer',
+    'Start',
+    'Resume',
+    'Pause',
+    'Stop',
+    'Send',
+    'Send when the turn ends',
+    'Replace',
+    'Save',
+    'Save name',
+    'Remove',
+    'Remove it',
+    'Rename',
+    'Start afresh',
+    'Take back',
+    'Connect',
+    'Reconnect',
+    'Disconnect',
+    'Sign in',
+    'Add account',
+    'Make the link',
+    'Set',
+    'Keep',
+    'Install',
+    'Update',
+    'Remove the key',
+    'Use the public server',
+    'Configure',
+    'Reload',
+    'Unblock',
+    'Delete',
+    'Delete anyway',
+    'Ask first',
+    'Plan only',
+    'Auto-edit',
+    'Full access',
+    'Default effort',
 ];
+
+/**
+ * The words of the chat's controls that only close, open, show or move, and act on nothing: a choice may use them as
+ * labels. Held beside `controlWords` so that every word a button of the chat draws is in exactly one of the three lists.
+ */
+export const passiveWords: readonly string[] = [
+    'Cancel',
+    'Not now',
+    'Close',
+    'Details',
+    'Edit',
+    'Edit message',
+    'Something else',
+    'Show more',
+    'Show the whole message',
+    'Keep it',
+    'Check again',
+    'Check now',
+    'Limits',
+    'Open folder',
+    'Open the shared mailbox page',
+    'Needs you',
+    'You chose this',
+    // The data cards' controls: a read again, which decides nothing, and the places they open.
+    'Show now',
+    'Refresh',
+    'Show what waits',
+    'Show them',
+    'Open',
+    'More in Needs you',
+    'People',
+    'Inbox',
+    'Results',
+    'Settings',
+];
+
+/**
+ * The words of the chat's buttons that are only a name: of a channel, a provider, a plugin or an AI. Under the AI's own
+ * question a bare name reads as an answer, never as the window's act, so a choice may use it as a label.
+ */
+export const nameWords: readonly string[] = ['Gmail', 'Outlook', 'LinkedIn'];
+
+/**
+ * A label as a person reads it, for comparing two: its compatible forms made one (a full-width letter is the letter),
+ * every apostrophe the one apostrophe, its runs of white space one space, no stop or ellipsis at its end, and no case.
+ * Letters of another alphabet that look the same are not made one.
+ */
+export const foldLabel = (label: string): string =>
+    // The apostrophes first: the compatible form of U+00B4 is a space and a combining mark.
+    label
+        .replace(/[\u2018\u2019\u201b\u2032\u02bc\u02b9\u0060\u00b4]/gu, "'")
+        .normalize('NFKC')
+        .replace(/[\u2018\u2019\u201b\u2032\u02bc\u02b9\u0060\u00b4]/gu, "'")
+        .replace(/\s+/gu, ' ')
+        .trim()
+        .replace(/[\s.!?:]+$/u, '')
+        .toLowerCase();
+
+/** The control words, folded once. */
+const controlFolded = new Set(controlWords.map(foldLabel));
 
 /** The counts of `campaign.summary` a people list may keep to (`docs/work-execution.md`). */
 export const standings = ['waiting', 'failed', 'working', 'new', 'idle', 'sequence', 'out', 'removed'] as const;
@@ -169,7 +270,8 @@ export interface PlacedCard extends CardBlock {
 /**
  * A chat's entries as the thread draws them: by the index of each text entry that held a card block, its words with
  * every block taken out; and by the index of the text entry that held it, each turn's last block. A turn runs from a
- * person's message to the next one; a person's own words are never read for a card.
+ * person's message to the next one; a person's own words are never read for a card. A turn the desktop marked a plan
+ * is left whole: what Approve and run tells the AI to carry out is its answer, so every block of it stays in its words.
  */
 export function cardLayout(entries: readonly LaidEntry[]): {
     words: ReadonlyMap<number, string>;
@@ -178,9 +280,14 @@ export function cardLayout(entries: readonly LaidEntry[]): {
     const words = new Map<number, string>();
     const cards = new Map<number, PlacedCard>();
     let turnLast: { index: number; block: CardBlock } | null = null;
+    let turnWords: number[] = [];
+    let turnPlan = false;
     const close = (lastTurn: boolean) => {
-        if (turnLast !== null) cards.set(turnLast.index, { ...turnLast.block, lastTurn });
+        if (turnPlan) for (const index of turnWords) words.delete(index);
+        else if (turnLast !== null) cards.set(turnLast.index, { ...turnLast.block, lastTurn });
         turnLast = null;
+        turnWords = [];
+        turnPlan = false;
     };
     entries.forEach((entry, index) => {
         if (entry.kind === 'user') {
@@ -188,9 +295,11 @@ export function cardLayout(entries: readonly LaidEntry[]): {
             return;
         }
         if (entry.kind !== 'text' || typeof entry.text !== 'string') return;
+        if (entry.plan === true) turnPlan = true;
         const split = splitCards(entry.text);
         if (split.blocks.length === 0) return;
         words.set(index, split.words);
+        turnWords.push(index);
         turnLast = { index, block: split.blocks.at(-1)! };
     });
     close(true);
@@ -247,7 +356,7 @@ function trimmedText(value: unknown, max: number, lines = false): string {
     if (typeof value !== 'string') return refuse();
     const trimmed = value.trim();
     if (trimmed === '' || characters(trimmed) > max) refuse();
-    if ((lines ? trimmed.replace(/\n/g, '') : trimmed).search(unseen) !== -1) refuse();
+    if ((lines ? trimmed.replace(/\n/g, '') : trimmed).search(cardUnseen) !== -1) refuse();
     return trimmed;
 }
 
@@ -259,19 +368,17 @@ function list<T>(object: Fields, key: string, min: number, max: number, item: (v
     return value.map(item);
 }
 
-const fold = (label: string): string => label.toLowerCase();
-
 /** The options of a choice, or of a plan's question: two to five, each label unique and none a control's word. */
 function options(object: Fields): CardOption[] {
     const read = list(object, 'options', 2, 5, (value): CardOption => {
         const option = shaped(value, ['label', 'detail']);
         const label = text(option, 'label', 80, true);
         const detail = text(option, 'detail', 100, false);
-        if (controlWords.includes(fold(label))) refuse();
+        if (controlFolded.has(foldLabel(label))) refuse();
         return detail === undefined ? { label } : { label, detail };
     });
     if (read === undefined) return refuse();
-    if (new Set(read.map((option) => fold(option.label))).size !== read.length) refuse();
+    if (new Set(read.map((option) => foldLabel(option.label))).size !== read.length) refuse();
     return read;
 }
 
@@ -445,11 +552,13 @@ export const optionsOf = (card: Card): readonly CardOption[] =>
  * person's or the AI's locks every earlier card, so no other can be.
  */
 export function openChoice(
-    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running'>,
+    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
 ): { index: number; card: Card } | null {
     let index = chat.entries.length - 1;
     while (index >= 0 && !locksChoice(chat.entries[index]!.kind)) index--;
     const entry = chat.entries[index];
+    // One read from the desktop's record is drawn locked (`choiceState`), so it is never open.
+    if (index < chat.reopened) return null;
     if (entry?.kind !== 'text' || entry.plan === true) return null;
     const block = splitCards(entry.text).blocks.at(-1);
     if (block === undefined) return null;

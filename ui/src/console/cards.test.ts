@@ -6,6 +6,9 @@ import {
     cardLayout,
     controlWords,
     depthOf,
+    foldLabel,
+    nameWords,
+    passiveWords,
     readCard,
     splitCards,
     type CardBlock,
@@ -15,6 +18,135 @@ import {
 
 // The chat's card protocol, read the way the page reads it: which fenced blocks are cards, which block of a turn is
 // drawn, and what every block reads as, each row of the table of failures by name.
+
+/** A source file of the chat, beside this one. */
+const source = (file: string) => readFileSync(join(import.meta.dirname, file), 'utf8');
+/** The English words of the page's keys (`t('key')`). */
+const english = new Map(
+    Array.from(
+        readFileSync(join(import.meta.dirname, '..', 'locale', 'en.ts'), 'utf8').matchAll(
+            /'([\w.]+)':\s*(['"])((?:\\.|(?!\2).)*)\2/g,
+        ),
+        (match) => [match[1]!, match[3]!.replace(/\\'/g, "'")] as const,
+    ),
+);
+
+/** The index just past the braces that open at `from`, skipping quoted text and the expressions of a template. */
+function closing(text: string, from: number): number {
+    let depth = 0;
+    for (let at = from; at < text.length; at++) {
+        const char = text[at]!;
+        if (char === "'" || char === '"' || char === '`') {
+            for (at++; at < text.length && text[at] !== char; at++) {
+                if (text[at] === '\\') at++;
+                else if (char === '`' && text[at] === '$' && text[at + 1] === '{') at = closing(text, at + 1) - 1;
+            }
+        } else if (char === '{') depth++;
+        else if (char === '}' && --depth === 0) return at + 1;
+    }
+    return text.length;
+}
+
+/** The index just past the tag that opens at `from`, skipping its expressions and its quoted values. */
+function tagEnd(text: string, from: number): number {
+    for (let at = from; at < text.length; at++) {
+        const char = text[at]!;
+        if (char === '{') at = closing(text, at) - 1;
+        else if (char === '"' || char === "'") at = text.indexOf(char, at + 1);
+        else if (char === '>') return at + 1;
+    }
+    return text.length;
+}
+
+/** The words markup draws: its own text, and what its expressions draw. */
+function drawnWords(markup: string): string[] {
+    const found: string[] = [];
+    let text = '';
+    for (let at = 0; at < markup.length; at++) {
+        const char = markup[at]!;
+        if (char === '<' && /[a-zA-Z/]/.test(markup[at + 1] ?? '')) {
+            at = tagEnd(markup, at) - 1;
+            text += '\n';
+        } else if (char === '{' || (char === '$' && markup[at + 1] === '{')) {
+            const start = char === '$' ? at + 1 : at;
+            const end = closing(markup, start);
+            found.push(...expressionWords(markup.slice(start + 1, end - 1)));
+            at = end - 1;
+            text += '\n';
+        } else text += char;
+    }
+    return [
+        ...found,
+        ...text
+            .split('\n')
+            .map((each) => each.trim())
+            .filter((each) => each !== ''),
+    ];
+}
+
+/** What an expression draws: the words of a key, a string it yields, the markup of its templates; never an argument. */
+function expressionWords(expression: string): string[] {
+    const found: string[] = [];
+    for (let at = 0; at < expression.length; at++) {
+        const char = expression[at]!;
+        if (expression.startsWith("t('", at) && !/[\w.]/.test(expression[at - 1] ?? '')) {
+            const end = expression.indexOf("'", at + 3);
+            found.push(english.get(expression.slice(at + 3, end)) ?? `no word for ${expression.slice(at + 3, end)}`);
+            at = expression.indexOf(')', end);
+        } else if (char === "'" || char === '"') {
+            let end = at + 1;
+            while (end < expression.length && expression[end] !== char) end += expression[end] === '\\' ? 2 : 1;
+            const before = expression.slice(0, at).trimEnd().at(-1);
+            if (before !== '(' && before !== ',' && before !== '=' && before !== '[')
+                found.push(expression.slice(at + 1, end).replace(/\\'/g, "'"));
+            at = end;
+        } else if (char === '`') {
+            let end = at + 1;
+            while (end < expression.length && expression[end] !== '`') {
+                if (expression[end] === '\\') end++;
+                else if (expression[end] === '$' && expression[end + 1] === '{') end = closing(expression, end + 1) - 1;
+                end++;
+            }
+            if (/\bhtml\s*$/.test(expression.slice(0, at))) found.push(...drawnWords(expression.slice(at + 1, end)));
+            at = end;
+        }
+    }
+    return found;
+}
+
+/** Every word drawn inside a button of a source file's markup. */
+function buttonWords(text: string): string[] {
+    const found: string[] = [];
+    for (let at = text.indexOf('<button'); at !== -1; at = text.indexOf('<button', at)) {
+        const open = tagEnd(text, at);
+        // A name the button gives itself, written as it is: the composer's Send and Stop have only that.
+        const named = /aria-label=(?:"([^"$]*)"|\{'([^']*)'\})/.exec(text.slice(at, open));
+        if (named) found.push(named[1] ?? named[2]!);
+        // A button closed in its own tag draws no words of its own.
+        if (text[open - 2] === '/') {
+            at = open;
+            continue;
+        }
+        const end = text.indexOf('</button>', open);
+        found.push(...drawnWords(text.slice(open, end)));
+        at = end;
+    }
+    return found;
+}
+
+/** The moves' verbs, as the chat bar's buttons and their dialog draw them. */
+const moveVerbs = (text: string): string[] =>
+    Array.from(
+        /export const verbs[^{]*\{([^}]*)\}/.exec(text)?.[1]?.matchAll(/:\s*'([^']*)'/g) ?? [],
+        (match) => match[1]!,
+    );
+
+/** The access modes' names, as the menu beside the composer draws them. */
+const modeNames = (text: string): string[] =>
+    Array.from(
+        /const modeWords[^{]*\{([^}]*)\}/.exec(text)?.[1]?.matchAll(/:\s*'([^']*)'/g) ?? [],
+        (match) => match[1]!,
+    );
 
 const fence = (body: string, info = 'card') => `\`\`\`${info}\n${body}\n\`\`\``;
 const choice = (fields: Record<string, unknown> = {}) =>
@@ -76,6 +208,14 @@ describe('which fenced block is a card', () => {
         ]);
     });
 
+    it('is no card after a tab, nor with a tab after its word', () => {
+        for (const text of [`\t\`\`\`card\n${choice()}\n\`\`\``, `\`\`\`card\t\n${choice()}\n\`\`\``]) {
+            const split = splitCards(text);
+            expect(split.blocks, JSON.stringify(text)).toEqual([]);
+            expect(split.words).toBe(text);
+        }
+    });
+
     it('takes out a block no fence closes, to the end of the text', () => {
         const split = splitCards(`Thinking.\n\`\`\`card\n{"kind":"cho`);
         expect(split.blocks).toEqual([{ body: '{"kind":"cho', closed: false }]);
@@ -111,6 +251,21 @@ describe('which block of a turn is drawn', () => {
             [2, false],
         ]);
         expect(layout.words.has(4)).toBe(false);
+    });
+
+    it('takes out no block of a turn the desktop marked a plan, so nothing of a plan is hidden', () => {
+        const plan = fence(
+            '{"kind":"plan","title":"Spring","channels":["email"],"steps":[{"channel":"email","body":"Hi there"}]}',
+        );
+        const layout = cardLayout([
+            { kind: 'user', text: 'Plan it' },
+            { kind: 'text', text: `First.\n${fence(choice())}` },
+            { kind: 'text', text: `Here is the plan.\n${plan}`, plan: true },
+            { kind: 'user', text: 'And now?' },
+            { kind: 'text', text: plan, plan: true },
+        ]);
+        expect(layout.cards.size).toBe(0);
+        expect(layout.words.size).toBe(0);
     });
 
     it('never reads a person’s own message, which is drawn as they wrote it', () => {
@@ -285,25 +440,34 @@ describe('a choice’s members', () => {
         expect(failure(read(choice({ options: [{ label: 'a\u0007' }, { label: 'b' }] })))).toBe(schema('choice'));
     });
 
-    it('takes each label once, case-folded', () => {
-        expect(failure(read(choice({ options: [{ label: 'Yes' }, { label: ' yes ' }] })))).toBe(schema('choice'));
+    it('takes each label once, folded as a person reads it: compatible forms, white space, apostrophes and case', () => {
+        for (const [one, other] of [
+            ['Yes', ' yes '],
+            ['From me', 'From\u00a0me'],
+            ['From  me', 'From me'],
+            ['Ｆｒｏｍ ｍｅ', 'From me'],
+            ['It’s mine', "It's mine"],
+        ])
+            expect(failure(read(choice({ options: [{ label: one }, { label: other }] }))), one).toBe(schema('choice'));
     });
 
-    it('refuses a label that is a control’s word, trimmed and case-folded, and takes one that only contains it', () => {
-        expect(controlWords).toEqual([
-            'approve',
-            'reject',
-            'edit',
-            'approve and run',
-            'keep planning',
-            'allow',
-            'allow for this chat',
-            "don't allow",
-            'start',
-            'resume',
-            'pause',
-            'send',
+    it('refuses a label that draws as nothing or as no character: a blank pattern, half a pair, a private character', () => {
+        for (const label of ['\u2800', 'A\u2800', 'A\ud800', 'A\udc00B', 'A\ue000', 'A\u{F0000}'])
+            expect(failure(read(choice({ options: [{ label }, { label: 'Other' }] }))), JSON.stringify(label)).toBe(
+                schema('choice'),
+            );
+    });
+
+    it('reads labels that are the names of an object’s own members as words, nothing more', () => {
+        const reading = read(choice({ options: [{ label: '__proto__' }, { label: 'constructor' }] }));
+        expect(reading.state).toBe('card');
+        expect(reading.state === 'card' && reading.card.kind === 'choice' ? reading.card.options : []).toEqual([
+            { label: '__proto__' },
+            { label: 'constructor' },
         ]);
+    });
+
+    it('refuses a label that is a control’s word, folded as a person reads it, and takes one that only contains it', () => {
         for (const word of controlWords) {
             const shouted = ` ${word.toUpperCase()} `;
             expect(failure(read(choice({ options: [{ label: shouted }, { label: 'Something else' }] }))), word).toBe(
@@ -311,6 +475,101 @@ describe('a choice’s members', () => {
             );
         }
         expect(read(choice({ options: [{ label: 'Yes, start it' }, { label: 'Not yet' }] })).state).toBe('card');
+        for (const label of [
+            'ＳＴＡＲＴ',
+            'approve\u00a0and run',
+            'Approve  and  run',
+            'Don’t allow',
+            'Don\u02bct allow',
+            'Don\u00b4t allow',
+            'Answer',
+            'Connect',
+            'Approve.',
+        ])
+            expect(failure(read(choice({ options: [{ label }, { label: 'Not yet' }] }))), label).toBe(schema('choice'));
+    });
+
+    it('takes the words of controls that only close, open, show or move, and a bare name', () => {
+        for (const word of [...passiveWords, ...nameWords])
+            expect(read(choice({ options: [{ label: word }, { label: 'Yes' }] })).state, word).toBe('card');
+        expect(read(choice({ options: [{ label: 'Yes' }, { label: 'Not now' }] })).state).toBe('card');
+    });
+
+    it('names in the chat’s instructions every word it refuses, and no other', () => {
+        const rule =
+            readFileSync(join(import.meta.dirname, '..', '..', '..', 'desktop', 'chat-instructions.md'), 'utf8')
+                .split('\n')
+                .find((line) => /^\d+\. A card is not an act\./.test(line)) ?? '';
+        const named = /A label is never the word of a button of the screen that acts: ([^.]+)\./.exec(rule)?.[1] ?? '';
+        expect(named.split(', ').map(foldLabel)).toEqual(controlWords.map(foldLabel));
+    });
+
+    // What the reader reaches: the literal words, the string-yielding expressions, the `t()` keys and the literal
+    // `aria-label` inside every `<button>` of the files it reads, which paint the chat: its thread and header, the
+    // waiting cards and their message editor ("Edit message", which only opens it), the composer's menus, the Reply card,
+    // and the chat bar's moves and their dialog; and the access modes' names and the moves' verbs, read from their tables.
+    // What it cannot reach is listed by hand below.
+    const byHand = [
+        // The Reply card's row buttons, whose words are arguments of one helper (connect.ts, `rowActs`).
+        'Reconnect',
+        'Limits',
+        'Unblock',
+        'Resume',
+        'Pause',
+        'Delete',
+        // The Reply card's mailbox buttons, drawn from a table of providers.
+        'Gmail',
+        'Outlook',
+        // The Reply card's offers after a refusal, drawn from a table.
+        'Open the shared mailbox page…',
+        'Delete anyway…',
+        // The status card's page buttons, whose words are arguments of one helper (card-status.ts, `page`). A people
+        // list's rows and footer draw a person's name and a count from the runtime's answer, which no list holds.
+        'People',
+        'Inbox',
+        'Results',
+        'Settings',
+        // The words of a permission answered are a sentence beside the card, not a button; the effort dots' words are
+        // only their names for a screen reader, never drawn; neither is held.
+    ];
+
+    it('classes every word the buttons of the files it reads draw as one that acts, one that does not, or a name', () => {
+        const drawn = [
+            ...buttonWords(source('chat.tsx')),
+            ...buttonWords(source('waiting-cards.tsx')),
+            ...buttonWords(source('start-menus.tsx')),
+            ...buttonWords(source('connect.ts')),
+            ...buttonWords(source('../screens/campaigns/moves.tsx')),
+            ...buttonWords(source('../screens/campaigns/pause-dialog.tsx')),
+            ...buttonWords(source('../screens/attention/message-editor.tsx')),
+            ...buttonWords(source('card-frame.ts')),
+            ...buttonWords(source('card-status.ts')),
+            ...buttonWords(source('card-people.ts')),
+            ...buttonWords(source('card-needs.ts')),
+            ...modeNames(source('chat-model.ts')),
+            ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
+            ...byHand,
+        ];
+        // Every file is read: a reader that finds nothing would hold nothing.
+        expect(drawn).toEqual(
+            expect.arrayContaining([
+                'Approve and run',
+                'Answer',
+                'Connect',
+                'Plan only',
+                'Default effort',
+                'Send',
+                'Disconnect',
+                'Edit message',
+                'Start',
+            ]),
+        );
+        const lists = [controlWords, passiveWords, nameWords].map((list) => list.map(foldLabel));
+        const words = [...new Set(drawn.map((word) => foldLabel(word.replace(/:$/, ''))))];
+        expect(words.filter((word) => lists.filter((list) => list.includes(word)).length !== 1)).toEqual([]);
+        expect(lists.flat().filter((word, at, all) => all.indexOf(word) !== at)).toEqual([]);
+        // And no list holds a word no button draws.
+        expect(lists.flat().filter((word) => !words.includes(word))).toEqual([]);
     });
 });
 
@@ -455,7 +714,7 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('shows each of the six kinds, and every example reads as a card of its kind', () => {
+    it('teaches only the kinds this window draws, a choice and four cards of data, and each example reads as one', () => {
         const shown = examples(instructions);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
             'choice',
@@ -463,7 +722,6 @@ describe('the chat’s instructions', () => {
             'agent_status',
             'needs',
             'accounts',
-            'plan',
         ]);
         for (const example of shown) expect(read(example).state, example).toBe('card');
     });

@@ -27,7 +27,7 @@ import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
 import { reloadWaiting } from './waiting';
-import { heardLine } from './card-acts';
+import { heardLine, readActsAgain } from './card-acts';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
@@ -322,9 +322,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 : () => undefined,
             journal.onState((state) => {
                 // A resume the runtime refused starts the stream afresh: what was written meanwhile is read back for the
-                // Feed.
+                // Feed, and a person's acts on an agent since its chat's open choice are read again.
                 const before = streamState.value;
-                if (state.fresh && state.last === null && (!before.fresh || before.last !== null)) catchUpFeed();
+                if (state.fresh && state.last === null && (!before.fresh || before.last !== null)) {
+                    catchUpFeed();
+                    readActsAgain(api);
+                }
                 streamState.value = state;
             }),
             journal.onLine((line) => {

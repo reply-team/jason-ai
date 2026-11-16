@@ -292,6 +292,23 @@ public sealed class ReplyAccount : IDisposable
     }
 
     /// <summary>
+    /// What a planted sequence's own <c>emailAccounts</c> member says, written as given: an array, another shape, or
+    /// <c>null</c> for no such member at all.
+    /// </summary>
+    public ReplyAccount WithEmailAccounts(int sequence, JsonNode? written)
+    {
+        var record = ReadArray(SequencesFile).OfType<JsonObject>().Single(existing => existing["id"]!.GetValue<int>() == sequence);
+        var changed = (JsonObject)record.DeepClone();
+        changed.Remove("emailAccounts");
+        if (written is not null)
+        {
+            changed["emailAccounts"] = written.DeepClone();
+        }
+
+        return Replace(SequencesFile, sequence, changed);
+    }
+
+    /// <summary>
     /// A planted sequence with no connected account to send from, so a start is refused. The stand-in keeps this
     /// under a key of its own and never shows it in an answer.
     /// </summary>

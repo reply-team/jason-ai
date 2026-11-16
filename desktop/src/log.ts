@@ -115,18 +115,6 @@ export const templates = {
     demo_shown: 'The demo page was shown in its sealed view, with the switch over it',
     demo_unshown: 'The demo page could not be shown; the window says so',
     demo_refused: 'The demo {View} was refused a {Kind}; each kind is said once a run',
-    demo_unopened: 'The demo data directory could not be made or used; this run is on the person’s own installation and the mode is Live again',
-    demo_runtime_stopped: 'The demo runtime was asked to stop as the demo run quit: {Outcome}',
-    demo_runtime_stop_timed_out: 'The demo runtime did not answer the stop within the cap as the demo run quit; the quit went on',
-    demo_start_over: 'The demo was stopped and its two folders removed; the desktop starts again on the demo, which makes the sample again',
-    demo_start_over_refused: 'Start the Demo Over was refused ({Cause}); the demo was left as it was or as far as it had got',
-    demo_start_over_not_carried_out: 'The start over asked by the run before was not carried out ({Cause}); this run is on the person’s own installation and the request is kept',
-    demo_seed_failed: 'The demo sample failed at {Step} ({Code})',
-    demo_seed_step: 'The demo sample: {Step}',
-    demo_start_over_request_unremoved: 'The request to start the demo over could not be taken away once the sample was whole ({Code}); the next start makes the sample again',
-    demo_archive_placed: 'The prepared demo was placed by jason import in {ElapsedMs} ms',
-    log_held_dropped: '{Count} lines said while the log was held were not kept: a hold keeps at most {Limit}',
-    demo_archive_unplaced: 'The prepared demo was not placed, at the step {Step} ({Code}); the sample is made at this start instead',
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
     open_in_remember_failed: 'The place Open in used last could not be kept',
@@ -305,53 +293,6 @@ export function fileLines(directory: string, limits: LogLimits = defaultLimits):
     };
 }
 
-/**
- * A hold on the desktop's log, for the seconds `jason import` places the prepared demo (`demo-archive.ts`): the log's
- * folder, `<data>/logs/`, is one of the parts an import places, and one that is there when it begins is moved aside. While
- * the hold stands no line reaches the disk and no file is opened; each line is kept with the moment it was said, and when
- * the hold is let go every kept line is written in the order it was said, whichever logger said it, and every line after
- * that is written at once. A hold never taken writes at once. It keeps at most `heldLimit` lines; those said after them
- * are counted, and the release says how many after the kept ones (`log_held_dropped`). The start lets it go after the
- * placing, after a run that ended any other way (`releasedAfter`), and as the application quits (`releaseAtQuit`).
- */
-export class LogHold {
-    private held: { sink: () => LineSink; level: Level; name: TemplateName; fields: Readonly<Record<string, unknown>>; at: Date }[] | null = null;
-    private dropped: { sink: () => LineSink; count: number; at: Date } | null = null;
-
-    /** From now on, lines are kept until `release`. */
-    hold(): void {
-        this.held ??= [];
-    }
-
-    /** Writes every kept line, in order, each with its own moment; nothing when nothing is held. */
-    release(): void {
-        const kept = this.held;
-        const dropped = this.dropped;
-        this.held = null;
-        this.dropped = null;
-        for (const line of kept ?? []) line.sink()(line.level, line.name, line.fields, line.at);
-        if (dropped !== null) dropped.sink()('Warning', 'log_held_dropped', { Count: dropped.count, Limit: heldLimit }, dropped.at);
-    }
-
-    /** A logger on this hold, whose lines go to the sink `open` makes, opened once, at its first line that is written. */
-    logger(open: () => LineSink, clock: () => Date = () => new Date()): Logger {
-        let opened: LineSink | null = null;
-        const sink = (): LineSink => (opened ??= open());
-        const say = (level: Level, name: TemplateName, fields: Readonly<Record<string, unknown>>) => {
-            const at = clock();
-            if (this.held === null) sink()(level, name, fields, at);
-            else if (this.held.length < heldLimit) this.held.push({ sink, level, name, fields: { ...fields }, at });
-            else if (this.dropped === null) this.dropped = { sink, count: 1, at };
-            else this.dropped.count += 1;
-        };
-        return {
-            info: (name, fields) => say('Information', name, fields),
-            warn: (name, fields) => say('Warning', name, fields),
-            error: (name, fields) => say('Error', name, fields),
-        };
-    }
-}
-
 /** The limits the installation's settings name under `Logging`, where they are valid; the runtime's defaults otherwise. */
 export function limitsFrom(settingsText: string | null): LogLimits {
     if (settingsText === null) return defaultLimits;
@@ -370,21 +311,4 @@ export function limitsFrom(settingsText: string | null): LogLimits {
         retainedFileCountLimit: Number.isInteger(count) && (count as number) >= 1 ? (count as number) : defaultLimits.retainedFileCountLimit,
         fileSizeLimitBytes: Number.isInteger(size) && (size as number) >= 1024 * 1024 ? (size as number) : defaultLimits.fileSizeLimitBytes,
     };
-}
-
-/** How many lines a hold keeps: a start says a few dozen while the demo is placed. */
-export const heldLimit = 1000;
-
-/** Runs `act` and lets the hold go when it ends, however it ends: a start that fails keeps the lines that explain it. */
-export async function releasedAfter<T>(hold: LogHold, act: () => Promise<T>): Promise<T> {
-    try {
-        return await act();
-    } finally {
-        hold.release();
-    }
-}
-
-/** Lets the hold go as the application quits, a quit while the demo is still placed included. */
-export function releaseAtQuit(app: { on(event: 'will-quit', listener: () => void): unknown }, hold: LogHold): void {
-    app.on('will-quit', () => hold.release());
 }

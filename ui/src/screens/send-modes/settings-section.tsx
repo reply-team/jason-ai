@@ -58,7 +58,7 @@ export function SendModesSettings() {
     }
 
     return (
-        <section aria-labelledby="settings-modes-heading">
+        <section data-section="modes" aria-labelledby="settings-modes-heading">
             <h2 id="settings-modes-heading">{t('modes.settings.heading')}</h2>
             {demo && <p className="muted">{t('modes.settings.demo')}</p>}
             {!demo && read === 'reading' && <p className="muted">{t('modes.settings.reading')}</p>}

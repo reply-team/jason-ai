@@ -23,9 +23,9 @@ harness installed, so §4 has somewhere to deploy.
 The background roles run on an agent host you installed and signed in to as yourself, through an execution profile, and
 an installation starts with none: until a profile is made and named the default, every AI role's work fails at its claim
 with `role_not_launchable`, and `jason status` says so under `roles_launchable`. For Claude Code, run
-`jason profile create claude-code --host claude_code --program claude`, then add
-`"Roles": {"DefaultExecutionProfile": "claude-code"}` to `~/.jason/config/settings.json`, which the runtime reads without
-a restart. Jason Desktop does both itself, in Live, where the installation holds no profile and names no default and
+`jason profile create claude-code --host claude_code --program claude`, then
+`jason profile set-default claude-code`, which the runtime writes to the settings file and applies without a restart.
+Jason Desktop does both itself, in Live, where the installation holds no profile and names no default and
 Claude Code or Codex is connected there: on the one its chat is set to run on, else Claude Code, else Codex
 ([desktop.md](desktop.md#connect)).
 
@@ -204,14 +204,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v0.45.0/install.sh | sh -s -- --version 0.45.0
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.46.0/install.sh | sh -s -- --version 0.46.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.45.0/install.ps1))) -Version 0.45.0
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.46.0/install.ps1))) -Version 0.46.0
 ```
 
-These install 0.45.0 with 0.45.0's own script: a pinned install fetches the script from the release it installs.
+These install 0.46.0 with 0.46.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
