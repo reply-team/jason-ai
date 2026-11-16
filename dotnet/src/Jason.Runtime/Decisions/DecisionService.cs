@@ -4,6 +4,7 @@ using Jason.Contracts.Api;
 using Jason.Runtime.Contacts;
 using Jason.Contracts.Ids;
 using Jason.Runtime.Campaigns;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Domain;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
@@ -53,6 +54,10 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
 
         await ResolveAsync(item.CampaignId, request.References, cancellationToken).ConfigureAwait(false);
 
+        // What the question is about, once and from the runtime's own record: the thread its own responder was woken for,
+        // by the rule the respond step finds that responder by. Never from what the role says, and never read again.
+        var thread = Responder.ThreadOf(item);
+
         var decision = new Decision
         {
             PublicId = PublicId.New(IdPrefix),
@@ -62,6 +67,8 @@ public sealed class DecisionService(JasonDbContext db, JournalWriter journal, Ti
             Question = question,
             Options = DecisionMapper.ToJson(request.Options),
             References = DecisionMapper.ToJson(request.References?.Select(reference => reference with { Id = reference.Id.Trim() }).ToList()),
+            ThreadPluginId = thread?.PluginId,
+            ThreadId = thread?.ThreadId,
             Status = DecisionStatus.Pending,
             RaisedAt = now,
         };

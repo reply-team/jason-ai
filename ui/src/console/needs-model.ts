@@ -4,7 +4,10 @@
 // here reads, keeps or draws anything.
 import type { ApprovalSummary, DecisionSummary } from '../api/types';
 
-/** The operation of a drafted answer to a reply a person sent: what Inbox holds. */
+/**
+ * The operation of a drafted answer to a reply a person sent. Inbox holds those approvals and the questions the runtime
+ * names a thread for: what waits on a person about a reply.
+ */
 export const REPLY_OPERATION = 'conversation.reply';
 
 /**
@@ -57,7 +60,10 @@ const inFilter = (item: WaitingItem, filter: NeedsFilter): boolean => {
         case 'chats':
             return item.kind === 'chat';
         case 'inbox':
-            return item.kind === 'approval' && item.row.operation === REPLY_OPERATION;
+            return (
+                (item.kind === 'approval' && item.row.operation === REPLY_OPERATION) ||
+                (item.kind === 'question' && item.row.thread !== null)
+            );
     }
 };
 
@@ -91,13 +97,13 @@ export function agentsOf(input: NeedsInput): { id: string; name: string }[] {
     return [...agents].map(([id, name]) => ({ id, name }));
 }
 
-/** Whether a filter's count may be short of what the runtime holds. */
-const moreUnder = (input: NeedsInput, filter: NeedsFilter): boolean => {
+/** Whether a filter's list may be short of what the runtime holds: Inbox holds rows of both lists. */
+export const moreUnder = (input: NeedsInput, filter: NeedsFilter): boolean => {
     switch (filter) {
         case 'all':
+        case 'inbox':
             return input.more.approvals || input.more.questions;
         case 'approvals':
-        case 'inbox':
             return input.more.approvals;
         case 'questions':
             return input.more.questions;

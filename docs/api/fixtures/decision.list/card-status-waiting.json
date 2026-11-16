@@ -19,7 +19,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Spring launch",
-        "contact_name": "Tomas Berg"
+        "contact_name": "Tomas Berg",
+        "thread": null
       }
     ],
     "next_cursor": null

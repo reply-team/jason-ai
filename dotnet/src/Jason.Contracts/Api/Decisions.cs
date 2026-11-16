@@ -15,6 +15,17 @@ public sealed record DecisionOption(string Label, string? Detail);
 public sealed record DecisionReference(DecisionReferenceKind? Kind, string Id);
 
 /// <summary>
+/// The conversation a question is about: the plugin it was read at and the provider's own identifier of the thread.
+/// </summary>
+/// <remarks>
+/// Written once, when the question is raised, and only by the runtime: a question raised by a responder the runtime
+/// itself woke for a reply names the thread that reply moved, from the identifiers the runtime recorded when it woke it.
+/// Every other question is about no thread and says so with null. Nothing a role writes sets it, and nothing recomputes
+/// it later.
+/// </remarks>
+public sealed record DecisionThread(string PluginId, string ThreadId);
+
+/// <summary>
 /// A question a running role could not answer for itself, as a caller reads it. The attempt that asked is
 /// named because it is also the chain the review released by the answer belongs to — the question outlives
 /// the attempt, which is the whole reason this is a row rather than a parked operation.
@@ -34,7 +45,8 @@ public sealed record DecisionDto(
     DateTimeOffset? AnsweredAt,
     ActorRef? AnsweredBy,
     string CampaignName,
-    string? ContactName);
+    string? ContactName,
+    DecisionThread? Thread);
 
 /// <summary>
 /// A listing carries the question whole. "What am I being asked?" is the only reason to open one of these,
@@ -50,7 +62,8 @@ public sealed record DecisionSummaryDto(
     DateTimeOffset? AnsweredAt,
     ActorRef? AnsweredBy,
     string CampaignName,
-    string? ContactName);
+    string? ContactName,
+    DecisionThread? Thread);
 
 /// <summary>
 /// Raising is fenced by the attempt, exactly as recording a result is: the asker must be the run that owns

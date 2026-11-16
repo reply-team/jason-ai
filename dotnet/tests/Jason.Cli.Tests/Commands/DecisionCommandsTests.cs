@@ -283,6 +283,25 @@ public class DecisionCommandsTests
         Assert.DoesNotContain("{", text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The thread a question is about, as the runtime recorded it: the plugin and the thread's identifier, among the
+    /// identifiers before the campaign, and a dash for a question about no thread.
+    /// </summary>
+    [Fact]
+    public async Task Get_names_the_thread_a_question_is_about_and_a_dash_for_none()
+    {
+        using var about = new CliRun(Jason.Cli.Tests.Human.CopyPromptTests.Fixture("decision.get", "needs-inbox-question"));
+        Assert.Equal(ExitCodes.Success, await about.RunAsync("decision", "get", "dec_2", "--human"));
+        Assert.Contains("Thread:        reply t_501", about.Text, StringComparison.Ordinal);
+        Assert.True(
+            about.Text.IndexOf("Thread:", StringComparison.Ordinal) < about.Text.IndexOf("Campaign:", StringComparison.Ordinal),
+            about.Text);
+
+        using var none = new CliRun(Jason.Cli.Tests.Human.CopyPromptTests.Fixture("decision.get", "needs-question"));
+        Assert.Equal(ExitCodes.Success, await none.RunAsync("decision", "get", "dec_1", "--human"));
+        Assert.Contains("Thread:        -", none.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>A question nobody has answered, with no choices and nothing to read: no empty tables, and a dash where an answer would be.</summary>
     [Fact]
     public async Task Get_renders_a_pending_question_without_empty_tables()

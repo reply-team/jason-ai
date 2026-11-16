@@ -40,7 +40,8 @@ internal static class DecisionMapper
             WorkItemMapper.Utc(decision.AnsweredAt),
             Decider(decision),
             campaignName,
-            contactName);
+            contactName,
+            Thread(decision));
     }
 
     public static DecisionSummaryDto ToSummary(Decision decision, string campaignPublicId, string workItemPublicId, string campaignName, string? contactName)
@@ -56,8 +57,13 @@ internal static class DecisionMapper
             WorkItemMapper.Utc(decision.AnsweredAt),
             Decider(decision),
             campaignName,
-            contactName);
+            contactName,
+            Thread(decision));
     }
+
+    /// <summary>The thread the question is about, as the row holds it: both columns, or none.</summary>
+    private static DecisionThread? Thread(Decision decision) =>
+        decision.ThreadPluginId is { } plugin && decision.ThreadId is { } thread ? new DecisionThread(plugin, thread) : null;
 
     private static ActorRef? Decider(Decision decision) =>
         decision.AnsweredByType is { } type ? new ActorRef(type, decision.AnsweredById) : null;

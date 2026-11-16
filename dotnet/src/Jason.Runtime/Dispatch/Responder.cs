@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
@@ -447,18 +448,45 @@ public sealed class Responder(
                     || item.Status == WorkItemStatus.AwaitingApproval
                     || item.Status == WorkItemStatus.Scheduled
                     || item.Status == WorkItemStatus.Processing
-                    || item.Status == WorkItemStatus.Waiting)
-                && item.Role == Role
-                && item.CreatedByType == ActorType.System)
+                    || item.Status == WorkItemStatus.Waiting))
+            .Where(IsOwnResponder)
             .OrderBy(item => item.Id)
             .Select(item => new OpenResponder(item.Id, item.PublicId, item.Context))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return open.FirstOrDefault(item => item.Context[InboundReplyKey] is JsonObject recorded
-            && recorded["plugin"] is JsonValue plugin && plugin.TryGetValue<string>(out var p) && p == reply.Plugin
-            && recorded["thread"] is JsonValue thread && thread.TryGetValue<string>(out var t) && t == reply.Thread);
+        return open.FirstOrDefault(item => Recorded(item.Context) is { } recorded
+            && recorded.PluginId == reply.Plugin
+            && recorded.ThreadId == reply.Thread);
     }
+
+    /// <summary>
+    /// Whether a work item is the runtime's own responder: of this role, and created by the runtime itself. A responder a
+    /// person or a role created is theirs. One rule with two readers — the respond step finding a thread's open responder,
+    /// and a question's raise naming the thread the question is about — so the two can never disagree about an item.
+    /// </summary>
+    public static Expression<Func<WorkItem, bool>> IsOwnResponder { get; } =
+        item => item.Role == Role && item.CreatedByType == ActorType.System;
+
+    private static readonly Func<WorkItem, bool> OwnResponder = IsOwnResponder.Compile();
+
+    /// <summary>
+    /// The thread the runtime's own responder was woken for: the plugin and the thread its reserved key records, both
+    /// text. None for any other item, and none where the key does not hold both: identifiers the runtime wrote, never
+    /// what anybody wrote in the thread.
+    /// </summary>
+    public static DecisionThread? ThreadOf(WorkItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return OwnResponder(item) ? Recorded(item.Context) : null;
+    }
+
+    private static DecisionThread? Recorded(JsonObject context) =>
+        context[InboundReplyKey] is JsonObject recorded
+        && recorded["plugin"] is JsonValue plugin && plugin.TryGetValue<string>(out var p)
+        && recorded["thread"] is JsonValue thread && thread.TryGetValue<string>(out var t)
+            ? new DecisionThread(p, t)
+            : null;
 
     /// <summary>
     /// The person the items are about, when the line names one the campaign may touch: not archived, and a member not

@@ -287,6 +287,68 @@ public class ResponderTests
         Assert.Equal(1, await harness.RespondAsync(Ct));
     }
 
+    /// <summary>
+    /// One rule, two readers: the item the respond step takes for a thread's open responder, and patches with the thread's
+    /// next move, is the one item whose question names the thread. A person's responder and another role's item carrying
+    /// the same key are neither.
+    /// </summary>
+    [Fact]
+    public async Task Responder_TheItemTheStepPatches_IsTheOneWhoseQuestionNamesTheThread()
+    {
+        using var harness = new DispatchHarness(Noon);
+        var campaign = await CampaignAsync(harness);
+        RoutedTo(harness, Reader);
+        await using (var db = harness.Open())
+        {
+            var row = await db.Campaigns.SingleAsync(c => c.Id == campaign, Ct);
+            var key = new JsonObject { ["inbound_reply"] = new JsonObject { ["plugin"] = Reader, ["thread"] = "th-1", ["move_count"] = 1 } };
+            db.WorkItems.Add(WorkItemFactory.NewAiRole(row, role: Responder.Role, now: Noon, configure: item =>
+            {
+                item.CreatedByType = ActorType.Human;
+                item.Context = key.DeepClone().AsObject();
+            }));
+            db.WorkItems.Add(WorkItemFactory.NewAiRole(row, role: "manager", now: Noon, configure: item =>
+            {
+                item.CreatedByType = ActorType.System;
+                item.Context = key.DeepClone().AsObject();
+            }));
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-20));
+        Assert.Equal(1, await harness.RespondAsync(Ct));
+        await LineAsync(harness, campaign, "th-1", Noon.AddMinutes(-2));
+        Assert.Equal(0, await harness.RespondAsync(Ct));
+
+        await using var read = harness.Open();
+        var items = await read.WorkItems.Where(item => item.Kind == WorkItemKind.AiRole).OrderBy(item => item.Id).ToListAsync(Ct);
+        Assert.Equal(3, items.Count);
+        var answers = new List<(bool Patched, DecisionThread? Thread)>();
+        foreach (var item in items)
+        {
+            item.Status = WorkItemStatus.Processing;
+            var attempt = new Attempt
+            {
+                PublicId = PublicId.New("att"),
+                WorkItem = item,
+                Number = 1,
+                Status = AttemptStatus.Running,
+                StartedAt = Noon,
+                LockUntil = Noon.AddMinutes(30),
+            };
+            read.Attempts.Add(attempt);
+            await read.SaveChangesAsync(Ct);
+
+            var raised = await new Jason.Runtime.Decisions.DecisionService(read, new JournalWriter(harness.Clock), harness.Clock).RaiseAsync(
+                new DecisionRaiseRequest(item.PublicId, attempt.PublicId, "Close the thread?", null, null, null), Ct);
+            answers.Add(((int)item.Context["inbound_reply"]!["move_count"]! == 2, raised.Thread));
+        }
+
+        Assert.Equal(
+            [(false, null), (false, null), (true, new DecisionThread(Reader, "th-1"))],
+            answers);
+    }
+
     [Fact]
     public async Task Responder_Off_CreatesNothing_AndMovesWatermark()
     {
