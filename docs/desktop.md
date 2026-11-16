@@ -531,6 +531,27 @@ The agent hosts keep their own transcripts of a turn, in their own folders: Clau
 and those of a turn on a provider's key are in that provider's keyed folder (see Its own files). Jason never touches the
 first, and the desktop keeps no transcript of a host.
 
+### Cards in the chat
+
+The agent may end a reply with one card, which the window draws under its words. These are all the kinds it can write;
+a card that does not hold what its kind needs is drawn as one line saying so, and what it held is never shown.
+
+- **Jason asks**: a question with two to five answers; a click sends that answer's words as your next message.
+- **People**: up to ten people of an agent, or of everyone, as the runtime lists them.
+- **Agent**: how one agent is doing, its counts now and over the last thirty days.
+- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
+- **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
+- **AI**: only leads to Connect, where the AI hosts and the model keys are, with **Open Connect**.
+- **Reply**: only leads to the Accounts page, where Reply's sign-in and its accounts are, with **Open Accounts**.
+- **Jason's proposal**: a plan the agent proposes, with what is on record under it.
+- **Your list**: a list of people you gave the chat, in an agent's own chat only (below).
+
+The cards that show data read the runtime when they are drawn, say when ("As of"), and read again only on their own
+**Refresh**; they take an id from the agent and never a number, a name or a state. The **AI** and **Reply** cards read
+nothing and act on nothing: they are not the AI card and the Reply card of the Connect and Accounts screens, which
+connect, sign in and change accounts with their own controls. No card acts in your place; of their buttons only **Add to
+this agent** on a list writes to the runtime, and pressing it is your own act.
+
 ### A list you give the chat
 
 In an agent's own chat you can paste a list of people, or name a CSV file the agent can read, and ask for them to be
