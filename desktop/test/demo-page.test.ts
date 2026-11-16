@@ -517,7 +517,8 @@ test('the host-resolver rule is set by a Demo start alone, before ready, and a L
     const start = main.slice(main.indexOf('function startDesktop('));
     const set = start.indexOf("if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);");
     assert.ok(set > 0, 'the Demo start sets it');
-    assert.ok(set < start.indexOf('void app.whenReady().then(() => releasedAfter('), 'before ready');
+    const ready = start.indexOf('void app.whenReady().then(() => (');
+    assert.ok(ready > 0 && set < ready, 'before ready');
     assert.equal(main.split('demoBeforeReady(').length - 1, 1, 'once, in the Demo start');
     assert.ok(!/appendSwitch|host-resolver-rules|registerSchemesAsPrivileged/.test(main), 'nothing else in main.ts sets a switch or a scheme');
     // Live is a start of its own: the relaunch hands it its arguments, never the switches this run appended.
@@ -589,7 +590,7 @@ function importsOf(file: string): string[] {
 }
 
 test('the Demo’s two modules reach no jason, no runtime, no program, no process and nothing of the earlier demo', () => {
-    const refused = /^\.\/(cli|programs|installation|own-runtime|chat.*|setup|repair|window-pairing|browser-bridge|ipc|preload|demo-(seed|archive|over|runtime|start|settings|plugin|folders|alive|story))\.ts$|child_process|^node:net$|^node:http/;
+    const refused = /^\.\/(cli|programs|installation|own-runtime|chat.*|setup|repair|window-pairing|browser-bridge|ipc|preload|demo-(over|runtime|folders))\.ts$|child_process|^node:net$|^node:http/;
     for (const file of ['demo-page.ts', 'demo-window.ts']) {
         const imports = importsOf(file);
         assert.ok(imports.length > 0, file);

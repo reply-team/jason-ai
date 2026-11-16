@@ -85,15 +85,21 @@ type Patch = { work_item_id: string; set: { input: Record<string, unknown> }; re
  * (a first message: its subject and body; a reply: its body). The caller passes the arguments just read, so no other
  * argument goes back changed.
  */
-export function editPatch(operation: string, workItemId: string, held: unknown, subject: string, body: string): Patch {
+export function editPatch(
+    operation: string,
+    workItemId: string,
+    held: unknown,
+    subject: string,
+    body: string,
+    reason: string = EDIT_REASON,
+): Patch {
     const args = record(held);
     if (!args) throw new Error('The work item holds no message to edit.');
-    if (operation === REPLIES)
-        return { work_item_id: workItemId, set: { input: { ...args, body } }, reason: EDIT_REASON };
+    if (operation === REPLIES) return { work_item_id: workItemId, set: { input: { ...args, body } }, reason };
     const message = record(args['message']);
     if (!message) throw new Error('The work item holds no message to edit.');
     const next = { ...message, body, ...(hasSubject(held, operation) ? { subject } : {}) };
-    return { work_item_id: workItemId, set: { input: { ...args, message: next } }, reason: EDIT_REASON };
+    return { work_item_id: workItemId, set: { input: { ...args, message: next } }, reason };
 }
 
 /** A sentence for what the runtime said, or for what went wrong; the runtime own words when it has them. */
@@ -146,11 +152,16 @@ export async function saveEdit(
     subject: string,
     body: string,
     opened: Words,
+    reason: string = EDIT_REASON,
 ): Promise<WorkItem> {
     const item = await readItem(api, id);
     const now = wordsOf(heldArgs(item), operation);
     if (now.subject !== opened.subject || now.body !== opened.body) throw new TextMoved(item);
-    return api.call<WorkItem>('workitem.update', editPatch(operation, id, heldArgs(item), subject, body), 'write');
+    return api.call<WorkItem>(
+        'workitem.update',
+        editPatch(operation, id, heldArgs(item), subject, body, reason),
+        'write',
+    );
 }
 
 /**

@@ -624,12 +624,14 @@ public partial class ClaimerTests
 
     /// <summary>
     /// The automatic release decides once. A retry after a failure that is retried runs under its row with no second row and
-    /// no second line; a send whose text changed since parks <c>input_changed</c> for the person; and a reply that landed
+    /// no second line, a pin of the person learned since included; a send whose text changed since parks <c>input_changed</c>
+    /// for the person; and a reply that landed
     /// between the failure and the retry parks the retry for the person, the row superseded, since the release read the
     /// contact's warmth before the reply was there.
     /// </summary>
     [Theory]
     [InlineData("nothing changed", null)]
+    [InlineData("the person pinned since", null)]
     [InlineData("the text changed", "input_changed")]
     [InlineData("a reply landed", "awaiting_judgement")]
     public async Task SendMode_ARetryUnderTheAutomaticRow(string meanwhile, string? parks)
@@ -653,6 +655,19 @@ public partial class ClaimerTests
                 break;
             case "a reply landed":
                 await ObservedAsync(db, reading, "2026-09-14T11:55:00.000Z");
+                break;
+            case "the person pinned since":
+                var failed = await db.Attempts.Where(a => a.WorkItem!.PublicId == send.Id).OrderBy(a => a.Number).LastAsync(Ct);
+                db.ExternalIds.Add(new ExternalId
+                {
+                    ContactId = reading.Contact.Id,
+                    PluginId = Provider,
+                    Kind = "contact",
+                    Value = "p-48211",
+                    RecordedAt = Noon,
+                    RecordedByAttemptId = failed.PublicId,
+                });
+                await db.SaveChangesAsync(Ct);
                 break;
         }
 

@@ -35,6 +35,8 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
+name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
@@ -44,6 +46,46 @@ has no published UI to fetch.
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
 and digest. Delete `custom/` to go back to the default.
+
+### Files the UI does not trust
+
+A build of the UI, the release's or a custom one, may hold under `sealed/` content the UI does not trust, and the
+runtime serves it unable to act. This is a rule of the server about a directory of the layout, named exactly `sealed`,
+in lower case, as `assets/` is one about caching: it applies to every file under `/ui/sealed/` whatever the file is
+called, never to a file by its name, and a build with nothing under `sealed/` is served as it was. A directory named
+another way, `Sealed/` say, is no such directory: its files are served by that name under the policy above. Only pages
+live under `sealed/`, files whose names end in `.html`: a sealed page loads no file, and a script or a style there
+could serve only the UI itself, which would run it with its own rights, so `jason ui install` refuses any other file
+there and the runtime answers a 404 for one. Every answer to a GET under `/ui/sealed/`, a missing file's included,
+carries this policy instead of the one above:
+
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+
+with a `Permissions-Policy` that denies each feature it names to every origin, the file's own included:
+
+`Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), keyboard-map=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()`
+
+and `X-Content-Type-Options: nosniff`, `X-DNS-Prefetch-Control: off`, `Referrer-Policy: no-referrer`,
+`Cross-Origin-Resource-Policy: same-origin` and `Cache-Control: no-store`. A request that is not a GET, or that names
+another origin, is answered before the files are looked at, with no file in it. The set sends no
+`Cross-Origin-Opener-Policy`: that header acts only on a window opened by itself, and how browsers take it together
+with a sandbox the policy sets is not established, so it is left out rather than relied on.
+
+What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
+It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
+in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
+included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads
+nothing and shows no dialog. A request of its that got past the policy to the Runtime API would name that origin,
+`null`, and the runtime refuses a request that names any origin but its own (`origin_refused`) before it reads a token.
+
+What the rule does not stop, in plain words: a browser may look up a host name the file mentions before any policy
+applies; the file can freeze its own tab, until the tab is reloaded or closed; and opened by itself rather than in a
+frame, it can move its own tab to another address. None of these reaches the installation.
+
+The build's own layout is trusted, and so is whoever can write under `<data>/ui/`, who could replace the UI itself: a
+link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
+asks for it.
 
 ## Paired browsers
 
@@ -270,6 +312,10 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
   then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
+  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
+  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+  names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
+  the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
@@ -296,7 +342,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   would not see the command's environment; a host's program whose path holds `=`, which `/usr/bin/env` would read as a
   variable, is refused with `terminal_start_failed`. On macOS the script exports them, the folder going before
   Terminal's own `PATH`. Nothing is added to the host's own words. A build run through `dotnet` rather than installed as
-  one file has no such folder, and leaves `PATH` as it is.
+  one file has no such folder, and leaves `PATH` as it is. A `jason` whose folder's name holds the character that
+  separates the entries of `PATH`, `;` on Windows and `:` elsewhere, starts nothing on any system, `--dry-run`
+  included: no entry of the window's `PATH` can name that folder, and `jason status` says the installation is not ready.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables

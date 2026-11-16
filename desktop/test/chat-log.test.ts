@@ -366,3 +366,55 @@ test('the Windows check of Codex\'s sandbox is logged by its answer and whether 
     assert.equal(text.includes(b.paths.settings), false);
     assert.equal(text.includes(b.paths.data), false);
 });
+
+test('a card the page did not draw is logged by its kind and why, each from its closed list, and never by what the block held', async (t) => {
+    const removals: (() => void)[] = [];
+    let held: Chat | undefined;
+    t.after(async () => {
+        held?.closeAll();
+        await held?.idle();
+        removals.forEach((remove) => remove());
+    });
+    const b = bench({ after: (fn) => void removals.push(fn) }, { programs: ['claude'] });
+    const log = fileLogger(b.paths.logs);
+    const chat: Chat = new Chat({
+        paths: b.paths,
+        env: b.env,
+        bundle: join(b.root, 'bundle'),
+        dataNamed: true,
+        bundleVersion: null,
+        cli: b.cli,
+        programs: b.programs,
+        keyFor: () => undefined,
+        fence: () => fence,
+        emit: () => undefined,
+        ...loggedTurns(log),
+    });
+    held = chat;
+    const { id } = await chat.create();
+    const said: [string, string][] = [
+        ['choice', 'schema'],
+        ['plan', 'schema'],
+        ['unknown', 'too_long'],
+        ['unknown', 'malformed'],
+        ['unknown', 'kind_unknown'],
+    ];
+    for (const [kind, failure] of said) assert.equal(chat.cardRefused(id, kind, failure), null);
+    // A word outside either list, a value that is no word, and a conversation the desktop does not hold: nothing is said.
+    assert.equal(chat.cardRefused(id, 'planted kind', 'schema'), null);
+    assert.equal(chat.cardRefused(id, 'choice', 'planted failure'), null);
+    assert.equal(chat.cardRefused(id, { kind: 'choice', question: 'planted question' }, 'schema'), null);
+    assert.equal(chat.cardRefused(newConversationId(), 'choice', 'schema'), null);
+    assert.equal(chat.cardRefused('planted id', 'choice', 'schema'), null);
+    const text = readdirSync(b.paths.logs).map((name) => readFileSync(join(b.paths.logs, name), 'utf8')).join('');
+    const lines = lines0(text)
+        .filter((line) => line.EventName === 'chat_card_refused')
+        .map(({ '@t': _at, SourceContext: _source, EventName: _name, ...rest }) => rest);
+    const template = 'A card the chat AI asked for was not drawn: kind {Kind}, failure {Failure}';
+    assert.deepEqual(
+        lines,
+        said.map(([kind, failure]) => ({ '@mt': template, Kind: kind, Failure: failure })),
+    );
+    assert.equal(text.includes('planted'), false);
+    assert.equal(text.includes(id), false, 'nor the conversation it was in');
+});

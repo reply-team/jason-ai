@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
-import { codexFullAccess, demoFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, newChatAskFirstSentence, standingUnkeptSentence, standingUnremovedSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
+import { codexFullAccess, feedFullAccess, fullAccessConsent, fullAccessSentence, newChatAskFirstSentence, standingUnkeptSentence, standingUnremovedSentence, unguardedSentence, unguardedStandingSentence, type FullAccessAnswer } from '../src/chat-modes.ts';
 import { readStanding, takenBackMark, writeStanding } from '../src/full-access-standing.ts';
 import { registerChat } from '../src/chat-ipc.ts';
 import type { SenderFrame } from '../src/ipc.ts';
@@ -476,70 +476,3 @@ test('a choice that cannot be written still gives Full access this time, says so
     await s.chat.setMode(other.id, 'full_access', 'claude');
     assert.equal(s.confirms, 2);
 });
-
-// ---- A demo run: Full access is not offered by any path, and the standing choice is not applied ----------------------
-
-/** The standing choice's file as bytes, or null when there is none: what a demo run must leave as it is. */
-const fileOf = (r: Rig) => (existsSync(r.b.paths.fullAccess) ? readFileSync(r.b.paths.fullAccess) : null);
-
-test('in a demo run the menu refuses Full access with the demo\'s sentence, before any box, on every host', async (t) => {
-    const r = rig(t, { chat: { demo: true } });
-    const { id } = await r.chat.create(undefined, 'claude');
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'claude'), { message: demoFullAccess });
-    await assert.rejects(r.chat.setMode(id, 'full_access', 'codex'), { message: demoFullAccess });
-    assert.equal(r.confirms, 0, 'no box is shown');
-    assert.equal(r.chat.open(id).mode, 'ask_first');
-    assert.deepEqual(grants(r), [], 'no grant folder is made');
-    // The other modes are offered as in the person's own installation.
-    assert.equal((await r.chat.setMode(id, 'auto_edit', 'claude')).mode, 'auto_edit');
-    assert.equal((await r.chat.setMode(id, 'plan_only', 'claude')).mode, 'plan_only');
-});
-
-test('in a demo run the standing choice is not applied: Always and "start new chats" stand, and a new chat still starts in Ask first and the menu still refuses; the file is left as it is', async (t) => {
-    const r = rig(t, { chat: { demo: true } });
-    stand(r, true);
-    const before = fileOf(r);
-    const demo = r.again();
-    assert.equal(demo.fullAccessStanding(), null, 'the menu and the System screen see no standing choice');
-    const made = await demo.create(undefined, 'claude');
-    assert.equal(made.mode, 'ask_first', 'a new chat is not started in Full access');
-    assert.equal((await demo.create('cmp_01ABC', 'claude')).mode, 'ask_first');
-    await assert.rejects(demo.setMode(made.id, 'full_access', 'claude'), { message: demoFullAccess });
-    assert.equal(demo.takeBackFullAccess(), null, 'nothing to take back in a demo run');
-    assert.equal(r.confirms, 0);
-    assert.deepEqual(r.standings, [], 'the standing choice is neither given nor taken back');
-    assert.deepEqual(fileOf(r), before, 'the standing choice\'s file is untouched');
-    assert.deepEqual(grants(r), []);
-});
-
-test('in a demo run a chat reopened from the record, or after Full access in the person\'s own installation, is in Ask first and cannot enter Full access', async (t) => {
-    const r = rig(t, { answer: { always: true, newChats: true } });
-    const { id } = await r.chat.create(undefined, 'claude');
-    assert.equal((await r.chat.setMode(id, 'full_access', 'claude')).mode, 'full_access');
-    await r.turn(id, 'hello');
-    const before = fileOf(r);
-    // The same conversations read by a demo run's chat.
-    const demo = r.again({ demo: true });
-    assert.equal(demo.open(id).mode, 'ask_first');
-    await assert.rejects(demo.setMode(id, 'full_access', 'claude'), { message: demoFullAccess });
-    assert.equal(demo.fullAccessStanding(), null);
-    assert.deepEqual(fileOf(r), before, 'the standing choice the person gave in their own installation is untouched');
-});
-
-test('in a demo run the page\'s call to choose Full access is refused as a value with the demo\'s sentence, and its take-back changes nothing', async (t) => {
-    const r = rig(t, { chat: { demo: true } });
-    stand(r, true);
-    const before = fileOf(r);
-    const demo = r.again();
-    const listeners = new Map<string, (event: { senderFrame: SenderFrame | null }, ...args: unknown[]) => unknown>();
-    registerChat({ handle: (channel, listener) => void listeners.set(channel, listener) }, demo, () => pageOrigin, () => undefined);
-    const page = { senderFrame: { url: `${pageOrigin}/ui/#/chat`, parent: null } };
-    const made = (await listeners.get('jason:chat.create')?.(page, null, 'claude')) as { id: string; mode: string };
-    assert.equal(made.mode, 'ask_first');
-    assert.deepEqual(await listeners.get('jason:chat.setMode')?.(page, made.id, 'full_access', 'claude'), { refused: demoFullAccess });
-    assert.equal(await listeners.get('jason:fullAccess.standing')?.(page), null);
-    assert.equal(await listeners.get('jason:fullAccess.takeBack')?.(page), null);
-    assert.equal(r.confirms, 0);
-    assert.deepEqual(fileOf(r), before);
-});
-

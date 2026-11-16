@@ -58,7 +58,10 @@ public static class LaunchEnvironment
     /// this build of Jason lives in, at the front of the search path so the bare command word the agent was
     /// allowed to run resolves to this runtime rather than to whatever else answers for that name.
     /// </summary>
-    /// <param name="cliDirectory">Null where this process publishes no path of its own; the search path is then left as it is.</param>
+    /// <param name="cliDirectory">
+    /// Null where this process publishes no path of its own, or one whose name holds the separator of PATH
+    /// (<see cref="SearchPathEntry"/>); the search path is then left as it is.
+    /// </param>
     /// <param name="hostConstants">
     /// The constants of the host the attempt runs, added after the four: <see cref="IAgentHost.Environment"/>. A name that
     /// is one of the runtime's own, the search path included, or starts with the runtime's <c>JASON_</c> prefix is refused
@@ -115,7 +118,10 @@ public static class LaunchEnvironment
             environment[name] = value;
         }
 
-        if (string.IsNullOrEmpty(cliDirectory))
+        // A directory whose name holds the separator of PATH would go on as two entries, neither of them the directory, the
+        // second relative to wherever the child stands; so it is left out, and the child finds what PATH finds. The status
+        // check says such an installation is not ready, once, rather than every claim refusing.
+        if (string.IsNullOrEmpty(cliDirectory) || SearchPathEntry.Problem(cliDirectory) is not null)
         {
             return;
         }

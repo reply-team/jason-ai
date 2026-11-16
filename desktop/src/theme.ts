@@ -16,7 +16,7 @@ export const darkBackground = '#1b1b1a';
 /**
  * Whether no earlier use of this installation left anything in its data directory: it is absent, empty, or holds only the
  * desktop's own records that a start writes before the installation is made: the mode, a request to start the demo over
- * that an earlier version left, Electron's own profile (`desktop/electron/`) and the desktop's own log files
+ * that a version of 0.44 or earlier left (`demoStartOver`, which nothing writes now), Electron's own profile (`desktop/electron/`) and the desktop's own log files
  * (`logs/desktop-*.jsonl`), which a Demo run writes and nothing else. A new installation's first start opens on the demo
  * and writes the first, so the person's own installation is still new when they first choose Live.
  */

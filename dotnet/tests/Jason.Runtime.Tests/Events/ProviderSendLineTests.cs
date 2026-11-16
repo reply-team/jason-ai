@@ -158,16 +158,90 @@ public class ProviderSendLineTests
         Assert.Empty(await store.LinesAsync(rival, JournalKinds.ProviderSendObserved));
     }
 
-    /// <summary>The rule itself: the person's pin finds the person's campaigns for a bounce, and nothing for a send.</summary>
+    /// <summary>
+    /// Where a send is found is decided once, by the sequence of rules, and not by each rule: the rules of this version find
+    /// the person's campaign for a bounce and nobody for a send, and a rule added after them, which would find a campaign
+    /// for anything, is not asked about a send either.
+    /// </summary>
     [Fact]
-    public void The_contact_rule_finds_nobody_for_a_send_and_the_person_s_campaigns_for_a_bounce()
+    public void The_sequence_asks_the_campaign_rule_alone_about_a_send_whatever_rules_follow_it()
     {
         var pins = new PinFacts([], [new ContactPin(7, "cnt_01JC0000000000000000000003", "c_1001")], [new ContactMembership(7, 3, Noon)]);
-        var rule = new ContactPinAttribution();
+        var send = ReadEvent.Read(Sent(campaign: null))!;
 
-        Assert.Empty(rule.Attribute(ReadEvent.Read(Sent(campaign: null))!, pins));
-        Assert.Equal([3], rule.Attribute(ReadEvent.Read(Bounced(campaign: null))!, pins).Select(found => found.CampaignId));
-        Assert.Empty(EventAttributionSequence.OfThisVersion().Attribute(ReadEvent.Read(Sent(campaign: null))!, pins));
+        Assert.Equal([3], EventAttributionSequence.OfThisVersion().Attribute(ReadEvent.Read(Bounced(campaign: null))!, pins).Select(found => found.CampaignId));
+        Assert.Empty(EventAttributionSequence.OfThisVersion().Attribute(send, pins));
+
+        var widened = new EventAttributionSequence(new CampaignPinAttribution(), new ContactPinAttribution(), new Anything(5));
+        Assert.Equal([5], widened.Attribute(ReadEvent.Read(Bounced(campaign: null, contact: "c_nobody"))!, pins).Select(found => found.CampaignId));
+        Assert.Empty(widened.Attribute(send, pins));
+    }
+
+    /// <summary>
+    /// The realistic case the rule is there for: a sequence at the provider that no campaign here runs sends to a person who
+    /// is a member of one of ours. The send is kept, concerns nobody, and that campaign hears nothing of it.
+    /// </summary>
+    [Fact]
+    public async Task A_send_of_a_provider_campaign_none_of_ours_holds_tells_the_person_s_campaign_nothing()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var mine = await store.CampaignAsync(pins: (Reader, "p_1"));
+        await store.MemberAsync(await store.ContactAsync("c_1001"), mine);
+
+        var result = await store.StoreAsync(source, null, Page("c-1", Sent(campaign: "p_9")));
+
+        Assert.Equal(new EventStoreResult(1, 0, 0, false), result);
+        Assert.Empty(await store.AllLinesAsync());
+        await using var db = store.Open();
+        Assert.Equal(0, await db.EventAttributions.CountAsync(Ct));
+    }
+
+    /// <summary>Two messages on one thread, each with its own identifier, are two sends: two events, two lines.</summary>
+    [Fact]
+    public async Task Two_sends_on_one_thread_with_their_own_message_identifiers_are_two_lines()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var campaign = await store.CampaignAsync(pins: (Reader, "p_1"));
+        var at = Noon.AddHours(-3);
+
+        var result = await store.StoreAsync(source, null, Page("c-1", Sent(thread: "t_501", message: "m_1", at: at), Sent(thread: "t_501", message: "m_2", at: at)));
+
+        Assert.Equal(new EventStoreResult(2, 0, 2, false), result);
+        var lines = await store.LinesAsync(campaign, JournalKinds.ProviderSendObserved);
+        Assert.Equal(["m_1", "m_2"], lines.Select(line => (string?)line.New!["message"]));
+        Assert.NotEqual(lines[0].Key, lines[1].Key);
+    }
+
+    /// <summary>
+    /// A span asked for again reads a send the account's own reading already stored: the span counts it as a duplicate and
+    /// says nothing again, and the account's cursor stays where it was.
+    /// </summary>
+    [Fact]
+    public async Task A_span_read_again_holding_a_send_already_stored_counts_a_duplicate_and_says_nothing()
+    {
+        using var store = new EventStoreFixture();
+        var source = await store.SourceAsync();
+        var campaign = await store.CampaignAsync(pins: (Reader, "p_1"));
+        await store.StoreAsync(source, null, Page("c-1", Sent()));
+        var backfill = await store.BackfillAsync(source);
+
+        var result = await store.StoreAsync(source, EventFence.OfBackfill(backfill.Id, null), Page("b-1", Sent()));
+
+        Assert.Equal(new EventStoreResult(0, 1, 0, false), result);
+        Assert.Single(await store.LinesAsync(campaign, JournalKinds.ProviderSendObserved));
+        await using var db = store.Open();
+        Assert.Equal(1, await db.Events.CountAsync(Ct));
+        var span = await db.EventBackfills.AsNoTracking().SingleAsync(Ct);
+        Assert.Equal((0, 1, "b-1"), (span.Stored, span.Duplicates, span.Cursor));
+        Assert.Equal("c-1", (await db.EventSources.AsNoTracking().SingleAsync(Ct)).Cursor);
+    }
+
+    /// <summary>A rule of the test's: every event concerns the one campaign it is told, by the campaign's pin.</summary>
+    private sealed class Anything(int campaign) : IEventAttribution
+    {
+        public IReadOnlyList<Attributed> Attribute(ReadEvent read, PinFacts pins) => [new Attributed(campaign, EventAttributionRules.CampaignPin)];
     }
 
     /// <summary>A send before the campaign went live is history: kept, found to concern the campaign, and said by no line.</summary>

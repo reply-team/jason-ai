@@ -89,9 +89,12 @@ public static class SetupSessionOpener
         }
 
         IReadOnlyList<string> program = [.. chosen.Program, .. AgentHosts.InteractiveArguments(host, SetupBrief.For(hostWord, skill.Deployed == true), notAdded is null ? plugins : null)];
-        if (TerminalPlan.Uncarried(terminals.Platform, program) is { } uncarried)
+        if (TerminalPlan.Uncarried(terminals.Platform, program, SessionOpener.Own(env), SessionOpener.Inherited(env)) is { } uncarried)
         {
-            return SessionOpener.Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started.");
+            return SessionOpener.Refuse(
+                env,
+                CliErrors.TerminalStartFailed,
+                $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started; to do the same by hand, run `{AgentHosts.Of(host).CommandWord}` in a terminal of your own at {folder} and ask it to use the skill {SetupBrief.SkillName}.");
         }
 
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder, program, "setup", SessionOpener.Own(env));

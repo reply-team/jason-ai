@@ -95,28 +95,32 @@ event names none. `channel` is `email`, `linkedin` or `other`.
 
 **A message the account sent.** `message_sent` is a message sent as the account to a person, whoever sent it: Jason, a
 sequence, or a person in the provider's own screens — the provider cannot tell them apart, and the runtime does not ask.
-`contact` is the person it went to; a send that names nobody is not reported. `campaign` is the provider campaign the
-send belongs to, by the identifier `campaign.get` pins, and `null` for a send outside every provider campaign: a send
-reaches a campaign by that identifier alone, never by the person, so one that names no provider campaign reaches no
-campaign. `occurred_at` is when the message was sent, as the provider stamps it; where the provider gives no moment for
-the message itself, the moment the thread last moved with it. `message` is the provider's identifier for the message, or
-`null` where it gives none.
+A plugin reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment
+the message was sent, and otherwise leaves it out; never as a move by the other side. `contact` is the person it went
+to; a send that names nobody is not reported. `campaign` is the provider campaign the send belongs to, by the
+identifier `campaign.get` pins, and `null` for a send outside every provider campaign: a send reaches a campaign by that
+identifier alone, never by the person, so one that names no provider campaign reaches no campaign. `occurred_at` is the
+moment the message was sent, as the provider stamps it, and the same at every read of that send: the moment is part of
+what makes two reads one send, so a send given two moments is said twice. `message` is the provider's identifier for
+the message, or `null` where it gives none.
 
 **Who moved a thread.** A thread moves when the other side writes, and also when the account itself acts — a reply sent
 into it, a category set, the read flag changed — which Jason does too. `moved_by` is the provider's own word for the
 move:
 
 - `other_side` — a message the other side wrote;
-- `account` — a message sent as the account, by Jason, by a sequence or by a person in the provider's own screens, which
-  a plugin reports as the send it is, below;
+- `account` — a message sent as the account, by Jason, by a sequence or by a person in the provider's own screens. The
+  runtime keeps such a move and says it to no campaign; the value stays for plugins written before `message_sent`, and
+  a plugin that reports the message as the send it is has no reason left to report the move;
 - `provider` — a change with no message: a category, the read flag, a meeting intent;
 - `null` — the provider cannot say.
 
 Only a move by the other side reads as a reply. Never report a move by the account or the provider as `other_side`.
 Report `null` only where the provider truly cannot say: such a move wakes the campaign's manager as a reply would, so a
-follow-up sent into a thread that already has a reply reads as one too. A move by the account that is a message is a
-send: report it as `message_sent`, or leave it out, never as `other_side` and never as a `thread_moved` by `account`.
-You may leave out moves by the provider altogether.
+follow-up sent into a thread that already has a reply reads as one too. A move by the account is a message:
+report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message
+was sent, and otherwise leave it out; never as a move by the other side. You may leave out moves by the provider
+altogether.
 
 **Nothing else travels.** Each kind is a closed object: a member the table does not name — a subject, a preview, a
 person's name — is refused with the whole page, and so is a kind outside the five. A schema cannot prove that an
@@ -181,9 +185,12 @@ A plugin that performs this contract:
   the events on the strength of this line, so naming the campaign is still the right course: the first rule decides alone
   when it finds one, and a move that names none reaches the campaigns the person is in rather than the one whose thread
   it is;
-- reports a message sent as the account, by whoever sent it, as `message_sent`, never as a `thread_moved` by `account`;
+- reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment the message
+  was sent, and otherwise leaves it out; never as a move by the other side;
 - names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it
   cannot place names `null`, and reaches no campaign;
+- gives a `message_sent` as its `occurred_at` the moment the message was sent, the same at every read of that send, so
+  that a send read twice is said once;
 - reports `moved_by: null` only where the provider cannot say, knowing that such a move wakes a manager as a reply;
 - answers `events_cursor_unknown` for a cursor it can no longer read, and `events_unreachable` for a provider that did
   not answer or is unavailable for now;

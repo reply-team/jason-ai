@@ -1132,12 +1132,12 @@ public partial class ClaimerTests
     }
 
     /// <summary>
-    /// What a person approved is what the plugin receives, and the pins the person carries are part of it. A pin learned
-    /// by the item's own earlier attempt is such a change as much as an edit is: the next claim composes the input with
-    /// it, so the same decision no longer matches and the person decides once more on what the plugin now receives.
+    /// A pin the item's own earlier attempt learned, where the approved subject held none, changes what the plugin receives
+    /// and not what the person read: the retry after a failure that is retried runs under the decision they made, with the
+    /// pin in its input and the approval's row as it was.
     /// </summary>
     [Fact]
-    public async Task A_pin_learned_by_an_earlier_attempt_parks_the_item_again_as_a_changed_input()
+    public async Task A_pin_learned_by_an_earlier_attempt_runs_its_retry_under_the_approval_the_person_gave()
     {
         using var harness = new Harness(
             plugin: TestPlugins.Loaded("stand-in-provider", ["campaign.enroll"]),
@@ -1157,19 +1157,19 @@ public partial class ClaimerTests
         var attempt = await db.Attempts.SingleAsync(Ct);
         attempt.Status = AttemptStatus.Failed;
         item.Status = WorkItemStatus.Created;
-        item.Contact!.ExternalIds.Add(ContactPin("stand-in-provider", "48211"));
+        var pin = ContactPin("stand-in-provider", "48211");
+        pin.RecordedByAttemptId = attempt.PublicId;
+        item.Contact!.ExternalIds.Add(pin);
         await db.SaveChangesAsync(Ct);
 
-        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var retry = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
 
+        Assert.Equal("48211", (string?)retry.Plan!.Input["contacts"]![0]!["external_ids"]!["contact"]);
         await using var fresh = database.Open();
-        Assert.Equal(WorkItemStatus.AwaitingApproval, (await fresh.WorkItems.AsNoTracking().SingleAsync(Ct)).Status);
-        Assert.Single(await fresh.Attempts.AsNoTracking().ToListAsync(Ct));
-        var approvals = await fresh.Approvals.AsNoTracking().OrderBy(a => a.Id).ToListAsync(Ct);
-        Assert.Equal([ApprovalStatus.Superseded, ApprovalStatus.Pending], approvals.Select(a => a.Status));
-        Assert.Equal(first.PublicId, approvals[0].PublicId);
-        Assert.Equal("input_changed", approvals[1].Reason);
-        Assert.Equal("48211", (string?)approvals[1].Subject["input"]!["contacts"]![0]!["external_ids"]!["contact"]);
+        var approval = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((first.PublicId, ApprovalStatus.Approved, first.SubjectHash), (approval.PublicId, approval.Status, approval.SubjectHash));
+        Assert.Null((string?)approval.Subject["input"]!["contacts"]![0]!["external_ids"]!["contact"]);
+        Assert.Equal(first.PublicId, (await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2, Ct)).Provenance!.ApprovalId);
     }
 
     /// <summary>
@@ -1670,9 +1670,9 @@ public partial class ClaimerTests
     /// keyed send is claimed only in an active campaign, so a campaign paused and resumed in between is active at both
     /// claims, and the pause leaves nothing else in the input: the repeat runs under the decision the person already made.
     /// (That the status itself is left out of the name is held where the check is.) A pin of the person or of the campaign
-    /// the lost attempt learned from its own answer is the same request too, though a pin is part of what the person
-    /// approves: they are asked again, and the repeat then runs, named with the pin it now carries. That repeat losing its
-    /// answer too is repeated in turn, since its claim named the input with the pin already in it.
+    /// the lost attempt learned from its own answer is the same request too, and a pin added where the approved subject held
+    /// none keeps the person's decision: the repeat runs, named with the pin it now carries. That repeat losing its answer
+    /// too is repeated in turn, since its claim named the input with the pin already in it.
     /// </summary>
     [Theory]
     [InlineData("nothing", false)]
@@ -1757,14 +1757,6 @@ public partial class ClaimerTests
 
         var claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
         var learned = since is "a pin the lost attempt learned" or "a campaign pin the lost attempt learned" or "two answers lost in a row";
-        if (learned)
-        {
-            // The pin is in what the person is asked to approve, so the repeat the key settles asks them again first.
-            Assert.Empty(claimed);
-            Assert.Equal(WorkItemStatus.AwaitingApproval, item.Status);
-            await Decide(db, ApprovalStatus.Approved);
-            claimed = await harness.Claimer.ClaimAsync(db, 4, Ct);
-        }
 
         await using var fresh = database.Open();
         var repeat = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2, Ct);
@@ -1806,7 +1798,7 @@ public partial class ClaimerTests
     /// A repeat is compared with the latest attempt that lost its answer, and the pins left out of the input composed now
     /// are the ones that attempt and every later attempt of the item recorded: each later one ran only because the claim
     /// found it the same request, so what it learned is the provider's answer to that request. A repeat that ended
-    /// transient after learning the person's pin is repeated in turn, once the person approves the pin. A pin an attempt
+    /// transient after learning the person's pin is repeated in turn, under the decision the person made. A pin an attempt
     /// before the compared one recorded is not left out, and since the compared attempt was not composed with it, the
     /// repeat is refused: compared with the first lost answer instead, it would have run.
     /// </summary>
@@ -1871,11 +1863,8 @@ public partial class ClaimerTests
         await using var fresh = database.Open();
         if (!refused)
         {
-            // The pin is in what the person is asked to approve, so the repeat asks them again first.
-            Assert.Empty(claimed);
-            Assert.Equal(WorkItemStatus.AwaitingApproval, item.Status);
-            await Decide(db, ApprovalStatus.Approved);
-            var repeat = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+            // A pin added where the approved subject held none keeps the person's decision, so the repeat runs under it.
+            var repeat = Assert.Single(claimed);
             var third = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 3, Ct);
             Assert.Equal(CanonicalInput.Digest(repeat.Plan!.Input), third.Provenance!.InputDigest);
             return;

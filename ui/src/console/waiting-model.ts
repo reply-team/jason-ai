@@ -29,7 +29,7 @@ export function approvalGate(whole: Approval | undefined, unread: Said | undefin
 
 /**
  * What a held Approve says while its approval is being read, in the words true where it is drawn: a chat's card shows
- * the approval whole once read; Needs you's row reads it whole and keeps its words for Details.
+ * the approval whole once read; Needs you's pane shows it whole once read.
  */
 export const readingSentence = (where: 'chat' | 'needs'): string =>
     `This approval is being read; it cannot be approved until it ${
@@ -38,12 +38,12 @@ export const readingSentence = (where: 'chat' | 'needs'): string =>
 
 /**
  * What a held Approve says when its approval could not be read, before what the runtime said, or before the words that
- * say it did not answer in time; and where the person can still open it: in a chat, Details opens it in Needs you; on
- * Needs you's row, Details reads it again.
+ * say it did not answer in time; and where the person can still open it: in a chat, Details opens it in Needs you; in
+ * Needs you's pane, Read again asks for it once more.
  */
 export const unreadSentence = (where: 'chat' | 'needs', said?: Said): string =>
     `This approval could not be read, so it cannot be approved here; ${
-        where === 'chat' ? 'Details opens it in Needs you' : 'Details reads it again'
+        where === 'chat' ? 'Details opens it in Needs you' : 'Read again asks for it once more'
     }.${said?.unanswered === true ? '' : ' The runtime said:'}`;
 
 export interface ApprovalCard {

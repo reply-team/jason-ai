@@ -172,9 +172,11 @@ public static class CanonicalInput
     }
 
     /// <summary>
-    /// A composed input without the pins one attempt <paramref name="learned"/>: what the same facts composed before that
-    /// attempt recorded them, since a pin is written once, by the attempt that learned it, and every pin travels in the
-    /// input under the kind it is known by.
+    /// A composed input without the pins of the kinds <paramref name="learned"/> names, for the person and for the campaign.
+    /// For the kinds the attempts a repeat is compared with recorded, it is what the same facts composed before those
+    /// attempts recorded them, since a pin is written once, by the attempt that learned it, and every pin travels in the
+    /// input under the kind it is known by; for the kinds <see cref="Added"/> finds, it is the input less the pins added
+    /// since an earlier document was composed, by whichever attempt learned them.
     /// </summary>
     public static JsonObject Without(JsonObject input, PinsLearned learned)
     {
@@ -204,6 +206,31 @@ public static class CanonicalInput
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The kinds of pin <paramref name="input"/> carries, for the person and for the campaign, that <paramref name="earlier"/>
+    /// does not carry at the same place: the pins added since that document was composed. A kind both carry is never among
+    /// them, whatever its two values, and a document of any other shape carries no kind, so the answer is total.
+    /// </summary>
+    public static PinsLearned Added(JsonObject input, JsonObject? earlier)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        return new PinsLearned(Beyond(PersonPins(input), PersonPins(earlier)), Beyond(CampaignPins(input), CampaignPins(earlier)));
+
+        static JsonObject? PersonPins(JsonObject? document) =>
+            document?[ContactsKey] is JsonArray { Count: > 0 } contacts && contacts[0] is JsonObject person
+                ? person[ExternalIdsKey] as JsonObject
+                : null;
+
+        static JsonObject? CampaignPins(JsonObject? document) =>
+            document?[CampaignKey] is JsonObject campaign ? campaign[ExternalIdsKey] as JsonObject : null;
+
+        static HashSet<string> Beyond(JsonObject? now, JsonObject? then) =>
+            (now ?? []).Select(pin => pin.Key)
+                .Where(kind => then is null || !then.ContainsKey(kind))
+                .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

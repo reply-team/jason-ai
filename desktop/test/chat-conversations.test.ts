@@ -255,3 +255,18 @@ test('a plan\'s mark on the agent\'s words is kept, read back only as true, and 
     // A desktop that knows no mark reads the words alone: the field is an extra one on a kind it takes.
     assert.equal(JSON.parse(serialize(kept)).entries[1].plan, true);
 });
+
+test('the moment the agent\'s words were kept is kept with them, read back only in the desktop\'s own shape, and kept when the words are cut to fit', () => {
+    const at = '2026-10-16T09:05:00.000Z';
+    const kept = record({ entries: [{ kind: 'user', text: 'Who sends?' }, { kind: 'text', text: 'From whom?', at }, { kind: 'text', text: 'A plan.', plan: true, at }] });
+    assert.deepEqual(parseConversation(serialize(kept), kept.id), kept);
+    // A record an earlier desktop wrote has none, and any other value is none: the words stand.
+    for (const value of [undefined, '2026-10-16', '2026-10-16T09:05:00Z', '2026-13-45T99:99:99.000Z', 1, null, {}]) {
+        const planted = record({ entries: [{ kind: 'text', text: 'Words', at: value } as never] });
+        assert.deepEqual(parseConversation(serialize(planted), planted.id)?.entries, [{ kind: 'text', text: 'Words' }], JSON.stringify(value));
+    }
+    // A card at the end of words cut to fit survives the cut, and was asked at the moment it was.
+    const long = bounded(record({ entries: [{ kind: 'text', text: 'p'.repeat(recordLimit) + 'END', at }] })).entries[0];
+    assert.ok(long?.kind === 'text' && long.text.endsWith('END'));
+    assert.equal(long.at, at);
+});
