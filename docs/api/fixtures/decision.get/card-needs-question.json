@@ -1,0 +1,25 @@
+{
+  "operation": "decision.get",
+  "case": "card-needs-question",
+  "request": {
+    "decision_id": "dec_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "dec_1",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_2",
+    "attempt_id": "att_4",
+    "status": "pending",
+    "question": "Should Tomas hear about the autumn pricing before the spring one?",
+    "options": null,
+    "references": null,
+    "raised_at": "2026-10-16T09:00:00.000Z",
+    "answer": null,
+    "chosen_option": null,
+    "answered_at": null,
+    "answered_by": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Tomas Berg"
+  }
+}

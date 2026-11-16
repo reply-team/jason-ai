@@ -328,7 +328,8 @@ export function CampaignsScreen() {
                 <PersonPanel contactId={personShown} campaignId={selected} onClose={() => setPerson(null)} />
             )}
             {selected && !waiting && !personShown && (
-                <div className="panel">
+                // The agent's own panel, named for a sheet that draws it and not what is drawn in its place.
+                <div className="panel" data-panel="agent">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
                     {tabFailure && <Notice danger>{tabFailure}</Notice>}
                     {campaign && campaign.id === selected && (

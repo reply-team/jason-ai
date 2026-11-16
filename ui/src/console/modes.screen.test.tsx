@@ -551,6 +551,35 @@ describe('Plan only’s plan card', () => {
         expect(document.querySelectorAll('.m.ai')).toHaveLength(0);
     });
 
+    // A block the AI wrote for a card is part of what Approve and run tells it to carry out: it stays in the plan's words.
+    const block =
+        '```card\n{"kind":"plan","title":"Spring","channels":["email"],"steps":[{"channel":"email","body":"Hi there"}]}\n```';
+
+    it('shows a card block of the plan as its text, and offers Approve and run only over the whole of it', async () => {
+        const desktop = renderConsole();
+        await planned(desktop, `Here is the plan.\n${block}`);
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe(`Here is the plan.\n${block}`);
+        expect(approve()).not.toBeNull();
+        expect(screen.queryByText('Jason asked for a card this app does not draw.')).toBeNull();
+    });
+
+    it('shows a plan that is only a card block as that text, never as an empty card with Approve and run', async () => {
+        const desktop = renderConsole();
+        await planned(desktop, block);
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe(block);
+        expect(approve()).not.toBeNull();
+    });
+
+    it('offers no Approve and run over a plan of no words', async () => {
+        const desktop = renderConsole();
+        await planned(desktop, '  \n ');
+        await waitFor(() => expect(card()).not.toBeNull());
+        expect(approve()).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Keep planning' })).toBeNull();
+    });
+
     it('shows no card for a turn’s end the desktop did not mark', async () => {
         const desktop = renderConsole();
         await planned(desktop, 'Just an answer', false);

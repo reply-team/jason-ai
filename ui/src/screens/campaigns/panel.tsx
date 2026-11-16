@@ -79,7 +79,10 @@ export function CampaignPanel({ campaign, at, counted, onAct, onMoved, onClose }
                 title={campaign.name}
                 sub={
                     <>
-                        <span className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
+                        <span
+                            className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}
+                            data-status={campaign.status}
+                        >
                             {campaign.status}
                         </span>{' '}
                         {word && (
@@ -98,7 +101,8 @@ export function CampaignPanel({ campaign, at, counted, onAct, onMoved, onClose }
                 <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
-                <CampaignMoves campaign={campaign} buttonClass={() => 'btn'} onDone={onMoved} />
+                {/* Each move named in its class, so a sheet can tell Start and Resume from Pause. */}
+                <CampaignMoves campaign={campaign} buttonClass={(move) => `btn agent-move-${move}`} onDone={onMoved} />
             </ActionsRow>
             {row && (
                 <div className="stats">
