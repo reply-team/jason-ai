@@ -286,17 +286,17 @@ desktop does not narrow, so it may read the records.
   begins with an underscore, and at most 300 characters. Every other page asks, a page of Claude Code's own preapproved
   documentation set included. On Codex every turn searches OpenAI's cached index with no card and opens no page live;
   the person's own search setting is set aside for the run, also when they had turned search off.
-- A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
-  "Start afresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
+- A conversation whose turn runs is not removed, started fresh or attached; each is refused with a sentence.
+  "Start fresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
   conversation's turn runs. When the page is loaded again while a turn runs, the turn shows running with Stop, and a
   card that waited is drawn as ended, since the record keeps no request to answer it by. A conversation is kept from its first turn: one made and never sent to is not listed and
-  leaves no record, and starting it afresh writes nothing.
+  leaves no record, and starting it fresh writes nothing.
 - **A refusal is a value.** Each chat call the desktop refuses answers `{ refused }` with its sentence alone, and a
   call with nothing to answer answers null; only what is no refusal rejects. Electron would put "Error invoking remote
   method" and the channel before a sentence thrown across the seam.
 - **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
   how many were read, how many files were not records, a record's error code when one could not be written, how many
-  new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of
+  new campaigns a set-up turn found and why a turn started fresh, and nothing else. `jason export` carries no part of
   `<data>/desktop/`, so conversations do not travel to another machine, nor do the transcripts of turns on a provider's
   key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
   chat's other turns are theirs, in their own folders, and are never touched.
@@ -314,11 +314,11 @@ applies to the turns a person starts by sending, from the next one on.
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start afresh. A Plan only turn that ends with no error, not
+  it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
   the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
   fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
-  Start afresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
+  Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
@@ -334,7 +334,7 @@ applies to the turns a person starts by sending, from the next one on.
   `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
   page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
-  held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
+  held in memory alone, for that conversation, and gone when the window closes or the chat is started fresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
@@ -464,7 +464,7 @@ applies to the turns a person starts by sending, from the next one on.
   host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
   reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
   no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
-  restart opens Ask first, Start afresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
+  restart opens Ask first, Start fresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
   first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
   Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
   Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a

@@ -709,10 +709,10 @@ describe('The conversation’s acts in the agent’s “…”', () => {
             within(menu)
                 .getAllByRole('menuitem')
                 .map((each) => each.textContent),
-        ).toEqual(['Rename conversation', 'Start conversation afresh', 'Remove conversation']);
+        ).toEqual(['Rename conversation', 'Start conversation fresh', 'Remove conversation']);
         expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Rename conversation' }));
         fireEvent.keyDown(menu, { key: 'ArrowDown' });
-        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Start conversation afresh' }));
+        expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Start conversation fresh' }));
         fireEvent.keyDown(menu, { key: 'Escape' });
         expect(within(head()!).queryByRole('menu')).toBeNull();
         expect(document.activeElement).toBe(more());

@@ -269,7 +269,7 @@ describe('the Feed', () => {
         const feed = shownPane()!.querySelector<HTMLElement>('.chat-panel')!;
         expect(within(feed).queryByRole('button', { name: 'Rename' })).toBeNull();
         expect(within(feed).queryByRole('button', { name: 'Remove' })).toBeNull();
-        expect(within(feed).getByRole('button', { name: 'Start afresh' })).toBeTruthy();
+        expect(within(feed).getByRole('button', { name: 'Start fresh' })).toBeTruthy();
     });
 
     it('has the desktop read back what was missed when the stream starts afresh after a resume the runtime refused', async () => {

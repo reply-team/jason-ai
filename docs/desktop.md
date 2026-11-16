@@ -308,7 +308,7 @@ with one sentence, "Done in Jason Desktop's own window.": the account acts of Co
 modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
 shows the demo page in that tab alone and leaves the desktop's mode as it is
 ([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
-draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
+draws no Start fresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
 holds Rename conversation alone. The tab shows the
 Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
@@ -532,10 +532,10 @@ tab, the first of its tabs, under the agent's one header, which stays while you 
 state and kind as pills, its one move, **Start** for a draft, **Pause** for an agent that runs, **Resume** for a paused
 one, and **…** with the conversation's acts. The move is the agent page's own control, with the same confirmation, which
 says before a start how many people the agent holds and how its messages go; it shows from the moment a set-up chat
-becomes a campaign's. **…** holds **Rename conversation**, **Start conversation afresh**, which begins the agent's next
+becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
 turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
 conversation's record from this computer after one question, saying that the agent stays as it is; the host keeps its
-own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start afresh** and **Remove**.
+own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
@@ -663,7 +663,7 @@ writes through it, a `cp` onto it say, reaches the file it shares wherever that 
 before the command runs, so a link put into the folder by something else between the two is the same limit Ask first's
 Write has.
 
-Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
+Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start fresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
