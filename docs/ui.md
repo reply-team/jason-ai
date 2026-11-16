@@ -568,8 +568,14 @@ composer's menus, which show what the new conversation will take.
 
 What has no address of its own, Start, a set-up chat, the Feed and the sidebar's panels, stands at the chat's address,
 `#/chat`. Leaving an agent for one of them adds one entry to the browser's history, so Back comes back to the agent's
-tab as you left it, the words typed and not sent included, and Forward shows that place again. A second place without an
+tab, and Forward shows that place again. Its Chat comes back as you left it, the words typed and not sent included; a
+page tab is drawn again from its address, so what was typed there, a search say, is not kept. A second place without an
 address straight after the first adds no entry, so Back from it goes to the agent too.
+
+An address naming an agent the runtime does not know, an old link say, is closed as the page closes it, saying the agent
+no longer exists. When the desktop cannot open an agent's conversation, its Chat tab says why under the agent's own
+header, with **Try again**. An agent with no conversation shows its unmade Chat only until one exists: once its
+conversation is opened, or made in another window or tab, that conversation takes its place, carrying the words typed.
 
 ## What the page may do
 

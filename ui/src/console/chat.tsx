@@ -1356,10 +1356,6 @@ function AgentInBar({ campaignId }: { campaignId: string }) {
 const agentMore = (): HTMLElement | null => document.querySelector<HTMLElement>('.jc-console .agent-head .agent-more');
 
 /**
- * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
- * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
- */
-/**
  * Opening one of an unmade chat's menus is a choice about the conversation, so it is made first: the press is held, the
  * conversation made, and the same menu opened in its panel. A key that does not open a menu passes.
  */
@@ -1395,6 +1391,10 @@ function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, c
     });
 }
 
+/**
+ * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
+ * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
+ */
 export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?: boolean }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
