@@ -395,6 +395,8 @@ test('a card the page did not draw is logged by its kind and why, each from its 
     const said: [string, string][] = [
         ['choice', 'schema'],
         ['plan', 'schema'],
+        ['ai_setup', 'schema'],
+        ['reply_setup', 'schema'],
         ['unknown', 'too_long'],
         ['unknown', 'malformed'],
         ['unknown', 'kind_unknown'],
