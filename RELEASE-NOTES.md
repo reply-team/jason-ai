@@ -75,6 +75,18 @@ window loses its second title bar.
   screen and dialog was walked in both themes, wide and narrow: fields, cards, notes and accent buttons read on the
   dark ground, and the dashboard's agents table scrolls inside its card. The layout faults found on the way are under
   Fixed.
+- **The console in a narrow browser tab can reach its sidebar.** Below 820 pixels the sidebar was off the screen and
+  nothing brought it back, so a tab that narrow reached only the page it opened on. The strip now has a button for the
+  sidebar wherever the sidebar is off the screen. Opening it moves the focus into the sidebar and puts the page behind
+  it out of reach; Escape (which gives the focus back to the button), a tap beside it or a choice in it puts it away.
+  The composer's two menus take the box's width, so neither runs off an edge. A table wider than the room (Agents, the
+  dashboard's two cards, People, Plugins, Paired browsers and Notification channels) scrolls inside a named box that
+  takes the keyboard's focus. On a narrow page Performance's period switch fits, the people search says "Search
+  people...", a person's history rows wrap so the campaign's name is read, and the start screen's voice note stacks.
+  Three of the rules are not limited to narrow pages, so Jason Desktop's own window changes in three places: the two
+  cards on Connect no longer touch, the age on a dashboard row (`30 d`) stays on one line, and the labels of a
+  segmented control stay on one line. A window of Jason Desktop cannot be narrower than 900 pixels, so the rest is for
+  the tab.
 - **The Windows window has no title bar of its own.** The system's minimize, maximize and close buttons stand over the
   console's top strip, in the console's ink for the theme in force, and follow a change of theme while the window is
   open. Open in and the Demo | Live switch stand left of the buttons, and the strip, with a drag band the desktop adds,
