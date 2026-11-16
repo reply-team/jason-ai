@@ -96,7 +96,7 @@ describe('when an approval may be approved where it is drawn', () => {
 
     it('says where the person can still open an approval it could not read', () => {
         expect(unreadSentence('chat')).toContain('Details opens it in Needs you');
-        expect(unreadSentence('needs')).toContain('Details reads it again');
+        expect(unreadSentence('needs')).toContain('Read again asks for it once more');
         for (const where of ['chat', 'needs'] as const)
             expect(unreadSentence(where)).toMatch(/^This approval could not be read, so it cannot be approved here; /);
     });
