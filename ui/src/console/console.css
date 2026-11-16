@@ -94,7 +94,7 @@
 .jc-console .btn.p {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .btn.p:hover {
     background: #0c5f66;
@@ -102,7 +102,7 @@
 .jc-console .btn.am {
     background: var(--amber);
     border-color: var(--amber);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .btn.sm {
     padding: 4px 9px;
@@ -143,7 +143,7 @@
     color: var(--faint);
     padding: 9px 12px;
     border-bottom: 1px solid var(--line);
-    background: #fafbfc;
+    background: var(--th-bg);
     white-space: nowrap;
 }
 .jc-console table.t td {
@@ -191,10 +191,10 @@
     color: var(--blue);
 }
 .jc-console .inp {
-    border: 1px solid var(--line);
+    border: 1px solid var(--field-line);
     border-radius: 7px;
     padding: 8px 10px;
-    background: var(--panel);
+    background: var(--field-bg);
     width: 100%;
 }
 .jc-console textarea.inp {
@@ -267,7 +267,7 @@
 .jc-console .note.am {
     background: var(--amber-2);
     border-color: #efcfa8;
-    color: #7a3f0a;
+    color: var(--note-am-ink);
 }
 .jc-console {
     --bg: #fff;
@@ -304,6 +304,17 @@
     --demo-bg: #fff4d6;
     --demo-line: #f2dc9c;
     --demo-ink: #6b4e00;
+    /* Ink on the accent and amber fills, the card edge, the notes' ink and the table head's ground. */
+    --on-teal: #fff;
+    --on-ok: #fff;
+    --card-line: #e8ecf4;
+    --note-ink: #27427f;
+    --note-am-ink: #7a3f0a;
+    --note-am-line: #f3dcb8;
+    --th-bg: #fafbfc;
+    --ask-q-line: #e3d6fb;
+    --field-bg: var(--panel);
+    --field-line: var(--line);
     /* The count on Needs you: white figures on it read at 4.5:1 or more in either theme. */
     --count-bg: var(--red);
     color-scheme: light;
@@ -343,11 +354,11 @@
 .jc-console .note {
     background: var(--teal-2);
     border-color: var(--accent-line);
-    color: #27427f;
+    color: var(--note-ink);
     border-radius: 10px;
 }
 .jc-console .note.am {
-    border-color: #f3dcb8;
+    border-color: var(--note-am-line);
     border-radius: 10px;
 }
 .jc-console table.t th {
@@ -794,7 +805,7 @@
     background: var(--panel);
 }
 .jc-console .ask.q {
-    border-color: #e3d6fb;
+    border-color: var(--ask-q-line);
 }
 .jc-console .ask-h {
     display: flex;
@@ -878,7 +889,7 @@
     border-radius: 50%;
     border: 0;
     background: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -931,7 +942,7 @@
     background: #f6f8fc;
 }
 .jc-console .card {
-    border-color: #e8ecf4;
+    border-color: var(--card-line);
     border-radius: 16px;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
@@ -1040,12 +1051,23 @@
         --blue-2: #10283a;
         --gray-2: #1f1f24;
         --seg-track: rgba(255, 255, 255, 0.08);
-        --seg-on: #2a2a30;
+        --seg-on: #3a3a42;
         --seg-on-ink: var(--ink);
         --demo-bg: var(--amber-2);
         --demo-line: #4a3a1c;
         --demo-ink: var(--amber);
         --count-bg: #c2410c;
+        --accent-text: #a3b6f7;
+        --on-teal: #0c0c0e;
+        --on-ok: var(--bg);
+        --card-line: var(--line);
+        --note-ink: #a3b6f7;
+        --note-am-ink: var(--amber);
+        --note-am-line: rgba(240, 180, 90, 0.35);
+        --th-bg: var(--panel-2);
+        --ask-q-line: rgba(182, 156, 255, 0.3);
+        --field-bg: var(--bg);
+        --field-line: #3a3a42;
         color-scheme: dark;
     }
     :root:not([data-theme='light']) .jc-console .content {
@@ -1085,12 +1107,23 @@
     --blue-2: #10283a;
     --gray-2: #1f1f24;
     --seg-track: rgba(255, 255, 255, 0.08);
-    --seg-on: #2a2a30;
+    --seg-on: #3a3a42;
     --seg-on-ink: var(--ink);
     --demo-bg: var(--amber-2);
     --demo-line: #4a3a1c;
     --demo-ink: var(--amber);
     --count-bg: #c2410c;
+    --accent-text: #a3b6f7;
+    --on-teal: #0c0c0e;
+    --on-ok: var(--bg);
+    --card-line: var(--line);
+    --note-ink: #a3b6f7;
+    --note-am-ink: var(--amber);
+    --note-am-line: rgba(240, 180, 90, 0.35);
+    --th-bg: var(--panel-2);
+    --ask-q-line: rgba(182, 156, 255, 0.3);
+    --field-bg: var(--bg);
+    --field-line: #3a3a42;
     color-scheme: dark;
 }
 :root[data-theme='dark'] .jc-console .content {
@@ -1191,6 +1224,11 @@ body,
 }
 .jc-console .panel-body {
     padding: 18px 20px;
+}
+/* A painted view inside a card of a screen takes its own height, so the card closes under it. */
+.jc-console .harness .sys > .card > .painted {
+    height: auto;
+    overflow: visible;
 }
 .jc-console .chat-panel {
     display: flex;
@@ -1364,7 +1402,7 @@ body,
 .jc-console .needs-filter .btn[aria-pressed='true'] {
     border-color: var(--teal);
     background: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .needs-filter .btn[aria-pressed='true'] .needs-n {
     color: inherit;
@@ -1902,6 +1940,9 @@ body,
     padding: 6px 0;
     border-bottom: 1px solid var(--line2);
 }
+.jc-console .dash-agents > .bd {
+    overflow-x: auto;
+}
 .jc-console .dash-agents progress {
     width: 90px;
 }
@@ -2231,7 +2272,7 @@ body,
 .jc-console .waiting-edit .btn.primary {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 /* A campaign's chat carries the agent's state at the bar's start and its one move at the bar's end: the group is laid
    out by the bar itself, the state first and the move last, the chat's own buttons between them. */
@@ -2245,4 +2286,38 @@ body,
 }
 .jc-console .chat-agent-move {
     order: 1;
+}
+/* The rename box carries no field look of its own; in the dark theme it takes the fields' ground and edge, not the
+   browser's grey. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .chat-rename input {
+        padding: 5px 8px;
+        border: 1px solid var(--field-line);
+        border-radius: 7px;
+        background: var(--field-bg);
+        color: var(--ink);
+    }
+}
+:root[data-theme='dark'] .jc-console .chat-rename input {
+    padding: 5px 8px;
+    border: 1px solid var(--field-line);
+    border-radius: 7px;
+    background: var(--field-bg);
+    color: var(--ink);
+}
+/* A dialog's edge and the layer behind it in the dark theme: the edge shows on the dimmed page, and the page behind
+   recedes. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .overlay {
+        background: rgba(0, 0, 0, 0.62);
+    }
+    :root:not([data-theme='light']) .jc-console .dialog {
+        border-color: var(--field-line);
+    }
+}
+:root[data-theme='dark'] .jc-console .overlay {
+    background: rgba(0, 0, 0, 0.62);
+}
+:root[data-theme='dark'] .jc-console .dialog {
+    border-color: var(--field-line);
 }

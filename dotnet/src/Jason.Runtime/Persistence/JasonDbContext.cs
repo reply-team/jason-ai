@@ -420,6 +420,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             decision.Property(d => d.ChosenOption).HasMaxLength(DecisionLimits.MaxOptionLabelLength);
             decision.Property(d => d.AnsweredById).HasMaxLength(100);
             decision.Property(d => d.AnswerJournalEntryId).HasMaxLength(40);
+            decision.Property(d => d.ThreadPluginId).HasMaxLength(64);
             decision.Property(d => d.Options).HasColumnName("options_json");
             decision.Property(d => d.References).HasColumnName("references_json");
             decision.ToTable(t =>

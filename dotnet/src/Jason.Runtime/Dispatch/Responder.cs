@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Runtime.Configuration;
@@ -10,6 +12,7 @@ using Jason.Runtime.Logging;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Plugins.Registry;
+using Jason.Runtime.Replies;
 using Jason.Runtime.Routing;
 using Jason.Runtime.WorkItems;
 using Microsoft.Data.Sqlite;
@@ -447,18 +450,62 @@ public sealed class Responder(
                     || item.Status == WorkItemStatus.AwaitingApproval
                     || item.Status == WorkItemStatus.Scheduled
                     || item.Status == WorkItemStatus.Processing
-                    || item.Status == WorkItemStatus.Waiting)
-                && item.Role == Role
-                && item.CreatedByType == ActorType.System)
+                    || item.Status == WorkItemStatus.Waiting))
+            .Where(IsOwnResponder)
             .OrderBy(item => item.Id)
             .Select(item => new OpenResponder(item.Id, item.PublicId, item.Context))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return open.FirstOrDefault(item => item.Context[InboundReplyKey] is JsonObject recorded
-            && recorded["plugin"] is JsonValue plugin && plugin.TryGetValue<string>(out var p) && p == reply.Plugin
-            && recorded["thread"] is JsonValue thread && thread.TryGetValue<string>(out var t) && t == reply.Thread);
+        return open.FirstOrDefault(item => Recorded(item.Context) is { } recorded
+            && recorded.PluginId == reply.Plugin
+            && recorded.ThreadId == reply.Thread);
     }
+
+    /// <summary>
+    /// Whether a work item is the runtime's own responder: of this role, and created by the runtime itself. A responder a
+    /// person or a role created is theirs. One rule with two readers — the respond step finding a thread's open responder,
+    /// and a question's raise naming the thread the question is about — so the two never disagree about whose an item is.
+    /// </summary>
+    public static Expression<Func<WorkItem, bool>> IsOwnResponder { get; } =
+        item => item.Role == Role && item.CreatedByType == ActorType.System;
+
+    private static readonly Func<WorkItem, bool> OwnResponder = IsOwnResponder.Compile();
+
+    /// <summary>
+    /// The thread the runtime woke its own responder for, and vouches for: the plugin and the thread its reserved key
+    /// records, both text, while nobody but the runtime has patched that key. None for any other item; none where the key
+    /// does not hold both; and none once a person, a role or an attempt has patched it, since <c>workitem.update</c> may
+    /// rewrite any key of an open item's context — the rule every reserved value is held to
+    /// (<see cref="Warmth.PatchedOnlyBySystem"/>). The dispatcher's own patch of a further move is the runtime's and
+    /// counts for nothing against it. Identifiers the runtime wrote, never what anybody wrote in the thread.
+    /// </summary>
+    public static async Task<DecisionThread?> ThreadAsync(JasonDbContext db, WorkItem item, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(item);
+        if (!OwnResponder(item) || Recorded(item.Context) is not { } thread)
+        {
+            return null;
+        }
+
+        var untouched = await db.Database.SqlQuery<int>(FormattableStringFactory.Create(
+                $$"""
+                SELECT count(*) AS "Value" FROM work_items AS w
+                WHERE w.id = {0} AND {{Warmth.PatchedOnlyBySystem("w", "p", InboundReplyKey)}}
+                """,
+                item.Id))
+            .SingleAsync(ct)
+            .ConfigureAwait(false);
+        return untouched == 1 ? thread : null;
+    }
+
+    private static DecisionThread? Recorded(JsonObject context) =>
+        context[InboundReplyKey] is JsonObject recorded
+        && recorded["plugin"] is JsonValue plugin && plugin.TryGetValue<string>(out var p)
+        && recorded["thread"] is JsonValue thread && thread.TryGetValue<string>(out var t)
+            ? new DecisionThread(p, t)
+            : null;
 
     /// <summary>
     /// The person the items are about, when the line names one the campaign may touch: not archived, and a member not

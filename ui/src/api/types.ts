@@ -56,6 +56,8 @@ export type ApprovalDecisionRequest = { approval_id: string; actor: ActorRef; re
 
 export type DecisionOption = { label: string; detail: string | null };
 export type DecisionReference = { kind: string | null; id: string };
+/** The conversation a question is about, as the runtime recorded it at the raise. */
+export type DecisionThread = { plugin_id: string; thread_id: string };
 export type DecisionSummary = {
     id: string;
     campaign_id: string;
@@ -67,6 +69,11 @@ export type DecisionSummary = {
     answered_by: ActorRef | null;
     campaign_name: string;
     contact_name: string | null;
+    /**
+     * What the question is about: the thread the runtime woke its own responder for and vouches for, or null. Absent from
+     * a runtime older than the field, which says nothing of it.
+     */
+    thread?: DecisionThread | null;
 };
 export type Decision = DecisionSummary & {
     attempt_id: string;

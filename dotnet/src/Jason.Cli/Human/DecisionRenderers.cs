@@ -76,6 +76,7 @@ public static partial class DecisionRenderers
             Line("Chosen:", decision.ChosenOption),
             Line("Answered by:", RenderText.Actor(decision.AnsweredBy)),
             Line("Answered:", RenderText.Moment(decision.AnsweredAt)),
+            Line("Thread:", decision.Thread is { } thread ? $"{thread.PluginId} {thread.ThreadId}" : null),
             Line("Campaign:", decision.CampaignId),
             Line("Work item:", decision.WorkItemId),
             Line("Asked by:", decision.AttemptId),

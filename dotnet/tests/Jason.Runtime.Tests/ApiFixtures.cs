@@ -60,6 +60,8 @@ public static class ApiFixtures
     // A second Needs you story, two first messages of one campaign (NeedsExchangesTests, its own ids): approval.list
     // needs-two and needs-two-after, approval.get needs-two-first|-second, workitem.get needs-two-first-parked and
     // approval.approve needs-two-first-approved (the first approved, the second left waiting).
+    // A third, a question the responder raised about a reply beside one about no thread (NeedsExchangesTests): decision.list
+    // needs-inbox-questions and decision.get needs-inbox-question.
     //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
     // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
@@ -389,6 +391,7 @@ public static class ApiFixtures
         "decision.get/card-question-2",
         "decision.get/card-question-3",
         "decision.get/for-campaign-row",
+        "decision.get/needs-inbox-question",
         "decision.get/needs-question",
         "decision.get/pending-with-options",
         "decision.list/archive-pending",
@@ -400,6 +403,7 @@ public static class ApiFixtures
         "decision.list/card-status-waiting",
         "decision.list/decided",
         "decision.list/empty",
+        "decision.list/needs-inbox-questions",
         "decision.list/needs-questions",
         "decision.list/pending",
         "decision.list/summer-pending",

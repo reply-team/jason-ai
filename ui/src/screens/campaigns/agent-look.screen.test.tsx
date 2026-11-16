@@ -139,7 +139,7 @@ describe('the sheet of an agent’s page in the console', () => {
     });
 
     it('makes Start and Resume the primary move and leaves Pause plain', () => {
-        const primary = /background: var\(--teal\); border-color: var\(--teal\); color: #fff/;
+        const primary = /background: var\(--teal\); border-color: var\(--teal\); color: var\(--on-teal\)/;
         expect(body(`${agent} > .panel-actions > .btn.agent-move-start`)).toMatch(primary);
         expect(body(`${agent} > .panel-actions > .btn.agent-move-resume`)).toMatch(primary);
         expect(body(`${agent} > .panel-actions > .btn.agent-move-pause`)).toBe('');

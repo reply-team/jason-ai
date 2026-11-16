@@ -1176,7 +1176,6 @@ describe('the sheet of the chat and its cards', () => {
                         : `:root[data-theme='dark'] ${selector}`),
             );
         for (const selector of [
-            '.jc-console .btn.ok',
             '.jc-console .ask-b',
             '.jc-console .waiting-card .send-doubts',
             '.jc-console .waiting-card.ask.q',

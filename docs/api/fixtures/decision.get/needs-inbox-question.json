@@ -1,0 +1,43 @@
+{
+  "operation": "decision.get",
+  "case": "needs-inbox-question",
+  "request": {
+    "decision_id": "dec_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "dec_2",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_2",
+    "attempt_id": "att_1",
+    "status": "pending",
+    "question": "Kai Lindt replied in the autumn campaign: they ask what it costs, a pricing question. Answer with the published prices, or leave it to you?",
+    "options": [
+      {
+        "label": "answer with the published prices",
+        "detail": null
+      },
+      {
+        "label": "leave it to me",
+        "detail": null
+      }
+    ],
+    "references": [
+      {
+        "kind": "work_item",
+        "id": "wi_2"
+      }
+    ],
+    "raised_at": "2026-10-16T09:00:00.000Z",
+    "answer": null,
+    "chosen_option": null,
+    "answered_at": null,
+    "answered_by": null,
+    "campaign_name": "Autumn outreach",
+    "contact_name": null,
+    "thread": {
+      "plugin_id": "reply",
+      "thread_id": "t_501"
+    }
+  }
+}
