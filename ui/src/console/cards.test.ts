@@ -7,6 +7,7 @@ import {
     controlWords,
     depthOf,
     foldLabel,
+    nameWords,
     passiveWords,
     readCard,
     splitCards,
@@ -132,6 +133,13 @@ function buttonWords(text: string): string[] {
     }
     return found;
 }
+
+/** The moves' verbs, as the chat bar's buttons and their dialog draw them. */
+const moveVerbs = (text: string): string[] =>
+    Array.from(
+        /export const verbs[^{]*\{([^}]*)\}/.exec(text)?.[1]?.matchAll(/:\s*'([^']*)'/g) ?? [],
+        (match) => match[1]!,
+    );
 
 /** The access modes' names, as the menu beside the composer draws them. */
 const modeNames = (text: string): string[] =>
@@ -481,8 +489,8 @@ describe('a choice’s members', () => {
             expect(failure(read(choice({ options: [{ label }, { label: 'Not yet' }] }))), label).toBe(schema('choice'));
     });
 
-    it('takes the words of controls that only close, open, show or move', () => {
-        for (const word of passiveWords)
+    it('takes the words of controls that only close, open, show or move, and a bare name', () => {
+        for (const word of [...passiveWords, ...nameWords])
             expect(read(choice({ options: [{ label: word }, { label: 'Yes' }] })).state, word).toBe('card');
         expect(read(choice({ options: [{ label: 'Yes' }, { label: 'Not now' }] })).state).toBe('card');
     });
@@ -497,8 +505,10 @@ describe('a choice’s members', () => {
     });
 
     // What the reader reaches: the literal words, the string-yielding expressions, the `t()` keys and the literal
-    // `aria-label` inside every `<button>` of the files that paint the chat (its thread and header, the waiting cards,
-    // the composer's menus, the Reply card), and the access modes' names. What it cannot reach is listed by hand below.
+    // `aria-label` inside every `<button>` of the files it reads, which paint the chat: its thread and header, the
+    // waiting cards and their message editor ("Edit message", which only opens it), the composer's menus, the Reply card,
+    // and the chat bar's moves and their dialog; and the access modes' names and the moves' verbs, read from their tables.
+    // What it cannot reach is listed by hand below.
     const byHand = [
         // The Reply card's row buttons, whose words are arguments of one helper (connect.ts, `rowActs`).
         'Reconnect',
@@ -513,19 +523,21 @@ describe('a choice’s members', () => {
         // The Reply card's offers after a refusal, drawn from a table.
         'Open the shared mailbox page…',
         'Delete anyway…',
-        // A person's acts on an agent: the Start, Pause and Resume a chat points to, from the campaign's verbs.
-        'Start',
         // The words of a permission answered are a sentence beside the card, not a button; the effort dots' words are
         // only their names for a screen reader, never drawn; neither is held.
     ];
 
-    it('classes every word a button of the chat draws as one that acts or one that does not, never both', () => {
+    it('classes every word the buttons of the files it reads draw as one that acts, one that does not, or a name', () => {
         const drawn = [
             ...buttonWords(source('chat.tsx')),
             ...buttonWords(source('waiting-cards.tsx')),
             ...buttonWords(source('start-menus.tsx')),
             ...buttonWords(source('connect.ts')),
+            ...buttonWords(source('../screens/campaigns/moves.tsx')),
+            ...buttonWords(source('../screens/campaigns/pause-dialog.tsx')),
+            ...buttonWords(source('../screens/attention/message-editor.tsx')),
             ...modeNames(source('chat-model.ts')),
+            ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
             ...byHand,
         ];
         // Every file is read: a reader that finds nothing would hold nothing.
@@ -538,15 +550,16 @@ describe('a choice’s members', () => {
                 'Default effort',
                 'Send',
                 'Disconnect',
+                'Edit message',
+                'Start',
             ]),
         );
-        const acting = new Set(controlWords.map(foldLabel));
-        const passive = new Set(passiveWords.map(foldLabel));
+        const lists = [controlWords, passiveWords, nameWords].map((list) => list.map(foldLabel));
         const words = [...new Set(drawn.map((word) => foldLabel(word.replace(/:$/, ''))))];
-        expect(words.filter((word) => !acting.has(word) && !passive.has(word))).toEqual([]);
-        expect([...acting].filter((word) => passive.has(word))).toEqual([]);
+        expect(words.filter((word) => lists.filter((list) => list.includes(word)).length !== 1)).toEqual([]);
+        expect(lists.flat().filter((word, at, all) => all.indexOf(word) !== at)).toEqual([]);
         // And no list holds a word no button draws.
-        expect([...acting, ...passive].filter((word) => !words.includes(word))).toEqual([]);
+        expect(lists.flat().filter((word) => !words.includes(word))).toEqual([]);
     });
 });
 

@@ -41,8 +41,8 @@ const campaignShape = /^cmp_[0-9A-Za-z]{1,64}$/;
  * resumes, pauses, stops, sends, saves, removes, renames, answers, connects, sets or changes the chat's mode or what it
  * runs on, or approves and runs a plan. A choice's label that is one of them, folded as `foldLabel` folds, is refused: a
  * click on it could be taken for that act. The chat's instructions name every one of them. A test reads the chat's
- * buttons and fails while a word of theirs is in neither this list nor `passiveWords`, so a new button is classed by a
- * person. Names a control draws from a value (a host's, a model's, a campaign's) are not held.
+ * buttons and fails while a word of theirs is in none of this list, `passiveWords` and `nameWords`, so a new button is
+ * classed by a person. Names a control draws from a value (a host's, a model's, a campaign's) are not held.
  */
 export const controlWords: readonly string[] = [
     'Approve',
@@ -73,9 +73,6 @@ export const controlWords: readonly string[] = [
     'Disconnect',
     'Sign in',
     'Add account',
-    'Gmail',
-    'Outlook',
-    'LinkedIn',
     'Make the link',
     'Set',
     'Keep',
@@ -97,7 +94,7 @@ export const controlWords: readonly string[] = [
 
 /**
  * The words of the chat's controls that only close, open, show or move, and act on nothing: a choice may use them as
- * labels. Held beside `controlWords` so that every word a button of the chat draws is in exactly one of the two.
+ * labels. Held beside `controlWords` so that every word a button of the chat draws is in exactly one of the three lists.
  */
 export const passiveWords: readonly string[] = [
     'Cancel',
@@ -105,6 +102,7 @@ export const passiveWords: readonly string[] = [
     'Close',
     'Details',
     'Edit',
+    'Edit message',
     'Something else',
     'Show more',
     'Show the whole message',
@@ -117,6 +115,12 @@ export const passiveWords: readonly string[] = [
     'Needs you',
     'You chose this',
 ];
+
+/**
+ * The words of the chat's buttons that are only a name: of a channel, a provider, a plugin or an AI. Under the AI's own
+ * question a bare name reads as an answer, never as the window's act, so a choice may use it as a label.
+ */
+export const nameWords: readonly string[] = ['Gmail', 'Outlook', 'LinkedIn'];
 
 /**
  * A label as a person reads it, for comparing two: its compatible forms made one (a full-width letter is the letter),
