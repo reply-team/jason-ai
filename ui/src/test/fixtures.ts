@@ -200,6 +200,7 @@ import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-ac
 import contactListByActivityEmpty from '../../../docs/api/fixtures/contact.list/by-activity-empty.json';
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
+import contactListByActivitySentFromTheAccount from '../../../docs/api/fixtures/contact.list/by-activity-sent-from-the-account.json';
 import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
 import contactListByActivitySummaryNewWithoutArchived from '../../../docs/api/fixtures/contact.list/by-activity-summary-new-without-archived.json';
 import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
@@ -817,6 +818,10 @@ export const fixtures = {
     'contact.list/by-activity-empty': contactListByActivityEmpty satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query': contactListByActivityQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query-aguilar': contactListByActivityQueryAguilar satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-activity-sent-from-the-account': contactListByActivitySentFromTheAccount satisfies Exchange<
         ContactListRequest,
         Page<Contact>
     >,

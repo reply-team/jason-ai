@@ -45,8 +45,8 @@ describe('entryLabel', () => {
 describe('a message the account sent', () => {
     it('is said as a send, with a mark of its own and never the reply mark, and claims no author or step', () => {
         const sent = entryLabel(entry('provider_send_observed', { type: 'system', id: 'dispatcher' }), 'me');
-        expect(sent.title).toBe('Sent by the provider');
-        expect(sent.short).toBe('sent by the provider');
+        expect(sent.title).toBe('Sent from the account');
+        expect(sent.short).toBe('sent from the account');
         expect(sent.mark.glyph).toBe('↗');
         expect(sent.mark.glyph).not.toBe('↩');
         expect(sent.mark.kind).not.toBe('reply');
@@ -56,6 +56,7 @@ describe('a message the account sent', () => {
     it('says the channel beside it only when the line names one the person knows', () => {
         const line = entry('provider_send_observed', { type: 'system', id: 'dispatcher' });
         expect(entryLabel({ ...line, new: { channel: 'email' } }, 'me').note).toBe('by email');
+        expect(entryLabel({ ...line, new: { channel: 'linkedin' } }, 'me').note).toBe('on LinkedIn');
         expect(entryLabel({ ...line, new: { channel: 'other' } }, 'me').note).toBeNull();
     });
 });

@@ -554,6 +554,11 @@ public class RecordedExchangesTests
         var sent = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "person-sent-by-the-provider", new { contact_id = seed.Mateo, kinds = personAll, limit = 50 }, Ct);
         var line = Assert.Single(sent.Items, item => item.Kind == JournalKinds.ProviderSendObserved);
         Assert.Equal(JournalKinds.ProviderSendObserved, line.Kind);
+
+        // The list's Last activity is the newest line of any kind, so the person the send reached is first, and it says the send.
+        var people = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity-sent-from-the-account", new { order = "activity", limit = 200 }, Ct);
+        Assert.Equal(seed.Mateo, people.Items[0].Id);
+        Assert.Equal(JournalKinds.ProviderSendObserved, people.Items[0].LastActivity!.Kind);
     }
 
     /// <summary>

@@ -105,14 +105,15 @@ export function entryLabel(entry: JournalEntry, me: string): EntryLabel {
             return { mark: { kind: 'reply', glyph: '↩' }, title: capital(said), short: said, note: null };
         }
         case 'provider_send_observed': {
-            // A message the account sent, as the provider's own events say it: no author and no step is claimed, and a
-            // channel only where the line names one a person knows.
+            // A message the account sent, as the provider's own events say it: who or what sent it (a sequence's step, Jason,
+            // a person at the provider) is not known, so none is claimed, and a channel only where the line names one a
+            // person knows.
             const channel = field(entry.new, 'channel');
             const how = channel === 'email' || channel === 'linkedin' ? channelWords(channel) : null;
             return {
                 mark: { kind: 'sent', glyph: '↗' },
-                title: 'Sent by the provider',
-                short: 'sent by the provider',
+                title: 'Sent from the account',
+                short: 'sent from the account',
                 note: how,
             };
         }

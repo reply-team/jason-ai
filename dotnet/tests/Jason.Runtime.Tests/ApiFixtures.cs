@@ -282,6 +282,7 @@ public static class ApiFixtures
         "contact.list/by-activity-empty",
         "contact.list/by-activity-query",
         "contact.list/by-activity-query-aguilar",
+        "contact.list/by-activity-sent-from-the-account",
         "contact.list/by-activity-several",
         "contact.list/by-activity-summary-new-without-archived",
         "contact.list/by-activity-summary-query",

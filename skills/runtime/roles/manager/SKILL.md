@@ -404,9 +404,11 @@ runtime raises nothing for it. A hard bounce is a person that channel no longer 
 there is work the campaign may no longer need. An accepted invitation is a channel that opened. Whatever you do or
 leave, say it in your note; where the next step is a person's to choose, raise one question.
 
-A `provider_send_observed` line is a different kind: a message the account sent, read from the provider's own record of
-it, for this campaign's provider campaign. Read it as a send and never as a reply, and never queue the read of a thread
-or a responder for it. It wakes you only where this installation lists it under `Manager:Triggers`.
+If the trigger is `provider_send_observed` (only where a person listed it under `Manager:Triggers`), the line is a
+message the account sent, read from the provider's own record of it, for this campaign's provider campaign. Read it as a
+send and never as a reply, and never queue the read of a thread or a responder for it. Who sent it is not known: a
+sequence's step, a send of Jason's own seen again and a person in the provider's own screens look the same, so do not
+report it as the sequence's.
 
 ## When a send that went woke you
 
