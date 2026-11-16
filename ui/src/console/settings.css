@@ -439,7 +439,3 @@
 .jc-console .harness .settings .settings-models .setrow.host-card {
     padding: 11px 14px;
 }
-/* Under the section's own "Models" heading the card's "AI" heading would say it twice: the groups' labels carry it. */
-.jc-console .harness .settings .settings-models .ai-card > .hd {
-    display: none;
-}

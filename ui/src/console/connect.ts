@@ -1345,7 +1345,12 @@ export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
  * found, a card, the one in use marked, then the key providers whose key is set, in one row. Under it, in a panel of its
  * own, what can be added or changed: the programs not found, with Install where it can be done, and the model keys' panel.
  */
-function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
+function aiCards(
+    programs: readonly DesktopHost[],
+    providers: readonly DesktopHost[],
+    disabled: Html | null,
+    heading = true,
+): Html {
     const found = programs.filter(hostRow);
     const set = keysSet(providers);
     const absent = notFound(
@@ -1354,7 +1359,7 @@ function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHo
     );
     const keys = keyPanel(providers, disabled);
     return html`<div class="card ai-card">
-        <div class="hd"><b>AI</b></div>
+        ${heading ? html`<div class="hd"><b>AI</b></div>` : null}
         <div class="bd">
             ${elsewhere()}
             ${
@@ -1379,7 +1384,8 @@ function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHo
 
 /**
  * The AI hosts and the model keys alone, for Settings' Models section: the same cards, with the same acts, that Connect
- * draws, read from the same `setup.status()` answer. Connect keeps them as well.
+ * draws, read from the same `setup.status()` answer, without the card's own "AI" heading: the section says "Models".
+ * Connect keeps them as well, with the heading.
  */
 export function modelsView(): Html {
     const state = setup.value;
@@ -1394,6 +1400,7 @@ export function modelsView(): Html {
                   state.hosts.filter((each) => each.kind === 'program'),
                   state.hosts.filter((each) => each.kind === 'provider'),
                   disabled,
+                  false,
               )
             : failure
               ? null
