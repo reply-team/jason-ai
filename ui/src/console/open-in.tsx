@@ -9,6 +9,7 @@ import type {
 } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { mode } from '../platform/mode';
+import { shownAgent } from './agent-place';
 import { activePanel, chats, currentChat } from './state';
 
 // "Open in": the split button of the console's top bar, in Live and in Demo alike. The main part opens the folder in the
@@ -83,10 +84,12 @@ function chatInFront(): string | undefined {
 }
 
 /**
- * The campaign of the chat in front, or undefined: only while that chat's panel is the one in front is its campaign's
- * folder the one meant; with Agents, Needs you or Activity in front the folder is the harness root.
+ * The campaign in front, or undefined: the agent shown, on any of its tabs, or the campaign of the chat in front; with
+ * Agents, Needs you or Activity in front the folder is the harness root.
  */
 function campaignOfChat(): string | undefined {
+    const agent = shownAgent.value;
+    if (agent !== null) return agent.id;
     const id = chatInFront();
     return id === undefined ? undefined : (chats.value[id]?.campaignId ?? undefined);
 }

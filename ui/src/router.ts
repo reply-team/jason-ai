@@ -25,14 +25,16 @@ export type PeopleFilters = {
     archived?: boolean;
 };
 
-/** A campaign's tabs, in the order they are drawn; the first is where a campaign opens. */
+/** A campaign's tabs on its page, in the order they are drawn; the first is where the browser shell opens one. */
 export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings'] as const;
-export type CampaignTab = (typeof campaignTabs)[number];
+/** Every tab an agent's address can name: its page's, and its Chat, which is the console's and never the page's. */
+export const agentTabs = ['chat', ...campaignTabs] as const;
+export type CampaignTab = (typeof agentTabs)[number];
 
 /**
  * The ONE place of the first-tab rule: the tab an agent opens on, whether its address names none, an older one, or it
- * is opened from the table, a link or a close. Sequence, and in the console's Live, which draws People first and no
- * Sequence, People (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
+ * is opened from the table, a link or a close. Sequence; in the console's Live, Chat where the place can make a chat and
+ * People where it cannot (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
  */
 export const firstCampaignTab: { value: CampaignTab } = { value: 'sequence' };
 export type CampaignView = 'summary' | 'activity';
@@ -167,7 +169,7 @@ function campaigns(segments: string[], query: string): Route {
     if (id === null) return { screen: 'campaigns', tab: firstCampaignTab.value, view, period, filters };
     // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
     const named = segments[1] === 'details' ? 'settings' : segments[1];
-    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? firstCampaignTab.value;
+    const tab: CampaignTab = agentTabs.find((each) => each === named) ?? firstCampaignTab.value;
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');

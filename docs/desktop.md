@@ -287,7 +287,8 @@ with one sentence, "Done in Jason Desktop's own window.": the account acts of Co
 modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
 shows the demo page in that tab alone and leaves the desktop's mode as it is
 ([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
-draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it. The tab shows the
+draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
+holds Rename conversation alone. The tab shows the
 Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
 The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
@@ -501,15 +502,19 @@ Claude Code.
 
 ### Conversations
 
-Each campaign has one conversation, found or made the first time it is opened, and any number of set-up chats are about
-no campaign yet. The window opens on Start, and a set-up chat is made when you send from it. A set-up chat whose turn made exactly one campaign becomes that
+Each campaign has one conversation, and any number of set-up chats are about no campaign yet. An agent's conversation is
+made at your first message or choice in it: opening its Chat, by a link, a reload, Back or the Agents list, makes
+nothing. The window opens on Start, and a set-up chat is made when you send from it. A set-up chat whose turn made exactly one campaign becomes that
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
-conversation is kept from its first turn, one never sent to leaves nothing, and **Start afresh** begins the agent's next
-turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
-this computer after one question; the host keeps its own transcript. A campaign's conversation carries the agent's
-state at the top, and its one move beside **Remove**: **Start** for a draft, **Pause** for an agent that runs,
-**Resume** for a paused one. It is the agent page's own control, with the same confirmation, which says before a start
-how many people the agent holds and how its messages go; it shows from the moment a set-up chat becomes a campaign's.
+conversation is kept from its first turn, and one never sent to leaves nothing. An agent's conversation is its **Chat**
+tab, the first of its tabs, under the agent's one header, which stays while you move between its tabs: its name, its
+state and kind as pills, its one move, **Start** for a draft, **Pause** for an agent that runs, **Resume** for a paused
+one, and **…** with the conversation's acts. The move is the agent page's own control, with the same confirmation, which
+says before a start how many people the agent holds and how its messages go; it shows from the moment a set-up chat
+becomes a campaign's. **…** holds **Rename conversation**, **Start conversation afresh**, which begins the agent's next
+turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
+conversation's record from this computer after one question, saying that the agent stays as it is; the host keeps its
+own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start afresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,

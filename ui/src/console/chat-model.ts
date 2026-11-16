@@ -632,6 +632,16 @@ export function takenBack(chat: Chat): Chat {
 }
 
 /**
+ * Everything not sent goes back to the box, in the order it was written: the words the person sent (`sent`), the
+ * message that waited after them, then whatever is in the box. For a send nothing could take, so no word is dropped.
+ */
+export function everyWordBack(chat: Chat, sent?: string): Chat {
+    const words = [sent, chat.waiting, chat.draft].map((each) => each?.trim() ?? '').filter((each) => each !== '');
+    if (chat.waiting === null && (sent === undefined || !sent.trim())) return chat;
+    return { ...chat, waiting: null, held: false, draft: words.join('\n\n') };
+}
+
+/**
  * The person asked the running turn to stop. A stopped turn ends with the same `done` as a good one, so the waiting
  * message is given back now, before the desktop is asked, and the end finds nothing to send.
  */

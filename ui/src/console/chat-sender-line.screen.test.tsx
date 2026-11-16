@@ -8,6 +8,7 @@ import { chatDesktop, journalLine, stubStream, type StubStream } from '../test/d
 import { shown } from '../test/area';
 import { Unpaired } from '../api/client';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import type { FixtureName } from '../test/fixtures';
 import { SENDER_ASKED, SENDER_WHEN_WORDS, senderWordings } from '../test/senders';
 import * as consoleCampaigns from './campaigns';
@@ -37,7 +38,7 @@ function renderChat(fake: FakeApi, journal: StubStream = stubStream()): FakeApi 
         .answerAnyRequest('decision.list', (body) =>
             'campaign_id' in body ? 'decision.list/summer-pending' : 'decision.list/empty',
         );
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
-import { route } from '../router';
+import { firstCampaignTab, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront, bringForward } from '../test/area';
@@ -37,6 +37,10 @@ function renderConsole(desktop: StubDesktop, fake: FakeApi): void {
 
 const panel = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
 const calls = (desktop: StubDesktop, name: string) => desktop.calls.filter((each) => each.name === name);
+
+afterEach(() => {
+    firstCampaignTab.value = 'sequence';
+});
 
 beforeEach(() => {
     chats.value = {};
@@ -88,17 +92,29 @@ describe('a link the desktop hands the console', () => {
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
             .answer('campaign.get', 'campaign.get/details')
             .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
-            .answer('journal.list', 'journal.list/by-campaign');
+            .answer('journal.list', 'journal.list/by-campaign')
+            // The agent's Chat draws the questions and approvals waiting on it, read and never answered.
+            .answerAnyRequest('decision.get', 'decision.get/for-campaign-row')
+            .answerAnyRequest('sender.list', 'sender.list/card-message-sender');
         renderConsole(desktop, fake);
         await waitFor(() => expect(calls(desktop, 'links.take')).toHaveLength(1));
         // The window opens on Start, with no chat made.
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?' }));
+        // In the window an agent opens on its Chat, as the window's mode sets it.
+        firstCampaignTab.value = 'chat';
+        // An agent's link opens it under its header on its Chat, at its own address, and makes nothing: no conversation is
+        // asked of the desktop, none is listed, and nothing is sent; its conversation waits for the person's first act.
         desktop.link({ page: 'campaign', id: 'cmp_1' });
-        await waitFor(() => expect(document.querySelector('.harness .campaign-tabs')).not.toBeNull());
-        expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_1' });
-        expect(Object.values(chats.value)).toEqual([]);
+        const header = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.agent-head');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_1/chat'));
+        expect(within(header).getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
         expect(calls(desktop, 'chat.send')).toEqual([]);
-        expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
+        expect(calls(desktop, 'chat.create')).toEqual([]);
+        expect(conversations.value.filter((each) => each.campaignId === 'cmp_1')).toEqual([]);
         // A panel's link brings that panel forward.
         desktop.link({ page: 'campaigns' });
         await waitFor(() => expect(inFront()).toBe('Agents'));

@@ -10,6 +10,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { shown, shownPane, bringForward } from '../test/area';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -39,7 +40,7 @@ async function renderConsole(
     // Needs you reads the sending name under an email's From (`needs-sender-line.screen.test.tsx`); here it is answered
     // with one recorded list of accounts, which draws one line and holds nothing.
     if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -220,7 +221,10 @@ describe('the one area', () => {
         const desktop = await renderConsole(seedSpring);
         fireEvent.click(await waitFor(() => recentRow('Q4 push')));
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
-        fireEvent.click(within(shownPane()!).getByRole('button', { name: 'Remove' }));
+        // An agent's conversation is removed from the "…" of the agent's header over it.
+        const header = await waitFor(() => document.querySelector<HTMLElement>('.agent-head')!);
+        fireEvent.click(within(header).getByRole('button', { name: "More for this agent's conversation" }));
+        fireEvent.click(await waitFor(() => within(header).getByRole('menuitem', { name: 'Remove conversation' })));
         fireEvent.click(await waitFor(() => within(shownPane()!).getByRole('button', { name: 'Remove it' })));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.remove')).toBe(true));
         await waitFor(() => expect(shown()).toBe('start'));

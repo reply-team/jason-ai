@@ -77,7 +77,7 @@ export async function loadMode(desktop?: { mode?: DesktopModeSeam }): Promise<Mo
             ? (kept as { mode?: unknown; unopened?: unknown; preparing?: unknown })
             : { mode: kept };
     mode.value = answer.mode === 'demo' ? 'demo' : 'live';
-    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : 'people';
+    firstCampaignTab.value = mode.value === 'demo' ? 'sequence' : can('chat.create') ? 'chat' : 'people';
     // The address was read when the router loaded, before the first tab was known: an agent's bare address is read again.
     if (typeof location !== 'undefined' && route.value.screen === 'campaigns' && route.value.id !== undefined)
         route.value = parseRoute(location.hash);
