@@ -576,6 +576,8 @@ An address naming an agent the runtime does not know, an old link say, is closed
 no longer exists. When the desktop cannot open an agent's conversation, its Chat tab says why under the agent's own
 header, with **Try again**. An agent with no conversation shows its unmade Chat only until one exists: once its
 conversation is opened, or made in another window or tab, that conversation takes its place, carrying the words typed.
+An archived agent with no conversation has none made for it: its Chat tab says that the agent is archived, and nothing
+more; one with a conversation shows it.
 
 ## What the page may do
 

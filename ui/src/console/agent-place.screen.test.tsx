@@ -579,6 +579,26 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
+describe.each<Place>(['window', 'tab'])('An archived agent with no conversation, in the %s', (place) => {
+    it('says on its Chat tab that it is archived, and draws nothing that could make a conversation', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_4/chat');
+        const header = await headOf('Winter');
+        await waitFor(() => expect(within(header).getByText('Archived')).toBeTruthy());
+        const line = await waitFor(() => {
+            const page = document.querySelector<HTMLElement>('[data-pane="page"]:not([hidden])');
+            expect(page).not.toBeNull();
+            return within(page!).getByRole('status');
+        });
+        expect(line.textContent).toBe('This agent is archived.');
+        expect(location.hash).toBe('#/campaigns/cmp_4/chat');
+        expect(tab('Chat').getAttribute('aria-selected')).toBe('true');
+        expect(document.querySelector('[data-pane^="chat:"]')).toBeNull();
+        expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]);
+        expect(within(line.closest<HTMLElement>('[data-pane]')!).queryByRole('button')).toBeNull();
+        expect(desktop.calls.filter((each) => each.name === 'chat.create')).toEqual([]);
+    });
+});
+
 describe('An agent whose conversation the desktop could not open', () => {
     it('says so under its own header on its Chat tab, never another agent’s pane, and tries again', async () => {
         const { desktop } = await renderAt(

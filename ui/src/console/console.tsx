@@ -87,8 +87,11 @@ function chatAbout(campaign?: { id: string; name: string }): void {
 /** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */
 const providerAccounts = { view: connect.accountsReplyView, gone: connect.accountsReplyGone };
 
-/** The agent whose conversation the desktop could not open, and why: its Chat tab says so until it opens. */
-const chatUnopened = signal<{ agent: string; why: string } | null>(null);
+/**
+ * What an agent's Chat tab says in place of a conversation: that the desktop could not open it, and why, until it opens;
+ * or that the agent is archived and has none, where nothing can be made.
+ */
+const chatNote = signal<{ agent: string; why: string } | { agent: string; archived: true } | null>(null);
 
 /** An agent's Chat tab whose conversation could not be opened: what the desktop said, and a way to try again. */
 function ChatUnopened({ agent, why }: { agent: string; why: string }) {
@@ -104,9 +107,9 @@ function ChatUnopened({ agent, why }: { agent: string; why: string }) {
 
 function PagePanel() {
     // An agent's Chat is the console's own pane: while the address names it, the page draws nothing behind it but the
-    // word that its conversation could not be opened.
+    // word that its conversation could not be opened, or that the agent is archived and has none.
     const chatOf = can('chat.create') ? agentChatOf(route.value) : null;
-    const unopened = chatUnopened.value;
+    const note = chatNote.value;
     return (
         <div className="harness">
             <div className="app chromeless">
@@ -120,8 +123,13 @@ function PagePanel() {
                             </AgentHeaded.Provider>
                         </CampaignChat.Provider>
                     ) : (
-                        unopened !== null &&
-                        unopened.agent === chatOf && <ChatUnopened agent={unopened.agent} why={unopened.why} />
+                        note !== null &&
+                        note.agent === chatOf &&
+                        ('why' in note ? (
+                            <ChatUnopened agent={note.agent} why={note.why} />
+                        ) : (
+                            <Notice status>This agent is archived.</Notice>
+                        ))
                     )}
                 </div>
             </div>
@@ -294,12 +302,15 @@ function restore(): void {
 
 /** What `chatOfAgent` answers for an agent the runtime does not know: it has no Chat to draw. */
 const agentGone = Symbol('gone');
+/** What `chatOfAgent` answers for an archived agent with no conversation: nothing can be made for it. */
+const agentArchived = Symbol('archived');
 
 /**
  * The conversation of an agent: the one held open, else the one the desktop keeps, else its unmade chat. Null where the
- * desktop could not open the one it keeps; `agentGone` where the runtime does not know the agent.
+ * desktop could not open the one it keeps; `agentGone` where the runtime does not know the agent; `agentArchived` for an
+ * archived agent with no conversation.
  */
-async function chatOfAgent(id: string): Promise<string | null | typeof agentGone> {
+async function chatOfAgent(id: string): Promise<string | null | typeof agentGone | typeof agentArchived> {
     // A conversation made for it wins over its unmade chat, which gives way to it.
     const held = Object.values(chats.value).find((each) => !each.main && each.campaignId === id && !isUnmade(each.id));
     if (held) return held.id;
@@ -319,6 +330,9 @@ async function chatOfAgent(id: string): Promise<string | null | typeof agentGone
         if (agentFacts.value[id] === undefined) await readAgent(here().api, id);
         if (goneAgents.value.has(id)) return agentGone;
     }
+    const status =
+        campaigns.campaigns.value.find((each) => each.id === id)?.status ?? agentFacts.value[id]?.campaign.status;
+    if (status === 'archived') return agentArchived;
     const name =
         campaigns.campaigns.value.find((each) => each.id === id)?.name ?? agentFacts.value[id]?.campaign.name ?? id;
     return unmadeChat({ id, name });
@@ -351,13 +365,17 @@ function showAgentChat(id: string): void {
             return;
         }
         moveBar(agentChatRoute(id));
-        if (chatId === null) {
-            // Under the agent's own header, never another's pane: its Chat tab says why and offers to try again.
-            chatUnopened.value = { agent: id, why: conversationsFailure.value ?? 'The desktop did not say why.' };
+        if (chatId === null || chatId === agentArchived) {
+            // Under the agent's own header, never another's pane: its Chat tab says why the desktop could not open its
+            // conversation and offers to try again, or that it is archived, with nothing that could make one.
+            chatNote.value =
+                chatId === agentArchived
+                    ? { agent: id, archived: true }
+                    : { agent: id, why: conversationsFailure.value ?? 'The desktop did not say why.' };
             reveal('page');
             return;
         }
-        if (chatUnopened.value?.agent === id) chatUnopened.value = null;
+        if (chatNote.value?.agent === id) chatNote.value = null;
         reveal(chatPane(chatId));
     });
 }
