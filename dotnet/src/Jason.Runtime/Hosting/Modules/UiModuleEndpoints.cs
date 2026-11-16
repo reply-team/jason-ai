@@ -47,7 +47,7 @@ public static class UiModuleEndpoints
                 return;
             }
 
-            UiFiles.ApplyHeaders(context.Response);
+            UiFiles.ApplyHeaders(context.Response, relative);
             var file = module.Resolve(relative);
             var contentType = file is null ? null : UiFiles.ContentType(file);
             if (file is null || contentType is null)

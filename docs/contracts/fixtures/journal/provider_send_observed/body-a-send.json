@@ -1,0 +1,11 @@
+{
+  "kind": "provider_send_observed",
+  "version": 1,
+  "case": "a message a sequence sent, found by the campaign's pinned identifier for its provider campaign",
+  "body": {
+    "key": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "old": null,
+    "new": { "plugin": "example-mail", "event_id": "evt_01JC0000000000000000000004", "occurred_at": "2026-10-28T10:01:00.000Z", "channel": "email", "contact_id": "cnt_01JC0000000000000000000003", "attributed_by": "campaign_pin", "thread": "thr-20931", "message": "msg-88121" }
+  },
+  "expect": "valid"
+}

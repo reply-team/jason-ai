@@ -997,6 +997,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("status");
 
+                    b.Property<string>("ThreadId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("thread_id");
+
+                    b.Property<string>("ThreadPluginId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("thread_plugin_id");
+
                     b.Property<int>("WorkItemId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("work_item_id");
@@ -1596,6 +1605,11 @@ namespace Jason.Runtime.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_journal_campaign_kind_key_events")
                         .HasFilter("kind = 'provider_event_observed'");
+
+                    b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_provider_sends")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_campaign_kind_key_provider_sends")
+                        .HasFilter("kind = 'provider_send_observed'");
 
                     b.HasIndex(new[] { "CampaignId", "Kind", "Key" }, "ix_journal_campaign_kind_key_searches_ended")
                         .IsUnique()

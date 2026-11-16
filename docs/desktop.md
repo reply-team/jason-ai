@@ -57,21 +57,24 @@ is the one the application carries, and `jason update` otherwise.
 
 **The agents' roles run on the AI the chat runs on.** An installation starts with no execution profile, and with none no
 AI role can run. In Live, once the runtime is up at a start, and as each chat turn starts until one look has settled it
-for that run, the desktop looks: when the installation holds no profile at all, a disabled one included, and its settings name no
-`Roles:DefaultExecutionProfile`, it makes one profile with `jason profile create` for the host the chat runs on, then
-names it that default in `<data>/config/settings.json`, which the runtime reads without a restart. The host is the one
-the chat is set to run on (its newest conversation's last turn at a start, the turn's own host as a turn starts) when that
-is Claude Code or Codex and it is connected, found and at its version floor; when the chat is on a model key, or on
-nothing yet, Claude Code if it is connected, else Codex. A model key never gets a profile, since a profile holds no
-credential. The profile is `claude-code` (`--host claude_code`) or `codex` (`--host codex`), its program the path the
+for that run, the desktop looks: when the installation holds no profile at all, a disabled one included, and the runtime
+answers no default profile in force, it makes one profile with `jason profile create` for the host the chat runs on,
+then asks the runtime to name it the default with `jason profile set-default`, which the runtime writes as
+`Roles:DefaultExecutionProfile` into `<data>/config/settings.json` and puts in force without a restart. The host is the
+one the chat is set to run on (its newest conversation's last turn at a start, the turn's own host as a turn starts)
+when that is Claude Code or Codex and it is connected, found and at its version floor; when the chat is on a model key,
+or on nothing yet, Claude Code if it is connected, else Codex. A model key never gets a profile, since a profile holds
+no credential. The profile is `claude-code` (`--host claude_code`) or `codex` (`--host codex`), its program the path the
 desktop found the host at, or the bare name where that is npm's `.cmd`, and the verb's own defaults for the rest. Before
-the profile is made, the desktop writes its name into its own settings as a mark, adds the id the create answered once it
-succeeded, and takes the mark away once the default is written. A later start that finds the one profile there with that
-id and no default writes the default and never makes a second. A mark that cannot show the profile there is the
+the profile is made, the desktop writes its name into its own settings as a mark, adds the id the create answered once
+it succeeded, and takes the mark away once the default is named. A later start that finds the one profile there with
+that id and no default names the default and never makes a second. A mark that cannot show the profile there is the
 desktop's own, because it has no id (the create was refused, or its answer was lost) or another, is let go and nothing
-is written; `jason status` then says what is missing. A profile or a default a person made is never touched, at that
-start or any later one, nor a default named between the desktop's look and its write, and nothing of this happens or is
-read in the demo. Connect says which host the roles run on.
+is named; `jason status` then says what is missing. A profile or a default a person made is never touched, at that start
+or any later one, nor a default in force when the desktop looks again just before it asks for the naming, and nothing of
+this happens or is read in the demo. The naming itself has no condition, so a default a person names in the moment
+between that look and the naming is replaced, and the runtime journals the change as it journals every one. Connect says
+which host the roles run on.
 
 The desktop starts every program with a file and arguments, never through a shell, and only from the modules that are
 named for it; a test holds that, and holds the page to a window that reaches the desktop through one object,
@@ -126,9 +129,12 @@ shows before anything is typed and what you send waits, while the window is open
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
 drawn in the light theme it was built in); one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
-its settings and the starting page and the window's background before the page loads follow it.
+its settings and the starting page and the window's background before the page loads follow it, and on Windows the
+window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
+On Windows the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's acts,
+all but About.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -195,8 +201,8 @@ directory.
 A Connect card writes, into `<data>/config/settings.json`, the keys of the plugin it configures and no other, as a person
 would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notifications:Plugins:<id>:Binding`), and then runs
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
-lists each key and each card's grant. The one key the desktop writes there of its own is `Roles:DefaultExecutionProfile`,
-only where the file names none ([What it does at a start](#what-it-does-at-a-start)).
+lists each key and each card's grant. The desktop writes no key there of its own: `Roles:DefaultExecutionProfile` is
+written by the runtime, which the desktop asks to name the default ([What it does at a start](#what-it-does-at-a-start)).
 
 ## Open in
 
@@ -311,9 +317,11 @@ installation is made until you choose **Live**. An installation that already exi
 updated from an earlier version open where they did.
 
 **The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
-colours, with the **Demo | Live** switch on its right, so you see one. On Windows and Linux the window keeps the system's
-title bar, which moves it. On macOS the window has no title bar of its own: a band of the page's colours above the page
-holds the window's buttons, and the band and the desktop's strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
+colours, with the **Demo | Live** switch on its right, so you see one. On Windows the window has no title bar of its own:
+the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
+moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
+strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
 carries the same switch, with **Demo** to come back.
@@ -350,9 +358,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
   plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
-  roles run on Claude Code, by the execution profile claude-code." It is said where `Roles:DefaultExecutionProfile` names
-  an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its version floor, whoever
-  made the profile, and nowhere else.
+  roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
+  answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
+  version floor, whoever made the profile, and nowhere else.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
@@ -528,6 +536,60 @@ The agent hosts keep their own transcripts of a turn, in their own folders: Clau
 and those of a turn on a provider's key are in that provider's keyed folder (see Its own files). Jason never touches the
 first, and the desktop keeps no transcript of a host.
 
+### Cards in the chat
+
+The agent may end a reply with one card, which the window draws under its words. These are all the kinds it can write;
+a card that does not hold what its kind needs is drawn as one line saying so, and what it held is never shown.
+
+- **Jason asks**: a question with two to five answers; a click sends that answer's words as your next message.
+- **People**: up to ten people of an agent, or of everyone, as the runtime lists them.
+- **Agent**: how one agent is doing, its counts now and over the last thirty days.
+- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
+- **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
+- **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
+  Connect**.
+- **Reply**, the card that opens Accounts: it only leads to the Accounts page, where Reply's sign-in and its accounts
+  are, with **Open Accounts**.
+- **Jason's proposal**: a plan the agent proposes, with what is on record under it.
+- **Your list**: a list of people you gave the chat, in an agent's own chat only (below).
+
+The cards that show data read the runtime when they are drawn, say when ("As of"), and read again only on their own
+**Refresh**; they take an id from the agent and never a number, a name or a state. The **AI** and **Reply** cards read
+nothing and act on nothing: they are not the AI card and the Reply card of the Connect and Accounts screens, which
+connect, sign in and change accounts with their own controls. No card acts in your place; of their buttons only **Add to
+this agent** on a list writes to the runtime, and pressing it is your own act.
+
+### A list you give the chat
+
+In an agent's own chat you can paste a list of people, or name a CSV file the agent can read, and ask for them to be
+added. The agent answers with a **Your list** card: how it read each of your columns and which it left out, and every
+row it will send, the first ten shown and **Show more** for the rest. A card holds at most 200 rows, and the agent puts
+fewer on one, so a longer list comes in parts, one card a turn, the next only after you say the last one is added or to
+skip it; if a card is not shown, tell the agent, and it sends fewer rows. A list past 1,000 rows is added from a
+terminal with `jason campaign add-contacts --file`.
+
+The card compares the rows' email addresses with what you wrote in this chat, without regard to case, and says how many
+of them are there, each found only where it stands whole, not inside a longer address; each row whose address is not
+is shown, unfolded. An answer you sent by clicking one of the agent's choices is not counted, since its words are the
+agent's. When none is there, it says so: rows the agent read from a file cannot be compared with it. A list matched by
+LinkedIn profile with no address column is not compared. The comparison holds nothing back.
+
+Under **On record now** the card reads the agent from the runtime: whether it is a draft, paused or running, and for a
+running agent what its send mode for people who have not replied yet means for the people you add, in one sentence:
+under **Every message waits for you**, each message to them waits for your approval; under automatic sending, a message
+the agent writes to them can go without asking you once Jason's own review of it passes. A draft or paused agent under
+automatic sending says the same of when it runs. The card adds nothing by
+itself. **Add to this agent** sends every row once, matched by email address (or by LinkedIn profile), with the reason
+"From a list given in the chat.", and the card then shows the runtime's answer row by row: added as a new person, added
+as the person Jason already held, already in this agent, taken out of this agent before and not added back, or not
+added with the runtime's reason, such as an address that is no address or a row with no address to match. The button
+is offered only on the conversation's last card, once its turn has ended, and never on an archived agent. A page opened
+again offers it again, and a second press adds nobody twice.
+
+Someone Jason already holds is added as they are: the list never changes their record. A person whose own record is
+archived is not matched, so the list makes them again as a new person; the do-not-contact list still holds them by their
+address. Nothing is sent on a channel where a person is on the do-not-contact list.
+
 ### Access modes
 
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
@@ -619,10 +681,12 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
   its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):
   starting is what lets its queued work run, so you press Start or Resume at the top of the agent's chat or on its
-  page. Pausing an agent,
-  archiving one, adding someone to the do-not-contact register, cancelling work and recording a verdict on a reply
-  are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused
-  too. Also refused: any `reply` command
+  page. **So is archiving one** (`campaign archive`), which you do at the bottom of the agent's Settings tab: no verb
+  undoes an archive, and it cancels the agent's open work but a search's stop, with each item's approval whether still
+  asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.
+  Pausing an agent, adding someone to the do-not-contact register, cancelling work and recording a verdict on a reply
+  are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused too.
+  Also refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
   names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
@@ -670,8 +734,9 @@ Under the chat, these things differ from a terminal:
   never see.
 - **The person's own words and the installation's changes are refused.** The same `JASON_CONFINED=1` makes `jason` refuse, locally
   before any request, exit 1 and one sentence, every command of the deny list's command half: approving, rejecting,
-  answering and the rest of a person's own word, starting an agent, and the commands that change the installation. Inside the desktop's
-  chat a decision is given in the page, or in a terminal, where the variable is not set. No attempt id in the
+  answering and the rest of a person's own word, starting an agent, archiving one, and the commands that change the
+  installation. Inside the desktop's chat a decision is given in the page, or in a terminal, where the variable is not
+  set, and an agent is archived at the bottom of its own Settings tab. No attempt id in the
   environment lifts the refusal: a role's own work never carries the variable, because the runtime drops it from what it
   launches. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and an
   attempt id in the environment is a claim, not a proof. The deny list's command lines are written from the CLI's one

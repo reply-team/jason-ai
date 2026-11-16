@@ -79,10 +79,10 @@ function memberships(person: Contact): Happened[] {
 }
 
 /**
- * The kinds a provider's event is said by. An event that reaches several of the person's campaigns is said once in each,
- * under one key, so it is one row naming them all.
+ * The kinds a provider's event is said by. An event is shown with the campaign it was said in, and one that reaches
+ * several of the person's campaigns is said once in each, under one key, so it is one row naming them all.
  */
-const saidPerCampaign = new Set(['inbound_reply_observed', 'provider_event_observed']);
+const saidPerCampaign = new Set(['inbound_reply_observed', 'provider_event_observed', 'provider_send_observed']);
 
 /** The person's lines, each event once where its newest line stands, with the campaigns it was said in. */
 function happenings(entries: JournalEntry[]): { entry: JournalEntry; campaigns: string[] }[] {

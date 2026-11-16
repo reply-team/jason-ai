@@ -1,7 +1,11 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
-/** What a dialog focuses as it opens: its first field or picker, so Escape and typing reach it at once. */
+/**
+ * What a dialog focuses as it opens: its first field or picker, so Escape and typing reach it at once; a dialog with no
+ * field focuses its way out, so Escape reaches it all the same.
+ */
 const firstControl = 'button.select, input, textarea';
+const wayOut = 'button[data-dismiss]';
 
 /**
  * A question over the page: its heading, what it asks for, and its buttons — the way out on the left, then what it
@@ -23,7 +27,13 @@ export function Dialog({
     children: ReactNode;
 }) {
     const box = useRef<HTMLDivElement>(null);
-    useEffect(() => box.current?.querySelector<HTMLElement>(firstControl)?.focus(), []);
+    useEffect(
+        () =>
+            (
+                box.current?.querySelector<HTMLElement>(firstControl) ?? box.current?.querySelector<HTMLElement>(wayOut)
+            )?.focus(),
+        [],
+    );
     return (
         <div
             className="overlay"
@@ -36,7 +46,7 @@ export function Dialog({
                 <h2>{title}</h2>
                 {children}
                 <div className="btn-row">
-                    <button className="btn ghost" type="button" onClick={onClose}>
+                    <button className="btn ghost" type="button" data-dismiss onClick={onClose}>
                         {dismiss}
                     </button>
                     {buttons}

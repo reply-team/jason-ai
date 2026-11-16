@@ -43,6 +43,16 @@ public sealed class Decision
     /// <summary>What to read before deciding: work, attempts, chronicle lines, reports and decisions, by id.</summary>
     public JsonArray? References { get; set; }
 
+    /// <summary>
+    /// The plugin of the thread the question is about, beside <see cref="ThreadId"/>: both or neither. Written once at the
+    /// raise, from what the runtime recorded on its own responder while nobody but the runtime had patched that record, and
+    /// never recomputed: a later patch of the item's context changes nothing here.
+    /// </summary>
+    public string? ThreadPluginId { get; set; }
+
+    /// <summary>The provider's identifier of the thread the question is about, beside <see cref="ThreadPluginId"/>.</summary>
+    public string? ThreadId { get; set; }
+
     public DecisionStatus Status { get; set; } = DecisionStatus.Pending;
 
     public DateTime RaisedAt { get; set; }

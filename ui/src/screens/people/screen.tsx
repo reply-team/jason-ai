@@ -13,12 +13,14 @@ import { Notice } from '../../layout/notice';
 import { EmptyStart } from '../../layout/empty-start';
 import { useCampaignChat } from '../campaigns/campaign-chat';
 import { Chips } from '../../layout/chips';
+import { useNarrow } from '../../platform/narrow';
 import { stages, stageWord, type Stage } from './standing';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 export function PeopleScreen() {
     const api = useApi();
+    const phone = useNarrow();
     const current = route.value;
     const filters: PeopleFilters = current.screen === 'people' ? current.filters : {};
     const selected = current.screen === 'people' ? (current.id ?? null) : null;
@@ -70,7 +72,9 @@ export function PeopleScreen() {
                     <Search
                         value={filters.q ?? ''}
                         label="Search people"
-                        placeholder="Search name, company, email, phone, LinkedIn, custom fields…"
+                        placeholder={
+                            phone ? 'Search people…' : 'Search name, company, email, phone, LinkedIn, custom fields…'
+                        }
                         onSearch={(q) => narrow(withValue(filters, 'q', q))}
                     />
                     <CampaignPicker

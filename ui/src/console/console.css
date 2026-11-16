@@ -94,7 +94,7 @@
 .jc-console .btn.p {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .btn.p:hover {
     background: #0c5f66;
@@ -102,7 +102,7 @@
 .jc-console .btn.am {
     background: var(--amber);
     border-color: var(--amber);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .btn.sm {
     padding: 4px 9px;
@@ -143,7 +143,7 @@
     color: var(--faint);
     padding: 9px 12px;
     border-bottom: 1px solid var(--line);
-    background: #fafbfc;
+    background: var(--th-bg);
     white-space: nowrap;
 }
 .jc-console table.t td {
@@ -191,10 +191,10 @@
     color: var(--blue);
 }
 .jc-console .inp {
-    border: 1px solid var(--line);
+    border: 1px solid var(--field-line);
     border-radius: 7px;
     padding: 8px 10px;
-    background: var(--panel);
+    background: var(--field-bg);
     width: 100%;
 }
 .jc-console textarea.inp {
@@ -267,7 +267,7 @@
 .jc-console .note.am {
     background: var(--amber-2);
     border-color: #efcfa8;
-    color: #7a3f0a;
+    color: var(--note-am-ink);
 }
 .jc-console {
     --bg: #fff;
@@ -304,6 +304,17 @@
     --demo-bg: #fff4d6;
     --demo-line: #f2dc9c;
     --demo-ink: #6b4e00;
+    /* Ink on the accent and amber fills, the card edge, the notes' ink and the table head's ground. */
+    --on-teal: #fff;
+    --on-ok: #fff;
+    --card-line: #e8ecf4;
+    --note-ink: #27427f;
+    --note-am-ink: #7a3f0a;
+    --note-am-line: #f3dcb8;
+    --th-bg: #fafbfc;
+    --ask-q-line: #e3d6fb;
+    --field-bg: var(--panel);
+    --field-line: var(--line);
     /* The count on Needs you: white figures on it read at 4.5:1 or more in either theme. */
     --count-bg: var(--red);
     color-scheme: light;
@@ -343,11 +354,11 @@
 .jc-console .note {
     background: var(--teal-2);
     border-color: var(--accent-line);
-    color: #27427f;
+    color: var(--note-ink);
     border-radius: 10px;
 }
 .jc-console .note.am {
-    border-color: #f3dcb8;
+    border-color: var(--note-am-line);
     border-radius: 10px;
 }
 .jc-console table.t th {
@@ -794,7 +805,7 @@
     background: var(--panel);
 }
 .jc-console .ask.q {
-    border-color: #e3d6fb;
+    border-color: var(--ask-q-line);
 }
 .jc-console .ask-h {
     display: flex;
@@ -878,7 +889,7 @@
     border-radius: 50%;
     border: 0;
     background: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -892,10 +903,15 @@
         top: 0;
         bottom: 0;
         transform: translateX(-100%);
-        transition: transform 0.18s;
+        visibility: hidden;
+        transition:
+            transform 0.18s,
+            visibility 0s 0.18s;
     }
     .jc-console .side.open {
         transform: none;
+        visibility: visible;
+        transition: transform 0.18s;
         box-shadow: 0 0 40px rgba(2, 6, 23, 0.25);
     }
     .jc-console .content {
@@ -931,7 +947,7 @@
     background: #f6f8fc;
 }
 .jc-console .card {
-    border-color: #e8ecf4;
+    border-color: var(--card-line);
     border-radius: 16px;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
@@ -967,6 +983,14 @@
     height: 26px;
     z-index: 30;
     -webkit-app-region: drag;
+}
+/* The Windows desktop's window has no title bar: the system's caption buttons stand over the strip's right end, as high
+   as it, with the desktop's own 40 px drag band just left of them. The strip leaves both free, the buttons' width read
+   from the overlay's own geometry, the free title bar area ending where they begin, so Open in and the switch stand left
+   of them at any scale of the display; without an overlay the variables fall back and only the band is left. The 40px
+   is the desktop's `windowsBandWidth` (desktop/src/window-frame.ts); a test of the desktop holds the two equal. */
+.jc-console.desktop-win .mode-strip {
+    padding-right: calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 .jc-console .menu,
 .jc-console .menu-away,
@@ -1033,12 +1057,23 @@
         --blue-2: #10283a;
         --gray-2: #1f1f24;
         --seg-track: rgba(255, 255, 255, 0.08);
-        --seg-on: #2a2a30;
+        --seg-on: #3a3a42;
         --seg-on-ink: var(--ink);
         --demo-bg: var(--amber-2);
         --demo-line: #4a3a1c;
         --demo-ink: var(--amber);
         --count-bg: #c2410c;
+        --accent-text: #a3b6f7;
+        --on-teal: #0c0c0e;
+        --on-ok: var(--bg);
+        --card-line: var(--line);
+        --note-ink: #a3b6f7;
+        --note-am-ink: var(--amber);
+        --note-am-line: rgba(240, 180, 90, 0.35);
+        --th-bg: var(--panel-2);
+        --ask-q-line: rgba(182, 156, 255, 0.3);
+        --field-bg: var(--bg);
+        --field-line: #3a3a42;
         color-scheme: dark;
     }
     :root:not([data-theme='light']) .jc-console .content {
@@ -1078,12 +1113,23 @@
     --blue-2: #10283a;
     --gray-2: #1f1f24;
     --seg-track: rgba(255, 255, 255, 0.08);
-    --seg-on: #2a2a30;
+    --seg-on: #3a3a42;
     --seg-on-ink: var(--ink);
     --demo-bg: var(--amber-2);
     --demo-line: #4a3a1c;
     --demo-ink: var(--amber);
     --count-bg: #c2410c;
+    --accent-text: #a3b6f7;
+    --on-teal: #0c0c0e;
+    --on-ok: var(--bg);
+    --card-line: var(--line);
+    --note-ink: #a3b6f7;
+    --note-am-ink: var(--amber);
+    --note-am-line: rgba(240, 180, 90, 0.35);
+    --th-bg: var(--panel-2);
+    --ask-q-line: rgba(182, 156, 255, 0.3);
+    --field-bg: var(--bg);
+    --field-line: #3a3a42;
     color-scheme: dark;
 }
 :root[data-theme='dark'] .jc-console .content {
@@ -1184,6 +1230,11 @@ body,
 }
 .jc-console .panel-body {
     padding: 18px 20px;
+}
+/* A painted view inside a card of a screen takes its own height, so the card closes under it. */
+.jc-console .harness .sys > .card > .painted {
+    height: auto;
+    overflow: visible;
 }
 .jc-console .chat-panel {
     display: flex;
@@ -1357,7 +1408,7 @@ body,
 .jc-console .needs-filter .btn[aria-pressed='true'] {
     border-color: var(--teal);
     background: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console .needs-filter .btn[aria-pressed='true'] .needs-n {
     color: inherit;
@@ -1592,12 +1643,21 @@ body,
     align-items: center;
     gap: 10px;
 }
+/* In a narrow strip the sentence gives way, cut short with the whole of it on hover, so the buttons after it keep their
+   place: the slot and the control may shrink, the split button may not. */
+.jc-console .open-in {
+    min-width: 0;
+}
 .jc-console .open-in-problem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--red);
     font-size: 13px;
 }
 .jc-console .open-in-split {
     display: flex;
+    flex: none;
 }
 /* Open in: a split button in the strip's quiet look, the segments' track with its parts plain until pointed at. */
 .jc-console .open-in-split {
@@ -1751,9 +1811,77 @@ body,
 .jc-console .mode-spacer {
     flex: 1;
 }
+/* The sidebar's button: drawn only where the sidebar is off the screen (a narrow tab), at the strip's left. */
+.jc-console .mode-nav {
+    display: none;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: -6px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+.jc-console .mode-nav:hover {
+    background: var(--hover);
+}
+.jc-console .side-away {
+    display: none;
+}
+@media (max-width: 820px) {
+    .jc-console .mode-nav {
+        display: inline-flex;
+    }
+    .jc-console .side-away {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 39;
+        border: 0;
+        background: rgba(2, 6, 23, 0.35);
+        cursor: default;
+    }
+}
+/* In a narrow tab the strip's sentence is read whole: the strip grows to the lines it needs. */
+@media (max-width: 520px) {
+    .jc-console .mode-strip {
+        height: auto;
+        min-height: 38px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        white-space: normal;
+    }
+    .jc-console .mode-strip > span {
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* A row of a person's history says what it is about in as many lines as it needs. */
+    .jc-console .harness .row .what {
+        flex-wrap: wrap;
+    }
+    .jc-console .harness .row .what .in {
+        flex: 1 1 100%;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* The period switch is as wide as the room, or less, and its labels shrink with it. */
+    .jc-console .harness .segmented {
+        max-width: 100%;
+    }
+    .jc-console .harness .segmented button {
+        padding: 0 8px;
+    }
+}
 .jc-console .mode-open-in {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
     align-items: center;
     margin-right: 4px;
 }
@@ -1894,6 +2022,9 @@ body,
 .jc-console .dash-line {
     padding: 6px 0;
     border-bottom: 1px solid var(--line2);
+}
+.jc-console .dash-agents > .bd {
+    overflow-x: auto;
 }
 .jc-console .dash-agents progress {
     width: 90px;
@@ -2224,7 +2355,7 @@ body,
 .jc-console .waiting-edit .btn.primary {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 /* A campaign's chat carries the agent's state at the bar's start and its one move at the bar's end: the group is laid
    out by the bar itself, the state first and the move last, the chat's own buttons between them. */
@@ -2238,4 +2369,71 @@ body,
 }
 .jc-console .chat-agent-move {
     order: 1;
+}
+/* The rename box carries no field look of its own; in the dark theme it takes the fields' ground and edge, not the
+   browser's grey. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .chat-rename input {
+        padding: 5px 8px;
+        border: 1px solid var(--field-line);
+        border-radius: 7px;
+        background: var(--field-bg);
+        color: var(--ink);
+    }
+}
+:root[data-theme='dark'] .jc-console .chat-rename input {
+    padding: 5px 8px;
+    border: 1px solid var(--field-line);
+    border-radius: 7px;
+    background: var(--field-bg);
+    color: var(--ink);
+}
+/* A dialog's edge and the layer behind it in the dark theme: the edge shows on the dimmed page, and the page behind
+   recedes. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .overlay {
+        background: rgba(0, 0, 0, 0.62);
+    }
+    :root:not([data-theme='light']) .jc-console .dialog {
+        border-color: var(--field-line);
+    }
+}
+:root[data-theme='dark'] .jc-console .overlay {
+    background: rgba(0, 0, 0, 0.62);
+}
+:root[data-theme='dark'] .jc-console .dialog {
+    border-color: var(--field-line);
+}
+
+/* The console in a narrow tab: what a page of the console or a screen of the browser shell drew too wide, or too tight. */
+.jc-console .panel-body > .card + .card {
+    margin-top: 16px;
+}
+.jc-console .dash-row .meta {
+    flex: none;
+    white-space: nowrap;
+}
+@media (max-width: 820px) {
+    /* A table wider than the room scrolls inside a box of its own, around it, which a keyboard reaches and a reader names. */
+    .jc-console .tscroll {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .jc-console .harness .filters .search {
+        flex: 1 1 100%;
+        width: auto;
+    }
+    .jc-console .chat-bar {
+        flex-wrap: wrap;
+    }
+    .jc-console .chat-rename {
+        flex: 1 1 100%;
+    }
+    .jc-console .start .start-note.uinote {
+        flex-wrap: wrap;
+    }
+    .jc-console .start .start-note.uinote > span:first-child {
+        flex: 1 1 220px;
+        min-width: 0;
+    }
 }

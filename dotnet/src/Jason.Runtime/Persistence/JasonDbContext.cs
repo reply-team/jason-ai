@@ -420,6 +420,7 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             decision.Property(d => d.ChosenOption).HasMaxLength(DecisionLimits.MaxOptionLabelLength);
             decision.Property(d => d.AnsweredById).HasMaxLength(100);
             decision.Property(d => d.AnswerJournalEntryId).HasMaxLength(40);
+            decision.Property(d => d.ThreadPluginId).HasMaxLength(64);
             decision.Property(d => d.Options).HasColumnName("options_json");
             decision.Property(d => d.References).HasColumnName("references_json");
             decision.ToTable(t =>
@@ -771,6 +772,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_events")
                 .IsUnique()
                 .HasFilter("kind = 'provider_event_observed'");
+
+            // A send the provider reported is said once per campaign the same way, under the event's own key, in an index
+            // of its own: the store looks the page's keys up by kind before it writes, and a second line is refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_provider_sends")
+                .IsUnique()
+                .HasFilter("kind = 'provider_send_observed'");
 
             // A send seen to have gone out is said once, under the key of the work item that accepted it, in an index of
             // its own: the reads that find it look the key up first, and a second line is refused.

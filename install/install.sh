@@ -73,6 +73,30 @@ case "$(uname -s)-$(uname -m)" in
     *) fail "no release is built for $(uname -s) on $(uname -m); the releases are linux-x64, osx-arm64 and win-x64" ;;
 esac
 
+# --- the install directory ----------------------------------------------------------------------------------
+
+# Refused before anything is written. The entries of PATH are separated by ':', with no escape, so a directory whose name
+# holds one is two entries to every reader, neither of them the directory: it can be on no PATH at all, and is refused
+# under --no-modify-path too. The other characters are this script's own limit: the line it writes into a profile reads
+# the directory inside double quotes, where '"', '$', '`' and '\' are not read as themselves, and a line break ends that
+# line. Under --no-modify-path no line is written, and a person may put the directory on PATH their own way.
+case "$INSTALL_DIR" in
+    *:*) fail "the install directory $INSTALL_DIR holds ':', which separates the entries of PATH, so no PATH entry can name it; nothing was installed: choose a folder whose name does not hold it with --install-dir" ;;
+esac
+if [ "$MODIFY_PATH" -eq 1 ]; then
+    LINE_BREAK='
+'
+    UNWRITTEN=""
+    case "$INSTALL_DIR" in
+        *"$LINE_BREAK"*) UNWRITTEN="it holds a line break, which would end the line it writes in your profile" ;;
+        *'"'*) UNWRITTEN="it holds '\"', which the line it writes in your profile reads inside double quotes as something else" ;;
+        *'$'*) UNWRITTEN="it holds '\$', which the line it writes in your profile reads inside double quotes as something else" ;;
+        *'`'*) UNWRITTEN="it holds '\`', which the line it writes in your profile reads inside double quotes as something else" ;;
+        *'\'*) UNWRITTEN="it holds '\\', which the line it writes in your profile reads inside double quotes as something else" ;;
+    esac
+    [ -z "$UNWRITTEN" ] || fail "this installer cannot write $INSTALL_DIR into your PATH: $UNWRITTEN. Nothing was installed: choose another --install-dir, or install with --no-modify-path and add the directory to your PATH yourself"
+fi
+
 # --- the feed -----------------------------------------------------------------------------------------------
 
 if [ -n "$FEED" ]; then

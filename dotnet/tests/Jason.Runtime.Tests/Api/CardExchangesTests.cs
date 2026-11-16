@@ -23,7 +23,7 @@ namespace Jason.Runtime.Tests.Api;
 /// the runtime's own claim (the scan that parks a send for a person), so the ids in a list row are the ids its
 /// <c>get</c> answers and the item a patch answers is the item the list held. Nothing here writes a row by hand.
 /// </summary>
-public class CardExchangesTests
+public partial class CardExchangesTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static readonly DateTimeOffset Nine = new(2026, 10, 16, 9, 0, 0, TimeSpan.Zero);
@@ -422,6 +422,102 @@ public class CardExchangesTests
         }
     }
 
+    /// <summary>
+    /// A list a person gave in the chat, added to a campaign as the card sends it: each row matched by its email
+    /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
+    /// out of the campaign, an address that is no address, a row with no address, and a person whose record is archived; then
+    /// the same request again. The campaign is read as the card reads it: a draft before the list, then started, then with
+    /// its send mode for people who have not replied set to automatic by a person, then paused, then archived, when the same
+    /// request is refused whole.
+    /// </summary>
+    [Fact]
+    public async Task A_list_given_in_the_chat_is_added_row_by_row_and_again_with_every_row_already_there()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var scene = await Scene.OpenAsync(api, "Spring launch");
+        var draft = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal(CampaignStatus.Draft, draft.Status);
+        var held = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ines", last_name = "Duarte", channels = new[] { new { channel = "email", value = "ines@example.test", primary = true } }, actor = Ada }, Ct);
+        var removed = await scene.PersonAsync("Omar", "Reyes", "email", "omar@example.test");
+        await api.PostOkAsync<RemoveContactsResult>(Operations.CampaignRemoveContacts, new { campaign_id = scene.Campaign, contact_ids = new[] { removed }, reason = "Not a fit.", actor = Ada }, Ct);
+        var archived = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Rafa", last_name = "Costa", channels = new[] { new { channel = "email", value = "rafa@example.test", primary = true } }, actor = Ada }, Ct);
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = archived.Id, actor = Ada }, Ct);
+        var heldBefore = await HeldRecordAsync(api, held.Id);
+
+        // An empty cell is left out, as the card leaves it out.
+        static object Row(string first, string last, string? email) => email is null
+            ? new { first_name = first, last_name = last }
+            : new { first_name = first, last_name = last, channels = new[] { new { channel = "email", value = email } } };
+        var request = new
+        {
+            campaign_id = scene.Campaign,
+            match_by = "email",
+            contacts = new[]
+            {
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Ines", "Duarte-Lopes", "ines@example.test"),
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Omar", "Reyes", "omar@example.test"),
+                Row("Bruno", "Silva", "bruno-at-example"),
+                Row("Chen", "Wu", null),
+                Row("Rafa", "Costa", "rafa@example.test"),
+            },
+            reason = "From a list given in the chat.",
+            actor = Ada,
+        };
+        var first = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list", request, Ct);
+        Assert.Equal(7, first.Items.Count);
+        Assert.Equal(
+            [AddContactsItemStatus.Added, AddContactsItemStatus.Added, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.Added],
+            first.Items.Select(i => i.Status));
+        Assert.Equal(held.Id, first.Items[1].ContactId);
+        Assert.False(first.Items[1].ContactCreated);
+        Assert.Equal(first.Items[0].ContactId, first.Items[2].ContactId);
+        Assert.Equal(removed, first.Items[3].ContactId);
+        Assert.Equal(MembershipState.Excluded, first.Items[3].State);
+        Assert.NotEqual(archived.Id, first.Items[6].ContactId);
+        Assert.True(first.Items[6].ContactCreated, "an archived person is made again, not matched");
+        Assert.NotNull((await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = archived.Id }, Ct)).ArchivedAt);
+        Assert.Equal(heldBefore, await HeldRecordAsync(api, held.Id));
+
+        var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list-again", request, Ct);
+        Assert.Equal(
+            [AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.AlreadyMember],
+            again.Items.Select(i => i.Status));
+        Assert.Equal(first.Items.Select(i => i.ContactId), again.Items.Select(i => i.ContactId));
+        Assert.Equal(
+            [MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Excluded, null, null, MembershipState.Enrolled],
+            again.Items.Select(i => i.State));
+        Assert.All(again.Items, i => Assert.False(i.ContactCreated));
+
+        await scene.StartAsync();
+        var running = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-running", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal(CampaignStatus.Active, running.Status);
+        Assert.Equal(SendMode.EveryMessage, running.SendModesInForce!.Cold.Mode);
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = scene.Campaign, cold = "automatic", actor = Ada }, Ct);
+        var automatic = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-automatic", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal((CampaignStatus.Active, SendMode.Automatic, SendMode.EveryMessage), (automatic.Status, automatic.SendModesInForce!.Cold.Mode, automatic.SendModesInForce.Warm.Mode));
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignPause, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
+        var paused = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-paused", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal((CampaignStatus.Paused, SendMode.Automatic), (paused.Status, paused.SendModesInForce!.Cold.Mode));
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
+        Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-archived", new { campaign_id = scene.Campaign }, Ct)).Status);
+        var refused = await api.RecordErrorAsync(Operations.CampaignAddContacts, "own-list-archived", request, System.Net.HttpStatusCode.Conflict, Ct);
+        Assert.Equal("campaign_archived", refused.Code);
+    }
+
+    /// <summary>A person's own record, without the campaigns and activity that adding them to one is meant to change.</summary>
+    private static async Task<string> HeldRecordAsync(RuntimeApiFixture api, string id)
+    {
+        var record = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = id }, Ct)))!.AsObject();
+        record.Remove("Campaigns");
+        record.Remove("LastActivity");
+        return record.ToJsonString();
+    }
+
     /// <summary>A campaign no route sends for: what the plan says of it, and the refusal the sender line meets.</summary>
     [Fact]
     public async Task A_campaign_with_no_route_is_refused_where_a_card_asks_for_one()
@@ -618,11 +714,11 @@ public class CardExchangesTests
 
         public string Campaign { get; private set; } = "";
 
-        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true)
+        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true, string[]? more = null)
         {
             if (routed)
             {
-                Route(api);
+                Route(api, more ?? []);
             }
 
             var scene = new Scene(api);
@@ -638,14 +734,15 @@ public class CardExchangesTests
             return scene;
         }
 
-        private static void Route(RuntimeApiFixture api)
+        /// <summary>The stand-in plugin routed for every campaign: the five operations the cards' stories use, and <paramref name="more"/>.</summary>
+        private static void Route(RuntimeApiFixture api, string[] more)
         {
             var routed = new JsonObject { ["workspace"] = "a" };
             var schema = JsonNode.Parse("""{ "type": "object", "properties": { "workspace": { "type": "string" } } }""")!.AsObject();
             var plugins = api.Resolve<PluginRegistry>();
             plugins.Replace(
                 new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Nine.UtcDateTime, SnapshotSource.Startup,
-                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list"], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
+                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list", .. more], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
                 new ReloadReport(Nine.UtcDateTime, SnapshotSource.Startup, Activated: true, [], []));
             api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
                 PublicId.New(RouteSnapshot.IdPrefix),

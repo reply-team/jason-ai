@@ -1,0 +1,11 @@
+{
+  "kind": "provider_send_observed",
+  "version": 1,
+  "case": "a send whose message the provider names no identifier for, to a person pinned to no contact",
+  "body": {
+    "key": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "old": null,
+    "new": { "plugin": "example-mail", "event_id": "evt_01JC0000000000000000000004", "occurred_at": "2026-10-28T10:01:00.000Z", "channel": "email", "contact_id": null, "attributed_by": "campaign_pin", "thread": null, "message": null }
+  },
+  "expect": "valid"
+}

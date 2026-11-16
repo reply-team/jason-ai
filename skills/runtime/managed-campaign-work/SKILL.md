@@ -107,7 +107,10 @@ jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 In the chat of Jason Desktop you cannot start a campaign or resume a paused one: either is the person's own act. There,
 once the plan is agreed and its work is created, say once that it is ready and that they press Start at the top of the
 campaign's chat, or Resume for a paused one, and never say it has started until `jason campaign get` answers the
-status `active`. In a person's own session you start it on their go, as above, and resume it the same way.
+status `active`. In a person's own session you start it on their go, as above, and resume it the same way. Archiving
+a campaign in that chat is the person's own act too, and it cannot be undone: they archive it at the bottom of the
+agent's Settings tab in Jason Desktop's window, which says first what the archive cancels, and you never try to
+archive one there.
 
 **What is sold is the project.** A project gathers the campaigns of one product, so it is named from what the person
 sells, in their words, and looked for before it is made: `jason project list --query` with a word of that name answers
@@ -432,7 +435,8 @@ draft for a reply it has already answered.
 chronicle, or a `provider_event_observed` line of kind `reply_detected` where the provider's own events reported it,
 so list both kinds. Either line names the thread, its channel and the person (`contact_id`) but never what anybody
 wrote. So when the person asks you to answer one, read the thread first and tell them what you read — who wrote last,
-when, and what they said — before anything is drafted.
+when, and what they said — before anything is drafted. A `provider_send_observed` line is a message the account sent, never a
+reply, so it is not listed here.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed

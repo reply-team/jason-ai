@@ -3,6 +3,8 @@ using System.Text.Json.Nodes;
 using Jason.Contracts.Api;
 using Jason.Contracts.Operations;
 using Jason.Runtime.Approvals;
+using Jason.Runtime.Decisions;
+using Jason.Runtime.Dispatch;
 using Jason.Runtime.Persistence;
 using Jason.Runtime.Routing;
 using Jason.Runtime.Tests.Plugins;
@@ -95,6 +97,58 @@ public class NeedsExchangesTests
         await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "needs-page-two-approved", new { approval_id = later, actor = new { type = "human", id = "ada" } }, Ct);
         var rest = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-next-page-after", new { cursor = first.NextCursor }, Ct);
         Assert.Equal([next.Items[1].Id], rest.Items.Select(a => a.Id));
+    }
+
+    /// <summary>
+    /// A question the runtime's own responder raised about a reply, beside one about no thread: the first names the thread
+    /// the reply moved, which is how Needs you holds it under Inbox; the second says null.
+    /// </summary>
+    [Fact]
+    public async Task A_question_the_responder_raised_about_a_reply_names_its_thread_beside_one_about_none()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var (_, autumn) = await SeedAsync(api);
+        string raised;
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            db.Attach(autumn);
+            var responder = WorkItemFactory.NewAiRole(autumn, role: Responder.Role, now: Noon, configure: item =>
+            {
+                item.CreatedByType = ActorType.System;
+                item.CreatedById = "dispatcher";
+                item.Context = new JsonObject
+                {
+                    ["trigger"] = "inbound_reply_observed",
+                    [Responder.InboundReplyKey] = new JsonObject { ["plugin"] = "reply", ["thread"] = "t_501", ["channel"] = "email" },
+                };
+            });
+            responder.PublicId = "wi_01K7QR0000000000000000000E";
+            responder.Status = WorkItemStatus.Processing;
+            var attempt = WorkItemFactory.NewAttempt(responder, 1, AttemptStatus.Running, Nine.UtcDateTime);
+            db.WorkItems.Add(responder);
+            db.Attempts.Add(attempt);
+            await db.SaveChangesAsync(Ct);
+
+            var asked = await scope.ServiceProvider.GetRequiredService<DecisionService>().RaiseAsync(
+                new DecisionRaiseRequest(
+                    responder.PublicId,
+                    attempt.PublicId,
+                    "Kai Lindt replied in the autumn campaign: they ask what it costs, a pricing question. Answer with the published prices, or leave it to you?",
+                    [new DecisionOption("answer with the published prices", null), new DecisionOption("leave it to me", null)],
+                    [new DecisionReference(DecisionReferenceKind.WorkItem, responder.PublicId)],
+                    "pricing_question escalates by the base table"),
+                Ct);
+            raised = asked.Id;
+        }
+
+        var questions = await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "needs-inbox-questions", new { }, Ct);
+        Assert.Equal(
+            [null, new DecisionThread("reply", "t_501")],
+            questions.Items.Select(question => question.Thread));
+        Assert.Equal(raised, questions.Items[1].Id);
+        var question = await api.RecordAsync<DecisionDto>(Operations.DecisionGet, "needs-inbox-question", new { decision_id = raised }, Ct);
+        Assert.Equal(new DecisionThread("reply", "t_501"), question.Thread);
     }
 
     [Fact]

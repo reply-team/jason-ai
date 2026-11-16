@@ -11,12 +11,12 @@ the two seem to differ, the document is right and this page is a bug.
 
 ## What it is for
 
-Jason learns what happened at a provider — a reply came in, an invitation was accepted, a message bounced — by reading
-it, on a cadence the runtime keeps, from each account a route binds. One read asks for everything after the point the
-plugin's own cursor names, a page at a time. What it reads is kept by the runtime as it was read, and a campaign hears
-of an event only through the provider identifiers that the operations of that campaign pinned or, where that finds none,
-by the contact pinned at the plugin, through every campaign that is not archived and holds them as a member. A machine
-that was off loses nothing: the cursor waits.
+Jason learns what happened at a provider — a reply came in, an invitation was accepted, a message bounced, the account
+sent a message — by reading it, on a cadence the runtime keeps, from each account a route binds. One read asks for
+everything after the point the plugin's own cursor names, a page at a time. What it reads is kept by the runtime as it
+was read, and a campaign hears of an event only through the provider identifiers that the operations of that campaign
+pinned or, where that finds none and the event is not a send, by the contact pinned at the plugin, through every
+campaign that is not archived and holds them as a member. A machine that was off loses nothing: the cursor waits.
 
 What travels is identifiers, moments and the provider's own flags. Nothing anybody wrote does: no subject, no preview,
 no message's text, no name.
@@ -75,7 +75,7 @@ given, before `until`. A provider that pages only by offset is paged newest firs
 page is read the next time rather than skipped. A provider that holds less history than `since` asks for answers what
 it holds; that is not a failure.
 
-## The four kinds
+## The five kinds
 
 Every event has a `kind`, an `occurred_at` — when it happened, as the provider stamps it — and an `id`, the provider's
 own identifier for the event or `null`. Every identifier is 1 to 256 printable ASCII characters with no space. A moment
@@ -88,26 +88,42 @@ never with an offset, and never at a leap second's `60`: convert the provider's 
 | `reply_detected` | `contact`, `campaign`, `thread` | `channel` |
 | `invitation_accepted` | `contact`, `campaign`, `account` (the provider's identifier for the account that sent it) | — |
 | `bounce` | `contact`, `campaign`, `message` | `bounce`: `hard`, `soft` or `null` |
+| `message_sent` | `contact`, `campaign`, `thread`, `message` | `channel` |
 
-`thread` on a moved thread and `contact` on the other three are required; every other identifier is `null` where the
+`thread` on a moved thread and `contact` on the other four are required; every other identifier is `null` where the
 event names none. `channel` is `email`, `linkedin` or `other`.
+
+**A message the account sent.** `message_sent` is a message sent as the account to a person, whoever sent it: Jason, a
+sequence, or a person in the provider's own screens — the provider cannot tell them apart, and the runtime does not ask.
+A plugin reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment
+the message was sent, and otherwise leaves it out; never as a move by the other side. `contact` is the person it went
+to; a send that names nobody is not reported. `campaign` is the provider campaign the send belongs to, by the
+identifier `campaign.get` pins, and `null` for a send outside every provider campaign: a send reaches a campaign by that
+identifier alone, never by the person, so one that names no provider campaign reaches no campaign. `occurred_at` is the
+moment the message was sent, as the provider stamps it, and the same at every read of that send: the moment is part of
+what makes two reads one send, so a send given two moments is said twice. `message` is the provider's identifier for
+the message, or `null` where it gives none.
 
 **Who moved a thread.** A thread moves when the other side writes, and also when the account itself acts — a reply sent
 into it, a category set, the read flag changed — which Jason does too. `moved_by` is the provider's own word for the
 move:
 
 - `other_side` — a message the other side wrote;
-- `account` — a message sent as the account, by Jason, by a sequence or by a person in the provider's own screens;
+- `account` — a message sent as the account, by Jason, by a sequence or by a person in the provider's own screens. The
+  runtime keeps such a move and says it to no campaign; the value stays for plugins written before `message_sent`, and
+  a plugin that reports the message as the send it is has no reason left to report the move;
 - `provider` — a change with no message: a category, the read flag, a meeting intent;
 - `null` — the provider cannot say.
 
 Only a move by the other side reads as a reply. Never report a move by the account or the provider as `other_side`.
 Report `null` only where the provider truly cannot say: such a move wakes the campaign's manager as a reply would, so a
-follow-up sent into a thread that already has a reply reads as one too. You may leave out moves by the account and the
-provider altogether.
+follow-up sent into a thread that already has a reply reads as one too. A move by the account is a message:
+report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message
+was sent, and otherwise leave it out; never as a move by the other side. You may leave out moves by the provider
+altogether.
 
 **Nothing else travels.** Each kind is a closed object: a member the table does not name — a subject, a preview, a
-person's name — is refused with the whole page, and so is a kind outside the four. A schema cannot prove that an
+person's name — is refused with the whole page, and so is a kind outside the five. A schema cannot prove that an
 identifier is not a name; returning only what the provider uses to identify things is what this contract asks of you.
 
 **A read pins nothing.** The runtime finds a campaign by the identifiers the operations of that campaign pinned. An
@@ -135,7 +151,7 @@ A read changes nothing at a provider, so reading again is always safe.
 | version | 1 |
 | input | `cursor`, `since`, `until`, `limit` |
 | output | `events`, `cursor`, `has_more` |
-| kinds | `thread_moved`, `reply_detected`, `invitation_accepted`, `bounce` |
+| kinds | `thread_moved`, `reply_detected`, `invitation_accepted`, `bounce`, `message_sent` |
 | page | at most 100 events |
 | timeout | 60000 ms |
 
@@ -169,6 +185,12 @@ A plugin that performs this contract:
   the events on the strength of this line, so naming the campaign is still the right course: the first rule decides alone
   when it finds one, and a move that names none reaches the campaigns the person is in rather than the one whose thread
   it is;
+- reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment the message
+  was sent, and otherwise leaves it out; never as a move by the other side;
+- names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it
+  cannot place names `null`, and reaches no campaign;
+- gives a `message_sent` as its `occurred_at` the moment the message was sent, the same at every read of that send, so
+  that a send read twice is said once;
 - reports `moved_by: null` only where the provider cannot say, knowing that such a move wakes a manager as a reply;
 - answers `events_cursor_unknown` for a cursor it can no longer read, and `events_unreachable` for a provider that did
   not answer or is unavailable for now;

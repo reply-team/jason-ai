@@ -864,6 +864,23 @@ internal static partial class StatusChecks
     /// </remarks>
     private static StatusCheck Path(CliEnvironment env)
     {
+        // First, whatever answers by name: a folder whose name holds the separator of PATH is two entries to every reader,
+        // so this jason is on no PATH, a role's agent is not given it first, and another jason answering by name would
+        // only hide that. No line is offered: the one that puts a folder on PATH would write the same split entry again.
+        // Not where the name answers with this very file through a link in a folder that is a whole entry: that is how a
+        // manager reaches an installation, and there a shell does find this jason by name.
+        if (OwnFolder(env) is { } own && SearchPathEntry.Problem(own) is { } split
+            && !IsThisFile(Executables.OnPath("jason", env.SearchPath), env.InstallPath ?? SelfExecutable.InstalledImage))
+        {
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Failed,
+                $"This jason's folder {split}: no shell finds this jason by name, and a role's agent is not given it first on PATH. "
+                + $"Install Jason into a folder whose name does not hold '{System.IO.Path.PathSeparator}'.",
+                null);
+        }
+
         var resolved = Executables.OnPath("jason", env.SearchPath);
 
         // A package manager puts its installation on the PATH itself, through its link or its own directory, and the file
@@ -933,6 +950,52 @@ internal static partial class StatusChecks
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
+
+    /// <summary>
+    /// Whether <paramref name="resolved"/> and <paramref name="own"/> are one file by their final paths, a link in the file or
+    /// in a folder above it followed; an unreadable link is not one.
+    /// </summary>
+    private static bool IsThisFile(string? resolved, string? own)
+    {
+        if (resolved is null || own is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(FinalPath(resolved), FinalPath(own), comparison);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The full path of <paramref name="path"/> with a link in the file, or else in its folder, followed to its target.</summary>
+    private static string FinalPath(string path)
+    {
+        var full = System.IO.Path.GetFullPath(path);
+        if (new FileInfo(full).ResolveLinkTarget(returnFinalTarget: true)?.FullName is { } file)
+        {
+            return System.IO.Path.GetFullPath(file);
+        }
+
+        var folder = System.IO.Path.GetDirectoryName(full);
+        return folder is not null && new DirectoryInfo(folder).ResolveLinkTarget(returnFinalTarget: true)?.FullName is { } target
+            ? System.IO.Path.Combine(System.IO.Path.GetFullPath(target), System.IO.Path.GetFileName(full))
+            : full;
+    }
+
+    /// <summary>
+    /// The folder of the file this jason is installed as, or null where there is none: never <c>Environment.ProcessPath</c>,
+    /// for the reason <see cref="Repair.OnPath"/> gives.
+    /// </summary>
+    private static string? OwnFolder(CliEnvironment env) =>
+        (env.InstallPath ?? SelfExecutable.InstalledImage) is { } executable && System.IO.Path.GetDirectoryName(executable) is { Length: > 0 } directory
+            ? directory
+            : null;
 
     /// <summary>
     /// How a name on the PATH reaches a manager's installation: its link, or its own directory. Null where it is neither.

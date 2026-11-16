@@ -14,7 +14,7 @@
     "plugins": [
       {
         "id": "reply",
-        "version": "0.17.0",
+        "version": "0.18.0",
         "kind": "provider",
         "name": "Reply",
         "description": "Jason's canonical provider operations, performed against a Reply account through the Reply CLI, which owns the credential and keeps it out of this package entirely.",

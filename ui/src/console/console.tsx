@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals-react';
+import { effect, signal } from '@preact/signals-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
@@ -10,7 +10,7 @@ import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { consoleShell } from '../platform/console-shell';
 import { registry } from '../platform/slots';
 import { LiveSettingsSections } from './settings-sections';
-import { navigate, parseRoute, type Route } from '../router';
+import { href, navigate, parseRoute, replace, route, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
@@ -206,6 +206,54 @@ export function commandTarget(command: DesktopCommand): PanelName | Route | null
 /** How long the console waits after a journal line before it reads what waits and the campaigns again. */
 export const reloadDelay = 400;
 
+/**
+ * Where a page was left from: the area's pane and the address then in the bar. Back to that address restores the pane;
+ * kept only while a page is shown, and set again by the next page opened from anywhere else.
+ */
+let leftFrom: { pane: string; address: string } | null = null;
+/** The address a page the dock opened put in the bar: the route's change that follows it is the dock's own. */
+let ownAddress: string | null = null;
+
+/** Shows again what was shown before a page: the chat if it is still open, else what the window opens on. */
+function restore(): void {
+    const pane = leftFrom?.pane ?? 'start';
+    if (pane.startsWith('chat:') && chats.value[pane.slice('chat:'.length)]) reveal(pane);
+    else reveal(pane.startsWith('chat:') ? 'start' : pane);
+}
+
+/**
+ * The address changed by the browser's own history (Back, Forward): Back to where a page was opened from shows what was
+ * shown there, and any other address, reached while a page is not shown, shows the page. A move the dock made itself
+ * is skipped.
+ */
+function followHistory(to: Route): void {
+    const address = href(to);
+    if (address === ownAddress) {
+        ownAddress = null;
+        return;
+    }
+    const onPage = activePanel.value === 'page';
+    if (to.screen === 'chat' || (leftFrom !== null && address === leftFrom.address)) {
+        if (onPage) restore();
+    } else if (!onPage) show_('page');
+}
+
+const show_ = (panel: PanelName) => reveal(panel);
+
+/** What an address names at the shell's start: a panel (with the item it opens), a page, or nothing (the chat's, or none). */
+function addressPlace(
+    hash: string,
+): { panel: PanelName; open?: { kind: 'approvals' | 'questions'; id: string } } | null {
+    if (hash === '' || hash === '#') return null;
+    const to = parseRoute(hash);
+    if (to.screen === 'chat') return null;
+    // The bare attention address is the default one (the window opens at it, and pairing leaves it): no address.
+    if (to.screen === 'attention')
+        return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : null;
+    if (to.screen === 'campaigns' && to.id === undefined) return { panel: 'campaigns' };
+    return { panel: 'page' };
+}
+
 function makeDock(): Dock {
     const show = (panel: PanelName) => reveal(panel);
     const showChat = (id: string) => {
@@ -228,6 +276,12 @@ function makeDock(): Dock {
             if (activePanel.value === chatPane(id)) reveal('start');
         },
         page: (to) => {
+            if (activePanel.value !== 'page') {
+                // What is shown is not a page, so the bar must not name one: it names the chat, the console's neutral place.
+                if (route.value.screen !== 'chat') replace({ screen: 'chat' });
+                leftFrom = { pane: activePanel.value ?? 'start', address: href(route.value) };
+            }
+            ownAddress = href(to) === href(route.value) ? null : href(to);
             navigate(to);
             show('page');
         },
@@ -241,13 +295,60 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     // as the shell mounts, before the page is painted, and again whenever React mounts the shell once more (StrictMode
     // does, at once); the window opens on Start, holding nothing else.
     const [bound, setBound] = useState(false);
+    // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
+    const [sideOpen, setSideOpen] = useState(false);
+    // While it is over the area the page behind is out of reach, the sidebar takes the focus, Escape puts it away and gives
+    // the focus back to its button, and a window that grows past the narrow edge leaves nothing of it standing.
+    useEffect(() => {
+        if (!sideOpen) return;
+        const area = document.querySelector('.jc-console .mainc > .area');
+        area?.setAttribute('inert', '');
+        document.querySelector<HTMLElement>('.jc-console .side button, .jc-console .side a')?.focus();
+        const away = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setSideOpen(false);
+            document.querySelector<HTMLElement>('.jc-console .mode-nav')?.focus();
+        };
+        window.addEventListener('keydown', away);
+        const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 821px)') : null;
+        const grown = () => {
+            if (wide?.matches) setSideOpen(false);
+        };
+        wide?.addEventListener('change', grown);
+        return () => {
+            area?.removeAttribute('inert');
+            window.removeEventListener('keydown', away);
+            wide?.removeEventListener('change', grown);
+        };
+    }, [sideOpen]);
     useLayoutEffect(() => {
         const unbound = bind({ api, desktop, dock });
         inArea.value = [];
         lastChats = [];
+        leftFrom = null;
+        ownAddress = null;
         reveal('start');
+        // The address is the truth: one that names something draws it (the window opens with none, so on Start).
+        const named = addressPlace(location.hash);
+        if (named !== null) {
+            leftFrom = { pane: 'start', address: href({ screen: 'chat' }) };
+            reveal(named.panel);
+            if (named.open) void needs.attention.open(api, named.open.kind, named.open.id);
+        }
         setBound(true);
-        return unbound;
+        // The browser's Back and Forward move the address; the area follows it .
+        let seen = href(route.value);
+        const followed = effect(() => {
+            const to = route.value;
+            // The address read again from the bar, as it was, moves nothing.
+            if (href(to) === seen) return;
+            seen = href(to);
+            followHistory(to);
+        });
+        return () => {
+            followed();
+            unbound();
+        };
     }, [api, desktop, dock]);
     useEffect(() => {
         const onFocus = () => connect.reloadOnFocus();
@@ -370,21 +471,39 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     }, [api, desktop, dock, stream]);
 
     // The Mac desktop's own window has no title bar: its buttons sit over the sidebar's top, and the window is dragged by
-    // a band there and by the strip. A browser tab, and the desktop's window on Windows and Linux, keep their own frame.
+    // a band there and by the strip. The Windows desktop's window has none either: the caption buttons stand over the
+    // strip's right end, which leaves them free. A browser tab, and the desktop's window on Linux, keep their own frame.
     const mac = desktop.platform === 'darwin' && placeKind() === 'window';
+    const win = desktop.platform === 'win32' && placeKind() === 'window';
     return (
-        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}`}>
+        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${win ? ' desktop-win' : ''}`}>
             {mac && <div className="title-drag" aria-hidden="true" />}
             {bound && (
                 <>
                     {/* The sidebar runs the window's height; the strip heads the column right of it, over the area. */}
                     <div className="shell">
-                        <aside className="side">
+                        <aside
+                            className={sideOpen ? 'side open' : 'side'}
+                            onClickCapture={(event) => {
+                                if ((event.target as HTMLElement).closest('[data-action], a, button'))
+                                    setSideOpen(false);
+                            }}
+                        >
                             <Painted className="side-body" view={sideView} />
                             <SideFailure />
                         </aside>
+                        {sideOpen && (
+                            <button
+                                type="button"
+                                className="side-away"
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                onClick={() => setSideOpen(false)}
+                            />
+                        )}
                         <div className="mainc">
                             <ModeStrip
+                                nav={{ open: sideOpen, toggle: () => setSideOpen((was) => !was) }}
                                 openIn={
                                     can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
                                         <OpenIn desktop={desktop} />

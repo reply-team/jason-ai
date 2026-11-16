@@ -111,7 +111,7 @@ it, as below.
   draft: draft nothing, and say so in your summary, with the outcome `nothing`. Where none is, write the draft under
   that line, naming it in `reply_verdict`.
 - `act`: do the act.
-- `escalate`: ask, unless a question about this thread is still open — a question raised about a thread names it —
+- `escalate`: ask, unless a question about this thread is still open — its row's `thread` names it, or its words do —
   and where one is, the outcome is `nothing`.
 - `none`: nothing.
 

@@ -533,12 +533,121 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
         expect(band()).toBeNull();
     });
 
-    it('draws no band on Windows and Linux, whose windows keep their frame', async () => {
+    it('draws no band on Windows, whose buttons stand over the strip, nor on Linux, whose window keeps its frame', async () => {
         for (const platform of ['win32', 'linux'] as const) {
             renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
             await screen.findByRole('heading', { name: 'Who do you want to reach?' });
             expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
             expect(band()).toBeNull();
+            cleanup();
+        }
+    });
+});
+
+describe('the sidebar where the window is narrow', () => {
+    it("is brought over the area by the strip's button and put away by a choice in it or a tap beside it", async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = () => document.querySelector<HTMLElement>('.jc-console .side')!;
+        const button = () => screen.getByRole('button', { name: 'Sidebar' });
+        expect(aside().classList.contains('open')).toBe(false);
+        expect(button().getAttribute('aria-expanded')).toBe('false');
+        expect(document.querySelector('.side-away')).toBeNull();
+        fireEvent.click(button());
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(button().getAttribute('aria-expanded')).toBe('true');
+        fireEvent.click(document.querySelector('.side-away')!);
+        expect(aside().classList.contains('open')).toBe(false);
+        fireEvent.click(button());
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        expect(aside().classList.contains('open')).toBe(false);
+    });
+
+    it('takes the focus when opened, makes the page behind unreachable, and Escape puts it away and gives the focus back', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const area = () => document.querySelector<HTMLElement>('.jc-console .mainc > .area')!;
+        const button = screen.getByRole('button', { name: 'Sidebar' });
+        expect(area().hasAttribute('inert')).toBe(false);
+        fireEvent.click(button);
+        expect(area().hasAttribute('inert')).toBe(true);
+        expect(document.querySelector('.jc-console .side')!.contains(document.activeElement)).toBe(true);
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(document.querySelector('.jc-console .side')!.classList.contains('open')).toBe(false);
+        expect(area().hasAttribute('inert')).toBe(false);
+        expect(document.activeElement).toBe(button);
+    });
+
+    it('leaves nothing standing when the window grows past the narrow edge with it open', async () => {
+        const listeners = new Set<() => void>();
+        const list = {
+            matches: false,
+            addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+            removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+        };
+        const original = window.matchMedia;
+        window.matchMedia = (() => list) as unknown as typeof window.matchMedia;
+        try {
+            renderConsole(stubDesktop(), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            fireEvent.click(screen.getByRole('button', { name: 'Sidebar' }));
+            expect(document.querySelector('.jc-console .side')!.classList.contains('open')).toBe(true);
+            flush(() => {
+                list.matches = true;
+                for (const fn of [...listeners]) fn();
+            });
+            expect(document.querySelector('.jc-console .side')!.classList.contains('open')).toBe(false);
+            expect(document.querySelector('.jc-console .mainc > .area')!.hasAttribute('inert')).toBe(false);
+        } finally {
+            window.matchMedia = original;
+        }
+    });
+});
+
+describe('the strip in the Windows desktop’s window, whose caption buttons stand over its right end', () => {
+    const windows = () => Object.assign(stubDesktop(), { platform: 'win32' as const });
+    const strip = () => screen.getByRole('region', { name: 'Mode bar' });
+
+    it('leaves the buttons’ width and the desktop’s band free at its right, read from the overlay’s own geometry', async () => {
+        renderConsole(windows(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const root = document.querySelector<HTMLElement>('.jc-console')!;
+        expect(root.classList.contains('desktop-win')).toBe(true);
+        expect(root.classList.contains('desktop-mac')).toBe(false);
+        // The free title bar area ends where the buttons begin; the desktop's band is 40 px left of them.
+        expect(styleOf(strip())).toMatchObject({
+            'padding-right': 'calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))',
+            '-webkit-app-region': 'drag',
+        });
+        // Nothing is kept over the sidebar: the buttons are at the window's right, not its left.
+        expect(styleOf(document.querySelector('.jc-console .side')!)['padding-top']).toBeUndefined();
+        expect(document.querySelector('.jc-console > .title-drag')).toBeNull();
+    });
+
+    it('keeps Open in and the Demo | Live switch clickable inside the strip that drags the window', async () => {
+        renderConsole(windows(), 'demo');
+        await waitFor(() => expect(strip()).not.toBeNull());
+        const switches = within(strip()).getByRole('group', { name: 'Data' });
+        expect(styleOf(switches)['-webkit-app-region']).toBe('no-drag');
+        for (const button of within(switches).getAllByRole('button'))
+            expect(styleOf(button)['-webkit-app-region']).toBe('no-drag');
+        const slot = strip().querySelector<HTMLElement>('[data-slot="open-in"]')!;
+        const made = document.createElement('button');
+        slot.append(made);
+        expect(styleOf(made)['-webkit-app-region']).toBe('no-drag');
+    });
+
+    it('leaves nothing in a browser tab on Windows, nor on Linux or macOS', async () => {
+        setPlace('tab', windows());
+        renderConsole(windows(), 'live');
+        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
+        expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
+        cleanup();
+        setPlace('window');
+        for (const platform of ['linux', 'darwin'] as const) {
+            renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
             cleanup();
         }
     });

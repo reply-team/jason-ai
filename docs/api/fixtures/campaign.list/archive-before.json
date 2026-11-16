@@ -1,0 +1,35 @@
+{
+  "operation": "campaign.list",
+  "case": "archive-before",
+  "request": {
+    "limit": 100
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cmp_1",
+        "name": "Spring launch",
+        "status": "active",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/spring-launch"
+      },
+      {
+        "id": "cmp_2",
+        "name": "Autumn outreach",
+        "status": "draft",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/autumn-outreach"
+      }
+    ],
+    "next_cursor": null
+  }
+}

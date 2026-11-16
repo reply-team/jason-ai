@@ -56,6 +56,8 @@ export type ApprovalDecisionRequest = { approval_id: string; actor: ActorRef; re
 
 export type DecisionOption = { label: string; detail: string | null };
 export type DecisionReference = { kind: string | null; id: string };
+/** The conversation a question is about, as the runtime recorded it at the raise. */
+export type DecisionThread = { plugin_id: string; thread_id: string };
 export type DecisionSummary = {
     id: string;
     campaign_id: string;
@@ -67,6 +69,11 @@ export type DecisionSummary = {
     answered_by: ActorRef | null;
     campaign_name: string;
     contact_name: string | null;
+    /**
+     * What the question is about: the thread the runtime woke its own responder for and vouches for, or null. Absent from
+     * a runtime older than the field, which says nothing of it.
+     */
+    thread?: DecisionThread | null;
 };
 export type Decision = DecisionSummary & {
     attempt_id: string;
@@ -509,6 +516,24 @@ export type AddContactsRequest = {
     reason?: string;
     actor?: ActorRef;
 };
+/** One person of a list given as payloads, as `campaign.add_contacts` takes one: only the values given. */
+export type ListContact = {
+    first_name?: string;
+    last_name?: string;
+    company?: string;
+    title?: string;
+    time_zone?: string;
+    channels?: { channel: string; value: string }[];
+    custom?: Record<string, string>;
+};
+/** A list added as payloads, each matched by `match_by` so a person held is found and none is added twice. */
+export type ListAddRequest = {
+    campaign_id: string;
+    match_by: string;
+    contacts: ListContact[];
+    reason: string;
+    actor?: ActorRef;
+};
 export type AddContactsResult = {
     campaign_id: string;
     summary: { added: number; already_member: number; rejected: number };
@@ -516,8 +541,10 @@ export type AddContactsResult = {
         index: number;
         status: string;
         contact_id: string | null;
+        /** Whether the runtime made the person, rather than finding one it held; absent from an earlier runtime. */
+        contact_created?: boolean;
         state: string | null;
-        error: { code: string; message: string } | null;
+        error: { code: string; message: string; details?: { field: string; code: string; message: string }[] } | null;
     }[];
 };
 // The person panel: what it reads and what its acts send, as the runtime takes and answers them.

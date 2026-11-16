@@ -1,0 +1,53 @@
+{
+  "operation": "campaign.summary",
+  "case": "archive-before",
+  "request": {
+    "campaign_ids": [
+      "cmp_1",
+      "cmp_2"
+    ],
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 4,
+        "waiting": 2,
+        "failed": 0,
+        "working": 2,
+        "new": 0,
+        "idle": 1,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": true
+      },
+      {
+        "campaign_id": "cmp_2",
+        "people": 1,
+        "waiting": 0,
+        "failed": 0,
+        "working": 0,
+        "new": 1,
+        "idle": 0,
+        "sequence": 0,
+        "out": 0,
+        "removed": 0,
+        "sequence_linked": false
+      }
+    ],
+    "total": {
+      "people": 5,
+      "waiting": 2,
+      "failed": 0,
+      "working": 2,
+      "new": 1,
+      "idle": 1,
+      "sequence": 0,
+      "out": 0,
+      "removed": 0
+    }
+  }
+}

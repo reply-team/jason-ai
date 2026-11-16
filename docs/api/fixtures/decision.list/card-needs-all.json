@@ -15,7 +15,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Spring launch",
-        "contact_name": "Tomas Berg"
+        "contact_name": "Tomas Berg",
+        "thread": null
       },
       {
         "id": "dec_2",
@@ -27,7 +28,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Autumn outreach",
-        "contact_name": "Lena Pohl"
+        "contact_name": "Lena Pohl",
+        "thread": null
       }
     ],
     "next_cursor": null

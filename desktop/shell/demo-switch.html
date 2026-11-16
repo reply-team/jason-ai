@@ -9,12 +9,14 @@ and 38 high, where the page draws its own, in a view of its own (src/demo-page.t
 is the window's drag region, but for the switch itself. It holds no script: Live is a link the view refuses to
 follow and reads as the person's choice (src/demo-page.ts, switchChoice); Demo is the mode in force. It is served alone,
 under the same content policy as the page. Its look is the console's Demo strip: 38 high, padded 0 12 0 16, a dot,
-a line, and the segmented switch.
+a line, and the segmented switch. On Windows the system's caption buttons stand over its right end; the view is told
+the free title bar area in its own coordinates, and the right padding leaves the buttons their width, so the switch
+stands left of them. Without an overlay the area is all of it, and the padding is 12.
 -->
 <style>
 :root { color-scheme: light; }
 html, body { margin: 0; height: 100%; overflow: hidden; -webkit-app-region: drag; }
-body { display: flex; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 12px 0 16px; background: #fff4d6; border-bottom: 1px solid #f2dc9c; color: #6b4e00; font: 500 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: flex; align-items: center; gap: 8px; box-sizing: border-box; padding: 0 12px 0 16px; padding-right: calc(12px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)); background: #fff4d6; border-bottom: 1px solid #f2dc9c; color: #6b4e00; font: 500 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #e0a100; }
 .note { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; user-select: none; }
 .switch { -webkit-app-region: no-drag; flex: none; display: flex; padding: 2px; border-radius: 7px; background: rgba(20, 33, 43, .08); }

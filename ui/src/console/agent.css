@@ -183,7 +183,7 @@
     > .btn.agent-move-resume {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console
     .harness
@@ -324,6 +324,16 @@
     font-size: 13px;
     color: var(--mute);
 }
+/* The archive's card: its sentence, then its button a step below it. */
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-body
+    > .section.archive-agent
+    .btn-row {
+    margin-top: 12px;
+}
 .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row {
     display: grid;
     grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) 170px;
@@ -380,6 +390,12 @@
     }
     .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts {
         grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > .btn {
+        justify-self: start;
     }
     .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt {
         padding-bottom: 0;

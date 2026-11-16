@@ -204,6 +204,16 @@ public static partial class JournalKinds
     public const string ProviderEventObserved = "provider_event_observed";
 
     /// <summary>
+    /// A message the account sent, as a provider's events reported it — by Jason, a sequence or a person in the provider's
+    /// own screens — stored and found to concern the campaign by the provider campaign it belongs to, pinned by the
+    /// campaign's own operations, and by nothing else: the plugin, the stored event, the moment, the channel, the thread and
+    /// the message by their identifiers, and the person where one contact is pinned. Never a subject, a body or a name.
+    /// Only the runtime's own store says one, under the event's own key, once per campaign, which the database holds. Not a
+    /// default manager trigger: a send is the course the campaign planned, and an installation may add it.
+    /// </summary>
+    public const string ProviderSendObserved = "provider_send_observed";
+
+    /// <summary>
     /// A role's verdict on one reply, recorded by <c>reply.record</c>: the plugin, thread and message that name the reply,
     /// its moment, the person where one is named, the category as a word the skills own, the confidence, the reaction
     /// decided and the goal it steers to by id and kind. Never a word of the reply, a subject or a name. Written by that
@@ -406,6 +416,7 @@ public static partial class JournalKinds
         NotificationSent,
         InboundReplyObserved,
         ProviderEventObserved,
+        ProviderSendObserved,
         ReplyClassified,
         MessageSentObserved,
         MessageBounceObserved,

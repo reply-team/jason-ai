@@ -1,6 +1,7 @@
 // Guard 2, the UI's half: every recorded exchange imported here is held to the UI's own types by `satisfies`.
 // A field renamed in the runtime fails `dotnet test` first (the recording), then the typecheck here.
 import type {
+    ListAddRequest,
     Approval,
     ApprovalDecisionRequest,
     ApprovalListRequest,
@@ -144,6 +145,14 @@ import campaignAddContactsOnePerson from '../../../docs/api/fixtures/campaign.ad
 import campaignAddContactsReEnrolExcluded from '../../../docs/api/fixtures/campaign.add_contacts/re-enrol-excluded.json';
 import campaignAddContactsSeveral from '../../../docs/api/fixtures/campaign.add_contacts/several.json';
 import campaignAddContactsToArchived from '../../../docs/api/fixtures/campaign.add_contacts/to-archived.json';
+import campaignAddContactsOwnList from '../../../docs/api/fixtures/campaign.add_contacts/own-list.json';
+import campaignAddContactsOwnListAgain from '../../../docs/api/fixtures/campaign.add_contacts/own-list-again.json';
+import campaignAddContactsOwnListArchived from '../../../docs/api/fixtures/campaign.add_contacts/own-list-archived.json';
+import campaignGetOwnList from '../../../docs/api/fixtures/campaign.get/own-list.json';
+import campaignGetOwnListRunning from '../../../docs/api/fixtures/campaign.get/own-list-running.json';
+import campaignGetOwnListAutomatic from '../../../docs/api/fixtures/campaign.get/own-list-automatic.json';
+import campaignGetOwnListArchived from '../../../docs/api/fixtures/campaign.get/own-list-archived.json';
+import campaignGetOwnListPaused from '../../../docs/api/fixtures/campaign.get/own-list-paused.json';
 import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archived.json';
 import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
@@ -225,6 +234,7 @@ import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-ac
 import contactListByActivityEmpty from '../../../docs/api/fixtures/contact.list/by-activity-empty.json';
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
+import contactListByActivitySentFromTheAccount from '../../../docs/api/fixtures/contact.list/by-activity-sent-from-the-account.json';
 import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
 import contactListByActivitySummaryNewWithoutArchived from '../../../docs/api/fixtures/contact.list/by-activity-summary-new-without-archived.json';
 import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
@@ -259,11 +269,13 @@ import contactThreadsProviderFailed from '../../../docs/api/fixtures/contact.thr
 import contactThreadsTwoThreads from '../../../docs/api/fixtures/contact.threads/two-threads.json';
 import decisionAnswerAnswered from '../../../docs/api/fixtures/decision.answer/answered.json';
 import decisionGetForCampaignRow from '../../../docs/api/fixtures/decision.get/for-campaign-row.json';
+import decisionGetNeedsInboxQuestion from '../../../docs/api/fixtures/decision.get/needs-inbox-question.json';
 import decisionGetNeedsQuestion from '../../../docs/api/fixtures/decision.get/needs-question.json';
 import decisionGetPendingWithOptions from '../../../docs/api/fixtures/decision.get/pending-with-options.json';
 import decisionListByCampaignPending from '../../../docs/api/fixtures/decision.list/by-campaign-pending.json';
 import decisionListDecided from '../../../docs/api/fixtures/decision.list/decided.json';
 import decisionListEmpty from '../../../docs/api/fixtures/decision.list/empty.json';
+import decisionListNeedsInboxQuestions from '../../../docs/api/fixtures/decision.list/needs-inbox-questions.json';
 import decisionListNeedsQuestions from '../../../docs/api/fixtures/decision.list/needs-questions.json';
 import decisionListPending from '../../../docs/api/fixtures/decision.list/pending.json';
 import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/summer-pending.json';
@@ -500,6 +512,7 @@ import journalListPanelDoubted from '../../../docs/api/fixtures/journal.list/pan
 import journalListPanelDoubtedApproved from '../../../docs/api/fixtures/journal.list/panel-doubted-approved.json';
 import journalListPanelMoved from '../../../docs/api/fixtures/journal.list/panel-moved.json';
 import journalListPanelMovedEdited from '../../../docs/api/fixtures/journal.list/panel-moved-edited.json';
+import journalListPersonSentFromTheAccount from '../../../docs/api/fixtures/journal.list/person-sent-from-the-account.json';
 import workitemCountPanelDoubtedApprovedDone from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-done.json';
 import workitemCountPanelDoubtedApprovedNow from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-now.json';
 import workitemCountPanelDoubtedApprovedPlanned from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-planned.json';
@@ -521,6 +534,21 @@ import workitemCountPanelMovedEditedNow from '../../../docs/api/fixtures/workite
 import workitemCountPanelMovedEditedPlanned from '../../../docs/api/fixtures/workitem.count/panel-moved-edited-planned.json';
 import workitemListPanelMovedEditedNow from '../../../docs/api/fixtures/workitem.list/panel-moved-edited-now.json';
 import approvalGetByWorkItem from '../../../docs/api/fixtures/approval.get/by-work-item.json';
+import approvalListArchiveAskedAndGiven from '../../../docs/api/fixtures/approval.list/archive-asked-and-given.json';
+import campaignArchiveArchiveSpring from '../../../docs/api/fixtures/campaign.archive/archive-spring.json';
+import campaignArchiveArchiveSpringAgain from '../../../docs/api/fixtures/campaign.archive/archive-spring-again.json';
+import campaignGetArchiveSpring from '../../../docs/api/fixtures/campaign.get/archive-spring.json';
+import campaignGetArchiveSpringArchived from '../../../docs/api/fixtures/campaign.get/archive-spring-archived.json';
+import campaignListArchiveAfter from '../../../docs/api/fixtures/campaign.list/archive-after.json';
+import campaignListArchiveBefore from '../../../docs/api/fixtures/campaign.list/archive-before.json';
+import campaignSummaryArchiveAfter from '../../../docs/api/fixtures/campaign.summary/archive-after.json';
+import campaignSummaryArchiveBefore from '../../../docs/api/fixtures/campaign.summary/archive-before.json';
+import campaignSummaryArchiveSpring from '../../../docs/api/fixtures/campaign.summary/archive-spring.json';
+import campaignSummaryArchiveSpringArchived from '../../../docs/api/fixtures/campaign.summary/archive-spring-archived.json';
+import decisionListArchivePending from '../../../docs/api/fixtures/decision.list/archive-pending.json';
+import routeResolveArchivePause from '../../../docs/api/fixtures/route.resolve/archive-pause.json';
+import routeResolveArchivePauseUnusable from '../../../docs/api/fixtures/route.resolve/archive-pause-unusable.json';
+import workitemListArchiveOpen from '../../../docs/api/fixtures/workitem.list/archive-open.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -755,6 +783,25 @@ export const fixtures = {
         AddContactsRequest,
         ErrorEnvelope
     >,
+    // The list a person gave in an agent's chat, one story: the agent read as a draft, the list added and added again,
+    // the agent started, its send mode for people who have not replied set to automatic, paused, then archived.
+    'campaign.add_contacts/own-list': campaignAddContactsOwnList satisfies Exchange<ListAddRequest, AddContactsResult>,
+    'campaign.add_contacts/own-list-again': campaignAddContactsOwnListAgain satisfies Exchange<
+        ListAddRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/own-list-archived': campaignAddContactsOwnListArchived satisfies Exchange<
+        ListAddRequest,
+        ErrorEnvelope
+    >,
+    'campaign.get/own-list': campaignGetOwnList satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-running': campaignGetOwnListRunning satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-automatic': campaignGetOwnListAutomatic satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.get/own-list-archived': campaignGetOwnListArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-paused': campaignGetOwnListPaused satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/archived': campaignGetArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/gone': campaignGetGone satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
@@ -968,6 +1015,10 @@ export const fixtures = {
         ContactListRequest,
         Page<Contact>
     >,
+    'contact.list/by-activity-sent-from-the-account': contactListByActivitySentFromTheAccount satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
     'contact.list/by-activity-several': contactListByActivitySeveral satisfies Exchange<
         ContactListRequest,
         Page<Contact>
@@ -1036,6 +1087,10 @@ export const fixtures = {
     'contact.threads/two-threads': contactThreadsTwoThreads satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'decision.answer/answered': decisionAnswerAnswered satisfies Exchange<DecisionAnswerRequest, Decision>,
     'decision.get/for-campaign-row': decisionGetForCampaignRow satisfies Exchange<{ decision_id: string }, Decision>,
+    'decision.get/needs-inbox-question': decisionGetNeedsInboxQuestion satisfies Exchange<
+        { decision_id: string },
+        Decision
+    >,
     'decision.get/needs-question': decisionGetNeedsQuestion satisfies Exchange<{ decision_id: string }, Decision>,
     'decision.get/pending-with-options': decisionGetPendingWithOptions satisfies Exchange<
         { decision_id: string },
@@ -1047,6 +1102,10 @@ export const fixtures = {
     >,
     'decision.list/decided': decisionListDecided satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/empty': decisionListEmpty satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
+    'decision.list/needs-inbox-questions': decisionListNeedsInboxQuestions satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
     'decision.list/needs-questions': decisionListNeedsQuestions satisfies Exchange<
         DecisionListRequest,
         Page<DecisionSummary>
@@ -1418,6 +1477,60 @@ export const fixtures = {
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,
+    'approval.list/archive-asked-and-given': approvalListArchiveAskedAndGiven satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'campaign.archive/archive-spring': campaignArchiveArchiveSpring satisfies Exchange<
+        CampaignTransitionRequest,
+        Campaign
+    >,
+    'campaign.archive/archive-spring-again': campaignArchiveArchiveSpringAgain satisfies Exchange<
+        CampaignTransitionRequest,
+        Campaign
+    >,
+    'campaign.get/archive-spring': campaignGetArchiveSpring satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/archive-spring-archived': campaignGetArchiveSpringArchived satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.list/archive-after': campaignListArchiveAfter satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.list/archive-before': campaignListArchiveBefore satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.summary/archive-after': campaignSummaryArchiveAfter satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-before': campaignSummaryArchiveBefore satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-spring': campaignSummaryArchiveSpring satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-spring-archived': campaignSummaryArchiveSpringArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'decision.list/archive-pending': decisionListArchivePending satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'route.resolve/archive-pause': routeResolveArchivePause satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/archive-pause-unusable': routeResolveArchivePauseUnusable satisfies Exchange<
+        RouteResolveRequest,
+        RouteResolution
+    >,
+    'workitem.list/archive-open': workitemListArchiveOpen satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
     'workitem.list/creating-none': workitemListCreatingNone satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
@@ -1639,6 +1752,10 @@ export const fixtures = {
     >,
     'journal.list/panel-moved': journalListPanelMoved satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/panel-moved-edited': journalListPanelMovedEdited satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/person-sent-from-the-account': journalListPersonSentFromTheAccount satisfies Exchange<
         JournalListRequest,
         Page<JournalEntry>
     >,

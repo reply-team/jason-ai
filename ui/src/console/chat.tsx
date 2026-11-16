@@ -8,8 +8,10 @@ import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
 import { accountsCard } from './card-accounts';
+import { placeCard } from './card-places';
 import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
 import { needsCard } from './card-needs';
+import { lists, ownListCard } from './card-own-list';
 import { peopleCard } from './card-people';
 import { statusCard } from './card-status';
 import {
@@ -620,14 +622,17 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
 
-/** A kind as the line of a card that did not hold what it needs names it. */
+/** A kind as the line of a card that did not hold what it needs names it: the card, by its kind or by where it leads. */
 const kindWords: Readonly<Record<CardKind, string>> = {
-    choice: 'a choice',
-    people_list: 'a people list',
-    agent_status: 'an agent status',
-    needs: 'a needs',
-    accounts: 'an accounts',
-    plan: 'a plan',
+    choice: 'a choice card',
+    people_list: 'a people list card',
+    agent_status: 'an agent status card',
+    needs: 'a needs card',
+    accounts: 'an accounts card',
+    ai_setup: 'the card that opens Connect',
+    reply_setup: 'the card that opens Accounts',
+    plan: 'a plan card',
+    own_list: 'a list card',
 };
 
 /** The line drawn in place of a card that did not draw, in the desktop's words; never anything the block held. */
@@ -637,7 +642,7 @@ export const cardRefusedLine = (kind: CardKind | 'unknown', failure: string): st
         : failure === 'too_long'
           ? 'Jason’s card was too long to read, so it is not shown.'
           : failure === 'schema' && kind !== 'unknown'
-            ? `Jason’s card did not hold what ${kindWords[kind]} card needs, so it is not shown.`
+            ? `Jason’s card did not hold what ${kindWords[kind]} needs, so it is not shown.`
             : 'Jason’s card could not be read, so it is not shown.';
 
 /** The header of each kind's card, in the desktop's words. */
@@ -647,7 +652,10 @@ const cardHeaders: Readonly<Record<CardKind, string>> = {
     agent_status: 'Agent',
     needs: 'Waiting for your decision',
     accounts: 'Accounts',
+    ai_setup: 'AI',
+    reply_setup: 'Reply',
     plan: 'Jason’s proposal',
+    own_list: 'Your list',
 };
 
 /** The words a choice says once it no longer stands, by why; none while it stands or when another entry locked it. */
@@ -784,6 +792,12 @@ function cardView(
                 }
                 case 'accounts':
                     return accountsCard(chat, index, last, cardHeaders.accounts);
+                case 'ai_setup':
+                case 'reply_setup':
+                    // It only leads to a place, and reads nothing.
+                    return placeCard(reading.card.kind, cardHeaders[reading.card.kind]);
+                case 'own_list':
+                    return ownListCard(chat, index, reading.card, last);
             }
     }
 }
@@ -1002,6 +1016,7 @@ function threadOf(chatId: string) {
         asked: unknown;
         read: unknown;
         proposed: unknown;
+        listed: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -1026,6 +1041,8 @@ function threadOf(chatId: string) {
         // A card draws what it read, once its read is answered, and a plan card the drafts the person opened.
         const read = cardReads.value[chatId];
         const proposed = proposals.value[chatId];
+        // A list card draws what its press did, and its rows shown whole.
+        const listed = lists.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
@@ -1039,11 +1056,25 @@ function threadOf(chatId: string) {
             last.asked === asked &&
             last.read === read &&
             last.proposed === proposed &&
+            last.listed === listed &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
         if (!same)
-            last = { chat, host, named, now, counts, held, card, asked, read, proposed, view: threadView(chat, host) };
+            last = {
+                chat,
+                host,
+                named,
+                now,
+                counts,
+                held,
+                card,
+                asked,
+                read,
+                proposed,
+                listed,
+                view: threadView(chat, host),
+            };
         return last!.view;
     });
 }

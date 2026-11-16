@@ -252,10 +252,16 @@ public static class Warmth
     /// <summary>
     /// Whether no line of the item <paramref name="item"/> says its context was patched by anyone but the system:
     /// <c>workitem.update</c> may rewrite any key of an open item's context, and a person or a role is never the system,
-    /// which the runtime alone may act as. Read through the item's own lines.
+    /// which the runtime alone may act as. Read through the item's own lines. With <paramref name="key"/>, only a patch of
+    /// that one key counts against the item, since each patched key writes a line of its own under its name; the key is a
+    /// name of the runtime's own, never a caller's text.
     /// </summary>
-    private static string PatchedOnlyBySystem(string item, string patch) => $"""
+    /// <remarks>
+    /// The one rule a reserved value is held to wherever the runtime vouches for one: the warmth reads here, and a
+    /// question's thread at its raise (<see cref="Responder.ThreadAsync"/>).
+    /// </remarks>
+    internal static string PatchedOnlyBySystem(string item, string patch, string? key = null) => $"""
         NOT EXISTS (SELECT 1 FROM journal AS {patch} INDEXED BY ix_journal_work_item_id_public_id
-            WHERE {patch}.work_item_id = {item}.public_id AND {patch}.kind = 'workitem_context_updated' AND {patch}.actor_type <> 'system')
+            WHERE {patch}.work_item_id = {item}.public_id AND {patch}.kind = 'workitem_context_updated' AND {patch}.actor_type <> 'system'{(key is null ? string.Empty : $" AND {patch}.key = '{key}'")})
         """;
 }

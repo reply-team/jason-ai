@@ -146,6 +146,7 @@ describe('what the console draws from the runtime', () => {
                     answered_by: null,
                     campaign_name: 'Autumn outreach',
                     contact_name: null,
+                    thread: null,
                 },
                 now,
             ),

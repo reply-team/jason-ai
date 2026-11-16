@@ -22,7 +22,8 @@
           "id": "ada"
         },
         "campaign_name": "Autumn outreach",
-        "contact_name": null
+        "contact_name": null,
+        "thread": null
       }
     ],
     "next_cursor": null

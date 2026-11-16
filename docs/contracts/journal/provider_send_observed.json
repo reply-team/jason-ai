@@ -1,0 +1,37 @@
+{
+  "kind": "provider_send_observed",
+  "version": 1,
+  "since": "0.47.0",
+  "summary": "A message the account sent, read from the account's events, reached the campaign whose provider campaign it belongs to.",
+  "subscribable": true,
+  "entities": {
+    "campaign": { "at": "/campaign_id", "presence": "always" },
+    "contact": { "at": "/contact_id", "presence": "sometimes" },
+    "plugin": { "at": "/new/plugin", "presence": "always" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": { "type": "string", "pattern": "^sha256:", "description": "The send's own key as a provider event: a hash over the plugin, the kind, the identifiers it names and its moment." },
+      "old": { "type": "null" },
+      "new": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["plugin", "event_id", "occurred_at", "channel", "contact_id", "attributed_by", "thread", "message"],
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1, "description": "The plugin the account was read through." },
+          "event_id": { "type": "string", "pattern": "^evt_", "description": "The stored provider event." },
+          "occurred_at": { "type": "string", "format": "date-time", "description": "When the message was sent, as the provider stamps it." },
+          "channel": { "type": "string", "enum": ["email", "linkedin", "other"], "description": "The channel the message was sent on." },
+          "contact_id": { "type": ["null", "string"], "pattern": "^cnt_", "description": "The contact the provider's person is pinned to, or null where none is." },
+          "attributed_by": { "type": "string", "enum": ["campaign_pin"], "description": "Which rule found that the send concerns the campaign: the campaign's own pinned identifier for the provider campaign, the only rule a send is found by." },
+          "thread": { "type": ["null", "string"], "minLength": 1, "description": "The provider's thread the message landed on, or null where it names none." },
+          "message": { "type": ["null", "string"], "minLength": 1, "description": "The provider's identifier for the message, or null where it gives none." }
+        }
+      }
+    }
+  }
+}
