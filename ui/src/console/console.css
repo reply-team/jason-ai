@@ -2272,3 +2272,21 @@ body,
 .jc-console .chat-agent-move {
     order: 1;
 }
+/* The rename box carries no field look of its own; in the dark theme it takes the fields' ground and edge, not the
+   browser's grey. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .chat-rename input {
+        padding: 5px 8px;
+        border: 1px solid var(--field-line);
+        border-radius: 7px;
+        background: var(--field-bg);
+        color: var(--ink);
+    }
+}
+:root[data-theme='dark'] .jc-console .chat-rename input {
+    padding: 5px 8px;
+    border: 1px solid var(--field-line);
+    border-radius: 7px;
+    background: var(--field-bg);
+    color: var(--ink);
+}
