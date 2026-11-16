@@ -355,6 +355,15 @@ test('a file is read through one handle only when regular, and never past its ca
     }
 });
 
+test('a device is no regular file: the read of one gives nothing and ends', { skip: process.platform === 'win32' }, async () => {
+    assert.equal(await readRegularFileAtMost('/dev/zero', 10), null);
+});
+
+test('a file that says it is empty and is not gives nothing: the byte past its size is read', { skip: process.platform !== 'linux' }, async () => {
+    // A regular file of the system's that claims no size and has content.
+    assert.equal(await readRegularFileAtMost('/proc/self/status', 4096), null);
+});
+
 // ---- The places that carry an icon ----------------------------------------------------------------------------------
 
 function probes(platform: NodeJS.Platform, present: string[], env: Record<string, string> = {}): Probes {
