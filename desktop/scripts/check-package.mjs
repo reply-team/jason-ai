@@ -245,6 +245,13 @@ function checkForm(app, form) {
     return [...said, ...checkIcons(app, form)];
 }
 
+/** The bundle carries no sample of a demo: the desktop's Demo is a sealed page, and nothing reads a `bundle/demo`. */
+function checkNoDemo(app, platform) {
+    const resources = platform === 'darwin' ? join(app, 'Contents', 'Resources') : join(app, 'resources');
+    if (existsSync(join(resources, 'bundle', 'demo'))) throw new Error(`${app} carries bundle/demo, and no package carries a sample of a demo any more.`);
+    return 'bundle/demo: none';
+}
+
 /**
  * What the package says, line by line; throws when it is not what it was configured to be. `form` is a Linux package's,
  * deb or appimage, and only a Linux package has one.
@@ -257,6 +264,7 @@ export function checkPackage(app, platform, form) {
         ...checkFuses(app, platform),
         ...(platform === 'linux' ? checkForm(app, form) : []),
         ...(platform === 'darwin' ? checkMacScheme(app) : []),
+        checkNoDemo(app, platform),
     ];
 }
 

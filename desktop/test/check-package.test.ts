@@ -238,6 +238,16 @@ test('linux: an AppImage carrying package-type is refused, since electron-update
     assert.throws(() => check(app, 'linux-appimage'), /The AppImage carries resources\/package-type saying deb, so electron-updater would update it as a deb/);
 });
 
+test('a package carrying bundle/demo is refused, on each platform, so the removed sample cannot come back unseen', async (t) => {
+    for (const kind of ['win32', 'darwin', 'linux-deb', 'linux-appimage'] as const) {
+        const app = await made(t, kind);
+        assert.ok(check(app, kind).includes('bundle/demo: none'), kind);
+        const resources = kind === 'darwin' ? join(app, 'Contents', 'Resources') : join(app, 'resources');
+        mkdirSync(join(resources, 'bundle', 'demo'), { recursive: true });
+        assert.throws(() => check(app, kind), /carries bundle\/demo/, kind);
+    }
+});
+
 test('linux: each form is what it says: an AppImage has AppRun at its root, and a deb\'s folder has none', async (t) => {
     const flat = await made(t, 'linux-appimage', { appRun: false });
     assert.throws(() => check(flat, 'linux-appimage'), /holds no AppRun; it is not an AppImage's contents/);

@@ -336,7 +336,8 @@ asks for and the `jason plugin grant` command that grants it, in force at once. 
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
 A sixth package, [`plugins/demo/`](../plugins/demo/README.md), is published with no release: the desktop of 0.44 and
-earlier carried it and placed it in the demo installation it made, and nothing carries it now; its demo is a page that
+earlier carried it and placed it in the demo installation it made, the desktop of 0.45 carried it and placed it nowhere,
+and no desktop carries it from 0.46; its demo is a page that
 runs no installation ([the desktop guide](desktop.md#the-demo)). `jason plugin install demo` has nothing to install.
 It is also the plainest example of a provider package. Its manifest requests no capability, so by §9 it can call no host
 and run no program, and a send made to it is answered `sent` and goes to nobody; it performs `message.send`,

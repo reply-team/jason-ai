@@ -51,11 +51,14 @@ export interface RuntimeLook {
     unreadable?: true;
 }
 
-/** What the person is told when it is the demo's runtime, the sample installation's own and not theirs, that would not stop. */
-export const demoRuntimeWords = 'the demo’s runtime, the sample installation’s own and not yours, is running and did not stop';
+/**
+ * What the person is told when the runtime that did not stop, or may be running, is one an earlier version's demo left:
+ * on that demo's own data directory (`demoDirectory`), not the person's.
+ */
+export const demoRuntimeWords = 'a runtime an earlier version’s demo left, on that demo’s data directory and not yours, may be running and did not stop';
 
-/** What a person does about it: quit the demo from its own window, or stop its runtime on the demo’s data directory. */
-export const demoRuntimeNext = 'Open Jason in the demo and quit it, or stop that runtime with jason runtime stop run with JASON_DATA_DIR set to the demo’s data directory.';
+/** What a person does about it: stop it on the demo's data directory, or take away the run file a dead one left. */
+export const demoRuntimeNext = 'Stop it with jason runtime stop run with JASON_DATA_DIR set to that demo’s data directory (yours with -demo after it); if no Jason runtime is running, deleting the run file in that directory’s run folder lets this go on.';
 
 /** What came of stopping this application's runtime: only `none`, `another` and `stopped` let an update or an uninstall go on. */
 export type StopOutcome =

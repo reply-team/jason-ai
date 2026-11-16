@@ -592,9 +592,8 @@ export interface JasonDesktop {
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
         /**
-         * Whether the demo's sample is being made, said by the desktop when that changes: true as the making begins, false
-         * once the sample is ready or its making failed. Until then the desktop refuses a switch. Answers
-         * the way to stop listening.
+         * Whether the demo's sample is being made, said by the desktop when that changes. A desktop since 0.45 makes no
+         * sample: it answers `preparing: false` and never sends the event. Answers the way to stop listening.
          */
         onPreparing(handler: (preparing: boolean) => void): () => void;
     };

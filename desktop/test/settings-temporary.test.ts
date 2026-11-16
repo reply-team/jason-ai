@@ -45,8 +45,8 @@ test('the name a write of the settings goes through is of the desktop’s shape,
 /** The one writer of the runtime's settings: the Connect cards. */
 const settingsWriters = ['setup.ts'];
 
-/** Whether a source names the runtime's settings file or the secrets file, by the layout's members or the demo's helper. */
-const namesTheSettings = (text: string): boolean => /\b(userSettingsFile|secretsFile|settingsFileOf)\b/.test(text);
+/** Whether a source names the runtime's settings file or the secrets file, by the layout's members. */
+const namesTheSettings = (text: string): boolean => /\b(userSettingsFile|secretsFile)\b/.test(text);
 
 test('every source that names the settings file or the secrets file makes its temporary name through settingsTemporary, never its own', () => {
     const naming = readdirSync(sources)

@@ -121,8 +121,11 @@ test('a demo runtime that will not stop is said to be the demo’s in what the p
         const update = updateRefusal(outcome);
         const removal = uninstallRefusal(outcome);
         for (const text of [update, removal]) {
-            assert.match(text, /the demo’s runtime, the sample installation’s own and not yours, is running and did not stop/);
-            assert.match(text, /Open Jason in the demo and quit it/);
+            assert.match(text, /a runtime an earlier version’s demo left, on that demo’s data directory and not yours, may be running and did not stop/);
+            assert.match(text, /jason runtime stop run with JASON_DATA_DIR set to that demo’s data directory \(yours with -demo after it\)/);
+            assert.match(text, /deleting the run file in that directory’s run folder lets this go on/);
+            assert.doesNotMatch(text, /Open Jason in the demo/);
+            assert.doesNotMatch(text, /the sample installation/);
             assert.doesNotMatch(text, /this application carries/);
         }
     }
