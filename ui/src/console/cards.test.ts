@@ -15,6 +15,7 @@ import {
     type CardPlace,
     type Reading,
 } from './cards';
+import { chipWords } from './chips';
 
 // The chat's card protocol, read the way the page reads it: which fenced blocks are cards, which block of a turn is
 // drawn, and what every block reads as, each row of the table of failures by name.
@@ -507,7 +508,8 @@ describe('a choice’s members', () => {
     // What the reader reaches: the literal words, the string-yielding expressions, the `t()` keys and the literal
     // `aria-label` inside every `<button>` of the files it reads, which paint the chat: its thread and header, the
     // waiting cards and their message editor ("Edit message", which only opens it), the composer's menus, the Reply card,
-    // and the chat bar's moves and their dialog; and the access modes' names and the moves' verbs, read from their tables.
+    // and the chat bar's moves and their dialog; the access modes' names and the moves' verbs, read from their tables; and
+    // the chips' words, which chips.ts publishes.
     // What it cannot reach is listed by hand below.
     const byHand = [
         // The Reply card's row buttons, whose words are arguments of one helper (connect.ts, `rowActs`).
@@ -548,6 +550,8 @@ describe('a choice’s members', () => {
             ...buttonWords(source('card-needs.ts')),
             ...modeNames(source('chat-model.ts')),
             ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
+            // The chips' words, drawn from the tables of chips.ts.
+            ...chipWords,
             ...byHand,
         ];
         // Every file is read: a reader that finds nothing would hold nothing.

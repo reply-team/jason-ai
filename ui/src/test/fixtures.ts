@@ -140,6 +140,7 @@ import campaignSetSendModeWarmAutomatic from '../../../docs/api/fixtures/campaig
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
 import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
+import campaignListCardChips from '../../../docs/api/fixtures/campaign.list/card-chips.json';
 import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.list/campaigns-for-picker.json';
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
@@ -170,6 +171,7 @@ import campaignListContactsSummaryWaitingAfter from '../../../docs/api/fixtures/
 import campaignListContactsUnlinked from '../../../docs/api/fixtures/campaign.list_contacts/unlinked.json';
 import campaignPauseWithReason from '../../../docs/api/fixtures/campaign.pause/with-reason.json';
 import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/after-pause.json';
+import campaignSummaryCardChips from '../../../docs/api/fixtures/campaign.summary/card-chips.json';
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryEveryone from '../../../docs/api/fixtures/campaign.summary/everyone.json';
 import campaignSummaryEveryoneWithoutArchived from '../../../docs/api/fixtures/campaign.summary/everyone-without-archived.json';
@@ -676,6 +678,7 @@ export const fixtures = {
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list/card-chips': campaignListCardChips satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/campaigns-for-picker': campaignListCampaignsForPicker satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -772,6 +775,10 @@ export const fixtures = {
     >,
     'campaign.pause/with-reason': campaignPauseWithReason satisfies Exchange<CampaignTransitionRequest, Campaign>,
     'campaign.start/after-pause': campaignStartAfterPause satisfies Exchange<CampaignTransitionRequest, Campaign>,
+    'campaign.summary/card-chips': campaignSummaryCardChips satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/all': campaignSummaryAll satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/everyone': campaignSummaryEveryone satisfies Exchange<
         CampaignSummaryRequest,

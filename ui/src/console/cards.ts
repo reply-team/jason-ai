@@ -114,6 +114,16 @@ export const passiveWords: readonly string[] = [
     'Open the shared mailbox page',
     'Needs you',
     'You chose this',
+    // The chips (`chips.ts`): a click sends the chip's words as the person's message, and acts on nothing.
+    'What is waiting for me?',
+    'How are my agents doing?',
+    'Help me start a new agent.',
+    'Who should this agent reach?',
+    'Show me the plan',
+    'What can you do here?',
+    'Show me the people',
+    'What happens when it starts?',
+    'How is it going?',
     // The data cards' controls: a read again, which decides nothing, and the places they open.
     'Show now',
     'Refresh',
