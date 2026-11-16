@@ -1302,6 +1302,25 @@ body,
     gap: 6px;
     padding: 8px 16px 0;
 }
+.jc-console .chat-bar .btn.ib {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .chat-bar .btn.ib:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .chat-bar .btn.ib:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 .jc-console .chat-remove {
     margin: 8px 16px 0;
 }

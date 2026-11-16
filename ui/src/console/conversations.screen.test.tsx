@@ -394,6 +394,27 @@ describe('the desktop’s conversations', () => {
         );
     });
 
+    it('draws Rename, Start afresh and Remove as icons that keep their names and say what they do', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', false));
+        const titles: Record<string, string> = {
+            Rename: 'Give this conversation a name of your own',
+            'Start afresh':
+                "The AI's next turn begins without its memory of this conversation; what is shown here stays",
+            Remove: 'Remove this conversation',
+        };
+        for (const [name, title] of Object.entries(titles)) {
+            const button = screen.getByRole('button', { name });
+            expect(button.textContent).toBe('');
+            expect(button.getAttribute('title')).toBe(title);
+            const glyph = button.querySelector('svg');
+            expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+            expect(glyph?.querySelector('path')).toBeTruthy();
+        }
+    });
+
     it('starts a conversation afresh, and removes one only once asked again, saying the host keeps its transcript', async () => {
         const { desktop } = renderConsole();
         const id = await send(desktop, 'Go');
