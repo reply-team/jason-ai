@@ -1,9 +1,9 @@
 import type { Campaign } from '../../api/types';
 import { consoleShell } from '../../platform/console-shell';
-import { ArchiveSection } from './archive';
+import { ArchiveSection, type WasOpen } from './archive';
 import { Details } from './details';
 
-type Props = { campaign: Campaign; now: Date; zone: string; onArchived: (archived: Campaign) => void };
+type Props = { campaign: Campaign; now: Date; zone: string; onArchived: (archived: Campaign, open: WasOpen) => void };
 
 /**
  * The campaign's record as the runtime keeps it; the moves its status allows are in the campaign's header. In the

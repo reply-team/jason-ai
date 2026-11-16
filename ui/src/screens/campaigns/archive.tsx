@@ -12,6 +12,7 @@ import type {
 } from '../../api/types';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
+import { countCancels, jasonMayPauseFirst, many, nothingOpen, type Cancels } from './archive-model';
 import { useCampaignChat } from './campaign-chat';
 import { unfinishedStatuses } from './kind';
 import { provider } from './pause-dialog';
@@ -32,18 +33,18 @@ async function everyPage<T>(api: Api, operation: string, body: Record<string, un
     return items;
 }
 
+/** The counts, or that they could not be read, with the runtime's own words where it gave any. */
+type Counted = { cancels: Cancels } | { unread: string | null };
+
 /**
- * What an archive cancels, as the runtime answers when the confirmation opens: the open work (and how much of it runs
- * now), the approvals on that work still asked and already given, and the questions pending. Null where a read failed.
+ * What the confirmation read as it opened: the agent archived already; or the agent as it is now (null where it could
+ * not be read), what archiving it cancels, and whether its route lets Jason pause the provider's campaign first (null
+ * where that was not read).
  */
-type Cancels = { work: number; running: number; asked: number; given: number; questions: number };
+type Read = { kind: 'archived' } | { kind: 'open'; record: Campaign | null; counted: Counted; usable: boolean | null };
 
-/** Whether Jason itself can pause the provider's campaign before the archive: the campaign's route for the pause. */
-type Before = { name: string; pin: string; pausable: boolean };
-
-type Read =
-    | { kind: 'archived'; record: Campaign }
-    | { kind: 'open'; record: Campaign; cancels: Cancels | null; before: Before | null };
+/** What is said of a read that failed: the runtime's own words where it answered with an error, nothing otherwise. */
+const reasonOf = (error: unknown): string | null => (error instanceof ApiError ? error.message : null);
 
 async function readCancels(api: Api, id: string): Promise<Cancels> {
     const [work, approvals, questions] = await Promise.all([
@@ -60,106 +61,107 @@ async function readCancels(api: Api, id: string): Promise<Cancels> {
         }),
         everyPage<DecisionSummary>(api, 'decision.list', { campaign_id: id, status: 'pending', limit: pageSize }),
     ]);
-    // An approval cancelled with its work is one whose work is open; an approval given to work that has run is left alone.
-    const open = new Set(work.map((item) => item.id));
-    const onOpen = approvals.filter((approval) => open.has(approval.work_item_id));
-    return {
-        work: work.length,
-        running: work.filter((item) => item.status === 'processing').length,
-        asked: onOpen.filter((approval) => approval.status === 'pending').length,
-        given: onOpen.filter((approval) => approval.status === 'approved').length,
-        questions: questions.length,
-    };
+    return countCancels(work, approvals, questions);
 }
 
-/** The provider's campaign this agent is linked to, and whether this agent's route lets Jason pause it there first. */
-async function readBefore(api: Api, record: Campaign): Promise<Before | null> {
-    const pin = (record.external_ids ?? []).find((p) => p.kind === 'campaign');
-    const name = provider(record);
-    if (!pin || !name) return null;
-    // Work for the provider runs in an agent that is live or paused; a draft's waits, so it pauses nothing first.
-    if (record.status !== 'active' && record.status !== 'paused') return { name, pin: pin.value, pausable: false };
-    try {
-        const route = await api.call<RouteResolution>('route.resolve', {
-            campaign_id: record.id,
-            operation: 'campaign.pause',
-        });
-        return { name, pin: pin.value, pausable: route.usable };
-    } catch (error) {
-        if (error instanceof Unpaired) throw error;
-        return { name, pin: pin.value, pausable: false };
-    }
+const pinOf = (campaign: Campaign) => (campaign.external_ids ?? []).find((p) => p.kind === 'campaign');
+
+/** Whether the agent's route for the provider's pause is usable; read only for a pinned agent that could pause first. */
+async function readUsable(api: Api, record: Campaign): Promise<boolean | null> {
+    if (!pinOf(record) || !jasonMayPauseFirst(record.status, true)) return null;
+    const route = await api.call<RouteResolution>('route.resolve', {
+        campaign_id: record.id,
+        operation: 'campaign.pause',
+    });
+    return route.usable;
 }
 
 /** Reads the agent as it is now and, unless it is archived already, what archiving it cancels. */
 async function readArchive(api: Api, id: string): Promise<Read> {
-    const record = await api.call<Campaign>('campaign.get', { campaign_id: id });
-    if (record.status === 'archived') return { kind: 'archived', record };
-    const [cancels, before] = await Promise.allSettled([readCancels(api, id), readBefore(api, record)]);
-    for (const read of [cancels, before])
+    let record: Campaign;
+    try {
+        record = await api.call<Campaign>('campaign.get', { campaign_id: id });
+    } catch (error) {
+        if (error instanceof Unpaired) throw error;
+        return { kind: 'open', record: null, counted: { unread: reasonOf(error) }, usable: null };
+    }
+    if (record.status === 'archived') return { kind: 'archived' };
+    const [cancels, usable] = await Promise.allSettled([readCancels(api, id), readUsable(api, record)]);
+    for (const read of [cancels, usable])
         if (read.status === 'rejected' && read.reason instanceof Unpaired) throw read.reason;
     return {
         kind: 'open',
         record,
-        cancels: cancels.status === 'fulfilled' ? cancels.value : null,
-        before: before.status === 'fulfilled' ? before.value : null,
+        counted: cancels.status === 'fulfilled' ? { cancels: cancels.value } : { unread: reasonOf(cancels.reason) },
+        usable: usable.status === 'fulfilled' ? usable.value : null,
     };
 }
 
 const number = new Intl.NumberFormat('en-US');
 
-/** "3 open work items": a count and its noun, one or many. */
-function many(count: number, one: string, more: string): string {
-    return `${number.format(count)} ${count === 1 ? one : more}`;
-}
-
-/** What archiving cancels, from the counts read as the confirmation opened. Text only. */
-function WhatArchivingCancels({ cancels }: { cancels: Cancels | null }) {
-    if (cancels === null)
+/** What archiving cancels, from the counts read as the confirmation opened, or that they could not be read. */
+function WhatArchivingCancels({ counted, onReadAgain }: { counted: Counted; onReadAgain: () => void }) {
+    if ('unread' in counted)
         return (
             <section className="section archive-cancels" aria-label="What archiving cancels">
-                <p className="muted">
-                    What this agent has open could not be read. Archiving cancels it all the same: its open work, the
-                    approvals on that work and its questions.
+                <p>
+                    What this agent has open could not be read
+                    {counted.unread ? `. The runtime said: ${counted.unread}` : ': the runtime did not answer.'}
                 </p>
+                <p>
+                    Archiving it still cancels its open work, the approvals on that work and its questions, and it
+                    cannot be undone.
+                </p>
+                <div className="btn-row">
+                    <button className="btn" type="button" onClick={onReadAgain}>
+                        Read again
+                    </button>
+                </div>
             </section>
         );
-    const { work, running, asked, given, questions } = cancels;
-    if (work + asked + given + questions === 0)
+    const { cancels } = counted;
+    if (nothingOpen(cancels))
         return (
             <section className="section archive-cancels" aria-label="What archiving cancels">
                 <p>Nothing is open: no work, no approval and no question is waiting.</p>
             </section>
         );
+    const { work, processing, asked, given, questions, finishing } = cancels;
+    const items = [
+        work > 0 &&
+            `${many(work, 'open work item', 'open work items')}${
+                processing > 0
+                    ? `, ${processing === 1 ? 'one of them' : `${number.format(processing)} of them`} processing now and stopped`
+                    : ''
+            }`,
+        asked > 0 && many(asked, 'approval still asked of you', 'approvals still asked of you'),
+        given > 0 && `${many(given, 'approval already given', 'approvals already given')}, whose work then never runs`,
+        questions > 0 && many(questions, 'question waiting for an answer', 'questions waiting for an answer'),
+    ].filter((each): each is string => Boolean(each));
     return (
         <section className="section archive-cancels" aria-label="What archiving cancels">
-            <p>Archiving cancels:</p>
-            <ul>
-                {work > 0 && (
-                    <li>
-                        {many(work, 'open work item', 'open work items')}
-                        {running > 0 &&
-                            `, ${running === 1 ? 'one of them' : `${number.format(running)} of them`} running now and stopped`}
-                    </li>
-                )}
-                {asked > 0 && <li>{many(asked, 'approval still asked of you', 'approvals still asked of you')}</li>}
-                {given > 0 && (
-                    <li>
-                        {many(given, 'approval already given', 'approvals already given')}, whose work then never runs
-                    </li>
-                )}
-                {questions > 0 && (
-                    <li>{many(questions, 'question waiting for an answer', 'questions waiting for an answer')}</li>
-                )}
-            </ul>
-            {work > 0 && <p className="muted">Only a search being stopped still finishes.</p>}
+            {items.length > 0 && (
+                <>
+                    <p>Archiving cancels:</p>
+                    <ul>
+                        {items.map((each) => (
+                            <li key={each}>{each}</li>
+                        ))}
+                    </ul>
+                </>
+            )}
+            {finishing > 0 && (
+                <p className="muted">
+                    {many(finishing, 'search being stopped still finishes', 'searches being stopped still finish')}: the
+                    archive leaves {finishing === 1 ? 'it' : 'them'} to run.
+                </p>
+            )}
         </section>
     );
 }
 
 /** What archiving leaves at the provider, and the way to stop it there first that is true for this agent. */
-function TheProvidersCampaign({ before, chat }: { before: Before; chat: boolean }) {
-    const { name, pin, pausable } = before;
+function TheProvidersCampaign({ name, pin, jasonFirst }: { name: string; pin: string; jasonFirst: boolean }) {
     return (
         <section className="section archive-provider" aria-label={`${name}'s campaign`}>
             <p>
@@ -167,7 +169,7 @@ function TheProvidersCampaign({ before, chat }: { before: Before; chat: boolean 
                 once this agent is archived Jason cannot pause it.
             </p>
             <p>
-                {pausable && chat
+                {jasonFirst
                     ? `To stop it first, ask in this agent's chat to pause it in ${name}, and archive once that work has finished; or pause it in ${name} itself.`
                     : `To stop it first, pause it in ${name} itself, then archive.`}
             </p>
@@ -175,43 +177,47 @@ function TheProvidersCampaign({ before, chat }: { before: Before; chat: boolean 
     );
 }
 
-type DialogProps = { campaign: Campaign; onDone: (archived: Campaign) => void; onClose: () => void };
+/** What the archive cancelled, as the confirmation counted it, or null where it could not: for the page's word after. */
+export type WasOpen = Cancels | null;
+
+type DialogProps = { campaign: Campaign; onDone: (archived: Campaign, open: WasOpen) => void; onClose: () => void };
 
 /** The confirmation: the agent named, that it cannot be undone, and what it cancels, read as it opens. */
 export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const api = useApi();
     const chat = useCampaignChat() !== null;
     const [read, setRead] = useState<Read | null>(null);
-    const [failed, setFailed] = useState(false);
+    const [reading, setReading] = useState(0);
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
-    // One press is one archive: a second press before the answer, a double click, sends nothing more.
+    // The second of two guards against a second archive: a press that lands before React has drawn the button disabled,
+    // the second click of a double click, finds the archive already under way and sends nothing.
     const sending = useRef(false);
     useEffect(() => {
         let current = true;
+        setRead(null);
         readArchive(api, campaign.id).then(
             (answer) => {
                 if (current) setRead(answer);
             },
-            (error: unknown) => {
-                if (!current) return;
-                if (error instanceof Unpaired) session.clear();
-                else setFailed(true);
+            () => {
+                // Only a lost pairing rejects: every other failure is a read that says so.
+                if (current) session.clear();
             },
         );
         return () => {
             current = false;
         };
-    }, [api, campaign.id]);
+    }, [api, campaign.id, reading]);
 
-    const act = async () => {
+    const act = async (open: WasOpen) => {
         if (sending.current) return;
         sending.current = true;
         setBusy(true);
         setRefused(null);
         try {
-            onDone(await store.archive(api, campaign.id, reason.trim() || undefined));
+            onDone(await store.archive(api, campaign.id, reason.trim() || undefined), open);
         } catch (error) {
             sending.current = false;
             if (error instanceof Unpaired) session.clear();
@@ -224,10 +230,19 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     const label = `Archive ${campaign.name}`;
     if (read?.kind === 'archived')
         return (
-            <Dialog title={label} label={label} onClose={onClose} dismiss="Close" buttons={null}>
+            // A dialog of its own key, so it opens anew and, holding no field, takes the focus on Close: Escape reaches it.
+            <Dialog key="archived" title={label} label={label} onClose={onClose} dismiss="Close" buttons={null}>
                 <p>This agent is archived already, from another window or a terminal. Nothing more is done.</p>
             </Dialog>
         );
+    // The provider's campaign is said from the agent as read now, or, where that read failed, from the agent the page
+    // holds; Jason's own pause first is offered only where every fact it needs was read.
+    const agent = read?.kind === 'open' ? (read.record ?? campaign) : campaign;
+    const pin = pinOf(agent);
+    const name = provider(agent);
+    const jasonFirst =
+        chat && read?.kind === 'open' && read.record !== null && jasonMayPauseFirst(read.record.status, read.usable);
+    const open: WasOpen = read?.kind === 'open' && 'cancels' in read.counted ? read.counted.cancels : null;
     return (
         <Dialog
             title={label}
@@ -237,18 +252,22 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
                 <button
                     className="btn danger"
                     type="button"
-                    disabled={busy || (read === null && !failed)}
-                    onClick={() => void act()}
+                    // The first of two guards against a second archive: disabled from the press until the answer.
+                    disabled={busy || read === null}
+                    onClick={() => void act(open)}
                 >
                     Archive
                 </button>
             }
         >
             <p>An archive cannot be undone: nothing brings this agent back.</p>
-            {read === null && !failed && <p className="muted">Reading what this agent has open…</p>}
-            {failed && <WhatArchivingCancels cancels={null} />}
-            {read?.kind === 'open' && <WhatArchivingCancels cancels={read.cancels} />}
-            {read?.kind === 'open' && read.before && <TheProvidersCampaign before={read.before} chat={chat} />}
+            {read === null && <p className="muted">Reading what this agent has open…</p>}
+            {read?.kind === 'open' && (
+                <WhatArchivingCancels counted={read.counted} onReadAgain={() => setReading((n) => n + 1)} />
+            )}
+            {read !== null && pin && name && (
+                <TheProvidersCampaign name={name} pin={pin.value} jasonFirst={jasonFirst} />
+            )}
             <div className="field">
                 <label htmlFor="archive-reason">Reason (optional, kept in the journal)</label>
                 <textarea
@@ -265,7 +284,7 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
     );
 }
 
-type SectionProps = { campaign: Campaign; onArchived: (archived: Campaign) => void };
+type SectionProps = { campaign: Campaign; onArchived: (archived: Campaign, open: WasOpen) => void };
 
 /**
  * The last part of the agent's own Settings: one sentence and the Archive button that opens its confirmation. The act is
@@ -284,8 +303,8 @@ export function ArchiveSection({ campaign, onArchived }: SectionProps) {
         <div className="section archive-agent">
             <h3>Archive this agent</h3>
             <p className="hint">
-                Archiving ends this agent for good and cannot be undone: its open work, its approvals and its questions
-                are cancelled.
+                Archiving ends this agent for good and cannot be undone: its open work, the approvals on that work and
+                its questions are cancelled.
             </p>
             <div className="btn-row">
                 <button className="btn danger" type="button" onClick={() => setOpen(campaign.id)}>
@@ -295,9 +314,9 @@ export function ArchiveSection({ campaign, onArchived }: SectionProps) {
             {open === campaign.id && (
                 <ArchiveDialog
                     campaign={campaign}
-                    onDone={(archived) => {
+                    onDone={(archived, was) => {
                         setOpen(null);
-                        onArchived(archived);
+                        onArchived(archived, was);
                     }}
                     onClose={() => setOpen(null)}
                 />

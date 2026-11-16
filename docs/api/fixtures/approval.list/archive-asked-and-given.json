@@ -14,7 +14,7 @@
     "items": [
       {
         "id": "apr_1",
-        "work_item_id": "wi_4",
+        "work_item_id": "wi_5",
         "campaign_id": "cmp_1",
         "operation": "message.send",
         "status": "approved",

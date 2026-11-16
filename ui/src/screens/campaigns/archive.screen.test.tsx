@@ -12,9 +12,9 @@ import { fixtures } from '../../test/fixtures';
 import { CampaignChat } from './campaign-chat';
 
 // Archiving an agent from its own Settings tab, in the console: one story's recordings (the `archive-` files), where
-// Spring launch is linked to the provider's campaign c_7714 and holds three open work items (one a role running now), an
-// approval still asked, one already given on open work, one given to a send that has gone, and a question; Autumn
-// outreach, a draft, stays in the list.
+// Spring launch is linked to the provider's campaign c_7714 and holds four open work items (one a role processing now,
+// one a search's stop, which the archive leaves to finish), an approval still asked, one already given on open work, one
+// given to a send that has gone, and a question; Autumn outreach, a draft, stays in the list.
 
 const recordedAt = new Date('2026-10-16T09:05:00Z');
 const spring = fixtures['campaign.get/archive-spring'].response;
@@ -92,7 +92,7 @@ describe('Archiving an agent from its Settings', () => {
         expect(part.parentElement!.lastElementChild).toBe(part);
         expect(part.parentElement!.classList.contains('panel-body')).toBe(true);
         expect(part.textContent).toContain(
-            'Archiving ends this agent for good and cannot be undone: its open work, its approvals and its questions are cancelled.',
+            'Archiving ends this agent for good and cannot be undone: its open work, the approvals on that work and its questions are cancelled.',
         );
         const button = within(part).getByRole('button', { name: 'Archive' });
         expect(button.className).toBe('btn danger');
@@ -112,12 +112,13 @@ describe('Archiving an agent from its Settings', () => {
                 .getAllByRole('listitem')
                 .map((each) => each.textContent),
         ).toEqual([
-            '3 open work items, one of them running now and stopped',
+            '3 open work items, one of them processing now and stopped',
             '1 approval still asked of you',
             '1 approval already given, whose work then never runs',
             '1 question waiting for an answer',
         ]);
-        expect(cancels.textContent).toContain('Only a search being stopped still finishes.');
+        // The search's stop is not among what is cancelled: the archive leaves it to run, and the confirmation says so.
+        expect(cancels.textContent).toContain('1 search being stopped still finishes: the archive leaves it to run.');
         // The reads are the ones recorded: every open item, the approvals asked and given, the questions, and the pause's route.
         expect(sent(api, 'workitem.list')).toEqual([fixtures['workitem.list/archive-open'].request]);
         expect(sent(api, 'approval.list')).toEqual([fixtures['approval.list/archive-asked-and-given'].request]);
@@ -164,8 +165,8 @@ describe('Archiving an agent from its Settings', () => {
         fireEvent.doubleClick(confirm);
         release();
 
-        expect((await screen.findByText(new RegExp(`^${spring.name} is archived\\.`))).textContent).toBe(
-            `${spring.name} is archived. Its open work, the approvals on that work and its questions are cancelled.`,
+        expect((await screen.findByText(new RegExp(`^${spring.name} is archived`))).textContent).toBe(
+            `${spring.name} is archived: 3 open work items, 2 approvals and 1 question are cancelled.`,
         );
         expect(sent(api, 'campaign.archive')).toEqual([written(fixtures['campaign.archive/archive-spring'].request)]);
         // Back on the list, read again: the archived agent has left it, and no agent is open.
@@ -248,7 +249,7 @@ describe('Archiving an agent from its Settings', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
 
         await screen.findByText(
-            `${spring.name} is archived. Its open work, the approvals on that work and its questions are cancelled.`,
+            `${spring.name} is archived: 3 open work items, 2 approvals and 1 question are cancelled.`,
         );
         expect(sent(api, 'campaign.archive')).toEqual([
             written(fixtures['campaign.archive/archive-spring-again'].request),
@@ -262,29 +263,94 @@ describe('Archiving an agent from its Settings', () => {
             'campaign.get/archive-spring-archived',
         );
         open(api, settings);
-        const dialog = await confirmation();
+        await confirmation();
 
-        expect((await within(dialog).findByText(/archived already/)).textContent).toBe(
+        // The answer opens a dialog of its own in place of the one that was reading.
+        const said = await screen.findByText(/archived already/);
+        const dialog = said.closest('[role="dialog"]') as HTMLElement;
+        expect(said.textContent).toBe(
             'This agent is archived already, from another window or a terminal. Nothing more is done.',
         );
         expect(within(dialog).queryByRole('button', { name: 'Archive' })).toBeNull();
-        expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
+        // With no field to take it, the focus is on Close, so Escape leaves this one too.
+        const close = within(dialog).getByRole('button', { name: 'Close' });
+        await waitFor(() => expect(document.activeElement).toBe(close));
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(sent(api, 'workitem.list')).toEqual([]);
         expect(sent(api, 'campaign.archive')).toEqual([]);
     });
 
-    it('a read that fails says what is open cannot be read, and Archive is still the person’s to press', async () => {
+    it('counts that cannot be read are said plainly, with why, that it still cannot be undone, and are read again', async () => {
         const api = before();
-        api.unreachable('workitem.list');
+        const back = api.unreachable('workitem.list');
         open(api, settings);
         const dialog = await confirmation();
 
         const cancels = await within(dialog).findByRole('region', { name: 'What archiving cancels' });
-        expect(cancels.textContent).toBe(
-            'What this agent has open could not be read. Archiving cancels it all the same: its open work, the approvals on that work and its questions.',
+        expect(Array.from(cancels.querySelectorAll('p'), (p) => p.textContent)).toEqual([
+            'What this agent has open could not be read: the runtime did not answer.',
+            'Archiving it still cancels its open work, the approvals on that work and its questions, and it cannot be undone.',
+        ]);
+        // The person may archive all the same: the facts that could not be read are said to be unread.
+        expect((within(dialog).getByRole('button', { name: 'Archive' }) as HTMLButtonElement).disabled).toBe(false);
+        // The provider's paragraph stands, read from the agent as it is.
+        expect(within(dialog).getByRole('region', { name: "Reply's campaign" })).toBeTruthy();
+
+        back();
+        fireEvent.click(within(cancels).getByRole('button', { name: 'Read again' }));
+        const counted = await within(dialog).findByText('Archiving cancels:');
+        expect(counted.closest('section')!.textContent).toContain('3 open work items');
+        expect(sent(api, 'workitem.list')).toEqual([
+            fixtures['workitem.list/archive-open'].request,
+            fixtures['workitem.list/archive-open'].request,
+        ]);
+        expect(sent(api, 'campaign.archive')).toEqual([]);
+    });
+
+    it("when the agent itself cannot be read, the provider's paragraph is said from the agent the page holds", async () => {
+        const api = before();
+        open(api, settings);
+        await archivePart();
+        // The page has read the agent; the confirmation's own read of it is not answered.
+        api.unreachable('campaign.get');
+        const dialog = await confirmation();
+
+        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        expect(provider.textContent).toContain(
+            "Reply's campaign c_7714 is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.",
+        );
+        // Whether Jason could pause it first was never read, so the way is the provider's own.
+        expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
+        expect(within(dialog).getByRole('region', { name: 'What archiving cancels' }).textContent).toContain(
+            'could not be read',
         );
         expect((within(dialog).getByRole('button', { name: 'Archive' }) as HTMLButtonElement).disabled).toBe(false);
-        expect(sent(api, 'campaign.archive')).toEqual([]);
+        expect(sent(api, 'route.resolve')).toEqual([]);
+    });
+
+    it("a live agent whose route cannot pause the provider's campaign is offered the provider's own way only", async () => {
+        const api = before().answer('route.resolve', 'route.resolve/archive-pause-unusable');
+        open(api, settings);
+        const dialog = await confirmation();
+
+        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
+        expect(provider.textContent).not.toContain('chat');
+        expect(sent(api, 'route.resolve')).toEqual([fixtures['route.resolve/archive-pause-unusable'].request]);
+    });
+
+    it("a live agent whose route for the pause cannot be read is offered the provider's own way only", async () => {
+        const api = before();
+        api.unreachable('route.resolve');
+        open(api, settings);
+        const dialog = await confirmation();
+
+        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
+        expect(provider.textContent).not.toContain('chat');
+        // The counts were read all the same.
+        expect(within(dialog).getByText('Archiving cancels:')).toBeTruthy();
     });
 
     it('the classic shell draws the record alone, with no Archive', async () => {

@@ -445,6 +445,7 @@ public static class ApiFixtures
         "route.list/channel-routes",
         "route.list/empty",
         "route.resolve/archive-pause",
+        "route.resolve/archive-pause-unusable",
         "route.resolve/card-plan-message-send",
         "route.resolve/card-plan-no-route",
         "route.resolve/elsewhere",

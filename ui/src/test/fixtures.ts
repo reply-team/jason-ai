@@ -447,6 +447,7 @@ import campaignSummaryArchiveSpring from '../../../docs/api/fixtures/campaign.su
 import campaignSummaryArchiveSpringArchived from '../../../docs/api/fixtures/campaign.summary/archive-spring-archived.json';
 import decisionListArchivePending from '../../../docs/api/fixtures/decision.list/archive-pending.json';
 import routeResolveArchivePause from '../../../docs/api/fixtures/route.resolve/archive-pause.json';
+import routeResolveArchivePauseUnusable from '../../../docs/api/fixtures/route.resolve/archive-pause-unusable.json';
 import workitemListArchiveOpen from '../../../docs/api/fixtures/workitem.list/archive-open.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
@@ -1155,6 +1156,10 @@ export const fixtures = {
         Page<DecisionSummary>
     >,
     'route.resolve/archive-pause': routeResolveArchivePause satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'route.resolve/archive-pause-unusable': routeResolveArchivePauseUnusable satisfies Exchange<
+        RouteResolveRequest,
+        RouteResolution
+    >,
     'workitem.list/archive-open': workitemListArchiveOpen satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>

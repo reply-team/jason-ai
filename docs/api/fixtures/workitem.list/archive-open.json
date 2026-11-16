@@ -99,6 +99,34 @@
         "campaign_name": "Spring launch",
         "contact_name": "Tomas Berg",
         "running_since": "2026-10-16T09:00:00.000Z"
+      },
+      {
+        "id": "wi_4",
+        "campaign_id": "cmp_1",
+        "contact_id": null,
+        "kind": "provider_op",
+        "role": null,
+        "operation": "audience.search_cancel",
+        "execution_profile": null,
+        "status": "created",
+        "eligible": true,
+        "priority": 0,
+        "not_before": null,
+        "due_at": null,
+        "retry_after": null,
+        "created_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "attempt_count": 0,
+        "current_attempt_id": null,
+        "last_error": null,
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "finished_at": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "running_since": null
       }
     ],
     "next_cursor": null

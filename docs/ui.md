@@ -211,15 +211,18 @@ agent's Settings is where you archive it (`jason campaign archive`, with your re
 which opens a confirmation that names the agent and says an archive cannot be undone. As it opens, it reads the agent
 again and what archiving cancels, every page of each (`jason workitem list` of its unfinished work, `jason approval
 list` of the approvals asked and given, `jason decision list` of its pending questions), and says how many open work
-items it cancels and how many of them run now and are stopped, how many approvals still asked of you, how many already
-given whose work then never runs, and how many questions; a search being stopped still finishes. Archive waits until
-that is read, and a read that fails says what is open could not be read. Where a provider's campaign is pinned to the
-agent, it says that campaign is left as it is, keeps sending if it is live there, and cannot be paused by Jason once
-the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or paused and its route
-lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by asking in the agent's
-chat, and always in the provider itself. One press sends one archive. The page then goes back to the list, read again
-without the agent, and says the agent is archived and what was cancelled; an archived agent's Settings say it is
-archived and offer nothing, and a confirmation opened after another window archived the agent says so. The browser
+items it cancels and how many of them are processing now and are stopped, how many approvals still asked of you, how
+many already given whose work then never runs, and how many questions; a search being stopped is not counted among them,
+and is said to still finish. Archive waits until that is read. A read that fails says what is open could not be read,
+with what the runtime said or that it did not answer, that the archive still cancels it and cannot be undone, and offers
+**Read again**. Where a provider's campaign is pinned to the agent, from the agent as read again or, where that read
+fails, as the page holds it, it says that campaign is left as it is, keeps sending if it is live there, and cannot be
+paused by Jason once the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or
+paused and its route lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by
+asking in the agent's chat, and always in the provider itself. One press sends one archive. The page then goes back to
+the list, read again without the agent, and says the agent is archived and what was cancelled, only what there was; an
+archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
+the agent says so. The browser
 shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
