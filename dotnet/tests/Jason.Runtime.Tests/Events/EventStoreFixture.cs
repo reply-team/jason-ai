@@ -299,6 +299,18 @@ internal sealed class EventStoreFixture : IDisposable
         ["bounce"] = "hard",
     };
 
+    public static JsonObject Sent(string? campaign = "p_1", string contact = "c_1001", string? thread = "t_501", string? message = "m_89", DateTime? at = null) => new()
+    {
+        ["kind"] = "message_sent",
+        ["id"] = null,
+        ["occurred_at"] = Stamp(at ?? Noon.AddHours(-3)),
+        ["contact"] = contact,
+        ["campaign"] = campaign,
+        ["thread"] = thread,
+        ["message"] = message,
+        ["channel"] = "email",
+    };
+
     public static string Stamp(DateTime moment) => moment.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>The lines of one kind a campaign holds, oldest first.</summary>
@@ -308,12 +320,14 @@ internal sealed class EventStoreFixture : IDisposable
         return await db.Journal.AsNoTracking().Where(entry => entry.CampaignId == campaign.Id && entry.Kind == kind).OrderBy(entry => entry.Id).ToListAsync();
     }
 
-    /// <summary>Every line of the two kinds the store writes, in every campaign.</summary>
+    /// <summary>Every line of the three kinds the store writes about a campaign, in every campaign.</summary>
     public async Task<List<JournalEntry>> AllLinesAsync()
     {
         await using var db = Open();
         return await db.Journal.AsNoTracking()
-            .Where(entry => entry.Kind == JournalKinds.InboundReplyObserved || entry.Kind == JournalKinds.ProviderEventObserved)
+            .Where(entry => entry.Kind == JournalKinds.InboundReplyObserved
+                || entry.Kind == JournalKinds.ProviderEventObserved
+                || entry.Kind == JournalKinds.ProviderSendObserved)
             .OrderBy(entry => entry.Id)
             .ToListAsync();
     }

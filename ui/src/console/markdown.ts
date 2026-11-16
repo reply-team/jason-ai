@@ -41,6 +41,29 @@ export function markdown(source: string): Block[] {
     return blocks(text.split('\n'), 0);
 }
 
+/**
+ * A code fence of the text's top level, as `markdown` reads it: the line it opens on and the line that closes it (null
+ * when nothing does, and it runs to the end), counted in the text's lines once its line breaks are `\n`; how many spaces
+ * stand before its mark; the mark; and the rest of its opening line, its info string. A fence inside a list item or a
+ * quote is that block's, and a fence inside a fence is its text: neither is one of these.
+ */
+export interface Fence {
+    open: number;
+    close: number | null;
+    indent: number;
+    mark: string;
+    info: string;
+}
+
+/** The fences of the text's top level, in order, read by the same walk as `markdown`; none for a text it leaves unread. */
+export function fences(source: string): Fence[] {
+    const text = source.replace(/\r\n?/g, '\n');
+    if (text.length > maxLength) return [];
+    const found: Fence[] = [];
+    blocks(text.split('\n'), 0, found);
+    return found;
+}
+
 const asText = (lines: readonly string[]): Block => ({
     kind: 'paragraph',
     children: [{ kind: 'text', text: lines.join('\n') }],
@@ -71,7 +94,8 @@ function startsBlock(line: string): boolean {
     return fenceLine.test(line) || headingStart.test(line) || quoteLine.test(line) || itemLine.test(line);
 }
 
-function blocks(lines: readonly string[], depth: number): Block[] {
+/** The blocks of `lines`; `found`, given at the top level alone, takes each fence as it is read. */
+function blocks(lines: readonly string[], depth: number, found?: Fence[]): Block[] {
     if (depth >= maxDepth) return lines.some((line) => !blank(line)) ? [asText(trimmed(lines))] : [];
     const out: Block[] = [];
     let at = 0;
@@ -85,12 +109,20 @@ function blocks(lines: readonly string[], depth: number): Block[] {
         if (fence) {
             const mark = fence[1]!;
             const indent = indentOf(line);
+            const open = at;
             const body: string[] = [];
             at++;
             while (at < lines.length && !closesFence(lines[at]!, mark)) {
                 body.push(lines[at]!.replace(new RegExp(`^ {0,${indent}}`), ''));
                 at++;
             }
+            found?.push({
+                open,
+                close: at < lines.length ? at : null,
+                indent,
+                mark,
+                info: line.slice(fence[0].length),
+            });
             at++;
             out.push({ kind: 'code', text: body.join('\n') });
             continue;

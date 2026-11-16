@@ -205,8 +205,12 @@ export interface DesktopRefusal {
  */
 export type DesktopKeptEntry =
     | { kind: 'user'; text: string }
-    /** `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. */
-    | { kind: 'text'; text: string; plan?: true }
+    /**
+     * `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. `at`, when
+     * present, is the moment the desktop kept the words, ISO-8601 UTC: a card they hold was asked then. An earlier
+     * desktop kept none.
+     */
+    | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
     | { kind: 'error'; text: string }
@@ -231,8 +235,11 @@ export type DesktopChatEvent =
      * `detail` the command, path, query or tool name it acted on, shown beneath them as text.
      */
     | { kind: 'step'; text: string; detail?: string }
-    /** A message of the agent's, whole: shown as its own bubble, as text. */
-    | { kind: 'text'; text: string }
+    /**
+     * A message of the agent's, whole: shown as its own bubble, as text. `at` is the moment the desktop kept it, as the
+     * kept entry holds it; an earlier desktop says none.
+     */
+    | { kind: 'text'; text: string; at?: string }
     /**
      * The agent asks to do something the permission model does not settle on its own: `request` is the id to answer
      * by `chat.answer`, `title` the act in a few words, `detail` the command or path in full, and `remember` what
@@ -703,6 +710,13 @@ export interface JasonDesktop {
          * most 200 lines a call; more is refused.
          */
         feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * A card the AI asked for in the chat did not draw: the desktop writes one line of its log, `chat_card_refused`,
+         * with the card's kind (one of the six, or `unknown`) and why (`kind_unknown`, `too_long`, `malformed` or
+         * `schema`), and nothing of what the block held; a value outside those lists writes nothing. A place with no
+         * desktop's log, a tab or none, refuses it in its own words.
+         */
+        cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
     };
     fullAccess: {
         /** The standing choice of Full access, or null when none stands. */

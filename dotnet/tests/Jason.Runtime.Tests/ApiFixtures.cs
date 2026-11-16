@@ -36,15 +36,29 @@ public static class ApiFixtures
     //                     card-choice-acts|-none (a person's pause since a moment, and none), campaign.activity card-status-30-days,
     //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
     //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
-    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
+    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.get|summary
     //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
-    //                     card-chips, plugin.list|route.list card-accounts.
+    //                     card-chips, plugin.list|route.list card-accounts, and last an archived campaign:
+    //                     campaign.get|summary|list_contacts, approval.list|decision.list card-archived, campaign.activity
+    //                     card-archived-30-days; then approval.get card-needs-pending, decision.get card-needs-question, and
+    //                     after a person approves that approval, approval.get card-needs-decided.
     //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
     //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
     //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
     //                     campaign.archive archive-spring|-spring-again (the agent page's archive, its own story).
+    //
+    // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
+    // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
+    // needs-message-parked, workitem.update needs-message-edited, approval.list needs-after-edit (the person's edit of
+    // the message), decision.list needs-questions and decision.get needs-question (a question beside them),
+    // approval.list needs-first-page|-next-page (two more than the default page, read by its cursor), approval.get
+    // needs-page-two, workitem.get needs-page-two-parked, approval.approve needs-page-two-approved and approval.list
+    // needs-next-page-after (the second page's first approved, the page read again).
+    // A second Needs you story, two first messages of one campaign (NeedsExchangesTests, its own ids): approval.list
+    // needs-two and needs-two-after, approval.get needs-two-first|-second, workitem.get needs-two-first-parked and
+    // approval.approve needs-two-first-approved (the first approved, the second left waiting).
     //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
     // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
@@ -66,16 +80,25 @@ public static class ApiFixtures
         "approval.approve/approved-and-allowed",
         "approval.approve/from-campaign-row",
         "approval.approve/from-campaign-row-again",
+        "approval.approve/needs-page-two-approved",
+        "approval.approve/needs-two-first-approved",
         "approval.approve/panel-doubted",
         "approval.get/by-work-item",
         "approval.get/card-invitation",
         "approval.get/card-message",
         "approval.get/card-message-reasked",
         "approval.get/card-message-withdrawn",
+        "approval.get/card-needs-decided",
+        "approval.get/card-needs-pending",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
         "approval.get/modes-chosen",
+        "approval.get/needs-message",
+        "approval.get/needs-page-two",
+        "approval.get/needs-reply",
+        "approval.get/needs-two-first",
+        "approval.get/needs-two-second",
         "approval.get/other-pending",
         "approval.get/panel-doubted",
         "approval.get/panel-moved",
@@ -95,6 +118,7 @@ public static class ApiFixtures
         "approval.list/archive-asked-and-given",
         "approval.list/by-campaign-pending",
         "approval.list/by-work-item",
+        "approval.list/card-archived",
         "approval.list/card-invitation-pending",
         "approval.list/card-message-after-edit",
         "approval.list/card-message-pending",
@@ -106,6 +130,13 @@ public static class ApiFixtures
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/messages-pending",
+        "approval.list/needs-after-edit",
+        "approval.list/needs-first-page",
+        "approval.list/needs-inbox",
+        "approval.list/needs-next-page",
+        "approval.list/needs-next-page-after",
+        "approval.list/needs-two",
+        "approval.list/needs-two-after",
         "approval.list/one-mode-unset",
         "approval.list/panel-doubted",
         "approval.list/panel-moved",
@@ -139,6 +170,7 @@ public static class ApiFixtures
         "campaign.activity/all-today",
         "campaign.activity/audience",
         "campaign.activity/audience-nobody-landed",
+        "campaign.activity/card-archived-30-days",
         "campaign.activity/card-status-30-days",
         "campaign.activity/last-7-days",
         "campaign.activity/many",
@@ -177,9 +209,11 @@ public static class ApiFixtures
         "campaign.get/archive-spring",
         "campaign.get/archive-spring-archived",
         "campaign.get/archived",
+        "campaign.get/card-archived",
         "campaign.get/card-plan-draft",
         "campaign.get/card-status",
         "campaign.get/card-status-draft",
+        "campaign.get/card-unknown-campaign",
         "campaign.get/details",
         "campaign.get/gone",
         "campaign.get/gone-here",
@@ -223,6 +257,7 @@ public static class ApiFixtures
         "campaign.list_contacts/audience-activity-replied",
         "campaign.list_contacts/audience-summary-waiting",
         "campaign.list_contacts/audience-unknown",
+        "campaign.list_contacts/card-archived",
         "campaign.list_contacts/card-people-empty",
         "campaign.list_contacts/card-people-first",
         "campaign.list_contacts/card-people-query",
@@ -258,6 +293,7 @@ public static class ApiFixtures
         "campaign.summary/audience-two-campaigns",
         "campaign.summary/audience-unknown",
         "campaign.summary/audience-without-archived",
+        "campaign.summary/card-archived",
         "campaign.summary/card-chips",
         "campaign.summary/card-plan-draft",
         "campaign.summary/card-status",
@@ -340,18 +376,22 @@ public static class ApiFixtures
         "contact.update/person-saved",
         "decision.answer/answered",
         "decision.answer/card-free-text",
+        "decision.get/card-needs-question",
         "decision.get/card-question-2",
         "decision.get/card-question-3",
         "decision.get/for-campaign-row",
+        "decision.get/needs-question",
         "decision.get/pending-with-options",
         "decision.list/archive-pending",
         "decision.list/by-campaign-pending",
+        "decision.list/card-archived",
         "decision.list/card-needs-all",
         "decision.list/card-questions-after-answer",
         "decision.list/card-questions-pending",
         "decision.list/card-status-waiting",
         "decision.list/decided",
         "decision.list/empty",
+        "decision.list/needs-questions",
         "decision.list/pending",
         "decision.list/summer-pending",
         "journal.kinds/first-page",
@@ -550,6 +590,9 @@ public static class ApiFixtures
         "workitem.get/card-message-parked",
         "workitem.get/expired",
         "workitem.get/failed",
+        "workitem.get/needs-message-parked",
+        "workitem.get/needs-page-two-parked",
+        "workitem.get/needs-two-first-parked",
         "workitem.get/open",
         "workitem.get/panel-doubted",
         "workitem.get/panel-doubted-approved",
@@ -598,6 +641,7 @@ public static class ApiFixtures
         "workitem.update/card-message-edited",
         "workitem.update/dates",
         "workitem.update/finished-meanwhile",
+        "workitem.update/needs-message-edited",
     ];
 
     public static string Root => Path.Combine(RepositoryTree.Root(), "docs", "api", "fixtures");

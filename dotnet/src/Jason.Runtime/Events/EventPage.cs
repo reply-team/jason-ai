@@ -69,6 +69,9 @@ public sealed record ReadEvent(string Kind, DateTimeOffset OccurredAt, JsonObjec
 
     public const string Bounce = "bounce";
 
+    /// <summary>A message the account sent to a person, by whoever sent it.</summary>
+    public const string MessageSent = "message_sent";
+
     /// <summary>The word <c>moved_by</c> says a message the other side wrote with.</summary>
     public const string MovedByOtherSide = "other_side";
 
@@ -82,6 +85,7 @@ public sealed record ReadEvent(string Kind, DateTimeOffset OccurredAt, JsonObjec
         [ReplyDetected] = ["contact", "campaign", "thread"],
         [InvitationAccepted] = ["contact", "campaign", "account"],
         [Bounce] = ["contact", "campaign", "message"],
+        [MessageSent] = ["contact", "campaign", "thread", "message"],
     };
 
     /// <summary>The string a field holds, or null where it holds none.</summary>

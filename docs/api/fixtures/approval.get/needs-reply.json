@@ -1,0 +1,149 @@
+{
+  "operation": "approval.get",
+  "case": "needs-reply",
+  "request": {
+    "approval_id": "apr_2"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_2",
+    "work_item_id": "wi_2",
+    "campaign_id": "cmp_2",
+    "operation": "conversation.reply",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-2",
+    "subject": {
+      "binding_identity": "sha256:recorded-3",
+      "input": {
+        "args": {
+          "channel": "email",
+          "thread": {
+            "external_id": "t_501"
+          },
+          "body": "Thanks Kai, Thursday at ten works for me."
+        },
+        "contacts": [
+          {
+            "id": "cnt_1",
+            "first_name": "Kai",
+            "last_name": "Lindt",
+            "channels": [
+              {
+                "channel": "email",
+                "value": "kai@example.test",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_2",
+          "name": "Autumn outreach",
+          "status": "active",
+          "external_ids": {}
+        },
+        "idempotency_key": "answer-t_501-1"
+      },
+      "operation": "conversation.reply",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_2"
+    },
+    "preview": {
+      "summary": "Reply in the provider's thread t_501 to kai@example.test by email, from the account that owns the thread and to nobody else: Thanks Kai, Thursday at ten works for me.",
+      "highlights": {
+        "/contacts/0/channels/0/value": "kai@example.test",
+        "/args/channel": "email",
+        "/args/thread": {
+          "external_id": "t_501"
+        },
+        "/args/reply_to_message": null,
+        "/args/body": "Thanks Kai, Thursday at ten works for me."
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_2",
+        "name": "Autumn outreach"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Kai Lindt",
+        "channel": "email",
+        "value": "kai@example.test"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-3",
+      "subject": {
+        "binding_identity": "sha256:recorded-3",
+        "input": {
+          "args": {
+            "channel": "email",
+            "thread": {
+              "external_id": "t_501"
+            },
+            "body": "Thanks Kai, Thursday at ten works for me."
+          },
+          "contacts": [
+            {
+              "id": "cnt_1",
+              "first_name": "Kai",
+              "last_name": "Lindt",
+              "channels": [
+                {
+                  "channel": "email",
+                  "value": "kai@example.test",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_2",
+            "name": "Autumn outreach",
+            "status": "active",
+            "external_ids": {}
+          },
+          "idempotency_key": "answer-t_501-1"
+        },
+        "operation": "conversation.reply",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_2"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-3",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Autumn outreach",
+    "contact_name": "Kai Lindt",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

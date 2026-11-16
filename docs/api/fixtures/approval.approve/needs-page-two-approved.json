@@ -1,0 +1,170 @@
+{
+  "operation": "approval.approve",
+  "case": "needs-page-two-approved",
+  "request": {
+    "approval_id": "apr_102",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_102",
+    "work_item_id": "wi_103",
+    "campaign_id": "cmp_1",
+    "operation": "message.send",
+    "operation_version": 1,
+    "status": "approved",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-105",
+    "subject": {
+      "binding_identity": "sha256:recorded-3",
+      "input": {
+        "args": {
+          "channel": "email",
+          "sender": {
+            "external_id": "s_12",
+            "address": "owner@example.test"
+          },
+          "message": {
+            "format": "email",
+            "subject": "Notes from the meetup",
+            "body": "Hi Person, thanks for the talk at the meetup."
+          }
+        },
+        "contacts": [
+          {
+            "id": "cnt_3",
+            "first_name": "Person",
+            "last_name": "100",
+            "channels": [
+              {
+                "channel": "email",
+                "value": "person100@example.test",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {}
+        }
+      },
+      "operation": "message.send",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_103"
+    },
+    "preview": {
+      "summary": "Send person100@example.test a message by email, from the provider's account s_12 (owner@example.test), outside any campaign — subject: Notes from the meetup; text: Hi Person, thanks for the talk at the meetup.; send after: —",
+      "highlights": {
+        "/contacts/0/channels/0/value": "person100@example.test",
+        "/args/channel": "email",
+        "/args/sender": {
+          "external_id": "s_12",
+          "address": "owner@example.test"
+        },
+        "/args/message": {
+          "format": "email",
+          "subject": "Notes from the meetup",
+          "body": "Hi Person, thanks for the talk at the meetup."
+        },
+        "/args/message/compose": null,
+        "/args/send_after": null
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_3",
+        "name": "Person 100",
+        "channel": "email",
+        "value": "person100@example.test"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-3",
+      "subject": {
+        "binding_identity": "sha256:recorded-3",
+        "input": {
+          "args": {
+            "channel": "email",
+            "sender": {
+              "external_id": "s_12",
+              "address": "owner@example.test"
+            },
+            "message": {
+              "format": "email",
+              "subject": "Notes from the meetup",
+              "body": "Hi Person, thanks for the talk at the meetup."
+            }
+          },
+          "contacts": [
+            {
+              "id": "cnt_3",
+              "first_name": "Person",
+              "last_name": "100",
+              "channels": [
+                {
+                  "channel": "email",
+                  "value": "person100@example.test",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {}
+          }
+        },
+        "operation": "message.send",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_103"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-3",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-15T12:00:00.000Z",
+    "decided_at": "2026-10-16T09:00:00.000Z",
+    "decided_by": {
+      "type": "human",
+      "id": "ada"
+    },
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Person 100",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

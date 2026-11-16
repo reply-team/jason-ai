@@ -276,6 +276,8 @@ export type JournalListRequest = {
     work_item_id?: string;
     contact_id?: string;
     kinds?: string[];
+    /** Keeps the lines at or after this moment, ISO-8601 UTC. */
+    since?: string;
     limit?: number;
     cursor?: string;
 };

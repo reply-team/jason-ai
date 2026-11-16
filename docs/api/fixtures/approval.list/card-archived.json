@@ -1,0 +1,14 @@
+{
+  "operation": "approval.list",
+  "case": "card-archived",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_5",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}
