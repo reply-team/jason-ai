@@ -442,32 +442,19 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent: one full-width box, its words centred across it, the caret's menu a quiet end of the same box. */
+/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
 .jc-console .newrow {
     display: flex;
+    gap: 8px;
     margin: 2px 14px 8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-    overflow: hidden;
-}
-.jc-console .newrow:hover {
-    border-color: var(--accent-line);
-}
-.jc-console .newrow:has(> .newbtn[aria-current='true']) {
-    border-color: var(--accent-line);
-    background: var(--hover);
 }
 .jc-console .newrow .newbtn {
     margin: 0;
     flex: 1;
     min-width: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    padding: 10px 10px 10px 44px;
+    font-weight: 500;
+    padding: 8px 10px;
+    border-radius: 10px;
 }
 .jc-console .caret {
     flex: none;
@@ -482,6 +469,18 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .newrow .caret {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.jc-console .newrow .caret:hover,
+.jc-console .newrow .caret[aria-expanded='true'] {
+    background: var(--panel);
+    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -1367,6 +1366,117 @@ body,
 }
 .jc-console .setrow .inp {
     max-width: 240px;
+}
+/* The AI card in two groups. On this computer: each program found a card of its own, its name, state and "In use" on
+   one line, what it does under it and apart from the how-to lines; then one row, "Model keys", with each provider that
+   holds a key as a pill. Under it, a tinted panel of what can be added or changed: the programs not found on one quiet
+   line, each that can be installed followed by its own Install, and the model keys' panel. */
+.jc-console .ai-card .group-label {
+    margin: 2px 0 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mute);
+}
+.jc-console .ai-here {
+    padding: 12px 16px 4px;
+}
+.jc-console .setrow.host-card {
+    display: block;
+    margin: 0 0 8px;
+    padding: 11px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .row-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+.jc-console .row-hd > .in-use {
+    margin-left: auto;
+}
+.jc-console .host-does {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--ink);
+}
+.jc-console .host-how {
+    margin-top: 6px;
+    padding-left: 10px;
+    border-left: 2px solid var(--line);
+}
+.jc-console .host-how .meta {
+    color: var(--mute);
+    overflow-wrap: anywhere;
+}
+.jc-console .ai-add {
+    margin: 4px 16px 16px;
+    padding: 12px 16px 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .hosts-absent {
+    color: var(--mute);
+    line-height: 1.9;
+}
+.jc-console .hosts-absent .sep {
+    margin: 0 6px;
+}
+.jc-console .hosts-absent .absent-host {
+    white-space: nowrap;
+}
+.jc-console .hosts-absent .btn {
+    height: auto;
+    margin-left: 4px;
+    padding: 1px 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    vertical-align: baseline;
+}
+.jc-console .hosts-absent + .key-panel {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+.jc-console .key-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+}
+.jc-console .key-hd b {
+    font-size: 13px;
+    font-weight: 600;
+}
+.jc-console .key-fld {
+    display: block;
+    margin-top: 10px;
+}
+.jc-console .key-fld > span {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink);
+}
+.jc-console .key-fld > .inp {
+    max-width: none;
+}
+.jc-console .key-act {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+.jc-console .key-act > .key-state {
+    margin-right: auto;
 }
 .jc-console .versions {
     margin-top: 18px;

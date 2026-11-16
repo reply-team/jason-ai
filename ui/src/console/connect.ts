@@ -740,7 +740,7 @@ define('connect.providerKey', ([provider, remove]) => {
     if (typeof provider !== 'string') return;
     const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
-        void doing('Keeping the key…', async () => {
+        void doing(remove === true ? 'Removing the key…' : 'Saving the key…', async () => {
             await here().desktop.setup.setProviderKey(provider, key);
             forget(`provider:${provider}`);
         });
@@ -848,63 +848,184 @@ export function runsRolesLine(host: DesktopHost): string | null {
     return t('connect.runsRoles', { host: host.label, profile: host.runsRoles });
 }
 
+/**
+ * Whether a host is drawn as a card of its own: found here, or carrying a sentence about its version. Every other host is
+ * named on the one line of the hosts not found.
+ */
+export const hostRow = (host: DesktopHost): boolean => host.found || host.belowFloor !== null;
+
+/**
+ * Whether a program is the one in use: the one the agents' roles run on by default, the fact its runs-roles line says.
+ * At most one program answers it, since the default profile is on one program.
+ */
+export const inUse = (host: DesktopHost): boolean => runsRolesLine(host) !== null;
+
+/** A program found here: a card, its name, its version as its state and "In use" on one line, its notes under it. */
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     const own = ownServersLine(host);
     const roles = runsRolesLine(host);
-    return html`<div class="setrow">
+    const state = host.found ? (host.version ?? 'Found') : 'Not found';
+    const tone = host.belowFloor !== null ? 'amber' : host.found ? 'green' : 'gray';
+    const how = host.belowFloor !== null || sentence !== null || own !== null || roles !== null;
+    return html`<div class="setrow host-row host-card">
         <div class="grow">
-            <b>${host.label}</b>
-            <span class="meta">${host.found ? (host.version ?? 'Found') : 'Not found'}</span>
+            <div class="row-hd">
+                <b>${host.label}</b> <span class="pillc ${tone} host-state">${state}</span>
+                ${inUse(host) ? html`<span class="pillc green in-use">In use</span>` : null}
+                ${
+                    !host.found && host.install
+                        ? html`<button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.installProgram')}
+                              ${act('connect.install', host.install)}
+                          >
+                              Install
+                          </button>`
+                        : null
+                }
+            </div>
             ${
                 host.found
-                    ? html`<div class="meta">
+                    ? html`<div class="host-does">
                           ${host.drivesChat ? 'Drives the chat' : 'Runs campaign work, not the chat yet'}
                       </div>`
                     : null
             }
-            ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
-            ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
-            ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
-            ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+            ${
+                how
+                    ? html`<div class="host-how">
+                          ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
+                          ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
+                          ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
+                          ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+                      </div>`
+                    : null
+            }
         </div>
-        ${
-            !host.found && host.install
-                ? html`<button
-                      class="btn sm"
-                      type="button"
-                      ${unlessCan(busy, 'setup.installProgram')}
-                      ${act('connect.install', host.install)}
-                  >
-                      Install
-                  </button>`
-                : null
-        }
     </div>`;
 }
 
-function provider(host: DesktopHost, busy: Html | null): Html {
-    return html`<div class="setrow">
-        <div class="grow"><b>${host.label}</b> <span class="meta">${host.found ? 'Key set' : 'No key'}</span></div>
+/**
+ * The hosts not found, on one quiet line that names them: those that can be installed first, each followed by its own
+ * Install button, then the others.
+ */
+function notFound(hosts: readonly DesktopHost[], busy: Html | null): Html | null {
+    if (hosts.length === 0) return null;
+    const ordered = [...hosts.filter((each) => each.install), ...hosts.filter((each) => !each.install)];
+    return html`<div class="meta hosts-absent">
+        <span>Not found</span>:
+        ${ordered.map(
+            (host, at) =>
+                html`${at > 0 ? html`<span class="sep">·</span>` : null}<span class="absent-host"
+                        >${host.label}${
+                            host.install
+                                ? html` <button
+                                      class="btn sm"
+                                      type="button"
+                                      ${unlessCan(busy, 'setup.installProgram')}
+                                      ${act('connect.install', host.install)}
+                                  >
+                                      Install
+                                  </button>`
+                                : null
+                        }</span
+                    >`,
+        )}
+    </div>`;
+}
+
+/** The key provider the person picked in the panel; null until they pick one. */
+const chosenProvider = signal<string | null>(null);
+
+define('connect.provider', (_args, element) => {
+    if (!(element instanceof HTMLSelectElement)) return;
+    // A key typed and not saved is not kept behind the person's back under the provider they leave.
+    for (const key of [...typed.keys()]) if (key.startsWith('provider:')) typed.delete(key);
+    chosenProvider.value = element.value;
+});
+
+/** The provider the panel shows: the one picked, else the first with no key, else the first. */
+export function shownProvider(providers: readonly DesktopHost[], picked: string | null): DesktopHost | undefined {
+    return providers.find((each) => each.id === picked) ?? providers.find((each) => !each.found) ?? providers[0];
+}
+
+/**
+ * The key providers whose key is set, as one row of what is on this computer: "Model keys" and each such provider as a
+ * pill; nothing when none is.
+ */
+function keysSet(providers: readonly DesktopHost[]): Html | null {
+    const set = providers.filter((each) => each.found);
+    if (set.length === 0) return null;
+    return html`<div class="setrow host-card keys-set">
+        <div class="row-hd">
+            <b>Model keys</b>
+            ${set.map((each) => html`<span class="pillc green key-held">${each.label}</span>`)}
+        </div>
+    </div>`;
+}
+
+/**
+ * The model keys as one panel: a Provider select over the key providers, each with a key saying so; under it, for the
+ * provider shown, the API key field and Save key when it has no key, or Key set and Remove the key when it has one.
+ */
+function keyPanel(providers: readonly DesktopHost[], busy: Html | null): Html | null {
+    const shown = shownProvider(providers, chosenProvider.value);
+    if (!shown) return null;
+    const key = `provider:${shown.id}`;
+    return html`<div class="key-panel">
+        <div class="key-hd">
+            <b>Model keys</b>
+            <span class="meta">Run through Claude Code; kept in the system keychain.</span>
+        </div>
+        <label class="key-fld">
+            <span>Provider</span>
+            <select class="inp" aria-label="Provider" data-change="connect.provider">
+                ${providers.map(
+                    (each) =>
+                        html`<option value="${each.id}" ${each.id === shown.id ? html`selected` : null}>
+                            ${each.label}${each.found ? ' · key set' : ''}
+                        </option>`,
+                )}
+            </select>
+        </label>
         ${
-            host.found
-                ? html`<button
-                      class="btn sm"
-                      type="button"
-                      ${unlessCan(busy, 'setup.setProviderKey')}
-                      ${act('connect.providerKey', host.id, true)}
-                  >
-                      Remove the key
-                  </button>`
-                : html`${secret(`provider:${host.id}`, `${host.label} key`)}
+            shown.found
+                ? html`<div class="key-act" data-id="${shown.id}">
+                      <span class="pillc green key-state">Key set</span>
                       <button
                           class="btn sm"
                           type="button"
                           ${unlessCan(busy, 'setup.setProviderKey')}
-                          ${act('connect.providerKey', host.id)}
+                          ${act('connect.providerKey', shown.id, true)}
                       >
-                          Keep
-                      </button>`
+                          Remove the key
+                      </button>
+                  </div>`
+                : html`<label class="key-fld">
+                          <span>API key</span>
+                          <input
+                              class="inp"
+                              type="password"
+                              autocomplete="off"
+                              aria-label="API key"
+                              placeholder="Enter your API key"
+                              value="${typed.get(key) ?? ''}"
+                              data-input="connect.type"
+                              ${argsOf(key)}
+                          />
+                      </label>
+                      <div class="key-act" data-id="${shown.id}">
+                          <button
+                              class="btn p sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.setProviderKey')}
+                              ${act('connect.providerKey', shown.id)}
+                          >
+                              Save key
+                          </button>
+                      </div>`
         }
     </div>`;
 }
@@ -1219,28 +1340,52 @@ export function accountsReplyView(): Html {
 /** The Accounts page stopped painting the card: a dialog it held open is dropped. */
 export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
 
-/** The AI hosts' card and, when there are any, the model keys' card: what Connect holds for the AI. */
-function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
-    return html`<div class="card">
-            <div class="hd"><b>AI</b></div>
-            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
+/**
+ * The AI card, what Connect and Settings' Models hold for the AI, in two groups. What is on this computer: each program
+ * found, a card, the one in use marked, then the key providers whose key is set, in one row. Under it, in a panel of its
+ * own, what can be added or changed: the programs not found, with Install where it can be done, and the model keys' panel.
+ */
+function aiCards(
+    programs: readonly DesktopHost[],
+    providers: readonly DesktopHost[],
+    disabled: Html | null,
+    heading = true,
+): Html {
+    const found = programs.filter(hostRow);
+    const set = keysSet(providers);
+    const absent = notFound(
+        programs.filter((each) => !hostRow(each)),
+        disabled,
+    );
+    const keys = keyPanel(providers, disabled);
+    return html`<div class="card ai-card">
+        ${heading ? html`<div class="hd"><b>AI</b></div>` : null}
+        <div class="bd">
+            ${elsewhere()}
+            ${
+                found.length > 0 || set !== null
+                    ? html`<div class="ai-here">
+                          <div class="group-label">On this computer</div>
+                          ${found.map((each) => program(each, disabled))}${set}
+                      </div>`
+                    : null
+            }
+            ${
+                absent !== null || keys !== null
+                    ? html`<div class="ai-add">
+                          <div class="group-label">Add or change</div>
+                          ${absent}${keys}
+                      </div>`
+                    : null
+            }
         </div>
-        ${
-            providers.length
-                ? html`<div class="card">
-                      <div class="hd">
-                          <b>Model keys</b>
-                          <span class="meta">Run through Claude Code; kept in the system keychain.</span>
-                      </div>
-                      <div class="bd">${providers.map((each) => provider(each, disabled))}</div>
-                  </div>`
-                : null
-        }`;
+    </div>`;
 }
 
 /**
  * The AI hosts and the model keys alone, for Settings' Models section: the same cards, with the same acts, that Connect
- * draws, read from the same `setup.status()` answer. Connect keeps them as well.
+ * draws, read from the same `setup.status()` answer, without the card's own "AI" heading: the section says "Models".
+ * Connect keeps them as well, with the heading.
  */
 export function modelsView(): Html {
     const state = setup.value;
@@ -1255,6 +1400,7 @@ export function modelsView(): Html {
                   state.hosts.filter((each) => each.kind === 'program'),
                   state.hosts.filter((each) => each.kind === 'provider'),
                   disabled,
+                  false,
               )
             : failure
               ? null
