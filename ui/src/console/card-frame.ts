@@ -139,7 +139,7 @@ export const saidView = (said: Said): Html =>
     </div>`;
 
 /**
- * A data card: its header, "As of" and Refresh in the first row; then what stands outside the facts (`before`: the AI's
+ * A data card: its header in plain weight (a frame's caption is never bold), "As of" and Refresh in the first row; then what stands outside the facts (`before`: the AI's
  * words, labelled as the AI's); then "On record now" over the runtime's facts, or "Reading..." while a read is under
  * way. A stub is its header and "Show now". `action` is the card's own read, named with the chat and the entry.
  */
@@ -159,14 +159,14 @@ export function frame<T>(view: {
     if (view.stub && held === null)
         return html`<div class="ask chat-card chat-data stub" role="group" aria-label="${header}">
             <div class="ask-h card-top">
-                <b>${header}</b>
+                <span class="card-head">${header}</span>
                 <button class="btn sm card-read" type="button" ${control}>Show now</button>
             </div>
         </div>`;
     const read = held?.state === 'read' ? held : null;
     return html`<div class="ask chat-card chat-data" role="group" aria-label="${header}">
         <div class="ask-h card-top">
-            <b>${header}</b>
+            <span class="card-head">${header}</span>
             ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
             <button class="btn sm ghost card-read" type="button" ${read === null ? html`disabled` : control}>
                 Refresh

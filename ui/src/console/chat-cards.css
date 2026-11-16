@@ -225,8 +225,9 @@
 /* A data card: its header, the minute it was read and Refresh on the first row; the AI's words, when it carries any,
    in a dashed frame of their own above the facts; and the runtime's facts under "On record now". A stub is its first
    row alone. */
-.jc-console .chat-data .card-top b {
+.jc-console .chat-data .card-top .card-head {
     font-size: 13.5px;
+    font-weight: 400;
 }
 .jc-console .chat-data .card-top .card-asof {
     margin-left: auto;
@@ -238,7 +239,7 @@
 .jc-console .chat-data .card-top .card-asof + .card-read {
     margin-left: 0;
 }
-.jc-console .chat-data .card-top b + .card-read {
+.jc-console .chat-data .card-top .card-head + .card-read {
     margin-left: auto;
 }
 .jc-console .chat-data .card-top .card-read:disabled {
