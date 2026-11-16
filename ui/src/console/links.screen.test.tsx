@@ -18,6 +18,9 @@ import { chats, conversations } from './state';
 // chat's box, no answer to what waits.
 
 function renderConsole(desktop: StubDesktop, fake: FakeApi): void {
+    // Needs you reads the sending name under an email's From (`needs-sender-line.screen.test.tsx`); here it is answered
+    // with one recorded list of accounts, which draws one line and holds nothing.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();

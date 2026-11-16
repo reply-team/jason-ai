@@ -31,6 +31,8 @@ import {
     type WaitingItem,
 } from './needs-model';
 import { clock, here } from './state';
+import { lookupFor, readSender, senderMark, senderReads } from './senders';
+import { SENDER_WHEN, senderAsked, senderLine, senderWords } from './senders-model';
 import { approveWhole, fillApprovals, keepWhole, wholeReads } from './waiting';
 import {
     approvalGate,
@@ -239,6 +241,13 @@ const acting = signal(0);
 /** A click that is the second or later of a double click: an act takes the first alone. */
 const repeated = (event: Event): boolean => event instanceof MouseEvent && event.detail > 1;
 
+/**
+ * The reads behind the sending name under an approval's From (`senders.ts`), and the approval the pane draws it for with
+ * the moment it was drawn: the pane reads when it comes to show an approval, and not again while it keeps showing it.
+ */
+const senders = senderReads();
+let sending: { id: string; drawn: number } | null = null;
+
 /** Whether the item the pane showed left while the person was not acting on it, until they choose or act again. */
 const left = signal(false);
 
@@ -320,11 +329,15 @@ export function forgetNeeds(): void {
     ownOpens.clear();
     left.value = false;
     acting.value = 0;
+    senders.lookups.value = {};
+    sending = null;
 }
 
 /** The panel is drawn: its approvals are read whole now, and at every reload while it stays drawn. */
 export function drawNeeds(): () => void {
     drawn += 1;
+    // A pane drawn again is a new drawing: the approval it shows reads its sending name again.
+    sending = null;
     void fill();
     return () => {
         drawn = Math.max(0, drawn - 1);
@@ -634,7 +647,12 @@ function words(whole: Approval | undefined): Html | null {
     const detail = toApprovalDetail(whole.preview);
     return html`<div class="needs-words">
             ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
-            ${detail.from ? html`<div class="meta needs-from">From <span>${detail.from}</span></div>` : null}
+            ${
+                detail.from
+                    ? html`<div class="meta needs-from">From <span>${detail.from}</span></div>
+                          ${senderOf(whole)}`
+                    : null
+            }
             ${detail.channel ? html`<div class="meta needs-channel">Channel <span>${detail.channel}</span></div>` : null}
             ${detail.subject ? html`<div class="ask-s">${detail.subject}</div>` : null}
             ${detail.body ? html`<div class="said needs-body">${detail.body}</div>` : null}
@@ -645,6 +663,29 @@ function words(whole: Approval | undefined): Html | null {
             }
         </div>
         ${detail.facts.length > 0 ? html`<div class="needs-facts">${detail.facts.map((fact) => html`<div class="meta">${withCode(fact)}</div>`)}</div>` : null}`;
+}
+
+/**
+ * The sending name the provider holds now for the mailbox the send names, in the words of an agent's chat's cards: read
+ * once when the pane comes to show this approval, nothing while it is read, nothing where the send names no mailbox. It
+ * decides nothing; Approve and its gate are the pane's.
+ */
+function senderOf(whole: Approval): Html | null {
+    const asked = senderAsked(whole);
+    if (asked === null) return null;
+    if (sending?.id !== whole.id) {
+        sending = { id: whole.id, drawn: senderMark() };
+        void readSender(here().api, senders, asked, sending.drawn);
+    }
+    const line = senderLine(lookupFor(senders, asked, sending.drawn), asked);
+    const said = line === null ? null : senderWords(line);
+    if (said === null) return null;
+    return html`<div class="sender-line">
+        <div class="sender-now">
+            ${said.text}${said.code === null ? null : html` <code>${said.code}</code>`}${said.message === null ? null : html` ${said.message}`}
+        </div>
+        ${said.when ? html`<div class="sender-when">${SENDER_WHEN}</div>` : null}
+    </div>`;
 }
 
 /** A fact as the runtime words it, its quoted names set as code rather than shown between backticks. */

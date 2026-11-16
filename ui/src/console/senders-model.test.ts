@@ -172,6 +172,16 @@ describe('reading the accounts', () => {
         });
     });
 
+    it('says a failure the window met itself without saying the runtime said it', () => {
+        const failed = lookup({ failed: { code: null, message: 'TypeError: Failed to fetch' } });
+        expect(senderWords(senderLine(failed, of('s_7'))!)).toEqual({
+            text: 'The sending name could not be read:',
+            code: null,
+            message: 'TypeError: Failed to fetch',
+            when: false,
+        });
+    });
+
     it('marks a read with the moment it began, and keeps that mark on every page after the first', () => {
         const once = withPage(undefined, page([account('s_1', 'One')], true), 7);
         expect(withPage(once, page([], false), 9).started).toBe(7);

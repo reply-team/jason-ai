@@ -49,6 +49,9 @@ function renderConsole(
         .answer('campaign.list', 'campaign.list/screen')
         .answer('system.info', 'system.info/with-ui');
     if (!fake.offers('campaign.summary')) fake.answer('campaign.summary', 'campaign.summary/all');
+    // Needs you reads the sending name under an email's From (`needs-sender-line.screen.test.tsx`); here it is answered
+    // with one recorded list of accounts, which draws one line and holds nothing.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();

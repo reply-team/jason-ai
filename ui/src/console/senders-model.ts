@@ -113,7 +113,11 @@ export function senderWords(line: SenderLine): SenderWords | null {
                       false,
                   )
                 : {
-                      text: 'The sending name could not be read. The runtime said:',
+                      // Only an answer of the runtime's has a code; a failure the window met itself is said as it was.
+                      text:
+                          line.said.code === null
+                              ? 'The sending name could not be read:'
+                              : 'The sending name could not be read. The runtime said:',
                       code: line.said.code,
                       message: line.said.message,
                       when: false,

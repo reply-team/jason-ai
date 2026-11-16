@@ -12,12 +12,16 @@ import {
 
 // The reads behind an approval card's sender line (`senders-model.ts` says what the line says): `sender.list` of the
 // approval's campaign on the send's channel. Cards drawn together share one read of a campaign's accounts; a card drawn
-// after a read began (a new approval, the next item, a re-ask) reads again, so no line is older than its card.
+// after a read began (a new approval, the next item, a re-ask) reads again, so no line is older than its card. Each read
+// is kept beside the later ones, so a card keeps its own answer whatever a later card's read finds or fails to find.
 
-/** The reads of a chat's cards or of a panel, by campaign and channel: the newest of each. */
+/** The reads of a chat's cards or of a panel, by campaign and channel, in the order they began. */
 export interface SenderReads {
-    readonly lookups: Signal<Readonly<Record<string, SenderLookup>>>;
+    readonly lookups: Signal<Readonly<Record<string, readonly SenderLookup[]>>>;
 }
+
+/** How many reads of one campaign and channel are kept: a card drawn before the oldest kept one shows a later one. */
+const KEPT = 16;
 
 export const senderReads = (): SenderReads => ({ lookups: signal({}) });
 
@@ -25,10 +29,15 @@ export const senderReads = (): SenderReads => ({ lookups: signal({}) });
 let marks = 0;
 export const senderMark = (): number => ++marks;
 
-/** The lookup a card drawn at `drawn` may show: one begun after it was drawn, never an older one. */
+/** The lookup a card drawn at `drawn` shows: the first begun after it was drawn, never an older one. */
 export function lookupFor(reads: SenderReads, asked: SenderAsked, drawn: number): SenderLookup | undefined {
-    const lookup = reads.lookups.value[senderKey(asked)];
-    return lookup !== undefined && lookup.started > drawn ? lookup : undefined;
+    return (reads.lookups.value[senderKey(asked)] ?? []).find((lookup) => lookup.started > drawn);
+}
+
+/** The reads of a campaign and channel with `kept` in the place of the read begun when it began. */
+function keeping(lookups: readonly SenderLookup[], kept: SenderLookup): readonly SenderLookup[] {
+    const others = lookups.filter((lookup) => lookup.started !== kept.started);
+    return [...others, kept].sort((a, b) => a.started - b.started).slice(-KEPT);
 }
 
 /** The reads under way, by holder and by campaign and channel: one waits for the one before it. */
@@ -72,6 +81,6 @@ async function pageUntilFound(api: Api, reads: SenderReads, asked: SenderAsked, 
                 started,
             );
         }
-        reads.lookups.value = { ...reads.lookups.value, [key]: kept };
+        reads.lookups.value = { ...reads.lookups.value, [key]: keeping(reads.lookups.value[key] ?? [], kept) };
     }
 }
