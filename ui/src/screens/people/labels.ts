@@ -104,6 +104,18 @@ export function entryLabel(entry: JournalEntry, me: string): EntryLabel {
             const said = words[what] ?? what.replaceAll('_', ' ');
             return { mark: { kind: 'reply', glyph: '↩' }, title: capital(said), short: said, note: null };
         }
+        case 'provider_send_observed': {
+            // A message the account sent, as the provider's own events say it: no author and no step is claimed, and a
+            // channel only where the line names one a person knows.
+            const channel = field(entry.new, 'channel');
+            const how = channel === 'email' || channel === 'linkedin' ? channelWords(channel) : null;
+            return {
+                mark: { kind: 'sent', glyph: '↗' },
+                title: 'Sent by the provider',
+                short: 'sent by the provider',
+                note: how,
+            };
+        }
         case 'workitem_succeeded':
             if (entry.work_item_operation === 'campaign.enroll') {
                 const into = entry.campaign_name ? ` in ${entry.campaign_name}` : '';

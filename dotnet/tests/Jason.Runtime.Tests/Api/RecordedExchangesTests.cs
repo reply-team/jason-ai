@@ -399,7 +399,7 @@ public class RecordedExchangesTests
         string[] work = ["workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired", "external_effect_reported"];
         string[] decisions = ["approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered"];
         string[] changes = ["contact_created", "contact_updated", "contact_archived"];
-        string[] all = [.. replies, .. work, .. decisions, .. changes];
+        string[] all = [.. replies, .. work, .. decisions, .. changes, "provider_send_observed"];
 
         var first = await api.RecordAsync<Page<ContactDto>>(Operations.ContactList, "by-activity", new { order = "activity", limit = 200 }, Ct);
         Assert.Equal([seed.Mateo, seed.Aguilar, seed.Paula, seed.Grace], first.Items.Select(c => c.Id));
@@ -503,6 +503,57 @@ public class RecordedExchangesTests
 
         var twice = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "by-contact-replied-twice", new { contact_id = seed.Mateo, kinds = all, limit = 50 }, Ct);
         Assert.Equal(3, twice.Items.Count(e => e.Kind == JournalKinds.InboundReplyObserved));
+    }
+
+    /// <summary>
+    /// A person's timeline holding a message the account sent, as the events store says it: the page is stored through the
+    /// real store, which finds the send's campaign by the provider campaign pinned on it and writes the line itself.
+    /// </summary>
+    [Fact]
+    public async Task People_exchange_for_a_message_the_provider_sent()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var seed = await Seed.PeopleAsync(api);
+        var clock = new FixedClock(Nine);
+        // The kinds the timeline asks for under All.
+        string[] personAll = ["inbound_reply_observed", "provider_event_observed", "workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired",
+            "external_effect_reported", "approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered",
+            "contact_created", "contact_updated", "contact_archived", "provider_send_observed"];
+
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var pilot = await db.Campaigns.SingleAsync(c => c.PublicId == seed.LatAm, Ct);
+            pilot.EventsFrom = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            db.ExternalIds.Add(new ExternalId { Campaign = pilot, PluginId = "reply", Kind = "campaign", Value = "7", RecordedAt = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc), RecordedByAttemptId = "att_01K7QN00000000000000000101" });
+            var source = new EventSource { PublicId = PublicId.New("evs"), PluginId = "reply", BindingIdentity = EventSource.NoBinding, CreatedAt = Nine.UtcDateTime };
+            db.EventSources.Add(source);
+            await db.SaveChangesAsync(Ct);
+
+            var page = Jason.Runtime.Events.EventPage.Read(new JsonObject
+            {
+                ["events"] = new JsonArray(new JsonObject
+                {
+                    ["kind"] = "message_sent",
+                    ["id"] = null,
+                    ["occurred_at"] = "2026-10-16T08:50:00.000Z",
+                    ["contact"] = "16786993",
+                    ["campaign"] = "7",
+                    ["thread"] = "t_501",
+                    ["message"] = "m_89",
+                    ["channel"] = "email",
+                }),
+                ["cursor"] = "c-1",
+                ["has_more"] = false,
+            })!;
+            var store = new Jason.Runtime.Events.EventStore(new JournalWriter(clock), clock, Jason.Runtime.Events.EventAttributionSequence.OfThisVersion());
+            var stored = await store.StoreAsync(db, source, null, page, "evr_01K7QN00000000000000000001", Ct);
+            Assert.Equal(1, stored.Said);
+        }
+
+        var sent = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "person-sent-by-the-provider", new { contact_id = seed.Mateo, kinds = personAll, limit = 50 }, Ct);
+        var line = Assert.Single(sent.Items, item => item.Kind == JournalKinds.ProviderSendObserved);
+        Assert.Equal(JournalKinds.ProviderSendObserved, line.Kind);
     }
 
     /// <summary>
@@ -694,7 +745,7 @@ public class RecordedExchangesTests
         // Oli's panel, opened from his row: his record, his open work and his lines under All.
         string[] personAll = ["inbound_reply_observed", "provider_event_observed", "workitem_succeeded", "workitem_failed", "workitem_cancelled", "workitem_expired",
             "external_effect_reported", "approval_requested", "approval_approved", "approval_rejected", "decision_raised", "decision_answered",
-            "contact_created", "contact_updated", "contact_archived"];
+            "contact_created", "contact_updated", "contact_archived", "provider_send_observed"];
         Assert.Equal("Oli", (await api.RecordAsync<ContactDto>(Operations.ContactGet, "oli", new { contact_id = seed.Oli }, Ct)).FirstName);
         await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "oli-open", new { contact_id = seed.Oli, status = new[] { "created", "awaiting_approval", "scheduled", "processing" }, order = "due", limit = 50 }, Ct);
         await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "oli", new { contact_id = seed.Oli, kinds = personAll, limit = 50 }, Ct);

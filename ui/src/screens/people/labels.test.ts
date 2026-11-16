@@ -42,6 +42,24 @@ describe('entryLabel', () => {
     });
 });
 
+describe('a message the account sent', () => {
+    it('is said as a send, with a mark of its own and never the reply mark, and claims no author or step', () => {
+        const sent = entryLabel(entry('provider_send_observed', { type: 'system', id: 'dispatcher' }), 'me');
+        expect(sent.title).toBe('Sent by the provider');
+        expect(sent.short).toBe('sent by the provider');
+        expect(sent.mark.glyph).toBe('↗');
+        expect(sent.mark.glyph).not.toBe('↩');
+        expect(sent.mark.kind).not.toBe('reply');
+        expect(sent.note).toBeNull();
+    });
+
+    it('says the channel beside it only when the line names one the person knows', () => {
+        const line = entry('provider_send_observed', { type: 'system', id: 'dispatcher' });
+        expect(entryLabel({ ...line, new: { channel: 'email' } }, 'me').note).toBe('by email');
+        expect(entryLabel({ ...line, new: { channel: 'other' } }, 'me').note).toBeNull();
+    });
+});
+
 describe('the line a work item is put back under', () => {
     it('does not promise a retry, since an approval, a retry and a withdrawn ask after an edit all write it', () => {
         for (const actor of [

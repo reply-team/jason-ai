@@ -434,6 +434,30 @@ describe('People', () => {
         ]);
     });
 
+    it('a message the account sent shows under All as a send, once, and under no other chip', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity')
+            .answer('contact.get', 'contact.get/with-campaigns')
+            .answer('workitem.list', 'workitem.list/by-contact-open')
+            .answer('journal.list', 'journal.list/person-sent-by-the-provider', 'journal.list/by-contact-replies');
+        open(api, {}, mateo.id);
+        await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
+
+        expect((api.sent('journal.list') as Record<string, unknown>)['kinds']).toContain('provider_send_observed');
+        expect(await screen.findByText('Sent by the provider')).toBeTruthy();
+        expect(rowTitles().filter((t) => t === 'Sent by the provider')).toHaveLength(1);
+        const row = (await screen.findByText('Sent by the provider')).closest('.row') as HTMLElement;
+        expect(row.querySelector('.mark')?.textContent).toBe('↗');
+        expect(row.textContent).toContain('by email');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Replies' }));
+        await waitFor(() =>
+            expect((api.sent('journal.list') as Record<string, unknown>)['kinds']).not.toContain(
+                'provider_send_observed',
+            ),
+        );
+    });
+
     it('each chip asks for its kinds; membership events show under All and Changes only', async () => {
         const api = timeline(
             new FakeApi()

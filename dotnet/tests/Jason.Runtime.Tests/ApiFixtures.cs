@@ -363,6 +363,7 @@ public static class ApiFixtures
         "journal.list/panel-doubted-approved",
         "journal.list/panel-moved",
         "journal.list/panel-moved-edited",
+        "journal.list/person-sent-by-the-provider",
         "journal.list/summer",
         "operation.describe/audience-search",
         "operation.describe/campaign-get",

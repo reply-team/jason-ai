@@ -432,7 +432,8 @@ draft for a reply it has already answered.
 chronicle, or a `provider_event_observed` line of kind `reply_detected` where the provider's own events reported it,
 so list both kinds. Either line names the thread, its channel and the person (`contact_id`) but never what anybody
 wrote. So when the person asks you to answer one, read the thread first and tell them what you read — who wrote last,
-when, and what they said — before anything is drafted.
+when, and what they said — before anything is drafted. A `provider_send_observed` line is a message the account sent, never a
+reply, so it is not listed here.
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed
