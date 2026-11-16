@@ -46,8 +46,8 @@ public class ProviderSendsSchemaTests
 
         var report = new DatabaseMigrator(dir.Paths).Migrate();
 
-        // The ordinary path: this migration alone was pending, and the database was copied before it ran.
-        Assert.Equal([ThisMigration], report.NewlyApplied);
+        // The ordinary path: this migration was the first pending, and the database was copied before it ran.
+        Assert.Equal(AppliedFrom(dir, ThisMigration), report.NewlyApplied);
         Assert.NotNull(report.BackupFile);
         Assert.EndsWith($"-before-{ThisMigration}.db", report.BackupFile, StringComparison.Ordinal);
         Assert.Equal(["0"], Rows(report.BackupFile!, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_journal_campaign_kind_key_provider_sends'"));
@@ -81,6 +81,17 @@ public class ProviderSendsSchemaTests
             Assert.Equal("kind = 'provider_send_observed'", index.GetFilter());
             Assert.Empty(db.Database.GetPendingMigrations());
         }
+    }
+
+    /// <summary>
+    /// What a start from the migration before this one applies: this migration and every one the tree carries after it,
+    /// so the assertion holds on a branch where later migrations follow.
+    /// </summary>
+    private static List<string> AppliedFrom(TempDataDir dir, string migration)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        Assert.Contains(migration, db.Database.GetMigrations());
+        return db.Database.GetMigrations().SkipWhile(name => name != migration).ToList();
     }
 
     /// <summary>Each row a query returns, its columns joined by a bar.</summary>
