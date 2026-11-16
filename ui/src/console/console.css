@@ -1738,6 +1738,9 @@ body,
     display: flex;
     flex-direction: column;
     width: 300px;
+    /* Inside the window: the strip above it is 38 pixels, and a menu taller than what is left scrolls within itself. */
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
     margin-top: 6px;
     padding: 6px;
     background: var(--panel);
@@ -1753,6 +1756,10 @@ body,
     color: var(--faint);
     font-size: 12px;
     font-weight: 400;
+}
+/* In a menu that scrolls, nothing is squeezed to fit: each child keeps its own height. */
+.jc-console .open-in-menu > * {
+    flex: none;
 }
 .jc-console .open-in-rule {
     height: 1px;
