@@ -275,6 +275,7 @@
     --panel-2: #f8fafc;
     --side-bg: #f3f5f9;
     --hover: #e9edf4;
+    --sel: #dde3ee;
     --ink: #0f172a;
     --mute: #64748b;
     --faint: #94a3b8;
@@ -540,9 +541,10 @@
     font-size: 12px;
     color: var(--faint);
 }
-.jc-console .item[aria-current='true'] {
-    background: var(--hover);
-    font-weight: 600;
+.jc-console .item[aria-current='true'],
+.jc-console .item[aria-current='true']:hover {
+    background: var(--sel);
+    font-weight: 500;
 }
 .jc-console .item .count {
     margin-left: auto;
@@ -566,7 +568,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 7px 10px;
+    padding: 8px 10px;
     border-radius: 9px;
     cursor: pointer;
     color: var(--ink);
@@ -1036,6 +1038,7 @@
         --panel-2: #1a1a1e;
         --side-bg: #111114;
         --hover: #1f1f24;
+        --sel: #2b2b32;
         --ink: #ececf1;
         --mute: #a1a1aa;
         --faint: #71717a;
@@ -1092,6 +1095,7 @@
     --panel-2: #1a1a1e;
     --side-bg: #111114;
     --hover: #1f1f24;
+    --sel: #2b2b32;
     --ink: #ececf1;
     --mute: #a1a1aa;
     --faint: #71717a;
