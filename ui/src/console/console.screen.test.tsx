@@ -16,7 +16,7 @@ import { choicesOf, chooseIn, currentOf, menuButton, openMenu, waitForMenus } fr
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { commandTarget, Console, reloadDelay } from './console';
-import { attention } from './needs';
+import { attention, forgetNeeds } from './needs';
 import { chats, clock, conversations, currentChat, here, lines, setup, setupBusy, streamState } from './state';
 
 const hostile = '<img src=x onerror="window.hit=1">';
@@ -87,6 +87,9 @@ beforeEach(() => {
     attention.detail.value = null;
     attention.approvals.value = [];
     attention.questions.value = [];
+    attention.approvalsCursor.value = null;
+    attention.questionsCursor.value = null;
+    forgetNeeds();
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -140,17 +143,23 @@ describe('the console', () => {
         renderConsole(fake);
         const needs = await openNeeds();
         await waitFor(() => within(needs).getAllByText('Grace Hopper'));
-        const row = (id: string) => needs.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
-        // Approve is live once the row's approval has been read whole.
-        await waitFor(() =>
-            expect(within(row('apr_1')).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false),
-        );
-        fireEvent.click(within(row('apr_1')).getByRole('button', { name: 'Approve' }));
+        // The list is on the left; the item chosen is whole in the pane, with the acts on it alone.
+        const pane = () => needs.querySelector<HTMLElement>('.needs-pane')!;
+        const live = (name: string) => !within(pane()).getByRole('button', { name }).hasAttribute('disabled');
+        // Approve is live once the approval has been read whole.
+        await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+        await waitFor(() => expect(live('Approve')).toBe(true));
+        fireEvent.click(within(pane()).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(fake.sent('approval.approve')).toEqual({ approval_id: 'apr_1' }));
         await waitFor(() => expect(fake.calls.filter((each) => each.operation === 'approval.list')).toHaveLength(2));
-        const reason = within(row('apr_2')).getByRole('textbox', { name: 'Reason (optional)' });
-        fireEvent.input(reason, { target: { value: 'not this quarter' } });
-        fireEvent.click(within(row('apr_2')).getByRole('button', { name: 'Reject' }));
+        fireEvent.click(needs.querySelector<HTMLElement>('[data-row="apr_2"]')!);
+        await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+        await waitFor(() => expect(live('Reject')).toBe(true));
+        // Reject asks first, with the reason in its question.
+        fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
+        const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
+        fireEvent.input(within(asked).getByRole('textbox'), { target: { value: 'not this quarter' } });
+        fireEvent.click(within(asked).getByRole('button', { name: 'Reject' }));
         await waitFor(() =>
             expect(fake.sent('approval.reject')).toMatchObject({ approval_id: 'apr_2', reason: 'not this quarter' }),
         );
@@ -163,8 +172,9 @@ describe('the console', () => {
         renderConsole(fake);
         await openNeeds();
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
-        const row = () => panel('Needs you').querySelector<HTMLElement>('[data-id="dec_1"]')!;
-        fireEvent.click(within(row()).getByRole('button', { name: 'Answer' }));
+        // The question chosen from the list is whole in the pane, its options read with it.
+        fireEvent.click(panel('Needs you').querySelector<HTMLElement>('[data-row="dec_1"]')!);
+        const row = () => panel('Needs you').querySelector<HTMLElement>('.needs-pane[data-id="dec_1"]')!;
         await waitFor(() => within(row()).getByRole('button', { name: 'Pause until the news' }));
         fireEvent.input(within(row()).getByRole('textbox', { name: 'Reason (optional)' }), {
             target: { value: 'their CFO is leaving' },
@@ -1389,15 +1399,17 @@ describe('the console', () => {
     });
 
     it('keeps the field a person is typing in focused, with its text and caret, through the clock and a journal line', async () => {
-        const fake = pending(new FakeApi());
+        const fake = pending(new FakeApi()).answer('decision.get', 'decision.get/pending-with-options');
         const { journal } = renderConsole(fake);
         await openNeeds();
         await waitFor(() => screen.getAllByText('Grace Hopper'));
+        // A field of the pane: the reason beside a question's answer.
+        fireEvent.click(panel('Needs you').querySelector<HTMLElement>('[data-row="dec_1"]')!);
+        await waitFor(() => panel('Needs you').querySelector('.needs-pane[data-id="dec_1"]'));
         const reason = () =>
-            within(panel('Needs you').querySelector<HTMLElement>('[data-id="apr_2"]')!).getByRole<HTMLInputElement>(
-                'textbox',
-                { name: 'Reason (optional)' },
-            );
+            within(
+                panel('Needs you').querySelector<HTMLElement>('.needs-pane[data-id="dec_1"]')!,
+            ).getByRole<HTMLInputElement>('textbox', { name: 'Reason (optional)' });
         reason().focus();
         fireEvent.input(reason(), { target: { value: 'not this quarter' } });
         reason().setSelectionRange(4, 8);

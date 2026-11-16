@@ -1154,14 +1154,26 @@ body,
 .jc-console .area > .pane[hidden] {
     display: none;
 }
-/* Needs you, Agents and Activity were drawn for a narrow column: in the wide area their cards and lists keep a measure. */
+/* Agents and Activity were drawn for a narrow column: in the wide area their cards and lists keep a measure. */
 .jc-console .pane.measure .panel-body {
     max-width: 880px;
     margin: 0 auto;
 }
-/* Needs you holds two panes side by side, so it takes the whole area. */
+/* Needs you holds two panes side by side, so it takes the whole area; the words read in its pane keep the same measure. */
 .jc-console .pane.measure .panel-body.needs-panel {
     max-width: none;
+}
+.jc-console .needs-pane .needs-words,
+.jc-console .needs-pane .needs-facts,
+.jc-console .needs-pane.q .needs-title,
+.jc-console .needs-pane .ui-opts,
+.jc-console .needs-pane .needs-said,
+.jc-console .needs-pane .needs-edit,
+.jc-console .needs-pane .send-doubts,
+.jc-console .needs-pane .ask-a,
+.jc-console .needs-pane .ask-w,
+.jc-console .needs-pane > .note {
+    max-width: 880px;
 }
 .jc-console .painted,
 .jc-console .chat-panel {
@@ -1359,7 +1371,7 @@ body,
 }
 .jc-console .needs-panes {
     display: grid;
-    grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr);
+    grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
 }

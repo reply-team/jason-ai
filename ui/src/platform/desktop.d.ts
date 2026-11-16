@@ -205,8 +205,12 @@ export interface DesktopRefusal {
  */
 export type DesktopKeptEntry =
     | { kind: 'user'; text: string }
-    /** `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. */
-    | { kind: 'text'; text: string; plan?: true }
+    /**
+     * `plan`, when present, marks the last words of a Plan only turn that ended well as its live plan. `at`, when
+     * present, is the moment the desktop kept the words, ISO-8601 UTC: a card they hold was asked then. An earlier
+     * desktop kept none.
+     */
+    | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
     | { kind: 'error'; text: string }
@@ -231,8 +235,11 @@ export type DesktopChatEvent =
      * `detail` the command, path, query or tool name it acted on, shown beneath them as text.
      */
     | { kind: 'step'; text: string; detail?: string }
-    /** A message of the agent's, whole: shown as its own bubble, as text. */
-    | { kind: 'text'; text: string }
+    /**
+     * A message of the agent's, whole: shown as its own bubble, as text. `at` is the moment the desktop kept it, as the
+     * kept entry holds it; an earlier desktop says none.
+     */
+    | { kind: 'text'; text: string; at?: string }
     /**
      * The agent asks to do something the permission model does not settle on its own: `request` is the id to answer
      * by `chat.answer`, `title` the act in a few words, `detail` the command or path in full, and `remember` what
@@ -592,17 +599,8 @@ export interface JasonDesktop {
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
         /**
-         * In the demo only: asks the person once, then stops the demo installation's runtime and starts the desktop again;
-         * the next start removes the demo's two folders and makes the sample again. Answers null once it has begun, and also
-         * when the person said no; the desktop's refusal, with the demo left as it was, when the runtime could not be stopped,
-         * a folder of the demo's name is not one the demo made, or the request could not be written. Refused in Live, where
-         * there is no demo to start over.
-         */
-        startOver(): Promise<DesktopRefusal | null>;
-        /**
-         * Whether the demo's sample is being made, said by the desktop when that changes: true as the making begins, false
-         * once the sample is ready or its making failed. Until then the desktop refuses a switch and a start over. Answers
-         * the way to stop listening.
+         * Whether the demo's sample is being made, said by the desktop when that changes. A desktop since 0.45 makes no
+         * sample: it answers `preparing: false` and never sends the event. Answers the way to stop listening.
          */
         onPreparing(handler: (preparing: boolean) => void): () => void;
     };
@@ -712,6 +710,13 @@ export interface JasonDesktop {
          * most 200 lines a call; more is refused.
          */
         feed(lines: DesktopFeedLine[], options?: { catchUp: true }): Promise<DesktopConversation | DesktopRefusal>;
+        /**
+         * A card the AI asked for in the chat did not draw: the desktop writes one line of its log, `chat_card_refused`,
+         * with the card's kind (one of the six, or `unknown`) and why (`kind_unknown`, `too_long`, `malformed` or
+         * `schema`), and nothing of what the block held; a value outside those lists writes nothing. A place with no
+         * desktop's log, a tab or none, refuses it in its own words.
+         */
+        cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
     };
     fullAccess: {
         /** The standing choice of Full access, or null when none stands. */
