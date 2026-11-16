@@ -6,8 +6,8 @@ namespace Jason.Cli.Tests.Status;
 /// <summary>
 /// The <c>roles_launchable</c> check: whether a role's work would find a profile by <c>Roles:DefaultExecutionProfile</c>,
 /// read from the settings file and the environment as the runtime reads it. A fresh installation has no profile and names
-/// no default, and every role's work then fails at its claim; the check says so and names whichever of the one command and
-/// the one line of settings is still missing. It is ok only where the default names an enabled profile, and it never
+/// no default, and every role's work then fails at its claim; the check says so and names whichever of the two commands, create and set-default,
+/// is still missing. It is ok only where the default names an enabled profile, and it never
 /// decides readiness.
 /// </summary>
 public sealed class RolesLaunchableCheckTests
