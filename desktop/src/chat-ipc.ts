@@ -1,6 +1,6 @@
 /**
  * The chat's calls from the page, each behind the origin check every call the page makes passes: a send, a stop, a
- * person's answer to a card, the conversations the desktop keeps (list, open, create, remove, start afresh, attach a
+ * person's answer to a card, the conversations the desktop keeps (list, open, create, remove, start fresh, attach a
  * set-up chat to a campaign it made, rename one, and choose its mode, whose Full access the desktop confirms with the
  * person itself), the Feed with the journal lines the page hands it, a card the AI asked for that did not draw, by its kind
  * and why, for the log, and the standing choice of Full access, which the
