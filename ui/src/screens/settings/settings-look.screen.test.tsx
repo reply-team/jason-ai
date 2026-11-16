@@ -32,6 +32,8 @@ const body = (selector: string) =>
         .map((rule) => rule.body)
         .join(' ');
 const scope = '.jc-console .harness .settings';
+const dark = `:root[data-theme='dark'] ${scope}`;
+const darkAuto = `:root:not([data-theme='light']) ${scope}`;
 
 function files(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -45,7 +47,13 @@ describe('the sheet of Settings in the console', () => {
         expect(rules.length).toBeGreaterThan(0);
         for (const rule of rules)
             for (const selector of rule.selectors)
-                expect(selector.startsWith(`${scope} `) || selector === scope, selector).toBe(true);
+                expect(
+                    selector.startsWith(`${scope} `) ||
+                        selector === scope ||
+                        selector.startsWith(`${dark} `) ||
+                        selector.startsWith(`${darkAuto} `),
+                    selector,
+                ).toBe(true);
     });
 
     it('is loaded by the console mount alone, so the classic shell never receives it', () => {
@@ -87,10 +95,16 @@ describe('the sheet of Settings in the console', () => {
         expect(body(`${scope} .voice-part label`)).toMatch(
             /grid-template-columns: minmax\(0, 1.3fr\) minmax\(0, 2fr\) 170px/,
         );
-        expect(body(`${scope} .voice-part label`)).toMatch(/border-bottom: 1px solid var\(--line\)/);
+        expect(body(`${scope} .voice-part label`)).toMatch(/border-bottom: 1px solid var\(--line2\)/);
         expect(body(`${scope} .facts dd`)).toMatch(/text-align: right/);
         expect(body(`${scope} .facts`)).toMatch(/margin: 0 -20px/);
-        expect(body(`${scope} .facts dt`)).toMatch(/padding-left: 16px;[^}]*color: var\(--mute\)/);
+        expect(body(`${scope} .facts dt`)).toMatch(/padding-left: 16px;[^}]*color: var\(--faint\)/);
+        // The dark theme takes the next stronger token for a fact's label and the dividers, in both of the console's forms.
+        for (const root of [dark, darkAuto]) {
+            expect(body(`${root} .facts dt`)).toMatch(/border-bottom-color: var\(--line\); color: var\(--mute\)/);
+            expect(body(`${root} .voice-part label`)).toMatch(/border-bottom-color: var\(--line\)/);
+            expect(body(`${root} .send-mode-choice`)).toMatch(/border-top-color: var\(--line\)/);
+        }
         expect(body(`${scope} .send-mode-option`)).toMatch(/padding: 11px 13px;[^}]*border-radius: 12px/);
         expect(body(`${scope} .badge.success`)).toMatch(/background: var\(--green-2\); color: var\(--green\)/);
         expect(body(`${scope} .send-mode-option:has(input:checked)`)).toMatch(/background: var\(--teal-2\)/);

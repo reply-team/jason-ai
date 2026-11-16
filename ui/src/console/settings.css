@@ -48,7 +48,7 @@
 .jc-console .harness .settings > section > p {
     margin: 0 0 12px;
     font-size: 13px;
-    color: var(--mute);
+    color: var(--faint);
 }
 .jc-console .harness .settings > section > p:last-child {
     margin-bottom: 0;
@@ -102,7 +102,7 @@
     gap: 14px;
     align-items: center;
     padding: 11px 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--line2);
     font-size: 13.5px;
     color: var(--ink);
 }
@@ -134,7 +134,7 @@
     margin: 0;
     padding: 14px 0 0;
     border: 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--line2);
 }
 .jc-console .harness .settings .send-mode-choice + .send-mode-choice {
     margin-top: 16px;
@@ -243,7 +243,7 @@
 .jc-console .harness .settings .facts dt,
 .jc-console .harness .settings .facts dd {
     padding: 11px 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--line2);
 }
 .jc-console .harness .settings .facts dt:last-of-type,
 .jc-console .harness .settings .facts dd:last-of-type {
@@ -252,7 +252,7 @@
 .jc-console .harness .settings .facts dt {
     padding-left: 16px;
     font-size: 13px;
-    color: var(--mute);
+    color: var(--faint);
 }
 .jc-console .harness .settings .facts dd {
     padding-left: 14px;
@@ -292,5 +292,32 @@
     .jc-console .harness .settings .facts dd {
         padding-left: 16px;
         text-align: left;
+    }
+}
+
+/* The dark theme: the quiet tokens of the light rows (a divider, a fact's label) are too faint on the dark panel, so the
+   next stronger ones are taken there, under the console's own two dark selectors. */
+:root[data-theme='dark'] .jc-console .harness .settings .voice-part label,
+:root[data-theme='dark'] .jc-console .harness .settings .facts dt,
+:root[data-theme='dark'] .jc-console .harness .settings .facts dd {
+    border-bottom-color: var(--line);
+}
+:root[data-theme='dark'] .jc-console .harness .settings .send-mode-choice {
+    border-top-color: var(--line);
+}
+:root[data-theme='dark'] .jc-console .harness .settings .facts dt {
+    color: var(--mute);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .harness .settings .voice-part label,
+    :root:not([data-theme='light']) .jc-console .harness .settings .facts dt,
+    :root:not([data-theme='light']) .jc-console .harness .settings .facts dd {
+        border-bottom-color: var(--line);
+    }
+    :root:not([data-theme='light']) .jc-console .harness .settings .send-mode-choice {
+        border-top-color: var(--line);
+    }
+    :root:not([data-theme='light']) .jc-console .harness .settings .facts dt {
+        color: var(--mute);
     }
 }
