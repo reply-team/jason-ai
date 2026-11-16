@@ -344,6 +344,15 @@ describe('a plan the AI proposes', () => {
         ]);
     });
 
+    it('in a chat about no agent yet says a failed read of the routes once for the card, not once for each channel', async () => {
+        const fake = new FakeApi().answer('system.info', 'system.info/with-ui', 'system.info/send-modes-set');
+        fake.unreachable('route.list');
+        renderConsole([setUp(turn())], fake);
+        const pane = await openChat('Sending');
+        const part = facts(await read(pane));
+        expect(part.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    });
+
     it('after a reopen is the one card that reads when it follows a data card, which waits on Show now', async () => {
         const { fake } = renderConsole(
             [winter([...turn({ kind: 'agent_status' }), ...turn()])],

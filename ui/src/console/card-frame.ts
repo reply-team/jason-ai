@@ -180,8 +180,8 @@ export const saidView = (said: Said): Html =>
 
 /**
  * A data card: its header in plain weight (a frame's caption is never bold), "As of" and Refresh in the first row; then what stands outside the facts (`before`: the AI's
- * words, labelled as the AI's); then "On record now" over the runtime's facts, or "Reading..." while a read is under
- * way; then `after`, the AI's again (a plan's question). A stub is its header and "Show now", and with `kept` the AI's
+ * words, labelled as the AI's, or by a caption the card supplies); then "On record now" over the runtime's facts, or "Reading..." while a read is under
+ * way; then `after`, the AI's again, likewise with the card's caption (a plan's question; the plan supplies one for `before` and for `after`). A stub is its header and "Show now", and with `kept` the AI's
  * parts too, as a plan's first part is never a stub. `action` is the card's own read, named with the chat and the entry;
  * `kind` a class of the card's own beside the frame's.
  */

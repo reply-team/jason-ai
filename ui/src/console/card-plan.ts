@@ -253,10 +253,16 @@ const sendWords: Readonly<Record<PlanChannel, string>> = { email: 'email', linke
  * send them now, with each problem the claim would name; or that no plugin is routed to send them.
  */
 function sendingView(sending: readonly Sending<Sender | string | null>[], whose: string): Html {
+    const said = new Set<Said>();
     return html`<div class="card-lab">Sending</div>
         ${sending.map(({ channel, sender }) => {
             const what = sendWords[channel];
-            if (!sender.ok) return saidView(sender.said);
+            if (!sender.ok) {
+                // One failed read of the routes serves every channel: it is said once for the card.
+                if (said.has(sender.said)) return null;
+                said.add(sender.said);
+                return saidView(sender.said);
+            }
             const value = sender.value;
             if (value === null) return html`<div class="card-line">No plugin is routed to send ${what} ${whose}.</div>`;
             if (typeof value === 'string')

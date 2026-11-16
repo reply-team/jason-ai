@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DesktopConversationRecord, DesktopEffort, DesktopHost, DesktopLineEntry } from '../platform/desktop';
 import {
@@ -46,6 +48,7 @@ import {
     choiceState,
     personActed,
     type Chat,
+    unseen,
 } from './chat-model';
 
 const asking = (chat: Chat): Chat =>
@@ -985,5 +988,20 @@ describe('a person’s act on an agent, as a journal line', () => {
         expect(personActed(line({ kind: 'campaign_created' }), 'cmp_1', since)).toBe(false);
         expect(personActed(line({ ts: '2026-10-16T09:04:59.999Z' }), 'cmp_1', since)).toBe(false);
         expect(personActed(line({ ts: since }), 'cmp_1', since)).toBe(true);
+    });
+});
+
+describe('the unseen characters', () => {
+    const desktop = (file: string, declaration: RegExp) =>
+        readFileSync(join(import.meta.dirname, '..', '..', '..', 'desktop', 'src', file), 'utf8').match(
+            declaration,
+        )?.[1];
+
+    it('are the pattern the desktop drops from a title, in its header and in its naming', () => {
+        const header = desktop('chat-header.ts', /export const unseen = (\/.*\/gu);/);
+        const naming = desktop('chat-naming.ts', /const unseen = (\/.*\/gu);/);
+        expect(header).toBeDefined();
+        expect(unseen.toString()).toBe(header);
+        expect(unseen.toString()).toBe(naming);
     });
 });
