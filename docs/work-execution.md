@@ -313,11 +313,20 @@ the work item, the composed input the plugin would have received, the plugin tha
 the account's binding identity, together with the canonical `sha256:` of that document. Before a later
 claim runs the work it computes the subject again and compares the hash: an input edited after the
 decision no longer matches, so the item is parked again with the reason `input_changed` rather than
-run under a decision nobody made about it. A pin that the item's own earlier attempt learned is such a change
-too: the next claim composes the input with it, so a person decides once more on what the plugin now receives,
-and that costs one more decision, never a performance nobody approved. The plugin's version and the package's digest are
-deliberately not part of the subject — they are provenance, recorded on the attempt that runs, and
-including them would supersede every pending decision the moment an operator reloaded a package.
+run under a decision nobody made about it. One difference is not such a change: a pin added where the approved
+subject held none, for the person or for the campaign, whether this item's earlier attempt learned it or another
+item did. It does change what reaches the plugin — the provider addresses a record it already holds rather than
+making one — but it is nothing the person read, so the claim compares the subject composed now, less the pin kinds
+the approved subject does not hold, with the approved hash, and runs the work under the decision when they match. A
+kind the approved subject holds is held to its value: a pin that now holds another value, or is gone, parks the work
+again with `input_changed`, and so does every other difference, a pin added beside it or not — an argument, a field
+of the person, the address, the campaign's name, the plugin, the account. A divergence changes nothing composed,
+since the plugin keeps receiving the value Jason recorded ([routing.md](routing.md) §11). Nothing about the decision
+is rewritten: the approval keeps the subject the person approved and its hash, the attempt that runs records the
+approval and the digest of the input it sent, the pin included, and the pin's own `external_id_pinned` line names the
+attempt that learned it and when — so whoever audits a send tells an exact match from a match less added pins.
+The plugin's version and the package's digest are deliberately not part of the subject — they are provenance,
+recorded on the attempt that runs, and including them would supersede every pending decision the moment an operator reloaded a package.
 
 **Beside the subject is the preview**, assembled at the claim from the operation's own sentence about
 itself, the dangerous readings of what it reaches, undoes and costs, the campaign, the person it would
@@ -1382,9 +1391,9 @@ claim's twenty-sixth check parks held work an open block already holds, before a
 ([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
 naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
 expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
-holds parks after its approval and runs under that decision when it is let through — unless what it would run
-changed meanwhile, a pin the refused attempt learned among such changes, and then the person decides once more
-(§Approvals).
+holds parks after its approval and runs under that decision when it is let through, a pin the refused attempt
+learned where the approved subject held none included — unless what it would run changed otherwise meanwhile, and
+then the person decides once more (§Approvals).
 
 **The trial.** A block is tried rather than waited out. Its next trial is due at the moment the provider said it
 clears by itself where that is ahead, a day at most — so a block that says it clears next month is still tried daily —
@@ -1397,8 +1406,9 @@ a decision, or in the queue where the claim could take it. A trial left in the q
 the claim would not take, holds nothing, and the next trial due is another item the block holds; the claim reads the
 same rule. A trial that waits for a person's decision holds the block's one trial until they decide: approved, it runs
 as the trial; refused, it ends, leaves the live set, and the next trial due is another item the block holds. Approved
-work let through as a trial asks the person again where the attempt the block refused learned a pin, since a learned
-pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
+work let through as a trial runs under the decision the person made where the attempt the block refused learned a pin
+the approved subject did not hold, since an added pin keeps an approval's cover (§Approvals, what is approved is a
+subject). A block that is due but
 holds nothing that could run now lets the next held item the claim meets through as its trial instead. The trial of a
 sender's block that names no channel is drawn among the items it holds whose channel has no open block of that
 sender, since that channel's block governs them. The trial of a sender's block on one channel is drawn from the items

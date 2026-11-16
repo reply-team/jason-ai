@@ -207,6 +207,31 @@ public static class CanonicalInput
     }
 
     /// <summary>
+    /// The kinds of pin <paramref name="input"/> carries, for the person and for the campaign, that <paramref name="earlier"/>
+    /// does not carry at the same place: the pins added since that document was composed. A kind both carry is never among
+    /// them, whatever its two values, and a document of any other shape carries no kind, so the answer is total.
+    /// </summary>
+    public static PinsLearned Added(JsonObject input, JsonObject? earlier)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        return new PinsLearned(Beyond(PersonPins(input), PersonPins(earlier)), Beyond(CampaignPins(input), CampaignPins(earlier)));
+
+        static JsonObject? PersonPins(JsonObject? document) =>
+            document?[ContactsKey] is JsonArray { Count: > 0 } contacts && contacts[0] is JsonObject person
+                ? person[ExternalIdsKey] as JsonObject
+                : null;
+
+        static JsonObject? CampaignPins(JsonObject? document) =>
+            document?[CampaignKey] is JsonObject campaign ? campaign[ExternalIdsKey] as JsonObject : null;
+
+        static HashSet<string> Beyond(JsonObject? now, JsonObject? then) =>
+            (now ?? []).Select(pin => pin.Key)
+                .Where(kind => then is null || !then.ContainsKey(kind))
+                .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// The input of a read made on a person's request rather than for a work item: the arguments the caller gave, and the
     /// person exactly as <see cref="Compose"/> projects them where the operation reads one. No campaign: the contracts a read
     /// on request performs let the campaign go unnamed.

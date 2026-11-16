@@ -299,16 +299,20 @@ public sealed partial class CanonicalReadsDocTests
     }
 
     /// <summary>
-    /// The approvals section says a pin the item's own earlier attempt learned changes what the plugin receives, so a
-    /// person decides once more: the claim composes the input with every pin, and the page may not promise otherwise.
+    /// The approvals section says what the claim's compare does with a pin: one added where the approved subject held none
+    /// keeps the cover though it changes what reaches the plugin, one that holds another value or is gone asks again, and
+    /// the record says which of the two matches let the work run.
     /// </summary>
     [Fact]
-    public void Work_execution_says_a_pin_an_earlier_attempt_learned_asks_for_one_more_decision()
+    public void Work_execution_says_an_added_pin_keeps_the_cover_and_a_changed_or_vanished_one_asks_again()
     {
         var text = Flat(Source("docs/work-execution.md"));
 
-        Assert.Contains("A pin that the item's own earlier attempt learned is such a change too", text, StringComparison.Ordinal);
-        Assert.Contains("a person decides once more on what the plugin now receives", text, StringComparison.Ordinal);
+        Assert.Contains("One difference is not such a change: a pin added where the approved subject held none", text, StringComparison.Ordinal);
+        Assert.Contains("It does change what reaches the plugin", text, StringComparison.Ordinal);
+        Assert.Contains("a pin that now holds another value, or is gone, parks the work again with `input_changed`", text, StringComparison.Ordinal);
+        Assert.Contains("tells an exact match from a match less added pins", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("A pin that the item's own earlier attempt learned is such a change", text, StringComparison.Ordinal);
     }
 
     /// <summary>

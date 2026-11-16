@@ -608,12 +608,13 @@ public sealed class Claimer(
     /// nothing — in which case the item has been parked for one by the time this returns.
     /// </summary>
     /// <remarks>
-    /// The comparison is between two hashes and nothing else. An approval authorizes its subject until something
-    /// supersedes it, so a retriable failure runs again under the same decision, unless what the plugin would
-    /// receive changed meanwhile — the operator approved an effect, and a provider timing out did not change what
-    /// that effect is. What they did not approve is a different document, and that is what the hash is for: a pin
-    /// the failed attempt learned is among such changes, since the input is composed with it, so the person
-    /// decides once more. That holds for <c>confirm_each</c> as for
+    /// The comparison is between hashes and nothing else (<see cref="ApprovalGate.Authorizes"/>). An approval authorizes its
+    /// subject until something supersedes it, so a retriable failure runs again under the same decision, unless what the
+    /// plugin would receive changed meanwhile — the operator approved an effect, and a provider timing out did not change
+    /// what that effect is. What they did not approve is a different document, and that is what the hash is for. A pin
+    /// learned where the approved subject held none, by the failed attempt or by another item, is not such a change: it
+    /// tells the provider which record it already holds, and the person read nothing about it. A pin that holds another
+    /// value or is gone is, and so is everything else. That holds for <c>confirm_each</c> as for
     /// <c>confirm_once</c>: the decision is this item's alone and the item is one person, so a retry after a failure
     /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated
     /// by an operation that says so.
