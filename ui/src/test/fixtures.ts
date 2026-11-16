@@ -225,6 +225,7 @@ import contactListByActivity from '../../../docs/api/fixtures/contact.list/by-ac
 import contactListByActivityEmpty from '../../../docs/api/fixtures/contact.list/by-activity-empty.json';
 import contactListByActivityQuery from '../../../docs/api/fixtures/contact.list/by-activity-query.json';
 import contactListByActivityQueryAguilar from '../../../docs/api/fixtures/contact.list/by-activity-query-aguilar.json';
+import contactListByActivitySentFromTheAccount from '../../../docs/api/fixtures/contact.list/by-activity-sent-from-the-account.json';
 import contactListByActivitySeveral from '../../../docs/api/fixtures/contact.list/by-activity-several.json';
 import contactListByActivitySummaryNewWithoutArchived from '../../../docs/api/fixtures/contact.list/by-activity-summary-new-without-archived.json';
 import contactListByActivitySummaryQuery from '../../../docs/api/fixtures/contact.list/by-activity-summary-query.json';
@@ -502,6 +503,7 @@ import journalListPanelDoubted from '../../../docs/api/fixtures/journal.list/pan
 import journalListPanelDoubtedApproved from '../../../docs/api/fixtures/journal.list/panel-doubted-approved.json';
 import journalListPanelMoved from '../../../docs/api/fixtures/journal.list/panel-moved.json';
 import journalListPanelMovedEdited from '../../../docs/api/fixtures/journal.list/panel-moved-edited.json';
+import journalListPersonSentFromTheAccount from '../../../docs/api/fixtures/journal.list/person-sent-from-the-account.json';
 import workitemCountPanelDoubtedApprovedDone from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-done.json';
 import workitemCountPanelDoubtedApprovedNow from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-now.json';
 import workitemCountPanelDoubtedApprovedPlanned from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-planned.json';
@@ -982,6 +984,10 @@ export const fixtures = {
     'contact.list/by-activity-empty': contactListByActivityEmpty satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query': contactListByActivityQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
     'contact.list/by-activity-query-aguilar': contactListByActivityQueryAguilar satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/by-activity-sent-from-the-account': contactListByActivitySentFromTheAccount satisfies Exchange<
         ContactListRequest,
         Page<Contact>
     >,
@@ -1718,6 +1724,10 @@ export const fixtures = {
     >,
     'journal.list/panel-moved': journalListPanelMoved satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/panel-moved-edited': journalListPanelMovedEdited satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/person-sent-from-the-account': journalListPersonSentFromTheAccount satisfies Exchange<
         JournalListRequest,
         Page<JournalEntry>
     >,

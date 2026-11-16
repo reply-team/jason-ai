@@ -10,7 +10,8 @@ namespace Jason.App.Tests.EndToEnd;
 /// line naming the thread and the person, and that line wakes the campaign's manager. The provider is only read, and
 /// the person's words — the subject, the preview, the name the provider shows — reach neither the chronicle nor the
 /// runtime's own log. Where the account's Reply has a change feed, the same reply is read from it instead, and the read
-/// of the campaign's conversations steps aside.
+/// of the campaign's conversations steps aside, and a message the sequence sent is read from it too: the person counts as
+/// contacted, and nobody is woken.
 /// </summary>
 public class InboundSyncE2ETests
 {
@@ -209,6 +210,63 @@ public class InboundSyncE2ETests
     }
 
     /// <summary>
+    /// After Marta was put into the sequence, the sequence sends her its next step. The account's events report the send,
+    /// the runtime says it in the campaign as provider_send_observed, and campaign.activity counts her contacted in a
+    /// period that starts after her enrolment finished, by the send alone; the line wakes no manager.
+    /// </summary>
+    [Fact]
+    public async Task A_message_the_sequence_sent_counts_the_person_contacted_and_wakes_no_manager()
+    {
+        var mark = "zq" + Guid.NewGuid().ToString("N");
+        using var it = GoldenPath.Create("inbound-send");
+        it.Account.WithSequence(Sequence, "Q3 LatAm founders", "active", false, 11)
+            .WithContact(Person, Address, "Marta");
+        await WriteSettingsAsync(it, inbound: true);
+        var (campaign, contact) = await LiveCampaignAsync(it);
+        var since = Moment(DateTime.UtcNow.AddSeconds(1));
+
+        var sent = DateTime.UtcNow.AddSeconds(5);
+        it.Account.WithThread(SentThread(Conversation, sent, mark));
+        await GoldenPath.StopAsync(it);
+        await GoldenPath.StartAsync(it);
+
+        // 1. The send is said in the campaign, about Marta, found by the sequence the campaign pins.
+        JsonObject? line = null;
+        await WaitAsync(
+            async () =>
+            {
+                var items = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+                    it, "journal", "list", "--campaign", campaign, "--kind", "provider_send_observed")))["items"]!.AsArray();
+                line = items.Count > 0 ? items[^1]!.AsObject() : null;
+                return line is not null;
+            },
+            Patience,
+            "No provider_send_observed line appeared: the account's events did not report the sequence's send.");
+        Assert.Equal(contact, (string?)line!["new"]!["contact_id"]);
+        Assert.Equal("campaign_pin", (string?)line["new"]!["attributed_by"]);
+
+        // 2. Contacted by the send alone: the enrolment, work of Jason's, finished before the period.
+        var activity = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(
+            it, "campaign", "activity", campaign, "--since", since, "--until", Moment(DateTime.UtcNow.AddHours(1)))));
+        var row = Assert.Single(activity["campaigns"]!.AsArray())!;
+        Assert.Equal(1, (int)row["contacted"]!);
+        Assert.Equal(0, (int)row["worked_on"]!);
+        Assert.Equal(1, (int)activity["total"]!["contacted"]!);
+
+        // 3. Nobody was woken by it: no check-in names the line, scans after it was said.
+        await Task.Delay(TimeSpan.FromSeconds(4), Ct);
+        foreach (var listed in (await ItemsAsync(it, campaign)).Where(item => (string?)item["role"] == "manager"))
+        {
+            var item = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "workitem", "get", (string)listed["id"]!)));
+            Assert.DoesNotContain((string)line["id"]!, item["context"]!.ToJsonString(), StringComparison.Ordinal);
+        }
+
+        // 4. The message's words stayed at the provider.
+        var chronicle = GoldenPath.Json(await GoldenPath.Ok(GoldenPath.JasonAsync(it, "journal", "list", "--campaign", campaign, "--limit", "500")));
+        Assert.DoesNotContain(mark, chronicle.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A campaign live in Jason and linked to the sequence: the package installed and routed, the person added, and an
     /// enrolment a person approved, which links the campaign to the sequence and pins the person.
     /// </summary>
@@ -349,6 +407,28 @@ public class InboundSyncE2ETests
         ["start"] = new JsonObject { ["position"] = "first_step" },
         ["first_touch"] = "authored_delay",
     };
+
+    /// <summary>A thread of the sequence as the provider holds it: the account sent Marta its next step, which carries the run's mark.</summary>
+    private static JsonObject SentThread(int id, DateTime sent, string mark)
+    {
+        var thread = Thread(id, sent, mark);
+        var at = (string)thread["lastActivityDate"]!;
+        thread["subject"] = "Q3 pilot, a second note " + mark;
+        thread["bodyPreview"] = "Following up on the pilot. " + mark;
+        thread["hasMeetingIntent"] = false;
+        thread["isRead"] = true;
+        thread["messages"] = new JsonArray(new JsonObject
+        {
+            ["channel"] = "email",
+            ["messageId"] = $"<s{id}@mail.example.com>",
+            ["isOutbound"] = true,
+            ["date"] = at,
+            ["fromAddress"] = "sales@example.com",
+            ["subject"] = "Q3 pilot, a second note " + mark,
+            ["body"] = "Following up on the pilot. " + mark,
+        });
+        return thread;
+    }
 
     /// <summary>A thread as the provider holds it: Marta wrote back, and her words carry the run's mark.</summary>
     private static JsonObject Thread(int id, DateTime moved, string mark)
