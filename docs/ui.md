@@ -523,8 +523,8 @@ never chose and follows the system, keeps that. Inside Jason Desktop the desktop
 follows it.
 
 **The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
-Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
-while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
+Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
+the desktop, while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
 is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
 account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
 Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the

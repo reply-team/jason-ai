@@ -221,7 +221,7 @@ keeps running.
   when they reply, when a group goes quiet, or when bounces and opt-outs climb.
 - **Nine specialists instead of one generalist.** A planner, researcher, copywriter, personalizer, critic, responder,
   analyst, deliverability specialist and a manager who watches the whole campaign.
-- **You keep the send button.** Nothing reaches a real person until you say yes, in the chat or in the browser. You can
+- **You keep the send button.** Nothing reaches a real person until you say yes, in the chat or in Jason Desktop. You can
   also say yes in advance, for one kind of reply in one campaign, and take it back at any time.
 - **Never a double-send.** If a send is interrupted and the answer is lost, Jason doesn't guess. A reply comes back to you.
   A new message is repeated only under its own key, where the provider keeps those keys and answers with the first result
