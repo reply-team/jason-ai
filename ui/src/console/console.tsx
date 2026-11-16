@@ -458,8 +458,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     <div className="shell">
                         <aside
                             className={sideOpen ? 'side open' : 'side'}
-                            onClick={(event) => {
-                                if ((event.target as HTMLElement).closest('[data-action], a, button')) setSideOpen(false);
+                            onClickCapture={(event) => {
+                                if ((event.target as HTMLElement).closest('[data-action], a, button'))
+                                    setSideOpen(false);
                             }}
                         >
                             <Painted className="side-body" view={sideView} />

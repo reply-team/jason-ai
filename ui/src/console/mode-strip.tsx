@@ -41,7 +41,16 @@ export function ModeStrip({
                     aria-expanded={nav.open}
                     onClick={nav.toggle}
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        aria-hidden="true"
+                    >
                         <path d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </button>

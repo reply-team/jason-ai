@@ -543,3 +543,23 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
         }
     });
 });
+
+describe('the sidebar where the window is narrow', () => {
+    it("is brought over the area by the strip's button and put away by a choice in it or a tap beside it", async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = () => document.querySelector<HTMLElement>('.jc-console .side')!;
+        const button = () => screen.getByRole('button', { name: 'Sidebar' });
+        expect(aside().classList.contains('open')).toBe(false);
+        expect(button().getAttribute('aria-expanded')).toBe('false');
+        expect(document.querySelector('.side-away')).toBeNull();
+        fireEvent.click(button());
+        expect(aside().classList.contains('open')).toBe(true);
+        expect(button().getAttribute('aria-expanded')).toBe('true');
+        fireEvent.click(document.querySelector('.side-away')!);
+        expect(aside().classList.contains('open')).toBe(false);
+        fireEvent.click(button());
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        expect(aside().classList.contains('open')).toBe(false);
+    });
+});
