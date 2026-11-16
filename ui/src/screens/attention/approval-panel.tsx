@@ -64,7 +64,7 @@ export function ApprovalPanel({
     reaskPoll,
 }: Props) {
     const api = useApi();
-    // The accounts a pending send's sender line reads, once per campaign and channel while this panel is drawn.
+    // The accounts a pending send's sender line reads, one read per approval shown (the line takes its mark when an approval is shown).
     const senders = useMemo(() => senderReads(), []);
     const [rejecting, setRejecting] = useState(false);
     // A message approval is checked against its work item before Approve is offered, and again at the press.

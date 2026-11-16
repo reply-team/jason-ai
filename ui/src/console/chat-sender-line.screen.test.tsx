@@ -133,7 +133,12 @@ describe('the sender line on an agent’s chat’s card', () => {
         renderChat(fake);
         const card = await openCard();
         await waitFor(() => expect(fake.calls.some((each) => each.operation === 'sender.list')).toBe(true));
-        expect(card.querySelector('.sender-line')).toBeNull();
+        // Nothing is said, but the line place is held at its height, so the acts below do not move when it arrives.
+        expect(card.querySelector('.sender-line:not(.sender-hold)')).toBeNull();
+        const hold = card.querySelector<HTMLElement>('.sender-line.sender-hold')!;
+        expect(hold.getAttribute('aria-hidden')).toBe('true');
+        expect(hold.querySelectorAll('.sender-now, .sender-when')).toHaveLength(2);
+        expect(hold.nextElementSibling?.classList.contains('ask-w')).toBe(true);
         expect(within(card).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
         release();
         await waitFor(() =>
@@ -254,6 +259,7 @@ describe('the sender line on an agent’s chat’s card', () => {
         expect(words(card.querySelector('.ask-h')!)).toContain('from https://www.linkedin.com/in/owner-example');
         await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
         expect(card.querySelector('.sender-line')).toBeNull();
+        expect(card.querySelector('.sender-hold')).toBeNull();
         expect(asks(fake, 'sender.list')).toBe(0);
     });
 
@@ -272,7 +278,7 @@ describe('the sender line on an agent’s chat’s card', () => {
         const card = await openCard();
         await waitFor(() => expect(asks(fake, 'sender.list')).toBe(1));
         await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
-        expect(card.querySelector('.sender-line')).toBeNull();
+        expect(card.querySelector('.sender-line:not(.sender-hold)')).toBeNull();
         expect(within(card).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
     });
 });

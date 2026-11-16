@@ -6,8 +6,8 @@ import { SENDER_WHEN, senderAsked, senderLine, senderWords } from '../../console
 
 /**
  * The sending name the provider holds now for the mailbox an approval's send names, under the address it goes from: one
- * piece, drawn on an agent's chat's card and on Needs you. Read when the card is drawn, once per campaign and channel in
- * a drawing; nothing while it is read, and nothing for an approval whose input names no sender. It decides nothing and
+ * piece, drawn on an agent's chat's card and on Needs you. Read when the card is drawn, one read per card; while it is
+ * read the place is held empty at the line's height, and nothing for an approval whose input names no sender. It decides nothing and
  * holds nothing: Approve, Reject and their gate are the card's.
  */
 export function SenderLine({ approval, reads }: { approval: Approval | undefined; reads: SenderReads }) {
@@ -27,7 +27,9 @@ export function SenderLine({ approval, reads }: { approval: Approval | undefined
     }, [api, reads, campaignId, channel, externalId, pluginId, drawn]);
     if (asked === null) return null;
     const line = senderLine(lookupFor(reads, asked, drawn), asked);
-    const words = line === null ? null : senderWords(line);
+    // While the read is out the line's place keeps its height, so the acts below do not move when it arrives.
+    if (line === null) return <SenderHold />;
+    const words = senderWords(line);
     if (words === null) return null;
     return (
         <div className="sender-line">
@@ -42,6 +44,16 @@ export function SenderLine({ approval, reads }: { approval: Approval | undefined
                 {words.message !== null && <> {words.message}</>}
             </div>
             {words.when && <div className="sender-when">{SENDER_WHEN}</div>}
+        </div>
+    );
+}
+
+/** An empty line's worth of height, held where a sender line will be drawn; it says nothing and is hidden from readers. */
+export function SenderHold() {
+    return (
+        <div className="sender-line sender-hold" aria-hidden="true">
+            <div className="sender-now">{' '}</div>
+            <div className="sender-when">{' '}</div>
         </div>
     );
 }

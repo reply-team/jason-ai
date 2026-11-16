@@ -61,6 +61,23 @@ describe('the sender line on Needs you’s panel', () => {
             expect(screen.getByRole('button', { name: 'Reject' }).hasAttribute('disabled')).toBe(false);
         });
 
+    it('holds the line height in the From while the accounts are read', async () => {
+        const fake = new FakeApi().answer('sender.list', 'sender.list/card-message-sender');
+        const release = fake.hold('sender.list');
+        renderPanel(fake);
+        const hold = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.sender-line.sender-hold');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(hold.getAttribute('aria-hidden')).toBe('true');
+        expect(hold.querySelectorAll('.sender-now, .sender-when')).toHaveLength(2);
+        expect(hold.closest('dd')?.previousElementSibling?.textContent).toBe('From');
+        release();
+        await screen.findByText('Sending name at Reply now: Owner Example', { selector: '.sender-now' });
+        expect(document.querySelector('.sender-hold')).toBeNull();
+    });
+
     it('reads the accounts again when the panel goes on to another item, and says what they are then', async () => {
         const fake = new FakeApi().answer(
             'sender.list',

@@ -657,10 +657,13 @@ function words(whole: Approval | undefined): Html | null {
         ${detail.facts.length > 0 ? html`<div class="needs-facts">${detail.facts.map((fact) => html`<div class="meta">${withCode(fact)}</div>`)}</div>` : null}`;
 }
 
+/** A no-break space: the one character a held line holds, so it has the height of a line of words. */
+const NBSP = ' ';
+
 /**
- * The sending name the provider holds now for the mailbox the send names, in the words of an agent's chat's cards: read
- * once when the pane comes to show this approval, nothing while it is read, nothing where the send names no mailbox. It
- * decides nothing; Approve and its gate are the pane's.
+ * The sending name the provider holds now for the mailbox the send names, in the words of an agent's chat's cards: one
+ * read per approval the pane shows, its place held at the line's height while it is read, nothing where the send names
+ * no mailbox. It decides nothing; Approve and its gate are the pane's.
  */
 function senderOf(whole: Approval): Html | null {
     const asked = senderAsked(whole);
@@ -670,7 +673,13 @@ function senderOf(whole: Approval): Html | null {
         void readSender(here().api, senders, asked, sending.drawn);
     }
     const line = senderLine(lookupFor(senders, asked, sending.drawn), asked);
-    const said = line === null ? null : senderWords(line);
+    // While the read is out the line's place keeps its height, so the acts below do not move when it arrives.
+    if (line === null)
+        return html`<div class="sender-line sender-hold" aria-hidden="true">
+            <div class="sender-now">${NBSP}</div>
+            <div class="sender-when">${NBSP}</div>
+        </div>`;
+    const said = senderWords(line);
     if (said === null) return null;
     return html`<div class="sender-line">
         <div class="sender-now">

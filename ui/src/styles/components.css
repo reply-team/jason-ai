@@ -678,4 +678,5 @@ button.row:hover .what .cue { text-decoration: underline; }
 .message-card .hint { color: var(--text-muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
 /* The sending name the provider holds now, under the address a send goes from, and when it was read. */
 .sender-line { margin-top: var(--space-1); }
+.sender-line.sender-hold { visibility: hidden; }
 .sender-line .sender-when { color: var(--text-muted); font-size: var(--text-sm); }

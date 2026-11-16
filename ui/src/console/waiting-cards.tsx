@@ -342,7 +342,7 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const api = useApi();
     const waiting = useMemo(() => waitingOf(campaignId), [campaignId]);
     useEffect(() => drawWaiting(api, campaignId), [api, campaignId]);
-    // The accounts the cards' sender lines read, once per channel while this chat is drawn.
+    // The accounts the cards' sender lines read, one read per card, kept while this chat is drawn.
     const senders = useMemo(() => senderReads(), [campaignId]);
     const store = waiting.store;
     const approvals = store.approvals.value;

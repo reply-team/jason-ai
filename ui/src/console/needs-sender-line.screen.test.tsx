@@ -20,12 +20,19 @@ import { forgetWaiting } from './waiting';
 // when the pane comes to show the approval. None of them changes Approve, Edit, Reject or the gate they follow.
 
 /** The console on Needs you, which lists the recorded message as the one approval waiting. */
-async function renderNeeds(fake: FakeApi): Promise<FakeApi> {
+async function renderNeeds(fake: FakeApi, pair = false): Promise<FakeApi> {
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
-        .answer('approval.get', 'approval.get/card-message')
-        .answerAnyRequest('approval.list', () => 'approval.list/card-message-pending')
+        .answer(
+            'approval.get',
+            ...(pair
+                ? (['approval.get/needs-two-first', 'approval.get/needs-two-second'] as const)
+                : (['approval.get/card-message'] as const)),
+        )
+        .answerAnyRequest('approval.list', () =>
+            pair ? 'approval.list/needs-two' : 'approval.list/card-message-pending',
+        )
         .answerAnyRequest('decision.list', () => 'decision.list/empty');
     watch(fake);
     activatePlugins(browserPlugins);
@@ -86,7 +93,7 @@ describe('the sender line in Needs you’s pane', () => {
         it(`says ${wording.name}, under the From, and leaves the pane’s acts as they were`, async () => {
             const fake = await renderNeeds(new FakeApi().answer('sender.list', wording.answer));
             const line = await waitFor(() => {
-                const found = pane().querySelector<HTMLElement>('.sender-line');
+                const found = pane().querySelector<HTMLElement>('.sender-line:not(.sender-hold)');
                 expect(found).not.toBeNull();
                 return found!;
             });
@@ -114,7 +121,7 @@ describe('the sender line in Needs you’s pane', () => {
         await renderNeeds(fake);
         await waitFor(() => expect(asks(fake)).toHaveLength(1));
         expect(await liveActs()).toEqual(acts);
-        expect(pane().querySelector('.sender-line')).toBeNull();
+        expect(pane().querySelector('.sender-line:not(.sender-hold)')).toBeNull();
         release();
         await waitFor(() =>
             expect(words(pane().querySelector('.sender-line .sender-now')!)).toBe(
@@ -125,7 +132,7 @@ describe('the sender line in Needs you’s pane', () => {
 
     it('reads once while the pane keeps showing the approval, whatever reloads the lists', async () => {
         const fake = await renderNeeds(new FakeApi().answer('sender.list', 'sender.list/card-message-sender'));
-        await waitFor(() => expect(pane().querySelector('.sender-line')).not.toBeNull());
+        await waitFor(() => expect(pane().querySelector('.sender-line:not(.sender-hold)')).not.toBeNull());
         await reload();
         await reload();
         expect(words(pane().querySelector('.sender-line .sender-now')!)).toBe(
@@ -136,12 +143,12 @@ describe('the sender line in Needs you’s pane', () => {
 
     it('reads again when Needs you is drawn again, so no line is older than the pane that shows it', async () => {
         const fake = await renderNeeds(new FakeApi().answer('sender.list', 'sender.list/card-message-sender'));
-        await waitFor(() => expect(pane().querySelector('.sender-line')).not.toBeNull());
+        await waitFor(() => expect(pane().querySelector('.sender-line:not(.sender-hold)')).not.toBeNull());
         // The window is closed and opened again on Needs you, which shows the same approval.
         cleanup();
         await renderNeeds(fake.answer('sender.list', 'sender.list/card-message-sender'));
         await waitFor(() => expect(asks(fake)).toEqual([SENDER_ASKED, SENDER_ASKED]));
-        await waitFor(() => expect(pane().querySelector('.sender-line')).not.toBeNull());
+        await waitFor(() => expect(pane().querySelector('.sender-line:not(.sender-hold)')).not.toBeNull());
     });
 
     it('draws nothing when the pairing has ended during the read, and Approve is live all the same', async () => {
@@ -158,6 +165,50 @@ describe('the sender line in Needs you’s pane', () => {
         await waitFor(() => expect(asks(fake)).toHaveLength(1));
         await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
         expect(await liveActs()).toEqual(acts);
-        expect(pane().querySelector('.sender-line')).toBeNull();
+        expect(pane().querySelector('.sender-line:not(.sender-hold)')).toBeNull();
+    });
+
+    it('holds the line height under the From while the accounts are read, and the line takes that place', async () => {
+        const fake = new FakeApi().answer('sender.list', 'sender.list/card-message-sender');
+        const release = fake.hold('sender.list');
+        await renderNeeds(fake);
+        await waitFor(() => expect(asks(fake)).toHaveLength(1));
+        const from = pane().querySelector('.needs-from')!;
+        const hold = from.nextElementSibling as HTMLElement;
+        expect(hold.classList.contains('sender-hold')).toBe(true);
+        expect(hold.getAttribute('aria-hidden')).toBe('true');
+        expect(hold.querySelectorAll('.sender-now, .sender-when')).toHaveLength(2);
+        expect(await liveActs()).toEqual(acts);
+        release();
+        // The pane is painted again when the read lands: the same place, under the same From.
+        await waitFor(() =>
+            expect(words(pane().querySelector('.needs-from')!.nextElementSibling!.querySelector('.sender-now')!)).toBe(
+                'Sending name at Reply now: Owner Example',
+            ),
+        );
+    });
+
+    it('reads again from one approval to another of the same campaign, and never paints the first answer on the second', async () => {
+        const fake = new FakeApi().answer(
+            'sender.list',
+            'sender.list/card-message-sender',
+            'sender.list/card-sender-other',
+        );
+        await renderNeeds(fake, true);
+        await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+        await waitFor(() =>
+            expect(words(pane().querySelector('.sender-line .sender-now')!)).toBe(
+                'Sending name at Reply now: Owner Example',
+            ),
+        );
+        fireEvent.click(needs().querySelector<HTMLElement>('[data-row="apr_2"]')!);
+        await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+        await waitFor(() => expect(asks(fake)).toEqual([SENDER_ASKED, SENDER_ASKED]));
+        await waitFor(() =>
+            expect(words(pane().querySelector('.sender-line .sender-now')!)).toBe(
+                'Reply does not list this mailbox now.',
+            ),
+        );
+        expect(words(pane())).not.toContain('Owner Example');
     });
 });
