@@ -485,6 +485,30 @@ describe('a choice in an agent’s chat', () => {
         await waitFor(() => within(card(pane)).getByText(/^You acted on this agent after this was asked/));
         expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true);
     });
+
+    it('ignores the answer of a read made before the stream started afresh, which arrives after the read made again', async () => {
+        // The first read finds an act and the second none; both are held, and the first answers first.
+        let answered = 0;
+        const fake = new FakeApi().answerAnyRequest('journal.list', () =>
+            answered++ === 0 ? 'journal.list/card-choice-acts' : 'journal.list/card-choice-acts-none',
+        );
+        const release = fake.hold('journal.list');
+        const journal = stubStream();
+        const { pane } = await asked(fake, journal);
+        await waitFor(() => expect(reads(fake)).toHaveLength(1));
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_41', kind: 'contacts_added', campaign_id: 'cmp_1' }));
+        });
+        flush(() => journal.close());
+        await waitFor(() => expect(journal.opened).toHaveLength(2), { timeout: 3000 });
+        flush(() => journal.close());
+        await waitFor(() => expect(reads(fake)).toHaveLength(2), { timeout: 3000 });
+        flush(() => release());
+        await live(pane);
+        expect(answered).toBe(2);
+        expect(within(card(pane)).queryByText(/^You acted on this agent/)).toBeNull();
+    });
 });
 
 afterEach(() => {
