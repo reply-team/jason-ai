@@ -183,7 +183,7 @@
     > .btn.agent-move-resume {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console
     .harness
