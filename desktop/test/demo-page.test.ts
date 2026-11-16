@@ -84,8 +84,11 @@ test('the two schemes are standard and secure and nothing more: the policy is ne
 test('the content policy allows the page’s inline script and style and its data: fonts and images, and nothing else', () => {
     assert.equal(
         demoPolicy,
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-forms",
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts",
     );
+    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and storage is refused;
+    // no forms.
+    assert.ok(!/allow-same-origin|allow-forms/.test(demoPolicy));
     // No source names an address, a scheme to fetch from, 'self' or eval.
     assert.ok(!/https?:|wss?:|blob:|'self'|unsafe-eval|\*/.test(demoPolicy));
     // The sandbox leaves out pop-ups, top navigation, downloads, modals, printing and the rest.

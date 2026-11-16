@@ -1,11 +1,13 @@
 /**
  * The seal around a view of the Demo: the page the application carries as one static file (`demo/index.html`), shown as
- * it was built, and the desktop's own Demo | Live switch drawn over it (`shell/demo-switch.html`). The page is not the
- * desktop's code, so its view is made harmless whatever its script does: no preload and so no bridge to the main process,
- * Chromium's sandbox, a session of its own that Electron keeps in memory, the one file it is served from and nothing
- * else, no pop-up, no navigation away, no download, every permission and every device chooser refused, and a content
- * policy sent as a header of the protocol that serves the file, before a byte of the page is read, so nothing in the
- * page can loosen it: a policy the page states itself is one more that also applies, never one that replaces it.
+ * it was built, and the desktop's own Demo | Live switch drawn over the place its strip leaves for one
+ * (`shell/demo-switch.html`). The page is not the desktop's code, so its view is made harmless whatever its script does:
+ * no preload and so no bridge to the main process, Chromium's sandbox, a session of its own that Electron keeps in
+ * memory, the one file it is served from and nothing else, no pop-up, no navigation away, no download, every permission
+ * and every device chooser refused, and a content policy sent as a header of the protocol that serves the file, before a
+ * byte of the page is read, so nothing in the page can loosen it: a policy the page states itself is one more that also
+ * applies, never one that replaces it. The policy's `sandbox` is the page's own frame, scripts alone, so its origin is
+ * opaque.
  *
  * Every piece of it is here, pure or wired onto the view's own contents and session (`sealView`), so a test runs the same
  * code over stand-ins and holds each piece; `demo-window.ts` makes the views and calls it before anything is loaded.
@@ -61,9 +63,9 @@ export function demoBeforeReady(commandLine: BeforeReady['commandLine'], protoco
 export const noDragSheet = '*, *::before, *::after { -webkit-app-region: no-drag !important; }';
 
 /**
- * How the two schemes are registered before Electron is ready: standard, so a page has an origin of its own and its
- * storage works, and secure, as a page served from the application is. Nothing else: never `bypassCSP`, never the Fetch
- * API, CORS, service workers or streams.
+ * How the two schemes are registered before Electron is ready: standard, so an address has a host and a path, and secure,
+ * as a page served from the application is. Nothing else: never `bypassCSP`, never the Fetch API, CORS, service workers
+ * or streams. The page's origin is opaque all the same: its policy's `sandbox` leaves out same-origin.
  */
 export function demoSchemes(): { scheme: string; privileges: { standard: boolean; secure: boolean } }[] {
     return [demoPage, demoSwitch].map((view) => ({ scheme: view.scheme, privileges: { standard: true, secure: true } }));
@@ -96,9 +98,10 @@ export function demoViewPreferences(view: DemoView): WebPreferences {
 /**
  * The content policy, a header of the one response: the page's inline script and inline style, its fonts and images as
  * `data:` addresses, and nothing else: no address to fetch, connect or open a socket to, no frame, worker, plugin, form
- * target or base. Its `sandbox` keeps scripts and the page's own origin, so its storage works, and lets its forms raise
- * their events for its script, which `form-action` keeps from going anywhere; it leaves out pop-ups, top-level
- * navigation, downloads, modal dialogs and printing, pointer lock, presentation and orientation lock.
+ * target or base. Its `sandbox` is the page's own frame, the one it was built and walked in: scripts and nothing more.
+ * Without same-origin the page's origin is opaque, so its storage is refused and it keeps what it keeps in memory; it
+ * leaves out forms, pop-ups, top-level navigation, downloads, modal dialogs and printing, pointer lock, presentation and
+ * orientation lock. The desktop's own refusals below hold the page to the same whatever the policy does.
  */
 export const demoPolicy = [
     "default-src 'none'",
@@ -116,7 +119,7 @@ export const demoPolicy = [
     "form-action 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
-    'sandbox allow-scripts allow-same-origin allow-forms',
+    'sandbox allow-scripts',
 ].join('; ');
 
 /** The browser features a page may ask for, each allowed to no origin, its own included. */
@@ -177,7 +180,7 @@ export interface DemoAnswer {
 
 /**
  * Pure: whether an address is the view's own: the same text up to its fragment, which names a place in the page and asks
- * nothing more of the scheme. The page moves itself to `#start` once it is loaded, so a reload asks for that. A fragment
+ * nothing more of the scheme, so a page that moved itself to a fragment is still its own page when reloaded. A fragment
  * begins at the first `#` of an address, so the scheme, the host, the path and the query are compared whole.
  */
 export function isOwnAddress(view: DemoView, url: string): boolean {
@@ -384,8 +387,9 @@ export function switchChoice(url: string): 'live' | null {
 
 /**
  * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of it
- * its top strip is 38 high (the strip and its one-pixel border), the window's drag region, where it draws its own switch.
- * Ours covers that strip whole, from the sidebar to the window's right edge. On macOS the window's title bar is hidden,
+ * its top strip is 38 high (the strip and its one-pixel border), with its own dot and words at its left and its right end
+ * left free for a switch. Our view lies over that strip whole, from the sidebar to the window's right edge, the window's
+ * drag region; it is transparent, so the page's words show through, and draws the switch alone at the right end. On macOS the window's title bar is hidden,
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
  * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
  * Windows the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
