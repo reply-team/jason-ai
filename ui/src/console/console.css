@@ -306,6 +306,7 @@
     --demo-ink: #6b4e00;
     /* Ink on the accent and amber fills, the card edge, the notes' ink and the table head's ground. */
     --on-teal: #fff;
+    --on-ok: #fff;
     --card-line: #e8ecf4;
     --note-ink: #27427f;
     --note-am-ink: #7a3f0a;
@@ -1043,7 +1044,7 @@
         --blue-2: #10283a;
         --gray-2: #1f1f24;
         --seg-track: rgba(255, 255, 255, 0.08);
-        --seg-on: #2a2a30;
+        --seg-on: #3a3a42;
         --seg-on-ink: var(--ink);
         --demo-bg: var(--amber-2);
         --demo-line: #4a3a1c;
@@ -1051,6 +1052,7 @@
         --count-bg: #c2410c;
         --accent-text: #a3b6f7;
         --on-teal: #0c0c0e;
+        --on-ok: var(--bg);
         --card-line: var(--line);
         --note-ink: #a3b6f7;
         --note-am-ink: var(--amber);
@@ -1098,7 +1100,7 @@
     --blue-2: #10283a;
     --gray-2: #1f1f24;
     --seg-track: rgba(255, 255, 255, 0.08);
-    --seg-on: #2a2a30;
+    --seg-on: #3a3a42;
     --seg-on-ink: var(--ink);
     --demo-bg: var(--amber-2);
     --demo-line: #4a3a1c;
@@ -1106,6 +1108,7 @@
     --count-bg: #c2410c;
     --accent-text: #a3b6f7;
     --on-teal: #0c0c0e;
+    --on-ok: var(--bg);
     --card-line: var(--line);
     --note-ink: #a3b6f7;
     --note-am-ink: var(--amber);
@@ -2294,4 +2297,20 @@ body,
     border-radius: 7px;
     background: var(--field-bg);
     color: var(--ink);
+}
+/* A dialog's edge and the layer behind it in the dark theme: the edge shows on the dimmed page, and the page behind
+   recedes. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .overlay {
+        background: rgba(0, 0, 0, 0.62);
+    }
+    :root:not([data-theme='light']) .jc-console .dialog {
+        border-color: var(--field-line);
+    }
+}
+:root[data-theme='dark'] .jc-console .overlay {
+    background: rgba(0, 0, 0, 0.62);
+}
+:root[data-theme='dark'] .jc-console .dialog {
+    border-color: var(--field-line);
 }

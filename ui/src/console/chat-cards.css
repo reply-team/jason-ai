@@ -67,7 +67,7 @@
 .jc-console .btn.ok {
     background: var(--green);
     border-color: var(--green);
-    color: #fff;
+    color: var(--on-ok);
 }
 .jc-console .btn.ok:hover {
     border-color: var(--green);
@@ -543,9 +543,6 @@
 }
 /* The dark theme, chosen by the system or by the person: the same values both ways. */
 @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) .jc-console .btn.ok {
-        color: var(--bg);
-    }
     :root:not([data-theme='light']) .jc-console .btn.no {
         border-color: rgba(255, 138, 101, 0.45);
     }
@@ -559,9 +556,6 @@
     :root:not([data-theme='light']) .jc-console .waiting-card.ask.q {
         border-color: rgba(182, 156, 255, 0.3);
     }
-}
-:root[data-theme='dark'] .jc-console .btn.ok {
-    color: var(--bg);
 }
 :root[data-theme='dark'] .jc-console .btn.no {
     border-color: rgba(255, 138, 101, 0.45);

@@ -72,6 +72,9 @@ describe('the two dark token blocks', () => {
         expect(chosen).toContain('--field-bg: var(--bg)');
         expect(chosen).toContain('--field-line: #3a3a42');
         expect(chosen).toContain('--on-teal: #0c0c0e');
+        expect(chosen).toContain('--on-ok: var(--bg)');
+        expect(chosen).toContain('--seg-on: #3a3a42');
+        expect(css).toContain('--on-ok: #fff;');
         expect(chosen).toContain('--card-line: var(--line)');
     });
 });

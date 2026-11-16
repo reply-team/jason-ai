@@ -28,3 +28,13 @@ describe('the agent page in a narrow window', () => {
         expect(narrow).toMatch(/[.]send-mode-row [{]\s*grid-template-columns: minmax\(0, 1fr\);\s*[}]/);
     });
 });
+
+describe('a dialog in the dark theme', () => {
+    it('has an edge that shows and a layer behind it that dims, chosen or by the system', () => {
+        for (const lead of [":root[data-theme='dark']", ":root:not([data-theme='light'])"]) {
+            expect(console_).toContain(`${lead} .jc-console .overlay {`);
+            expect(console_).toContain(`${lead} .jc-console .dialog {`);
+        }
+        expect(console_).toContain('background: rgba(0, 0, 0, 0.62);');
+    });
+});
