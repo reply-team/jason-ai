@@ -42,6 +42,8 @@ export function TabChat({ bridge }: { bridge: Bridge }) {
             desktop.chat.onEvent((id, event) => {
                 changeChat(id, (chat) => received(chat, event));
                 if (listChanged.has(event.kind)) void reloadConversations();
+                // A set-up chat handed over to a campaign made since the list was read draws that campaign's move.
+                if (event.kind === 'attached') void campaigns.reload();
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             // The event stream was cut and opened again: what the tab drew may be behind, so every chat is read anew.

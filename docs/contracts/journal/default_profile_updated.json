@@ -1,7 +1,7 @@
 {
   "kind": "default_profile_updated",
   "version": 1,
-  "since": "0.45.0",
+  "since": "0.46.0",
   "summary": "The configured default execution profile, the one agent work runs on when nothing more specific names one, was named, replaced or taken away by profile.set_default or profile.unset_default.",
   "subscribable": true,
   "entities": {
