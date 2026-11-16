@@ -8,6 +8,7 @@ import { standInBridge, standInSecret, type StandIn } from '../../test/bridge';
 import { setupFound, stubDesktop, type StubDesktop } from '../../test/desktop';
 import { FakeApi } from '../../test/fake-api';
 import { renderApp } from '../../test/render-app';
+import { nothingWaitsInChats } from '../../test/waiting';
 
 // The classic shell's Chat screen with a bridge to the desktop's chat: the console's list, a conversation and its box,
 // with a stand-in bridge over a stub desktop and no network. A tab never says yes: no card has a button, the mode is a
@@ -90,6 +91,32 @@ describe('the Chat screen in a tab the desktop opened', () => {
         await waitFor(() => screen.getByText('Hello from the desktop'));
         expect(stand.asked.filter((each) => each.member === 'chat.feed')).toEqual([]);
         expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(1);
+    });
+});
+
+describe('the agent’s move in a tab’s chat', () => {
+    it('a set-up chat whose campaign the first list did not hold draws the move once it becomes that campaign’s', async () => {
+        desktop.keep({ id: 'conv_1', title: 'Set-up' });
+        const bridge: Bridge = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch, () => {
+            if (session.bridge.value === bridge) session.dropBridge();
+        });
+        session.bridge.value = bridge;
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('campaign.list', 'campaign.list/screen-empty', 'campaign.list/screen')
+            .answer('campaign.summary', 'campaign.summary/all');
+        renderApp(fake);
+        route.value = { screen: 'chat' };
+        await waitFor(() => screen.getByRole('navigation', { name: 'Chats' }));
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'Set-up' })));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        await waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
+        expect(screen.queryByRole('group', { name: 'This agent' })).toBeNull();
+
+        desktop.kept.get('conv_1')!.campaignId = 'cmp_2';
+        flush(() => desktop.emit('conv_1', { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' }));
+        const group = await waitFor(() => screen.getByRole('group', { name: 'This agent' }));
+        expect(within(group).getByText('Draft')).toBeTruthy();
+        expect(within(group).getByRole('button', { name: 'Start' })).toBeTruthy();
     });
 });
 

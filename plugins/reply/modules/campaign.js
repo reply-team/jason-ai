@@ -48,6 +48,18 @@ export function campaignGet(input, context) {
   // can hold and the provider's own name survives beside it, whole.
   const name = named.length > MAX_NAME ? shortened(named) : named;
 
+  const vendor = {
+    // Only when it did not fit: a name repeated unchanged in both halves would say the two disagree.
+    name: name === named ? undefined : named,
+    status: sequenceRead.status === undefined ? null : sequenceRead.status,
+    is_archived: sequenceRead.isArchived === undefined ? null : sequenceRead.isArchived,
+    health: sequenceRead.health === undefined ? null : sequenceRead.health,
+  };
+  const mailboxes = mailboxesOf(sequenceRead);
+  if (mailboxes !== undefined) {
+    vendor.mailboxes = mailboxes;
+  }
+
   return {
     result: {
       campaign: {
@@ -59,16 +71,23 @@ export function campaignGet(input, context) {
         counts: {},
       },
       // Reply's own answer, untranslated and untyped, so nothing is lost while the neutral half stays strict.
-      vendor: {
-        // Only when it did not fit: a name repeated unchanged in both halves would say the two disagree.
-        name: name === named ? undefined : named,
-        status: sequenceRead.status === undefined ? null : sequenceRead.status,
-        is_archived: sequenceRead.isArchived === undefined ? null : sequenceRead.isArchived,
-        health: sequenceRead.health === undefined ? null : sequenceRead.health,
-      },
+      vendor: vendor,
     },
     external_ids: learned,
   };
+}
+
+// The mailboxes the sequence sends from, by Reply's own number as text and nothing else: an address is what
+// `sender.list` says, and whoever shows one joins the two. An array of whole numbers is the list, an empty one
+// included; a member that is absent or of any other shape is no list at all, never an empty one, because the answer
+// then did not say the sequence sends from none.
+function mailboxesOf(sequenceRead) {
+  const listed = sequenceRead.emailAccounts;
+  if (!Array.isArray(listed) || !listed.every((entry) => Number.isSafeInteger(entry))) {
+    return undefined;
+  }
+
+  return listed.map((entry) => ({ id: String(entry) }));
 }
 
 // The first five hundred characters of a name, cut where a character ends rather than in the middle of one.
