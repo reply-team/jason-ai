@@ -63,11 +63,13 @@ public partial class CardExchangesTests
         Assert.True(JsonNode.DeepEquals(parked.Context["input"], asked.Subject["input"]!["args"]), "the item holds the arguments its approval asked about");
 
         // The line under the message: the accounts the campaign's route lists for a send, read as the card reads them (the
-        // whole team's, the person's own among them), and the same read once the account the send names is gone. The
-        // account is the one the parked send names, so the card finds it by its identifier.
+        // whole team's, the person's own among them), the same read once the account the send names is gone, and once more
+        // while the provider holds no sending name for it. The account is the one the parked send names, so the card finds
+        // it by its identifier.
         reads.Answer(
-            FakeProviderReads.Result(Senders(listed: true)),
-            FakeProviderReads.Result(Senders(listed: false)));
+            FakeProviderReads.Result(Senders(SenderListed.Named)),
+            FakeProviderReads.Result(Senders(SenderListed.Gone)),
+            FakeProviderReads.Result(Senders(SenderListed.Unnamed)));
         var senderAsked = new { campaign_id = scene.Campaign, owners = "team", sender_channel = "email", limit = 100 };
         var sender = (string?)asked.Subject["input"]!["args"]!["sender"]!["external_id"];
         var accounts = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-message-sender", senderAsked, Ct);
@@ -76,6 +78,9 @@ public partial class CardExchangesTests
         Assert.Contains(accounts.Items, a => (string?)a!["owner"] == "teammate");
         var gone = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-sender-other", senderAsked, Ct);
         Assert.DoesNotContain(gone.Items, a => (string?)a!["external_id"] == sender);
+        var unnamed = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-sender-unnamed", senderAsked, Ct);
+        var nameless = Assert.Single(unnamed.Items, a => (string?)a!["external_id"] == sender);
+        Assert.Null((string?)nameless!["name"]);
 
         // (b) The edit: the item's arguments as they were, with the text replaced, patched with the card's own reason.
         var edited = EmailArgs("Hi Ines, thanks for the talk at the meetup. Shall we talk next week?");
@@ -355,6 +360,13 @@ public partial class CardExchangesTests
             Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-draft", new { campaign_ids = new[] { winter.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
             var route = await api.RecordAsync<JsonObject>(Operations.RouteResolve, "card-plan-message-send", new { campaign_id = winter.Campaign, operation = "message.send" }, Ct);
             Assert.Equal((true, "reply"), ((bool?)route["usable"], (string?)route["plugin_id"]));
+            // A send names its channel, and a channel may have a route of its own: the same read for each channel a plan
+            // names, which here falls to the global default.
+            foreach (var channel in new[] { "email", "linkedin" })
+            {
+                var sent = await api.RecordAsync<JsonObject>(Operations.RouteResolve, $"card-plan-{channel}", new { campaign_id = winter.Campaign, operation = "message.send", channel }, Ct);
+                Assert.Equal(("reply", channel), ((string?)sent["plugin_id"], (string?)sent["channel"]));
+            }
 
             // The campaigns a chip is chosen from: the page the panel lists and the counts it reads for them.
             var listed = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "card-chips", new { limit = 100 }, Ct);
@@ -492,6 +504,10 @@ public partial class CardExchangesTests
         var scene = await Scene.OpenAsync(api, "Winter plan", routed: false);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route", new { campaign_id = scene.Campaign, operation = "message.send" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.SenderList, "card-sender-unread", new { campaign_id = scene.Campaign, owners = "team", sender_channel = "email", limit = 100 }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
+        // What a plan for it reads: the campaign, its people, and where its email would go, which is nowhere.
+        Assert.Equal(CampaignStatus.Draft, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "card-plan-unrouted", new { campaign_id = scene.Campaign }, Ct)).Status);
+        Assert.Equal(0, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-unrouted", new { campaign_ids = new[] { scene.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
+        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route-email", new { campaign_id = scene.Campaign, operation = "message.send", channel = "email" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
     }
 
     /// <summary>
@@ -511,14 +527,14 @@ public partial class CardExchangesTests
 
     /// <summary>
     /// What the provider lists for a team: the person's own mailbox, named, and a colleague's; without the first once the
-    /// account is gone from the provider's list.
+    /// account is gone from the provider's list; and the first with no sending name the provider holds.
     /// </summary>
-    private static JsonObject Senders(bool listed)
+    private static JsonObject Senders(SenderListed listed)
     {
         var items = new JsonArray();
-        if (listed)
+        if (listed != SenderListed.Gone)
         {
-            items.Add(Account("s_12", "Owner Example", "owner@example.test", "own"));
+            items.Add(Account("s_12", listed == SenderListed.Named ? "Owner Example" : null, "owner@example.test", "own"));
         }
 
         items.Add(Account("s_13", null, "colleague@example.test", "teammate"));
@@ -529,6 +545,14 @@ public partial class CardExchangesTests
             ["channels"] = new JsonObject { ["email"] = "listed", ["linkedin"] = "not_asked" },
             ["vendor"] = new JsonObject { ["ordering"] = "email_then_linkedin" },
         };
+    }
+
+    /// <summary>How the provider lists the person's own mailbox the send names.</summary>
+    private enum SenderListed
+    {
+        Named,
+        Gone,
+        Unnamed,
     }
 
     private static JsonObject Account(string id, string? name, string address, string owner) => new()

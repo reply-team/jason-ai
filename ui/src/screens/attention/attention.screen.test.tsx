@@ -77,7 +77,8 @@ describe('Attention', () => {
             .answer('approval.list', 'approval.list/messages-pending')
             .answer('decision.list', 'decision.list/empty')
             .answer('approval.get', 'approval.get/email-message')
-            .answer('preference.list', 'preference.list/set');
+            .answer('preference.list', 'preference.list/set')
+            .answer('sender.list', 'sender.list/card-message-sender');
         // A message approval is checked against its work item; no recording holds a message item, so this row holds it.
         const call = fake.call.bind(fake);
         fake.call = async (operation, body, kind) =>
@@ -88,7 +89,10 @@ describe('Attention', () => {
         await waitFor(() => screen.getByText('message.send Ines Duarte'));
         fireEvent.click(screen.getByText('message.send Ines Duarte'));
         await waitFor(() => screen.getAllByText('owner@example.test'));
-        expect(fact('From')).toBe('owner@example.test');
+        // The address, and under it, in the same cell, the sending name the provider holds for it now.
+        await waitFor(() => screen.getByText('Sending name at Reply now: Owner Example'));
+        const from = Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === 'From')!;
+        expect(from.nextElementSibling?.firstChild?.textContent).toBe('owner@example.test');
         expect(fact('Channel')).toBe('Email');
     });
 

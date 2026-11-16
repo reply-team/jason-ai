@@ -56,6 +56,10 @@ function renderConsole(
                 ? 'decision.get/pending-with-options'
                 : 'decision.get/for-campaign-row',
         );
+    // A card's sender line reads the accounts of the send's campaign and channel; these tests are of the rest of the
+    // card, so every such read is answered with one recorded list of accounts, which draws one line and holds nothing.
+    // Its wordings are `chat-sender-line.screen.test.tsx`'s.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     if (!fake.offers('approval.list'))
         fake.answerAnyRequest('approval.list', (body) => {
             const campaign = (body as { campaign_id?: string }).campaign_id;
@@ -449,8 +453,8 @@ describe('what waits in an agent’s chat', () => {
         expect([...editor.querySelectorAll('*')].flatMap((element) => reaching(rules, element))).toEqual([]);
     });
 
-    // His option card: the options as pills, and one more in his words for an answer of one's own, which opens the free
-    // answer and the reason in place. Both stay one press away and are sent as before.
+    // A question's option card: the options as pills, and one more in its own words for an answer of one's own, which opens the free
+    // answer and the reason in place. Both stay one press away and are sent the same way.
     it('draws a question’s options as pills and one more, “Something else…”, that opens the own answer and the reason in place', async () => {
         renderConsole();
         const pane = await openChat('Spring');
