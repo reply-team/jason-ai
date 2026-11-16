@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { openSystem } from './fixtures';
+import { openSystem, quietDesktop } from './fixtures';
 import { Jason } from './harness';
 
 test('a custom build is served over the default, and deleting it brings the default back', async ({ page }) => {
+    await page.addInitScript(quietDesktop);
     const jason = await Jason.start({ build: 'both' });
     try {
         const { url } = await jason.uiOpen();

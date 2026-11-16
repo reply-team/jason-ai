@@ -4,7 +4,7 @@ import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
 import { fullAccessStanding } from '../platform/full-access';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
-import { noDesktop, setPlace, tabDesktop } from '../platform/places';
+import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { parseRoute, route } from '../router';
@@ -25,7 +25,7 @@ import { activePanel, chats, conversations, feedId, here, lines, setup, setupErr
 // An agent is one place: its chat and its page's tabs under one header, each tab an address of its own. The address is
 // the truth for a reload, a deep link, Back and Forward; a pane with no address of its own stands at the chat's.
 
-type Place = 'window' | 'tab' | 'none';
+type Place = 'window' | 'tab';
 
 const spring = 'conv_01JDKEPT0000000000000000S1';
 const setupChat = 'conv_01JDKEPT0000000000000000U1';
@@ -75,9 +75,6 @@ async function renderAt(
         held = new Bridge({ port: 43210, secret: standInSecret }, stand.fetch);
         used = tabDesktop(held);
         setPlace('tab', used);
-    } else if (place === 'none') {
-        used = noDesktop();
-        setPlace('none', used);
     } else setPlace('window');
     await loadMode(used);
     watch(fake);
@@ -796,23 +793,5 @@ describe('What the header says of the agent', () => {
         await renderAt('window', '#/campaigns/cmp_2/settings', api({ ...agents, cmp_2: 'campaign.get/started' }));
         const header = await headOf('Running');
         await waitFor(() => expect(header.querySelector('.agent-kind')?.textContent).toBe('Adaptive'));
-    });
-});
-
-describe('An agent in a tab with no desktop', () => {
-    it('opens on People, has no Chat tab and no “…”, and its Chat’s address gives way to People', async () => {
-        await renderAt('none', '#/campaigns/cmp_1');
-        const header = await headOf('Spring');
-        await pageShown();
-        await waitFor(() =>
-            expect(tabsOf(header).map(([name]) => name)).toEqual(['People 22', 'Inbox', 'Results', 'Settings']),
-        );
-        expect(tab(/^People/).getAttribute('aria-selected')).toBe('true');
-        expect(within(header).queryByRole('button', { name: "More for this agent's conversation" })).toBeNull();
-        flush(() => {
-            location.hash = '#/campaigns/cmp_1/chat';
-        });
-        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_1/people'));
-        await pageShown();
     });
 });

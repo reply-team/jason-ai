@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures';
+import { expect, quietDesktop, test } from './fixtures';
 
 // What the screen tests cannot see is where a screen is drawn. These rows measure the boxes in a real browser at a wide
 // window: a screen shown in the console's one area fills it, the panels once drawn for a narrow column keep a measure of
@@ -9,60 +9,6 @@ const WIDE = { width: 2000, height: 900 };
 const FILLS = 0.9;
 // The measure the panels drawn for a narrow column keep, and the words read in Needs you's pane with them.
 const MEASURE = 880;
-
-// The desktop's seam as far as the console needs it to mount and show a page: nothing answers, nothing is running.
-function quietDesktop(): void {
-    const quiet = () => () => undefined;
-    const done = () => Promise.resolve();
-    (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
-        platform: 'win32',
-        // The desktop's menu commands reach the console through this handler; the test sends them from the page.
-        onCommand: (handler: unknown) => {
-            (window as unknown as { menuCommand: unknown }).menuCommand = handler;
-            return () => undefined;
-        },
-        theme: { get: () => Promise.resolve(null), set: done },
-        links: { take: () => Promise.resolve(null), onOpen: quiet },
-        chat: {
-            send: done,
-            stop: done,
-            answer: done,
-            onEvent: quiet,
-            list: () => Promise.resolve([]),
-            open: done,
-            create: done,
-            remove: done,
-            restart: done,
-            attach: done,
-            rename: done,
-            feed: done,
-        },
-        setup: {
-            status: () =>
-                Promise.resolve({
-                    hosts: [],
-                    reply: {
-                        cli: { found: false, version: null, install: null },
-                        signedIn: false,
-                        user: null,
-                        wired: false,
-                        accounts: [],
-                    },
-                    runtimeVersion: null,
-                    bundleVersion: '0.0.0-smoke',
-                    versionsDiffer: null,
-                    plugins: [],
-                    settingsRefused: null,
-                }),
-            connectReply: done,
-            connectReplyWithKey: done,
-            setProviderKey: done,
-            installProgram: done,
-            configurePlugin: done,
-            onChanged: quiet,
-        },
-    };
-}
 
 test('in the console a screen shown in the one area fills it, whichever screen it is', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
@@ -175,23 +121,4 @@ test('in the console Needs you is drawn across the whole wide area, as its two p
     expect(room.width / room.panelWidth, `Needs you fills the panel ${JSON.stringify(room)}`).toBeGreaterThanOrEqual(
         FILLS,
     );
-});
-
-test('in a browser tab with no desktop the sidebar keeps its width and the area takes the rest', async ({
-    page,
-    jason,
-}) => {
-    await page.setViewportSize(WIDE);
-    const { url } = await jason.uiOpen();
-    await page.goto(url);
-    await expect(page.locator('.jc-console .area')).toBeVisible();
-
-    const sidebar = await page.locator('.jc-console .side').boundingBox();
-    const area = await page.locator('.jc-console .area').boundingBox();
-    expect(sidebar).not.toBeNull();
-    expect(area).not.toBeNull();
-    expect(sidebar!.width).toBe(284);
-    // The area starts where the sidebar ends and takes most of the rest of the window.
-    expect(area!.x).toBeGreaterThanOrEqual(sidebar!.x + sidebar!.width - 1);
-    expect(area!.width).toBeGreaterThan((WIDE.width - 284) * 0.8);
 });

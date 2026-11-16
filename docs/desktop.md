@@ -314,8 +314,8 @@ Dashboard's daily trends and does not remember the switch; the theme it keeps is
 
 The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
 on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
-a tab the desktop opened holds the chat; any other tab shows the same console with no chat, and says that the chat needs Jason Desktop
-([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
+a tab the desktop opened holds the chat; any other tab draws no console, and says that Live Mode is only available in
+Jason Desktop ([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
 not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
 `127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
 which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is

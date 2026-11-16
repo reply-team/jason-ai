@@ -579,5 +579,5 @@ their own: who was worked on, contacted, replied or opted out since they landed.
   [inbound sync](inbound-sync.md)), queues the read of the thread and the responder for a thread that is the
   campaign's own, and wakes the manager; it never reads or classifies the reply itself, and nothing tells a person
   one came. Reading it, and answering it, is the responder's; what it means for the campaign is the manager's.
-- **Allowing in the browser.** The UI's approval panel approves or rejects a search; allowing more people under its
+- **Allowing in Jason Desktop.** The approval panel in Jason Desktop approves or rejects a search; allowing more people under its
   audience is `jason approval approve --allow` or `jason approval set-standing` for now.

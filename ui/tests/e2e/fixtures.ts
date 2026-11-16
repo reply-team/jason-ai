@@ -28,3 +28,87 @@ export async function openBySearch(page: Page, text: string): Promise<void> {
 export async function openSystem(page: Page): Promise<void> {
     await openBySearch(page, 'System');
 }
+
+/**
+ * The desktop's seam as far as the console needs it to mount and show a page: nothing answers, nothing is running. A tab
+ * with no desktop draws one page and not the console, so a test of the console stands this in, as an init script, first.
+ */
+export function quietDesktop(): void {
+    const quiet = () => () => undefined;
+    const done = () => Promise.resolve();
+    (window as unknown as { jasonDesktop: unknown }).jasonDesktop = {
+        platform: 'win32',
+        // The desktop's menu commands reach the console through this handler; the test sends them from the page.
+        onCommand: (handler: unknown) => {
+            (window as unknown as { menuCommand: unknown }).menuCommand = handler;
+            return () => undefined;
+        },
+        theme: { get: () => Promise.resolve(null), set: done },
+        links: { take: () => Promise.resolve(null), onOpen: quiet },
+        chat: {
+            send: done,
+            stop: done,
+            answer: done,
+            onEvent: quiet,
+            list: () => Promise.resolve([]),
+            open: (id: unknown) =>
+                Promise.resolve({
+                    id,
+                    campaignId: null,
+                    title: 'Feed',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                    main: true,
+                    entries: [],
+                    dropped: 0,
+                    chosen: null,
+                }),
+            // A conversation as the desktop makes one: the console reads its id as soon as it asks for one.
+            create: () =>
+                Promise.resolve({
+                    id: 'conv_01JD0000000000000000000001',
+                    campaignId: null,
+                    title: 'New chat',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                }),
+            remove: done,
+            restart: done,
+            attach: done,
+            rename: done,
+            feed: () =>
+                Promise.resolve({
+                    id: 'conv_01JD0000000000000000000002',
+                    campaignId: null,
+                    title: 'Feed',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                    main: true,
+                }),
+        },
+        setup: {
+            status: () =>
+                Promise.resolve({
+                    hosts: [],
+                    reply: {
+                        cli: { found: false, version: null, install: null },
+                        signedIn: false,
+                        user: null,
+                        wired: false,
+                        accounts: [],
+                    },
+                    runtimeVersion: null,
+                    bundleVersion: '0.0.0-smoke',
+                    versionsDiffer: null,
+                    plugins: [],
+                    settingsRefused: null,
+                }),
+            connectReply: done,
+            connectReplyWithKey: done,
+            setProviderKey: done,
+            installProgram: done,
+            configurePlugin: done,
+            onChanged: quiet,
+        },
+    };
+}
