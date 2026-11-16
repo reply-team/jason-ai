@@ -181,7 +181,9 @@ export const saidView = (said: Said): Html =>
 /**
  * A data card: its header in plain weight (a frame's caption is never bold), "As of" and Refresh in the first row; then what stands outside the facts (`before`: the AI's
  * words, labelled as the AI's); then "On record now" over the runtime's facts, or "Reading..." while a read is under
- * way. A stub is its header and "Show now". `action` is the card's own read, named with the chat and the entry.
+ * way; then `after`, the AI's again (a plan's question). A stub is its header and "Show now", and with `kept` the AI's
+ * parts too, as a plan's first part is never a stub. `action` is the card's own read, named with the chat and the entry;
+ * `kind` a class of the card's own beside the frame's.
  */
 export function frame<T>(view: {
     chatId: string;
@@ -191,20 +193,25 @@ export function frame<T>(view: {
     held: Held<T> | null;
     stub: boolean;
     before?: Html | null;
+    after?: Html | null;
+    kept?: boolean;
+    kind?: string;
     /** The facts read, drawn; `at` is the moment the read was answered. */
     facts: (facts: T, at: number) => Html;
 }): Html {
     const { chatId, index, head, held } = view;
     const control = act(view.action, chatId, index);
+    const kind = view.kind === undefined ? '' : ` ${view.kind}`;
     if (view.stub && held === null)
-        return html`<div class="ask chat-card chat-data stub" role="group" aria-label="${head.words}">
+        return html`<div class="ask chat-card chat-data${kind} stub" role="group" aria-label="${head.words}">
             <div class="ask-h card-top">
                 ${head.view}
                 <button class="btn sm card-read" type="button" ${control}>Show now</button>
             </div>
+            ${view.kept === true ? html`${view.before ?? null} ${view.after ?? null}` : null}
         </div>`;
     const read = held?.state === 'read' ? held : null;
-    return html`<div class="ask chat-card chat-data" role="group" aria-label="${head.words}">
+    return html`<div class="ask chat-card chat-data${kind}" role="group" aria-label="${head.words}">
         <div class="ask-h card-top">
             ${head.view} ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
             <button class="btn sm ghost card-read" type="button" ${control}>Refresh</button>
@@ -214,6 +221,7 @@ export function frame<T>(view: {
             <div class="card-rec">On record now</div>
             ${read === null ? html`<div class="card-reading" role="status">Reading...</div>` : view.facts(read.facts, read.at)}
         </div>
+        ${view.after ?? null}
     </div>`;
 }
 

@@ -32,6 +32,11 @@
 .jc-console .thread .sugs {
     justify-content: center;
 }
+/* The chips under the last answer stand at the answer's edge, not centred. */
+.jc-console .thread .sugs.next {
+    justify-content: flex-start;
+    margin: 2px 0 14px;
+}
 
 /* The trail of steps: an arrow that turns as the list opens, none while the turn still runs. */
 .jc-console .vsteps > summary::after {
@@ -395,14 +400,15 @@
     text-decoration: underline;
 }
 
-/* A plan the AI proposes. Its first part is the AI's, in a dashed frame of its own with the AI's name in its first row:
-   its fields as labelled rows, its steps, each draft opened in place under its own caption and drawn as plain text
-   with its line breaks, never in the look of an approval's message. Its second part is the runtime's, under "On record
-   now", with the minute it was read and Refresh in its first row; a stub is that row alone. Its question comes last. */
+/* A plan the AI proposes, in the data cards' frame: its first part the AI's, in the frame's dashed box and in the ink of
+   words rather than the muted look of a query: its fields as labelled rows, its steps, each draft opened in place under
+   its own caption and drawn as plain text with its line breaks, never in the look of an approval's message. Its second
+   part is the frame's facts. Its question comes last. A stub keeps its first part and its question. */
 .jc-console .chat-proposal .card-ai {
-    padding: 10px 12px;
-    border: 1px dashed var(--line);
-    border-radius: 10px;
+    color: var(--ink);
+}
+.jc-console .chat-proposal.stub .card-ai {
+    margin-top: 10px;
 }
 .jc-console .chat-proposal .proposal-none {
     color: var(--mute);
@@ -433,8 +439,7 @@
     margin: 0;
     overflow-wrap: anywhere;
 }
-.jc-console .chat-proposal .proposal-lab,
-.jc-console .chat-proposal .card-lab {
+.jc-console .chat-proposal .proposal-lab {
     margin: 12px 0 4px;
     color: var(--mute);
     font-size: 12px;
@@ -485,57 +490,17 @@
     color: var(--mute);
     font-size: 12px;
 }
-.jc-console .chat-proposal .card-facts {
-    margin-top: 12px;
-}
-.jc-console .chat-proposal .card-top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 10px;
-}
-.jc-console .chat-proposal .card-rec {
-    color: var(--faint);
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-}
-.jc-console .chat-proposal .card-top .card-asof,
-.jc-console .chat-proposal .card-top .card-rec + .card-read {
-    margin-left: auto;
-}
-.jc-console .chat-proposal .card-top .card-read:disabled {
-    opacity: 0.45;
-    cursor: default;
-}
-.jc-console .chat-proposal .card-reading,
 .jc-console .chat-proposal .card-line,
-.jc-console .chat-proposal .card-modes,
 .jc-console .chat-proposal .card-problems {
     margin: 0;
     font-size: 13px;
 }
-.jc-console .chat-proposal .card-modes {
-    padding: 0;
-    list-style: none;
-    color: var(--mute);
-}
-.jc-console .chat-proposal .card-modes b,
 .jc-console .chat-proposal .card-line b {
     color: var(--ink);
     font-weight: 600;
 }
-.jc-console .chat-proposal .card-status {
-    margin-top: 6px;
-    font-size: 13.5px;
-    font-weight: 600;
-}
 .jc-console .chat-proposal .card-problems {
     padding-left: 20px;
-}
-.jc-console .chat-proposal .card-said {
-    margin-top: 4px;
 }
 .jc-console .chat-proposal .proposal-asks {
     margin-top: 12px;

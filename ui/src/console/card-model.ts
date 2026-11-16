@@ -95,7 +95,8 @@ export function modesInForce(
     ];
 }
 
-const people = (count: number): string => (count === 1 ? '1 person' : `${count} people`);
+/** A count of people in words. */
+export const people = (count: number): string => (count === 1 ? '1 person' : `${count} people`);
 
 /** A count's one word, as the Campaigns screen words it. */
 const standingWord = (key: string): string => summaryColumns.find((column) => column.key === key)?.label ?? key;

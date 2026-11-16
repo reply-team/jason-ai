@@ -10,6 +10,7 @@ import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
+import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -125,7 +126,8 @@ async function openChat(title: string): Promise<HTMLElement> {
 
 const proposal = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Jason’s proposal' });
 const proposalsIn = (pane: HTMLElement) => within(pane).queryAllByRole('group', { name: 'Jason’s proposal' });
-/** The AI's part of a plan card, and the runtime's. */
+/** A plan card's first row (its header, the minute part 2 was read, its Refresh), the AI's part, and the runtime's. */
+const top = (card: HTMLElement) => card.querySelector<HTMLElement>('.card-top')!;
 const ai = (card: HTMLElement) => card.querySelector<HTMLElement>('.card-ai')!;
 const facts = (card: HTMLElement) => card.querySelector<HTMLElement>('.card-facts')!;
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -133,14 +135,14 @@ const calls = (fake: FakeApi, operation: string) => fake.calls.filter((each) => 
 const writes = (fake: FakeApi) => fake.calls.filter((each) => each.kind === 'write');
 const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
 /**
- * The pane's plan card at `at` once its facts are read, "On record now" over them and the minute they were read: found
- * afresh, as every read that lands paints the thread again.
+ * The pane's plan card at `at` once its facts are read, "On record now" over them and the minute they were read in its
+ * first row: found afresh, as every read that lands paints the thread again.
  */
 const read = (pane: HTMLElement, at = 0) =>
     waitFor(() => {
         const card = proposalsIn(pane)[at]!;
         expect(within(facts(card)).queryByText('Reading...')).toBeNull();
-        expect(facts(card).querySelector('.card-asof')).not.toBeNull();
+        expect(top(card).querySelector('.card-asof')).not.toBeNull();
         return card;
     });
 
@@ -149,6 +151,7 @@ beforeEach(() => {
     conversations.value = [];
     acts.value = {};
     proposals.value = {};
+    cardReads.value = {};
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -162,6 +165,7 @@ beforeEach(() => {
 afterEach(() => {
     acts.value = {};
     proposals.value = {};
+    cardReads.value = {};
 });
 
 describe('a plan the AI proposes', () => {
@@ -169,8 +173,9 @@ describe('a plan the AI proposes', () => {
         renderConsole([winter(turn())], winterReads());
         const pane = await openChat('Winter plan');
         const card = await waitFor(() => proposal(pane));
-        const rows = Array.from(ai(card).children).map(words);
-        expect(rows.slice(0, 2)).toEqual(['Jason’s proposal', 'This card creates and sends nothing.']);
+        // The card's header names the AI's proposal, and the AI's part opens with what the card does not do.
+        expect(words(top(card).querySelector('.card-head')!)).toBe('Jason’s proposal');
+        expect(words(ai(card).children[0]!)).toBe('This card creates and sends nothing.');
         const part = ai(card);
         for (const shown of [
             '**Winter** outreach',
@@ -211,14 +216,14 @@ describe('a plan the AI proposes', () => {
         const { fake, desktop } = renderConsole([winter(turn())], winterReads());
         const pane = await openChat('Winter plan');
         const card = await read(pane);
-        const before = Array.from(ai(card).children).slice(0, 2).map(words);
+        const before = [words(top(card).querySelector('.card-head')!), words(ai(card).children[0]!)];
         const open = within(card).getAllByRole('button', { name: 'Show the draft' })[0]!;
         expect(open.getAttribute('aria-expanded')).toBe('false');
         open.focus();
         fireEvent.click(open);
         const opened = await waitFor(() => within(proposal(pane)).getByText('Jason’s draft'));
         const again = proposal(pane);
-        expect(Array.from(ai(again).children).slice(0, 2).map(words)).toEqual(before);
+        expect([words(top(again).querySelector('.card-head')!), words(ai(again).children[0]!)]).toEqual(before);
         const body = again.querySelector<HTMLElement>('.proposal-body')!;
         expect(body.textContent).toBe(draft);
         expect(opened.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -241,7 +246,8 @@ describe('a plan the AI proposes', () => {
         const pane = await openChat('Winter plan');
         const card = await read(pane);
         const part = facts(card);
-        expect(words(part)).toMatch(/^On record now As of \d\d:\d\d Refresh/);
+        expect(words(top(card))).toMatch(/^Jason’s proposal As of \d\d:\d\d Refresh$/);
+        expect(words(part)).toMatch(/^On record now It is a draft/);
         expect(within(part).getByText('It is a draft: none of its work starts until it is started.')).toBeTruthy();
         expect(within(part).getAllByText('Every message waits for you')).toHaveLength(2);
         expect(within(part).getByText('2 people in this agent')).toBeTruthy();
@@ -250,9 +256,7 @@ describe('a plan the AI proposes', () => {
             'Plugin that sends LinkedIn messages: reply It can send this agent’s LinkedIn messages now.',
         );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
-        const counted = part.cloneNode(true) as HTMLElement;
-        counted.querySelector('.card-asof')!.remove();
-        expect(counted.textContent!.match(/\d+/g)).toEqual(['2']);
+        expect(part.textContent!.match(/\d+/g)).toEqual(['2']);
         expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([{ campaign_id: 'cmp_5' }]);
         // A send names its channel, so where each channel's sends go is read by naming it, as the claim does.
         expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
@@ -270,7 +274,7 @@ describe('a plan the AI proposes', () => {
         const pane = await openChat('Winter plan');
         const card = await read(pane);
         const made = fake.calls.length;
-        fireEvent.click(within(facts(card)).getByRole('button', { name: 'Refresh' }));
+        fireEvent.click(within(top(card)).getByRole('button', { name: 'Refresh' }));
         await waitFor(() => expect(fake.calls.length).toBe(made + 4));
         await read(pane);
         expect(
@@ -362,11 +366,12 @@ describe('a plan the AI proposes', () => {
         await waitFor(() => expect(proposalsIn(pane)).toHaveLength(2));
         await read(pane, 1);
         const earlier = proposalsIn(pane)[0]!;
-        // The earlier card's own words are all there; only its reading waits.
+        // The earlier card's own words are all there; only its reading waits, its first row its header and Show now.
         expect(within(ai(earlier)).getByText('**Winter** outreach')).toBeTruthy();
-        expect(words(facts(earlier))).toBe('On record now Show now');
+        expect(words(top(earlier))).toBe('Jason’s proposal Show now');
+        expect(earlier.querySelector('.card-facts')).toBeNull();
         expect(calls(fake, 'route.list')).toHaveLength(1);
-        fireEvent.click(within(facts(earlier)).getByRole('button', { name: 'Show now' }));
+        fireEvent.click(within(top(earlier)).getByRole('button', { name: 'Show now' }));
         const shown = await read(pane, 0);
         expect(calls(fake, 'route.list')).toHaveLength(2);
         expect(within(facts(shown)).getByText('No agent is created yet.')).toBeTruthy();

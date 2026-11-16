@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import { ApiError, type Api } from '../api/client';
+import type { Api } from '../api/client';
 import type {
     Campaign,
     CampaignSummaryResponse,
@@ -10,10 +10,20 @@ import type {
     SystemInfo,
 } from '../api/types';
 import { t } from '../platform/i18n';
-import { modeWords } from '../screens/send-modes/model';
-import { clock } from '../time/format';
 import { act, define } from './actions';
-import { lastReadingCard } from './card-frame';
+import {
+    aiCaption,
+    cardHead,
+    drawn,
+    frame,
+    lastReadingCard,
+    readFor,
+    saidOf,
+    saidView,
+    startRead,
+    type Said,
+} from './card-frame';
+import { modesInForce, people, statusSentence } from './card-model';
 import {
     cardLayout,
     lastCardOf,
@@ -30,29 +40,18 @@ import { html, type Html } from './html';
 import { channelWords } from './live';
 import { chats, here } from './state';
 
-// A plan the chat's AI proposes, drawn in two parts that stand visibly apart. The first is the AI's: under its frame's
-// label "Jason’s proposal" and the fixed sentence that the card creates and sends nothing, its fields as labelled rows,
-// its steps, each draft one press away and opened in place under "Jason’s draft", how it adapts and what the person does
-// by hand. Every word of it is the AI's, drawn as its characters, never in the look of a fact or of an approval's
-// message. The second is the runtime's, under "On record now": in an agent's chat the agent's status, how its messages
-// go now, the people it holds and the plugin routed to send its messages; in a chat about no agent yet, that none is
-// created, how messages go for every agent and the plugin the routes send them by. It is read when the card is drawn as
-// the conversation's last card that reads, and again on its Refresh; an earlier one stands as a stub until "Show now".
-// It never follows the journal, and nothing it read is kept in the conversation. The card creates, approves and sends
-// nothing: its question's options send their words as a choice's do, and in Plan only the plan's own card decides.
-
-const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-/** What the runtime said when a read failed: its code, when it gave one, and its words. */
-interface Said {
-    code: string | null;
-    message: string;
-}
-
-const saidOf = (error: unknown): Said =>
-    error instanceof ApiError
-        ? { code: error.code, message: error.message }
-        : { code: null, message: error instanceof Error ? error.message : String(error) };
+// A plan the chat's AI proposes, in the frame every card that reads shares (`card-frame.ts`): under its header
+// "Jason’s proposal", the minute its facts were read and Refresh, two parts that stand visibly apart. The first is the
+// AI's, in a dashed frame of its own: the fixed sentence that the card creates and sends nothing, its fields as labelled
+// rows, its steps, each draft one press away and opened in place under "Jason’s draft", how it adapts and what the
+// person does by hand. Every word of it is the AI's, drawn as its characters, never in the look of a fact or of an
+// approval's message. The second is the runtime's, under "On record now": in an agent's chat the agent's status, how its
+// messages go now, the people it holds and the plugin a send on each of the plan's channels goes to; in a chat about no
+// agent yet, that none is created, how messages go for every agent and the plugin the routes send each channel by. It is
+// read as every card that reads is: when the card is drawn as the conversation's last card that reads, and again on its
+// Refresh; an earlier one stands as a stub until "Show now", its first part and its question still drawn whole. It never
+// follows the journal, and nothing it read is kept in the conversation. The card creates, approves and sends nothing:
+// its question's options send their words as a choice's do, and in Plan only the plan's own card decides.
 
 /** One of the reads: what it answered, or what the runtime said instead. */
 type Part<T> = { ok: true; value: T } | { ok: false; said: Said };
@@ -117,7 +116,7 @@ async function readAgent(api: Api, campaignId: string, channels: readonly PlanCh
             ? { place: 'agent', state: 'gone' }
             : { place: 'agent', state: 'failed', said };
     }
-    const [people, ...sent] = await Promise.all([
+    const [count, ...sent] = await Promise.all([
         part(
             api
                 .call<CampaignSummaryResponse>('campaign.summary', {
@@ -129,7 +128,7 @@ async function readAgent(api: Api, campaignId: string, channels: readonly PlanCh
         ...channels.map((channel) => resolveSender(api, campaignId, channel)),
     ]);
     const sending = channels.map((channel, at) => ({ channel, sender: sent[at]! }));
-    return { place: 'agent', state: 'read', campaign, people, sending };
+    return { place: 'agent', state: 'read', campaign, people: count, sending };
 }
 
 /**
@@ -155,67 +154,40 @@ async function readSetup(api: Api, channels: readonly PlanChannel[]): Promise<Fa
     return { place: 'setup', modes, sending };
 }
 
+/** Part 2's read, for the chat's place when the read starts. */
 const readFacts = (chat: Pick<Chat, 'main' | 'campaignId'>, card: PlanCard): Promise<Facts> =>
     placeOf(chat) === 'agent'
         ? readAgent(here().api, chat.campaignId!, channelsOf(card))
         : readSetup(here().api, channelsOf(card));
 
-/** One read of part 2: under way, or answered at a moment. */
-type Read = { serial: number } & ({ state: 'reading' } | { state: 'read'; at: number; facts: Facts });
-
-/** What one plan card shows of its own: its read, and which of its drafts are open, for the entry it was drawn from. */
-interface Shown {
+/** Which of a plan card's drafts are open, for the entry it was drawn from. */
+interface Opened {
     entry: Entry;
-    read: Read | null;
     open: readonly number[];
 }
 
-/** By chat id, then by the index of the text entry that holds the plan: what each plan card drawn has read and opened. */
-export const proposals = signal<Readonly<Record<string, Readonly<Record<number, Shown>>>>>({});
+/** By chat id, then by the index of the text entry that holds the plan: the drafts the person opened on each plan card. */
+export const proposals = signal<Readonly<Record<string, Readonly<Record<number, Opened>>>>>({});
 
 /**
- * Whether what a card holds was drawn from this entry: the same kind, words and moment, whatever the mark of a Plan only
- * turn's plan says, which is put on as the turn ends and taken off as the chat leaves Plan only or its next turn ends.
- * A conversation opened again from the desktop's record forgets what its cards held (`forgetProposals`).
+ * Whether the drafts a card holds open were opened on this entry: the same kind, words and moment, whatever the mark of a
+ * Plan only turn's plan says, which is put on as the turn ends and taken off as the chat leaves Plan only or its next turn
+ * ends. A conversation opened again from the desktop's record forgets them (`forgetProposals`).
  */
 const sameEntry = (held: Entry, entry: Entry): boolean =>
     held === entry ||
     (held.kind === 'text' && entry.kind === 'text' && held.text === entry.text && held.at === entry.at);
 
-/** Forgets what the plan cards of a chat read and opened: it is opened again from the desktop's record, and reads afresh. */
+/** Forgets the drafts a chat's plan cards hold open: it is opened again from the desktop's record. */
 export function forgetProposals(chatId: string): void {
     if (proposals.value[chatId] === undefined) return;
     proposals.value = Object.fromEntries(Object.entries(proposals.value).filter(([id]) => id !== chatId));
 }
 
-function shownOf(chatId: string, index: number, entry: Entry): Shown | null {
-    const shown = proposals.value[chatId]?.[index];
-    return shown !== undefined && sameEntry(shown.entry, entry) ? shown : null;
+function openOf(chatId: string, index: number, entry: Entry): readonly number[] {
+    const opened = proposals.value[chatId]?.[index];
+    return opened !== undefined && sameEntry(opened.entry, entry) ? opened.open : [];
 }
-
-function put(chatId: string, index: number, shown: Shown): void {
-    proposals.value = { ...proposals.value, [chatId]: { ...proposals.value[chatId], [index]: shown } };
-}
-
-let serials = 0;
-
-/** Reads part 2 now: "Reading..." until it is answered, then what it answered and when. A read under way is left to finish. */
-function startRead(chat: Chat, index: number, card: PlanCard): void {
-    const entry = chat.entries[index]!;
-    const shown = shownOf(chat.id, index, entry);
-    if (shown?.read?.state === 'reading') return;
-    const serial = ++serials;
-    put(chat.id, index, { entry, open: shown?.open ?? [], read: { serial, state: 'reading' } });
-    void readFacts(chat, card).then((facts) => {
-        // Only the read the card waits for lands; a conversation drawn afresh since has forgotten it.
-        const now = proposals.value[chat.id]?.[index];
-        if (now?.read?.serial === serial)
-            put(chat.id, index, { ...now, read: { serial, state: 'read', at: Date.now(), facts } });
-    });
-}
-
-/** The cards asked to read while a thread was drawn, read once the drawing is done: a drawing changes nothing. */
-const asked = new Set<string>();
 
 /**
  * The plan a Plan only turn's marked words end in, as the plan's own card draws it: their last card block when it reads
@@ -234,7 +206,7 @@ export function proposalOf(chat: Chat, index: number): { words: string; card: Pl
 }
 
 /**
-` * The index of the conversation's last card that reads, among the cards its turns draw (`lastReadingCard`, the plan's
+ * The index of the conversation's last card that reads, among the cards its turns draw (`lastReadingCard`, the plan's
  * among them) and the plans its Plan only turns end in; null when none reads. One card reads at a time, whatever its kind.
  */
 export function lastReadingOrPlan(chat: Chat, cards: ReadonlyMap<number, PlacedCard>): number | null {
@@ -262,38 +234,15 @@ function planAt(chatId: unknown, index: unknown): { chat: Chat; card: PlanCard }
     return reading.state === 'card' && reading.card.kind === 'plan' ? { chat, card: reading.card } : null;
 }
 
-/** A campaign's status in a sentence chosen from the status alone: what the dispatcher's eligibility rule says of it. */
-function statusSentence(status: string): string {
-    switch (status) {
-        case 'draft':
-            return 'It is a draft: none of its work starts until it is started.';
-        case 'active':
-            return 'It is active.';
-        case 'paused':
-            return 'It is paused: none of its work starts but what stops it.';
-        case 'archived':
-            return 'It is archived.';
-        default:
-            return `Its status is ${status}.`;
-    }
-}
-
-const people = (count: number): string => (count === 1 ? '1 person' : `${count} people`);
-
-/** A refusal of the runtime's, as the waiting cards say one: its code, then its words. */
-const saidView = (said: Said): Html =>
-    html`<div class="note am card-said" role="alert">
-        ${said.code === null ? null : html`<code>${said.code}</code> `}${said.message}
-    </div>`;
-
 /** How a send to each kind of person is decided, in the send-modes screen's words; nothing from a runtime that does not say. */
 function modesView(inForce: { cold: ModeInForce; warm: ModeInForce } | undefined): Html | null {
-    if (inForce === undefined) return null;
-    return html`<div class="card-lab">${t('modes.settings.heading')}</div>
-        <ul class="card-modes">
-            <li>${t('modes.kind.cold')}: <b>${modeWords(inForce.cold.mode).name}</b></li>
-            <li>${t('modes.kind.warm')}: <b>${modeWords(inForce.warm.mode).name}</b></li>
-        </ul>`;
+    const modes = modesInForce(inForce);
+    return modes.length === 0
+        ? null
+        : html`<div class="card-lab">${t('modes.settings.heading')}</div>
+              <ul class="card-modes">
+                  ${modes.map((each) => html`<li>${each.kind}: <b>${each.mode}</b></li>`)}
+              </ul>`;
 }
 
 /** What a channel's sends are, as a line names the plugin that sends them. */
@@ -324,6 +273,7 @@ function sendingView(sending: readonly Sending<Sender | string | null>[], whose:
         })}`;
 }
 
+/** Part 2: what is on record now, in the runtime's facts and the desktop's sentences. */
 function factsView(facts: Facts): Html {
     if (facts.place === 'setup')
         return html`<div class="card-line">No agent is created yet.</div>
@@ -350,29 +300,6 @@ function factsView(facts: Facts): Html {
         ${sendingView(facts.sending, 'for this agent')}`;
 }
 
-/** Part 2: "On record now", the minute it was read and Refresh in its first row; or, as a stub, "Show now" alone. */
-function recordView(chatId: string, index: number, read: Read | null, stub: boolean): Html {
-    const control = act('card.plan', chatId, index);
-    if (stub && read === null)
-        return html`<div class="card-facts stub">
-            <div class="ask-h card-top">
-                <span class="card-rec">On record now</span>
-                <button class="btn sm card-read" type="button" ${control}>Show now</button>
-            </div>
-        </div>`;
-    const answered = read?.state === 'read' ? read : null;
-    return html`<div class="card-facts">
-        <div class="ask-h card-top">
-            <span class="card-rec">On record now</span>
-            ${answered === null ? null : html`<span class="meta card-asof">As of ${clock(new Date(answered.at), zone)}</span>`}
-            <button class="btn sm ghost card-read" type="button" ${answered === null ? html`disabled` : control}>
-                Refresh
-            </button>
-        </div>
-        ${answered === null ? html`<div class="card-reading" role="status">Reading...</div>` : factsView(answered.facts)}
-    </div>`;
-}
-
 /** A row of the AI's own words under the desktop's label for it; nothing when the AI gave none. */
 const row = (label: string, value: string | undefined): Html | null =>
     value === undefined
@@ -395,7 +322,6 @@ const lines = (heading: string, values: readonly string[] | undefined): Html | n
 function proposalPart(chatId: string, index: number, card: PlanCard, open: readonly number[]): Html {
     const steps = card.steps ?? [];
     return html`<div class="card-ai">
-        <div class="card-who">Jason’s proposal</div>
         <div class="proposal-none">This card creates and sends nothing.</div>
         <div class="proposal-title">${card.title}</div>
         <dl class="proposal-rows">
@@ -431,7 +357,7 @@ function proposalPart(chatId: string, index: number, card: PlanCard, open: reado
                                                 ${
                                                     opened
                                                         ? html`<div class="proposal-draft">
-                                                              <div class="card-who">Jason’s draft</div>
+                                                              ${aiCaption('Jason’s draft')}
                                                               <div class="proposal-body">${step.body}</div>
                                                           </div>`
                                                         : null
@@ -451,7 +377,7 @@ function proposalPart(chatId: string, index: number, card: PlanCard, open: reado
  */
 export function askedAsWords(question: string, options: readonly CardOption[]): Html {
     return html`<div class="proposal-asks" role="group" aria-label="Jason asks">
-        <div class="card-who">Jason asks</div>
+        ${aiCaption('Jason asks')}
         <div class="ask-s">${question}</div>
         <ul class="proposal-answers">
             ${options.map(
@@ -467,37 +393,34 @@ export function askedAsWords(question: string, options: readonly CardOption[]): 
 }
 
 /**
- * The plan card, drawn from the AI's block: its two parts, and under them `asks`, its question as the thread draws it.
- * Part 2 reads when the card is the conversation's last that reads (`last`) and this drawing has not read it; a thread is
- * drawn inside a computed value, so the read starts once the drawing is done. Otherwise it is a stub.
+ * The plan card, drawn from the AI's block in the shared frame: its header, the minute part 2 was read and Refresh; part
+ * 1; part 2 under "On record now"; and under them `asks`, its question as the thread draws it. Part 2 reads when the
+ * card is the conversation's last that reads (`last`) and has not been read for what it is now; otherwise its frame is a
+ * stub, with part 1 and the question still drawn whole.
  */
 export function planView(chat: Chat, index: number, card: PlanCard, last: number | null, asks: Html | null): Html {
-    const entry = chat.entries[index]!;
-    const shown = shownOf(chat.id, index, entry);
-    const read = shown?.read ?? null;
-    if (read === null && index === last) {
-        const key = `${chat.id} ${index}`;
-        if (!asked.has(key)) {
-            asked.add(key);
-            queueMicrotask(() => {
-                asked.delete(key);
-                const now = chats.value[chat.id];
-                const held = now?.entries[index];
-                if (now === undefined || held === undefined || !sameEntry(entry, held)) return;
-                if ((shownOf(now.id, index, held)?.read ?? null) === null) startRead(now, index, card);
-            });
-        }
-    }
-    return html`<div class="ask chat-card chat-proposal" role="group" aria-label="Jason’s proposal">
-        ${proposalPart(chat.id, index, card, shown?.open ?? [])} ${recordView(chat.id, index, read, index !== last)}
-        ${asks}
-    </div>`;
+    const { held, stub } = drawn(chat, index, last, () => readFacts(chat, card));
+    return frame<Facts>({
+        chatId: chat.id,
+        index,
+        head: cardHead('Jason’s proposal'),
+        action: 'card.plan',
+        held,
+        stub,
+        kept: true,
+        kind: 'chat-proposal',
+        before: proposalPart(chat.id, index, card, openOf(chat.id, index, chat.entries[index]!)),
+        after: asks,
+        facts: (facts) => factsView(facts),
+    });
 }
 
 /** "Refresh" and "Show now": part 2 read again. It decides nothing. */
 define('card.plan', ([chatId, index]) => {
     const at = planAt(chatId, index);
-    if (at !== null) startRead(at.chat, index as number, at.card);
+    if (at === null) return;
+    const chat = at.chat;
+    startRead(chat.id, index as number, readFor(chat, index as number), () => readFacts(chat, at.card));
 });
 
 /** "Show the draft" and "Hide the draft": one draft opened or closed in place. It sends nothing. */
@@ -505,11 +428,15 @@ define('card.planDraft', ([chatId, index, step]) => {
     const at = planAt(chatId, index);
     if (at === null || typeof step !== 'number' || at.card.steps?.[step]?.body === undefined) return;
     const entry = at.chat.entries[index as number]!;
-    const shown = shownOf(at.chat.id, index as number, entry);
-    const open = shown?.open ?? [];
-    put(at.chat.id, index as number, {
-        entry,
-        read: shown?.read ?? null,
-        open: open.includes(step) ? open.filter((each) => each !== step) : [...open, step],
-    });
+    const open = openOf(at.chat.id, index as number, entry);
+    proposals.value = {
+        ...proposals.value,
+        [at.chat.id]: {
+            ...proposals.value[at.chat.id],
+            [index as number]: {
+                entry,
+                open: open.includes(step) ? open.filter((each) => each !== step) : [...open, step],
+            },
+        },
+    };
 });

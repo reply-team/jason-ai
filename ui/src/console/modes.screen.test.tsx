@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
+import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
 import { openConversation } from './chat';
 import { Console } from './console';
@@ -53,6 +54,7 @@ beforeEach(() => {
     chats.value = {};
     conversations.value = [];
     proposals.value = {};
+    cardReads.value = {};
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
