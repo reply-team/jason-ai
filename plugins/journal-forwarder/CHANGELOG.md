@@ -3,6 +3,13 @@
 This package versions independently of the Jason runtime, under SemVer. It declares every journal kind a plugin may
 subscribe to, so a version that adds a kind to its manifest is a new version of the package.
 
+## 1.6.0
+
+The manifest declares `provider_send_observed`, which Jason 0.47.0 writes when an account's events report a message the
+account sent in a provider campaign one of its campaigns runs, so a person can grant it. Nothing else changes.
+
+Jason 0.47.0 or newer: an earlier runtime rejects the reload, as every package problem does, over a kind it does not write.
+
 ## 1.5.0
 
 The manifest declares `default_profile_updated`, which Jason 0.46.0 writes when the configured default execution profile

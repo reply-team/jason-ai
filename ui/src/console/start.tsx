@@ -12,7 +12,7 @@ import { chatHosts } from './live';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModelButton, useFit } from './start-menus';
 import { readPreferences, noneStated } from '../screens/settings/voice-model';
-import { voiceSectionId } from '../screens/settings/voice-id';
+import { openSettings } from '../screens/send-modes/open-settings';
 import { voiceKnown } from '../screens/settings/voice-state';
 import { changeChat, chats, conversations, here, inTab, messageOf, setup, setupError } from './state';
 
@@ -118,10 +118,7 @@ const messageWasSent = (): boolean =>
     Object.values(chats.value).some((chat) => chat.entries.some((entry) => entry.kind === 'user'));
 
 /** Opens Settings at the section for name and tone. */
-function openVoice(): void {
-    here().dock.page({ screen: 'settings' });
-    setTimeout(() => document.getElementById(voiceSectionId)?.scrollIntoView?.(), 0);
-}
+const openVoice = (): void => openSettings();
 
 /** Whether the setup, once read, holds an AI that can drive the chat; null while it is not read. */
 const aiConnected = (): boolean | null => {

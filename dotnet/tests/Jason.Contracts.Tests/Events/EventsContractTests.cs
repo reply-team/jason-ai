@@ -93,25 +93,48 @@ public sealed class EventsContractTests
     }
 
     /// <summary>
-    /// A send is reported as a send, never as a thread the account moved, and it reaches a campaign only by the provider
-    /// campaign it names. Both are the plugin's to keep, so the document says so, and the plugin author's page with it.
+    /// A plugin reports a send as a send where it can give the moment the message was sent, and never as a move by the
+    /// other side; it names the provider campaign the send belongs to, by which alone the send reaches a campaign; and it
+    /// gives the send one moment at every read, since the moment is part of what makes two reads one send. A send it
+    /// cannot date it leaves out, so reporting sends is no obligation. All three are the plugin's to keep, so the document
+    /// says so, and the plugin author's pages, each in the same sentence.
     /// </summary>
     [Fact]
-    public void The_conformance_says_a_send_is_reported_as_one_and_named_by_its_provider_campaign()
+    public void The_conformance_says_a_send_is_reported_as_one_named_by_its_provider_campaign_at_one_moment()
     {
-        const string AsASend = "Reports a message sent as the account, by whoever sent it, as message_sent, never as a thread_moved by account.";
+        const string AsASend = "Reports a message sent as the account, by whoever sent it, as message_sent where it can give the moment the message was sent, and otherwise leaves it out; never as a move by the other side.";
         const string ByItsCampaign = "Names under campaign the provider campaign the send belongs to, by the identifier campaign.get pins; a send it cannot place names null, and reaches no campaign.";
+        const string OneMoment = "Gives a message_sent as its occurred_at the moment the message was sent, the same at every read of that send, so that a send read twice is said once.";
         var contract = EventsCatalog.Find("events.read")!;
 
         Assert.Contains(AsASend, contract.Conformance);
         Assert.Contains(ByItsCampaign, contract.Conformance);
+        Assert.Contains(OneMoment, contract.Conformance);
+        Assert.DoesNotContain(contract.Conformance, line => line.Contains("never as a thread_moved by account", StringComparison.Ordinal));
 
-        var page = string.Join(' ', File.ReadAllText(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"))
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var page = Flat(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"));
         Assert.Contains("## The five kinds", page, StringComparison.Ordinal);
-        Assert.Contains("reports a message sent as the account, by whoever sent it, as `message_sent`, never as a `thread_moved` by `account`", page, StringComparison.Ordinal);
+        Assert.Contains("reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment the message was sent, and otherwise leaves it out; never as a move by the other side", page, StringComparison.Ordinal);
+        Assert.Contains("report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by the other side", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("where the provider can tell", page, StringComparison.Ordinal);
         Assert.Contains("names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it cannot place names `null`, and reaches no campaign", page, StringComparison.Ordinal);
+        Assert.Contains("gives a `message_sent` as its `occurred_at` the moment the message was sent, the same at every read of that send, so that a send read twice is said once", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("the moment the thread last moved with it", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("never as a `thread_moved` by `account`", page, StringComparison.Ordinal);
+
+        var guide = Flat(Path.Combine(OperationContracts.ContractFiles.Root, "docs", "plugins.md"));
+        Assert.Contains("Every event is one of five closed kinds", guide, StringComparison.Ordinal);
+        Assert.Contains("Report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by the other side.", guide, StringComparison.Ordinal);
+        Assert.DoesNotContain("four closed kinds", guide, StringComparison.Ordinal);
+
+        var readme = Flat(Path.Combine(OperationContracts.ContractFiles.Package, "README.md"));
+        Assert.Contains("an invitation accepted, a message that bounced, a message the account sent.", readme, StringComparison.Ordinal);
+        Assert.Contains("A branch added to an output's `anyOf`", readme, StringComparison.Ordinal);
     }
+
+    /// <summary>A page's text with its whitespace made single spaces.</summary>
+    private static string Flat(string path) =>
+        string.Join(' ', File.ReadAllText(path).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     [Fact]
     public void A_document_with_a_field_of_its_own_is_refused()

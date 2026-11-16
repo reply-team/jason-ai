@@ -35,6 +35,8 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
+name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
@@ -44,6 +46,46 @@ has no published UI to fetch.
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
 and digest. Delete `custom/` to go back to the default.
+
+### Files the UI does not trust
+
+A build of the UI, the release's or a custom one, may hold under `sealed/` content the UI does not trust, and the
+runtime serves it unable to act. This is a rule of the server about a directory of the layout, named exactly `sealed`,
+in lower case, as `assets/` is one about caching: it applies to every file under `/ui/sealed/` whatever the file is
+called, never to a file by its name, and a build with nothing under `sealed/` is served as it was. A directory named
+another way, `Sealed/` say, is no such directory: its files are served by that name under the policy above. Only pages
+live under `sealed/`, files whose names end in `.html`: a sealed page loads no file, and a script or a style there
+could serve only the UI itself, which would run it with its own rights, so `jason ui install` refuses any other file
+there and the runtime answers a 404 for one. Every answer to a GET under `/ui/sealed/`, a missing file's included,
+carries this policy instead of the one above:
+
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+
+with a `Permissions-Policy` that denies each feature it names to every origin, the file's own included:
+
+`Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), keyboard-map=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()`
+
+and `X-Content-Type-Options: nosniff`, `X-DNS-Prefetch-Control: off`, `Referrer-Policy: no-referrer`,
+`Cross-Origin-Resource-Policy: same-origin` and `Cache-Control: no-store`. A request that is not a GET, or that names
+another origin, is answered before the files are looked at, with no file in it. The set sends no
+`Cross-Origin-Opener-Policy`: that header acts only on a window opened by itself, and how browsers take it together
+with a sandbox the policy sets is not established, so it is left out rather than relied on.
+
+What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
+It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
+in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
+included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads
+nothing and shows no dialog. A request of its that got past the policy to the Runtime API would name that origin,
+`null`, and the runtime refuses a request that names any origin but its own (`origin_refused`) before it reads a token.
+
+What the rule does not stop, in plain words: a browser may look up a host name the file mentions before any policy
+applies; the file can freeze its own tab, until the tab is reloaded or closed; and opened by itself rather than in a
+frame, it can move its own tab to another address. None of these reaches the installation.
+
+The build's own layout is trusted, and so is whoever can write under `<data>/ui/`, who could replace the UI itself: a
+link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
+asks for it.
 
 ## Paired browsers
 
@@ -160,7 +202,10 @@ beside **Add people**, so they are within reach from every tab, each offered onl
 opening a dialog with an optional reason. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
-`jason campaign start`, which resumes a paused one, with your reason). An address naming a campaign's Details opens its Settings, and one naming
+`jason campaign start`, which resumes a paused one, with your reason). The Start and Resume dialogs first read the
+campaign again and say what starting lets go: how many people it holds, and how messages go for people who have not
+replied yet and for people who have replied, in the words of Settings and with where each mode comes from; Start waits
+until that is read, and a mode that cannot be read is said to be unreadable. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want

@@ -49,10 +49,11 @@ plugin revoke
 role set-profile
 #
 # The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when
-# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the
-# project's campaigns.
+# work names the role, linking a project's folder, which then becomes a working folder of every chat on the
+# project's campaigns, and starting a campaign or resuming one, which is what lets its queued work run.
 role add
 project link
+campaign start
 #
 # The Runtime API operations the verbs above call, so that a command naming one is refused by the desktop:
 approval.approve
@@ -81,6 +82,7 @@ plugin.revoke
 role.set_profile
 role.add
 project.link
+campaign.start
 profile.create
 profile.update
 profile.get

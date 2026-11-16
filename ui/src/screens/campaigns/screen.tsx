@@ -26,7 +26,6 @@ import {
 import { AddPeopleDialog } from './add-dialog';
 import { views } from './labels';
 import { CampaignPanel } from './panel';
-import { TransitionDialog, type Transition } from './pause-dialog';
 import { CampaignInbox } from './inbox';
 import { CampaignPeople } from './people';
 import { CampaignResults } from './results';
@@ -41,7 +40,7 @@ import { useCampaignChat } from './campaign-chat';
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 type At = Extract<Route, { screen: 'campaigns' }>;
-type Act = Transition | 'add';
+type Act = 'add';
 
 export function CampaignsScreen() {
     const api = useApi();
@@ -329,7 +328,8 @@ export function CampaignsScreen() {
                 <PersonPanel contactId={personShown} campaignId={selected} onClose={() => setPerson(null)} />
             )}
             {selected && !waiting && !personShown && (
-                <div className="panel">
+                // The agent's own panel, named for a sheet that draws it and not what is drawn in its place.
+                <div className="panel" data-panel="agent">
                     {store.panelFailure.value && <Notice danger>{store.panelFailure.value}</Notice>}
                     {tabFailure && <Notice danger>{tabFailure}</Notice>}
                     {campaign && campaign.id === selected && (
@@ -339,19 +339,9 @@ export function CampaignsScreen() {
                                 at={at}
                                 counted={numbers}
                                 onAct={setActing}
+                                onMoved={reread}
                                 onClose={close}
                             />
-                            {acting && acting !== 'add' && (
-                                <TransitionDialog
-                                    campaign={campaign}
-                                    kind={acting}
-                                    onDone={() => {
-                                        setActing(null);
-                                        reread();
-                                    }}
-                                    onClose={() => setActing(null)}
-                                />
-                            )}
                             {acting === 'add' && (
                                 <AddPeopleDialog campaign={campaign} onAdded={reread} onClose={() => setActing(null)} />
                             )}

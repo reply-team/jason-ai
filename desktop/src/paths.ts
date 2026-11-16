@@ -15,7 +15,11 @@ export interface DesktopPaths {
     settings: string;
     /** `<data>/desktop/mode`: the record of the mode, Live or Demo, one word; read and written in the person's directory only, also during a demo run (`mode.ts`). */
     mode: string;
-    /** `<data>/desktop/demo-start-over`: a request that the next demo start remove the demo's two folders first; written in the person's directory only (`demo-over.ts`). */
+    /**
+     * `<data>/desktop/demo-start-over`: a request to start the demo over that a desktop of 0.44 or earlier may have left,
+     * which nothing writes or reads any more; still a record of the desktop's own (`isNewInstallation`), and a known entry
+     * of its folder that a chat turn is refused (`knownDesktopEntries`).
+     */
     demoStartOver: string;
     /** `<data>/desktop/full-access.json`: the standing choice of Full access, the main process's alone (`full-access-standing.ts`). */
     fullAccess: string;

@@ -139,7 +139,7 @@ export function VoiceSection() {
         );
 
     return (
-        <section id={voiceSectionId} aria-labelledby="settings-voice-heading">
+        <section id={voiceSectionId} data-section="voice" aria-labelledby="settings-voice-heading">
             <h2 id="settings-voice-heading">{t('voice.heading')}</h2>
             {demo && <p className="muted">{t('voice.demo')}</p>}
             {!demo && read === 'reading' && <p className="muted">{t('voice.reading')}</p>}
