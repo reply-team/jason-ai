@@ -99,7 +99,6 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
         mode: {
             get: seam.mode.get,
             set: async () => refused(),
-            startOver: async () => refused(),
             onPreparing: none,
         },
         openIn: {
@@ -170,7 +169,6 @@ export function noDesktop(): JasonDesktop {
         mode: {
             get: async () => ({ mode: 'live', unopened: null, preparing: false }),
             set: async () => needsRefusal(),
-            startOver: async () => needsRefusal(),
             onPreparing: none,
         },
         openIn: {

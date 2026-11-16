@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, openDirectory, opensOnDemo, parseMode, personEnvironmentOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, runsOn, startOn, startRun, writeMode, type Environment, type Mode } from '../src/mode.ts';
-import { dataDirectory, dataLayout, desktopPaths } from '../src/paths.ts';
-import { harnessRoot } from '../src/uninstall.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, opensOnDemo, parseMode, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { dataDirectory, desktopPaths } from '../src/paths.ts';
 import { isNewInstallation } from '../src/theme.ts';
 
 const folder = () => mkdtempSync(join(tmpdir(), 'mode-'));
@@ -115,25 +114,6 @@ test('the demo’s data directory is the person’s sibling, with -demo after it
     assert.equal(demoDirectory(join(home, '.jason') + String.fromCharCode(92)), join(home, '.jason-demo'));
 });
 
-test('a start runs on the person’s directory in Live and on the demo’s in Demo, the record staying in the person’s', () => {
-    const person = join(folder(), '.jason');
-    assert.deepEqual(runsOn(person, 'live', false), { person, data: person, mode: 'live' });
-    assert.deepEqual(runsOn(person, 'demo', false), { person, data: `${person}-demo`, mode: 'demo' });
-});
-
-test('the installer’s and the uninstaller’s starts ignore the record and act on the person’s installation', () => {
-    const person = join(folder(), '.jason');
-    assert.deepEqual(runsOn(person, 'demo', true), { person, data: person, mode: 'live' });
-});
-
-test('the record read at start comes from the person’s directory: a demo record there makes the run the demo’s', () => {
-    const person = join(folder(), '.jason');
-    writeMode(desktopPaths(person).mode, 'demo');
-    const run = runsOn(person, readMode(desktopPaths(person).mode), false);
-    assert.equal(run.data, `${person}-demo`);
-    assert.equal(desktopPaths(run.person).mode, join(person, 'desktop', 'mode'));
-});
-
 test('a packaged desktop starts again with nothing after the program, an unpackaged one with its folder', () => {
     assert.deepEqual(relaunchOptions(['C:/Programs/Jason/Jason.exe', 'jason://campaigns', '--opened-at-login'], true, 'C:/Programs/Jason/Jason.exe'), {
         execPath: 'C:/Programs/Jason/Jason.exe',
@@ -176,15 +156,15 @@ test('a start reads the record before it resolves any path, and the run is the p
 test('a Demo start shows the page and nothing else: no jason, no runtime, no folder of the earlier demo, no import, no start over', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     // The earlier demo's acts are named nowhere in the main module but where Live stops a runtime an earlier demo left.
-    for (const gone of ['carryOutStartOver', 'beginPlacing', 'beginDemoPlacement', 'settlePlacing', 'placingPlan', 'prepareDemo', 'openOnTheSample', 'seedDepsOnDisk', 'holdDemoQuit', 'stopLeftDemoRuntime', 'startDemoOver', 'requestStartOver', 'placeDemoPlugin', 'writeDemoSettings', 'claimDemoFolder', 'openDemoDirectory', 'startOn(', 'enterRun(']) {
+    for (const gone of ['carryOutStartOver', 'beginPlacing', 'beginDemoPlacement', 'settlePlacing', 'placingPlan', 'prepareDemo', 'openOnTheSample', 'seedDepsOnDisk', 'holdDemoQuit', 'stopLeftDemoRuntime', 'startDemoOver', 'requestStartOver', 'placeDemoPlugin', 'writeDemoSettings', 'claimDemoFolder', 'openDemoDirectory', 'startOn(', 'enterRun(', 'mode.startOver', 'startOverGone', 'LogHold', 'releasedAfter(']) {
         assert.equal(main.includes(gone), false, gone);
     }
     // The run is chosen by the mode once Electron is ready: the Demo's own, or the window onto the installation.
     const start = main.slice(main.indexOf('function startDesktop('));
-    assert.ok(start.includes("void app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))));"));
+    assert.ok(start.includes("void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));"));
     // The two schemes are registered, and no host name resolved, before Electron is ready, for a Demo start alone.
     assert.ok(start.includes("if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);"));
-    assert.ok(start.indexOf('demoBeforeReady(') > 0 && start.indexOf('demoBeforeReady(') < start.indexOf('void app.whenReady().then(() => releasedAfter('));
+    assert.ok(start.indexOf('demoBeforeReady(') > 0 && start.indexOf('demoBeforeReady(') < start.indexOf('void app.whenReady().then(() => ('));
     // The Demo's run makes no jason, starts no runtime and asks no program anything.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
     assert.ok(demo.length > 0);
@@ -193,8 +173,6 @@ test('a Demo start shows the page and nothing else: no jason, no runtime, no fol
     }
     assert.ok(demo.includes('await openDemo(window, {'));
 });
-
-const noPreparation = { prepare: () => undefined };
 
 test('a new installation’s first start opens on the demo; any other start goes by its record or the default', () => {
     assert.equal(opensOnDemo(false, true, false), true, 'no record, a new directory');
@@ -301,17 +279,6 @@ test('nothing of the person’s installation exists before they choose Live but 
     assert.equal(live.wrote, false);
 });
 
-test('while the demo’s sample is made a switch is refused with the desktop’s words, a word that is not a mode still thrown', () => {
-    const b = bench();
-    assert.deepEqual(applyMode('live', b.deps, true), { refused: demoPreparing });
-    assert.deepEqual(applyMode('demo', b.deps, true), { refused: demoPreparing });
-    assert.deepEqual(b.steps, [], 'nothing written, nothing started');
-    assert.throws(() => applyMode('sample', b.deps, true), /not a mode/);
-    assert.equal(applyMode('live', b.deps, false), null);
-    assert.deepEqual(b.steps, ['write live', 'relaunch']);
-    assert.equal(demoPreparing, 'The demo is still being prepared. Try again once it is ready.');
-});
-
 test('a demo run’s menu holds the way back alone: no Start the Demo Over, no line where an act of the installation would be', () => {
     assert.deepEqual(demoMenu('demo'), { back: { label: 'Back to Your Own Installation', enabled: true } });
     assert.equal(demoMenu('live'), null);
@@ -348,115 +315,6 @@ test('the person’s environment is taken as it stands, and putting it back chan
     assert.deepEqual(inherited, before);
 });
 
-test('a demo start whose directory can be made and used runs on it, the directory made', () => {
-    const person = join(folder(), '.jason');
-    writeMode(desktopPaths(person).mode, 'demo');
-    const run = startOn(person, 'demo', false, { open: openDirectory, ...noPreparation, keep: (mode) => writeMode(desktopPaths(person).mode, mode) });
-    assert.deepEqual(run, { person, data: `${person}-demo`, mode: 'demo', unopened: null });
-    assert.ok(existsSync(`${person}-demo`));
-    assert.deepEqual(readdirSync(`${person}-demo`), [], 'nothing is left in it by the check');
-    assert.equal(readMode(desktopPaths(person).mode), 'demo');
-});
-
-test('a demo start whose directory cannot be made falls back to the person’s, sets the record back to live and says so', () => {
-    const person = join(folder(), '.jason');
-    writeMode(desktopPaths(person).mode, 'demo');
-    // A file where the demo's directory would be: it can be neither made nor used.
-    writeFileSync(`${person}-demo`, 'not a folder');
-    const run = startOn(person, 'demo', false, { open: openDirectory, ...noPreparation, keep: (mode) => writeMode(desktopPaths(person).mode, mode) });
-    assert.deepEqual(run, { person, data: person, mode: 'live', unopened: demoUnopened });
-    assert.equal(readMode(desktopPaths(person).mode), 'live');
-    assert.match(demoUnopened, /demo could not be opened/);
-});
-
-test('a demo directory that refuses its use falls back the same way, and a record that cannot be set back still falls back', () => {
-    const person = join(folder(), '.jason');
-    const kept: Mode[] = [];
-    const refuse = () => {
-        throw new Error('EACCES');
-    };
-    assert.deepEqual(startOn(person, 'demo', false, { open: refuse, ...noPreparation, keep: (mode) => void kept.push(mode) }), { person, data: person, mode: 'live', unopened: demoUnopened });
-    assert.deepEqual(kept, ['live']);
-    assert.deepEqual(startOn(person, 'demo', false, { open: refuse, ...noPreparation, keep: refuse }), { person, data: person, mode: 'live', unopened: demoUnopened });
-});
-
-test('the demo is prepared after its directory is made and before the start goes on; a preparation that fails falls back', () => {
-    const person = join(folder(), '.jason');
-    const steps: string[] = [];
-    const run = startOn(person, 'demo', false, {
-        open: (dir) => void steps.push(`open ${dir}`),
-        prepare: (dir) => void steps.push(`prepare ${dir}`),
-        keep: () => assert.fail('nothing is set back'),
-    });
-    assert.deepEqual(steps, [`open ${person}-demo`, `prepare ${person}-demo`]);
-    assert.equal(run.mode, 'demo');
-    const kept: Mode[] = [];
-    const failed = startOn(person, 'demo', false, {
-        open: () => undefined,
-        prepare: () => {
-            throw new Error('settings unwritable');
-        },
-        keep: (mode) => void kept.push(mode),
-    });
-    assert.deepEqual(failed, { person, data: person, mode: 'live', unopened: demoUnopened });
-    assert.deepEqual(kept, ['live']);
-});
-
-test('the unopened sentence is the desktop’s own words, never the error’s text nor a path the person gave', () => {
-    const person = join(folder(), 'Chosen By The Person', '.jason');
-    const leaky = () => {
-        throw new Error(`EACCES: permission denied, mkdir '${person}-demo'`);
-    };
-    const run = startOn(person, 'demo', false, { open: leaky, prepare: leaky, keep: leaky });
-    assert.equal(run.unopened, demoUnopened);
-    assert.equal(run.unopened.includes(person), false);
-    assert.equal(run.unopened.includes('Chosen By The Person'), false);
-    assert.equal(run.unopened.includes('EACCES'), false);
-    // The sentence is one constant: no part of it is made from what the start was given.
-    assert.equal(demoUnopened, 'The demo could not be opened, so Jason opened your own installation.');
-    const source = readFileSync(new URL('../src/mode.ts', import.meta.url), 'utf8');
-    const given = [...source.matchAll(/unopened: ([^,;}\n]+)/g)].map((each) => each[1]!.trim());
-    assert.ok(given.length > 0);
-    for (const value of given) assert.ok(['null', 'demoUnopened', 'string | null'].includes(value), `unopened is only ever null or the constant, not ${value}`);
-});
-
-test('a live start and an installer start look at no demo directory and prepare nothing', () => {
-    const person = join(folder(), '.jason');
-    const touched: string[] = [];
-    const deps = { open: (dir: string) => void touched.push(dir), prepare: (dir: string) => void touched.push(dir), keep: () => assert.fail('nothing is set back') };
-    assert.deepEqual(startOn(person, 'live', false, deps), { person, data: person, mode: 'live', unopened: null });
-    assert.deepEqual(startOn(person, 'demo', true, deps), { person, data: person, mode: 'live', unopened: null });
-    assert.deepEqual(touched, []);
-});
-
-test('a demo run points this process at the demo’s directory and away from a harness root the person set; a live run changes nothing', () => {
-    const run = { person: '/p/.jason', data: '/p/.jason-demo', mode: 'demo' as const };
-    const env: Environment = { PATH: '/bin', JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' };
-    const person = enterRun(env, run);
-    assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo' });
-    assert.deepEqual(person, { dataDirectory: undefined, settings: { JASON_Harness__Root: '/p/Mine', jason_harness__root: '/p/Other' } });
-    const live: Environment = { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' };
-    enterRun(live, { person: '/x', data: '/x', mode: 'live' });
-    assert.deepEqual(live, { PATH: '/bin', JASON_DATA_DIR: '/x', JASON_Harness__Root: '/r' });
-});
-
-test('a route, a role switch or any other runtime setting given by the environment does not reach a demo run’s environment', () => {
-    const env: Environment = {
-        PATH: '/bin',
-        JASON_Routes__Default__Plugin: 'reply',
-        jason_responder__onreply: 'true',
-        JASON_Plugins__Grants__reply__0: 'api.example',
-        JASON_DATA_DIR: '/p/.jason',
-        JASON_NO_UNDERSCORES: 'kept',
-        JASON_: 'kept too',
-        NOT_JASON__Routes: 'kept as well',
-    };
-    const person = enterRun(env, { person: '/p/.jason', data: '/p/.jason-demo', mode: 'demo' });
-    assert.deepEqual(env, { PATH: '/bin', JASON_DATA_DIR: '/p/.jason-demo', JASON_NO_UNDERSCORES: 'kept', JASON_: 'kept too', NOT_JASON__Routes: 'kept as well' });
-    assert.equal(Object.keys(env).some(isSettingsVariable), false);
-    assert.deepEqual(person.settings, { JASON_Routes__Default__Plugin: 'reply', jason_responder__onreply: 'true', JASON_Plugins__Grants__reply__0: 'api.example' });
-});
-
 test('back to Live puts back every runtime settings variable byte for byte, names included, and nothing added since', () => {
     const original: Environment = {
         PATH: '/bin',
@@ -466,8 +324,11 @@ test('back to Live puts back every runtime settings variable byte for byte, name
         JASON_DATA_DIR: '/p/data',
     };
     const env: Environment = { ...original };
-    const person = enterRun(env, { person: '/p/data', data: '/p/data-demo', mode: 'demo' });
-    // A variable set during the run, as a settings variable, is no part of the person's environment.
+    const person = personEnvironmentOf(env);
+    // Whatever this process's environment came to hold since: the person's settings variables gone, another data
+    // directory named, and a variable set during the run, as a settings variable, which is no part of the person's.
+    for (const name of Object.keys(env)) if (isSettingsVariable(name)) delete env[name];
+    env.JASON_DATA_DIR = '/p/data-elsewhere';
     env.JASON_Dispatcher__TickSeconds = '2';
     let inherited: Environment | null = null;
     relaunchAsPerson({ env, person, relaunch: () => void (inherited = { ...env }), quit: () => undefined });
@@ -540,22 +401,6 @@ test('a demo run offers nothing that outlasts it and offers the way back; a live
     assert.deepEqual(offersOf('live'), { updates: true, autostart: true, command: true, removal: true, back: false });
 });
 
-test('a demo run hands the chat the person\'s data directory and harness root, read before the run takes the person\'s variables away; a live run hands none', () => {
-    const person = join(folder(), '.jason');
-    const root = join(folder(), 'MyJason');
-    const env: Environment = { JASON_DATA_DIR: person, JASON_Harness__Root: root };
-    const settings = dataLayout(person).userSettingsFile;
-    const demo = runsOn(person, 'demo', false);
-    const own = personsOwnOf(demo, () => harnessRoot(env, '/home/someone', settings));
-    enterRun(env, demo);
-    assert.deepEqual(own, { data: person, harnessRoot: root });
-    // Read after the run is entered, the root the person named is gone: why main reads it first.
-    assert.notEqual(harnessRoot(env, '/home/someone', settings), root);
-    let read = false;
-    assert.equal(personsOwnOf(runsOn(person, 'live', false), () => ((read = true), root)), undefined);
-    assert.equal(read, false, 'a live run reads no harness root for the fence');
-});
-
 test('main hands the chat none of the person’s directories to refuse: the chat runs in the person’s own installation alone', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     assert.equal(main.includes('personsOwn'), false);
@@ -563,10 +408,13 @@ test('main hands the chat none of the person’s directories to refuse: the chat
     assert.ok(chat.indexOf('const chat = new Chat({') === 0 && main.indexOf('const chat = new Chat({') > main.indexOf('async function run('), 'the chat is made by the run onto the installation, never by the Demo’s');
 });
 
-test('main tells the menu and the chat whether this is a demo run, where Full access is not offered', () => {
+test('main tells the set-up, the chat and Open in nothing of a demo: they are made by the run onto the installation alone', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const setup = main.slice(main.indexOf('new Setup({'), main.indexOf('const chat = new Chat({'));
-    assert.ok(setup.includes("demo: runOn.mode === 'demo',"));
-    const chat = main.slice(main.indexOf('const chat = new Chat({'));
-    assert.ok(chat.slice(0, chat.indexOf('});')).includes("demo: runOn.mode === 'demo',"));
+    const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
+    for (const made of ['const setup = new Setup({', 'const chat = new Chat({', 'const openIn = new OpenIn({']) assert.ok(run.includes(made), made);
+    assert.equal(run.includes("demo: runOn.mode === 'demo'"), false);
+    assert.equal(run.includes("live: () => runOn.mode === 'live'"), false);
+    // The page still reads the mode as it did: no sentence of a demo that could not be opened, and no sample being made.
+    assert.ok(run.includes("handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: false }), refused);"));
+    assert.equal(run.includes("'mode.startOver'"), false);
 });
