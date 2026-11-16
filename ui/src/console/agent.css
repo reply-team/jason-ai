@@ -1,0 +1,327 @@
+/* An agent's page in the console's look. The browser shell's Agents screen, drawn inside the console's area, is drawn
+   here as the console draws an agent: the agent alone in the area, its name with its state and type as pills in a bar,
+   its moves at the bar's right, the tabs under it, and its own Settings as cards of rows. The page's markup, words,
+   controls and reads are its own; the sheet reads the two attributes the page carries for it (the status on its pill,
+   the move in its button's class). One rule takes something out of view: while an agent is open, the list beside it,
+   which Close gives back. Every rule is under the Agents screen in the console, so the classic shell and every other
+   screen are untouched; the console's tokens carry its dark values. */
+
+/* The agent alone, on the console's white ground, out to the edges of the console's content, whose padding it takes back. */
+.jc-console .harness .main.campaigns:not(.single) {
+    grid-template-columns: minmax(0, 1fr);
+    margin: -22px -28px -60px;
+    background: var(--panel);
+}
+.jc-console .harness .main.campaigns:not(.single) > .list {
+    display: none;
+}
+@media (max-width: 820px) {
+    .jc-console .harness .main.campaigns:not(.single) {
+        margin: -16px -16px -40px;
+    }
+}
+
+/* The header as the console's bar: the panel a grid of three columns, the header's own box given up so that its name
+   sits in the first, its Close in the third, and the moves between them on the same row; everything else spans the row. */
+.jc-console .harness .main.campaigns:not(.single) > .panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-auto-flow: row dense;
+    align-content: start;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel > * {
+    grid-column: 1 / -1;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel > .panel-header {
+    display: contents;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel .panel-header .heading {
+    grid-column: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    min-width: 0;
+    padding: 14px 0 0 28px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel .panel-header h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 30px;
+    letter-spacing: 0;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel .panel-header .sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel > .panel-actions {
+    grid-column: 2;
+    align-self: start;
+    gap: 8px;
+    padding: 14px 0 0 12px;
+    border: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel .panel-header .close {
+    grid-column: 3;
+    align-self: start;
+    width: 28px;
+    height: 28px;
+    margin: 15px 22px 0 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel .panel-header .close:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+/* The state and the type as the console's pills: the state plain, active green, paused amber; Sequence blue, Adaptive
+   violet. */
+.jc-console .harness .main.campaigns .panel-header .sub .badge {
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.45;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns .panel-header .badge[data-status] {
+    text-transform: capitalize;
+}
+.jc-console .harness .main.campaigns .panel-header .badge[data-status='active'] {
+    color: var(--green);
+    background: var(--green-2);
+    border-color: transparent;
+}
+.jc-console .harness .main.campaigns .panel-header .badge[data-status='paused'] {
+    color: var(--amber);
+    background: var(--amber-2);
+    border-color: transparent;
+}
+.jc-console .harness .main.campaigns .panel-header .badge.kind[data-kind='sequence'] {
+    color: var(--blue);
+    background: var(--blue-2);
+    border-color: transparent;
+}
+.jc-console .harness .main.campaigns .panel-header .badge.kind[data-kind='adaptive'] {
+    color: var(--violet);
+    background: var(--violet-2);
+    border-color: transparent;
+}
+
+/* The moves as the console's buttons: Start and Resume the primary one, Pause and Add people plain. */
+.jc-console .harness .main.campaigns .panel-actions .btn {
+    height: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+.jc-console .harness .main.campaigns .panel-actions .btn:hover {
+    border-color: var(--accent-line);
+}
+.jc-console .harness .main.campaigns .panel-actions .btn.agent-move-start,
+.jc-console .harness .main.campaigns .panel-actions .btn.agent-move-resume {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #fff;
+}
+.jc-console .harness .main.campaigns .panel-actions .btn.agent-move-start:hover,
+.jc-console .harness .main.campaigns .panel-actions .btn.agent-move-resume:hover {
+    filter: brightness(1.07);
+}
+
+/* The agent's numbers, a quiet line under the bar. */
+.jc-console .harness .main.campaigns:not(.single) > .panel > .stats {
+    gap: 16px;
+    padding: 6px 28px 0;
+    border: 0;
+    font-size: 12.5px;
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel > .stats b {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+/* The tabs as the console's: one row with Chat, a teal underline under the one shown. */
+.jc-console .harness .main.campaigns .campaign-tabs {
+    gap: 22px;
+    padding: 0 28px;
+    margin-top: 10px;
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .harness .main.campaigns .campaign-tabs .tabs {
+    gap: 22px;
+    padding: 0;
+    border: 0;
+}
+.jc-console .harness .main.campaigns .campaign-tabs .tabs a,
+.jc-console .harness .main.campaigns .campaign-tabs .campaign-tabs-chat {
+    height: auto;
+    margin: 0 0 -1px;
+    padding: 9px 0 10px;
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns .campaign-tabs .tabs a:hover,
+.jc-console .harness .main.campaigns .campaign-tabs .campaign-tabs-chat:hover {
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns .campaign-tabs .tabs a.active {
+    color: var(--teal);
+    border-bottom-color: var(--teal);
+}
+
+/* A tab's body under the bar, at the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .panel > .panel-body {
+    padding: 22px 28px 28px;
+    gap: 16px;
+}
+/* The timeline's rows carry their own 16px to 20px; the rest of the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .panel > .timeline {
+    padding: 4px 8px 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel > .campaign-tabs-inbox,
+.jc-console .harness .main.campaigns:not(.single) > .panel > .campaign-tabs-results {
+    padding: 22px 28px 28px;
+}
+
+/* The agent's own Settings: each part a card, a fact a row of its card, a send mode a setting row. */
+.jc-console .harness .main.campaigns .panel-body > .facts,
+.jc-console .harness .main.campaigns .panel-body > .section {
+    box-sizing: border-box;
+    max-width: 1120px;
+    margin: 0;
+    padding: 16px 20px 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.jc-console .harness .main.campaigns .panel-body > .facts {
+    padding: 6px 20px;
+}
+.jc-console .harness .main.campaigns .panel-body > .section h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 650;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns .facts {
+    grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+    row-gap: 0;
+    column-gap: 0;
+}
+.jc-console .harness .main.campaigns .facts dt,
+.jc-console .harness .main.campaigns .facts dd {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line2);
+    font-size: 13.5px;
+}
+.jc-console .harness .main.campaigns .facts dt {
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns .facts dd {
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+.jc-console .harness .main.campaigns .facts dt:nth-last-of-type(1),
+.jc-console .harness .main.campaigns .facts dd:nth-last-of-type(1) {
+    border-bottom: 0;
+}
+.jc-console .harness .main.campaigns .panel-body .hint {
+    font-size: 13px;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns .send-mode-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) 170px;
+    gap: 6px 14px;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line2);
+    font-size: 13.5px;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns .send-mode-row:last-child {
+    border-bottom: 0;
+}
+.jc-console .harness .main.campaigns .send-mode-row > p {
+    margin: 0;
+}
+.jc-console .harness .main.campaigns .send-mode-row > p:nth-of-type(n + 2) {
+    grid-column: 1 / -1;
+    font-size: 12.5px;
+}
+.jc-console .harness .main.campaigns .send-mode-row > select {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+}
+.jc-console .harness .main.campaigns .send-mode-row > .btn {
+    justify-self: end;
+    height: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 13px;
+}
+.jc-console .harness .main.campaigns .panel-body > details.fold {
+    max-width: 1120px;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+/* Dark: a fact's label and the dividers take the next stronger token. */
+:root[data-theme='dark'] .jc-console .harness .main.campaigns .facts dt {
+    color: var(--mute);
+}
+:root[data-theme='dark'] .jc-console .harness .main.campaigns .facts dt,
+:root[data-theme='dark'] .jc-console .harness .main.campaigns .facts dd,
+:root[data-theme='dark'] .jc-console .harness .main.campaigns .send-mode-row {
+    border-bottom-color: var(--line);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .jc-console .harness .main.campaigns .facts dt {
+        color: var(--mute);
+    }
+    :root:not([data-theme='light']) .jc-console .harness .main.campaigns .facts dt,
+    :root:not([data-theme='light']) .jc-console .harness .main.campaigns .facts dd,
+    :root:not([data-theme='light']) .jc-console .harness .main.campaigns .send-mode-row {
+        border-bottom-color: var(--line);
+    }
+}
