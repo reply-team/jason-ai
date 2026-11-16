@@ -990,7 +990,7 @@ export function needsView(): Html {
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
                   ? html`<div class="card needs-empty">
-                        <span class="needs-disc">${svg('check', 22)}</span>
+                        <span class="needs-disc">${svg('check', 28)}</span>
                         <div class="bd">You're all caught up</div>
                         <div class="needs-none-says">Nothing is waiting for your decision.</div>
                         <div class="ask-a">

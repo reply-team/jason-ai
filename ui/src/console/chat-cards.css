@@ -531,18 +531,10 @@
 .jc-console .chat-proposal .proposal-chan {
     padding: 0 8px;
     border-radius: 999px;
-    background: var(--panel-2);
-    color: var(--mute);
-    font-size: 12px;
-    font-weight: 600;
-}
-.jc-console .chat-proposal .proposal-chan[data-channel='email'] {
     background: var(--blue-2);
     color: var(--blue);
-}
-.jc-console .chat-proposal .proposal-chan[data-channel='linkedin'] {
-    background: var(--violet-2);
-    color: var(--violet);
+    font-size: 12px;
+    font-weight: 600;
 }
 /* What the person does by hand: an amber box, the console's amber note, so it reads as theirs to do. */
 .jc-console .chat-proposal .proposal-manual {

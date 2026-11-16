@@ -22,11 +22,11 @@ describe('the sidebar rows', () => {
 
     it('defines the row-in-front token in the light theme and in both ways of choosing dark', () => {
         expect(css.match(/--sel: #[0-9a-f]{6};/g)).toHaveLength(3);
-        expect(css).toMatch(/--hover: #e9edf4;\s*--sel: #dde3ee;/);
-        expect(css.match(/--hover: #1f1f24;\s*--sel: #2b2b32;/g)).toHaveLength(2);
+        expect(css).toMatch(/--hover: #e9edf4;\s*--sel: #e3e7ef;/);
+        expect(css.match(/--hover: #1f1f24;\s*--sel: #28282f;/g)).toHaveLength(2);
     });
 
-    it('spaces the rows at 36 pixels from one to the next: eight of padding over a 20 pixel line', () => {
-        expect(css).toMatch(/[.]jc-console [.]item [{][^}]*padding: 8px 10px;/);
+    it('spaces the rows at 36 pixels from one to the next, each box about 35.5 high', () => {
+        expect(css).toMatch(/[.]jc-console [.]item [{][^}]*padding: 7[.]6px 10px;\s*margin-bottom: 0[.]5px;/);
     });
 });
