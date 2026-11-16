@@ -6,11 +6,15 @@
  * file with the generic icon of a program, which is not told apart and is drawn as it comes. macOS: the bundle's own icon
  * set, read by `open-in-icns.ts`. Linux: none; the menu keeps its glyphs.
  *
- * Each path is read once a run, again only when its modified time changes, and a read that failed is kept as none. Nothing
- * is written to disk. A read slower than `waitMs` is not waited for: the menu is drawn with the glyph, and the icon the
- * read finds is there the next time the menu is read.
+ * Each path is read once a run, again only when its modified time changes; one answer is kept per path, the last, and an
+ * answer of no icon is kept as one, while a read that failed is not kept and is tried again the next time. Nothing is
+ * written to disk. A read slower than `waitMs` is not waited for: the menu is drawn with the glyph, and the icon the read
+ * finds is there the next time the menu is read. A file of a bundle is read only where it is a regular file, and never
+ * past its cap, however large it is or grows.
  */
 
+import { constants } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { icnsBytesAtMost, iconFileOf, largestPng, plistBytesAtMost, plistOf, resourceOf } from './open-in-icns.ts';
 
 /** An icon as the page receives it: its size in pixels and its pixels, RGBA, not premultiplied, base64. */
@@ -32,8 +36,9 @@ export interface IconImage {
 
 export interface IconReaderDeps {
     platform: NodeJS.Platform;
-    stat(path: string): Promise<{ mtimeMs: number; size: number }>;
-    readFile(path: string): Promise<Buffer>;
+    stat(path: string): Promise<{ mtimeMs: number; size: number; isFile(): boolean }>;
+    /** A regular file's bytes, or null for anything else or for more than `cap` bytes (`readRegularFileAtMost`). */
+    readAtMost(path: string, cap: number): Promise<Buffer | null>;
     /** Windows: the icon a program's file carries, 32 px (`app.getFileIcon(path, { size: 'normal' })`). */
     fileIcon(path: string): Promise<IconImage>;
     /** An image decoded from PNG data (`nativeImage.createFromBuffer`). */
@@ -60,6 +65,35 @@ export function rgbaOf(bgra: Buffer): Buffer {
     return out;
 }
 
+/**
+ * A regular file's bytes, read through one handle and never more than `cap` of them; null where the path is no regular file
+ * (a folder, a device, a pipe, by a link or not) or holds more than `cap` bytes, the bytes it gained after it was opened
+ * included. Opened without waiting where the system allows it, so a pipe put in the file's place does not hold the read.
+ */
+export async function readRegularFileAtMost(path: string, cap: number): Promise<Buffer | null> {
+    let handle;
+    try {
+        handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    } catch {
+        return null;
+    }
+    try {
+        const stats = await handle.stat();
+        if (!stats.isFile() || stats.size > cap) return null;
+        // One byte more than the size or the cap: a read that fills it says the file is larger than either.
+        const buffer = Buffer.alloc(Math.min(stats.size, cap) + 1);
+        let length = 0;
+        while (length < buffer.length) {
+            const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+            if (bytesRead === 0) break;
+            length += bytesRead;
+        }
+        return length === buffer.length ? null : buffer.subarray(0, length);
+    } finally {
+        await handle.close();
+    }
+}
+
 /** An image as the page receives it, or null for an empty one or one whose pixels do not fill its size. */
 export function iconOf(image: IconImage): PlaceIcon | null {
     if (image.isEmpty()) return null;
@@ -72,7 +106,8 @@ export function iconOf(image: IconImage): PlaceIcon | null {
 
 export class IconReader {
     readonly #deps: IconReaderDeps;
-    readonly #kept = new Map<string, Promise<PlaceIcon | null>>();
+    /** By path, the last answer read and the modified time it was read at: one entry a path, so it never grows past them. */
+    readonly #kept = new Map<string, { changed: number; icon: Promise<PlaceIcon | null> }>();
 
     constructor(deps: IconReaderDeps) {
         this.#deps = deps;
@@ -100,13 +135,16 @@ export class IconReader {
         } catch {
             return null;
         }
-        const key = `${path}\0${changed}`;
-        let kept = this.#kept.get(key);
-        if (kept === undefined) {
-            kept = (this.#deps.platform === 'win32' ? this.#windows(path) : this.#mac(path)).catch(() => null);
-            this.#kept.set(key, kept);
-        }
-        return kept;
+        const kept = this.#kept.get(path);
+        if (kept !== undefined && kept.changed === changed) return kept.icon;
+        const entry = { changed, icon: Promise.resolve<PlaceIcon | null>(null) };
+        // A read that failed is not an answer: it is dropped, so the next time the menu is read asks again.
+        entry.icon = (this.#deps.platform === 'win32' ? this.#windows(path) : this.#mac(path)).catch(() => {
+            if (this.#kept.get(path) === entry) this.#kept.delete(path);
+            return null;
+        });
+        this.#kept.set(path, entry);
+        return entry.icon;
     }
 
     async #windows(path: string): Promise<PlaceIcon | null> {
@@ -115,16 +153,28 @@ export class IconReader {
 
     async #mac(app: string): Promise<PlaceIcon | null> {
         const deps = this.#deps;
-        const plist = plistOf(app);
-        if ((await deps.stat(plist)).size > plistBytesAtMost) return null;
-        const file = iconFileOf((await deps.readFile(plist)).toString('utf8'));
+        const plist = await this.#regular(plistOf(app), plistBytesAtMost);
+        if (plist === null) return null;
+        const file = iconFileOf(plist.toString('utf8'));
         if (file === null) return null;
-        const icns = resourceOf(app, file);
-        if ((await deps.stat(icns)).size > icnsBytesAtMost) return null;
-        const png = largestPng(await deps.readFile(icns));
+        const icns = await this.#regular(resourceOf(app, file), icnsBytesAtMost);
+        if (icns === null) return null;
+        const png = largestPng(icns);
         if (png === null) return null;
         const image = deps.fromBuffer(png);
         if (image.isEmpty()) return null;
         return iconOf(image.resize({ width: pixelEdge, height: pixelEdge, quality: 'best' }));
+    }
+
+    /** A bundle's file, where it is a regular file within its cap, else null: a file that is not there is no icon, too. */
+    async #regular(path: string, cap: number): Promise<Buffer | null> {
+        let stats;
+        try {
+            stats = await this.#deps.stat(path);
+        } catch {
+            return null;
+        }
+        if (!stats.isFile() || stats.size > cap) return null;
+        return this.#deps.readAtMost(path, cap);
     }
 }

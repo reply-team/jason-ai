@@ -2,10 +2,13 @@
 // application's own file), the reader's cache and its wait, and the places that carry an icon on each system.
 
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 import { test } from 'node:test';
-import { icnsBytesAtMost, iconFileOf, largestPng } from '../src/open-in-icns.ts';
-import { IconReader, iconOf, pixelEdge, rgbaOf, type IconImage, type IconReaderDeps, type PlaceIcon } from '../src/open-in-icons.ts';
+import { edgeAtMost, icnsBytesAtMost, iconFileOf, largestPng, plistBytesAtMost } from '../src/open-in-icns.ts';
+import { IconReader, iconOf, pixelEdge, readRegularFileAtMost, rgbaOf, type IconImage, type IconReaderDeps, type PlaceIcon } from '../src/open-in-icons.ts';
 import { finderApp, iconPath, OpenIn, terminalApp, type OpenInDeps, type Probes } from '../src/open-in.ts';
 
 // ---- Bytes made here ------------------------------------------------------------------------------------------------
@@ -134,25 +137,31 @@ interface Planted {
     calls: string[];
     files: Map<string, Buffer>;
     times: Map<string, number>;
+    /** Paths that are no regular file: a device or a pipe, which a stat says has no size. */
+    special: Set<string>;
+    /** Paths whose file grows past its cap between the stat and the read. */
+    growing: Set<string>;
 }
 
 function planted(platform: NodeJS.Platform, overrides: Partial<IconReaderDeps> = {}): Planted {
     const calls: string[] = [];
     const files = new Map<string, Buffer>();
     const times = new Map<string, number>();
+    const special = new Set<string>();
+    const growing = new Set<string>();
     const deps: IconReaderDeps = {
         platform,
         stat: async (path) => {
             calls.push(`stat ${path}`);
             const bytes = files.get(path);
-            if (bytes === undefined && !times.has(path)) throw new Error('ENOENT');
-            return { mtimeMs: times.get(path) ?? 1, size: bytes?.length ?? 0 };
+            if (bytes === undefined && !times.has(path) && !special.has(path)) throw new Error('ENOENT');
+            return { mtimeMs: times.get(path) ?? 1, size: bytes?.length ?? 0, isFile: () => bytes !== undefined && !special.has(path) };
         },
-        readFile: async (path) => {
+        readAtMost: async (path, cap) => {
             calls.push(`read ${path}`);
             const bytes = files.get(path);
             if (bytes === undefined) throw new Error('ENOENT');
-            return bytes;
+            return special.has(path) || growing.has(path) || bytes.length > cap ? null : bytes;
         },
         fileIcon: async (path) => {
             calls.push(`fileIcon ${path}`);
@@ -164,28 +173,33 @@ function planted(platform: NodeJS.Platform, overrides: Partial<IconReaderDeps> =
         },
         ...overrides,
     };
-    return { deps, calls, files, times };
+    return { deps, calls, files, times, special, growing };
 }
 
 const exe = 'C:\\Programs\\Editor\\Editor.exe';
 
-test('on Windows an icon is read once a run for a path, again when its file changes, and a failed read is kept as none', async () => {
+test('on Windows an icon is read once a run for a path, again when its file changes, one answer kept a path, and a failed read is asked again', async () => {
     const machine = planted('win32');
     machine.times.set(exe, 1);
     const reader = new IconReader(machine.deps);
+    const asked = () => machine.calls.filter((call) => call.startsWith('fileIcon')).length;
     const first = await reader.icon(exe);
     assert.equal(first?.width, 32);
     assert.equal(first?.height, 32);
     assert.deepEqual(await reader.icon(exe), first);
-    assert.equal(machine.calls.filter((call) => call.startsWith('fileIcon')).length, 1, 'kept for the run');
+    assert.equal(asked(), 1, 'kept for the run');
     machine.times.set(exe, 2);
     await reader.icon(exe);
-    assert.equal(machine.calls.filter((call) => call.startsWith('fileIcon')).length, 2, 'read again once the file changed');
+    assert.equal(asked(), 2, 'read again once the file changed');
+    // Only the last answer is kept for a path: the earlier time, back again, is read again rather than found.
+    machine.times.set(exe, 1);
+    await reader.icon(exe);
+    assert.equal(asked(), 3, 'one answer a path, so the cache never grows');
 
-    let asked = 0;
+    let failures = 0;
     const failing = planted('win32', {
         fileIcon: async () => {
-            asked += 1;
+            failures += 1;
             throw new Error('no icon');
         },
     });
@@ -193,7 +207,7 @@ test('on Windows an icon is read once a run for a path, again when its file chan
     const unlucky = new IconReader(failing.deps);
     assert.equal(await unlucky.icon(exe), null);
     assert.equal(await unlucky.icon(exe), null);
-    assert.equal(asked, 1, 'a failure is kept as none');
+    assert.equal(failures, 2, 'a read that failed is no answer, so it is asked again');
     // A path that is not there is none, and nothing is asked of the system.
     assert.equal(await new IconReader(planted('win32').deps).icon('C:\\Gone\\Gone.exe'), null);
 });
@@ -256,6 +270,88 @@ test('on macOS a binary list, an asset catalog only, a missing or an oversized i
         plant(machine);
         assert.equal(await new IconReader(machine.deps).icon(app), null, name);
         if (name === 'oversized') assert.ok(!machine.calls.includes(`read ${app}/Contents/Resources/Editor.icns`), 'an oversized set is not read');
+    }
+});
+
+const listing = Buffer.from(plist('<key>CFBundleIconFile</key><string>Editor</string>'));
+
+test('on macOS a property list or an icon set that is no regular file is never read, and one past its cap is not read', async () => {
+    const cases: [string, string, (machine: Planted) => void][] = [
+        ['a list that is a device', `${app}/Contents/Info.plist`, (machine) => {
+            machine.files.set(`${app}/Contents/Info.plist`, listing);
+            machine.special.add(`${app}/Contents/Info.plist`);
+        }],
+        ['a set that is a pipe', `${app}/Contents/Resources/Editor.icns`, (machine) => {
+            machine.files.set(`${app}/Contents/Info.plist`, listing);
+            machine.files.set(`${app}/Contents/Resources/Editor.icns`, icns(['ic08', png(8)]));
+            machine.special.add(`${app}/Contents/Resources/Editor.icns`);
+        }],
+        ['a list past its own cap', `${app}/Contents/Info.plist`, (machine) => {
+            machine.files.set(`${app}/Contents/Info.plist`, Buffer.concat([listing, Buffer.alloc(plistBytesAtMost)]));
+        }],
+    ];
+    for (const [name, unread, plant] of cases) {
+        const machine = planted('darwin');
+        machine.times.set(app, 1);
+        plant(machine);
+        assert.equal(await new IconReader(machine.deps).icon(app), null, name);
+        assert.ok(!machine.calls.includes(`read ${unread}`), `${name} is not read`);
+        assert.ok(!machine.calls.some((call) => call.startsWith('fromBuffer')), `${name}: nothing decoded`);
+    }
+});
+
+test('on macOS an icon set that grows past its cap between the look and the read gives no icon', async () => {
+    const machine = planted('darwin');
+    machine.times.set(app, 1);
+    machine.files.set(`${app}/Contents/Info.plist`, listing);
+    machine.files.set(`${app}/Contents/Resources/Editor.icns`, icns(['ic08', png(8)]));
+    machine.growing.add(`${app}/Contents/Resources/Editor.icns`);
+    assert.equal(await new IconReader(machine.deps).icon(app), null);
+    assert.ok(!machine.calls.some((call) => call.startsWith('fromBuffer')));
+});
+
+test('an answer of no icon is kept: a list with no icon file is read once a run', async () => {
+    const machine = planted('darwin');
+    machine.times.set(app, 1);
+    machine.files.set(`${app}/Contents/Info.plist`, Buffer.from(plist('<key>CFBundleIconName</key><string>AppIcon</string>')));
+    const reader = new IconReader(machine.deps);
+    assert.equal(await reader.icon(app), null);
+    assert.equal(await reader.icon(app), null);
+    assert.equal(machine.calls.filter((call) => call === `read ${app}/Contents/Info.plist`).length, 1);
+});
+
+test('a chunk claiming more than 1024 px a side is skipped, and a set holding only such a chunk decodes nothing', async () => {
+    const claimed = png(4);
+    claimed.writeUInt32BE(40000, 16);
+    claimed.writeUInt32BE(40000, 20);
+    assert.equal(largestPng(icns(['ic10', claimed])), null);
+    const wide = png(4);
+    wide.writeUInt32BE(edgeAtMost + 1, 16);
+    const small = png(8);
+    assert.deepEqual(largestPng(icns(['ic10', wide], ['ic07', small])), small, 'one side over is enough');
+    const machine = planted('darwin');
+    machine.times.set(app, 1);
+    machine.files.set(`${app}/Contents/Info.plist`, listing);
+    machine.files.set(`${app}/Contents/Resources/Editor.icns`, icns(['ic10', claimed]));
+    assert.equal(await new IconReader(machine.deps).icon(app), null);
+    assert.ok(!machine.calls.some((call) => call.startsWith('fromBuffer')), 'nothing handed to the decoder');
+});
+
+test('a file is read through one handle only when regular, and never past its cap', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'jason-open-in-icons-'));
+    try {
+        const file = join(folder, 'set.icns');
+        writeFileSync(file, Buffer.alloc(10, 7));
+        assert.deepEqual(await readRegularFileAtMost(file, 10), Buffer.alloc(10, 7), 'a file at its cap');
+        assert.equal(await readRegularFileAtMost(file, 9), null, 'a file past its cap at the read');
+        const inner = join(folder, 'Resources');
+        mkdirSync(inner);
+        assert.equal(await readRegularFileAtMost(inner, 10), null, 'a folder is no regular file');
+        assert.equal(await readRegularFileAtMost(join(folder, 'gone'), 10), null);
+        writeFileSync(join(folder, 'empty'), '');
+        assert.deepEqual(await readRegularFileAtMost(join(folder, 'empty'), 10), Buffer.alloc(0));
+    } finally {
+        rmSync(folder, { recursive: true, force: true });
     }
 });
 

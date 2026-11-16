@@ -8,7 +8,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
@@ -19,7 +19,7 @@ import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
-import { IconReader } from './open-in-icons.ts';
+import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
 import { editorEnvironment } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
@@ -567,7 +567,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const icons = new IconReader({
         platform: process.platform,
         stat: (path) => stat(path),
-        readFile: (path) => readFile(path),
+        readAtMost: (path, cap) => readRegularFileAtMost(path, cap),
         fileIcon: (path) => app.getFileIcon(path, { size: 'normal' }),
         fromBuffer: (png) => nativeImage.createFromBuffer(png),
     });

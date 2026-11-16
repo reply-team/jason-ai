@@ -98,6 +98,8 @@ function pixelsOf(icon: DesktopOpenInIcon): Uint8ClampedArray<ArrayBuffer> | nul
     const { width, height } = icon;
     const sized = (edge: number) => Number.isInteger(edge) && edge > 0 && edge <= iconEdgeAtMost;
     if (!sized(width) || !sized(height) || typeof icon.rgba !== 'string') return null;
+    // The text's length is the one the size gives, four characters for every three bytes, before anything is decoded.
+    if (icon.rgba.length !== 4 * Math.ceil((width * height * 4) / 3)) return null;
     let text: string;
     try {
         text = atob(icon.rgba);

@@ -20,6 +20,9 @@ const pngTypes = new Set(['icp4', 'icp5', 'icp6', 'ic07', 'ic08', 'ic09', 'ic10'
 /** The edge, in pixels, past which a larger chunk is not preferred: decoding a 1024 px image to draw it at 40 is waste. */
 const preferredAtMost = 512;
 
+/** The largest edge an icon set's image has (`ic10`); a chunk whose header claims more is never handed to a decoder. */
+export const edgeAtMost = 1024;
+
 const entities: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 /**
@@ -43,7 +46,8 @@ export const resourceOf = (app: string, file: string): string => posix.join(app,
 /**
  * The PNG data of the largest image an icon set holds at most 512 px wide, else of the largest; null where the file is
  * not an icon set or holds no PNG chunk whole. A chunk whose length runs past the end ends the walk, the chunks before it
- * still counted; a chunk's size is read from its PNG header, never trusted from its type.
+ * still counted; a chunk's size is read from its PNG header, never trusted from its type, and one claiming more than
+ * 1024 px a side is skipped.
  */
 export function largestPng(bytes: Buffer): Buffer | null {
     if (bytes.length < 8 || bytes.toString('latin1', 0, 4) !== 'icns') return null;
@@ -64,8 +68,10 @@ export function largestPng(bytes: Buffer): Buffer | null {
         const data = bytes.subarray(at + 8, at + length);
         // The PNG header: the signature, then the IHDR chunk with the width and the height.
         if (pngTypes.has(type) && data.length >= 24 && data.subarray(0, 8).equals(pngSignature) && data.toString('latin1', 12, 16) === 'IHDR') {
-            const edge = Math.max(data.readUInt32BE(16), data.readUInt32BE(20));
-            if (edge > 0 && better(edge)) best = { edge, data };
+            const width = data.readUInt32BE(16);
+            const height = data.readUInt32BE(20);
+            const edge = Math.max(width, height);
+            if (width > 0 && height > 0 && edge <= edgeAtMost && better(edge)) best = { edge, data };
         }
         at += length;
     }
