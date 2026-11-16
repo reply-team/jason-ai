@@ -14,6 +14,7 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { heldDialog, replyDismissed } from './connect';
 import { chats, conversations, lines, setup, setupError } from './state';
+import { chosenSection } from '../screens/settings/chosen';
 import { fullAccessStanding } from '../platform/full-access';
 import {
     noteKey,
@@ -839,5 +840,20 @@ describe('the note about name and tone', () => {
         await waitFor(() => expect(voiceNote()).not.toBeNull());
         fireEvent.click(within(voiceNote()!).getByRole('button', { name: 'Set preferences now' }));
         await waitFor(() => expect(route.value.screen).toBe('settings'));
+    });
+
+    it('opens Settings on the card for name and tone, whichever section was chosen before', async () => {
+        chosenSection.value = 'models';
+        open();
+        await ready();
+        sent();
+        await waitFor(() => expect(voiceNote()).not.toBeNull());
+        fireEvent.click(within(voiceNote()!).getByRole('button', { name: 'Set preferences now' }));
+        const list = await screen.findByRole('navigation', { name: 'Settings' });
+        expect(within(list).getByRole('button', { name: 'Your name and tone' }).getAttribute('aria-current')).toBe(
+            'true',
+        );
+        expect(document.querySelector('.settings')!.getAttribute('data-chosen')).toBe('voice');
+        chosenSection.value = 'appearance';
     });
 });

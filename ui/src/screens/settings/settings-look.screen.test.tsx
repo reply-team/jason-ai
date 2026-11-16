@@ -32,6 +32,17 @@ const body = (selector: string) =>
         .map((rule) => rule.body)
         .join(' ');
 const scope = '.jc-console .harness .settings';
+// The exact selectors the two panes add: the rule that lets the bar stay, the rules on the chosen page, and the one that hides.
+const contentRule = '.jc-console .harness .content:has(> .settings[data-chosen])';
+const hiding = ['appearance', 'voice', 'modes', 'models', 'runtime'].map(
+    (name) => `${scope}[data-chosen='${name}'] > [data-section]:not([data-section='${name}'])`,
+);
+const panes = [
+    `${scope}[data-chosen]`,
+    `${scope}[data-chosen] > h1`,
+    `${scope}[data-chosen] > [data-section]`,
+    ...['input', 'select', 'textarea', 'button'].map((each) => `${scope}[data-chosen] > [data-section] ${each}`),
+];
 const dark = `:root[data-theme='dark'] ${scope}`;
 const darkAuto = `:root:not([data-theme='light']) ${scope}`;
 
@@ -49,7 +60,9 @@ describe('the sheet of Settings in the console', () => {
             for (const selector of rule.selectors)
                 expect(
                     selector.startsWith(`${scope} `) ||
-                        selector.startsWith(`${scope}[data-chosen`) ||
+                        selector === contentRule ||
+                        hiding.includes(selector) ||
+                        panes.includes(selector) ||
                         selector === scope ||
                         selector.startsWith(`${dark} `) ||
                         selector.startsWith(`${darkAuto} `),
@@ -73,7 +86,7 @@ describe('the sheet of Settings in the console', () => {
     // Look alone: nothing of the screen is hidden, cut or replaced by words of the sheet's.
     it('hides, cuts and writes nothing', () => {
         // The one exception is the two panes' rule, which hides the sections not chosen (settings-panes.screen.test.tsx).
-        for (const rule of rules.filter((each) => !each.selectors.every((one) => one.includes('[data-chosen='))))
+        for (const rule of rules.filter((each) => each.selectors.join() !== hiding.join()))
             expect(rule.body, rule.selectors.join(', ')).not.toMatch(
                 /display: none|visibility: hidden|content:|-webkit-line-clamp|text-overflow/,
             );

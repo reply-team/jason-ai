@@ -1,13 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ApiProvider } from '../../api/context';
 import { session } from '../../api/session';
 import { Console } from '../../console/console';
 import * as consoleCampaigns from '../../console/campaigns';
 import { attention } from '../../console/needs';
 import { chats, conversations } from '../../console/state';
+import { consoleShell } from '../../platform/console-shell';
 import { mode } from '../../platform/mode';
+import * as shell from '../../shell/shell';
+import { SettingsScreen } from './screen';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
@@ -75,8 +78,30 @@ describe('the sheet of the two panes', () => {
         expect(sheet).not.toMatch(/left: -\d|clip:|text-indent: -/);
     });
 
-    it('keeps the bar at the top while the content scrolls', () => {
-        expect(sheet).toMatch(/\.settings\[data-chosen\] > h1 \{\s*position: sticky;\s*top: -22px;/);
+    it('keeps the bar at the top while the content scrolls: the page scrolls, and a card clears the bar', () => {
+        expect(sheet).toMatch(/\.settings\[data-chosen\] > h1 \{\s*position: sticky;\s*top: 0;/);
+        // At both widths: no narrower rule moves the bar's offset.
+        expect(sheet.match(/position: sticky/g)).toHaveLength(1);
+        expect(sheet).not.toMatch(/h1 \{[^}]*top: -/);
+        // The harness page's inner content is no scroller of its own while Settings is in two panes.
+        expect(sheet).toMatch(/\.harness \.content:has\(> \.settings\[data-chosen\]\) \{\s*overflow: visible;\s*\}/);
+        expect(sheet).toMatch(/\[data-section\] \{[^}]*scroll-margin-top: 84px;/);
+        expect(sheet).toMatch(/\[data-section\] button \{\s*scroll-margin-top: 84px;/);
+    });
+
+    it('draws the list as the console draws a list: ink text, the chosen entry on the hover ground at 600', () => {
+        const rule = (selector: string) =>
+            Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g))
+                .filter((each) => each[1]!.split(',').some((one) => one.trim() === selector))
+                .map((each) => each[2]!.replace(/\s+/g, ' '))
+                .join(' ');
+        expect(rule(`${scope} > .settings-list`)).toMatch(/width: 236px/);
+        expect(rule(`${scope} > .settings-list > button`)).toMatch(/padding: 7px 10px; border: 0; border-radius: 9px;/);
+        expect(rule(`${scope} > .settings-list > button`)).toMatch(/color: var\(--ink\)/);
+        expect(rule(`${scope} > .settings-list > button:hover`)).toMatch(/background: var\(--hover\)/);
+        expect(rule(`${scope} > .settings-list > button[aria-current='true']`)).toMatch(
+            /background: var\(--hover\); font-weight: 600/,
+        );
     });
 });
 
@@ -120,7 +145,11 @@ describe('Settings in two panes', () => {
 
     it('opens at the name-and-tone card, selected and in view, from openSettings', async () => {
         const scrolled = vi.fn();
+        const was = Element.prototype.scrollIntoView;
         Element.prototype.scrollIntoView = scrolled;
+        onTestFinished(() => {
+            Element.prototype.scrollIntoView = was;
+        });
         await openConsoleSettings();
         fireEvent.click(list().getByRole('button', { name: 'Models' }));
         act(() => openSettings());
@@ -145,5 +174,68 @@ describe('Settings in two panes', () => {
         );
         fireEvent.click(await screen.findByRole('button', { name: 'Open Settings' }));
         expect(chosenSection.value).toBe('voice');
+    });
+
+    it('marks the name of a section that holds an alert while another is shown, and describes it by the alert', async () => {
+        await openConsoleSettings();
+        const card = document.querySelector('.settings > [data-section="voice"]')!;
+        const alert = document.createElement('p');
+        alert.setAttribute('role', 'alert');
+        alert.textContent = 'The save did not go through.';
+        act(() => {
+            card.appendChild(alert);
+        });
+        const entry = list().getByRole('button', { name: 'Your name and tone' });
+        await waitFor(() => expect(entry.hasAttribute('data-flagged')).toBe(true));
+        expect(document.getElementById(entry.getAttribute('aria-describedby')!)).toBe(alert);
+        expect(chosen()).toBe('appearance');
+        expect(list().getByRole('button', { name: 'Appearance' }).hasAttribute('data-flagged')).toBe(false);
+        // Chosen, the card shows the alert itself, so the mark goes.
+        fireEvent.click(entry);
+        await waitFor(() => expect(entry.hasAttribute('data-flagged')).toBe(false));
+    });
+
+    const alone = () =>
+        render(
+            <ApiProvider api={new FakeApi().answer('preference.list', 'preference.list/set')}>
+                <SettingsScreen />
+            </ApiProvider>,
+        );
+
+    it('draws no list and no chosen section in the demo', async () => {
+        mode.value = 'demo';
+        alone();
+        await screen.findByRole('heading', { name: 'Settings', level: 1 });
+        expect(screen.queryByRole('navigation')).toBeNull();
+        expect(document.querySelector('.settings')!.hasAttribute('data-chosen')).toBe(false);
+    });
+
+    it('draws no list and no chosen section in the classic shell, where the console is not loaded', async () => {
+        const loaded = consoleShell.loaded;
+        consoleShell.loaded = false;
+        onTestFinished(() => {
+            consoleShell.loaded = loaded;
+        });
+        alone();
+        await screen.findByRole('heading', { name: 'Settings', level: 1 });
+        expect(screen.queryByRole('navigation')).toBeNull();
+        expect(document.querySelector('.settings')!.hasAttribute('data-chosen')).toBe(false);
+    });
+
+    it('lists no Runtime while the runtime has not been read', () => {
+        const added = consoleShell.settingsSections;
+        consoleShell.settingsSections = () => null;
+        const info = shell.info.value;
+        shell.info.value = null;
+        onTestFinished(() => {
+            consoleShell.settingsSections = added;
+            shell.info.value = info;
+        });
+        alone();
+        expect(
+            list()
+                .getAllByRole('button')
+                .map((each) => each.textContent),
+        ).toEqual(['Appearance', 'Your name and tone', 'How messages go', 'Models']);
     });
 });
