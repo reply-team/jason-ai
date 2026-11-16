@@ -37,44 +37,46 @@ window loses its second title bar.
     holds, is kept and concerns nobody. The line wakes no manager unless you list it under `Manager:Triggers`, and no
     reader of replies or of provider events sees it.
   - `Contacted` counts a person once when an act about them succeeded (enrolling them, sending a message, replying or
-    sending a social invitation) or a send was said for them in the period, dated by the moment the provider gives, not the moment the span was read. A send to somebody who is not a member of
-    the campaign counts nobody, and no count of messages is offered. A person's latest touch, the reason the list gives,
-    is the later of their latest act and their latest send.
+    sending a social invitation) or a send was said for them in the period, dated by the moment the provider gives, not
+    the moment the span was read. A send to somebody who is not a member of the campaign counts nobody, and no count of
+    messages is offered. A person's latest touch, the reason the list gives, is the later of their latest act and their
+    latest send.
   - A person's timeline shows each send under All as "Sent from the account" with a mark of its own, never the reply
-    mark, and the people list's Last activity says the same; a campaign's timeline shows none.
-    Nothing says who sent the message, since the feed cannot tell.
-  - **Reply plugin 0.18.0** reports the account's own email sends through this kind.
+    mark, and the people list's Last activity says the same; a campaign's timeline shows none. Nothing says who sent the
+    message, since the feed cannot tell.
+  - **Reply plugin 0.18.0** reports the account's own email sends through this kind. A send the feed gives no date for
+    is left out, and a send with no message identifier is reported without one. Only email sends are reported.
   - **journal-forwarder 1.6.0** declares `provider_send_observed`, so a person can grant it.
 - **A list you give the chat is shown back and added by your press.** In an agent's own chat the AI can end a turn with
   a card of the list as it read it: each column and the field it fills, the row count, the first ten rows, and a
   comparison of the addresses with what you wrote in the chat, which gates nothing. Under it the card reads the agent
   and says in fixed sentences what adding does and, for a running agent under automatic sending, that a message written
   to someone added can be sent without asking once Jason's own review of it passes. **Add to this agent** is yours: one
-  request for every row, answered row by row in the runtime's words. A person you took out of the agent is not added
-  back, and a repeated press adds nobody twice.
+  request that carries every row, answered row by row in the runtime's words. A person you took out of the agent is not
+  added back, and a repeated press adds nobody twice. A card holds up to about a hundred rows; a longer list comes in
+  parts, each added by its own press.
 - **Two cards that only lead somewhere.** Ask the chat which AI runs your agents, or how to connect Reply, and it can
-  end with a card whose one button, **Open Connect** or **Open Accounts**, opens that place.
-  Neither card takes a key, a sign-in or any input.
+  end with a card whose one button, **Open Connect** or **Open Accounts**, opens that place. Neither card takes a key, a
+  sign-in or any input.
 - **Archiving an agent is your own act.** `jason campaign archive` is refused in the desktop's chat in every access
-  mode. In the console, the agent's Settings tab ends with an **Archive** part whose confirmation names the agent, says an archive
-  cannot be undone, and says what it cancels, read from the runtime as the dialog opens: the open work, the approvals
-  still asked and those already given on it, and the pending questions. Where a provider's campaign is linked to the
-  agent, it says that campaign is left as it is and keeps sending if it is live.
+  mode. In Jason Desktop's window, the agent's Settings tab ends with an **Archive** part whose confirmation names the
+  agent, says an archive cannot be undone, and says what it cancels, read from the runtime as the dialog opens: the open
+  work, the approvals still asked and those already given on it, and the pending questions. Where a provider's campaign
+  is linked to the agent, it says that campaign is left as it is and keeps sending if it is live.
 - **A question names the thread it is about.** `decision.raise`, `decision.answer`, `decision.get` and each row of
   `decision.list` carry `thread`, the plugin and the conversation the runtime woke the asker for, or null. Only the
   runtime writes it, once, when the question is raised, and only for a responder the runtime itself made for a reply
-  whose record nobody else rewrote. Needs you's Inbox holds those questions beside the answers to replies, and
-  `jason decision get --human` prints a `Thread:` line. The responder checks for an open question about its thread
-  before it asks again.
+  whose record nobody else rewrote. Needs you's Inbox holds those questions beside the answers to replies, and `jason
+  decision get --human` prints a `Thread:` line. The responder checks for an open question about its thread before it
+  asks again.
 - **An approval keeps covering its work when the only change is an added pin.** A provider identifier the runtime
   learned after you approved, one the approved work did not hold, no longer parks the work for a second approval: the
   provider addresses a record it already holds, and an added pin is either never shown to you or a value you already
-  read. A pin the approval held, an argument, a field of the person, the address, the campaign, the plugin, the account or the operation's version still
-  park it.
-- **The dark theme is complete.** The browser shell and the console share one ground in the dark theme, and every
-  screen and dialog was walked in both themes, wide and narrow: fields, cards, notes and accent buttons read on the
-  dark ground, and the dashboard's agents table scrolls inside its card. The layout faults found on the way are under
-  Fixed.
+  read. A pin the approval held, an argument, a field of the person, the address, the campaign, the plugin, the account
+  or the operation's version still park it.
+- **The dark theme is complete.** The browser shell and the console share one ground in the dark theme, and every screen
+  and dialog was walked in both themes, wide and narrow: fields, cards, notes and accent buttons read on the dark
+  ground, and the dashboard's agents table scrolls inside its card. The layout faults found on the way are under Fixed.
 - **The console in a narrow browser tab can reach its sidebar.** Below 820 pixels the sidebar was off the screen and
   nothing brought it back, so a tab that narrow reached only the page it opened on. The strip now has a button for the
   sidebar wherever the sidebar is off the screen. Opening it moves the focus into the sidebar and puts the page behind
@@ -84,50 +86,51 @@ window loses its second title bar.
   takes the keyboard's focus. On a narrow page Performance's period switch fits, the people search says "Search
   people...", a person's history rows wrap so the campaign's name is read, and the start screen's voice note stacks.
   Three of the rules are not limited to narrow pages, so Jason Desktop's own window changes in three places: the two
-  cards on Connect no longer touch, the age on a dashboard row (`30 d`) stays on one line, and the labels of a
-  segmented control stay on one line. A window of Jason Desktop cannot be narrower than 900 pixels, so the rest is for
-  the tab.
+  cards on Connect no longer touch, the age on a dashboard row (`30 d`) stays on one line, and the labels of a segmented
+  control stay on one line. A window of Jason Desktop cannot be narrower than 900 pixels, so the rest is for the tab.
 - **The Windows window has no title bar of its own.** The system's minimize, maximize and close buttons stand over the
   console's top strip, in the console's ink for the theme in force, and follow a change of theme while the window is
   open. Open in and the Demo | Live switch stand left of the buttons, and the strip, with a drag band the desktop adds,
   moves the window. macOS is unchanged and Linux keeps the system's frame.
-- **The desktop names the default execution profile through the runtime.** It calls `jason profile set-default`, so
-  the journal says the desktop named it and the runtime puts it in force without a restart, and it reads the default in
-  force from `jason profile list`, which also covers a default set by a `JASON_` variable. It writes no settings key
-  of its own for this.
+- **The desktop names the default execution profile through the runtime.** It calls `jason profile set-default`, so the
+  journal says the desktop named it and the runtime puts it in force without a restart, and it reads the default in
+  force from `jason profile list`, which also covers a default set by a `JASON_` variable. It writes no settings key of
+  its own for this.
 - **Served files.** Every file of the UI is served by the exact name its directory holds, on every system; see
   Upgrading. A build of the UI may also keep pages it does not trust under a directory named `sealed/`, which the
-  runtime serves unable to act: only `.html` files may stand there, and every answer under it carries a stricter
-  header set (no address to fetch, connect or frame, and no same-origin rights). `docs/ui.md` prints the set whole and
-  says what it does not stop. The release's own UI has no such directory, so nothing changes for it.
-- **Words of a work item's attempts.** `jason workitem list --human` heads its count `FAILED TRIES`, and
-  `jason workitem get --human` prints `Attempts: <made> made, <n> counted toward the limit`, since the runtime's
-  `attempt_count` has always counted failed attempts only. The JSON does not change.
+  runtime serves unable to act: only `.html` files may stand there, and every answer under it carries a stricter header
+  set (no address to fetch, connect or frame, and no same-origin rights). `docs/ui.md` prints the set whole and says
+  what it does not stop. The release's own UI has no such directory, so nothing changes for it.
+- **Words of a work item's attempts.** `jason workitem list --human` heads its count `FAILED TRIES`, and `jason workitem
+  get --human` prints `Attempts: <made> made, <n> counted toward the limit`, since the runtime's `attempt_count` has
+  always counted failed attempts only. The JSON does not change.
 - **The packages:** reply 0.18.0 and journal-forwarder 1.6.0, which need Jason 0.47.0 or newer; ntfy 1.0.3, slack 1.0.0
   and telegram 1.0.0 as in 0.46.0.
 
 ## Fixed since 0.46.0
 
-- On Windows, `jason session open` could hand the agent a different brief or folder than Jason wrote: the console
-  host replaces every `%NAME%` of a variable it knows in the command line before the program reads it. Jason now
-  reads the words the host would change and, if any would change, starts nothing, names the word, and gives a line to
-  run by hand. `--dry-run` refuses the same way.
-- An install folder whose name holds the character that separates the entries of `PATH` (`;` on Windows, `:`
-  elsewhere) was put on `PATH` as two wrong entries, so no shell found `jason` by name and `jason status` offered a
-  repair that wrote the same entry again. `jason status` and `jason doctor` now say so once and offer no repair, a
-  role's agent is not given the folder, `jason session open` refuses it, and `install.ps1` and `install.sh` refuse it
-  before they write anything. Each installer also refuses, only where it writes the `PATH` entry itself, a name its own
-  form cannot carry; use another folder or the option that leaves `PATH` alone.
+- On Windows, `jason session open` could hand the agent a different brief or folder than Jason wrote: the console host
+  replaces every `%NAME%` of a variable it knows in the command line before the program reads it. Jason now reads the
+  words the host would change and, if any would change, starts nothing, names the word, and gives a line to run by hand.
+  `--dry-run` refuses the same way.
+- An install folder whose name holds the character that separates the entries of `PATH` (`;` on Windows, `:` elsewhere)
+  was put on `PATH` as two wrong entries, so no shell found `jason` by name and `jason status` offered a repair that
+  wrote the same entry again. `jason status` and `jason doctor` now say so once and offer no repair, a role's agent is
+  not given the folder, `jason session open` refuses it, and `install.ps1` and `install.sh` refuse it before they write
+  anything. Each installer also refuses, only where it writes the `PATH` entry itself, a name its own form cannot carry;
+  use another folder or the option that leaves `PATH` alone.
 - In a browser tab that Jason Desktop opened, pressing the browser's Back after opening a page from the chat (a card's
-  Open, a link) brought the chat back with controls that did nothing. Back and Forward now return to the chat as it was, with its
-  draft, and its controls work, in the tab and in the window.
-- On the Accounts page, the provider's card did not contain its box: the view inside it ran past the card's edge. It
-  now stays inside.
+  Open, a link) brought the chat back with controls that did nothing. Back and Forward now return to the chat as it was,
+  with its draft, and its controls work, in the tab and in the window.
+- On the Accounts page, the provider's card did not contain its box: the view inside it ran past the card's edge. It now
+  stays inside.
 - A stray line ran down the right edge of People, Performance and Work items when no item was open beside the list. It
   is gone.
-- On the agent's page, the send-mode rows were squeezed into a narrow column in a narrow window; they now use the width.
-- Contacted undercounted a campaign that runs as a provider's sequence: a person sent the sequence's later steps was
-  not counted for a period that held those steps but not the enrolment, and their last touch read as their enrolment.
+- On the agent's page, the send-mode rows were squeezed into a narrow column in a narrow browser tab; they now use the
+  width.
+- Reloading a page in a browser tab came back to the start screen. It now shows the page its address names.
+- Contacted undercounted a campaign that runs as a provider's sequence: a person sent the sequence's later steps was not
+  counted for a period that held those steps but not the enrolment, and their last touch read as their enrolment.
 
 ## Upgrading from 0.46.0
 
@@ -139,8 +142,8 @@ them for the questions already there by the rule above.
   console's changes.
 - **A custom UI build:** every file under `<data>/ui/` is now served only by its exact name, segment by segment, in the
   case and the spelling the directory holds. A request that relied on the system folding a name, as a case-blind disk
-  does, gets a 404, as it already did on a case-sensitive disk. The release's own UI is not affected. A build that wants a directory of
-  untrusted pages places it as `sealed/`, with `.html` files alone.
+  does, gets a 404, as it already did on a case-sensitive disk. The release's own UI is not affected. A build that wants
+  a directory of untrusted pages places it as `sealed/`, with `.html` files alone.
 - **The packages:** update Jason before the Reply plugin. Reply 0.18.0 needs Jason 0.47.0 or newer: an older runtime
   refuses a whole page of events that holds a kind it does not know, so replies and bounces stop being read through
   events until Jason is updated. journal-forwarder 1.6.0 needs 0.47.0 or newer too: an earlier runtime rejects the
@@ -150,13 +153,3 @@ them for the questions already there by the rule above.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
 - **From 0.45.x or earlier,** the notes of each release in between apply as well.
-
-## Known issues
-
-- On Windows, these parts of the new window were checked by the system's own hit tests and by keys sent to it, and not
-  seen by eye: a real drag and snap, the buttons' clicks and hover tints, the snap flyout, the transparent ground with
-  the GPU on, and a maximized window at the monitor's edge.
-- That Reply's feed carries a sequence's own send with its message identifier and date has not been seen on a real
-  account: the Reply plugin's reading is tested against a stand-in only. A send with no date is left out, and a send
-  with no message identifier is reported without one. Only email sends are reported; another channel's, if the feed
-  carries them, are not claimed.
