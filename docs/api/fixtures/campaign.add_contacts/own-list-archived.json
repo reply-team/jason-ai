@@ -1,0 +1,87 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "own-list-archived",
+  "request": {
+    "campaign_id": "cmp_1",
+    "match_by": "email",
+    "contacts": [
+      {
+        "first_name": "Alma",
+        "last_name": "Novak",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "alma@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Ines",
+        "last_name": "Duarte-Lopes",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ines@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Alma",
+        "last_name": "Novak",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "alma@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Omar",
+        "last_name": "Reyes",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "omar@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Bruno",
+        "last_name": "Silva",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "bruno-at-example"
+          }
+        ]
+      },
+      {
+        "first_name": "Chen",
+        "last_name": "Wu"
+      },
+      {
+        "first_name": "Rafa",
+        "last_name": "Costa",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "rafa@example.test"
+          }
+        ]
+      }
+    ],
+    "reason": "From a list given in the chat.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "campaign_archived",
+      "message": "Campaign 'cmp_1' is archived; only journal entries can still be appended.",
+      "retryable": false
+    }
+  }
+}

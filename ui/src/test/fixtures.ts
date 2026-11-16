@@ -1,6 +1,7 @@
 // Guard 2, the UI's half: every recorded exchange imported here is held to the UI's own types by `satisfies`.
 // A field renamed in the runtime fails `dotnet test` first (the recording), then the typecheck here.
 import type {
+    ListAddRequest,
     Approval,
     ApprovalDecisionRequest,
     ApprovalListRequest,
@@ -144,6 +145,13 @@ import campaignAddContactsOnePerson from '../../../docs/api/fixtures/campaign.ad
 import campaignAddContactsReEnrolExcluded from '../../../docs/api/fixtures/campaign.add_contacts/re-enrol-excluded.json';
 import campaignAddContactsSeveral from '../../../docs/api/fixtures/campaign.add_contacts/several.json';
 import campaignAddContactsToArchived from '../../../docs/api/fixtures/campaign.add_contacts/to-archived.json';
+import campaignAddContactsOwnList from '../../../docs/api/fixtures/campaign.add_contacts/own-list.json';
+import campaignAddContactsOwnListAgain from '../../../docs/api/fixtures/campaign.add_contacts/own-list-again.json';
+import campaignAddContactsOwnListArchived from '../../../docs/api/fixtures/campaign.add_contacts/own-list-archived.json';
+import campaignGetOwnList from '../../../docs/api/fixtures/campaign.get/own-list.json';
+import campaignGetOwnListRunning from '../../../docs/api/fixtures/campaign.get/own-list-running.json';
+import campaignGetOwnListAutomatic from '../../../docs/api/fixtures/campaign.get/own-list-automatic.json';
+import campaignGetOwnListArchived from '../../../docs/api/fixtures/campaign.get/own-list-archived.json';
 import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archived.json';
 import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
@@ -770,6 +778,24 @@ export const fixtures = {
         AddContactsRequest,
         ErrorEnvelope
     >,
+    // The list a person gave in an agent's chat, one story: the agent read as a draft, the list added and added again,
+    // the agent started, its send mode for people who have not replied set to automatic, then archived.
+    'campaign.add_contacts/own-list': campaignAddContactsOwnList satisfies Exchange<ListAddRequest, AddContactsResult>,
+    'campaign.add_contacts/own-list-again': campaignAddContactsOwnListAgain satisfies Exchange<
+        ListAddRequest,
+        AddContactsResult
+    >,
+    'campaign.add_contacts/own-list-archived': campaignAddContactsOwnListArchived satisfies Exchange<
+        ListAddRequest,
+        ErrorEnvelope
+    >,
+    'campaign.get/own-list': campaignGetOwnList satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-running': campaignGetOwnListRunning satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-automatic': campaignGetOwnListAutomatic satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.get/own-list-archived': campaignGetOwnListArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/archived': campaignGetArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/gone': campaignGetGone satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,

@@ -45,6 +45,8 @@ public static class ApiFixtures
     //   no route:         route.resolve card-plan-no-route|-no-route-email, campaign.get|summary card-plan-unrouted,
     //                     sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
+    //   own list:         campaign.get own-list (a draft), campaign.add_contacts own-list|-again, campaign.get
+    //                     own-list-running|-automatic|-archived, and campaign.add_contacts own-list-archived (refused whole).
     //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
     //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
     //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
@@ -198,6 +200,7 @@ public static class ApiFixtures
         "campaign.add_contacts/one-person",
         "campaign.add_contacts/own-list",
         "campaign.add_contacts/own-list-again",
+        "campaign.add_contacts/own-list-archived",
         "campaign.add_contacts/re-enrol-excluded",
         "campaign.add_contacts/several",
         "campaign.add_contacts/to-archived",
@@ -228,6 +231,10 @@ public static class ApiFixtures
         "campaign.get/making",
         "campaign.get/many",
         "campaign.get/one",
+        "campaign.get/own-list",
+        "campaign.get/own-list-archived",
+        "campaign.get/own-list-automatic",
+        "campaign.get/own-list-running",
         "campaign.get/send-mode-override",
         "campaign.get/started",
         "campaign.get/summer",

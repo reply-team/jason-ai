@@ -576,3 +576,45 @@
 :root[data-theme='dark'] .jc-console .waiting-card.ask.q {
     border-color: rgba(182, 156, 255, 0.3);
 }
+
+/* A list the person gave: the AI's reading of it in the dashed box, its rows in a table that scrolls sideways on a
+   narrow window rather than widen the page, the page's comparison under it, and the facts' fixed sentences as a quiet
+   list above the sentence the agent's status and send mode give and the button. */
+.jc-console .chat-own-list .card-list {
+    color: var(--ink);
+}
+.jc-console .chat-own-list .card-map {
+    margin-top: 4px;
+    color: var(--mute);
+    overflow-wrap: anywhere;
+}
+.jc-console .chat-own-list .card-list .card-count-line {
+    margin-top: 6px;
+}
+.jc-console .chat-own-list .card-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+}
+.jc-console .chat-own-list .card-scroll .card-tbl td,
+.jc-console .chat-own-list .card-scroll .card-tbl th {
+    white-space: nowrap;
+}
+.jc-console .chat-own-list .card-scroll .card-tbl td.card-outcome {
+    min-width: 220px;
+    white-space: normal;
+}
+.jc-console .chat-own-list .card-compare {
+    margin-top: 10px;
+}
+.jc-console .chat-own-list .card-notes {
+    margin: 0 0 8px;
+    padding-left: 18px;
+    color: var(--mute);
+    font-size: 13px;
+}
+.jc-console .chat-own-list .card-notes li + li {
+    margin-top: 2px;
+}
+.jc-console .chat-own-list .card-nav {
+    margin-top: 10px;
+}

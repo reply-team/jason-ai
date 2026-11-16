@@ -1,6 +1,6 @@
 // Pure: the cards the chat's AI asks for. The AI ends a reply with one fenced block whose info string is `card`, holding
 // one JSON object with a `kind`; the page takes every such block out of the words it draws, and draws the last block of
-// a turn as a card. Six kinds, a closed list, each held to its schema: every member's type and length, own keys only,
+// a turn as a card. Seven kinds, a closed list, each held to its schema: every member's type and length, own keys only,
 // nothing the schema does not name. A block is read once, by `JSON.parse` alone, and never mended, cut or guessed: a
 // block that does not read draws one line in the desktop's words, and what it held is never shown.
 //
@@ -19,7 +19,7 @@ import { locksChoice, unseen, type Chat } from './chat-model';
 const cardUnseen = new RegExp(`${unseen.source.slice(0, -1)}\\p{Cs}\\p{Co}\\u2800]`, 'u');
 
 /** The kinds a card may be, in the order the chat's instructions list them. */
-export const cardKinds = ['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan'] as const;
+export const cardKinds = ['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan', 'own_list'] as const;
 export type CardKind = (typeof cardKinds)[number];
 
 /** Why a card block did not draw, as the desktop's log names it. */
@@ -90,6 +90,7 @@ export const controlWords: readonly string[] = [
     'Auto-edit',
     'Full access',
     'Default effort',
+    'Add to this agent',
 ];
 
 /**
@@ -173,6 +174,34 @@ export type Standing = (typeof standings)[number];
 export const planChannels = ['email', 'linkedin'] as const;
 export type PlanChannel = (typeof planChannels)[number];
 
+/** The fields a list's column may fill, beside `custom:<name>`: a contact's own fields and its channels. */
+export const listFields = [
+    'first_name',
+    'last_name',
+    'company',
+    'title',
+    'time_zone',
+    'email',
+    'phone',
+    'linkedin',
+] as const;
+/** What a list's rows are matched by, so a person already held is found and a second press adds nobody twice. */
+export const listMatches = ['email', 'linkedin'] as const;
+export type ListMatch = (typeof listMatches)[number];
+/** The most rows a list card holds: a ceiling of its own, whatever the block's cap would let through. */
+export const listRowLimit = 200;
+/**
+ * The keys the runtime itself writes into a contact's custom fields, when a search lands a person (its own record of
+ * them, where they are, their company's particulars): a list never writes one of them.
+ */
+export const reservedCustomKeys: readonly string[] = [
+    'location',
+    'company_domain',
+    'company_size',
+    'company_industry',
+    'provider_record',
+];
+
 export interface CardOption {
     label: string;
     detail?: string;
@@ -227,7 +256,26 @@ export interface PlanCard {
     options?: CardOption[];
 }
 
-export type Card = ChoiceCard | PeopleListCard | AgentStatusCard | NeedsCard | AccountsCard | PlanCard;
+/** One column of a list: the field it fills, and the person's own header for it when the list had one. */
+export interface ListColumn {
+    field: string;
+    from?: string;
+}
+
+/**
+ * A list the person gave in the chat, as the AI read it, for the person's own press: what each column fills, the
+ * person's columns it left out, and the rows, each cell as given and `""` where nothing was.
+ */
+export interface OwnListCard {
+    kind: 'own_list';
+    campaign?: string;
+    match_by: ListMatch;
+    columns: ListColumn[];
+    left_out: string[];
+    rows: string[][];
+}
+
+export type Card = ChoiceCard | PeopleListCard | AgentStatusCard | NeedsCard | AccountsCard | PlanCard | OwnListCard;
 
 /** A card block as a text holds it: the text between its fences, and whether a fence closed it. */
 export interface CardBlock {
@@ -434,6 +482,8 @@ const allowedIn: Readonly<Record<CardKind, readonly CardPlace[]>> = {
     needs: ['agent', 'setup', 'feed'],
     accounts: ['agent', 'setup', 'feed'],
     plan: ['agent', 'setup'],
+    // A list is added to the agent whose conversation shows it, where what happened to it is read.
+    own_list: ['agent'],
 };
 
 /** A kind's members, read; throws `Refused` for anything its schema does not hold. */
@@ -473,7 +523,56 @@ function cardOf(kind: CardKind, object: Fields, place: CardPlace): Card {
             return { kind };
         case 'plan':
             return planOf(object);
+        case 'own_list':
+            return listOf(object);
     }
+}
+
+/** A custom field's name, as the runtime's match keys take one. */
+const customName = /^custom:([A-Za-z0-9_]{1,64})$/;
+
+/** A list's cell: a string of at most 500 characters on one line, free of what draws as nothing; `""` is no value. */
+function cell(value: unknown): string {
+    if (typeof value !== 'string') return refuse();
+    const trimmed = value.trim();
+    if (characters(trimmed) > 500 || value.search(cardUnseen) !== -1) refuse();
+    return trimmed;
+}
+
+function listOf(object: Fields): OwnListCard {
+    const fields = shaped(object, ['kind', 'campaign', 'match_by', 'columns', 'left_out', 'rows']);
+    const id = campaign(fields);
+    const columns = list(fields, 'columns', 1, 12, (value): ListColumn => {
+        const column = shaped(value, ['field', 'from']);
+        const field = own(column, 'field');
+        if (typeof field !== 'string') return refuse();
+        const custom = customName.exec(field)?.[1];
+        if (
+            !(listFields as readonly string[]).includes(field) &&
+            (custom === undefined || reservedCustomKeys.includes(custom))
+        )
+            refuse();
+        const from = text(column, 'from', 80, false);
+        return from === undefined ? { field } : { field, from };
+    });
+    if (columns === undefined || new Set(columns.map((column) => column.field)).size !== columns.length)
+        return refuse();
+    const matchBy = oneOf(own(fields, 'match_by'), listMatches);
+    if (!columns.some((column) => column.field === matchBy)) refuse();
+    const leftOut = list(fields, 'left_out', 0, 20, (value) => trimmedText(value, 80)) ?? [];
+    const rows = list(fields, 'rows', 1, listRowLimit, (value) => {
+        if (!Array.isArray(value) || value.length !== columns.length) return refuse();
+        return value.map(cell);
+    });
+    if (rows === undefined) return refuse();
+    return {
+        kind: 'own_list',
+        ...(id === undefined ? {} : { campaign: id }),
+        match_by: matchBy,
+        columns,
+        left_out: leftOut,
+        rows,
+    };
 }
 
 function planOf(object: Fields): PlanCard {
