@@ -9,7 +9,7 @@
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { demoLayout, demoPage, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
+import { demoLayout, demoPage, demoStripSheets, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
 
 export interface DemoWindowDeps {
     /** The application's folder, where `demo/index.html`, `shell/demo-switch.html` and `shell/demo-band.html` are. */
@@ -49,9 +49,12 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     }
     const page = new WebContentsView({ webPreferences: demoViewPreferences(demoPage) });
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
-    await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)) });
+    // On Windows, the strip kept clear of the caption buttons (`demoStripSheets`); elsewhere nothing.
+    const sheets = demoStripSheets(deps.platform);
+    await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)), sheet: sheets?.page });
     await sealView(ours.webContents, demoSwitch, {
         read: fileOf(switchFile),
+        sheet: sheets?.switch,
         refused: onceEach((kind) => deps.refused('switch', kind)),
         asked: (url) => {
             if (switchChoice(url) !== 'live') return false;

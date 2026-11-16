@@ -25,6 +25,9 @@ import {
     sealView,
     demoGeometry,
     demoLayout,
+    demoStrip,
+    demoStripAt,
+    demoStripSheets,
     demoBeforeReady,
     demoResolverRule,
     noDragSheet,
@@ -729,4 +732,114 @@ test('every request from the page’s view to an address the page holds, or to a
         const answer = (await call(view.protocols.get(scheme), { url, method: 'GET' })) as Response;
         assert.equal(answer.status, 403, url);
     }
+});
+
+// ---- The strip on Windows, where the caption buttons stand over its right end -------------------------------------------
+
+// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%.
+const captions = [138, 137.33];
+
+test('the page’s strip, as the desktop’s sheet names it, is still in the page: the selectors, the strip’s padding and its breakpoint', () => {
+    const page = pageText();
+    const sheets = demoStripSheets('win32');
+    assert.ok(sheets);
+    const named = new Set([...sheets.page.matchAll(/\.jc-console [#.][\w-]+/g)].map((match) => match[0]));
+    assert.deepEqual([...named].sort(), ['.jc-console #mode-bar', '.jc-console .mb-long', '.jc-console .mb-short']);
+    for (const selector of named) assert.ok(page.includes(`${selector}{`), `${selector} is a rule of the page`);
+    // The numbers the sheet is computed from are the page's own: its strip's left edge and padding, the gap before its
+    // empty right-hand slot, and the width at which it takes its short sentence.
+    assert.ok(page.includes('.jc-console #mode-bar{box-sizing:border-box;z-index:20;white-space:nowrap;-webkit-app-region:drag;align-items:center;gap:8px;height:38px;padding:0 12px 0 16px;'));
+    assert.ok(page.includes('left:284px;right:0}'));
+    assert.ok(page.includes('@media (width<=1100px){.jc-console .mb-long{display:none}.jc-console .mb-short{display:inline}}'));
+    assert.ok(page.includes('<span class="mb-long">${long}</span><span class="mb-short">${short}</span>'));
+    assert.ok(page.includes('.jc-console #mode-bar>span{text-overflow:ellipsis;overflow:hidden}'), 'a sentence that does not fit ends in an ellipsis of the page’s own');
+});
+
+test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
+    const sheets = demoStripSheets('win32');
+    assert.ok(sheets);
+    const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
+    assert.ok(sheets.page.includes(`padding-right: calc(${demoStrip.inset}px + ${caption}) !important;`));
+    assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
+    assert.ok(sheets.page.includes(`@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`));
+    assert.ok(sheets.switch.includes('body { container: jason-switch / inline-size !important; }'));
+    assert.ok(sheets.switch.includes(`@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${demoStrip.ours.segment.tight}px !important; padding-right: ${demoStrip.ours.segment.tight}px !important; } }`));
+    // Only the segments' inner padding changes: the words, the height and the rest of the switch stay.
+    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.replace('container', '')));
+    assert.equal(demoStrip.ours.segment.normal, 12);
+    assert.ok(/\.switch a, \.switch span \{[^}]*padding: 2px 12px;/.test(readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8').replace(/\s+/g, ' ')));
+});
+
+test('on Windows from 1101 to 1149 pixels the page shows its own short sentence, whole, clear of our switch', () => {
+    for (const caption of captions) {
+        for (let width = 1101; width <= 1149; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.equal(at.form, 'short', `${width}`);
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}: no word under the switch`);
+        }
+    }
+    // Wide enough, the page's long sentence comes back, clear of the switch.
+    const wide = demoStripAt('win32', 1440, 138);
+    assert.equal(wide.form, 'long');
+    assert.ok(wide.whole && wide.textEnd <= wide.coveredFrom);
+});
+
+test('on Windows from 900 to 933 pixels our switch takes its tighter form and the short sentence stands whole', () => {
+    for (const caption of captions) {
+        for (let width = 900; width <= 933; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.equal(at.switchForm, 'tight', `${width}`);
+            assert.equal(at.form, 'short');
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}: no word under the switch`);
+        }
+    }
+});
+
+test('on Windows at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
+    for (const caption of captions) {
+        for (let width = 900; width <= 2600; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}`);
+        }
+    }
+});
+
+test('on macOS and Linux nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        assert.equal(demoStripSheets(platform), null);
+        for (let width = 900; width <= 2600; width++) {
+            const at = demoStripAt(platform, width, 0);
+            assert.equal(at.form, width <= 1100 ? 'short' : 'long');
+            assert.equal(at.switchForm, 'normal');
+            assert.ok(at.whole && at.textEnd <= at.coveredFrom, `${platform} ${width}`);
+        }
+    }
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.ok(window.includes('const sheets = demoStripSheets(deps.platform);'));
+    assert.ok(window.includes('sheet: sheets?.page'));
+    assert.ok(window.includes('sheet: sheets?.switch'));
+});
+
+test('a sheet given to the seal is put into every document of the view, of the user’s origin', async () => {
+    const made = stand();
+    await sealView(made.contents, demoSwitch, { read: () => pageBytes, refused: () => undefined, sheet: 'body { color: red; }' });
+    call(made.on.get('dom-ready'));
+    await Promise.resolve();
+    assert.ok(made.calls.includes('insertCSS:user:body { color: red; }'));
+    const page = stand();
+    await sealView(page.contents, demoPage, { read: () => pageBytes, refused: () => undefined, sheet: 'p { color: red; }' });
+    call(page.on.get('dom-ready'));
+    await Promise.resolve();
+    assert.ok(page.calls.includes(`insertCSS:user:${noDragSheet}`));
+    assert.ok(page.calls.includes('insertCSS:user:p { color: red; }'));
+});
+
+test('the sheets’ three numbers are the ones the strip’s measures give, and the tight switch is the normal one less its segments’ padding', () => {
+    assert.equal(demoStrip.inset, 79);
+    assert.equal(demoStrip.longFrom, 641);
+    assert.equal(demoStrip.tightBelow, 494);
+    assert.equal(Math.round(demoStrip.ours.tight * 100) / 100, 70.16);
 });
