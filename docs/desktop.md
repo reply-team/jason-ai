@@ -129,12 +129,12 @@ shows before anything is typed and what you send waits, while the window is open
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
 drawn in the light theme it was built in); one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
-its settings and the starting page and the window's background before the page loads follow it, and on Windows the
-window's minimize, maximize and close buttons, as the theme changes.
+its settings and the starting page and the window's background before the page loads follow it, and on Windows and
+Linux the window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
-On Windows the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's acts,
-all but About.
+On Windows and Linux the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's
+acts, all but About, which neither the window nor the tray reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -160,8 +160,9 @@ them on.
   only where the session offers a keyring (GNOME Keyring or KWallet); where Electron would fall back to its fixed-key
   store, the card says so and the key is not kept.
 - `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
-  runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
-  alone where the system has modes.
+  runs its host with. They keep the host's transcripts of those turns, never the key (but on Linux, where a command the
+  agent runs can read the key, what such a command printed), and are readable by your account alone where the system
+  has modes.
 - `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone where the
   system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
@@ -320,11 +321,11 @@ installation is made until you choose **Live**. An installation that already exi
 updated from an earlier version open where they did.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
-for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows the window has no title bar of its own:
-the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
+for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
+own: the minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
 moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
 window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
-a little tighter. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+a little tighter. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
@@ -375,7 +376,10 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
-  process environment and nothing else (`CODEX_API_KEY` for Codex), and is never written in the clear, to a file of Jason's or anywhere else: the file `provider-keys` holds it encrypted by the operating system. A turn on
+  process environment and nothing else (`CODEX_API_KEY` for Codex), but for the commands a Claude Code turn runs on
+  Linux (below, "On Linux it does"), and is never written in the clear, to a file of Jason's or anywhere else, but on
+  Linux where a command the agent runs prints it: the host's transcript then keeps what the command printed. The file
+  `provider-keys` holds it encrypted by the operating system. A turn on
   a key runs its host with a configuration folder of the desktop's own, holding no claude.ai login and no saved Codex
   login, and without the variables that name another credential, a profile or a federation: the design is that a key the
   host does not take fails the turn instead of running it on your own plan, as built and not yet seen with a real host.
@@ -758,11 +762,13 @@ Under the chat, these things differ from a terminal:
   table of these commands.
 - **The provider check names a program, never a path.** `jason status --provider-cli <program>` runs a bare name found on
   the search path, and a name with a directory in it is neither looked up nor started; run a path from a terminal.
-- **A credential in an environment variable does not reach the commands the agent runs.** Every Claude Code turn sets
-  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or by value, from the commands
-  the host runs. `reply` signed in through its own store is unaffected. On Linux the host runs those commands in a process
-  namespace of their own, so a check that looks at a host process by its number may answer differently from inside the
-  chat than in a terminal; what `jason status` sees of the runtime from there has not been checked on a real machine.
+- **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
+  every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
+  by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
+- **On Linux it does.** No Claude Code turn sets that variable there, and one the desktop inherited is not passed on: on
+  Linux it makes the host run each command in a process namespace of its own, which needs `socat` and hides the
+  processes outside it from the command. So on Linux a key connected on a Connect card, and the credentials the turn
+  carries from the desktop's own environment, reach the commands the agent runs, as they would in a terminal.
 - **A folder the chat works in is trusted** the way a folder you open your agent in is trusted: the agent definitions and
   skills it carries run with what they declare, and the cards stand in front of what the agent itself asks for.
 - **Limits that are said.** Claude Code's documentation leaves one case open, a read-only command that names no path after
@@ -813,8 +819,16 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## On Linux
 
-- The window keeps its menu bar, which carries the tray's items, since a session may show no tray icon. Closing the window
-  quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
+- The window has no title bar, under Wayland and under X11: its buttons stand at the right end of the top strip, in your
+  desktop's style and as many as it shows on its other windows, so where it shows the close button alone (GNOME as it
+  ships, Hyprland under Wayland) Jason's window does too. The strip moves the window, and a double click on it does what
+  one on a title bar does on your desktop (it maximizes on GNOME and Plasma). If your desktop puts the buttons at the
+  left, they stand over the sidebar's top, over the name Jason AI.
+- The window shows no menu bar: the keys work without it, and the tray carries the Jason menu's acts; About is not
+  reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), Open
+  Jason at Login, Start the Runtime at Logon, the update item, Command Line, Remove What Jason Placed and Back to Your
+  Own Installation cannot be reached from the window. Closing the window quits the application; the runtime keeps
+  running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.
 - An AppImage update that installs under a new file name moves an entry that is on to it, and re-points a logon

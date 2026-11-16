@@ -129,7 +129,9 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
   of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
   the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
-  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex). Each folder keeps the
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but on Linux, where a Claude
+  Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that prints it leaves it in the
+  transcript. Each folder keeps the
   transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
   provider.
 - How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
@@ -548,19 +550,29 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   desktop also adds a band of its own to every document the window loads: an empty element at the end of the document,
   drawn over those 284 by 26 pixels as a drag region by a stylesheet of the user's origin whose every declaration is
   important, which no stylesheet of a page outranks. The page shown while Jason starts has a drag band across its top.
-- On Windows the window has no title bar either: the system's caption buttons are Electron's title bar overlay
+- On Windows and Linux the window has no title bar either: the caption buttons are Electron's title bar overlay
   (`titleBarStyle: 'hidden'` with `titleBarOverlay`), 38 pixels high, the console's top strip's height, standing over
   the strip's right end. Their ground has no colour at all, so the strip shows through them in either mode and theme;
   their symbols are the console's ink in the theme in force, set again at each `nativeTheme` `updated` while the window
   is open (`followTheme`), the person's choice and the system's own change alike. The console leaves the buttons' width
-  free at the strip's right (its `desktop-win` class), read from the overlay's own geometry, the `env(titlebar-area-*)`
-  variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live switch stand left of
-  them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left of the buttons and as
-  high as they are, placed by the same variables, so a page that marks no drag region still moves the window; a double
-  click on a drag region maximizes it, as the system does for a title bar: a drag region answers the system's hit test
-  as the caption, the buttons as minimize, maximize and close. The window shows no menu bar on Windows, and About is not
-  reachable there (it was not before either: the bar was hidden and not auto-hide); the tray carries the Jason menu's
-  other acts. Linux keeps the native frame, and none of this is added there.
+  free at the strip's right (its `desktop-overlay` class), read from the overlay's own geometry, the
+  `env(titlebar-area-*)` variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live
+  switch stand left of them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left
+  of the buttons and as high as they are, placed by the same variables, so a page that marks no drag region still moves
+  the window; a double click on a drag region does what one on the desktop's own title bars does (on Windows, where a
+  drag region answers the system's hit test as the caption and the buttons as minimize, maximize and close, it
+  maximizes; on GNOME and Plasma too, as seen). The window shows no menu bar on
+  Windows or Linux: Electron makes none for a window without its title bar, and on Windows it was hidden before too. The
+  menu stays the application's, so its keys act in the window; the tray carries the Jason menu's other acts, and About
+  is not reachable from the window or the tray.
+- On Linux the buttons are drawn in the desktop's own style (round on Ubuntu's GNOME, Breeze's on Plasma), and as many
+  as the desktop's button layout names for its windows (`org.gnome.desktop.wm.preferences` `button-layout`, which GTK
+  reads, and follows as it changes): where it names the close button alone (`appmenu:close`, GNOME's own default,
+  which Ubuntu changes), the overlay shows that alone, like the desktop's other windows. A layout that puts the buttons
+  at the left stands them over the sidebar's brand, and the strip keeps its right end free all the same: the window is
+  closed and moved as ever, but the console leaves no room there. The same window is made under Wayland and under X11.
+  On Hyprland, which draws no title bars, a window with the system's frame has no buttons at all; the overlay gives it
+  its close button under Wayland, and all three under XWayland, where its layout does not reach.
 - In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
   and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
@@ -591,16 +603,20 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   pixels) and both views start below that band, which they leave to the window's own contents: our band
   (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
   drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, lies under
-  our switch's view. On Windows and Linux the views start at the top of the content. On Windows the caption buttons
+  our switch's view. On Windows and Linux the views start at the top of the content, and the caption buttons
   stand over the right end of our switch's view, which Electron tells the free title bar area in the view's own
   coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
   them and the rest of the view moves the window. The page does not know the buttons are there: it picks its sentence
-  by the window's width alone. So on Windows the desktop puts a sheet of its own, of the user's origin, into each view
+  by the window's width alone. So there the desktop puts a sheet of its own, of the user's origin, into each view
   (`demoStripSheets`): the page's strip is inset by the buttons' width, read from the same variables, and our switch's,
   and the page shows its own short sentence wherever the strip so inset is too narrow for its long one; where even the
   short sentence would reach the switch, at the narrowest widths, the switch's two segments take less padding, with the
   same words and height. No word of the page lies under the switch at any width the window allows (`demoStripAt`, held
-  by `test/demo-page.test.ts` at every width). On Linux the frame is the system's, and on Linux and macOS no sheet is put.
+  by `test/demo-page.test.ts` at every width, with the buttons' width as Windows, GNOME and Plasma draw them). The
+  page's sentence is drawn in the font the page carries, so its numbers hold on both systems; our switch's are measured
+  in Segoe UI, so on Windows its words are drawn in that font by name, and on Linux, which lacks it, in the system's
+  own: Ubuntu's and Plasma's fonts were seen to fit in the room kept beside them, and a much wider one may put the
+  sentence's last letters under the switch's edge. On macOS no sheet is put.
 
 ## Links
 
@@ -714,8 +730,11 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
 
 ## On Linux
 
-- The window keeps its menu bar, which carries the tray's items, since a session may show no tray icon. Closing the
-  window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
+- The window shows no menu bar, as on Windows (above): the menu's keys act, and the tray carries the Jason menu's acts
+  but About. A session that shows no tray icon (GNOME without an extension for one) has no way from the window to the
+  items without a key: Open Jason at Login, Start the Runtime at Logon, the update item, Command Line, Remove What Jason
+  Placed and Back to Your Own Installation. Closing the window quits the application; the runtime keeps running. A
+  start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path

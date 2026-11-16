@@ -325,7 +325,7 @@ export class Desk {
                 { role: 'windowMenu' },
             ]),
         );
-        // The tray carries the same items, since a Windows window shows no menu bar.
+        // The tray carries the same items, since a Windows or Linux window shows no menu bar.
         this.renderTray();
     }
 

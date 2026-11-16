@@ -682,12 +682,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     }, [api, desktop, dock, stream]);
 
     // The Mac desktop's own window has no title bar: its buttons sit over the sidebar's top, and the window is dragged by
-    // a band there and by the strip. The Windows desktop's window has none either: the caption buttons stand over the
-    // strip's right end, which leaves them free. A browser tab, and the desktop's window on Linux, keep their own frame.
+    // a band there and by the strip. The Windows and Linux desktop's window has none either: the caption buttons are an
+    // overlay over the strip's right end, which leaves them free. A browser tab keeps its own frame.
     const mac = desktop.platform === 'darwin' && placeKind() === 'window';
-    const win = desktop.platform === 'win32' && placeKind() === 'window';
+    const overlay = (desktop.platform === 'win32' || desktop.platform === 'linux') && placeKind() === 'window';
     return (
-        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${win ? ' desktop-win' : ''}`}>
+        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${overlay ? ' desktop-overlay' : ''}`}>
             {mac && <div className="title-drag" aria-hidden="true" />}
             {bound && (
                 <>

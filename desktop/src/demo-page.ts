@@ -395,7 +395,7 @@ export function switchChoice(url: string): 'live' | null {
  * drag region; it is transparent, so the page's words show through, and draws the switch alone at the right end. On macOS the window's title bar is hidden,
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
  * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
- * Windows the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
+ * Windows and Linux the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
  * free, told it in its own view's coordinates.
  */
 export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
@@ -418,9 +418,9 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
 }
 
 /**
- * The page's strip on Windows. The caption buttons stand over the strip's right end, and the page cannot know they are
- * there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a sentence
- * that does not fit end in an ellipsis of its own. So on Windows the desktop puts two sheets of its own into the views,
+ * The page's strip on Windows and Linux. The caption buttons stand over the strip's right end, and the page cannot know
+ * they are there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a
+ * sentence that does not fit end in an ellipsis of its own. So there the desktop puts two sheets of its own into the views,
  * each of the user's origin and important, which no rule of a page outranks: into the page's view, one that insets the
  * strip by the caption buttons' width, read from the overlay's geometry (`env(titlebar-area-*)`), and our switch beside
  * them, and has the page show its own short sentence wherever the strip so inset is too narrow for its long one; into our
@@ -428,8 +428,9 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
  * inside its two segments, the same words and the same height. Nothing of the page is edited, and no word of ours is
  * drawn over it.
  *
- * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium
- * with the system's Segoe UI, from the strip's left edge (its 16 pixels of padding included); `test/demo-page.test.ts`
+ * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium,
+ * from the strip's left edge (its 16 pixels of padding included); the sentence is drawn in the Inter the page carries,
+ * so they are the same on every system, while our switch's width is measured in Segoe UI. `test/demo-page.test.ts`
  * holds the page's rules they rest on. `margin` is the room kept beyond them before the switch takes its normal form or
  * the page its long sentence.
  */
@@ -453,9 +454,14 @@ export const demoStrip = {
     tightBelow: Math.ceil(sentence.short + ours.padEnd + ours.normal + ours.shadow + margin - ours.padStart - ours.padEnd),
 } as const;
 
-/** The two sheets on `platform`: on Windows alone, where the caption buttons stand over the strip. */
+/**
+ * The two sheets on `platform`: on Windows and Linux, where the caption buttons stand over the strip. The page's sentence
+ * is drawn in the font the page carries, so its numbers hold on both; our switch's are measured in Segoe UI, a Windows
+ * font, so on Linux its words stay in the system's own font. Ubuntu's and Plasma's were seen to fit in the room kept
+ * beside them (`margin`); a much wider font may put the sentence's last letters under the switch's edge.
+ */
 export function demoStripSheets(platform: NodeJS.Platform): { page: string; switch: string } | null {
-    if (platform !== 'win32') return null;
+    if (platform !== 'win32' && platform !== 'linux') return null;
     const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
     const tight = demoStrip.ours.segment.tight;
     return {
@@ -463,8 +469,8 @@ export function demoStripSheets(platform: NodeJS.Platform): { page: string; swit
             `.jc-console #mode-bar { container: jason-strip / inline-size !important; padding-right: calc(${demoStrip.inset}px + ${caption}) !important; } ` +
             `@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`,
         switch:
-            // Its widths are measured in Segoe UI, so its words are drawn in that font by name, never by the system's.
-            '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' +
+            // Its widths are measured in Segoe UI, so on Windows its words are drawn in that font by name, never by the system's.
+            (platform === 'win32' ? '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' : '') +
             'body { container: jason-switch / inline-size !important; } ' +
             `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
     };
