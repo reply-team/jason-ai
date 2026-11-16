@@ -533,12 +533,61 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
         expect(band()).toBeNull();
     });
 
-    it('draws no band on Windows and Linux, whose windows keep their frame', async () => {
+    it('draws no band on Windows, whose buttons stand over the strip, nor on Linux, whose window keeps its frame', async () => {
         for (const platform of ['win32', 'linux'] as const) {
             renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
             await screen.findByRole('heading', { name: 'Who do you want to reach?' });
             expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
             expect(band()).toBeNull();
+            cleanup();
+        }
+    });
+});
+
+describe('the strip in the Windows desktop’s window, whose caption buttons stand over its right end', () => {
+    const windows = () => Object.assign(stubDesktop(), { platform: 'win32' as const });
+    const strip = () => screen.getByRole('region', { name: 'Mode bar' });
+
+    it('leaves the buttons’ width and the desktop’s band free at its right, read from the overlay’s own geometry', async () => {
+        renderConsole(windows(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const root = document.querySelector<HTMLElement>('.jc-console')!;
+        expect(root.classList.contains('desktop-win')).toBe(true);
+        expect(root.classList.contains('desktop-mac')).toBe(false);
+        // The free title bar area ends where the buttons begin; the desktop's band is 40 px left of them.
+        expect(styleOf(strip())).toMatchObject({
+            'padding-right': 'calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))',
+            '-webkit-app-region': 'drag',
+        });
+        // Nothing is kept over the sidebar: the buttons are at the window's right, not its left.
+        expect(styleOf(document.querySelector('.jc-console .side')!)['padding-top']).toBeUndefined();
+        expect(document.querySelector('.jc-console > .title-drag')).toBeNull();
+    });
+
+    it('keeps Open in and the Demo | Live switch clickable inside the strip that drags the window', async () => {
+        renderConsole(windows(), 'demo');
+        await waitFor(() => expect(strip()).not.toBeNull());
+        const switches = within(strip()).getByRole('group', { name: 'Data' });
+        expect(styleOf(switches)['-webkit-app-region']).toBe('no-drag');
+        for (const button of within(switches).getAllByRole('button'))
+            expect(styleOf(button)['-webkit-app-region']).toBe('no-drag');
+        const slot = strip().querySelector<HTMLElement>('[data-slot="open-in"]')!;
+        const made = document.createElement('button');
+        slot.append(made);
+        expect(styleOf(made)['-webkit-app-region']).toBe('no-drag');
+    });
+
+    it('leaves nothing in a browser tab on Windows, nor on Linux or macOS', async () => {
+        setPlace('tab', windows());
+        renderConsole(windows(), 'live');
+        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
+        expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
+        cleanup();
+        setPlace('window');
+        for (const platform of ['linux', 'darwin'] as const) {
+            renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
             cleanup();
         }
     });
