@@ -22,8 +22,8 @@ public static class UiFiles
     /// lift its own sandbox.
     /// </summary>
     public const string SealedContentSecurityPolicy =
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; "
-        + "connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
+        "script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; "
+        + "media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
         + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts";
 
     /// <summary>The browser features a file under <c>sealed/</c> may ask for, each allowed to no origin, its own included.</summary>
