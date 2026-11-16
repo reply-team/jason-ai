@@ -111,11 +111,32 @@ test('every window is made with the frame of the platform it runs on, the Demo�
         assert.match(options, /\.\.\.frameOf\(process\.platform, nativeTheme\.shouldUseDarkColors\),/);
     }
     assert.doesNotMatch(main, /titleBarStyle|trafficLightPosition|titleBarOverlay|setTitleBarOverlay|frame:\s*false/);
-    // The theme is set before either window is made, so the first overlay is drawn in it.
-    for (const start of ['async function run(', 'async function runDemo(']) {
-        const body = main.slice(main.indexOf(start));
-        assert.ok(body.indexOf('nativeTheme.themeSource =') < body.indexOf('new BrowserWindow({'), start);
+});
+
+test('the theme in force is set before the frame’s options are built, in Live and in the Demo, so no first paint is in the other', () => {
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    const frame = '...frameOf(process.platform, nativeTheme.shouldUseDarkColors),';
+    for (const [start, set] of [
+        ['async function run(', 'nativeTheme.themeSource = startingTheme('],
+        ['async function runDemo(', "nativeTheme.themeSource = 'light';"],
+    ] as const) {
+        const from = main.indexOf(start);
+        assert.ok(from >= 0, start);
+        const body = main.slice(from, main.indexOf('\n}\n', from));
+        const setAt = body.indexOf(set);
+        const frameAt = body.indexOf(frame);
+        assert.ok(setAt >= 0 && frameAt >= 0, `${start} sets the theme and builds the frame`);
+        assert.ok(setAt < frameAt, `${start} sets the theme first`);
+        assert.ok(!body.slice(0, frameAt).slice(setAt + set.length).includes('nativeTheme.themeSource ='), `${start}: nothing sets it again between`);
     }
+});
+
+test('the console leaves the Windows band its width: the strip’s padding names the same number as the band', () => {
+    const css = readFileSync(join(desktop, '..', 'ui', 'src', 'console', 'console.css'), 'utf8');
+    const rule = /\.jc-console\.desktop-win \.mode-strip\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const padding = /padding-right:\s*calc\(12px \+ (\d+)px \+ 100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, 100vw\)\);/.exec(rule);
+    assert.ok(padding, rule);
+    assert.equal(Number(padding[1]), windowsBandWidth);
 });
 
 test('Live’s window follows the theme as it is made; the Demo’s is drawn light and never changes it', () => {

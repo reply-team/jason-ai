@@ -133,7 +133,8 @@ its settings and the starting page and the window's background before the page l
 window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
-On Windows the window shows no menu bar, and the tray's menu carries the Jason menu's acts.
+On Windows the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's acts,
+all but About.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -318,8 +319,9 @@ updated from an earlier version open where they did.
 **The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
 colours, with the **Demo | Live** switch on its right, so you see one. On Windows the window has no title bar of its own:
 the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
-moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar of its own: a band of the page's colours above the page
-holds the window's buttons, and the band and the desktop's strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
+moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
+strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
 carries the same switch, with **Demo** to come back.
