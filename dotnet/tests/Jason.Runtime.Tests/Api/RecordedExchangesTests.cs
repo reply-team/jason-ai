@@ -551,7 +551,7 @@ public class RecordedExchangesTests
             Assert.Equal(1, stored.Said);
         }
 
-        var sent = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "person-sent-by-the-provider", new { contact_id = seed.Mateo, kinds = personAll, limit = 50 }, Ct);
+        var sent = await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "person-sent-from-the-account", new { contact_id = seed.Mateo, kinds = personAll, limit = 50 }, Ct);
         var line = Assert.Single(sent.Items, item => item.Kind == JournalKinds.ProviderSendObserved);
         Assert.Equal(JournalKinds.ProviderSendObserved, line.Kind);
 

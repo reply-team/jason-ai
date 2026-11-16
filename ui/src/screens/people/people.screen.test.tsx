@@ -459,7 +459,7 @@ describe('People', () => {
             .answer('contact.list', 'contact.list/by-activity')
             .answer('contact.get', 'contact.get/with-campaigns')
             .answer('workitem.list', 'workitem.list/by-contact-open')
-            .answer('journal.list', 'journal.list/person-sent-by-the-provider', 'journal.list/by-contact-replies');
+            .answer('journal.list', 'journal.list/person-sent-from-the-account', 'journal.list/by-contact-replies');
         open(api, {}, mateo.id);
         await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
 

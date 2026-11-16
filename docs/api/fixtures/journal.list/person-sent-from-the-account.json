@@ -1,6 +1,6 @@
 {
   "operation": "journal.list",
-  "case": "person-sent-by-the-provider",
+  "case": "person-sent-from-the-account",
   "request": {
     "contact_id": "cnt_1",
     "kinds": [

@@ -501,7 +501,7 @@ import journalListPanelDoubted from '../../../docs/api/fixtures/journal.list/pan
 import journalListPanelDoubtedApproved from '../../../docs/api/fixtures/journal.list/panel-doubted-approved.json';
 import journalListPanelMoved from '../../../docs/api/fixtures/journal.list/panel-moved.json';
 import journalListPanelMovedEdited from '../../../docs/api/fixtures/journal.list/panel-moved-edited.json';
-import journalListPersonSentByTheProvider from '../../../docs/api/fixtures/journal.list/person-sent-by-the-provider.json';
+import journalListPersonSentFromTheAccount from '../../../docs/api/fixtures/journal.list/person-sent-from-the-account.json';
 import workitemCountPanelDoubtedApprovedDone from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-done.json';
 import workitemCountPanelDoubtedApprovedNow from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-now.json';
 import workitemCountPanelDoubtedApprovedPlanned from '../../../docs/api/fixtures/workitem.count/panel-doubted-approved-planned.json';
@@ -1717,7 +1717,7 @@ export const fixtures = {
         JournalListRequest,
         Page<JournalEntry>
     >,
-    'journal.list/person-sent-by-the-provider': journalListPersonSentByTheProvider satisfies Exchange<
+    'journal.list/person-sent-from-the-account': journalListPersonSentFromTheAccount satisfies Exchange<
         JournalListRequest,
         Page<JournalEntry>
     >,
