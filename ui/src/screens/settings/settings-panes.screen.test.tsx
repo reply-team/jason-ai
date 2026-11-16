@@ -202,18 +202,18 @@ describe('Settings in two panes', () => {
         expect(region().textContent).toBe('');
     });
 
-    it('says a real refused save of name and tone in the region of the list, though its card is hidden', async () => {
+    it('says a real failed save of name and tone in the region of the list, though its card is hidden', async () => {
         const fake = await openConsoleSettings();
         fireEvent.click(list().getByRole('button', { name: 'Your name and tone' }));
-        fake.answerAnyRequest('preference.set', 'preference.set/invalid-value');
-        const release = fake.hold('preference.set');
+
+        // The runtime does not answer the save: the screen's own refusal path, which says it in an alert.
+        fake.unreachable('preference.set');
         fireEvent.click(
             within(document.querySelector<HTMLElement>('[data-section="voice"]')!).getAllByRole('button', {
                 name: 'Save',
             })[0]!,
         );
         fireEvent.click(list().getByRole('button', { name: 'Appearance' }));
-        act(() => release());
         await waitFor(() => expect(region().textContent).not.toBe(''));
         const entry = list().getByRole('button', { name: 'Your name and tone' });
         expect(entry.getAttribute('title')).toBe(region().textContent);
