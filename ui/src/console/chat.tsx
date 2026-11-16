@@ -528,7 +528,8 @@ function planCard(
     host: DesktopHost | null,
     words: string = entry.text,
 ): Html {
-    const last = entry === chat.entries.at(-1);
+    // Approve and run is offered over words a person can read: never over a plan of none.
+    const last = entry === chat.entries.at(-1) && words.trim() !== '';
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -640,6 +641,7 @@ const choiceWords: Partial<Record<ReturnType<typeof choiceState>['state'], strin
     own_words: 'You answered in your own words.',
     acted: 'You acted on this agent after this was asked; write your answer below if it still stands.',
     unread: 'Whether this still stands could not be read; write your answer below.',
+    reopened: 'This was asked before the chat was opened again; write your answer below.',
 };
 
 /** The entries whose card that did not draw the desktop was told of, so a redraw does not tell it again. */
@@ -736,7 +738,7 @@ function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHo
  * chat of no agent, one with no open choice, and one whose choice has no moment, which draws locked without a read.
  */
 function actsAsked(
-    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running'>,
+    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
 ): { campaignId: string; at: string } | null {
     if (chat.campaignId === null || chat.main) return null;
     const open = openChoice(chat);
@@ -826,8 +828,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'text': {
                 const index = indexOf.get(entry) ?? -1;
                 const cut = layout.words.get(index);
-                // A plan the desktop marked is drawn by the plan's card, its card blocks taken out of its words.
-                if (entry.plan === true && !chat.main) return planCard(chat, entry, host, cut?.trim() ?? entry.text);
+                // A plan the desktop marked is drawn by the plan's card, whole: its turn draws no card (`cardLayout`).
+                if (entry.plan === true && !chat.main) return planCard(chat, entry, host);
                 const words = cut ?? entry.text;
                 const placed = layout.cards.get(index);
                 const card = placed === undefined ? null : cardView(chat, index, placed, host);
@@ -1078,9 +1080,10 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const campaignId = record?.campaignId ?? null;
     const main = record?.main === true;
     const running = record?.running === true;
+    const reopened = record?.reopened ?? 0;
     const asked = useMemo(
-        () => (entries === undefined ? null : actsAsked({ entries, campaignId, main, running })),
-        [entries, campaignId, main, running],
+        () => (entries === undefined ? null : actsAsked({ entries, campaignId, main, running, reopened })),
+        [entries, campaignId, main, running, reopened],
     );
     useEffect(
         () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),

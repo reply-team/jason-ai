@@ -69,6 +69,30 @@ function renderConsole(
     return { fake, desktop, journal };
 }
 
+/** A chat kept with one exchange before the choice is asked. */
+const opened: DesktopKeptEntry[] = [
+    { kind: 'user', text: 'Hi' },
+    { kind: 'text', text: 'Hello.', at },
+];
+/** The AI's words that end in the choice, said in the chat while the page has it open, and the turn's end. */
+function ask(
+    desktop: StubDesktop,
+    chatId: string,
+    text = `Two ways to send it.\n\n${fenced(choice)}`,
+    moment: string | null = at,
+) {
+    flush(() => {
+        desktop.emit(chatId, moment === null ? { kind: 'text', text } : { kind: 'text', text, at: moment });
+        desktop.emit(chatId, { kind: 'done', error: null });
+    });
+}
+const live = (pane: HTMLElement) =>
+    waitFor(() => {
+        const button = option(pane, 'From me');
+        expect(button.hasAttribute('disabled')).toBe(false);
+        return button;
+    });
+
 const setUp = (entries: DesktopKeptEntry[]) => ({ id: setupChat, campaignId: null, title: 'Sending', entries });
 const spring = (entries: DesktopKeptEntry[]) => ({ id: springChat, campaignId: 'cmp_1', title: 'Spring', entries });
 
@@ -150,14 +174,10 @@ describe('a choice the AI asked for', () => {
     });
 
     it('sends exactly the option’s label as the person’s message, once, and then shows it chosen', async () => {
-        const { desktop } = renderConsole([setUp([{ kind: 'user', text: 'Set it up' }, asking()])]);
+        const { desktop } = renderConsole([setUp(opened)]);
         const pane = await openChat('Sending');
-        const mine = await waitFor(() => {
-            const button = option(pane, 'From me');
-            expect(button.hasAttribute('disabled')).toBe(false);
-            return button;
-        });
-        fireEvent.click(mine);
+        ask(desktop, setupChat);
+        fireEvent.click(await live(pane));
         await waitFor(() => expect(sends(desktop)).toHaveLength(1));
         const [id, text, options] = sends(desktop)[0]!.args as [string, string, object];
         expect([id, text]).toEqual([setupChat, 'From me']);
@@ -174,17 +194,19 @@ describe('a choice the AI asked for', () => {
     });
 
     it('is locked by a message the person typed, which it says, and by a sentence of the desktop’s, with no mark', async () => {
-        const { desktop } = renderConsole([setUp([{ kind: 'user', text: 'Set it up' }, asking()])]);
+        const { desktop } = renderConsole([setUp(opened)]);
         const pane = await openChat('Sending');
-        await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(false));
+        ask(desktop, setupChat);
+        await live(pane);
         flush(() => desktop.emit(setupChat, { kind: 'notice', text: 'A folder was left out of the chat.' }));
         await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true));
         expect(within(card(pane)).queryByText(/You chose this|your own words/)).toBeNull();
         cleanup();
         chats.value = {};
-        const again = renderConsole([setUp([{ kind: 'user', text: 'Set it up' }, asking()])]);
+        const again = renderConsole([setUp(opened)]);
         const typed = await openChat('Sending');
-        await waitFor(() => expect(option(typed, 'From me').hasAttribute('disabled')).toBe(false));
+        ask(again.desktop, setupChat);
+        await live(typed);
         fireEvent.change(box(), { target: { value: 'Both of us, alternately' } });
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(sends(again.desktop)).toHaveLength(1));
@@ -192,20 +214,31 @@ describe('a choice the AI asked for', () => {
         expect(option(typed, 'From me').hasAttribute('disabled')).toBe(true);
     });
 
-    it('is drawn as it stood when the conversation is opened again: answered, or live while nothing follows it', async () => {
-        renderConsole([
-            setUp([
-                { kind: 'user', text: 'Set it up' },
-                asking(),
-                { kind: 'user', text: ' From someone else on my team ' },
-                { kind: 'text', text: 'Noted.', at },
-            ]),
-            { id: 'conv_01JDCARDS0000000000000000F', campaignId: null, title: 'Feed', main: true, entries: [asking()] },
-        ]);
+    it('is drawn answered as it was when the conversation is opened again, and locked, saying why, when it was not', async () => {
+        const fake = new FakeApi();
+        renderConsole(
+            [
+                setUp([
+                    { kind: 'user', text: 'Set it up' },
+                    asking(),
+                    { kind: 'user', text: ' From someone else on my team ' },
+                    { kind: 'text', text: 'Noted.', at },
+                ]),
+                spring([{ kind: 'user', text: 'Who sends?' }, asking()]),
+            ],
+            fake,
+        );
         const pane = await openChat('Sending');
         const chosen = await waitFor(() => option(pane, 'From someone else'));
         expect(chosen.getAttribute('aria-pressed')).toBe('true');
         expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true);
+        // What locked it may be a sentence of the desktop's, which its record does not keep: it is drawn locked.
+        const agent = await openChat('Spring');
+        await waitFor(() =>
+            within(card(agent)).getByText('This was asked before the chat was opened again; write your answer below.'),
+        );
+        expect(option(agent, 'From me').hasAttribute('disabled')).toBe(true);
+        expect(reads(fake)).toEqual([]);
     });
 
     it('in a tab that may not send is only shown, as the plan card is; in one that may, it sends', async () => {
@@ -214,7 +247,7 @@ describe('a choice the AI asked for', () => {
         const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
         setPlace('tab', tab);
         await loadMode(tab);
-        desktop.keep({ ...setUp([{ kind: 'user', text: 'Set it up' }, asking()]), mode: 'full_access' });
+        desktop.keep({ ...setUp(opened), mode: 'full_access' });
         const fake = new FakeApi()
             .answer('plugin.list', 'plugin.list/none')
             .answer('route.list', 'route.list/empty')
@@ -240,8 +273,10 @@ describe('a choice the AI asked for', () => {
         try {
             render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
             const pane = await openChat('Sending');
+            await waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
+            ask(desktop, setupChat);
             const asked = await waitFor(() => card(pane));
-            expect(within(asked).getByText('This is answered in Jason Desktop.')).toBeTruthy();
+            await waitFor(() => within(asked).getByText('This is answered in Jason Desktop.'));
             expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true);
             fireEvent.click(option(pane, 'From me'));
             expect(stand.asked.filter((each) => each.member === 'chat.send')).toHaveLength(0);
@@ -319,13 +354,19 @@ describe('a card that does not read', () => {
 });
 
 describe('a choice in an agent’s chat', () => {
-    const asked = [{ kind: 'user' as const, text: 'Who sends?' }, asking()];
+    /** Opens Spring's chat and has the AI ask the choice in it. */
+    async function asked(fake: FakeApi, journal: StubStream = stubStream()) {
+        const { desktop } = renderConsole([spring(opened)], fake, journal);
+        const pane = await openChat('Spring');
+        ask(desktop, springChat);
+        await waitFor(() => card(pane));
+        return { pane, desktop };
+    }
 
     it('reads once whether the person acted on the agent since it was asked, and is live when they did not', async () => {
         const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts-none');
-        renderConsole([spring(asked)], fake);
-        const pane = await openChat('Spring');
-        await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(false));
+        const { pane } = await asked(fake);
+        await live(pane);
         expect(reads(fake)).toEqual([
             {
                 campaign_id: 'cmp_1',
@@ -344,8 +385,7 @@ describe('a choice in an agent’s chat', () => {
 
     it('is locked, saying so, by a person’s act on the agent after it was asked', async () => {
         const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts');
-        renderConsole([spring(asked)], fake);
-        const pane = await openChat('Spring');
+        const { pane } = await asked(fake);
         await waitFor(() =>
             within(card(pane)).getByText(
                 'You acted on this agent after this was asked; write your answer below if it still stands.',
@@ -356,9 +396,9 @@ describe('a choice in an agent’s chat', () => {
 
     it('is locked by a person’s act the journal’s stream brings while it is live, and not by a role’s', async () => {
         const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts-none');
-        const { journal } = renderConsole([spring(asked)], fake);
-        const pane = await openChat('Spring');
-        await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(false));
+        const journal = stubStream();
+        const { pane } = await asked(fake, journal);
+        await live(pane);
         flush(() => {
             journal.open();
             journal.send(
@@ -391,8 +431,7 @@ describe('a choice in an agent’s chat', () => {
     it('is drawn locked, with the quiet words, when the read fails', async () => {
         const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts-none');
         fake.unreachable('journal.list');
-        renderConsole([spring(asked)], fake);
-        const pane = await openChat('Spring');
+        const { pane } = await asked(fake);
         await waitFor(() =>
             within(card(pane)).getByText('Whether this still stands could not be read; write your answer below.'),
         );
@@ -401,16 +440,9 @@ describe('a choice in an agent’s chat', () => {
 
     it('is drawn locked, with the quiet words and no read, when an earlier desktop kept its words with no moment', async () => {
         const fake = new FakeApi();
-        renderConsole(
-            [
-                spring([
-                    { kind: 'user', text: 'Who sends?' },
-                    { kind: 'text', text: fenced(choice) },
-                ]),
-            ],
-            fake,
-        );
+        const { desktop } = renderConsole([spring(opened)], fake);
         const pane = await openChat('Spring');
+        ask(desktop, springChat, fenced(choice), null);
         await waitFor(() =>
             within(card(pane)).getByText('Whether this still stands could not be read; write your answer below.'),
         );
@@ -421,24 +453,37 @@ describe('a choice in an agent’s chat', () => {
         const fake = new FakeApi();
         // The Feed's row is in the demo's sidebar.
         mode.value = 'demo';
-        renderConsole(
-            [
-                setUp(asked),
-                {
-                    id: 'conv_01JDCARDS0000000000000000F',
-                    campaignId: null,
-                    title: 'Feed',
-                    main: true,
-                    entries: [asking()],
-                },
-            ],
+        const feedChat = 'conv_01JDCARDS0000000000000000F';
+        const { desktop } = renderConsole(
+            [setUp(opened), { id: feedChat, campaignId: null, title: 'Feed', main: true, entries: opened }],
             fake,
         );
         const pane = await openChat('Sending');
-        await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(false));
+        ask(desktop, setupChat);
+        await live(pane);
         const feed = await openFeed();
-        await waitFor(() => expect(option(feed, 'From me').hasAttribute('disabled')).toBe(false));
+        ask(desktop, feedChat);
+        await live(feed);
         expect(reads(fake)).toEqual([]);
+    });
+
+    it('reads the acts again when the stream starts afresh after a resume the runtime refused, as lines were missed', async () => {
+        const fake = new FakeApi().answer('journal.list', 'journal.list/card-choice-acts-none');
+        const journal = stubStream();
+        const { pane } = await asked(fake, journal);
+        await live(pane);
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_31', kind: 'contacts_added', campaign_id: 'cmp_1' }));
+        });
+        // The runtime goes away; the stream resumes after its last line, and the runtime refuses that resume.
+        flush(() => journal.close());
+        await waitFor(() => expect(journal.opened).toHaveLength(2), { timeout: 3000 });
+        fake.answer('journal.list', 'journal.list/card-choice-acts');
+        flush(() => journal.close());
+        await waitFor(() => expect(reads(fake)).toHaveLength(2), { timeout: 3000 });
+        await waitFor(() => within(card(pane)).getByText(/^You acted on this agent after this was asked/));
+        expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true);
     });
 });
 
