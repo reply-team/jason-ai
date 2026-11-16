@@ -34,6 +34,10 @@ shows one item whole beside the list, and the agent's page and Settings are draw
     agent or of everyone, and how many approvals and questions wait for a decision.
   - An **accounts** card shows Reply's accounts as the desktop reads them at that moment and the plugin the runtime's
     routes name for messages, with a Refresh button.
+  - A **plan** card, in Plan only, draws the AI's proposal under its own label, with its steps, its drafts (folded
+    until you open them) and what is on record now, read from the runtime: the agent's state, how its messages go and
+    the plugin each channel sends through. Approve and run stands only under the whole plan, and a line above it says
+    that it approves the plan as written, its drafts included.
   - **Chips** under the last answer offer up to three next questions, chosen from the agent's counts; a chip sends its
     words as your next message and does nothing else.
   - A block the chat cannot read is one quiet line instead of a card.
