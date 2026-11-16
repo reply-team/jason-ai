@@ -132,8 +132,10 @@ one the next claim reads: no restart, no reload. Writing the line by hand is sti
 - **Each change is journaled** as `default_profile_updated`, naming the profile before and after, with the actor and
   the reason: the change the runtime wrote, and the one a hand edit made that the runtime had not yet read, which the
   verb reads and puts in force. The file is written first and the line saved after, as `route.set` orders them; a save
-  that fails puts the file back, so the file, the default in force and the journal are left as they were. A claim made
-  between the write and that failure may already have resolved to the new default, and its provenance says so.
+  that fails puts back the file the verb wrote, so the file, the default in force and the journal are left as they were.
+  A claim made between the write and that failure may already have resolved to the new default, and its provenance says
+  so. Where the verb wrote nothing and read a hand edit, a save that fails leaves that edit in force with no line: the
+  file is the person's, as they left it, and its watch would have put it in force anyway.
 - **`jason profile list` says which one it is.** Every page of `profile.list` carries `default_execution_profile`, the
   name in force or `null`, and `--human` prints it under the table. A name written by hand that no profile answers is said
   as it stands, since it is what every claim that falls back to it refuses on.

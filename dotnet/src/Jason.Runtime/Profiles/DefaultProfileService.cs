@@ -34,8 +34,9 @@ namespace Jason.Runtime.Profiles;
 /// <b>One line per change, in <c>route.set</c>'s order.</b> Every act that changes the default in force is journaled as
 /// <c>default_profile_updated</c> — the one that wrote the file, and the one that found a hand edit already saying what was
 /// asked and put it in force by reading it; the state already in force writes nothing and says nothing. The file is written
-/// first and the line saved after, inside the writer's act, so a save that fails puts the file back: the file, the default
-/// in force and the chronicle are left as they were, and agree.
+/// first and the line saved after, inside the writer's act, so a save that fails puts back a file this act wrote: the file,
+/// the default in force and the chronicle are left as they were, and agree. An act that wrote nothing and read a hand edit
+/// leaves that edit in force when its save fails, with no line, as the file's watch would have.
 /// </para>
 /// </remarks>
 public sealed class DefaultProfileService(

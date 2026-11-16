@@ -333,20 +333,32 @@ public class DefaultProfileTests
 
     /// <summary>
     /// The order is <c>route.set</c>'s: the file is written, then the journal's line is saved, and a failure between the
-    /// two puts the file back. Here the database refuses the save of the line and nothing else, so the file, the default in
-    /// force and the chronicle are left as they were before the request, and the three agree.
+    /// two puts the file this call wrote back. Here the database refuses the save of the line and nothing else, so the file,
+    /// the default in force and the chronicle are left as they were before the request, and the three agree: a file that
+    /// was there holds its bytes again, and where there was none the one this call wrote is taken away again.
     /// </summary>
-    [Fact]
-    public async Task A_line_the_database_refuses_to_save_puts_the_file_back_and_leaves_the_default_as_it_was()
+    [Theory]
+    [InlineData(Original)]
+    [InlineData(null)]
+    public async Task A_line_the_database_refuses_to_save_puts_the_file_back_and_leaves_the_default_as_it_was(string? settings)
     {
-        await using var api = await StartAsync(refuseTheLine: true);
+        await using var api = await StartAsync(settings, refuseTheLine: true);
         await ProfileAsync(api, "house");
-        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+        var bytes = settings is null ? null : File.ReadAllBytes(api.Paths.UserSettingsFile);
+        Assert.Equal(settings is not null, File.Exists(api.Paths.UserSettingsFile));
 
         var error = await api.PostErrorAsync(Operations.ProfileSetDefault, new { name = "house" }, HttpStatusCode.InternalServerError, Ct);
 
         Assert.Equal("internal_error", error.Code);
-        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        if (bytes is null)
+        {
+            Assert.False(File.Exists(api.Paths.UserSettingsFile));
+        }
+        else
+        {
+            Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        }
+
         Assert.Null(InForce(api));
         Assert.Empty((await LinesAsync(api)).Items);
     }
@@ -458,14 +470,20 @@ public class DefaultProfileTests
     private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
         api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.DefaultProfileUpdated }, Ct);
 
-    /// <param name="settings">The settings file the runtime starts from.</param>
+    /// <param name="settings">The settings file the runtime starts from; <see langword="null"/> starts it with no file at all.</param>
     /// <param name="clock">The runtime's clock, for a recording.</param>
     /// <param name="watch">False stops the settings file's watch once the configuration is built, so an edit reaches the runtime only by a read it makes itself.</param>
     /// <param name="refuseTheLine">True makes the database refuse every save that carries a <c>default_profile_updated</c> line, and nothing else.</param>
-    private static Task<RuntimeApiFixture> StartAsync(string settings = Original, TimeProvider? clock = null, bool watch = true, bool refuseTheLine = false) =>
+    private static Task<RuntimeApiFixture> StartAsync(string? settings = Original, TimeProvider? clock = null, bool watch = true, bool refuseTheLine = false) =>
         RuntimeApiFixture.StartAsync(
             Ct,
-            prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false)),
+            prepare: paths =>
+            {
+                if (settings is not null)
+                {
+                    File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false));
+                }
+            },
             clock: clock,
             configureServices: refuseTheLine
                 ? services => services.ConfigureDbContext<JasonDbContext>(options => options.AddInterceptors(new RefusesTheLine()))
