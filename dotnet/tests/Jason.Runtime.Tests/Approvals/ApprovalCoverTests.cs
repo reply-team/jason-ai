@@ -26,7 +26,6 @@ public class ApprovalCoverTests
     private static readonly IReadOnlyDictionary<string, string> NoPins = PreflightFacts.NoPins;
 
     [Theory]
-    [Critical(Family.S2, "an approval covers its subject and the pins learned since")]
     [InlineData("the same subject", true)]
     [InlineData("the person pinned since", true)]
     [InlineData("the campaign pinned since", true)]
@@ -107,7 +106,6 @@ public class ApprovalCoverTests
     /// version, the operation and the work item.
     /// </summary>
     [Theory]
-    [Critical(Family.S2, "every other change needs a new approval")]
     [InlineData("an argument", false)]
     [InlineData("an argument", true)]
     [InlineData("a field of the person", false)]

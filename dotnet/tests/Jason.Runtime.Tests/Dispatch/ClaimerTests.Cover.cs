@@ -23,7 +23,6 @@ public partial class ClaimerTests
     private const string Covering = "stand-in-provider";
 
     [Theory]
-    [Critical(Family.S2, "a pin learned since keeps the approval's cover")]
     [InlineData("the failed attempt pinned the person")]
     [InlineData("the failed attempt pinned the campaign")]
     [InlineData("the failed attempt pinned both")]
@@ -95,7 +94,6 @@ public partial class ClaimerTests
     /// still the person's, and nothing runs.
     /// </summary>
     [Theory]
-    [Critical(Family.S2, "a changed or vanished pin needs a new approval")]
     [InlineData("person", "the person's pin holds another value")]
     [InlineData("person", "the person's pin is gone")]
     [InlineData("campaign", "the campaign's pin holds another value")]
