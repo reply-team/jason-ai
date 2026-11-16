@@ -1368,6 +1368,75 @@ body,
 .jc-console .setrow .inp {
     max-width: 240px;
 }
+/* An AI host found here, or a model key: one row, its name and state at the left. A host's notes are its secondary text,
+   "In use" at the right; a key's field and button share one column at the right, the same width in every row, so the
+   fields line up. On a narrow page the column takes a line of its own. */
+.jc-console .setrow.host-row,
+.jc-console .setrow.key-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+}
+.jc-console .setrow.host-row {
+    align-items: flex-start;
+}
+.jc-console .host-row > .grow,
+.jc-console .key-row > .grow {
+    flex: 1 1 220px;
+}
+.jc-console .row-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+.jc-console .host-row .row-hd + .meta {
+    margin-top: 4px;
+}
+.jc-console .host-row .meta {
+    color: var(--mute);
+    overflow-wrap: anywhere;
+}
+.jc-console .host-row > .in-use {
+    flex: none;
+}
+.jc-console .key-act {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 1 360px;
+    margin-left: auto;
+}
+.jc-console .key-act .inp {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+}
+/* The hosts not found: one quiet line naming them, an Install button beside each that can be installed. */
+.jc-console .setrow.hosts-absent {
+    display: block;
+    color: var(--mute);
+    line-height: 1.9;
+}
+.jc-console .hosts-absent .absent-host {
+    margin-left: 4px;
+    white-space: nowrap;
+}
+.jc-console .hosts-absent .btn {
+    height: auto;
+    margin: 0 1px 0 4px;
+    padding: 1px 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    vertical-align: baseline;
+}
+@media (max-width: 820px) {
+    .jc-console .key-act {
+        flex: 1 1 100%;
+    }
+}
 .jc-console .versions {
     margin-top: 18px;
 }

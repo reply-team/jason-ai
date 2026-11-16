@@ -9,15 +9,16 @@ import { mode, type Mode } from '../../platform/mode';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
-import { stubDesktop, stubStream, type StubDesktop } from '../../test/desktop';
+import type { DesktopHost, DesktopSetup } from '../../platform/desktop';
+import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
 
 // Settings in Live gains Models, what Connect holds for the AI hosts and keys, and Runtime, what System holds of the
 // runtime, beside the sections it has. Both are the same cards over the same answers; Connect and System keep them.
 
-function renderSettings(where: Mode): { desktop: StubDesktop; fake: FakeApi } {
+function renderSettings(where: Mode, status: DesktopSetup = setupFound): { desktop: StubDesktop; fake: FakeApi } {
     mode.value = where;
-    const desktop = stubDesktop();
+    const desktop = stubDesktop(status);
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
@@ -87,6 +88,53 @@ describe('Settings in Live', () => {
         flush(() => here().dock.show('connect'));
         const connect = await waitFor(() => document.querySelector<HTMLElement>('[data-pane="connect"]')!);
         expect(within(connect).getByText('Drives the chat')).toBeTruthy();
+    });
+
+    it('draws the hosts found a row each, the hosts not found on one line, and keeps every act', async () => {
+        const [claude, codex, gemini, deepseek] = setupFound.hosts as [
+            DesktopHost,
+            DesktopHost,
+            DesktopHost,
+            DesktopHost,
+        ];
+        const hosts = [
+            { ...claude, runsRoles: 'default' },
+            codex,
+            gemini,
+            { ...gemini, id: 'cursor', label: 'Cursor CLI', found: false, version: null },
+            { ...deepseek, id: 'anthropic', label: 'Anthropic', found: true },
+            deepseek,
+        ];
+        const { desktop } = renderSettings('live', { ...setupFound, hosts });
+        await settings();
+        const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
+        await waitFor(() => expect(models.querySelector('.hosts-absent')).toBeTruthy());
+        const rows = Array.from(models.querySelectorAll<HTMLElement>('.host-row'));
+        expect(rows.map((each) => each.querySelector('b')?.textContent)).toEqual(['Claude Code', 'Gemini CLI']);
+        expect(rows.map((each) => each.querySelector('.in-use') !== null)).toEqual([true, false]);
+        const absent = models.querySelector<HTMLElement>('.hosts-absent')!;
+        expect(absent.textContent).toContain('Codex');
+        expect(absent.textContent).toContain('Cursor CLI');
+        fireEvent.click(within(absent).getByRole('button', { name: 'Install' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.installProgram')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'setup.installProgram')!.args).toEqual(['codex']);
+        const keyRow = (label: string) =>
+            within(models).getByText(label, { selector: 'b' }).closest<HTMLElement>('.key-row')!;
+        await waitFor(() => expect(within(keyRow('DeepSeek')).getByRole('button', { name: 'Keep' })).toBeTruthy());
+        fireEvent.input(within(keyRow('DeepSeek')).getByLabelText('DeepSeek key'), { target: { value: ' sk-1 ' } });
+        fireEvent.click(within(keyRow('DeepSeek')).getByRole('button', { name: 'Keep' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.setProviderKey')).toBe(true));
+        expect(desktop.calls.find((each) => each.name === 'setup.setProviderKey')!.args).toEqual(['deepseek', 'sk-1']);
+        await waitFor(() =>
+            expect(within(keyRow('Anthropic')).getByRole('button', { name: 'Remove the key' })).toBeTruthy(),
+        );
+        expect(within(keyRow('Anthropic')).queryByLabelText('Anthropic key')).toBeNull();
+        fireEvent.click(within(keyRow('Anthropic')).getByRole('button', { name: 'Remove the key' }));
+        await waitFor(() =>
+            expect(
+                desktop.calls.filter((each) => each.name === 'setup.setProviderKey').map((each) => each.args),
+            ).toContainEqual(['anthropic', '']),
+        );
     });
 
     it('draws in Runtime what System draws, from the system.info the page already read', async () => {
