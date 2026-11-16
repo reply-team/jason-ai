@@ -64,4 +64,9 @@ describe('the console in a narrow tab', () => {
         );
         expect(readFileSync('src/styles/components.css', 'utf8')).toContain('.segmented button { white-space: nowrap;');
     });
+    it('leaves the inset of the browser shell’s screens as they have it', () => {
+        const text = readFileSync('src/console/console.css', 'utf8');
+        expect(text).not.toMatch(/\.harness \.toolbar[^{]*\{[^}]*padding/);
+        expect(text).not.toMatch(/\.harness \.sys[^{]*\{[^}]*padding/);
+    });
 });
