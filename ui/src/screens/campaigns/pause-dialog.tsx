@@ -44,9 +44,12 @@ function provider(campaign: Movable): string | null {
 
 /** What pausing or starting does, said before it is done: Jason's own release of work, and nothing at the provider. */
 function says(campaign: Movable, kind: Transition): string {
-    if (kind === 'resume') return "Jason releases this agent's work again.";
-    if (kind === 'start') return "Jason starts releasing this agent's work.";
     const name = provider(campaign);
+    // A provider's sequence sends on its own schedule: starting or resuming Jason's work starts nothing there.
+    const own = (verb: string) =>
+        name ? ` ${name}'s sequence sends on its own schedule: ${verb} this agent starts nothing there.` : '';
+    if (kind === 'resume') return `Jason releases this agent's work again.${own('resuming')}`;
+    if (kind === 'start') return `Jason starts releasing this agent's work.${own('starting')}`;
     const sequence = name ? ` ${name}'s sequence keeps sending until a role pauses it there.` : '';
     return `Jason stops releasing this agent's work. Work already running finishes.${sequence} Your reason is recorded.`;
 }
@@ -56,7 +59,7 @@ function says(campaign: Movable, kind: Transition): string {
  * send mode each kind of message goes under now. Each is null where its read failed; `modes` is null too from a runtime
  * that does not say its modes.
  */
-type Releases = { people: number | null; modes: Record<Kind, ModeInForce> | null };
+type Releases = { people: number | null; modes: Record<Kind, ModeInForce> | null; record: Campaign | null };
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -79,6 +82,7 @@ async function readReleases(api: Api, id: string): Promise<Releases> {
     return {
         people: row && typeof row.people === 'number' ? row.people : null,
         modes: record.status === 'fulfilled' ? (record.value.send_modes_in_force ?? null) : null,
+        record: record.status === 'fulfilled' ? record.value : null,
     };
 }
 
@@ -196,7 +200,7 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
                 </>
             }
         >
-            <p>{says(record ?? campaign, kind)}</p>
+            <p>{says(releases?.record ?? record ?? campaign, kind)}</p>
             {reading && <p className="muted">{t('modes.settings.reading')}</p>}
             {releases && <WhatStartingReleases releases={releases} />}
             <div className="field">

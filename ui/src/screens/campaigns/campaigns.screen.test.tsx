@@ -1296,7 +1296,9 @@ describe('What the panel does', () => {
         expect(offered(settings())).toEqual([]);
         fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
-        expect(start.textContent).toContain("Jason releases this agent's work again.");
+        expect(start.textContent).toContain(
+            "Jason releases this agent's work again. Reply's sequence sends on its own schedule: resuming this agent starts nothing there.",
+        );
         // Resuming lets the queued work go as starting does, so it says the same.
         const rule = await within(start).findByRole('region', { name: 'What starting releases' });
         expect(rule.textContent).toContain('22 people are in this agent.');
