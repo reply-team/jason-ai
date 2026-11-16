@@ -59,13 +59,13 @@ an editor is opened.
   is gone. The sentences a person acts on stay: the CLI not found, and the CLI older than the account acts need.
 
 - **The Open in menu has an icon column, one-line hints and dividers, and stays inside the window.** Every item starts
-  with an icon: on Windows and macOS an installed application's own icon, read from the application itself (on macOS
-  from the application's own bundle), and on Linux, and on every row with no application (Claude Code, Codex, Browser,
-  Copy path, and Terminal on Windows), a glyph for its kind. The hint under Claude Code and Codex is the one line "A new
-  session in a terminal"; the whole sentence is still the item's description and its tooltip. A divider follows the
-  Agents group and another the Editors group, beside the one before Change Jason itself. The menu is 300 pixels wide, so
-  names and one-line hints no longer wrap, and a menu taller than what is left below the strip scrolls inside itself
-  instead of running past the window's bottom edge.
+  with an icon. On Windows and macOS a row for an installed application shows that application's own icon, read from the
+  application itself at run time (on macOS from its bundle). Where that icon cannot be read, on Linux, and on every row
+  with no application (Claude Code, Codex, Browser, Copy path, and Terminal on Windows), the row shows a glyph for its
+  kind. The hint under Claude Code and Codex is the one line "A new session in a terminal"; the whole sentence is still
+  the item's description and its tooltip. A divider follows the Agents group and another the Editors group, beside the
+  one before Change Jason itself. The menu is 300 pixels wide, so names and one-line hints no longer wrap, and a menu
+  taller than what is left below the strip scrolls inside itself instead of running past the window's bottom edge.
 
 - **After an editor is opened from Open in, the window says which Jason a terminal there finds.** It reads the PATH the
   desktop gives the editor, and says one of three things: "jason on your PATH is this window's Jason, so a terminal
