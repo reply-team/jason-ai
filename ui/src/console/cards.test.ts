@@ -455,13 +455,15 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('shows each kind this build draws and no other, and every example reads as a card of its kind', () => {
+    it('shows each of the six kinds, and every example reads as a card of its kind', () => {
         const shown = examples(instructions);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
             'choice',
             'people_list',
             'agent_status',
             'needs',
+            'accounts',
+            'plan',
         ]);
         for (const example of shown) expect(read(example).state, example).toBe('card');
     });

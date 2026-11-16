@@ -179,11 +179,12 @@
 }
 
 /* A card the AI asked for. Its frame's label names the AI as the speaker of what stands under it, in the first row,
-   where nothing it holds can push it away; the AI's words are drawn as plain text, never in the look of a fact. */
+   in plain weight, where nothing it holds can push it away; the AI's words are drawn as plain text, never in the look
+   of a fact. */
 .jc-console .chat-card .card-who {
     color: var(--faint);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
     letter-spacing: 0.01em;
     margin-bottom: 4px;
 }
