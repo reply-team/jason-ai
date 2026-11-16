@@ -2,7 +2,10 @@
    the console draws its own pages: the title as a page's bar, each section a card, the theme a segmented control, a field
    a setting row (label, control, room for an act), a fact a row of its card, the runtime's state a pill. Look alone: the
    screen's markup, words and controls are its own. Every rule is under Settings in the console, so the classic shell,
-   System's own Runtime card and every other screen are untouched; the console's tokens carry its dark values. */
+   System's own Runtime card and every other screen are untouched; the console's tokens carry its dark values.
+   Order is what wins against the shell's sheet at equal specificity; one rule is the exception: the palette's input rule
+   (the console palette sheet) is more specific and beats this sheet in light whatever the order, so an input's values are
+   changed there, and today they are the same as here. */
 
 .jc-console .harness .settings {
     max-width: none;
@@ -99,7 +102,7 @@
     gap: 14px;
     align-items: center;
     padding: 11px 0;
-    border-bottom: 1px solid var(--line2);
+    border-bottom: 1px solid var(--line);
     font-size: 13.5px;
     color: var(--ink);
 }
@@ -131,7 +134,7 @@
     margin: 0;
     padding: 14px 0 0;
     border: 0;
-    border-top: 1px solid var(--line2);
+    border-top: 1px solid var(--line);
 }
 .jc-console .harness .settings .send-mode-choice + .send-mode-choice {
     margin-top: 16px;
@@ -160,9 +163,9 @@
     row-gap: 2px;
     align-items: start;
     margin: 0 0 8px;
-    padding: 10px 12px;
+    padding: 11px 13px;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--panel);
     font-size: 13.5px;
     color: var(--ink);
@@ -235,22 +238,25 @@
 .jc-console .harness .settings .facts {
     grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
     gap: 0;
+    margin: 0 -20px;
 }
 .jc-console .harness .settings .facts dt,
 .jc-console .harness .settings .facts dd {
     padding: 11px 0;
-    border-bottom: 1px solid var(--line2);
+    border-bottom: 1px solid var(--line);
 }
 .jc-console .harness .settings .facts dt:last-of-type,
 .jc-console .harness .settings .facts dd:last-of-type {
     border-bottom: 0;
 }
 .jc-console .harness .settings .facts dt {
+    padding-left: 16px;
     font-size: 13px;
-    color: var(--faint);
+    color: var(--mute);
 }
 .jc-console .harness .settings .facts dd {
     padding-left: 14px;
+    padding-right: 16px;
     text-align: right;
     overflow-wrap: anywhere;
     font-variant-numeric: tabular-nums;
@@ -284,7 +290,7 @@
         border-bottom: 0;
     }
     .jc-console .harness .settings .facts dd {
-        padding-left: 0;
+        padding-left: 16px;
         text-align: left;
     }
 }

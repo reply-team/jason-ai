@@ -70,7 +70,7 @@ describe('the sheet of Settings in the console', () => {
         }
     });
 
-    it('draws the page as his: a bar for the title, and each section a card of his', () => {
+    it('draws the page as the console draws its pages: a bar for the title, each section a card', () => {
         expect(body(`${scope} > h1`)).toMatch(/font-size: 17px; font-weight: 650;/);
         expect(body(`${scope} > h1`)).toMatch(/border-bottom: 1px solid var\(--line\)/);
         const card = body(`${scope} > section`);
@@ -81,14 +81,17 @@ describe('the sheet of Settings in the console', () => {
         expect(body(`${scope} h2`)).toMatch(/font-size: 15px; font-weight: 650;/);
     });
 
-    it('draws the theme as his segmented control, a field as his setting row, a fact as a row of his card', () => {
+    it('draws the theme as a segmented control, a field as a setting row, a fact as a row of its card', () => {
         expect(body(`${scope} .choices`)).toMatch(/background: var\(--seg-track\)/);
         expect(body(`${scope} .choices button[aria-pressed='true']`)).toMatch(/background: var\(--seg-on\)/);
         expect(body(`${scope} .voice-part label`)).toMatch(
             /grid-template-columns: minmax\(0, 1.3fr\) minmax\(0, 2fr\) 170px/,
         );
-        expect(body(`${scope} .voice-part label`)).toMatch(/border-bottom: 1px solid var\(--line2\)/);
+        expect(body(`${scope} .voice-part label`)).toMatch(/border-bottom: 1px solid var\(--line\)/);
         expect(body(`${scope} .facts dd`)).toMatch(/text-align: right/);
+        expect(body(`${scope} .facts`)).toMatch(/margin: 0 -20px/);
+        expect(body(`${scope} .facts dt`)).toMatch(/padding-left: 16px;[^}]*color: var\(--mute\)/);
+        expect(body(`${scope} .send-mode-option`)).toMatch(/padding: 11px 13px;[^}]*border-radius: 12px/);
         expect(body(`${scope} .badge.success`)).toMatch(/background: var\(--green-2\); color: var\(--green\)/);
         expect(body(`${scope} .send-mode-option:has(input:checked)`)).toMatch(/background: var\(--teal-2\)/);
     });
