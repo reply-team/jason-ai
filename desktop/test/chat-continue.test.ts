@@ -236,7 +236,7 @@ test('while a turn of the chat runs it is offered as running; a chat the desktop
     for (const other of ['conv_01ZZZZZZZZZZZZZZZZZZZZZZZZ', 'chat-a', '../x', 7, null, undefined, {}]) assert.equal(r.chat.continuable(other), null, String(other));
 });
 
-test('starting a chat afresh drops its sessions and their marks', async (t) => {
+test('starting a chat fresh drops its sessions and their marks', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.turn(id, 'Hello', { host: 'claude' });

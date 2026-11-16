@@ -5,9 +5,10 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
@@ -18,6 +19,7 @@ import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
+import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
 import { editorEnvironment } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
@@ -560,7 +562,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
     // in this run's chat folder, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
-    // which this run is.
+    // which this run is. Each application the menu offers is drawn with its own icon where one can be read: the pixels are
+    // read here, by the system on Windows and from the bundle's own files on macOS, and kept for the run in memory only.
+    const icons = new IconReader({
+        platform: process.platform,
+        stat: (path) => stat(path),
+        readAtMost: (path, cap) => readRegularFileAtMost(path, cap),
+        fileIcon: (path) => app.getFileIcon(path, { size: 'normal' }),
+        fromBuffer: (png) => nativeImage.createFromBuffer(png),
+    });
     const openIn = new OpenIn({
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
@@ -592,6 +602,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look; none told where
         // this run offers no command (the demo, a start that carries no copy).
         ...(command === null ? {} : { jason: () => command.onPath() }),
+        icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>

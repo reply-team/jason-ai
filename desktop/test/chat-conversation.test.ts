@@ -1,7 +1,7 @@
 // A conversation per campaign, end to end against stub hosts and a stub jason: the record decides the campaign and the
 // header says it, the record is kept and reopened after a restart, a host resumes its own session and a lost one starts
 // afresh with a recap, a set-up chat hands over to the one campaign its turn made, and a conversation whose turn runs is
-// neither removed nor started afresh.
+// neither removed nor started fresh.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -428,7 +428,7 @@ test('two set-up turns that ran at the same time hand over neither, and both off
     await assert.rejects(r.chat.attach(first.id, 'cmp_OTHER'), /already about an agent/);
 });
 
-test('a conversation whose turn runs is neither removed nor started afresh, and says so; once it ends, both are done', async (t) => {
+test('a conversation whose turn runs is neither removed nor started fresh, and says so; once it ends, both are done', async (t) => {
     const r = rig(t);
     const pid = join(r.b.root, 'host.pid');
     plan(r, [{ wait: pid }]);
@@ -440,7 +440,7 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     await r.chat.send(chat.id, 'Beside it', { host: 'claude' });
     assert.deepEqual(await refused, { kind: 'done', error: 'This chat is still answering. Wait for it to finish, or stop it, then send again.' });
     assert.throws(() => r.chat.remove(chat.id), { message: 'This conversation is still answering. Wait for it to finish, or stop it, then remove it.' });
-    assert.throws(() => r.chat.restart(chat.id), { message: 'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.' });
+    assert.throws(() => r.chat.restart(chat.id), { message: 'This conversation is still answering. Wait for it to finish, or stop it, then start it fresh.' });
     await assert.rejects(r.chat.attach(chat.id, 'cmp_02'), /still answering/);
     const done = r.until(chat.id, (event) => event.kind === 'done');
     r.chat.stop(chat.id);
@@ -461,7 +461,7 @@ test('a conversation whose turn runs is neither removed nor started afresh, and 
     await assert.rejects(r.chat.create('../cmp'), { message: "That is not an agent's id." });
 });
 
-test('a conversation that never had a turn is not listed and leaves no record, and Start afresh on it writes nothing', async (t) => {
+test('a conversation that never had a turn is not listed and leaves no record, and Start fresh on it writes nothing', async (t) => {
     const r = rig(t);
     const setup = await r.chat.create();
     const campaign = await r.chat.create('cmp_01ABC');

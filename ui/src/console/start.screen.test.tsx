@@ -572,7 +572,7 @@ describe('Reply in a chat', () => {
         await ready();
         await openCampaignChat(desktop, 'Autumn');
         const card = await waitFor(() => screen.getByRole('region', { name: 'Connect Reply' }));
-        expect(within(card).getByRole('button', { name: 'Sign in' })).toBeTruthy();
+        expect(within(card).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
         expect(screen.queryByRole('region', { name: 'Connect Reply' })).toBeNull();
     });

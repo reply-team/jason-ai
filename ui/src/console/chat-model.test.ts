@@ -918,7 +918,7 @@ describe('a choice the AI asked', () => {
             { kind: 'user', text: 'Set it up' },
             { kind: 'text', text: 'Who?', at },
         ];
-        // A notice, a campaign attached or a session started afresh locked it; the record keeps none of them.
+        // A notice, a campaign attached or a session started fresh locked it; the record keeps none of them.
         expect(state(fromRecord(record(asking), 'claude'))).toEqual({ state: 'reopened' });
         expect(state(fromRecord({ ...record(asking), campaignId: 'cmp_1' }, 'claude'), clear)).toEqual({
             state: 'reopened',

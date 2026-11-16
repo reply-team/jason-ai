@@ -273,10 +273,10 @@ conversation, and an approval or a question opening Needs you. A line carries no
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. An agent's header holds its conversation's acts in **…**:
-**Rename conversation**, **Start conversation afresh**, which begins the AI's next turn without its memory of the
+**Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
-transcript of it; a set-up chat has them in its own bar as **Rename**, **Start afresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
+transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
 text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it

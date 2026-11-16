@@ -15,7 +15,7 @@
  *
  * Each conversation has an access mode (`chat-modes.ts`), read when a person's send starts a turn: Ask first, the
  * default; Plan only, kept on the record; and Full access, held in memory only, so a restart opens every chat in Ask
- * first, and so does Start afresh. Full access is chosen through a confirmation, unless the person answered it with
+ * first, and so does Start fresh. Full access is chosen through a confirmation, unless the person answered it with
  * Always: that standing choice is the main process's own file (`full-access-standing.ts`), which no turn can read or
  * write, and while it stands the menu enters Full access without the box and, if the person also asked for it, a new
  * chat starts in Full access. Every other check of Full access runs all the same. Leaving Full access stops the turn that runs in
@@ -1145,15 +1145,15 @@ export class Chat {
         this.#endGrant(conversation.id, false);
     }
 
-    /** "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
+    /** "Start fresh": the hosts' sessions are dropped, and the entries and the campaign kept. One whose turn runs is refused. */
     restart(id: unknown): void {
         const conversation = this.#own(id);
-        if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it afresh'));
+        if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it fresh'));
         conversation.sessions = {};
         delete conversation.plain_sessions;
         // A plan the host no longer remembers is no card to approve.
         unmarkPlans(conversation.entries);
-        // A chat in Full access started afresh goes back to Ask first; Plan only stays, as on its record, and so does
+        // A chat in Full access started fresh goes back to Ask first; Plan only stays, as on its record, and so does
         // Auto-edit, which has no grant and no box.
         if (this.#fullAccess.has(conversation.id)) this.#changeMode(conversation, 'ask_first', true);
         // One never sent to has no session to drop, and no record to write.
