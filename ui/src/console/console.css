@@ -442,32 +442,19 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent: one full-width box, its words centred across it, the caret's menu a quiet end of the same box. */
+/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
 .jc-console .newrow {
     display: flex;
+    gap: 8px;
     margin: 2px 14px 8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-    overflow: hidden;
-}
-.jc-console .newrow:hover {
-    border-color: var(--accent-line);
-}
-.jc-console .newrow:has(> .newbtn[aria-current='true']) {
-    border-color: var(--accent-line);
-    background: var(--hover);
 }
 .jc-console .newrow .newbtn {
     margin: 0;
     flex: 1;
     min-width: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    padding: 10px 10px 10px 44px;
+    font-weight: 500;
+    padding: 8px 10px;
+    border-radius: 10px;
 }
 .jc-console .caret {
     flex: none;
@@ -482,6 +469,18 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .newrow .caret {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.jc-console .newrow .caret:hover,
+.jc-console .newrow .caret[aria-expanded='true'] {
+    background: var(--panel);
+    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
