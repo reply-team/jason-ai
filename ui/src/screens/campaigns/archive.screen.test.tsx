@@ -131,9 +131,9 @@ describe('Archiving an agent from its Settings', () => {
         open(before(), settings);
         const dialog = await confirmation();
 
-        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
         expect(provider.textContent).toContain(
-            "Reply's campaign c_7714 is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.",
+            'The campaign in Reply (id c_7714) is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.',
         );
         expect(provider.textContent).toContain(
             "To stop it first, ask in this agent's chat to pause it in Reply, and archive once that work has finished; or pause it in Reply itself.",
@@ -144,7 +144,7 @@ describe('Archiving an agent from its Settings', () => {
         open(before(), settings, { chat: false });
         const dialog = await confirmation();
 
-        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
         expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
         expect(provider.textContent).not.toContain('chat');
     });
@@ -295,7 +295,7 @@ describe('Archiving an agent from its Settings', () => {
         // The person may archive all the same: the facts that could not be read are said to be unread.
         expect((within(dialog).getByRole('button', { name: 'Archive' }) as HTMLButtonElement).disabled).toBe(false);
         // The provider's paragraph stands, read from the agent as it is.
-        expect(within(dialog).getByRole('region', { name: "Reply's campaign" })).toBeTruthy();
+        expect(within(dialog).getByRole('region', { name: 'The campaign in Reply' })).toBeTruthy();
 
         back();
         fireEvent.click(within(cancels).getByRole('button', { name: 'Read again' }));
@@ -316,9 +316,9 @@ describe('Archiving an agent from its Settings', () => {
         api.unreachable('campaign.get');
         const dialog = await confirmation();
 
-        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
         expect(provider.textContent).toContain(
-            "Reply's campaign c_7714 is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.",
+            'The campaign in Reply (id c_7714) is left as it is: if it is live there, it keeps sending on its own schedule, and once this agent is archived Jason cannot pause it.',
         );
         // Whether Jason could pause it first was never read, so the way is the provider's own.
         expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
@@ -334,7 +334,7 @@ describe('Archiving an agent from its Settings', () => {
         open(api, settings);
         const dialog = await confirmation();
 
-        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
         expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
         expect(provider.textContent).not.toContain('chat');
         expect(sent(api, 'route.resolve')).toEqual([fixtures['route.resolve/archive-pause-unusable'].request]);
@@ -346,7 +346,7 @@ describe('Archiving an agent from its Settings', () => {
         open(api, settings);
         const dialog = await confirmation();
 
-        const provider = await within(dialog).findByRole('region', { name: "Reply's campaign" });
+        const provider = await within(dialog).findByRole('region', { name: 'The campaign in Reply' });
         expect(provider.textContent).toContain('To stop it first, pause it in Reply itself, then archive.');
         expect(provider.textContent).not.toContain('chat');
         // The counts were read all the same.

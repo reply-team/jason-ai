@@ -167,6 +167,8 @@ describe('the sheet of an agent’s page in the console', () => {
             /grid-template-columns: minmax\(0, 1.3fr\) minmax\(0, 2fr\) 170px/,
         );
         expect(body(`${agent} .facts dt`)).toMatch(/padding: 11px 0;/);
+        // The archive's card sets its button a step below its sentence.
+        expect(body(`${agent} > .panel-body > .section.archive-agent .btn-row`)).toMatch(/margin-top: 12px/);
         expect(body(`${agent} .facts dd`)).toMatch(/text-align: right; overflow-wrap: anywhere;/);
         // A narrow window stacks a fact: its label over its value, the value to the left.
         expect(sheet).toMatch(

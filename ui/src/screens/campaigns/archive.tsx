@@ -163,10 +163,10 @@ function WhatArchivingCancels({ counted, onReadAgain }: { counted: Counted; onRe
 /** What archiving leaves at the provider, and the way to stop it there first that is true for this agent. */
 function TheProvidersCampaign({ name, pin, jasonFirst }: { name: string; pin: string; jasonFirst: boolean }) {
     return (
-        <section className="section archive-provider" aria-label={`${name}'s campaign`}>
+        <section className="section archive-provider" aria-label={`The campaign in ${name}`}>
             <p>
-                {name}'s campaign {pin} is left as it is: if it is live there, it keeps sending on its own schedule, and
-                once this agent is archived Jason cannot pause it.
+                The campaign in {name} (id {pin}) is left as it is: if it is live there, it keeps sending on its own
+                schedule, and once this agent is archived Jason cannot pause it.
             </p>
             <p>
                 {jasonFirst
