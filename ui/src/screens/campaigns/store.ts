@@ -27,6 +27,7 @@ import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { bucketOf, periodWindow } from '../../time/periods';
 import { createBody, unfinishedCreate } from './kind';
+import { interestedWord } from '../../console/dashboard-model';
 
 /**
  * What every read of a campaign's people or counts on the campaign screens adds, the Results and the Performance page
@@ -304,17 +305,21 @@ function forget(tab: 'results' | 'inbox'): void {
     if (tabFailure.value?.tab === tab) tabFailure.value = null;
 }
 
-/** One read of the Results tab that may fail by itself: its value, or that it could not be read. */
-export type Read<T> = { ok: true; value: T } | { ok: false };
+/**
+ * One read of the Results tab that may fail by itself: still on its way, its value, or that it failed, with the
+ * runtime's own reason when the runtime refused it (null when nobody answered).
+ */
+export type Read<T> = { state: 'pending' } | { state: 'ok'; value: T } | { state: 'failed'; reason: string | null };
 
 /** The newest finished review of the campaign: when, or null while none has finished. */
 export type Review = string | null;
 
 /**
  * The Results tab's answers, with the campaign and the period they were read for: the campaign's people now, from
- * campaign.summary, and the period's counts, from campaign.activity; those two or nothing. Beside them, each read
- * that may fail alone: the conversations judged interested (reply.count), the two series (campaign.activity_by_period)
- * and the last review (workitem.list). The tab shows them as they came; it divides nothing.
+ * campaign.summary, and the period's counts, from campaign.activity; those two or nothing, written the moment both land.
+ * Beside them, each read that may fail or be slow alone, filled in as it lands: the conversations judged interested
+ * (reply.count), the two series (campaign.activity_by_period) and the last review (workitem.list). The tab shows them
+ * as they came; it divides nothing.
  */
 export const results = signal<{
     id: string;
@@ -327,10 +332,19 @@ export const results = signal<{
 } | null>(null);
 let resulting = 0;
 
-/** The word reply.count counts a verdict of interest by: the Dashboard's. */
-const interestedWord = 'interested';
+/** What an optional read came to: the runtime's own words when it refused, nothing when nobody answered. */
+function failedRead(error: unknown): { state: 'failed'; reason: string | null } {
+    // A request nobody is paired for ends the session, as every read of this page does.
+    failureText(error);
+    return { state: 'failed', reason: error instanceof ApiError ? error.message : null };
+}
 
-/** Reads the open campaign's Results again: the counts, or why not, said over this campaign's Results only. */
+/**
+ * Reads the open campaign's Results again: the counts, or why not, said over this campaign's Results only, and the
+ * optional reads, each filled in where it lands. The review and the people now do not depend on the period; a period
+ * change reads them again with the rest, which costs one cheap request and keeps one rule for the tab. An answer of an
+ * older load is never written.
+ */
 export async function loadResults(api: Api, id: string, period: Period, now: Date, zone: string): Promise<void> {
     const mine = ++resulting;
     forget('results');
@@ -344,12 +358,51 @@ export async function loadResults(api: Api, id: string, period: Period, now: Dat
             zone,
             ...archivedLeftOut,
         });
-    const [summed, active, judged, contacted, replied, reviewed] = await Promise.allSettled([
-        api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id], ...archivedLeftOut }),
-        api.call<CampaignActivityResponse>('campaign.activity', { campaign_ids: [id], ...window, ...archivedLeftOut }),
+    let core: { now: CampaignSummaryRow; counts: CampaignActivityRow } | null = null;
+    let interested: Read<number> = { state: 'pending' };
+    let series: Read<{ contacted: ActivityBucket[]; replied: ActivityBucket[]; readAt: Date }> = { state: 'pending' };
+    let review: Read<Review> = { state: 'pending' };
+    const publish = () => {
+        if (mine === resulting && core) results.value = { id, period, ...core, interested, series, review };
+    };
+    const settle = <T>(read: Promise<T>, take: (value: T) => void, fail: (error: unknown) => void) =>
+        read.then(
+            (value) => {
+                if (mine !== resulting) return;
+                take(value);
+                publish();
+            },
+            (error: unknown) => {
+                if (mine !== resulting) return;
+                fail(error);
+                publish();
+            },
+        );
+
+    // The optional reads are started with the counts and never hold them back.
+    const judged = settle(
         api.call<ReplyCountResponse>('reply.count', { campaign_ids: [id], ...window }),
-        over('contacted'),
-        over('replied'),
+        (value) => {
+            // An absent word is a count of zero in a window that was read; the Dashboard draws a dash for it, which on
+            // one campaign's tab would say "unknown" of something the runtime has just answered.
+            interested = {
+                state: 'ok',
+                value: value.total.categories.find((each) => each.category === interestedWord)?.threads ?? 0,
+            };
+        },
+        (error) => (interested = failedRead(error)),
+    );
+    const charted = settle(
+        Promise.all([over('contacted'), over('replied')]),
+        ([contacted, replied]) => {
+            series = {
+                state: 'ok',
+                value: { contacted: contacted.buckets, replied: replied.buckets, readAt: new Date(window.until) },
+            };
+        },
+        (error) => (series = failedRead(error)),
+    );
+    const reviewed = settle(
         // The latest review the manager role finished here: one request, newest finished first, a limit of one.
         api.call<Page<WorkItemSummary>>('workitem.list', {
             campaign_id: id,
@@ -358,47 +411,29 @@ export async function loadResults(api: Api, id: string, period: Period, now: Dat
             order: 'finished',
             limit: 1,
         }),
-    ]);
-    if (mine !== resulting) return;
-    // A read of its own that failed is said where it would be drawn; a request nobody is paired for ends the session.
-    for (const each of [judged, contacted, replied, reviewed]) if (each.status === 'rejected') failureText(each.reason);
-    const first = summed.status === 'rejected' ? summed : active.status === 'rejected' ? active : null;
-    if (first) {
-        failOver(id, 'results', first.reason);
-        return;
+        (value) => (review = { state: 'ok', value: value.items[0]?.finished_at ?? null }),
+        (error) => (review = failedRead(error)),
+    );
+
+    try {
+        const [summed, active] = await Promise.all([
+            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id], ...archivedLeftOut }),
+            api.call<CampaignActivityResponse>('campaign.activity', {
+                campaign_ids: [id],
+                ...window,
+                ...archivedLeftOut,
+            }),
+        ]);
+        const [row, counts] = [summed.campaigns[0], active.campaigns[0]];
+        if (mine === resulting && row && counts) {
+            core = { now: row, counts };
+            publish();
+        }
+    } catch (error) {
+        if (mine === resulting) failOver(id, 'results', error);
     }
-    if (summed.status !== 'fulfilled' || active.status !== 'fulfilled') return;
-    const [row, counts] = [summed.value.campaigns[0], active.value.campaigns[0]];
-    if (!row || !counts) return;
-    results.value = {
-        id,
-        period,
-        now: row,
-        counts,
-        interested:
-            judged.status === 'fulfilled'
-                ? {
-                      ok: true,
-                      value:
-                          judged.value.total.categories.find((each) => each.category === interestedWord)?.threads ?? 0,
-                  }
-                : { ok: false },
-        series:
-            contacted.status === 'fulfilled' && replied.status === 'fulfilled'
-                ? {
-                      ok: true,
-                      value: {
-                          contacted: contacted.value.buckets,
-                          replied: replied.value.buckets,
-                          readAt: new Date(window.until),
-                      },
-                  }
-                : { ok: false },
-        review:
-            reviewed.status === 'fulfilled'
-                ? { ok: true, value: reviewed.value.items[0]?.finished_at ?? null }
-                : { ok: false },
-    };
+    // The optional reads settle by themselves; waiting here keeps a caller's `await` to the whole tab.
+    await Promise.all([judged, charted, reviewed]);
 }
 
 /** The Results of this campaign for this period, or none while they are on their way. */
