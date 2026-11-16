@@ -49,6 +49,7 @@ describe('the sheet of Settings in the console', () => {
             for (const selector of rule.selectors)
                 expect(
                     selector.startsWith(`${scope} `) ||
+                        selector.startsWith(`${scope}[data-chosen`) ||
                         selector === scope ||
                         selector.startsWith(`${dark} `) ||
                         selector.startsWith(`${darkAuto} `),
@@ -71,11 +72,11 @@ describe('the sheet of Settings in the console', () => {
 
     // Look alone: nothing of the screen is hidden, cut or replaced by words of the sheet's.
     it('hides, cuts and writes nothing', () => {
-        for (const rule of rules) {
+        // The one exception is the two panes' rule, which hides the sections not chosen (settings-panes.screen.test.tsx).
+        for (const rule of rules.filter((each) => !each.selectors.every((one) => one.includes('[data-chosen='))))
             expect(rule.body, rule.selectors.join(', ')).not.toMatch(
                 /display: none|visibility: hidden|content:|-webkit-line-clamp|text-overflow/,
             );
-        }
     });
 
     it('draws the page as the console draws its pages: a bar for the title, each section a card', () => {
