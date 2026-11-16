@@ -1039,8 +1039,9 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
+    // Only a CLI that is missing is said: the version of one that is there is nothing a person acts on.
     const cli = state.cli.found
-        ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
+        ? null
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
                       ? html`<button
@@ -1056,8 +1057,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     return html`<div class="card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="hd"><b>Reply</b></div>
         <div class="bd">
-            ${notInDemo()}
-            <div class="setrow"><div class="grow">${cli}</div></div>
+            ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${
                 state.cli.found && below !== null
                     ? html`<div class="setrow below-minimum">
@@ -1082,7 +1082,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
                     <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in</button>` : null}
+                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
             </div>
             ${
                 state.cli.found

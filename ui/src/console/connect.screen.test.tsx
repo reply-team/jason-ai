@@ -700,6 +700,9 @@ describe('the Reply card, its acts', () => {
         const connect = await openConnect();
         const card = () => replyCard(connect);
         expect(Array.from(card().querySelectorAll('.below-minimum'), words)).toEqual([`${below} Update`]);
+        // A version of a CLI that is found is not drawn; only the sentence a person acts on is.
+        expect(words(card())).not.toContain('Reply CLI 0.20.0');
+        expect(within(card()).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         expect(within(card()).queryByRole('button', { name: 'Add account' })).toBeNull();
         expect(buttonsOf(rowOf(card, 'Account 2'))).toEqual([]);
         fireEvent.click(within(card()).getByRole('button', { name: 'Update' }));
