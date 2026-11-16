@@ -477,12 +477,12 @@ details.fold pre {
 .campaign-tabs-inbox-untied { display: flex; align-items: baseline; gap: var(--space-3); }
 .campaign-tabs-inbox-untied .s { flex: 1; }
 .campaign-tabs-results { padding: var(--space-4) var(--space-5); }
-.campaign-tabs-results .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.campaign-tabs-results .tiles, .main:not(.single) .campaign-tabs-results .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .campaign-tabs-results .charts, .campaign-tabs-results .review { margin-top: var(--space-4); }
 .campaign-tabs-results .review { color: var(--text-muted); font-size: var(--text-sm); }
 .campaign-tabs-results .tile .none { font-weight: 400; color: var(--text-muted); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }
-@media (max-width: 640px) { .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .campaign-tabs-results .charts { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .campaign-tabs-results .tiles, .main:not(.single) .campaign-tabs-results .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .campaign-tabs-results .charts { grid-template-columns: minmax(0, 1fr); } }
 
 /* People: one row per person, the stage chips under the search. */
 .stage-filter { padding: var(--space-2) var(--space-4) 0; }
