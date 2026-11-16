@@ -463,6 +463,8 @@ export function demoStripSheets(platform: NodeJS.Platform): { page: string; swit
             `.jc-console #mode-bar { container: jason-strip / inline-size !important; padding-right: calc(${demoStrip.inset}px + ${caption}) !important; } ` +
             `@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`,
         switch:
+            // Its widths are measured in Segoe UI, so its words are drawn in that font by name, never by the system's.
+            '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' +
             'body { container: jason-switch / inline-size !important; } ' +
             `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
     };

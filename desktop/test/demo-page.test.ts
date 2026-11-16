@@ -766,6 +766,8 @@ test('the page’s strip, as the desktop’s sheet names it, is still in the pag
     assert.ok(page.includes('@media (width<=1100px){.jc-console .mb-long{display:none}.jc-console .mb-short{display:inline}}'));
     assert.ok(page.includes('<span class="mb-long">${long}</span><span class="mb-short">${short}</span>'));
     assert.ok(page.includes('.jc-console #mode-bar>span{text-overflow:ellipsis;overflow:hidden}'), 'a sentence that does not fit ends in an ellipsis of the page’s own');
+    // The two sentences whose ends the numbers are measured from, as the page states them.
+    assert.ok(page.includes("say('an example of what you can build on Jason. The data is samples, and nothing is sent.','an example of what you can build. Nothing is sent.')"));
 });
 
 test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
@@ -776,9 +778,12 @@ test('on Windows the sheets are the desktop’s: the strip inset by the caption 
     assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
     assert.ok(sheets.page.includes(`@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`));
     assert.ok(sheets.switch.includes('body { container: jason-switch / inline-size !important; }'));
+    // The switch's widths are measured in Segoe UI, so on Windows its words are drawn in that font by name, not by
+    // whatever the system's font is.
+    assert.ok(sheets.switch.startsWith('.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } '));
     assert.ok(sheets.switch.includes(`@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${demoStrip.ours.segment.tight}px !important; padding-right: ${demoStrip.ours.segment.tight}px !important; } }`));
     // Only the segments' inner padding changes: the words, the height and the rest of the switch stay.
-    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.replace('container', '')));
+    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.slice(sheets.switch.indexOf('@container'))));
     assert.equal(demoStrip.ours.segment.normal, 12);
     assert.ok(/\.switch a, \.switch span \{[^}]*padding: 2px 12px;/.test(readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8').replace(/\s+/g, ' ')));
 });
