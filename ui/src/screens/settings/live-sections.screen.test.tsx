@@ -156,6 +156,26 @@ describe('Settings in Live', () => {
         );
     });
 
+    it('forgets a key typed and not saved when another provider is chosen', async () => {
+        const [claude, , , deepseek] = setupFound.hosts as [DesktopHost, DesktopHost, DesktopHost, DesktopHost];
+        const hosts = [claude, deepseek, { ...deepseek, id: 'openai', label: 'OpenAI' }];
+        const { desktop } = renderSettings('live', { ...setupFound, hosts });
+        await settings();
+        const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
+        const add = () => models.querySelector<HTMLElement>('.ai-add')!;
+        const provider = await waitFor(() => within(add()).getByLabelText<HTMLSelectElement>('Provider'));
+        const first = provider.value;
+        fireEvent.input(within(add()).getByLabelText('API key'), { target: { value: 'sk-typed' } });
+        fireEvent.change(within(add()).getByLabelText('Provider'), {
+            target: { value: first === 'openai' ? 'deepseek' : 'openai' },
+        });
+        await waitFor(() => expect(within(add()).getByLabelText<HTMLSelectElement>('Provider').value).not.toBe(first));
+        fireEvent.change(within(add()).getByLabelText('Provider'), { target: { value: first } });
+        await waitFor(() => expect(within(add()).getByLabelText<HTMLSelectElement>('Provider').value).toBe(first));
+        expect(within(add()).getByLabelText<HTMLInputElement>('API key').value).toBe('');
+        expect(desktop.calls.some((each) => each.name === 'setup.setProviderKey')).toBe(false);
+    });
+
     it('draws in Runtime what System draws, from the system.info the page already read', async () => {
         const { fake } = renderSettings('live');
         await settings();

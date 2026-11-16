@@ -740,7 +740,7 @@ define('connect.providerKey', ([provider, remove]) => {
     if (typeof provider !== 'string') return;
     const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
-        void doing('Keeping the key…', async () => {
+        void doing(remove === true ? 'Removing the key…' : 'Saving the key…', async () => {
             await here().desktop.setup.setProviderKey(provider, key);
             forget(`provider:${provider}`);
         });
@@ -940,7 +940,10 @@ function notFound(hosts: readonly DesktopHost[], busy: Html | null): Html | null
 const chosenProvider = signal<string | null>(null);
 
 define('connect.provider', (_args, element) => {
-    if (element instanceof HTMLSelectElement) chosenProvider.value = element.value;
+    if (!(element instanceof HTMLSelectElement)) return;
+    // A key typed and not saved is not kept behind the person's back under the provider they leave.
+    for (const key of [...typed.keys()]) if (key.startsWith('provider:')) typed.delete(key);
+    chosenProvider.value = element.value;
 });
 
 /** The provider the panel shows: the one picked, else the first with no key, else the first. */
