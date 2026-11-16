@@ -70,12 +70,19 @@ import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.a
 import approvalApproveApproved from '../../../docs/api/fixtures/approval.approve/approved.json';
 import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import approvalApproveNeedsPageTwoApproved from '../../../docs/api/fixtures/approval.approve/needs-page-two-approved.json';
+import approvalApproveNeedsTwoFirstApproved from '../../../docs/api/fixtures/approval.approve/needs-two-first-approved.json';
 import approvalGetCardInvitation from '../../../docs/api/fixtures/approval.get/card-invitation.json';
 import approvalGetCardMessage from '../../../docs/api/fixtures/approval.get/card-message.json';
 import approvalGetCardMessageReasked from '../../../docs/api/fixtures/approval.get/card-message-reasked.json';
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
+import approvalGetNeedsMessage from '../../../docs/api/fixtures/approval.get/needs-message.json';
+import approvalGetNeedsPageTwo from '../../../docs/api/fixtures/approval.get/needs-page-two.json';
+import approvalGetNeedsReply from '../../../docs/api/fixtures/approval.get/needs-reply.json';
+import approvalGetNeedsTwoFirst from '../../../docs/api/fixtures/approval.get/needs-two-first.json';
+import approvalGetNeedsTwoSecond from '../../../docs/api/fixtures/approval.get/needs-two-second.json';
 import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/modes-chosen.json';
 import approvalGetParkAnswersNoVerdict from '../../../docs/api/fixtures/approval.get/park-answers-no-verdict.json';
 import approvalGetParkAwaitingJudgement from '../../../docs/api/fixtures/approval.get/park-awaiting-judgement.json';
@@ -100,6 +107,13 @@ import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
 import approvalListEmpty from '../../../docs/api/fixtures/approval.list/empty.json';
 import approvalListMessagesPending from '../../../docs/api/fixtures/approval.list/messages-pending.json';
+import approvalListNeedsAfterEdit from '../../../docs/api/fixtures/approval.list/needs-after-edit.json';
+import approvalListNeedsFirstPage from '../../../docs/api/fixtures/approval.list/needs-first-page.json';
+import approvalListNeedsInbox from '../../../docs/api/fixtures/approval.list/needs-inbox.json';
+import approvalListNeedsNextPage from '../../../docs/api/fixtures/approval.list/needs-next-page.json';
+import approvalListNeedsNextPageAfter from '../../../docs/api/fixtures/approval.list/needs-next-page-after.json';
+import approvalListNeedsTwo from '../../../docs/api/fixtures/approval.list/needs-two.json';
+import approvalListNeedsTwoAfter from '../../../docs/api/fixtures/approval.list/needs-two-after.json';
 import approvalListOneModeUnset from '../../../docs/api/fixtures/approval.list/one-mode-unset.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
@@ -149,6 +163,7 @@ import campaignSetSendModeWarmAutomatic from '../../../docs/api/fixtures/campaig
 import campaignGetSummer from '../../../docs/api/fixtures/campaign.get/summer.json';
 import campaignGetUnknown from '../../../docs/api/fixtures/campaign.get/unknown.json';
 import campaignGetUnlinked from '../../../docs/api/fixtures/campaign.get/unlinked.json';
+import campaignListCardChips from '../../../docs/api/fixtures/campaign.list/card-chips.json';
 import campaignListCampaignsForPicker from '../../../docs/api/fixtures/campaign.list/campaigns-for-picker.json';
 import campaignListFirstPage from '../../../docs/api/fixtures/campaign.list/first-page.json';
 import campaignListForPicker from '../../../docs/api/fixtures/campaign.list/for-picker.json';
@@ -179,6 +194,7 @@ import campaignListContactsSummaryWaitingAfter from '../../../docs/api/fixtures/
 import campaignListContactsUnlinked from '../../../docs/api/fixtures/campaign.list_contacts/unlinked.json';
 import campaignPauseWithReason from '../../../docs/api/fixtures/campaign.pause/with-reason.json';
 import campaignStartAfterPause from '../../../docs/api/fixtures/campaign.start/after-pause.json';
+import campaignSummaryCardChips from '../../../docs/api/fixtures/campaign.summary/card-chips.json';
 import campaignSummaryAll from '../../../docs/api/fixtures/campaign.summary/all.json';
 import campaignSummaryEveryone from '../../../docs/api/fixtures/campaign.summary/everyone.json';
 import campaignSummaryEveryoneWithoutArchived from '../../../docs/api/fixtures/campaign.summary/everyone-without-archived.json';
@@ -243,10 +259,12 @@ import contactThreadsProviderFailed from '../../../docs/api/fixtures/contact.thr
 import contactThreadsTwoThreads from '../../../docs/api/fixtures/contact.threads/two-threads.json';
 import decisionAnswerAnswered from '../../../docs/api/fixtures/decision.answer/answered.json';
 import decisionGetForCampaignRow from '../../../docs/api/fixtures/decision.get/for-campaign-row.json';
+import decisionGetNeedsQuestion from '../../../docs/api/fixtures/decision.get/needs-question.json';
 import decisionGetPendingWithOptions from '../../../docs/api/fixtures/decision.get/pending-with-options.json';
 import decisionListByCampaignPending from '../../../docs/api/fixtures/decision.list/by-campaign-pending.json';
 import decisionListDecided from '../../../docs/api/fixtures/decision.list/decided.json';
 import decisionListEmpty from '../../../docs/api/fixtures/decision.list/empty.json';
+import decisionListNeedsQuestions from '../../../docs/api/fixtures/decision.list/needs-questions.json';
 import decisionListPending from '../../../docs/api/fixtures/decision.list/pending.json';
 import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/summer-pending.json';
 import journalListByAwaitingItem from '../../../docs/api/fixtures/journal.list/by-awaiting-item.json';
@@ -268,6 +286,37 @@ import journalListBySucceededItem from '../../../docs/api/fixtures/journal.list/
 import journalListByWorkItem from '../../../docs/api/fixtures/journal.list/by-work-item.json';
 import journalListOli from '../../../docs/api/fixtures/journal.list/oli.json';
 import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.json';
+// A person's acts on campaign A since the moment a choice was asked in its chat: a pause, and none.
+import journalListCardChoiceActs from '../../../docs/api/fixtures/journal.list/card-choice-acts.json';
+import journalListCardChoiceActsNone from '../../../docs/api/fixtures/journal.list/card-choice-acts-none.json';
+// What the chat's data cards read: an agent's status, its people and what waits, in the cards' story.
+import campaignGetCardStatus from '../../../docs/api/fixtures/campaign.get/card-status.json';
+import campaignGetCardStatusDraft from '../../../docs/api/fixtures/campaign.get/card-status-draft.json';
+import campaignGetCardArchived from '../../../docs/api/fixtures/campaign.get/card-archived.json';
+import campaignGetCardUnknownCampaign from '../../../docs/api/fixtures/campaign.get/card-unknown-campaign.json';
+import campaignSummaryCardStatus from '../../../docs/api/fixtures/campaign.summary/card-status.json';
+import campaignSummaryCardStatusLater from '../../../docs/api/fixtures/campaign.summary/card-status-later.json';
+import campaignSummaryCardStatusDraft from '../../../docs/api/fixtures/campaign.summary/card-status-draft.json';
+import campaignSummaryCardArchived from '../../../docs/api/fixtures/campaign.summary/card-archived.json';
+import campaignActivityCardStatus30Days from '../../../docs/api/fixtures/campaign.activity/card-status-30-days.json';
+import campaignActivityCardArchived30Days from '../../../docs/api/fixtures/campaign.activity/card-archived-30-days.json';
+import campaignListContactsCardPeopleFirst from '../../../docs/api/fixtures/campaign.list_contacts/card-people-first.json';
+import campaignListContactsCardPeopleQuery from '../../../docs/api/fixtures/campaign.list_contacts/card-people-query.json';
+import campaignListContactsCardPeopleWaiting from '../../../docs/api/fixtures/campaign.list_contacts/card-people-waiting.json';
+import campaignListContactsCardPeopleEmpty from '../../../docs/api/fixtures/campaign.list_contacts/card-people-empty.json';
+import campaignListContactsCardArchived from '../../../docs/api/fixtures/campaign.list_contacts/card-archived.json';
+import contactListCardPeopleEveryone from '../../../docs/api/fixtures/contact.list/card-people-everyone.json';
+import contactListCardPeopleQuery from '../../../docs/api/fixtures/contact.list/card-people-query.json';
+import contactListCardPeopleNobody from '../../../docs/api/fixtures/contact.list/card-people-nobody.json';
+import approvalListCardStatusWaiting from '../../../docs/api/fixtures/approval.list/card-status-waiting.json';
+import approvalListCardNeedsAll from '../../../docs/api/fixtures/approval.list/card-needs-all.json';
+import approvalListCardArchived from '../../../docs/api/fixtures/approval.list/card-archived.json';
+import decisionListCardStatusWaiting from '../../../docs/api/fixtures/decision.list/card-status-waiting.json';
+import decisionListCardNeedsAll from '../../../docs/api/fixtures/decision.list/card-needs-all.json';
+import decisionListCardArchived from '../../../docs/api/fixtures/decision.list/card-archived.json';
+import approvalGetCardNeedsPending from '../../../docs/api/fixtures/approval.get/card-needs-pending.json';
+import approvalGetCardNeedsDecided from '../../../docs/api/fixtures/approval.get/card-needs-decided.json';
+import decisionGetCardNeedsQuestion from '../../../docs/api/fixtures/decision.get/card-needs-question.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
@@ -338,6 +387,9 @@ import workitemCountZero from '../../../docs/api/fixtures/workitem.count/zero.js
 import workitemGetAwaiting from '../../../docs/api/fixtures/workitem.get/awaiting.json';
 import workitemGetExpired from '../../../docs/api/fixtures/workitem.get/expired.json';
 import workitemGetFailed from '../../../docs/api/fixtures/workitem.get/failed.json';
+import workitemGetNeedsMessageParked from '../../../docs/api/fixtures/workitem.get/needs-message-parked.json';
+import workitemGetNeedsPageTwoParked from '../../../docs/api/fixtures/workitem.get/needs-page-two-parked.json';
+import workitemGetNeedsTwoFirstParked from '../../../docs/api/fixtures/workitem.get/needs-two-first-parked.json';
 import workitemGetParkedEditedSend from '../../../docs/api/fixtures/workitem.get/parked-edited-send.json';
 import senderListCardMessageSender from '../../../docs/api/fixtures/sender.list/card-message-sender.json';
 import senderListCardSenderOther from '../../../docs/api/fixtures/sender.list/card-sender-other.json';
@@ -376,6 +428,7 @@ import workitemListTomasNow from '../../../docs/api/fixtures/workitem.list/tomas
 import workitemListUnknownCampaign from '../../../docs/api/fixtures/workitem.list/unknown-campaign.json';
 import workitemUpdateDates from '../../../docs/api/fixtures/workitem.update/dates.json';
 import workitemUpdateFinishedMeanwhile from '../../../docs/api/fixtures/workitem.update/finished-meanwhile.json';
+import workitemUpdateNeedsMessageEdited from '../../../docs/api/fixtures/workitem.update/needs-message-edited.json';
 // The person panel's recordings.
 import personCampaignAddContactsMoveIn from '../../../docs/api/fixtures/campaign.add_contacts/move-in.json';
 import personCampaignAddContactsMoveInRejected from '../../../docs/api/fixtures/campaign.add_contacts/move-in-rejected.json';
@@ -467,6 +520,14 @@ export const fixtures = {
         ApprovalDecisionRequest,
         ErrorEnvelope
     >,
+    'approval.approve/needs-page-two-approved': approvalApproveNeedsPageTwoApproved satisfies Exchange<
+        ApprovalDecisionRequest,
+        Approval
+    >,
+    'approval.approve/needs-two-first-approved': approvalApproveNeedsTwoFirstApproved satisfies Exchange<
+        ApprovalDecisionRequest,
+        Approval
+    >,
     'approval.get/card-invitation': approvalGetCardInvitation satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-message': approvalGetCardMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-message-reasked': approvalGetCardMessageReasked satisfies Exchange<
@@ -476,6 +537,11 @@ export const fixtures = {
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-message': approvalGetNeedsMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-page-two': approvalGetNeedsPageTwo satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-reply': approvalGetNeedsReply satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-two-first': approvalGetNeedsTwoFirst satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-two-second': approvalGetNeedsTwoSecond satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/modes-chosen': approvalGetModesChosen satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/park-answers-no-verdict': approvalGetParkAnswersNoVerdict satisfies Exchange<
         { approval_id: string },
@@ -542,6 +608,28 @@ export const fixtures = {
     'approval.list/decided': approvalListDecided satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/empty': approvalListEmpty satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/messages-pending': approvalListMessagesPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-after-edit': approvalListNeedsAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-first-page': approvalListNeedsFirstPage satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-inbox': approvalListNeedsInbox satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'approval.list/needs-next-page': approvalListNeedsNextPage satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-next-page-after': approvalListNeedsNextPageAfter satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-two': approvalListNeedsTwo satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
+    'approval.list/needs-two-after': approvalListNeedsTwoAfter satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,
@@ -681,6 +769,7 @@ export const fixtures = {
     'campaign.get/summer': campaignGetSummer satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/unknown': campaignGetUnknown satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,
     'campaign.get/unlinked': campaignGetUnlinked satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.list/card-chips': campaignListCardChips satisfies Exchange<CampaignListRequest, Page<CampaignSummary>>,
     'campaign.list/campaigns-for-picker': campaignListCampaignsForPicker satisfies Exchange<
         CampaignListRequest,
         Page<CampaignSummary>
@@ -777,6 +866,10 @@ export const fixtures = {
     >,
     'campaign.pause/with-reason': campaignPauseWithReason satisfies Exchange<CampaignTransitionRequest, Campaign>,
     'campaign.start/after-pause': campaignStartAfterPause satisfies Exchange<CampaignTransitionRequest, Campaign>,
+    'campaign.summary/card-chips': campaignSummaryCardChips satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
     'campaign.summary/all': campaignSummaryAll satisfies Exchange<CampaignSummaryRequest, CampaignSummaryResponse>,
     'campaign.summary/everyone': campaignSummaryEveryone satisfies Exchange<
         CampaignSummaryRequest,
@@ -923,6 +1016,7 @@ export const fixtures = {
     'contact.threads/two-threads': contactThreadsTwoThreads satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'decision.answer/answered': decisionAnswerAnswered satisfies Exchange<DecisionAnswerRequest, Decision>,
     'decision.get/for-campaign-row': decisionGetForCampaignRow satisfies Exchange<{ decision_id: string }, Decision>,
+    'decision.get/needs-question': decisionGetNeedsQuestion satisfies Exchange<{ decision_id: string }, Decision>,
     'decision.get/pending-with-options': decisionGetPendingWithOptions satisfies Exchange<
         { decision_id: string },
         Decision
@@ -933,6 +1027,10 @@ export const fixtures = {
     >,
     'decision.list/decided': decisionListDecided satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/empty': decisionListEmpty satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
+    'decision.list/needs-questions': decisionListNeedsQuestions satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
     'decision.list/pending': decisionListPending satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/summer-pending': decisionListSummerPending satisfies Exchange<
         DecisionListRequest,
@@ -990,6 +1088,110 @@ export const fixtures = {
     'journal.list/by-work-item': journalListByWorkItem satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/oli': journalListOli satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/summer': journalListSummer satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/card-choice-acts': journalListCardChoiceActs satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/card-choice-acts-none': journalListCardChoiceActsNone satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'campaign.get/card-status': campaignGetCardStatus satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/card-status-draft': campaignGetCardStatusDraft satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/card-archived': campaignGetCardArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/card-unknown-campaign': campaignGetCardUnknownCampaign satisfies Exchange<
+        { campaign_id: string },
+        ErrorEnvelope
+    >,
+    'campaign.summary/card-status': campaignSummaryCardStatus satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/card-status-later': campaignSummaryCardStatusLater satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/card-status-draft': campaignSummaryCardStatusDraft satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/card-archived': campaignSummaryCardArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.activity/card-status-30-days': campaignActivityCardStatus30Days satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.activity/card-archived-30-days': campaignActivityCardArchived30Days satisfies Exchange<
+        CampaignActivityRequest,
+        CampaignActivityResponse
+    >,
+    'campaign.list_contacts/card-people-first': campaignListContactsCardPeopleFirst satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/card-people-query': campaignListContactsCardPeopleQuery satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/card-people-waiting': campaignListContactsCardPeopleWaiting satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/card-people-empty': campaignListContactsCardPeopleEmpty satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'campaign.list_contacts/card-archived': campaignListContactsCardArchived satisfies Exchange<
+        ListContactsRequest,
+        Page<MembershipItem>
+    >,
+    'contact.list/card-people-everyone': contactListCardPeopleEveryone satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'contact.list/card-people-query': contactListCardPeopleQuery satisfies Exchange<ContactListRequest, Page<Contact>>,
+    'contact.list/card-people-nobody': contactListCardPeopleNobody satisfies Exchange<
+        ContactListRequest,
+        Page<Contact>
+    >,
+    'approval.list/card-status-waiting': approvalListCardStatusWaiting satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-needs-all': approvalListCardNeedsAll satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-archived': approvalListCardArchived satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'decision.list/card-status-waiting': decisionListCardStatusWaiting satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'decision.list/card-needs-all': decisionListCardNeedsAll satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'decision.list/card-archived': decisionListCardArchived satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'approval.get/card-needs-pending': approvalGetCardNeedsPending satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/card-needs-decided': approvalGetCardNeedsDecided satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'decision.get/card-needs-question': decisionGetCardNeedsQuestion satisfies Exchange<
+        { decision_id: string },
+        Decision
+    >,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
@@ -1115,6 +1317,18 @@ export const fixtures = {
     'workitem.get/awaiting': workitemGetAwaiting satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/expired': workitemGetExpired satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/failed': workitemGetFailed satisfies Exchange<{ work_item_id: string }, WorkItem>,
+    'workitem.get/needs-message-parked': workitemGetNeedsMessageParked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/needs-page-two-parked': workitemGetNeedsPageTwoParked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/needs-two-first-parked': workitemGetNeedsTwoFirstParked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
     'workitem.get/parked-edited-send': workitemGetParkedEditedSend satisfies Exchange<
         { work_item_id: string },
         WorkItem
@@ -1199,6 +1413,10 @@ export const fixtures = {
     'workitem.update/finished-meanwhile': workitemUpdateFinishedMeanwhile satisfies Exchange<
         WorkItemUpdateRequest,
         ErrorEnvelope
+    >,
+    'workitem.update/needs-message-edited': workitemUpdateNeedsMessageEdited satisfies Exchange<
+        WorkItemUpdateRequest,
+        WorkItem
     >,
     // The person panel's recordings.
     'campaign.add_contacts/move-in': personCampaignAddContactsMoveIn satisfies Exchange<

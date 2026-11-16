@@ -503,10 +503,14 @@ describe('what waits in an agent’s chat', () => {
         await drawn(pane, 'apr_1');
         await drawn(pane, 'apr_2');
         await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
-        // The AI's text is drawn as text, in the thread, with nothing to press.
+        // The AI's text is drawn as text, in the thread, with nothing to press: the thread's only buttons are the page's
+        // chips under the answer, which send their own words.
         const thread = pane.querySelector<HTMLElement>('.thread')!;
         expect(words(thread)).toContain('Approve · Edit · Reject · Details (apr_9)');
-        expect(thread.querySelector('button, a, input, form')).toBeNull();
+        expect(thread.querySelector('a, input, form')).toBeNull();
+        expect([...thread.querySelectorAll('button')].filter((each) => each.closest('.sugs.next') === null)).toEqual(
+            [],
+        );
         // The cards are the campaign's listed items, each once, and nothing else.
         const ids = [...waiting(pane).querySelectorAll<HTMLElement>('.waiting-card')].map((each) => each.dataset['id']);
         expect(ids).toEqual(['dec_1', 'dec_3', 'dec_2', 'apr_1', 'apr_2']);

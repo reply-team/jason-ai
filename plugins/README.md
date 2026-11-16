@@ -34,7 +34,7 @@ The index so far:
 | [`telegram/`](telegram/README.md) | the delivery contract `notification.send`: Jason's pointer — the counts the runtime composes, and where to look — sent to a Telegram chat by a bot you make. Its README says how it is installed from the release, how to make the bot, the settings that name the chat, the token, and every outcome it reports. |
 | [`demo/`](demo/README.md) | `message.send`, `social_invitation.send`, `conversation.reply`, `sender.list`, `conversation.list`, `conversation.get` and the events contract `events.read`, against nobody: it requests no capability, so it can reach nothing outside its process, and it answers the written threads and replies of an invented sample story kept in the package as data. |
 
-The demo provider is the one no release publishes: the desktop carries it and places it in its demo installation.
+The demo provider is the one no release publishes: the desktop of 0.44 and earlier carried it and placed it in its demo installation, the desktop of 0.45 carried it and placed it nowhere, and no desktop carries it from 0.46.
 Each of the other five is published with every release, Reply's from 0.11.0, the journal forwarder's from 0.30.0, and ntfy's,
 Slack's and Telegram's from 0.32.0, as `jason-plugin-<id>.zip`, and `jason plugin install <id>` places it.
 
@@ -45,7 +45,7 @@ package against its version's line, and a copy whose digest is not its version's
 [`journal-forwarder.digests`](journal-forwarder.digests) does the same for the journal forwarder's package, from 1.0.0,
 the package 0.29.0 shipped in its tree; [`ntfy.digests`](ntfy.digests) for ntfy's, from the 1.0.0 that 0.2.0 shipped in
 its tree; [`slack.digests`](slack.digests) and [`telegram.digests`](telegram.digests) for Slack's and Telegram's; and
-[`demo.digests`](demo.digests) for the demo provider's, from 1.0.0, the package the desktop carries.
+[`demo.digests`](demo.digests) for the demo provider's, from 1.0.0, the package the desktop carried up to 0.45.
 
 **Writing one?** [docs/plugins.md](../docs/plugins.md) is the author's guide — package layout, every
 manifest rule and its problem code, the Host SDK with every limit, capabilities and grants, the
