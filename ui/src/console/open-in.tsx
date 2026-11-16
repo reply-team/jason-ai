@@ -3,6 +3,7 @@ import { can } from '../platform/places';
 import type {
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
+    DesktopOpenInIcon,
     DesktopOpenInJason,
     DesktopOpenInPlace,
     DesktopRefusal,
@@ -41,7 +42,10 @@ const glyphs = {
     again: 'M4 12h12M11 6l6 6-6 6M20 5v14',
 } as const;
 
-/** The glyph a menu item draws for its place: one of ours for its kind, never a product's mark. */
+/**
+ * The glyph a menu item draws for its place where the desktop sends no icon of the application: one of ours for its kind,
+ * never a product's mark.
+ */
 function kindOf(place: DesktopOpenInPlace): keyof typeof glyphs {
     switch (place) {
         case 'claude':
@@ -83,6 +87,56 @@ function PlaceGlyph({ glyph, size = 16 }: { glyph: keyof typeof glyphs; size?: n
         >
             <path d={glyphs[glyph]} />
         </svg>
+    );
+}
+
+/** The largest icon the menu paints, in pixels a side: the desktop sends twice the drawn size. */
+const iconEdgeAtMost = 256;
+
+/** An icon's pixels, decoded, where they are exactly the size it says; null otherwise, and the glyph is drawn. */
+function pixelsOf(icon: DesktopOpenInIcon): Uint8ClampedArray<ArrayBuffer> | null {
+    const { width, height } = icon;
+    const sized = (edge: number) => Number.isInteger(edge) && edge > 0 && edge <= iconEdgeAtMost;
+    if (!sized(width) || !sized(height) || typeof icon.rgba !== 'string') return null;
+    let text: string;
+    try {
+        text = atob(icon.rgba);
+    } catch {
+        return null;
+    }
+    if (text.length !== width * height * 4) return null;
+    const pixels = new Uint8ClampedArray(text.length);
+    for (let at = 0; at < text.length; at++) pixels[at] = text.charCodeAt(at);
+    return pixels;
+}
+
+/**
+ * An application's own icon, painted on a canvas from the pixels the desktop read: no image element and no address, so the
+ * page's content policy needs no image source. Its backing is the pixels' size and the stylesheet draws it at the glyph
+ * cell's.
+ */
+function AppIcon({ icon, pixels }: { icon: DesktopOpenInIcon; pixels: Uint8ClampedArray<ArrayBuffer> }) {
+    const canvas = useRef<HTMLCanvasElement>(null);
+    useEffect(() => {
+        let context: CanvasRenderingContext2D | null;
+        try {
+            context = canvas.current?.getContext('2d') ?? null;
+        } catch {
+            context = null;
+        }
+        if (context === null || typeof ImageData === 'undefined') return;
+        context.putImageData(new ImageData(pixels, icon.width, icon.height), 0, 0);
+    }, [icon, pixels]);
+    return <canvas ref={canvas} className="oi-app" width={icon.width} height={icon.height} aria-hidden="true" />;
+}
+
+/** A menu item's icon: the application's own where the desktop sent one that can be painted, else our glyph for its kind. */
+function ItemIcon({ place }: { place: { id: DesktopOpenInPlace; icon?: DesktopOpenInIcon } }) {
+    const pixels = place.icon === undefined ? null : pixelsOf(place.icon);
+    return place.icon !== undefined && pixels !== null ? (
+        <AppIcon icon={place.icon} pixels={pixels} />
+    ) : (
+        <PlaceGlyph glyph={kindOf(place.id)} />
     );
 }
 
@@ -329,7 +383,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // can take a glyph's place without moving anything. An agent's full sentence is the item's description; the line drawn
     // under its name is the short form of it.
     const item = (
-        place: { id: DesktopOpenInPlace; label: string },
+        place: { id: DesktopOpenInPlace; label: string; icon?: DesktopOpenInIcon },
         subtitle?: string,
         text?: string,
         description?: string,
@@ -349,7 +403,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                 onClick={() => void open(place.id)}
             >
                 <span className="oi-icon">
-                    <PlaceGlyph glyph={kindOf(place.id)} />
+                    <ItemIcon place={place} />
                 </span>
                 <span className="oi-text">
                     <span className="oi-name" id={`${menuId}-${place.id}-name`}>

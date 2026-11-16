@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { configuration } from '../electron-builder.config.mjs';
@@ -92,4 +92,41 @@ test('no file of the mark it replaced is left in the tree, and no stylesheet dra
         }
     }
     assert.deepEqual(found, []);
+});
+
+/**
+ * Every image file of the desktop and the UI, by its path: Jason's own mark, its tray and its wordmark. The menu's "Open in"
+ * draws an application's own icon from the application installed, read at run time and never kept as a file, so no other
+ * product's mark is ever a file of this tree; a new image of Jason's own is added here by name.
+ */
+const ownImages = [
+    'desktop/installer/icon.icns',
+    'desktop/installer/linux-icons/1024x1024.png',
+    'desktop/installer/linux-icons/128x128.png',
+    'desktop/installer/linux-icons/256x256.png',
+    'desktop/installer/linux-icons/32x32.png',
+    'desktop/installer/linux-icons/512x512.png',
+    'desktop/installer/linux-icons/64x64.png',
+    'desktop/resources/icon.png',
+    'desktop/resources/tray/tray.png',
+    'desktop/resources/tray/trayTemplate.png',
+    'desktop/resources/tray/trayTemplate@2x.png',
+    'desktop/shell/brand/wordmark-dark.svg',
+    'desktop/shell/brand/wordmark.svg',
+    'ui/public/brand-wordmark-dark.svg',
+    'ui/public/brand-wordmark.svg',
+    'ui/public/favicon.svg',
+];
+
+test('no image file but Jason’s own is in the desktop or the UI: an application’s icon is read at run time, never carried', () => {
+    const image = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|ico|icns|svg)$/i;
+    const found: string[] = [];
+    for (const folder of ['desktop', 'ui']) {
+        for (const file of files(join(repository, folder))) {
+            const path = relative(repository, file).split(sep).join('/');
+            if (/^ui\/(artifacts|test-results|playwright-report)\//.test(path)) continue;
+            if (image.test(path)) found.push(path);
+        }
+    }
+    assert.deepEqual(found.sort(), [...ownImages].sort());
 });

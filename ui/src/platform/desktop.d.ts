@@ -538,8 +538,11 @@ export type DesktopOpenInPlace =
  * part opens (the place used last, else Claude Code), and the folder's name, never its path.
  */
 export interface DesktopOpenInAnswer {
-    /** A product's name (VS Code, Finder, Claude Code) is the label; a generic place (Terminal, Copy path) has an empty one and the page's own word. */
-    places: { id: DesktopOpenInPlace; label: string }[];
+    /**
+     * A product's name (VS Code, Finder, Claude Code) is the label; a generic place (Terminal, Copy path) has an empty one and
+     * the page's own word. `icon` is the application's own icon where the desktop could read it; absent, the page's glyph.
+     */
+    places: { id: DesktopOpenInPlace; label: string; icon?: DesktopOpenInIcon }[];
     default: DesktopOpenInPlace;
     folder: string;
     /** Present only when the chat the page named may be continued in a terminal. */
@@ -554,6 +557,17 @@ export interface DesktopOpenInAnswer {
      * desktop's Jason menu offers. Absent where the desktop cannot tell, or offers no PATH command: in the demo, say.
      */
     jason?: DesktopOpenInJason;
+}
+
+/**
+ * An application's own icon, as the desktop read it from the application it found: pixels only, never a path or a file, so
+ * the page paints them on a canvas and its content policy needs no image source. `rgba` is base64 of `width` x `height`
+ * pixels, four bytes each, red, green, blue and alpha, not premultiplied.
+ */
+export interface DesktopOpenInIcon {
+    width: number;
+    height: number;
+    rgba: string;
 }
 
 /**
