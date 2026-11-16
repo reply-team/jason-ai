@@ -585,7 +585,9 @@ no authority at all.
 The brief's `escalation` names the verb — `decision.raise` — and it is typed from the attempt you were launched
 for, which is the fencing token. Raise **one question**, carrying what is already known and what you
 recommend. A person answering from a phone should be able to read the question and the two or three answers
-you named, and pick one; they should not have to open anything you could have read for them.
+you named, and pick one; they should not have to open anything you could have read for them. What you write for a
+person — the question, its options, an `--ask-person-note`, a `proposal` — names people, messages and campaigns in
+words; an identifier goes in the member made for it, a question's `--reference`, and never in the text.
 
 ```
 jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "Three bounces from the new domain in a day, so I paused the campaign. Resume at half volume once the domain is warm, or keep it paused? I recommend keeping it paused: the domain is nine days old." --option "keep it paused" --option "resume at half volume" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "bounce rate above the guardrail"
@@ -642,14 +644,14 @@ harm.** `optout.record` records that somebody said stop — the responder's to c
 Two things are called "pause". `jason campaign pause` pauses Jason's campaign and stops Jason's own work; a
 `provider_op` item naming `campaign.pause` pauses the provider's campaign and stops it sending. In an incident, do
 both in one run: create the provider's pause with a high `--priority`, pause Jason's campaign, raise one question that
-names the pause item so a person confirms the provider stopped, and then end the run. A campaign runs one item at a
+references the pause item so a person confirms the provider stopped, and then end the run. A campaign runs one item at a
 time, so the provider's pause is claimed only once this run has ended — and it still runs then, in the paused
 campaign, because its contract says it does.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.pause --priority 100 --input '{"reason":{"code":"incident","note":"the wrong copy went out in step 2"}}' --reason "stop the provider sending before anything else" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-pause-incident
 jason campaign pause cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "incident: the wrong copy went out in step 2"
-jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The wrong copy went out in step 2, so I paused the campaign here and asked the provider to pause it (wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE). Once that item has succeeded, is the provider's campaign stopped?" --option "it has stopped" --option "it is still sending" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "an incident pause a person should see land"
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "The wrong copy went out in step 2, so I paused the campaign here and asked the provider to pause it. Once the provider's pause has succeeded, is the provider's campaign stopped?" --option "it has stopped" --option "it is still sending" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE --reason "an incident pause a person should see land"
 ```
 
 ## The line you always leave

@@ -65,7 +65,7 @@ public partial class RoleSkillTests
         Assert.Contains("it has not ended: read nothing again, since whatever holds the first read holds a second, and ask the person at once.", skill, StringComparison.Ordinal);
         Assert.Contains("- `read` is null: no route reads the thread for you, so ask the person.", skill, StringComparison.Ordinal);
         Assert.Contains(
-            "It names the campaign, the thread's identifier, the read's id and its status, and how long ago the thread moved, and it quotes nothing.",
+            "It names the campaign and the person in words, says the read's status and how long ago the thread moved, and quotes nothing; your own item and the read, where there is one, go in `--reference`, never in the text.",
             skill,
             StringComparison.Ordinal);
         Assert.DoesNotContain("fail with a code rather than answer a reply you have not seen", skill, StringComparison.Ordinal);
@@ -642,16 +642,17 @@ public partial class RoleSkillTests
     }
 
     /// <summary>
-    /// A question the responder raises says the category in the category's own words and the thread to open, and
-    /// neither quotes nor retells the reply: the person reads the reply in the thread, never in the question.
+    /// A question the responder raises says the category in the category's own words and names the person and the
+    /// campaign by name, with the thread reached by the reference to its own item, and neither quotes nor retells the
+    /// reply: the person reads the reply in the thread, never in the question, and no identifier in its text.
     /// </summary>
     [Fact]
-    public void The_responder_asks_in_the_category_s_words_and_names_the_thread()
+    public void The_responder_asks_in_the_category_s_words_and_points_at_the_thread_by_reference()
     {
         var skill = Flattened("responder");
 
         Assert.Contains(
-            "The question names the category, in the category's own words, and the thread's identifier, so the person can open the thread.",
+            "The question names the category, in the category's own words, and the person and the campaign by name; the thread is reached by the `--reference` to your own item, whose brief names it.",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("It quotes nothing, and it retells nothing of the reply beyond what the category says.", skill, StringComparison.Ordinal);
@@ -662,7 +663,9 @@ public partial class RoleSkillTests
             line => line.StartsWith("jason decision raise ", StringComparison.Ordinal));
         var words = ShellWords.Split(raise).ToList();
         var question = words[words.IndexOf("--question") + 1];
-        Assert.Contains("thread 501", question, StringComparison.Ordinal);
+        Assert.DoesNotContain("thread 501", question, StringComparison.Ordinal);
+        Assert.Contains("Marta Weber", question, StringComparison.Ordinal);
+        Assert.Equal("work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", words[words.IndexOf("--reference") + 1]);
         Assert.DoesNotContain("and why it fits", skill, StringComparison.Ordinal);
 
         // The printed question is a referral, in referral's own words and nothing of the reply beyond them.

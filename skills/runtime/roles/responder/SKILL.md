@@ -55,8 +55,9 @@ A run whose `resumption` names your own read reads that read's result there, and
 brief's read again.
 
 Asking here is a question on your own item, as "Ask the person where the category escalates" says, and the outcome
-`escalated`. It names the campaign, the thread's identifier, the read's id and its status, and how long ago the thread
-moved, and it quotes nothing. What else you can read is the person and what Jason has already done about them.
+`escalated`. It names the campaign and the person in words, says the read's status and how long ago the thread moved,
+and quotes nothing; your own item and the read, where there is one, go in `--reference`, never in the text. What else
+you can read is the person and what Jason has already done about them.
 
 ```
 jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRE
@@ -272,12 +273,15 @@ Somebody who asked to stop is sent no answer: recording the stop is the whole of
 
 **Ask the person where the category escalates.** A question goes to the person through your own item; its id goes into
 your result's `decisions_raised`, and the outcome is `escalated`. The question names the category, in the category's own
-words, and the thread's identifier, so the person can open the thread. It says what you would do and
+words, and the person and the campaign by name; the thread is reached by the `--reference` to your own item, whose
+brief names it. Everything you write for a person — a question, its options, an `--ask-person-note`, a reply item's
+`--reason` — names people, messages and campaigns in words; an identifier goes in the member made for it
+(`--reference`, `--contact`, the input), never in the text. It says what you would do and
 offers the answers a person can pick. It quotes nothing, and it retells nothing of the reply beyond what the category
 says.
 
 ```
-jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "In thread 501 they are not the one who decides this and name someone who is: a referral. Reach the person they named with a first message, or close the thread?" --option "reach the person they named" --option "close the thread" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "referral escalates by the base table"
+jason decision raise wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --attempt att_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --question "Marta Weber replied in the logistics campaign: they are not the one who decides this and name someone who is, a referral. Reach the person they named with a first message, or close the thread?" --option "reach the person they named" --option "close the thread" --reference work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "referral escalates by the base table"
 ```
 
 **Greet the person by the name Jason holds, and say when the thread names them otherwise.** The greeting in what you
@@ -298,7 +302,7 @@ built from your own work item's id, the thread and the number of this reply in i
 `-reply-501-2` — so that two replies in one thread are two keys.
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"501"},"body":"Thursday at 10 works. I will send an invitation."}' --context '{"reply_verdict":"jrn_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"}' --reason "an answer to the reply in thread 501" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation conversation.reply --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","thread":{"external_id":"501"},"body":"Thursday at 10 works. I will send an invitation."}' --context '{"reply_verdict":"jrn_01JB6K8TQ2W9V4MZ0C3Y7H5NRG"}' --reason "an answer to Marta Weber's reply" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-reply-501-1
 ```
 
 Whether it goes out now or waits for a person is the runtime's to decide, never yours. A person may have set a standing
