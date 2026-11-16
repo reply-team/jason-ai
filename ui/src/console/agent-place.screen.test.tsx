@@ -439,6 +439,21 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(shownBox().value).toBe('keep these words');
         expect(sends(desktop)).toEqual([]);
     });
+
+    it('a create refused after a second send gives both messages back to the box, in the order they were sent', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'first thought' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        fireEvent.change(shownBox(), { target: { value: 'second thought' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        await waitFor(() => expect(within(shown()).getByText(/could not make the conversation/)).toBeTruthy());
+        await waitFor(() => expect(shownBox().value).toBe('first thought\n\nsecond thought'));
+        expect(within(shown()).queryByRole('status', { name: 'Waiting message' })).toBeNull();
+        expect(creates(desktop)).toHaveLength(1);
+        expect(sends(desktop)).toEqual([]);
+    });
 });
 
 describe('The conversation’s acts in the agent’s “…”', () => {

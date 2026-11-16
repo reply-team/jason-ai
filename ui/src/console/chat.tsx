@@ -66,6 +66,7 @@ import {
     said,
     shown,
     stopAsked,
+    everyWordBack,
     takenBack,
     told,
     turnOptions,
@@ -304,10 +305,8 @@ export function makeUnmade(id: string): Promise<string | null> {
         const now = chats.value[id];
         if (real === null) {
             const why = conversationsFailure.value ?? 'The conversation could not be made.';
-            if (now)
-                changeChat(id, (each) =>
-                    told(each.waiting !== null && !each.draft.trim() ? takenBack(each) : each, why),
-                );
+            // The message that waited goes back to the box before what is typed there; nothing is dropped.
+            if (now) changeChat(id, (each) => told(everyWordBack(each), why));
             return null;
         }
         if (now)
@@ -481,8 +480,8 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
     if (isUnmade(id)) {
         void makeUnmade(id).then((real) => {
             if (real !== null) return sendTurn(real, text, resent, mode);
-            // Refused: the words go back to the box, unless the person typed others meanwhile.
-            changeChat(id, (each) => (each.draft.trim() ? each : typed(each, text)));
+            // Refused: the words go back to the box first, before anything sent or typed after them.
+            changeChat(id, (each) => everyWordBack(each, text));
         });
         return;
     }
