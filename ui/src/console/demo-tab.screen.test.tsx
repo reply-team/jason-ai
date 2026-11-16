@@ -171,6 +171,27 @@ describe.each(['tab', 'none'] as const)('the demo in a browser tab (%s)', (kind)
         expect(frame()).toBeNull();
     });
 
+    it('forgets where the console was once the address leaves the demo by itself', async () => {
+        await renderIn(kind, '#/system');
+        await waitFor(() => expect(consoleShown()).toBe(true));
+        fireEvent.click(button('Demo'));
+        await waitFor(() => expect(frame()).not.toBeNull());
+        // Back, to another address than the one the demo was chosen at, and Forward to the demo again.
+        flush(() => {
+            location.hash = '#/accounts';
+            dispatchEvent(new HashChangeEvent('hashchange'));
+        });
+        await waitFor(() => expect(consoleShown()).toBe(true));
+        flush(() => {
+            location.hash = '#/demo';
+            dispatchEvent(new HashChangeEvent('hashchange'));
+        });
+        await waitFor(() => expect(frame()).not.toBeNull());
+        fireEvent.click(button('Live'));
+        await waitFor(() => expect(consoleShown()).toBe(true));
+        expect(location.hash).toBe('#/attention');
+    });
+
     it('opens on the demo when the address names it, as after a reload', async () => {
         await renderIn(kind, '#/demo');
         await waitFor(() => expect(frame()).not.toBeNull());
@@ -186,6 +207,29 @@ describe.each(['tab', 'none'] as const)('the demo in a browser tab (%s)', (kind)
         await waitFor(() => screen.getByText('This build of the UI carries no demo.'));
         expect(frame()).toBeNull();
         expect(button('Live').disabled).toBe(false);
+    });
+});
+
+describe('whether the build carries the page', () => {
+    it('reads only the answer’s status, and stops the page’s own download there', async () => {
+        const signals: AbortSignal[] = [];
+        const realFetch = globalThis.fetch;
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+            signals.push(init!.signal!);
+            expect(String(input)).toBe('sealed/demo.html');
+            return Promise.resolve(new Response('a page', { status: 200 }));
+        }) as typeof fetch;
+        try {
+            expect(await realPresent()).toBe(true);
+            expect(signals).toHaveLength(1);
+            expect(signals[0]!.aborted).toBe(true);
+            globalThis.fetch = (() => Promise.resolve(new Response('', { status: 404 }))) as typeof fetch;
+            expect(await realPresent()).toBe(false);
+            globalThis.fetch = (() => Promise.reject(new TypeError('no answer'))) as typeof fetch;
+            expect(await realPresent()).toBe(false);
+        } finally {
+            globalThis.fetch = realFetch;
+        }
     });
 });
 

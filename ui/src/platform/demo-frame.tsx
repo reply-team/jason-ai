@@ -1,3 +1,4 @@
+import { effect } from '@preact/signals-react';
 import { useEffect, useRef, useState } from 'react';
 import { href, navigate, route, type Route } from '../router';
 import { demoFrame, demoStrip } from './demo-page';
@@ -12,19 +13,34 @@ export { demoFrame, demoStrip };
 // own, so one page serves the window and the tab and a person sees one strip. The choice lives in the address (`#/demo`):
 // nothing is kept, nothing is asked of the desktop, and the installation is unchanged.
 
-/** Whether the build the runtime serves carries the page: one read of it, as the frame would read it. */
+/**
+ * Whether the build the runtime serves carries the page: one read of it, as the frame would read it, stopped once its
+ * status is read, so the page itself is downloaded once, by the frame.
+ */
 export const demoPage = {
     present: async (): Promise<boolean> => {
+        const stop = new AbortController();
         try {
-            return (await fetch(demoFrame.src, { cache: 'no-store', credentials: 'omit' })).ok;
+            return (await fetch(demoFrame.src, { cache: 'no-store', credentials: 'omit', signal: stop.signal })).ok;
         } catch {
             return false;
+        } finally {
+            stop.abort();
         }
     },
 };
 
 /** The console's address before the demo was shown, in this load's memory only; Live goes back to it. */
 let before: string | null = null;
+
+// An address that leaves the demo by itself, Back say, ends the visit the address was kept for: a later Forward to the
+// demo and Live then go where the console opens, never to where an earlier visit began.
+let inDemo = false;
+effect(() => {
+    const now = route.value.screen === 'demo';
+    if (inDemo && !now) before = null;
+    inDemo = now;
+});
 
 /** Shows the demo in this tab: the address moves to it, so Back leaves it. */
 export function showDemo(): void {
