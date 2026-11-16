@@ -4,6 +4,7 @@ import { FakeApi } from '../../test/fake-api';
 import { fixtures, type FixtureName } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { App } from '../../app';
+import { kindsOf } from './store';
 import { CampaignChat } from '../campaigns/campaign-chat';
 import { href, route, type PeopleFilters, type PersonTab } from '../../router';
 
@@ -432,6 +433,50 @@ describe('People', () => {
             'Created by Researcher',
             'Added to Re-engage Q2 no-replies',
         ]);
+    });
+
+    it("the list's Last activity says a message the account sent, for the person it reached", async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity-sent-from-the-account')
+            .answer('campaign.summary', 'campaign.summary/everyone-without-archived-empty');
+        open(api, {});
+        await waitFor(() => expect(screen.getByText('Mateo Ruiz')).toBeTruthy());
+        expect(rowOf('Mateo Ruiz').querySelector('td.activity')?.textContent).toContain('sent from the account');
+    });
+
+    it("a person's timeline asks for the messages the account sent under All and no chip, and a campaign's never does", () => {
+        const sends = 'provider_send_observed';
+        expect(kindsOf('all', { contact_id: 'cnt_1' })).toContain(sends);
+        expect(kindsOf('all', { campaign_id: 'cmp_1' })).not.toContain(sends);
+        for (const chip of ['replies', 'work', 'decisions', 'changes'] as const) {
+            expect(kindsOf(chip, { contact_id: 'cnt_1' })).not.toContain(sends);
+            expect(kindsOf(chip, { campaign_id: 'cmp_1' })).not.toContain(sends);
+        }
+    });
+
+    it('a message the account sent shows under All as a send, once, and under no other chip', async () => {
+        const api = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity')
+            .answer('contact.get', 'contact.get/with-campaigns')
+            .answer('workitem.list', 'workitem.list/by-contact-open')
+            .answer('journal.list', 'journal.list/person-sent-from-the-account', 'journal.list/by-contact-replies');
+        open(api, {}, mateo.id);
+        await waitFor(() => expect(api.sent('journal.list')).toBeTruthy());
+
+        expect((api.sent('journal.list') as Record<string, unknown>)['kinds']).toContain('provider_send_observed');
+        expect(await screen.findByText('Sent from the account')).toBeTruthy();
+        expect(rowTitles().filter((t) => t === 'Sent from the account')).toHaveLength(1);
+        const row = (await screen.findByText('Sent from the account')).closest('.row') as HTMLElement;
+        expect(row.querySelector('.mark')?.textContent).toBe('↗');
+        expect(row.textContent).toContain('LatAm pilot');
+        expect(row.textContent).toContain('by email');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Replies' }));
+        await waitFor(() =>
+            expect((api.sent('journal.list') as Record<string, unknown>)['kinds']).not.toContain(
+                'provider_send_observed',
+            ),
+        );
     });
 
     it('each chip asks for its kinds; membership events show under All and Changes only', async () => {

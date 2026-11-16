@@ -231,7 +231,11 @@ const campaignChanges = [
 
 export function kindsOf(chip: Chip, subject?: Subject): string[] {
     const kinds = subject && 'campaign_id' in subject ? { ...chipKinds, changes: campaignChanges } : chipKinds;
-    return chip === 'all' ? Object.values(kinds).flat() : kinds[chip];
+    if (chip !== 'all') return kinds[chip];
+    // A person's own timeline also holds the messages the account sent to them, under All and under no chip: the Replies
+    // chip reads replies and provider events, and a send is neither.
+    const sends = subject && 'contact_id' in subject ? ['provider_send_observed'] : [];
+    return [...Object.values(kinds).flat(), ...sends];
 }
 
 export const openStatuses = ['created', 'awaiting_approval', 'scheduled', 'processing'];
