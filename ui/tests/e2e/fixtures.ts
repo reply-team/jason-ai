@@ -51,13 +51,40 @@ export function quietDesktop(): void {
             answer: done,
             onEvent: quiet,
             list: () => Promise.resolve([]),
-            open: done,
-            create: done,
+            open: (id: unknown) =>
+                Promise.resolve({
+                    id,
+                    campaignId: null,
+                    title: 'Feed',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                    main: true,
+                    entries: [],
+                    dropped: 0,
+                    chosen: null,
+                }),
+            // A conversation as the desktop makes one: the console reads its id as soon as it asks for one.
+            create: () =>
+                Promise.resolve({
+                    id: 'conv_01JD0000000000000000000001',
+                    campaignId: null,
+                    title: 'New chat',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                }),
             remove: done,
             restart: done,
             attach: done,
             rename: done,
-            feed: done,
+            feed: () =>
+                Promise.resolve({
+                    id: 'conv_01JD0000000000000000000002',
+                    campaignId: null,
+                    title: 'Feed',
+                    updatedAt: '2026-11-11T00:00:00.000Z',
+                    running: false,
+                    main: true,
+                }),
         },
         setup: {
             status: () =>
