@@ -903,10 +903,15 @@
         top: 0;
         bottom: 0;
         transform: translateX(-100%);
-        transition: transform 0.18s;
+        visibility: hidden;
+        transition:
+            transform 0.18s,
+            visibility 0s 0.18s;
     }
     .jc-console .side.open {
         transform: none;
+        visibility: visible;
+        transition: transform 0.18s;
         box-shadow: 0 0 40px rgba(2, 6, 23, 0.25);
     }
     .jc-console .content {
@@ -1806,6 +1811,73 @@ body,
 .jc-console .mode-spacer {
     flex: 1;
 }
+/* The sidebar's button: drawn only where the sidebar is off the screen (a narrow tab), at the strip's left. */
+.jc-console .mode-nav {
+    display: none;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: -6px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+.jc-console .mode-nav:hover {
+    background: var(--hover);
+}
+.jc-console .side-away {
+    display: none;
+}
+@media (max-width: 820px) {
+    .jc-console .mode-nav {
+        display: inline-flex;
+    }
+    .jc-console .side-away {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 39;
+        border: 0;
+        background: rgba(2, 6, 23, 0.35);
+        cursor: default;
+    }
+}
+/* In a narrow tab the strip's sentence is read whole: the strip grows to the lines it needs. */
+@media (max-width: 520px) {
+    .jc-console .mode-strip {
+        height: auto;
+        min-height: 38px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        white-space: normal;
+    }
+    .jc-console .mode-strip > span {
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* A row of a person's history says what it is about in as many lines as it needs. */
+    .jc-console .harness .row .what {
+        flex-wrap: wrap;
+    }
+    .jc-console .harness .row .what .in {
+        flex: 1 1 100%;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* The period switch is as wide as the room, or less, and its labels shrink with it. */
+    .jc-console .harness .segmented {
+        max-width: 100%;
+    }
+    .jc-console .harness .segmented button {
+        padding: 0 8px;
+    }
+}
 .jc-console .mode-open-in {
     display: flex;
     flex: 0 1 auto;
@@ -2331,4 +2403,37 @@ body,
 }
 :root[data-theme='dark'] .jc-console .dialog {
     border-color: var(--field-line);
+}
+
+/* The console in a narrow tab: what a page of the console or a screen of the browser shell drew too wide, or too tight. */
+.jc-console .panel-body > .card + .card {
+    margin-top: 16px;
+}
+.jc-console .dash-row .meta {
+    flex: none;
+    white-space: nowrap;
+}
+@media (max-width: 820px) {
+    /* A table wider than the room scrolls inside a box of its own, around it, which a keyboard reaches and a reader names. */
+    .jc-console .tscroll {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .jc-console .harness .filters .search {
+        flex: 1 1 100%;
+        width: auto;
+    }
+    .jc-console .chat-bar {
+        flex-wrap: wrap;
+    }
+    .jc-console .chat-rename {
+        flex: 1 1 100%;
+    }
+    .jc-console .start .start-note.uinote {
+        flex-wrap: wrap;
+    }
+    .jc-console .start .start-note.uinote > span:first-child {
+        flex: 1 1 220px;
+        min-width: 0;
+    }
 }

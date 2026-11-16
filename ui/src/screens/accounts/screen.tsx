@@ -8,6 +8,8 @@ import { useProviderAccounts } from './provider-card';
 import { channelName, outcomeTone, outcomeWords } from './words';
 import { relative } from '../../time/format';
 
+import { ScrollBox } from '../../layout/scroll-box';
+
 export function AccountsScreen() {
     const api = useApi();
     const provider = useProviderAccounts();
@@ -55,30 +57,32 @@ export function AccountsScreen() {
                         ) : notifications.channels.length === 0 ? (
                             <p className="empty">No channel is set up, so Jason sends you no notifications.</p>
                         ) : (
-                            <table className="tbl">
-                                <thead>
-                                    <tr>
-                                        <th>Channel</th>
-                                        <th>State</th>
-                                        <th>Last notification</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {notifications.channels.map((channel) => (
-                                        <tr key={channel.channel}>
-                                            <td>
-                                                <strong>{channelName(channel)}</strong>
-                                            </td>
-                                            <td>
-                                                <span className={`badge ${outcomeTone(channel)}`}>
-                                                    {channel.on ? 'on' : 'off'}
-                                                </span>
-                                            </td>
-                                            <td>{outcomeWords(channel, now)}</td>
+                            <ScrollBox label="Notification channels">
+                                <table className="tbl">
+                                    <thead>
+                                        <tr>
+                                            <th>Channel</th>
+                                            <th>State</th>
+                                            <th>Last notification</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {notifications.channels.map((channel) => (
+                                            <tr key={channel.channel}>
+                                                <td>
+                                                    <strong>{channelName(channel)}</strong>
+                                                </td>
+                                                <td>
+                                                    <span className={`badge ${outcomeTone(channel)}`}>
+                                                        {channel.on ? 'on' : 'off'}
+                                                    </span>
+                                                </td>
+                                                <td>{outcomeWords(channel, now)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </ScrollBox>
                         )}
                         {notifications?.last_at && (
                             <p className="hint">

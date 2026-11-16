@@ -31,10 +31,12 @@ type Props = {
  * One row per campaign, one column per count of the view; a number opens exactly the people it counts, and anywhere else
  * on the row opens the campaign on the tab open now.
  */
+import { ScrollBox } from '../../layout/scroll-box';
+
 export function CampaignTable({ campaigns, view, period, filters, summary, activity, selected, opens, more }: Props) {
     const columns = (view === 'summary' ? summaryColumns : activityColumns).filter((column) => column.column !== false);
     return (
-        <div className="tablewrap">
+        <ScrollBox label="Agents">
             <table className="grid">
                 <thead>
                     <tr>
@@ -109,6 +111,6 @@ export function CampaignTable({ campaigns, view, period, filters, summary, activ
                 </tbody>
             </table>
             <More more={more} />
-        </div>
+        </ScrollBox>
     );
 }
