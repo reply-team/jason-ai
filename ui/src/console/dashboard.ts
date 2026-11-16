@@ -35,7 +35,7 @@ import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
 import * as needs from './needs';
-import { countWords, needsCount, type Count } from './needs-model';
+import { countOf, countWords, needsCount, type Count } from './needs-model';
 import { clock, here, lines } from './state';
 
 // The Dashboard: where things stand, drawn only from reads the console already makes. Needs you and the Agents panel
@@ -372,8 +372,8 @@ function trendView(trend: Trend | null): Html | null {
 function tiles(): Html {
     const read = activity.value;
     const list = tilesOf({
-        approvals: needs.attention.approvals.value.length,
-        questions: needs.attention.questions.value.length,
+        approvals: countOf(needs.needsInput(), 'approvals'),
+        questions: countOf(needs.needsInput(), 'questions'),
         waitingKnown: needs.attention.loaded.value,
         waiting: countWords(needsCount(needs.needsInput())),
         activity: read === null ? null : read.total,

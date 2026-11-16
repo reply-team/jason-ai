@@ -32,6 +32,7 @@ const row = (fields: Partial<RecentRow>): RecentRow => ({
     agent: null,
     aboutAgent: false,
     waiting: 0,
+    waitingWords: '0',
     state: null,
     running: false,
     dot: 'none',
@@ -99,6 +100,24 @@ describe('the rows under Recent', () => {
         });
         expect(read.map((each) => each.waiting)).toEqual([2, 0, 1, 0]);
         expect(read.map((each) => each.dot)).toEqual(['waiting', 'paused', 'waiting', 'none']);
+    });
+
+    it('carries the plus Needs you’s count carries while the runtime holds another page', () => {
+        const paged = recentRows({
+            conversations: [
+                conversation({ id: 'conv_a', campaignId: 'cmp_a', title: 'Alpha' }),
+                conversation({ id: 'conv_p', campaignId: 'cmp_p', title: 'Pending' }),
+            ],
+            titles: () => undefined,
+            campaigns: agents,
+            approvals: [approval('cmp_a'), approval('cmp_a')],
+            questions: [question('cmp_a')],
+            more: { approvals: true, questions: false },
+            now,
+        });
+        expect(paged.map((each) => each.waitingWords)).toEqual(['3+', '0+']);
+        expect(paged.map((each) => each.waiting)).toEqual([3, 0]);
+        expect(rows.map((each) => each.waitingWords)).toEqual(['3', '0', '1', '0', '0']);
     });
 
     it('draws amber when something waits, else the agent’s state, else nothing', () => {

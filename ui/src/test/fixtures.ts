@@ -68,10 +68,12 @@ import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.a
 import approvalApproveApproved from '../../../docs/api/fixtures/approval.approve/approved.json';
 import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import approvalApproveNeedsPageTwoApproved from '../../../docs/api/fixtures/approval.approve/needs-page-two-approved.json';
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
 import approvalGetNeedsMessage from '../../../docs/api/fixtures/approval.get/needs-message.json';
+import approvalGetNeedsPageTwo from '../../../docs/api/fixtures/approval.get/needs-page-two.json';
 import approvalGetNeedsReply from '../../../docs/api/fixtures/approval.get/needs-reply.json';
 import approvalGetModesChosen from '../../../docs/api/fixtures/approval.get/modes-chosen.json';
 import approvalGetParkAnswersNoVerdict from '../../../docs/api/fixtures/approval.get/park-answers-no-verdict.json';
@@ -97,6 +99,7 @@ import approvalListNeedsAfterEdit from '../../../docs/api/fixtures/approval.list
 import approvalListNeedsFirstPage from '../../../docs/api/fixtures/approval.list/needs-first-page.json';
 import approvalListNeedsInbox from '../../../docs/api/fixtures/approval.list/needs-inbox.json';
 import approvalListNeedsNextPage from '../../../docs/api/fixtures/approval.list/needs-next-page.json';
+import approvalListNeedsNextPageAfter from '../../../docs/api/fixtures/approval.list/needs-next-page-after.json';
 import approvalListOneModeUnset from '../../../docs/api/fixtures/approval.list/one-mode-unset.json';
 import approvalListPending from '../../../docs/api/fixtures/approval.list/pending.json';
 import approvalListSummerPending from '../../../docs/api/fixtures/approval.list/summer-pending.json';
@@ -240,10 +243,12 @@ import contactThreadsProviderFailed from '../../../docs/api/fixtures/contact.thr
 import contactThreadsTwoThreads from '../../../docs/api/fixtures/contact.threads/two-threads.json';
 import decisionAnswerAnswered from '../../../docs/api/fixtures/decision.answer/answered.json';
 import decisionGetForCampaignRow from '../../../docs/api/fixtures/decision.get/for-campaign-row.json';
+import decisionGetNeedsQuestion from '../../../docs/api/fixtures/decision.get/needs-question.json';
 import decisionGetPendingWithOptions from '../../../docs/api/fixtures/decision.get/pending-with-options.json';
 import decisionListByCampaignPending from '../../../docs/api/fixtures/decision.list/by-campaign-pending.json';
 import decisionListDecided from '../../../docs/api/fixtures/decision.list/decided.json';
 import decisionListEmpty from '../../../docs/api/fixtures/decision.list/empty.json';
+import decisionListNeedsQuestions from '../../../docs/api/fixtures/decision.list/needs-questions.json';
 import decisionListPending from '../../../docs/api/fixtures/decision.list/pending.json';
 import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/summer-pending.json';
 import journalListByAwaitingItem from '../../../docs/api/fixtures/journal.list/by-awaiting-item.json';
@@ -336,6 +341,7 @@ import workitemGetAwaiting from '../../../docs/api/fixtures/workitem.get/awaitin
 import workitemGetExpired from '../../../docs/api/fixtures/workitem.get/expired.json';
 import workitemGetFailed from '../../../docs/api/fixtures/workitem.get/failed.json';
 import workitemGetNeedsMessageParked from '../../../docs/api/fixtures/workitem.get/needs-message-parked.json';
+import workitemGetNeedsPageTwoParked from '../../../docs/api/fixtures/workitem.get/needs-page-two-parked.json';
 import workitemGetParkedEditedSend from '../../../docs/api/fixtures/workitem.get/parked-edited-send.json';
 import workitemGetParkedSend from '../../../docs/api/fixtures/workitem.get/parked-send.json';
 import workitemGetOpen from '../../../docs/api/fixtures/workitem.get/open.json';
@@ -461,10 +467,15 @@ export const fixtures = {
         ApprovalDecisionRequest,
         ErrorEnvelope
     >,
+    'approval.approve/needs-page-two-approved': approvalApproveNeedsPageTwoApproved satisfies Exchange<
+        ApprovalDecisionRequest,
+        Approval
+    >,
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/needs-message': approvalGetNeedsMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/needs-page-two': approvalGetNeedsPageTwo satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/needs-reply': approvalGetNeedsReply satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/modes-chosen': approvalGetModesChosen satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/park-answers-no-verdict': approvalGetParkAnswersNoVerdict satisfies Exchange<
@@ -529,6 +540,10 @@ export const fixtures = {
     >,
     'approval.list/needs-inbox': approvalListNeedsInbox satisfies Exchange<ApprovalListRequest, Page<ApprovalSummary>>,
     'approval.list/needs-next-page': approvalListNeedsNextPage satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-next-page-after': approvalListNeedsNextPageAfter satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,
@@ -910,6 +925,7 @@ export const fixtures = {
     'contact.threads/two-threads': contactThreadsTwoThreads satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'decision.answer/answered': decisionAnswerAnswered satisfies Exchange<DecisionAnswerRequest, Decision>,
     'decision.get/for-campaign-row': decisionGetForCampaignRow satisfies Exchange<{ decision_id: string }, Decision>,
+    'decision.get/needs-question': decisionGetNeedsQuestion satisfies Exchange<{ decision_id: string }, Decision>,
     'decision.get/pending-with-options': decisionGetPendingWithOptions satisfies Exchange<
         { decision_id: string },
         Decision
@@ -920,6 +936,10 @@ export const fixtures = {
     >,
     'decision.list/decided': decisionListDecided satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/empty': decisionListEmpty satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
+    'decision.list/needs-questions': decisionListNeedsQuestions satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
     'decision.list/pending': decisionListPending satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/summer-pending': decisionListSummerPending satisfies Exchange<
         DecisionListRequest,
@@ -1090,6 +1110,10 @@ export const fixtures = {
     'workitem.get/expired': workitemGetExpired satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/failed': workitemGetFailed satisfies Exchange<{ work_item_id: string }, WorkItem>,
     'workitem.get/needs-message-parked': workitemGetNeedsMessageParked satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/needs-page-two-parked': workitemGetNeedsPageTwoParked satisfies Exchange<
         { work_item_id: string },
         WorkItem
     >,

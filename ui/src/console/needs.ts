@@ -1,4 +1,4 @@
-import { effect, signal } from '@preact/signals-react';
+import { batch, effect, signal } from '@preact/signals-react';
 import { Unpaired } from '../api/client';
 import type { Approval, ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { attentionStore } from '../screens/attention/store';
@@ -48,7 +48,7 @@ import {
 // this panel is shown, and neither replaces the other's list. Every count is a length of what the runtime listed.
 
 /** The panel's own approvals and questions. */
-export const attention = attentionStore();
+export const attention = attentionStore({ keepPages: true });
 
 /**
  * The panel's approvals read whole, as an agent's chat reads its cards': while the panel is drawn, each listed approval
@@ -124,23 +124,31 @@ export function needsInput(): NeedsInput {
 }
 
 // When nothing waits at all the panel draws its card and no filter row, so the filter and the agent go back to
-// everything: what arrives next is drawn whatever was chosen before. An agent that no longer has anything waiting is
-// let go too, since the picker no longer names it.
+// everything: what arrives next is drawn whatever was chosen before.
 effect(() => {
     if (!attention.loaded.value) return;
     const input = needsInput();
     if (input.approvals.length === 0 && input.questions.length === 0 && (input.chats ?? []).length === 0) {
         filter.value = 'all';
         agent.value = null;
-    } else if (agent.value !== null && !agentsOf(input).some((each) => each.id === agent.value)) {
-        agent.value = null;
     }
 });
 
-// An approval or a question opened from elsewhere (an agent's chat's Details) is the one the pane shows, in view.
+/** The questions and approvals the panel itself asked for whole: their answers are no person's choice of what to show. */
+const ownOpens = new Set<string>();
+
+/** Opens an item whole for the panel's own sake, not as a choice made elsewhere. */
+function openOwn(kind: 'approvals' | 'questions', id: string): Promise<void> {
+    ownOpens.add(id);
+    return attention.open(here().api, kind, id).finally(() => ownOpens.delete(id));
+}
+
+// An approval or a question opened from elsewhere (an agent's chat's Details, the dashboard) is the one the pane shows,
+// in view. One the panel opened for itself changes nothing, however late its answer comes.
 effect(() => {
     const shown = attention.detail.value;
     if (shown === null) return;
+    if (ownOpens.has(shown.item.id)) return;
     const opened: Chosen = { kind: shown.kind === 'approvals' ? 'approval' : 'question', id: shown.item.id };
     const now = chosen.peek();
     if (now?.kind === opened.kind && now.id === opened.id) return;
@@ -155,7 +163,26 @@ effect(() => {
 /** The items listed under the filter and the agent, and the one the pane shows. */
 function listed(): { items: WaitingItem[]; shown: WaitingItem | null } {
     const items = waitingOf(needsInput(), filter.value, agent.value);
-    return { items, shown: pick(items, chosen.value) };
+    return { items, shown: placeOf(items, chosen.value) };
+}
+
+/** The order the list was last drawn in, so that the item after one that left is known. */
+let lastOrder: readonly Chosen[] = [];
+
+/**
+ * Where the pane stands: the item chosen while it is listed; when it left, the one after it in the order last drawn that
+ * is still listed; with nothing chosen yet, the first. Nothing else moves it.
+ */
+function placeOf(items: readonly WaitingItem[], now: Chosen | null): WaitingItem | null {
+    const kept = pick(items, now);
+    if (now === null || (kept !== null && kept.kind === now.kind && kept.id === now.id)) return kept;
+    const at = lastOrder.findIndex((each) => each.kind === now.kind && each.id === now.id);
+    if (at < 0) return kept;
+    for (const each of [...lastOrder.slice(at + 1), ...lastOrder.slice(0, at)]) {
+        const found = items.find((item) => item.kind === each.kind && item.id === each.id);
+        if (found !== undefined) return found;
+    }
+    return kept;
 }
 
 /** What the person typed into a field of the panel, kept while the panel is painted again around it. */
@@ -180,22 +207,75 @@ function readShown(): void {
     const { shown } = listed();
     const open = attention.detail.peek();
     if (shown?.kind === 'question' && !(open?.kind === 'questions' && open.item.id === shown.id))
-        void attention.open(here().api, 'questions', shown.id);
+        void openOwn('questions', shown.id);
 }
 
-/** Reads whole the approvals not read yet while the panel is drawn, and lets go of what was said of items that left. */
+/** Puts the keyboard on a line of the list, once the panel has been painted with it. */
+function focusRow(id: string): void {
+    for (const row of document.querySelectorAll<HTMLElement>('.needs-row'))
+        if (row.dataset['row'] === id) {
+            row.focus();
+            return;
+        }
+}
+
+/** Puts the keyboard on the first element of the pane that matches, if there is one. */
+function focusPane(selector: string): void {
+    document.querySelector<HTMLElement>(`.needs-pane ${selector}`)?.focus();
+}
+
+/** How many of the person's acts are under way: an item that leaves meanwhile left by their hand. */
+let acting = 0;
+
+/** Whether the item the pane showed left while the person was not acting on it, until they choose or act again. */
+const left = signal(false);
+
+/** Holds the pane where it stands (`placeOf`) and remembers the order drawn; true when the item chosen had left. */
+function keepPlace(): boolean {
+    const items = waitingOf(needsInput(), filter.value, agent.value);
+    const now = chosen.value;
+    const shown = placeOf(items, now);
+    const moved = now !== null && (shown === null || shown.kind !== now.kind || shown.id !== now.id);
+    chosen.value = shown === null ? null : { kind: shown.kind, id: shown.id };
+    lastOrder = items.map((item) => ({ kind: item.kind, id: item.id }));
+    return moved;
+}
+
+/**
+ * Lets go of what was said of items that left, keeps the pane where the person is, and reads whole the approvals not
+ * read yet while the panel is drawn.
+ */
 async function fill(): Promise<void> {
     const listedIds = new Set(attention.approvals.value.map((row) => row.id));
-    if (Object.keys(unapproved.value).some((id) => !listedIds.has(id)))
-        unapproved.value = Object.fromEntries(Object.entries(unapproved.value).filter(([id]) => listedIds.has(id)));
-    if (rejecting.value !== null && !listedIds.has(rejecting.value)) rejecting.value = null;
-    if (editing.value !== null && !listedIds.has(editing.value.id)) editing.value = null;
-    reasked.value = stillAsking(reasked.value, attention.approvals.value);
+    batch(() => {
+        if (Object.keys(unapproved.value).some((id) => !listedIds.has(id)))
+            unapproved.value = Object.fromEntries(Object.entries(unapproved.value).filter(([id]) => listedIds.has(id)));
+        if (rejecting.value !== null && !listedIds.has(rejecting.value)) rejecting.value = null;
+        if (editing.value !== null && !listedIds.has(editing.value.id)) editing.value = null;
+        reasked.value = stillAsking(reasked.value, attention.approvals.value);
+        if (agent.value !== null && !agentsOf(needsInput()).some((each) => each.id === agent.value)) agent.value = null;
+        // An item that leaves while no act of the person's is under way left by someone else's hand: the pane says so.
+        if (keepPlace() && acting === 0) left.value = true;
+    });
     readShown();
     if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
-/** Reads what waits again, then each approval not read whole yet and not being read. */
+/** An act of the person's, after which the keyboard is on the line the pane then shows, never on a button. */
+async function acted(work: () => Promise<unknown>): Promise<void> {
+    acting += 1;
+    left.value = false;
+    try {
+        await work();
+        await fill();
+    } finally {
+        acting = Math.max(0, acting - 1);
+    }
+    const shown = chosen.value;
+    if (shown !== null) focusRow(shown.id);
+}
+
+/** Reads what waits again, every page the person had read, then each approval not read whole yet. */
 export async function reload(): Promise<void> {
     await attention.load(here().api, false);
     await fill();
@@ -212,6 +292,11 @@ export function forgetNeeds(): void {
     checking.value = new Set();
     unapproved.value = {};
     typed.clear();
+    attention.forgetPages();
+    lastOrder = [];
+    ownOpens.clear();
+    left.value = false;
+    acting = 0;
 }
 
 /** The panel is drawn: its approvals are read whole now, and at every reload while it stays drawn. */
@@ -228,28 +313,49 @@ define('needs.type', (args, element) => {
         typed.set(args[0], element.value);
 });
 
+/** After the filter or the agent changed: the pane keeps its item if it is still listed, else shows the first. */
+function narrowed(): void {
+    left.value = false;
+    const { items } = listed();
+    const now = chosen.value;
+    if (now === null || !items.some((item) => item.kind === now.kind && item.id === now.id))
+        chosen.value = items[0] === undefined ? null : { kind: items[0].kind, id: items[0].id };
+    lastOrder = items.map((item) => ({ kind: item.kind, id: item.id }));
+    readShown();
+}
+
 define('needs.filter', ([value]) => {
     const found = filtersOf(needsInput(), agent.value).find(([each]) => each === value);
     if (!found) return;
     filter.value = found[0];
-    readShown();
+    narrowed();
 });
 
 define('needs.agent', (_, element) => {
     if (!(element instanceof HTMLSelectElement)) return;
     const value = element.value;
     agent.value = agentsOf(needsInput()).some((each) => each.id === value) ? value : null;
-    readShown();
+    narrowed();
 });
+
+/** The width under which the panes stand one above the other: the media query the panel's sheet narrows at. */
+const NARROW = '(max-width: 900px)';
 
 define('needs.pick', ([kind, id]) => {
     if ((kind === 'approval' || kind === 'question' || kind === 'chat') && typeof id === 'string') {
-        chosen.value = { kind, id };
-        rejecting.value = null;
+        batch(() => {
+            chosen.value = { kind, id };
+            rejecting.value = null;
+            left.value = false;
+        });
         readShown();
+        // Where the list and the pane stand one above the other, the pane chosen is brought into view.
+        if (window.matchMedia?.(NARROW).matches)
+            document.querySelector('.needs-pane')?.scrollIntoView({ block: 'start' });
     }
 });
 
+// Show more reads one more page of each list that has one, and every read after it reads that page again.
 define('needs.more', () => {
     const api = here().api;
     void Promise.all([attention.more(api, 'approvals', false), attention.more(api, 'questions', false)]).then(fill);
@@ -264,7 +370,7 @@ define('needs.chat', ([id, name]) => {
 // A read of an approval that failed is asked for again by the person: once it answers, its Approve is live.
 define('needs.read', ([id]) => {
     if (typeof id === 'string')
-        void attention.open(here().api, 'approvals', id).then(() => {
+        void openOwn('approvals', id).then(() => {
             const shown = attention.detail.value;
             if (shown?.kind === 'approvals' && shown.item.id === id) keepWhole(reads, shown.item);
         });
@@ -275,32 +381,37 @@ define('needs.approve', ([id]) => {
     if (typeof id !== 'string' || checking.value.has(id)) return;
     const api = here().api;
     said(id, null);
-    void approveWhole(
-        api,
-        reads.approvals.value[id],
-        () => attention.approve(api, id),
-        (on) => checked(id, on),
-    )
-        .then((why) => {
+    void acted(() =>
+        approveWhole(
+            api,
+            reads.approvals.value[id],
+            () => attention.approve(api, id),
+            (on) => checked(id, on),
+        ).then((why) => {
             if (why !== null) said(id, why);
-        })
-        .then(fill);
+        }),
+    );
 });
 
+// Reject asks first, in a dialog that takes the keyboard and gives it back to Reject when it closes without rejecting.
 define('needs.reject', ([id]) => {
     if (typeof id !== 'string') return;
     typed.delete(`${id}:reason`);
     rejecting.value = id;
+    focusPane('.needs-reject .inp');
 });
 
 define('needs.unreject', () => {
     rejecting.value = null;
+    focusPane('[data-action="needs.reject"]');
 });
 
 define('needs.rejected', ([id]) => {
-    if (typeof id !== 'string') return;
+    if (typeof id !== 'string' || rejecting.value !== id) return;
     rejecting.value = null;
-    void attention.reject(here().api, id, optional(`${id}:reason`)).then(fill);
+    // Only an approval still listed is rejected: one that left while the question stood open is no longer the person's.
+    if (!attention.approvals.value.some((row) => row.id === id)) return;
+    void acted(() => attention.reject(here().api, id, optional(`${id}:reason`)));
 });
 
 // Edit reads the message's work item, and the boxes open with the words it holds now: a person never replaces words
@@ -321,34 +432,44 @@ define('needs.edit', ([id]) => {
         .catch((error: unknown) => {
             if (!(error instanceof Unpaired)) said(whole.id, sentence(error));
         })
-        .finally(() => checked(whole.id, false));
+        .finally(() => {
+            checked(whole.id, false);
+            focusPane('.needs-edit textarea');
+        });
 });
 
 define('needs.unedit', () => {
     editing.value = null;
+    focusPane('[data-action="needs.edit"]');
 });
+
+/** The reason the journal keeps for an edit made here: what was done, in plain words. */
+export const NEEDS_EDIT_REASON = "Changed the message's words before deciding on it.";
 
 define('needs.save', ([id]) => {
     const now = editing.value;
     const whole = typeof id === 'string' ? reads.approvals.value[id] : undefined;
     if (now === null || whole === undefined || now.id !== whole.id || now.saving) return;
+    const subject = typed.get(`${whole.id}:subject`) ?? '';
+    const body = typed.get(`${whole.id}:body`) ?? '';
+    // Words that did not change are not written: the runtime would leave the approval as it is, and nothing is asked again.
+    if (subject === (now.opened.subject ?? '') && body === (now.opened.body ?? '')) {
+        editing.value = null;
+        focusRow(whole.id);
+        return;
+    }
     const api = here().api;
     editing.value = { ...now, saving: true, problem: null };
-    saveEdit(
-        api,
-        whole.operation,
-        whole.work_item_id,
-        typed.get(`${whole.id}:subject`) ?? '',
-        typed.get(`${whole.id}:body`) ?? '',
-        now.opened,
-    )
-        .then(() => {
+    saveEdit(api, whole.operation, whole.work_item_id, subject, body, now.opened, NEEDS_EDIT_REASON)
+        .then((item) => {
             editing.value = null;
-            reasked.value = [
-                ...reasked.value.filter((each) => each.workItemId !== whole.work_item_id),
-                { workItemId: whole.work_item_id, approvalId: whole.id },
-            ];
-            return reload();
+            // The runtime asks again only when the edit took the work out of waiting for this approval.
+            if (item.status !== 'awaiting_approval')
+                reasked.value = [
+                    ...reasked.value.filter((each) => each.workItemId !== whole.work_item_id),
+                    { workItemId: whole.work_item_id, approvalId: whole.id },
+                ];
+            return acted(() => attention.load(api, false));
         })
         .catch((error: unknown) => {
             const still = editing.value;
@@ -376,13 +497,13 @@ define('needs.save', ([id]) => {
 
 define('needs.option', ([id, option]) => {
     if (typeof id === 'string' && typeof option === 'string')
-        void attention.answer(here().api, id, { option }, optional(`${id}:reason`)).then(fill);
+        void acted(() => attention.answer(here().api, id, { option }, optional(`${id}:reason`)));
 });
 
 define('needs.answer', ([id]) => {
     if (typeof id !== 'string') return;
     const text = optional(`${id}:text`);
-    if (text) void attention.answer(here().api, id, { text }, optional(`${id}:reason`)).then(fill);
+    if (text) void acted(() => attention.answer(here().api, id, { text }, optional(`${id}:reason`)));
 });
 
 /** Who doubted a send and why, from the approval read whole, in the words the chat's cards and the browser use. */
@@ -484,7 +605,12 @@ function words(whole: Approval | undefined): Html | null {
                     : null
             }
         </div>
-        ${detail.facts.length > 0 ? html`<div class="needs-facts">${detail.facts.map((fact) => html`<div class="meta">${fact}</div>`)}</div>` : null}`;
+        ${detail.facts.length > 0 ? html`<div class="needs-facts">${detail.facts.map((fact) => html`<div class="meta">${withCode(fact)}</div>`)}</div>` : null}`;
+}
+
+/** A fact as the runtime words it, its quoted names set as code rather than shown between backticks. */
+function withCode(fact: string): Html[] {
+    return fact.split('`').map((part, at) => (at % 2 === 1 ? html`<code>${part}</code>` : html`${part}`));
 }
 
 /** The box of a message's body. Its words follow its tag at once: a line break there would be read as part of them. */
@@ -521,6 +647,9 @@ function editBoxes(edit: Editing, operation: string, busy: boolean): Html {
                       ${edit.moved.body ? html`<div class="message-text">${edit.moved.body}</div>` : null}
                   </div>`
         }
+        <div class="ask-w needs-save-says">
+            Saving changes the words only and approves nothing: Jason asks you again.
+        </div>
         <div class="ask-a">
             <button
                 class="btn sm p"
@@ -596,7 +725,7 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
     return html`<section class="needs-pane ask" data-id="${summary.id}" aria-label="${row.what}">
         <div class="ask-h">
             <span class="b amber">Waiting for you</span>
-            <span class="meta">${row.campaign} · ${row.via} · ${row.age}</span>
+            <span class="meta">${row.campaign} · ${row.age}</span>
         </div>
         <h2 class="needs-title">${row.what} ${person(summary, now)}</h2>
         <div class="ask-w">${reasonLabel(whole?.reason ?? summary.reason)}</div>
@@ -761,6 +890,14 @@ export function needsView(): Html {
             </div>
         </div>
         ${failure ? html`<div class="note am" role="alert">${failure}</div>` : null}
+        ${
+            left.value
+                ? html`<div class="note needs-left" role="status">
+                      What you had open is no longer waiting: it was decided or withdrawn elsewhere. This is the next
+                      one.
+                  </div>`
+                : null
+        }
         ${
             !attention.loaded.value
                 ? html`<div class="empty">Reading what waits…</div>`

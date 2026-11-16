@@ -365,7 +365,10 @@ describe('Needs you', () => {
             // The chat, once shown, reads its own questions whole for its cards: what it reads is not this test's.
             .answerAnyRequest('decision.get', 'decision.get/for-campaign-row');
         const desktop = await renderConsole(fake);
-        fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Open the chat' })));
+        // The pane is painted again as its read answers, so the button is found once the reads are in.
+        await waitFor(() => expect(Object.keys(reads.approvals.value).length).toBeGreaterThan(0));
+        await settle();
+        fireEvent.click(within(pane()).getByRole('button', { name: 'Open the chat' }));
         await waitFor(() =>
             expect(desktop.calls.filter((each) => each.name === 'chat.create').map((each) => each.args[0])).toEqual([
                 'cmp_1',
@@ -403,10 +406,176 @@ describe('Needs you', () => {
             expect(chips()).toEqual(['All 100+', 'Approvals 100+', 'Questions 0', 'Inbox 1+']);
 
             fireEvent.click(within(needs()).getByRole('button', { name: 'Show more' }));
-            await waitFor(() => expect(chips()[0]).toBe('All 101'));
-            expect(words(badge())).toBe('101');
+            await waitFor(() => expect(chips()[0]).toBe('All 102'));
+            expect(words(badge())).toBe('102');
             expect(sent(fake, 'approval.list').at(-1)).toEqual(fixtures['approval.list/needs-next-page'].request);
             expect(within(needs()).queryByRole('button', { name: 'Show more' })).toBeNull();
+        });
+    });
+
+    describe('stays where the person is', () => {
+        const badge = () => document.querySelector<HTMLElement>('.side .count')!;
+        /** A journal line, as the runtime writes one when something waits: the console reads what waits again. */
+        const line = (journal: StubStream, id: string) =>
+            flush(() => {
+                journal.open();
+                journal.send(journalLine({ id, kind: 'approval_requested' }));
+            });
+        const inbox = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-inbox')
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply');
+        const paged = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-first-page', 'approval.list/needs-next-page')
+                .answer('decision.list', 'decision.list/empty')
+                .answerAnyRequest('approval.get', (body) =>
+                    (body as { approval_id?: string }).approval_id === 'apr_102'
+                        ? 'approval.get/needs-page-two'
+                        : 'approval.get/needs-message',
+                );
+        const more = () => fireEvent.click(within(needs()).getByRole('button', { name: 'Show more' }));
+
+        it('keeps the page Show more read through a reload, with the item chosen on it', async () => {
+            const journal = stubStream();
+            const fake = paged();
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(chips()[0]).toBe('All 100+'));
+            more();
+            await waitFor(() => expect(chips()[0]).toBe('All 102'));
+            await choose('apr_103');
+            const asked = sent(fake, 'approval.list').length;
+
+            await line(journal, 'jrn_needs_1');
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBe(asked + 2));
+            await settle();
+            expect(sent(fake, 'approval.list').at(-1)).toEqual(fixtures['approval.list/needs-next-page'].request);
+            expect(chips()[0]).toBe('All 102');
+            expect(words(badge())).toBe('102');
+            expect(pane().dataset['id']).toBe('apr_103');
+            expect(row('apr_103').getAttribute('aria-current')).toBe('true');
+        });
+
+        it('reads the second page again after an act on it, keeps the rest of it, and puts the keyboard on the next line', async () => {
+            const fake = paged()
+                .answer(
+                    'approval.list',
+                    'approval.list/needs-first-page',
+                    'approval.list/needs-next-page',
+                    'approval.list/needs-next-page-after',
+                )
+                .answer('workitem.get', 'workitem.get/needs-page-two-parked')
+                .answer('approval.approve', 'approval.approve/needs-page-two-approved');
+            await renderConsole(fake);
+            await waitFor(() => expect(chips()[0]).toBe('All 100+'));
+            more();
+            await waitFor(() => expect(chips()[0]).toBe('All 102'));
+            await choose('apr_102');
+            const approve = await waitFor(() => {
+                const button = within(pane()).getByRole('button', { name: 'Approve' });
+                expect(button.hasAttribute('disabled')).toBe(false);
+                return button;
+            });
+            fireEvent.click(approve);
+            await waitFor(() =>
+                expect(sent(fake, 'approval.approve')).toEqual([
+                    asGiven(fixtures['approval.approve/needs-page-two-approved'].request),
+                ]),
+            );
+            await waitFor(() => expect(needs().querySelector('[data-row="apr_102"]')).toBeNull());
+            await settle();
+            expect(chips()[0]).toBe('All 101');
+            expect(pane().dataset['id']).toBe('apr_103');
+            expect(document.activeElement).toBe(row('apr_103'));
+            expect(needs().querySelector('.needs-left')).toBeNull();
+        });
+
+        it('shows the next item, and says why, when the one chosen was decided elsewhere', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_1'));
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_2');
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            expect(words(needs().querySelector('.needs-left')!)).toBe(
+                'What you had open is no longer waiting: it was decided or withdrawn elsewhere. This is the next one.',
+            );
+            fireEvent.click(row('apr_2'));
+            await waitFor(() => expect(needs().querySelector('.needs-left')).toBeNull());
+        });
+
+        it('stays on the question shown when an approval arrives above it', async () => {
+            const journal = stubStream();
+            const fake = new FakeApi()
+                .answer('approval.list', 'approval.list/empty')
+                .answer('decision.list', 'decision.list/needs-questions')
+                .answer('decision.get', 'decision.get/needs-question')
+                .answer('approval.get', 'approval.get/needs-reply');
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(pane().dataset['id']).toBe('dec_1'));
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_3');
+            await waitFor(() => expect(row('apr_2')).toBeTruthy());
+            await settle();
+            expect(pane().dataset['id']).toBe('dec_1');
+            expect(needs().querySelector('.needs-left')).toBeNull();
+        });
+
+        it('lets a question its own read answered late change neither the filter nor the agent', async () => {
+            const fake = inbox()
+                .answer('decision.list', 'decision.list/needs-questions')
+                .answer('decision.get', 'decision.get/needs-question');
+            const release = fake.hold('decision.get');
+            await renderConsole(fake);
+            await waitFor(() => expect(row('dec_1')).toBeTruthy());
+            await choose('dec_1');
+            show('Approvals');
+            await waitFor(() => expect(pressed()).toEqual(['Approvals 2']));
+            await flush(async () => release());
+            await settle();
+            expect(pressed()).toEqual(['Approvals 2']);
+            expect(pane().dataset['id']).toBe('apr_1');
+        });
+
+        it('closes Reject’s question when its item leaves, and sends no reject', async () => {
+            const journal = stubStream();
+            const fake = inbox();
+            await renderConsole(fake, journal);
+            // The pane is painted again as its read answers, so the button is found once the reads are in.
+            await waitFor(() => expect(Object.keys(reads.approvals.value).length).toBeGreaterThan(0));
+            await settle();
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
+            const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
+            // The question takes the keyboard, on its reason.
+            expect(document.activeElement).toBe(within(asked).getByRole('textbox'));
+            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            await line(journal, 'jrn_needs_4');
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            expect(needs().querySelector('[role="alertdialog"]')).toBeNull();
+            expect(sent(fake, 'approval.reject')).toEqual([]);
+        });
+
+        it('gives the keyboard back to Reject when its question is cancelled', async () => {
+            await renderConsole(inbox());
+            // The pane is painted again as its read answers, so the button is found once the reads are in.
+            await waitFor(() => expect(Object.keys(reads.approvals.value).length).toBeGreaterThan(0));
+            await settle();
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
+            const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
+            fireEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(within(pane()).queryByRole('alertdialog')).toBeNull());
+            expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
+        });
+
+        it('names no plugin in the pane’s header, and sets a fact’s quoted names as code', async () => {
+            await renderConsole(inbox());
+            await waitFor(() => expect(pane().querySelector('.needs-facts')).toBeTruthy());
+            expect(words(pane().querySelector('.ask-h .meta')!)).toMatch(/^Spring launch · [^·]+$/);
+            expect(words(pane().querySelector('.ask-h')!)).not.toMatch(/\breply\b/);
+            expect(pane().querySelector('.needs-facts')!.textContent).not.toContain('`');
+            expect([...pane().querySelectorAll('.needs-facts code')].map((each) => each.textContent)).toEqual(['none']);
         });
     });
 
@@ -449,6 +618,31 @@ describe('Needs you', () => {
             );
             expect(sent(fake, 'approval.approve')).toEqual([]);
             expect(pane().dataset['id']).toBe('apr_2');
+            // The keyboard is on the line the pane shows now, never on a button of an item the person did not choose.
+            expect(document.activeElement).toBe(row('apr_2'));
+        });
+
+        it('says before Save that saving approves nothing', async () => {
+            await renderConsole(edits());
+            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
+            expect(words(pane().querySelector('.needs-save-says')!)).toBe(
+                'Saving changes the words only and approves nothing: Jason asks you again.',
+            );
+        });
+
+        it('writes nothing and says nothing of asking again when Save is pressed on the words as they were', async () => {
+            const fake = edits();
+            await renderConsole(fake);
+            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
+            await settle();
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Save' }));
+            await waitFor(() => expect(within(pane()).queryByRole('textbox', { name: 'Body' })).toBeNull());
+            await settle();
+            expect(sent(fake, 'workitem.update')).toEqual([]);
+            expect(needs().querySelector('.needs-reasked')).toBeNull();
+            expect(within(pane()).getByRole('button', { name: 'Approve' })).toBeTruthy();
         });
 
         it('closes the boxes on Cancel having written nothing', async () => {

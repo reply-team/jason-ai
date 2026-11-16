@@ -106,7 +106,8 @@ const moreUnder = (input: NeedsInput, filter: NeedsFilter): boolean => {
     }
 };
 
-const countOf = (input: NeedsInput, filter: NeedsFilter, agent: string | null): Count => ({
+/** What one filter holds, counted, for every agent or for one. */
+export const countOf = (input: NeedsInput, filter: NeedsFilter, agent: string | null = null): Count => ({
     n: waitingOf(input, filter, agent).length,
     more: moreUnder(input, filter),
 });

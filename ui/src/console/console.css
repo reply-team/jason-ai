@@ -1153,6 +1153,10 @@ body,
     max-width: 880px;
     margin: 0 auto;
 }
+/* Needs you holds two panes side by side, so it takes the whole area. */
+.jc-console .pane.measure .panel-body.needs-panel {
+    max-width: none;
+}
 .jc-console .painted,
 .jc-console .chat-panel {
     height: 100%;
@@ -1322,8 +1326,10 @@ body,
     flex-wrap: wrap;
 }
 .jc-console .needs-filter .btn {
+    height: 32px;
     border-radius: 999px;
-    padding: 0 12px;
+    padding: 0 14px;
+    font-size: 13px;
 }
 .jc-console .needs-filter .needs-n {
     margin-left: 4px;
@@ -1440,6 +1446,15 @@ body,
 .jc-console .needs-more {
     margin: 10px 14px;
     align-self: flex-start;
+}
+.jc-console .needs-pane .ask-h .meta {
+    margin-left: 0;
+}
+.jc-console .needs-save-says {
+    margin: 4px 0 0;
+}
+.jc-console .needs-left {
+    margin: 0 0 12px;
 }
 .jc-console .needs-panel .needs-pane {
     margin: 0;

@@ -53,17 +53,24 @@ public class NeedsExchangesTests
         var parked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-message-parked", new { work_item_id = item }, Ct);
         Assert.Equal(WorkItemStatus.AwaitingApproval, parked.Status);
         var edited = EmailArgs("Ines", "Hi Ines, thanks for the talk at the meetup. Shall we talk next week?");
-        var patched = await api.RecordAsync<WorkItemDto>(Operations.WorkItemUpdate, "needs-message-edited", new { work_item_id = item, set = new { input = edited }, reason = "Message text edited on the approval card.", actor = new { type = "human", id = "ada" } }, Ct);
+        var patched = await api.RecordAsync<WorkItemDto>(Operations.WorkItemUpdate, "needs-message-edited", new { work_item_id = item, set = new { input = edited }, reason = "Changed the message's words before deciding on it.", actor = new { type = "human", id = "ada" } }, Ct);
         Assert.True(JsonNode.DeepEquals(edited, patched.Context["input"]));
         var after = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-after-edit", new { }, Ct);
         Assert.Equal([ReplyApproval], after.Items.Select(a => a.Id));
 
-        // A hundred more first messages: one more than the default page holds, so the list has a second page.
+        // A question the autumn campaign's AI raised, with its options: what waits on a person beside the approvals.
+        var questions = await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "needs-questions", new { }, Ct);
+        var question = Assert.Single(questions.Items);
+        Assert.Equal(("Autumn outreach", autumn.PublicId), (question.CampaignName, question.CampaignId));
+        var asked = await api.RecordAsync<DecisionDto>(Operations.DecisionGet, "needs-question", new { decision_id = question.Id }, Ct);
+        Assert.Equal(2, asked.Options!.Count);
+
+        // A hundred and one more first messages: two more than the default page holds, so the list has a second page.
         using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
             db.Attach(spring);
-            for (var n = 1; n <= 100; n++)
+            for (var n = 1; n <= 101; n++)
             {
                 var number = n.ToString("D3", CultureInfo.InvariantCulture);
                 AddSend(db, spring, "apr_01K7QS00000000000000000" + number, "Person", number, "person" + number + "@example.test");
@@ -75,10 +82,19 @@ public class NeedsExchangesTests
         Assert.Equal(100, first.Items.Count);
         Assert.NotNull(first.NextCursor);
         var next = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-next-page", new { cursor = first.NextCursor }, Ct);
-        Assert.Single(next.Items);
+        Assert.Equal(2, next.Items.Count);
         Assert.Null(next.NextCursor);
-        Assert.Equal(101, first.Items.Concat(next.Items).Select(a => a.Id).Distinct().Count());
+        Assert.Equal(102, first.Items.Concat(next.Items).Select(a => a.Id).Distinct().Count());
         Assert.Equal(autumn.PublicId, Assert.Single(first.Items, a => a.Operation == "conversation.reply").CampaignId);
+
+        // The first approval of the second page read whole, checked against its work item and approved; the second page,
+        // read again by the same cursor, then holds the one after it.
+        var later = next.Items[0].Id;
+        var whole = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "needs-page-two", new { approval_id = later }, Ct);
+        await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-page-two-parked", new { work_item_id = whole.WorkItemId }, Ct);
+        await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "needs-page-two-approved", new { approval_id = later, actor = new { type = "human", id = "ada" } }, Ct);
+        var rest = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-next-page-after", new { cursor = first.NextCursor }, Ct);
+        Assert.Equal([next.Items[1].Id], rest.Items.Select(a => a.Id));
     }
 
     private static async Task<(Campaign Spring, Campaign Autumn)> SeedAsync(RuntimeApiFixture api)
@@ -107,6 +123,26 @@ public class NeedsExchangesTests
             ["idempotency_key"] = "answer-t_501-1",
         };
         AddApproval(db, autumn, ReplyApproval, contact, Reply, input);
+
+        var role = WorkItemFactory.NewAiRole(autumn, now: Noon);
+        role.PublicId = "wi_01K7QR0000000000000000000C";
+        role.Status = WorkItemStatus.Processing;
+        var attempt = WorkItemFactory.NewAttempt(role, 1, AttemptStatus.Running, Noon);
+        db.WorkItems.Add(role);
+        db.Attempts.Add(attempt);
+        db.Decisions.Add(new Decision
+        {
+            PublicId = "dec_01K7QR0000000000000000000C",
+            Campaign = autumn,
+            WorkItem = role,
+            Attempt = attempt,
+            Question = "Kai asked to move the call to Thursday. Keep the follow-up for Friday?",
+            Options = new JsonArray(
+                new JsonObject { ["label"] = "Keep Friday", ["detail"] = null },
+                new JsonObject { ["label"] = "Move it to Monday", ["detail"] = "A day after the call, so it can mention it." }),
+            Status = DecisionStatus.Pending,
+            RaisedAt = Noon,
+        });
         await db.SaveChangesAsync(Ct);
         return (spring, autumn);
     }

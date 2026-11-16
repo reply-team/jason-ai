@@ -9,7 +9,7 @@
     "items": [
       {
         "id": "apr_102",
-        "work_item_id": "wi_102",
+        "work_item_id": "wi_103",
         "campaign_id": "cmp_1",
         "operation": "message.send",
         "status": "pending",
@@ -21,6 +21,25 @@
         "decided_by": null,
         "campaign_name": "Spring launch",
         "contact_name": "Person 100",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_103",
+        "work_item_id": "wi_104",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-106",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 101",
         "send_modes_unset": [
           "send_mode.cold",
           "send_mode.warm"

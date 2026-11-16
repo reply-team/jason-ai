@@ -1,7 +1,7 @@
 import type { ApprovalSummary, CampaignSummary, DecisionSummary } from '../api/types';
 import type { DesktopConversation } from '../platform/desktop';
 import { ageOf } from './live';
-import { needsCount, type ChatWait } from './needs-model';
+import { countWords, needsCount, type ChatWait } from './needs-model';
 
 // Pure: the rows under "Recent" from what the console already holds. Nothing here reads the runtime or draws markup.
 
@@ -24,6 +24,8 @@ export interface RecentRow {
     aboutAgent: boolean;
     /** What waits on the person for the row's agent, by Needs you's one count; for a chat of no agent, its own wait. */
     waiting: number;
+    /** That count in words: with a plus when the runtime holds more than was read. */
+    waitingWords: string;
     /** The agent's state, whether or not something waits; null for a chat with no agent or one not read yet. */
     state: 'active' | 'paused' | 'draft' | null;
     dot: RecentDot;
@@ -43,6 +45,8 @@ export interface RecentInput {
     questions: readonly DecisionSummary[];
     /** The chats that wait on a choice, once read; absent or null while they have not been. */
     chats?: readonly ChatWait[] | null;
+    /** Whether the runtime holds more of each list than was read; absent for neither. */
+    more?: { approvals: boolean; questions: boolean };
     now: number;
 }
 
@@ -54,7 +58,7 @@ export function recentRows(input: RecentInput): RecentRow[] {
         approvals: input.approvals,
         questions: input.questions,
         chats: input.chats ?? null,
-        more: { approvals: false, questions: false },
+        more: input.more ?? { approvals: false, questions: false },
     };
     return input.conversations
         .filter((conversation) => conversation.main !== true)
@@ -63,11 +67,16 @@ export function recentRows(input: RecentInput): RecentRow[] {
                 conversation.campaignId === null
                     ? undefined
                     : input.campaigns.find((each) => each.id === conversation.campaignId);
-            const waiting = agent
-                ? needsCount(waits, agent.id).n
-                : conversation.campaignId === null
-                  ? (waits.chats ?? []).filter((each) => each.conversationId === conversation.id).length
-                  : 0;
+            const count = agent
+                ? needsCount(waits, agent.id)
+                : {
+                      n:
+                          conversation.campaignId === null
+                              ? (waits.chats ?? []).filter((each) => each.conversationId === conversation.id).length
+                              : 0,
+                      more: false,
+                  };
+            const waiting = count.n;
             const state = states.find((each) => each === agent?.status);
             return {
                 id: conversation.id,
@@ -75,6 +84,7 @@ export function recentRows(input: RecentInput): RecentRow[] {
                 agent: agent?.name ?? null,
                 aboutAgent: conversation.campaignId !== null,
                 waiting,
+                waitingWords: countWords(count),
                 state: state ?? null,
                 running: input.running?.(conversation.id) ?? conversation.running,
                 dot: waiting > 0 ? 'waiting' : (state ?? 'none'),

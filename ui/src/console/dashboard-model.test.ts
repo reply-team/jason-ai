@@ -43,6 +43,11 @@ describe('the Needs you subline', () => {
         expect(needsSubline(4, 0)).toBe('4 approvals');
         expect(needsSubline(0, 0)).toBeNull();
     });
+
+    it('carries the plus of a list the runtime holds more of, and is then plural', () => {
+        expect(needsSubline({ n: 100, more: true }, { n: 1, more: false })).toBe('100+ approvals · 1 question');
+        expect(needsSubline({ n: 1, more: true }, 0)).toBe('1+ approvals');
+    });
 });
 
 describe('the reply rate', () => {

@@ -68,17 +68,25 @@ export function greetingFor(hour: number): string {
     return t('dash.evening');
 }
 
+/** A count, and whether the runtime holds more than was read: "100+" is many, whatever the number. */
+export type Counted = number | { n: number; more: boolean };
+
 const counted = (
-    count: number,
+    count: { n: number; more: boolean },
     one: 'dash.approval.one' | 'dash.question.one',
     many: 'dash.approval.many' | 'dash.question.many',
-): string => t(count === 1 ? one : many, { n: String(count) });
+): string => t(count.n === 1 && !count.more ? one : many, { n: `${count.n}${count.more ? '+' : ''}` });
 
-/** "2 approvals · 1 question": a part only above zero; null when nothing waits. */
-export function needsSubline(approvals: number, questions: number): string | null {
+const countOf = (count: Counted): { n: number; more: boolean } =>
+    typeof count === 'number' ? { n: count, more: false } : count;
+
+/** "2 approvals · 1 question", "100+ approvals": a part only above zero; null when nothing waits. */
+export function needsSubline(approvalCount: Counted, questionCount: Counted): string | null {
+    const approvals = countOf(approvalCount);
+    const questions = countOf(questionCount);
     const parts = [
-        ...(approvals > 0 ? [counted(approvals, 'dash.approval.one', 'dash.approval.many')] : []),
-        ...(questions > 0 ? [counted(questions, 'dash.question.one', 'dash.question.many')] : []),
+        ...(approvals.n > 0 ? [counted(approvals, 'dash.approval.one', 'dash.approval.many')] : []),
+        ...(questions.n > 0 ? [counted(questions, 'dash.question.one', 'dash.question.many')] : []),
     ];
     return parts.length === 0 ? null : parts.join(' · ');
 }
@@ -232,8 +240,8 @@ export function bounceTile(activity: ActivityRead | null): Tile {
 
 /** The six tiles in order. Interested and Meetings booked count conversations judged so. */
 export function tilesOf(input: {
-    approvals: number;
-    questions: number;
+    approvals: Counted;
+    questions: Counted;
     /** Whether the approvals and questions were read. */
     waitingKnown: boolean;
     /** Needs you's one count in words, which the tile shows when given: the number the sidebar and All show. */
@@ -247,7 +255,9 @@ export function tilesOf(input: {
     return [
         {
             label: t('dash.tile.needs'),
-            value: input.waitingKnown ? (input.waiting ?? input.approvals + input.questions) : null,
+            value: input.waitingKnown
+                ? (input.waiting ?? countOf(input.approvals).n + countOf(input.questions).n)
+                : null,
             sub: input.waitingKnown ? needsSubline(input.approvals, input.questions) : null,
         },
         {

@@ -17,7 +17,7 @@
         }
       }
     },
-    "reason": "Message text edited on the approval card.",
+    "reason": "Changed the message's words before deciding on it.",
     "actor": {
       "type": "human",
       "id": "ada"
