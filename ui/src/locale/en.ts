@@ -141,6 +141,10 @@ export const en = {
     'openIn.jason.type': "Type jason-desktop there instead: it runs this window's Jason.",
     'openIn.jasonLine.other': "jason on your PATH is another Jason, not this window's.",
     'openIn.jasonLine.none': 'jason is not on your PATH.',
+    'openIn.act.put_jason': 'Put jason on the PATH…',
+    'openIn.act.put_jason_desktop': 'Put jason-desktop on the PATH…',
+    'openIn.act.point_jason': 'Point jason at This Jason…',
+    'openIn.act.point_jason_desktop': 'Point jason-desktop at This Jason…',
     'openIn.copied': 'Copied the path of {folder}.',
     'openIn.continue': 'Continue this chat in {place}',
     'openIn.continueNote':

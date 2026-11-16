@@ -559,13 +559,18 @@ export interface DesktopOpenInAnswer {
 /**
  * Which `jason` the PATH finds by name, and the way out the Jason menu's Command Line really offers: `put` places `jason`,
  * `name` places this window's Jason as `jason-desktop` (the other keeps `jason`), `point` points a command of the desktop's
- * back at this window's Jason, each by `act`, that act's label in the menu; `type` says `jason-desktop` already finds this
- * window's Jason. No way where the desktop offers none that would help.
+ * back at this window's Jason, each by `act`, the code of the menu's act that does it, whose words are the page's
+ * (`openIn.act.*`, the menu's label letter for letter); `type` says `jason-desktop` already finds this window's Jason. No
+ * way where the desktop offers none that would help. No sentence comes from the desktop.
  */
 export type DesktopOpenInJason =
     | { found: 'this' }
-    | { found: 'none'; way?: 'put'; act?: string }
-    | { found: 'other'; way?: 'name' | 'point' | 'type'; act?: string };
+    | { found: 'none'; way?: 'put'; act?: 'put_jason' }
+    | {
+          found: 'other';
+          way?: 'name' | 'point' | 'type';
+          act?: 'put_jason_desktop' | 'point_jason' | 'point_jason_desktop';
+      };
 
 /**
  * The entry that continues the chat in front in a terminal: the host whose own conversation it continues, by its product's

@@ -147,7 +147,9 @@ function jasonSaid(jason: DesktopOpenInJason): string {
     if (jason.found === 'this' || jason.way === undefined) return found;
     if (jason.way === 'type') return found + ' ' + t('openIn.jason.type');
     const way = jason.way;
-    return jason.act === undefined ? found : found + ' ' + t(`openIn.jason.${way}`, { act: jason.act });
+    return jason.act === undefined
+        ? found
+        : found + ' ' + t(`openIn.jason.${way}`, { act: t(`openIn.act.${jason.act}`) });
 }
 
 export function OpenIn({ desktop }: { desktop: JasonDesktop }) {

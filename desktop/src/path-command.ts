@@ -38,13 +38,23 @@ export type CommandStatus =
 /**
  * Which `jason` the PATH finds by name (`PathCommand.onPath`), and the way out the Command Line submenu really offers:
  * `put` places `jason`, `name` places this window's Jason as `jason-desktop` (the other keeps `jason`), `point` points a
- * command of ours back at this window's Jason, each by `act`, the act's label in the menu; `type` says `jason-desktop`
- * already finds this window's Jason. No way where the desktop offers none that would help.
+ * command of ours back at this window's Jason, each by `act`, the code of the menu's act that does it; `type` says
+ * `jason-desktop` already finds this window's Jason. No way where the desktop offers none that would help. Codes only:
+ * the page holds the words, the act's among them, letter for letter the menu's label (`actLabel`).
  */
 export type JasonOnPath =
     | { found: 'this' }
-    | { found: 'none'; way?: 'put'; act?: string }
-    | { found: 'other'; way?: 'name' | 'point' | 'type'; act?: string };
+    | { found: 'none'; way?: 'put'; act?: 'put_jason' }
+    | { found: 'other'; way?: 'name' | 'point' | 'type'; act?: 'put_jason_desktop' | 'point_jason' | 'point_jason_desktop' };
+
+/** The code of each act a way out names, by the name it concerns: the label the menu gives it is `actLabel`'s. */
+export type ActCode = 'put_jason' | 'put_jason_desktop' | 'point_jason' | 'point_jason_desktop';
+
+/** The menu's label of an act by its code, from `commandMenuOf`'s own words, so the two cannot be told apart. */
+export function actLabel(code: ActCode): string {
+    const name = code.endsWith('_desktop') ? 'jason-desktop' : 'jason';
+    return code.startsWith('put') ? `Put ${name} on the PATH…` : `Point ${name} at This Jason…`;
+}
 
 /** The folder the command goes in, or null where none is offered. */
 export function commandFolder(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, home: string): string | null {
@@ -238,18 +248,26 @@ export class PathCommand {
         const ours = (name: Name, file: string) =>
             sameFile(platform, file, this.deps.executable) ||
             this.looksOf(name).some((look) => sameFile(platform, look.file, file) && look.target !== null && look.target.executable === look.runs && look.target.dataDirectory === this.deps.dataDirectory);
-        const place = commandMenuOf(status).acts.find((act) => act.act === 'place')?.label;
+        // The act the menu carries for this very status, by its code; only one whose label is the menu's own.
+        const label = commandMenuOf(status).acts.find((act) => act.act === 'place')?.label;
+        const code = (verb: 'put' | 'point', name: Name): ActCode | undefined => {
+            const act: ActCode = verb === 'put' ? (name === 'jason' ? 'put_jason' : 'put_jason_desktop') : name === 'jason' ? 'point_jason' : 'point_jason_desktop';
+            return label === actLabel(act) ? act : undefined;
+        };
         const found = lookup('jason');
         if (found === null) {
-            return status.state === 'absent' && status.name === 'jason' && status.folderOnPath && place !== undefined ? { found: 'none', way: 'put', act: place } : { found: 'none' };
+            const put = status.state === 'absent' && status.name === 'jason' && status.folderOnPath ? code('put', 'jason') : undefined;
+            return put === 'put_jason' ? { found: 'none', way: 'put', act: put } : { found: 'none' };
         }
         if (ours('jason', found)) return { found: 'this' };
         const desktop = lookup('jason-desktop');
         if (desktop !== null && ours('jason-desktop', desktop)) return { found: 'other', way: 'type' };
         // The act helps only where the file it writes is the one the PATH would then find.
-        if (place !== undefined && status.state === 'absent' && status.name === 'jason-desktop' && status.folderOnPath && desktop === null) return { found: 'other', way: 'name', act: place };
+        const name = status.state === 'absent' && status.name === 'jason-desktop' && status.folderOnPath && desktop === null ? code('put', 'jason-desktop') : undefined;
+        if (name === 'put_jason_desktop') return { found: 'other', way: 'name', act: name };
         const pointed = status.state === 'elsewhere' ? lookup(status.name) : null;
-        if (place !== undefined && status.state === 'elsewhere' && pointed !== null && status.files.some((file) => sameFile(platform, file, pointed))) return { found: 'other', way: 'point', act: place };
+        const point = status.state === 'elsewhere' && pointed !== null && status.files.some((file) => sameFile(platform, file, pointed)) ? code('point', status.name) : undefined;
+        if (point === 'point_jason' || point === 'point_jason_desktop') return { found: 'other', way: 'point', act: point };
         return { found: 'other' };
     }
 
@@ -314,7 +332,7 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
             return {
                 lines: [runs, `${status.name} on the PATH points elsewhere: ${status.why}`],
                 acts: [
-                    { label: `Point ${status.name} at This Jason…`, act: 'place' },
+                    { label: actLabel(status.name === 'jason' ? 'point_jason' : 'point_jason_desktop'), act: 'place' },
                     { label: `Remove ${status.name} from the PATH…`, act: 'remove' },
                 ],
             };
@@ -327,7 +345,7 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
                 lines.push(windows ? `${folder} is not on the PATH, so nothing is placed; run the executable by its full path.` : `${folder} is not on the PATH yet; a terminal finds ${status.name} once it is.`);
             }
             const placeable = status.folderOnPath || !windows;
-            return { lines, acts: placeable ? [{ label: `Put ${status.name} on the PATH…`, act: 'place' }] : [] };
+            return { lines, acts: placeable ? [{ label: actLabel(status.name === 'jason' ? 'put_jason' : 'put_jason_desktop'), act: 'place' }] : [] };
         }
     }
 }

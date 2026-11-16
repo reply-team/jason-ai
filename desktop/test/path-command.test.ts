@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { fileLogger } from '../src/log.ts';
-import { commandFolder, commandMenuOf, commandQuestion, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
+import { actLabel, commandFolder, commandMenuOf, commandQuestion, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -404,25 +404,25 @@ test('which jason the PATH finds by name: this window’s, another or none, with
     // None: the folder is on the PATH and nothing answers, so the act that puts jason there is the way out; with the folder
     // off the PATH no act would help, and none is named.
     const fresh = windows(t);
-    assert.deepEqual(fresh.command.onPath(), { found: 'none', way: 'put', act: 'Put jason on the PATH…' });
+    assert.deepEqual(fresh.command.onPath(), { found: 'none', way: 'put', act: 'put_jason' });
     assert.deepEqual(windows(t, { onPath: false }).command.onPath(), { found: 'none' });
 
     // This: our command, running this executable with the data directory the desktop runs on, is what the PATH finds.
     fresh.command.place();
     assert.deepEqual(fresh.command.onPath(), { found: 'this' });
     const elsewhere = new PathCommand({ platform: 'win32', folder: fresh.folder, executable: windowsExe, dataDirectory: 'D:\\Jason data', path: () => fresh.folder, isProgram: present, log: memoryLog() });
-    assert.deepEqual(elsewhere.onPath(), { found: 'other', way: 'point', act: 'Point jason at This Jason…' }, 'our command naming other data is another Jason');
+    assert.deepEqual(elsewhere.onPath(), { found: 'other', way: 'point', act: 'point_jason' }, 'our command naming other data is another Jason');
 
     // Another: an older copy our command still runs, by the act that points it back.
     const older = windows(t);
     writeFileSync(join(older.folder, 'jason.cmd'), `@echo off\r\n"D:\\Old\\Jason\\resources\\bundle\\jason.exe" %*\r\n`);
-    assert.deepEqual(older.command.onPath(), { found: 'other', way: 'point', act: 'Point jason at This Jason…' });
+    assert.deepEqual(older.command.onPath(), { found: 'other', way: 'point', act: 'point_jason' });
 
     // Another installation's jason: the act gives this window's Jason the name jason-desktop, and once that is placed it is
     // typed by that name, with no act.
     const other = 'C:\\Tools\\Jason\\jason.exe';
     const foreign = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
-    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'name', act: 'Put jason-desktop on the PATH…' });
+    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'name', act: 'put_jason_desktop' });
     foreign.command.place();
     assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'type' });
 
@@ -440,4 +440,18 @@ test('which jason the PATH finds by name: this window’s, another or none, with
 
     // Where the command is not offered, nothing is told.
     assert.equal(new PathCommand({ platform: 'freebsd', folder: null, executable: macExe, dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() }).onPath(), undefined);
+});
+
+test('a way out travels as a code, and the page words each act letter for letter as the menu labels it', () => {
+    // The page's table of words, read as text: no sentence comes from the desktop, so the two sides are held here.
+    const words = readFileSync(join(import.meta.dirname, '..', '..', 'ui', 'src', 'locale', 'en.ts'), 'utf8');
+    for (const code of ['put_jason', 'put_jason_desktop', 'point_jason', 'point_jason_desktop'] as const) {
+        const line = words.split('\n').find((each) => each.includes(`'openIn.act.${code}':`));
+        assert.ok(line !== undefined, code);
+        assert.equal(line.slice(line.indexOf(':') + 1).trim().replace(/^'(.*)',$/, '$1'), actLabel(code), code);
+    }
+    // And the menu draws its acts by the same function.
+    const absent = (name: 'jason' | 'jason-desktop') => commandMenuOf({ state: 'absent', name, files: [], folderOnPath: true, shadows: null, executable: macExe }).acts[0]?.label;
+    const elsewhere = (name: 'jason' | 'jason-desktop') => commandMenuOf({ state: 'elsewhere', name, files: [], why: '', executable: macExe }).acts[0]?.label;
+    assert.deepEqual([absent('jason'), absent('jason-desktop'), elsewhere('jason'), elsewhere('jason-desktop')], [actLabel('put_jason'), actLabel('put_jason_desktop'), actLabel('point_jason'), actLabel('point_jason_desktop')]);
 });

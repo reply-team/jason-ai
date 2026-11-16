@@ -406,7 +406,7 @@ describe('Which jason an editor finds on the PATH', () => {
     it('says another Jason, never other data for certain, with the way out the Jason menu offers', async () => {
         const other =
             "Opened Jason in VS Code. jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
-        expect(await openVsCode({ found: 'other', way: 'name', act: 'Put jason-desktop on the PATH…' })).toBe(
+        expect(await openVsCode({ found: 'other', way: 'name', act: 'put_jason_desktop' })).toBe(
             other +
                 ' In the Jason menu, Command Line, "Put jason-desktop on the PATH…" gives this window\'s Jason the name jason-desktop; the other keeps jason.',
         );
@@ -415,7 +415,7 @@ describe('Which jason an editor finds on the PATH', () => {
             other + " Type jason-desktop there instead: it runs this window's Jason.",
         );
         cleanup();
-        expect(await openVsCode({ found: 'other', way: 'point', act: 'Point jason at This Jason…' })).toBe(
+        expect(await openVsCode({ found: 'other', way: 'point', act: 'point_jason' })).toBe(
             other + ' In the Jason menu, Command Line, choose "Point jason at This Jason…".',
         );
         cleanup();
@@ -424,7 +424,7 @@ describe('Which jason an editor finds on the PATH', () => {
 
     it('says jason is not on the PATH where none is, with the act that puts it there', async () => {
         const none = 'Opened Jason in VS Code. jason is not on your PATH, so a terminal there does not find Jason.';
-        expect(await openVsCode({ found: 'none', way: 'put', act: 'Put jason on the PATH…' })).toBe(
+        expect(await openVsCode({ found: 'none', way: 'put', act: 'put_jason' })).toBe(
             none + ' In the Jason menu, Command Line, "Put jason on the PATH…" puts it there.',
         );
         cleanup();
@@ -435,7 +435,7 @@ describe('Which jason an editor finds on the PATH', () => {
         const line = () => menu().querySelector('.open-in-jason');
         const cases: [DesktopOpenInJason | undefined, string | null][] = [
             [{ found: 'other', way: 'type' }, "jason on your PATH is another Jason, not this window's."],
-            [{ found: 'none', way: 'put', act: 'Put jason on the PATH…' }, 'jason is not on your PATH.'],
+            [{ found: 'none', way: 'put', act: 'put_jason' }, 'jason is not on your PATH.'],
             [{ found: 'this' }, null],
             [undefined, null],
         ];
