@@ -38,6 +38,7 @@ public static class SessionCommands
         + "host, on macOS by the script); nothing is added to the host's own words; a build run through dotnet rather than installed as one file leaves PATH as it is. "
         + "On Windows a word the console host would change, one holding the %NAME% of a variable it is started with, starts nothing, "
         + "with --dry-run too: the refusal names the word and the way to do the same by hand. "
+        + "A jason whose folder's name holds the separator of PATH (; on Windows, : elsewhere) starts nothing on any system. "
         + "Every form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
         + "removes itself when Terminal runs it.";
 

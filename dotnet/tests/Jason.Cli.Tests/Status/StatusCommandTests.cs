@@ -1144,6 +1144,37 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// A jason in a folder whose name holds this system's separator of PATH can be on no PATH: every reader splits the
+    /// entry in two. The check is required and failed whether or not some other <c>jason</c> answers by name, and it offers
+    /// no line, since the line that puts a folder on PATH would write the same split entry again.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_jason_in_a_folder_path_cannot_carry_is_not_ready_and_offers_no_line(bool anotherJasonOnPath)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var folder = Path.Combine(dir.Paths.Root, "programs", "a" + Path.PathSeparator + "b");
+        var installed = Path.Combine(folder, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: anotherJasonOnPath, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Read(output);
+        Assert.False(report.Ready);
+        var check = Assert.Single(report.Checks, check => check.Name == "path");
+        Assert.True(check.Required);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Null(check.Fix);
+        Assert.Equal(
+            $"This jason's folder {folder} holds '{Path.PathSeparator}', which separates the entries of PATH, so no PATH entry can name it: "
+            + $"no shell finds this jason by name, and a role's agent is not given it first on PATH. Install Jason into a folder whose name does not hold '{Path.PathSeparator}'.",
+            check.Fact);
+    }
+
+    /// <summary>
     /// Each repair once, in the order it was first called for.
     /// </summary>
     /// <remarks>

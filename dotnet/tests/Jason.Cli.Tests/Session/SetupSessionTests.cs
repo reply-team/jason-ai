@@ -329,6 +329,23 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(claude, Assert.Single(_run.Terminals.Launches).Argv[2]);
     }
 
+    /// <summary>This jason in a folder whose name holds PATH's separator cannot go first on the window's PATH: nothing is started.</summary>
+    [Fact]
+    public async Task Setup_with_a_jason_in_a_folder_path_cannot_carry_starts_nothing()
+    {
+        _run.Programs.AddProgram("claude");
+        DeploySkill(AgentHostKind.ClaudeCode);
+        var folder = Path.Combine(_run.DataDirectory, "a;b");
+        _run.InstallPath = Path.Combine(folder, "jason.exe");
+
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", (string?)Answer()["error"]!["code"]);
+        Assert.Contains($"this jason's folder {folder} holds ';', which separates the entries of PATH", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A stand-in for the host's program in a folder of that name under the search path's, the only folder searched.</summary>
     private string ProgramIn(string name)
     {

@@ -300,7 +300,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   would not see the command's environment; a host's program whose path holds `=`, which `/usr/bin/env` would read as a
   variable, is refused with `terminal_start_failed`. On macOS the script exports them, the folder going before
   Terminal's own `PATH`. Nothing is added to the host's own words. A build run through `dotnet` rather than installed as
-  one file has no such folder, and leaves `PATH` as it is.
+  one file has no such folder, and leaves `PATH` as it is. A `jason` whose folder's name holds the character that
+  separates the entries of `PATH`, `;` on Windows and `:` elsewhere, starts nothing on any system, `--dry-run`
+  included: no entry of the window's `PATH` can name that folder, and `jason status` says the installation is not ready.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables

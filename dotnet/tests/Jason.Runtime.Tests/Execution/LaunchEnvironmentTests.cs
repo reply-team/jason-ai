@@ -141,6 +141,22 @@ public class LaunchEnvironmentTests
         Assert.Equal("/usr/bin", environment["PATH"]);
     }
 
+    /// <summary>
+    /// A directory whose name holds this system's separator of PATH would go on as two entries, neither of them the
+    /// directory, and the second relative to wherever the child stands: it is left out, and the search path stays as it
+    /// was. <c>jason status</c> is where a person learns the installation is not ready; no claim is refused for it.
+    /// </summary>
+    [Fact]
+    public void A_directory_whose_name_holds_the_separator_of_path_is_left_out()
+    {
+        var environment = Existing();
+
+        LaunchEnvironment.Apply(environment, DataDir, AttemptId, WorkItemId, "/opt/a" + Path.PathSeparator + "b");
+
+        Assert.Equal("/usr/bin", environment["PATH"]);
+        Assert.Equal(DataDir, environment[JasonPaths.DataDirectoryVariable]);
+    }
+
     [Fact]
     public void A_child_of_a_process_with_no_search_path_at_all_still_finds_the_cli()
     {

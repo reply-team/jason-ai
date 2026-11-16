@@ -864,6 +864,20 @@ internal static partial class StatusChecks
     /// </remarks>
     private static StatusCheck Path(CliEnvironment env)
     {
+        // First, whatever answers by name: a folder whose name holds the separator of PATH is two entries to every reader,
+        // so this jason is on no PATH, a role's agent is not given it first, and another jason answering by name would
+        // only hide that. No line is offered: the one that puts a folder on PATH would write the same split entry again.
+        if (OwnFolder(env) is { } own && SearchPathEntry.Problem(own) is { } split)
+        {
+            return new StatusCheck(
+                "path",
+                true,
+                CheckState.Failed,
+                $"This jason's folder {split}: no shell finds this jason by name, and a role's agent is not given it first on PATH. "
+                + $"Install Jason into a folder whose name does not hold '{System.IO.Path.PathSeparator}'.",
+                null);
+        }
+
         var resolved = Executables.OnPath("jason", env.SearchPath);
 
         // A package manager puts its installation on the PATH itself, through its link or its own directory, and the file
@@ -933,6 +947,15 @@ internal static partial class StatusChecks
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
+
+    /// <summary>
+    /// The folder of the file this jason is installed as, or null where there is none: never <c>Environment.ProcessPath</c>,
+    /// for the reason <see cref="Repair.OnPath"/> gives.
+    /// </summary>
+    private static string? OwnFolder(CliEnvironment env) =>
+        (env.InstallPath ?? SelfExecutable.InstalledImage) is { } executable && System.IO.Path.GetDirectoryName(executable) is { Length: > 0 } directory
+            ? directory
+            : null;
 
     /// <summary>
     /// How a name on the PATH reaches a manager's installation: its link, or its own directory. Null where it is neither.

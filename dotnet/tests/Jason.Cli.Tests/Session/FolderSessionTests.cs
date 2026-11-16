@@ -409,6 +409,26 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal([_run.ConsoleHost, "--", claude], Assert.Single(_run.Terminals.Launches).Argv);
     }
 
+    /// <summary>This jason in a folder whose name holds PATH's separator cannot go first on the window's PATH: not even a shell starts.</summary>
+    [Fact]
+    public async Task A_jason_in_a_folder_path_cannot_carry_starts_nothing()
+    {
+        var folder = Path.Combine(_run.DataDirectory, "a;b");
+        _run.InstallPath = Path.Combine(folder, "jason.exe");
+        var system = Directory.CreateDirectory(Path.Combine(_run.Terminals.SystemDirectory!, "WindowsPowerShell", "v1.0")).FullName;
+        File.WriteAllBytes(Path.Combine(system, "powershell.exe"), []);
+
+        var exit = await _run.Cli("session", "open", "--shell");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", Code());
+        Assert.Equal(
+            $"The terminal conhost did not start (this jason's folder {folder} holds ';', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first), so nothing was started; "
+            + $"to do the same by hand, open a terminal of your own at {_root}.",
+            _run.Error.ToString().TrimEnd());
+    }
+
     /// <summary>A stand-in for the host's program in a folder of that name under the search path's, the only folder searched.</summary>
     private string ProgramIn(string name)
     {

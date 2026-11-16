@@ -785,6 +785,35 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Single(_run.Terminals.Launches);
     }
 
+    /// <summary>
+    /// The window's PATH puts this jason's folder first, and a folder whose name holds the system's separator of PATH would be
+    /// two entries there: nothing is started on any system, a dry run included, and the refusal says which character and why.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows, ';', false)]
+    [InlineData(TerminalPlatform.Linux, ':', false)]
+    [InlineData(TerminalPlatform.MacOs, ':', true)]
+    public async Task A_jason_in_a_folder_path_cannot_carry_starts_nothing(TerminalPlatform os, char separator, bool dryRun)
+    {
+        _run.Terminals.Platform = os;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        _run.Programs.AddProgram("claude");
+        // Joined by hand: on Windows a combined "a:b" would be read as a path on the drive a.
+        var folder = _run.DataDirectory + Path.DirectorySeparatorChar + "a" + separator + "b";
+        _run.InstallPath = Path.Combine(folder, "jason");
+
+        string[] args = dryRun ? ["session", "open", "--approval", "apr_1", "--dry-run"] : ["session", "open", "--approval", "apr_1"];
+        var exit = await _run.Cli(args);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        Assert.Contains(
+            $"did not start (this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first). To work on it by hand",
+            _run.Error.ToString(),
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A campaign folder whose name holds <paramref name="part"/>, made on disk and named by the campaign's answer.</summary>
     private string FolderHolding(string part)
     {

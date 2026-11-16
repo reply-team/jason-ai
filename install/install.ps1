@@ -29,7 +29,9 @@ The release to install, without a leading v. The latest, when not given.
 A directory or a base URL to read the release's files from, instead of the published releases. Also JASON_INSTALL_FEED.
 
 .PARAMETER InstallDir
-Where jason.exe and its licence files go. %LOCALAPPDATA%\Programs\jason, when not given.
+Where jason.exe and its licence files go. %LOCALAPPDATA%\Programs\jason, when not given. A directory whose name holds
+';' is refused, since no PATH entry can name it; so is one holding a %NAME% Windows would read in the user's Path as
+another folder, unless -NoModifyPath is given.
 
 .PARAMETER NoModifyPath
 Leave the user's PATH alone.
@@ -84,6 +86,21 @@ function Install-Jason {
     $architecture = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
     if ($architecture -ne 'AMD64') {
         throw "No release is built for Windows on $architecture; the releases are win-x64, linux-x64 and osx-arm64."
+    }
+
+    # --- the install directory ----------------------------------------------------------------------------------
+
+    # Refused before anything is written. The entries of PATH are separated by ';', with no escape, so a directory whose
+    # name holds one is two entries to every reader, neither of them the directory: it can be on no PATH at all, and is
+    # refused under -NoModifyPath too. A %NAME% is this script's own limit: Windows can read the user's Path with each
+    # %NAME% of a variable replaced by its value, so the entry this script writes there would name another folder. Under
+    # -NoModifyPath that entry is not written, and a person may put the directory on PATH their own way.
+    if ($InstallDir.Contains(';')) {
+        throw "The install directory $InstallDir holds ';', which separates the entries of PATH, so no PATH entry can name it; nothing was installed: choose a folder whose name does not hold it with -InstallDir."
+    }
+    $readAs = [Environment]::ExpandEnvironmentVariables($InstallDir)
+    if (-not $NoModifyPath -and $readAs -cne $InstallDir) {
+        throw "This installer cannot write $InstallDir into your PATH: it holds '%', and Windows can read a %NAME% in the user's Path as that variable's value, so the entry would name $readAs. Nothing was installed: choose another -InstallDir, or install with -NoModifyPath and add the directory to your PATH yourself."
     }
 
     # --- the feed ---------------------------------------------------------------------------------------------

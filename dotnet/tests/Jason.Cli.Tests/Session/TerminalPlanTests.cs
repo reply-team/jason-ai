@@ -325,6 +325,37 @@ public sealed class TerminalPlanTests : IDisposable
     }
 
     /// <summary>
+    /// The opened terminal's PATH puts this jason's folder first, and a folder whose name holds the system's separator of
+    /// PATH would be two entries there, neither of them the folder: refused on every system, by the system's separator
+    /// alone, and never composed.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows, @"C:\Tools\a;b", ';')]
+    [InlineData(TerminalPlatform.Linux, "/opt/a:b", ':')]
+    [InlineData(TerminalPlatform.MacOs, "/opt/a:b", ':')]
+    public void A_jason_whose_folder_holds_the_separator_of_path_is_refused(TerminalPlatform os, string folder, char separator)
+    {
+        var own = Own with { ExecutableFolder = folder };
+        string[] host = ["/opt/claude", "Go."];
+
+        Assert.Equal(
+            $"this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first",
+            TerminalPlan.Uncarried(os, host, own));
+        Assert.ThrowsAny<ArgumentException>(() => TerminalPlan.Compose(os, TerminalOf(os), "/home/marta", host, Item, own));
+    }
+
+    /// <summary>The other system's separator is a character of the folder's own, and a build with no folder carries none.</summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows, @"C:\Tools\a:b")]
+    [InlineData(TerminalPlatform.Linux, "/opt/a;b")]
+    [InlineData(TerminalPlatform.MacOs, "/opt/a;b")]
+    [InlineData(TerminalPlatform.Windows, null)]
+    public void A_folder_without_the_systems_separator_is_carried(TerminalPlatform os, string? folder)
+    {
+        Assert.Null(TerminalPlan.Uncarried(os, ["/opt/claude", "Go."], Own with { ExecutableFolder = folder }));
+    }
+
+    /// <summary>
     /// The start a terminal is given carries the launch's variables, and on Windows PATH replaces the variable whatever its
     /// spelling there (Windows' own is <c>Path</c>), so there is one. Making a start info starts nothing.
     /// </summary>

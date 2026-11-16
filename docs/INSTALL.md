@@ -197,7 +197,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 - `--version X.Y.Z` installs a particular release instead of the latest. The script checks that the manifest
   it gets back is the release you asked for, rather than trusting the feed to have answered the question you
   put to it.
-- `--install-dir <path>` installs somewhere else — into a directory of its own, for the reason below.
+- `--install-dir <path>` installs somewhere else — into a directory of its own, for the reason below. A directory
+  whose name holds the character that separates the entries of PATH, `;` on Windows and `:` elsewhere, is refused
+  before anything is written, with `--no-modify-path` too: no PATH entry can name it, so neither you nor the agents
+  Jason starts could reach that `jason` by name. Where the script writes the PATH entry itself, it also refuses a name
+  that entry cannot carry — on Windows a `%NAME%` of a variable, which Windows can read in your `Path` as that
+  variable's value; on macOS and Linux a `"`, `$`, backtick, backslash or line break, which the profile line reads
+  inside double quotes — and says the two ways on: another directory, or `--no-modify-path` and the entry put on the
+  PATH your own way.
 - `--no-modify-path` leaves your PATH alone. Then `jason` is only typeable by its full path until you put it
   on the PATH yourself, as below.
 
@@ -481,6 +488,12 @@ that this shell predates it, and names the full path to type in the meantime. A 
 finds `jason` by name. **But everything the old shell started is as old as it is**: an agent host started
 before the install, and every command it runs, keeps failing a bare `jason` while `ready` is true — type the
 full path the check names, or restart the host.
+
+One installation `path` fails with no line at all: a `jason` in a directory whose name holds the separator of PATH,
+`;` on Windows and `:` elsewhere. No PATH entry can name that directory, since every reader splits it in two, so no
+shell finds that `jason` by name and the agents Jason starts are not given it first on their PATH, whatever else
+answers to `jason`; a line would only write the same split entry again. The check says which character, and the way
+on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
 `runtime`, `runtime_version`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with

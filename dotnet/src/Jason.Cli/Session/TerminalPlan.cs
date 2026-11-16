@@ -141,7 +141,7 @@ public static class TerminalPlan
             throw new ArgumentException("The host's program is missing.", nameof(host));
         }
 
-        if (own is not null && Uncarried(os, host) is { } uncarried)
+        if (own is not null && Uncarried(os, host, own) is { } uncarried)
         {
             throw new ArgumentException(uncarried, nameof(host));
         }
@@ -165,7 +165,9 @@ public static class TerminalPlan
     /// Why the host's words cannot be carried to the terminal as they are, worded to follow "did not start", or null where
     /// they can. On Linux <see cref="EnvProgram"/> reads every word holding <c>=</c> as a variable to set until the program
     /// it runs, so a program whose path holds one would be read as a variable and the next word run in its place; only the
-    /// program is read so. On Windows the console host runs the system's expansion over the whole command line it hands
+    /// program is read so. On every system this jason's folder goes first on the window's PATH, and a folder whose name
+    /// holds that system's separator of PATH would be two entries there, neither of them the folder
+    /// (<see cref="SearchPathEntry"/>). On Windows the console host runs the system's expansion over the whole command line it hands
     /// on, replacing every <c>%NAME%</c> of a variable in the environment it was started with, before the host reads a
     /// word of it: where <paramref name="inherited"/> is given, the first word that expansion would change is refused,
     /// since the host would be given something Jason did not write. Nothing is escaped instead.
@@ -180,6 +182,11 @@ public static class TerminalPlan
         if (os == TerminalPlatform.Linux && host.Count > 0 && host[0].Contains('=', StringComparison.Ordinal))
         {
             return $"the host's program {host[0]} holds '=', which {EnvProgram} reads as a variable to set rather than a program to run";
+        }
+
+        if (own?.ExecutableFolder is { Length: > 0 } folder && Split(os, folder) is { } split)
+        {
+            return $"this jason's folder {split}, and the window's PATH could not put this jason first";
         }
 
         if (os != TerminalPlatform.Windows || inherited is null)
@@ -198,6 +205,18 @@ public static class TerminalPlan
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Why <paramref name="folder"/> can be no entry of <paramref name="os"/>'s PATH (<see cref="SearchPathEntry"/>), or
+    /// null. A drive's colon at the start is not read as macOS's or Linux's separator: the plan's rows for those systems run
+    /// on Windows too, where this jason's folder starts with a drive, and on those systems a folder starts with its root.
+    /// </summary>
+    private static string? Split(TerminalPlatform os, string folder)
+    {
+        var separator = SearchPathEntry.Separator(os == TerminalPlatform.Windows);
+        var judged = os != TerminalPlatform.Windows && folder.Length >= 2 && char.IsAsciiLetter(folder[0]) && folder[1] == ':' ? folder[2..] : folder;
+        return SearchPathEntry.Problem(judged, separator) is null ? null : SearchPathEntry.Problem(folder, separator);
     }
 
     /// <summary>
