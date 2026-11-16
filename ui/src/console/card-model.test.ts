@@ -65,13 +65,13 @@ describe('which card of a conversation reads', () => {
                 { index: 4, kind: 'accounts' },
             ]),
         ).toBe(4);
-        // A kind this build draws only as a line that it is not drawn reads nothing, so the card before it still reads.
+        // A plan reads what is on record, so a plan after a data card is the one that reads.
         expect(
             lastReading([
                 { index: 1, kind: 'needs' },
                 { index: 4, kind: 'plan' },
             ]),
-        ).toBe(1);
+        ).toBe(4);
     });
 
     it('draws a card already read as it was read, the last as a read, and every earlier one as a stub', () => {
