@@ -6,7 +6,11 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
-import { askedAsWords, forgetProposals, lastReading, planView, proposalOf, proposals } from './card-plan';
+import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
+import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
+import { needsCard } from './card-needs';
+import { peopleCard } from './card-people';
+import { statusCard } from './card-status';
 import {
     cardLayout,
     openChoice,
@@ -170,7 +174,9 @@ async function hold(id: string): Promise<string> {
     if (chats.value[id]) return id;
     const record = unless(await here().desktop.chat.open(id));
     if (!chats.value[record.id]) {
-        // Read from the record, its cards read afresh: nothing they held before belongs to these entries.
+        // A conversation opened afresh reads its last card that reads again, draws the earlier ones as stubs, and its plan
+        // cards hold nothing they held before: none of it belongs to these entries.
+        forgetCards(record.id);
         forgetProposals(record.id);
         chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
     }
@@ -709,7 +715,7 @@ function asksView(
         choiceWords[state.state] ??
         (state.state === 'idle' && inTab() && !tabMaySend(chat.mode) ? answeredInDesktop : null);
     return html`<div class="${kind}${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
-        <div class="card-who">${cardHeaders.choice}</div>
+        ${aiCaption(cardHeaders.choice)}
         <div class="ask-s">${question}</div>
         <div class="ui-opts">
             ${options.map((option, at) => {
@@ -756,15 +762,24 @@ function cardView(
         case 'failed':
             tellRefused(chat.id, entry, reading.kind, reading.failure);
             return noteLine(cardRefusedLine(reading.kind, reading.failure));
-        case 'elsewhere':
-            return html`<div class="ask chat-card" role="group" aria-label="${cardHeaders[reading.kind]}">
-                <div class="ask-h"><b>${cardHeaders[reading.kind]}</b></div>
+        case 'elsewhere': {
+            const head = cardHead(cardHeaders[reading.kind]);
+            return html`<div class="ask chat-card" role="group" aria-label="${head.words}">
+                <div class="ask-h">${head.view}</div>
                 <div class="ask-w">This chat shows only its own agent.</div>
             </div>`;
+        }
         case 'card':
+            // A data card reads when it is the conversation's last card that reads (`last`), else stands as a stub.
             switch (reading.card.kind) {
                 case 'choice':
                     return choiceView(chat, index, reading.card, host);
+                case 'people_list':
+                    return peopleCard(chat, index, reading.card, last);
+                case 'agent_status':
+                    return statusCard(chat, index, reading.card, last);
+                case 'needs':
+                    return needsCard(chat, index, reading.card, last);
                 case 'plan': {
                     const { question, options } = reading.card;
                     const asks =
@@ -846,7 +861,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     // The cards the AI asked for: each text's words without its card blocks, and each turn's last block, by the index of
     // the text entry that held it.
     const layout = cardLayout(chat.entries);
-    const lastReads = lastReading(chat, layout.cards);
+    const lastReads = lastReadingOrPlan(chat, layout.cards);
     const indexOf = new Map<object, number>(chat.entries.map((entry, index) => [entry, index]));
     // The speaker is named over the agent's first words of each turn: after the person's message, or at the start. A
     // card has no speaker's label over it: a turn's words after one are named instead.
@@ -966,6 +981,7 @@ function threadOf(chatId: string) {
         now: number;
         card: string;
         asked: unknown;
+        read: unknown;
         proposed: unknown;
         view: Html;
     } | null = null;
@@ -983,7 +999,8 @@ function threadOf(chatId: string) {
         // A choice the AI asked is live by the person's acts on the agent as read. A message waits only while a turn
         // runs, after the person's message, which has locked every choice already.
         const asked = acts.value[chatId];
-        // A plan card draws what it read, once its read is answered, and the drafts the person opened.
+        // A card draws what it read, once its read is answered, and a plan card the drafts the person opened.
+        const read = cardReads.value[chatId];
         const proposed = proposals.value[chatId];
         const same =
             last !== null &&
@@ -994,11 +1011,12 @@ function threadOf(chatId: string) {
             last.chat.running === chat.running &&
             last.card === card &&
             last.asked === asked &&
+            last.read === read &&
             last.proposed === proposed &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, asked, proposed, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, card, asked, read, proposed, view: threadView(chat, host) };
         return last!.view;
     });
 }

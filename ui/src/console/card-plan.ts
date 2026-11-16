@@ -13,6 +13,7 @@ import { t } from '../platform/i18n';
 import { modeWords } from '../screens/send-modes/model';
 import { clock } from '../time/format';
 import { act, define } from './actions';
+import { lastReadingCard } from './card-frame';
 import {
     cardLayout,
     lastCardOf,
@@ -233,19 +234,11 @@ export function proposalOf(chat: Chat, index: number): { words: string; card: Pl
 }
 
 /**
- * The index of the conversation's last card that reads, among the cards its turns draw and the plans its Plan only turns
- * end in; null when none reads. The plan is the one kind of card this window draws that reads.
+` * The index of the conversation's last card that reads, among the cards its turns draw (`lastReadingCard`, the plan's
+ * among them) and the plans its Plan only turns end in; null when none reads. One card reads at a time, whatever its kind.
  */
-export function lastReading(chat: Chat, cards: ReadonlyMap<number, PlacedCard>): number | null {
-    let last: number | null = null;
-    for (const [index, placed] of cards) {
-        const reading = readCard(placed, {
-            place: placeOf(chat),
-            campaignId: chat.campaignId,
-            ended: !placed.lastTurn || !chat.running,
-        });
-        if (reading.state === 'card' && reading.card.kind === 'plan' && (last === null || index > last)) last = index;
-    }
+export function lastReadingOrPlan(chat: Chat, cards: ReadonlyMap<number, PlacedCard>): number | null {
+    let last = lastReadingCard(chat, cards);
     chat.entries.forEach((_, index) => {
         if ((last === null || index > last) && proposalOf(chat, index) !== null) last = index;
     });

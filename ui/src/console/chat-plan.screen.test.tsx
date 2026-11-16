@@ -340,6 +340,19 @@ describe('a plan the AI proposes', () => {
         ]);
     });
 
+    it('after a reopen is the one card that reads when it follows a data card, which waits on Show now', async () => {
+        const { fake } = renderConsole(
+            [winter([...turn({ kind: 'agent_status' }), ...turn()])],
+            // The plan's reads alone: a read of the status card would find no recording and fail.
+            winterReads(),
+        );
+        const pane = await openChat('Winter plan');
+        await read(pane);
+        const status = within(pane).getByRole('group', { name: 'Agent' });
+        expect(words(status)).toBe('Agent Show now');
+        expect(calls(fake, 'campaign.activity')).toEqual([]);
+    });
+
     it('after a reopen reads only for the conversation’s last plan, an earlier one waiting on Show now', async () => {
         const { fake } = renderConsole(
             [setUp([...turn(), ...turn({ ...plan, title: 'Spring outreach' })])],

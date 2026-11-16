@@ -112,12 +112,14 @@ define('needs.filter', ([value]) => {
 define('needs.campaigns', () => here().dock.show('campaigns'));
 
 // An approval Details opens is read whole by it, so a row whose own read failed can be approved once Details has read it.
+// It opens from elsewhere too (a chat's card): Needs you is shown first, then the item.
 define('needs.open', ([kind, id]) => {
-    if ((kind === 'approvals' || kind === 'questions') && typeof id === 'string')
-        void attention.open(here().api, kind, id).then(() => {
-            const shown = attention.detail.value;
-            if (shown?.kind === 'approvals' && shown.item.id === id) keepWhole(reads, shown.item);
-        });
+    if ((kind !== 'approvals' && kind !== 'questions') || typeof id !== 'string') return;
+    here().dock.show('needs');
+    void attention.open(here().api, kind, id).then(() => {
+        const shown = attention.detail.value;
+        if (shown?.kind === 'approvals' && shown.item.id === id) keepWhole(reads, shown.item);
+    });
 });
 
 // Approve acts only on an approval read whole, a message checked against its work item first: the chat's cards' rule.

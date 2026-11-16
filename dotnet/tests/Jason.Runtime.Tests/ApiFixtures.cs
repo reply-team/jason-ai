@@ -36,9 +36,12 @@ public static class ApiFixtures
     //                     card-choice-acts|-none (a person's pause since a moment, and none), campaign.activity card-status-30-days,
     //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
     //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
-    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
+    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.get|summary
     //                     card-unknown-campaign, route.resolve card-plan-message-send|-email|-linkedin, campaign.list|summary
-    //                     card-chips, plugin.list|route.list card-accounts.
+    //                     card-chips, plugin.list|route.list card-accounts, and last an archived campaign:
+    //                     campaign.get|summary|list_contacts, approval.list|decision.list card-archived, campaign.activity
+    //                     card-archived-30-days; then approval.get card-needs-pending, decision.get card-needs-question, and
+    //                     after a person approves that approval, approval.get card-needs-decided.
     //   no route:         route.resolve card-plan-no-route|-no-route-email, campaign.get|summary card-plan-unrouted,
     //                     sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
@@ -69,6 +72,8 @@ public static class ApiFixtures
         "approval.get/card-message",
         "approval.get/card-message-reasked",
         "approval.get/card-message-withdrawn",
+        "approval.get/card-needs-decided",
+        "approval.get/card-needs-pending",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -91,6 +96,7 @@ public static class ApiFixtures
         "approval.get/with-doubts",
         "approval.list/by-campaign-pending",
         "approval.list/by-work-item",
+        "approval.list/card-archived",
         "approval.list/card-invitation-pending",
         "approval.list/card-message-after-edit",
         "approval.list/card-message-pending",
@@ -135,6 +141,7 @@ public static class ApiFixtures
         "campaign.activity/all-today",
         "campaign.activity/audience",
         "campaign.activity/audience-nobody-landed",
+        "campaign.activity/card-archived-30-days",
         "campaign.activity/card-status-30-days",
         "campaign.activity/last-7-days",
         "campaign.activity/many",
@@ -169,11 +176,13 @@ public static class ApiFixtures
         "campaign.audience/three-audiences",
         "campaign.audience/unknown-campaign",
         "campaign.get/archived",
+        "campaign.get/card-archived",
         "campaign.get/card-plan-channels",
         "campaign.get/card-plan-draft",
         "campaign.get/card-plan-unrouted",
         "campaign.get/card-status",
         "campaign.get/card-status-draft",
+        "campaign.get/card-unknown-campaign",
         "campaign.get/details",
         "campaign.get/gone",
         "campaign.get/gone-here",
@@ -215,6 +224,7 @@ public static class ApiFixtures
         "campaign.list_contacts/audience-activity-replied",
         "campaign.list_contacts/audience-summary-waiting",
         "campaign.list_contacts/audience-unknown",
+        "campaign.list_contacts/card-archived",
         "campaign.list_contacts/card-people-empty",
         "campaign.list_contacts/card-people-first",
         "campaign.list_contacts/card-people-query",
@@ -246,6 +256,7 @@ public static class ApiFixtures
         "campaign.summary/audience-two-campaigns",
         "campaign.summary/audience-unknown",
         "campaign.summary/audience-without-archived",
+        "campaign.summary/card-archived",
         "campaign.summary/card-chips",
         "campaign.summary/card-plan-channels",
         "campaign.summary/card-plan-draft",
@@ -330,11 +341,13 @@ public static class ApiFixtures
         "contact.update/person-saved",
         "decision.answer/answered",
         "decision.answer/card-free-text",
+        "decision.get/card-needs-question",
         "decision.get/card-question-2",
         "decision.get/card-question-3",
         "decision.get/for-campaign-row",
         "decision.get/pending-with-options",
         "decision.list/by-campaign-pending",
+        "decision.list/card-archived",
         "decision.list/card-needs-all",
         "decision.list/card-questions-after-answer",
         "decision.list/card-questions-pending",
