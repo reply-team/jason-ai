@@ -275,8 +275,9 @@ public class ConfinedVerbsTests
     }
 
     /// <summary>
-    /// Archiving a campaign is final: no verb brings it back, and it cancels the campaign's open work with its approvals and
-    /// its pending questions. In the chat it is the person's own act: every form of the command is refused with the
+    /// Archiving a campaign is final: no verb undoes it, and it cancels the campaign's open work but a search's stop, with
+    /// each item's approval whether still asked or already given, stops its running attempts once the archive is
+    /// committed, and cancels its pending questions. In the chat it is the person's own act: every form of the command is refused with the
     /// variable set, with a reason, an actor or an attempt named, and nothing is sent.
     /// </summary>
     [Theory]

@@ -31,7 +31,9 @@ public class DesktopDenyListTests
     /// The verbs the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
     /// command the dispatcher starts when work names the role, linking a project's folder, which then becomes a working
     /// folder of every chat on the project's campaigns, starting a campaign or resuming one, which is what lets its queued
-    /// work run, and archiving one, which no verb undoes and which cancels its open work and its pending questions.
+    /// work run, and archiving one, which no verb undoes: it cancels its open work but a search's stop, with each item's
+    /// approval whether still asked or already given, stops its running attempts once the archive is committed, and
+    /// cancels its pending questions.
     /// </summary>
     private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive"];
 
@@ -207,7 +209,8 @@ public class DesktopDenyListTests
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, linking a project's folder, which then becomes a working folder of every chat on the\n" +
             "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, and archiving\n" +
-            "# one, which no verb undoes and which cancels its open work and its pending questions.\n",
+            "# one, which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still\n" +
+            "# asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.\n",
     };
 
     /// <summary>
@@ -362,8 +365,9 @@ public class DesktopDenyListTests
     }
 
     /// <summary>
-    /// Archiving a campaign is the person's own act in the chat: it is final, and it cancels the campaign's open work, the
-    /// approvals parked on it and its pending questions. The command is off the allow list and on the deny list, and its
+    /// Archiving a campaign is the person's own act in the chat: no verb undoes it, and it cancels the campaign's open work
+    /// but a search's stop, with each item's approval whether still asked or already given, stops its running attempts
+    /// once the archive is committed, and cancels its pending questions. The command is off the allow list and on the deny list, and its
     /// operation is a line of the file, so a text that names <c>campaign.archive</c> is refused as the others are; pausing
     /// stays the chat's.
     /// </summary>

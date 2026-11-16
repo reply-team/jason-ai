@@ -614,10 +614,10 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
   its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):
   starting is what lets its queued work run, so you press Start or Resume at the top of the agent's chat or on its
-  page. **So is archiving one** (`campaign archive`): an archive is final, nothing brings the agent back, and it cancels
-  the agent's open work, the approvals waiting on that work and its questions still unanswered. Pausing an agent, adding
-  someone to the do-not-contact register, cancelling work and recording a verdict on a reply are the AI's, since each
-  stops reaching a person. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
+  page. **So is archiving one** (`campaign archive`): no verb undoes an archive, and it cancels the agent's open work
+  but a search's stop, with each item's approval whether still asked or already given, stops its running attempts once
+  the archive is committed, and cancels its pending questions. Pausing an agent, adding someone to the do-not-contact
+  register, cancelling work and recording a verdict on a reply are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
   names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
