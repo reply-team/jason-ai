@@ -21,8 +21,9 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Everything here is something a change to which makes the decision a different decision. A different
-    /// argument reaches a different person; a different plugin or binding acts against a different account.
+    /// Everything here is something a change to which makes the decision a different decision, with one exception the
+    /// comparison makes rather than the document: a pin added where the approved subject held none (<see cref="Less"/>). A
+    /// different argument reaches a different person; a different plugin or binding acts against a different account.
     /// </para>
     /// <para>
     /// The plugin's version and the package digest are deliberately absent. They are provenance — recorded on the
@@ -45,6 +46,33 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
             ["work_item"] = item.PublicId,
         };
 
+        return new ApprovalSubject(document, CanonicalJson.Hash(document));
+    }
+
+    /// <summary>
+    /// This subject less every pin it carries, for the person or for the campaign, of a kind <paramref name="approved"/>
+    /// does not carry at the same place: this subject as it would be had no pin been added since that one was written, by
+    /// whichever attempt learned it; every other change since stays in it. A pin added changes what reaches the plugin,
+    /// which then addresses a record the provider already holds rather than making one; it moves nothing the person read,
+    /// since such a pin is either not shown to them or bound to an argument they read. A kind both carry stays, with its
+    /// value now, so another value or a pin gone still makes another document. This subject itself where nothing was
+    /// added.
+    /// </summary>
+    public ApprovalSubject Less(JsonObject? approved)
+    {
+        if (Document["input"] is not JsonObject input)
+        {
+            return this;
+        }
+
+        var added = CanonicalInput.Added(input, approved?["input"] as JsonObject);
+        if (added.Contact.Count == 0 && added.Campaign.Count == 0)
+        {
+            return this;
+        }
+
+        var document = Document.DeepClone().AsObject();
+        document["input"] = CanonicalInput.Without(input, added);
         return new ApprovalSubject(document, CanonicalJson.Hash(document));
     }
 }

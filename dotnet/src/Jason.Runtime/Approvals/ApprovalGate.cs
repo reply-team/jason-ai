@@ -47,14 +47,21 @@ public static class ApprovalGate
 
     /// <summary>
     /// Whether <paramref name="live"/> lets the work run as it now stands without asking anybody: approved, and about
-    /// exactly <paramref name="subject"/>. The claim runs work under such a row and reads nothing else about it, its
-    /// reviews included, so a review asks this same question of the same row to know whether the claim would hear it.
+    /// exactly <paramref name="subject"/>, or about it less the pins learned where the approved subject held none
+    /// (<see cref="ApprovalSubject.Less"/>). The claim runs work under such a row and reads nothing else about it, its
+    /// reviews included, so a review asks this same question of the same row to know whether the claim would hear it, and
+    /// the automatic mode's retry goes under it too.
     /// </summary>
+    /// <remarks>
+    /// The row is never rewritten: it keeps the subject the person approved and its hash, the attempt that runs names the
+    /// row and the digest of what it sent, and each pin's own line names the attempt that learned it and when.
+    /// </remarks>
     public static bool Authorizes(Approval? live, ApprovalSubject subject)
     {
         ArgumentNullException.ThrowIfNull(subject);
         return live is { Status: ApprovalStatus.Approved }
-            && string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal);
+            && (string.Equals(live.SubjectHash, subject.Hash, StringComparison.Ordinal)
+                || string.Equals(live.SubjectHash, subject.Less(live.Subject).Hash, StringComparison.Ordinal));
     }
 
     /// <summary>
