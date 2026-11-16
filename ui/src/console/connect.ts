@@ -849,7 +849,7 @@ export function runsRolesLine(host: DesktopHost): string | null {
 }
 
 /**
- * Whether a host is drawn as a row of its own: found here, or carrying a sentence about its version. Every other host is
+ * Whether a host is drawn as a card of its own: found here, or carrying a sentence about its version. Every other host is
  * named on the one line of the hosts not found.
  */
 export const hostRow = (host: DesktopHost): boolean => host.found || host.belowFloor !== null;
@@ -860,96 +860,162 @@ export const hostRow = (host: DesktopHost): boolean => host.found || host.belowF
  */
 export const inUse = (host: DesktopHost): boolean => runsRolesLine(host) !== null;
 
+/** A program found here: a card, its name, its version as its state and "In use" on one line, its notes under it. */
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     const own = ownServersLine(host);
     const roles = runsRolesLine(host);
     const state = host.found ? (host.version ?? 'Found') : 'Not found';
     const tone = host.belowFloor !== null ? 'amber' : host.found ? 'green' : 'gray';
-    return html`<div class="setrow host-row">
+    const how = host.belowFloor !== null || sentence !== null || own !== null || roles !== null;
+    return html`<div class="setrow host-row host-card">
         <div class="grow">
-            <div class="row-hd"><b>${host.label}</b> <span class="pillc ${tone} host-state">${state}</span></div>
+            <div class="row-hd">
+                <b>${host.label}</b> <span class="pillc ${tone} host-state">${state}</span>
+                ${inUse(host) ? html`<span class="pillc green in-use">In use</span>` : null}
+                ${
+                    !host.found && host.install
+                        ? html`<button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.installProgram')}
+                              ${act('connect.install', host.install)}
+                          >
+                              Install
+                          </button>`
+                        : null
+                }
+            </div>
             ${
                 host.found
-                    ? html`<div class="meta">
+                    ? html`<div class="host-does">
                           ${host.drivesChat ? 'Drives the chat' : 'Runs campaign work, not the chat yet'}
                       </div>`
                     : null
             }
-            ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
-            ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
-            ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
-            ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+            ${
+                how
+                    ? html`<div class="host-how">
+                          ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
+                          ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
+                          ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
+                          ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+                      </div>`
+                    : null
+            }
         </div>
-        ${inUse(host) ? html`<span class="pillc green in-use">In use</span>` : null}
-        ${
-            !host.found && host.install
-                ? html`<button
-                      class="btn sm"
-                      type="button"
-                      ${unlessCan(busy, 'setup.installProgram')}
-                      ${act('connect.install', host.install)}
-                  >
-                      Install
-                  </button>`
-                : null
-        }
     </div>`;
 }
 
-/** The hosts not found, on one quiet line that names them, each that can be installed with its Install button. */
+/**
+ * The hosts not found, on one quiet line that names them: those that can be installed first, each followed by its own
+ * Install button, then the others.
+ */
 function notFound(hosts: readonly DesktopHost[], busy: Html | null): Html | null {
     if (hosts.length === 0) return null;
-    return html`<div class="setrow meta hosts-absent">
+    const ordered = [...hosts.filter((each) => each.install), ...hosts.filter((each) => !each.install)];
+    return html`<div class="meta hosts-absent">
         <span>Not found</span>:
-        ${hosts.map(
+        ${ordered.map(
             (host, at) =>
-                html`<span class="absent-host"
-                    >${host.label}${
-                        host.install
-                            ? html` <button
-                                  class="btn sm"
-                                  type="button"
-                                  ${unlessCan(busy, 'setup.installProgram')}
-                                  ${act('connect.install', host.install)}
-                              >
-                                  Install
-                              </button>`
-                            : null
-                    }${at < hosts.length - 1 ? ',' : ''}</span
-                >`,
+                html`${at > 0 ? html`<span class="sep">·</span>` : null}<span class="absent-host"
+                        >${host.label}${
+                            host.install
+                                ? html` <button
+                                      class="btn sm"
+                                      type="button"
+                                      ${unlessCan(busy, 'setup.installProgram')}
+                                      ${act('connect.install', host.install)}
+                                  >
+                                      Install
+                                  </button>`
+                                : null
+                        }</span
+                    >`,
         )}
     </div>`;
 }
 
-function provider(host: DesktopHost, busy: Html | null): Html {
-    return html`<div class="setrow key-row">
-        <div class="grow row-hd">
-            <b>${host.label}</b>
-            <span class="pillc ${host.found ? 'green' : 'gray'} key-state">${host.found ? 'Key set' : 'No key'}</span>
+/** The key provider the person picked in the panel; null until they pick one. */
+const chosenProvider = signal<string | null>(null);
+
+define('connect.provider', (_args, element) => {
+    if (element instanceof HTMLSelectElement) chosenProvider.value = element.value;
+});
+
+/** The provider the panel shows: the one picked, else the first with no key, else the first. */
+export function shownProvider(providers: readonly DesktopHost[], picked: string | null): DesktopHost | undefined {
+    return providers.find((each) => each.id === picked) ?? providers.find((each) => !each.found) ?? providers[0];
+}
+
+/** The one line naming the key providers whose key is set; nothing when none is. */
+function keysSet(providers: readonly DesktopHost[]): Html | null {
+    const set = providers.filter((each) => each.found).map((each) => each.label);
+    if (set.length === 0) return null;
+    return html`<div class="meta keys-set">${set.length === 1 ? 'Key set' : 'Keys set'}: ${set.join(', ')}</div>`;
+}
+
+/**
+ * The model keys as one panel: a Provider select over the key providers, each with a key saying so; under it, for the
+ * provider shown, the API key field and Save key when it has no key, or Key set and Remove the key when it has one.
+ */
+function keyPanel(providers: readonly DesktopHost[], busy: Html | null): Html | null {
+    const shown = shownProvider(providers, chosenProvider.value);
+    if (!shown) return null;
+    const key = `provider:${shown.id}`;
+    return html`<div class="key-panel">
+        <div class="key-hd">
+            <b>Model keys</b>
+            <span class="meta">Run through Claude Code; kept in the system keychain.</span>
         </div>
-        <div class="key-act">
-            ${
-                host.found
-                    ? html`<button
+        <label class="key-fld">
+            <span>Provider</span>
+            <select class="inp" aria-label="Provider" data-change="connect.provider">
+                ${providers.map(
+                    (each) =>
+                        html`<option value="${each.id}" ${each.id === shown.id ? html`selected` : null}>
+                            ${each.label}${each.found ? ' · key set' : ''}
+                        </option>`,
+                )}
+            </select>
+        </label>
+        ${
+            shown.found
+                ? html`<div class="key-act" data-id="${shown.id}">
+                      <span class="pillc green key-state">Key set</span>
+                      <button
                           class="btn sm"
                           type="button"
                           ${unlessCan(busy, 'setup.setProviderKey')}
-                          ${act('connect.providerKey', host.id, true)}
+                          ${act('connect.providerKey', shown.id, true)}
                       >
                           Remove the key
-                      </button>`
-                    : html`${secret(`provider:${host.id}`, `${host.label} key`)}
+                      </button>
+                  </div>`
+                : html`<label class="key-fld">
+                          <span>API key</span>
+                          <input
+                              class="inp"
+                              type="password"
+                              autocomplete="off"
+                              aria-label="API key"
+                              placeholder="Enter your API key"
+                              value="${typed.get(key) ?? ''}"
+                              data-input="connect.type"
+                              ${argsOf(key)}
+                          />
+                      </label>
+                      <div class="key-act" data-id="${shown.id}">
                           <button
-                              class="btn sm"
+                              class="btn p sm"
                               type="button"
                               ${unlessCan(busy, 'setup.setProviderKey')}
-                              ${act('connect.providerKey', host.id)}
+                              ${act('connect.providerKey', shown.id)}
                           >
-                              Keep
-                          </button>`
-            }
-        </div>
+                              Save key
+                          </button>
+                      </div>`
+        }
     </div>`;
 }
 
@@ -1264,31 +1330,33 @@ export function accountsReplyView(): Html {
 export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
 
 /**
- * The AI hosts' card and, when there are any, the model keys' card: what Connect holds for the AI. The hosts found come
- * first, a row each; the hosts not found share one line.
+ * The AI card, what Connect and Settings' Models hold for the AI, in two groups. What is on this computer: each program
+ * found, a card, the one in use marked, and the key providers whose key is set, named. Under it, in a panel of its own,
+ * what is not: the programs not found, with Install where it can be done, and the model keys' panel.
  */
 function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
-    return html`<div class="card">
-            <div class="hd"><b>AI</b></div>
-            <div class="bd">
-                ${elsewhere()}${programs.filter(hostRow).map((each) => program(each, disabled))}
-                ${notFound(
-                    programs.filter((each) => !hostRow(each)),
-                    disabled,
-                )}
-            </div>
+    const found = programs.filter(hostRow);
+    const set = keysSet(providers);
+    const absent = notFound(
+        programs.filter((each) => !hostRow(each)),
+        disabled,
+    );
+    const keys = keyPanel(providers, disabled);
+    return html`<div class="card ai-card">
+        <div class="hd"><b>AI</b></div>
+        <div class="bd">
+            ${elsewhere()}
+            ${
+                found.length > 0 || set !== null
+                    ? html`<div class="ai-here">
+                          <div class="group-label">On this computer</div>
+                          ${found.map((each) => program(each, disabled))}${set}
+                      </div>`
+                    : null
+            }
+            ${absent !== null || keys !== null ? html`<div class="ai-add">${absent}${keys}</div>` : null}
         </div>
-        ${
-            providers.length
-                ? html`<div class="card">
-                      <div class="hd">
-                          <b>Model keys</b>
-                          <span class="meta">Run through Claude Code; kept in the system keychain.</span>
-                      </div>
-                      <div class="bd">${providers.map((each) => provider(each, disabled))}</div>
-                  </div>`
-                : null
-        }`;
+    </div>`;
 }
 
 /**

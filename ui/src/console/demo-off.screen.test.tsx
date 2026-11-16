@@ -145,12 +145,12 @@ describe('The Connect panel in the demo', () => {
         expect(desktop.calls.some((each) => each.name === 'setup.configurePlugin')).toBe(false);
     });
 
-    it('leaves connecting an AI alone: a program Install and a model key Keep stay on', async () => {
+    it('leaves connecting an AI alone: a program Install and a model key Save key stay on', async () => {
         await renderAt('demo', 'Connect');
         const ai = within(document.body).getByText('AI', { selector: 'b' }).closest<HTMLElement>('.card')!;
         expect(button(ai, 'Install').disabled).toBe(false);
         const keys = within(document.body).getByText('Model keys', { selector: 'b' }).closest<HTMLElement>('.card')!;
-        expect(button(keys, 'Keep').disabled).toBe(false);
+        expect(button(keys, 'Save key').disabled).toBe(false);
         expect(words(ai)).not.toContain(sentence);
         expect(words(keys)).not.toContain(sentence);
     });

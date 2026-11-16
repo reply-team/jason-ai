@@ -90,7 +90,7 @@ describe('Settings in Live', () => {
         expect(within(connect).getByText('Drives the chat')).toBeTruthy();
     });
 
-    it('draws the hosts found a row each, the hosts not found on one line, and keeps every act', async () => {
+    it('draws what is on this computer apart from what is not, and keeps every act', async () => {
         const [claude, codex, gemini, deepseek] = setupFound.hosts as [
             DesktopHost,
             DesktopHost,
@@ -108,28 +108,42 @@ describe('Settings in Live', () => {
         const { desktop } = renderSettings('live', { ...setupFound, hosts });
         await settings();
         const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
-        await waitFor(() => expect(models.querySelector('.hosts-absent')).toBeTruthy());
-        const rows = Array.from(models.querySelectorAll<HTMLElement>('.host-row'));
-        expect(rows.map((each) => each.querySelector('b')?.textContent)).toEqual(['Claude Code', 'Gemini CLI']);
-        expect(rows.map((each) => each.querySelector('.in-use') !== null)).toEqual([true, false]);
-        const absent = models.querySelector<HTMLElement>('.hosts-absent')!;
+        await waitFor(() => expect(models.querySelector('.ai-add')).toBeTruthy());
+        // On this computer: the programs found, a card each, the one in use marked, and the keys set, named.
+        const here = models.querySelector<HTMLElement>('.ai-here')!;
+        const cards = Array.from(here.querySelectorAll<HTMLElement>('.host-card'));
+        expect(cards.map((each) => each.querySelector('b')?.textContent)).toEqual(['Claude Code', 'Gemini CLI']);
+        expect(cards.map((each) => each.querySelector('.in-use') !== null)).toEqual([true, false]);
+        expect(here.querySelector('.keys-set')?.textContent).toBe('Key set: Anthropic');
+        // Not here yet: the programs not found, and the keys through the one panel.
+        // The card is painted again after each act, so each look reads it afresh.
+        const add = () => models.querySelector<HTMLElement>('.ai-add')!;
+        const absent = add().querySelector<HTMLElement>('.hosts-absent')!;
         expect(absent.textContent).toContain('Codex');
         expect(absent.textContent).toContain('Cursor CLI');
         fireEvent.click(within(absent).getByRole('button', { name: 'Install' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.installProgram')).toBe(true));
         expect(desktop.calls.find((each) => each.name === 'setup.installProgram')!.args).toEqual(['codex']);
-        const keyRow = (label: string) =>
-            within(models).getByText(label, { selector: 'b' }).closest<HTMLElement>('.key-row')!;
-        await waitFor(() => expect(within(keyRow('DeepSeek')).getByRole('button', { name: 'Keep' })).toBeTruthy());
-        fireEvent.input(within(keyRow('DeepSeek')).getByLabelText('DeepSeek key'), { target: { value: ' sk-1 ' } });
-        fireEvent.click(within(keyRow('DeepSeek')).getByRole('button', { name: 'Keep' }));
+        // The panel opens on the first provider with no key: its field and Save key, which saves the typed key.
+        const provider = await waitFor(() => within(add()).getByLabelText<HTMLSelectElement>('Provider'));
+        expect(Array.from(provider.options, (each) => each.textContent?.trim())).toEqual([
+            'Anthropic · key set',
+            'DeepSeek',
+        ]);
+        expect(provider.value).toBe('deepseek');
+        await waitFor(() =>
+            expect(within(add()).getByRole<HTMLButtonElement>('button', { name: 'Save key' }).disabled).toBe(false),
+        );
+        fireEvent.input(within(add()).getByLabelText('API key'), { target: { value: ' sk-1 ' } });
+        fireEvent.click(within(add()).getByRole('button', { name: 'Save key' }));
         await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.setProviderKey')).toBe(true));
         expect(desktop.calls.find((each) => each.name === 'setup.setProviderKey')!.args).toEqual(['deepseek', 'sk-1']);
-        await waitFor(() =>
-            expect(within(keyRow('Anthropic')).getByRole('button', { name: 'Remove the key' })).toBeTruthy(),
-        );
-        expect(within(keyRow('Anthropic')).queryByLabelText('Anthropic key')).toBeNull();
-        fireEvent.click(within(keyRow('Anthropic')).getByRole('button', { name: 'Remove the key' }));
+        // Picking a provider with a key shows its state and Remove the key at once, and no field.
+        fireEvent.change(within(add()).getByLabelText('Provider'), { target: { value: 'anthropic' } });
+        await waitFor(() => expect(within(add()).getByRole('button', { name: 'Remove the key' })).toBeTruthy());
+        expect(within(add()).getByText('Key set', { selector: '.key-state' })).toBeTruthy();
+        expect(within(add()).queryByLabelText('API key')).toBeNull();
+        fireEvent.click(within(add()).getByRole('button', { name: 'Remove the key' }));
         await waitFor(() =>
             expect(
                 desktop.calls.filter((each) => each.name === 'setup.setProviderKey').map((each) => each.args),
