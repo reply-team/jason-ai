@@ -462,6 +462,7 @@ public class ProfileLaunchTests
     /// the default names and succeeds, with no restart.
     /// </summary>
     [Fact]
+    [Critical(Family.S6, BrokenUntouched.PrintedCommand)]
     public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_profile_status_names_is_made_the_default()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct);
