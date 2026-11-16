@@ -150,6 +150,33 @@ public class ContractsShapeTests
     }
 
     /// <summary>
+    /// What a question is about travels on the row as <c>thread</c>, the plugin and the thread's identifier, and as null
+    /// for a question about no thread: never absent, so a reader tells "about no thread" from a runtime that never said.
+    /// </summary>
+    [Fact]
+    public void A_question_row_carries_its_thread_and_null_for_none()
+    {
+        var row = new DecisionSummaryDto(
+            "dec_1",
+            "cmp_1",
+            "wi_1",
+            DecisionStatus.Pending,
+            "Close the thread?",
+            new DateTimeOffset(2026, 11, 1, 9, 0, 0, TimeSpan.Zero),
+            null,
+            null,
+            "Autumn outreach",
+            null,
+            new DecisionThread("reply", "t_501"));
+
+        Assert.EndsWith(
+            "\"contact_name\":null,\"thread\":{\"plugin_id\":\"reply\",\"thread_id\":\"t_501\"}}",
+            JsonSerializer.Serialize(row, JasonJson.Options),
+            StringComparison.Ordinal);
+        Assert.EndsWith("\"thread\":null}", JsonSerializer.Serialize(row with { Thread = null }, JasonJson.Options), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// What the last update check learned rides on <c>system.info</c> as a section of its own, null until a
     /// check has succeeded — so a runtime that has not looked yet is told apart from one that looked and found
     /// nothing newer, and never dressed up as "up to date".

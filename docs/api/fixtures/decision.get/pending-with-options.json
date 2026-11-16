@@ -29,6 +29,7 @@
     "answered_at": null,
     "answered_by": null,
     "campaign_name": "Autumn outreach",
-    "contact_name": null
+    "contact_name": null,
+    "thread": null
   }
 }

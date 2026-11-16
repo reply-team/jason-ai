@@ -997,6 +997,15 @@ namespace Jason.Runtime.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("status");
 
+                    b.Property<string>("ThreadId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("thread_id");
+
+                    b.Property<string>("ThreadPluginId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("thread_plugin_id");
+
                     b.Property<int>("WorkItemId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("work_item_id");

@@ -260,11 +260,13 @@ import contactThreadsProviderFailed from '../../../docs/api/fixtures/contact.thr
 import contactThreadsTwoThreads from '../../../docs/api/fixtures/contact.threads/two-threads.json';
 import decisionAnswerAnswered from '../../../docs/api/fixtures/decision.answer/answered.json';
 import decisionGetForCampaignRow from '../../../docs/api/fixtures/decision.get/for-campaign-row.json';
+import decisionGetNeedsInboxQuestion from '../../../docs/api/fixtures/decision.get/needs-inbox-question.json';
 import decisionGetNeedsQuestion from '../../../docs/api/fixtures/decision.get/needs-question.json';
 import decisionGetPendingWithOptions from '../../../docs/api/fixtures/decision.get/pending-with-options.json';
 import decisionListByCampaignPending from '../../../docs/api/fixtures/decision.list/by-campaign-pending.json';
 import decisionListDecided from '../../../docs/api/fixtures/decision.list/decided.json';
 import decisionListEmpty from '../../../docs/api/fixtures/decision.list/empty.json';
+import decisionListNeedsInboxQuestions from '../../../docs/api/fixtures/decision.list/needs-inbox-questions.json';
 import decisionListNeedsQuestions from '../../../docs/api/fixtures/decision.list/needs-questions.json';
 import decisionListPending from '../../../docs/api/fixtures/decision.list/pending.json';
 import decisionListSummerPending from '../../../docs/api/fixtures/decision.list/summer-pending.json';
@@ -1057,6 +1059,10 @@ export const fixtures = {
     'contact.threads/two-threads': contactThreadsTwoThreads satisfies Exchange<ContactThreadsRequest, ContactThreads>,
     'decision.answer/answered': decisionAnswerAnswered satisfies Exchange<DecisionAnswerRequest, Decision>,
     'decision.get/for-campaign-row': decisionGetForCampaignRow satisfies Exchange<{ decision_id: string }, Decision>,
+    'decision.get/needs-inbox-question': decisionGetNeedsInboxQuestion satisfies Exchange<
+        { decision_id: string },
+        Decision
+    >,
     'decision.get/needs-question': decisionGetNeedsQuestion satisfies Exchange<{ decision_id: string }, Decision>,
     'decision.get/pending-with-options': decisionGetPendingWithOptions satisfies Exchange<
         { decision_id: string },
@@ -1068,6 +1074,10 @@ export const fixtures = {
     >,
     'decision.list/decided': decisionListDecided satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
     'decision.list/empty': decisionListEmpty satisfies Exchange<DecisionListRequest, Page<DecisionSummary>>,
+    'decision.list/needs-inbox-questions': decisionListNeedsInboxQuestions satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
     'decision.list/needs-questions': decisionListNeedsQuestions satisfies Exchange<
         DecisionListRequest,
         Page<DecisionSummary>

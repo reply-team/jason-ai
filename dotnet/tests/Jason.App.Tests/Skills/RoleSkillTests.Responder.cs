@@ -549,7 +549,11 @@ public partial class RoleSkillTests
             skill,
             StringComparison.Ordinal);
         Assert.Contains("- `act`: do the act.", skill, StringComparison.Ordinal);
-        Assert.Contains("- `escalate`: ask, unless a question about this thread is still open", skill, StringComparison.Ordinal);
+        // A question the runtime's own responder raised names its thread on the row; one raised otherwise only in its words.
+        Assert.Contains(
+            "- `escalate`: ask, unless a question about this thread is still open — its row's `thread` names it, or its words do — and where one is, the outcome is `nothing`.",
+            skill,
+            StringComparison.Ordinal);
         Assert.Contains("- `none`: nothing.", skill, StringComparison.Ordinal);
         Assert.Contains(
             "A draft under a line that is neither your own attempt's nor a named person's waits for a person whatever standing approval exists, unless the line carries a person's answer through a decision (its `answered_by` is not null), and your summary says so.",

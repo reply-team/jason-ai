@@ -247,7 +247,7 @@ describe('Needs you', () => {
 
         show('Inbox');
         await waitFor(() =>
-            expect(words(needs().querySelector('.needs-none')!)).toBe('No answer to a reply waits for you.'),
+            expect(words(needs().querySelector('.needs-none')!)).toBe('Nothing about a reply waits for you.'),
         );
 
         show('Approvals');
@@ -273,6 +273,32 @@ describe('Needs you', () => {
         expect(words(row('apr_2'))).toContain('Reply to Kai Lindt');
         expect(within(pane()).getByText('Thanks Kai, Thursday at ten works for me.')).toBeTruthy();
         expect(words(pane().querySelector('.needs-title')!)).toBe('Reply to Kai Lindt');
+    });
+
+    it('holds under Inbox a question the runtime names a thread for, and leaves one about no thread under Questions', async () => {
+        await renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-inbox')
+                .answer('decision.list', 'decision.list/needs-inbox-questions')
+                .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply')
+                .answer('decision.get', 'decision.get/needs-inbox-question'),
+        );
+        await waitFor(() => expect(row('dec_2')).toBeTruthy());
+        expect(chips()).toEqual(['All 4', 'Approvals 2', 'Questions 2', 'Inbox 2']);
+
+        show('Inbox');
+        await waitFor(() => expect(needs().querySelector('[data-row="apr_1"]')).toBeNull());
+        expect(needs().querySelector('[data-row="dec_1"]')).toBeNull();
+        expect(row('apr_2')).toBeTruthy();
+        fireEvent.click(row('dec_2'));
+        await waitFor(() => expect(pane().dataset['id']).toBe('dec_2'));
+        expect(words(pane().querySelector('.needs-title')!)).toBe(
+            fixtures['decision.get/needs-inbox-question'].response.question,
+        );
+
+        show('Questions');
+        await waitFor(() => expect(row('dec_1')).toBeTruthy());
+        expect(row('dec_2')).toBeTruthy();
     });
 
     it('narrows the list and every count to one agent, and back to all of them', async () => {

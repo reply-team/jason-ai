@@ -400,6 +400,11 @@ that is not that attempt does not call them.
 - `decision.get`
 - `decision.list`: what is waiting, oldest question first; pending by default.
 
+The raise, the answer, `decision.get` and each row of `decision.list` carry `thread`, what the question is about:
+`{"plugin_id", "thread_id"}` where the runtime's own responder raised it, the conversation the runtime woke it for and
+vouches for ([inbound sync](inbound-sync.md)), written once at the raise and never recomputed; null for every other
+question, and for one whose `inbound_reply` anybody but the runtime changed before the raise. Never absent.
+
 ### `reply`
 
 - `reply.record`: a role's verdict on one reply of a campaign, written as the journal line `reply_classified` and

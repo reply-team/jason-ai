@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ApprovalSummary, DecisionSummary } from '../api/types';
 import {
     agentsOf,
+    countOf,
     countWords,
+    moreUnder,
     filtersOf,
     needsCount,
     pick,
@@ -26,7 +28,7 @@ const approval = (id: string, campaign: string, operation = 'message.send'): App
     contact_name: 'Ines Duarte',
 });
 
-const question = (id: string, campaign: string): DecisionSummary => ({
+const question = (id: string, campaign: string, thread: DecisionSummary['thread'] = null): DecisionSummary => ({
     id,
     campaign_id: campaign,
     work_item_id: `wi_${id}`,
@@ -37,7 +39,12 @@ const question = (id: string, campaign: string): DecisionSummary => ({
     answered_by: null,
     campaign_name: `Agent ${campaign}`,
     contact_name: null,
+    thread,
 });
+
+/** A question the runtime's own responder raised about a reply: the runtime names the thread. */
+const aboutAReply = (id: string, campaign: string): DecisionSummary =>
+    question(id, campaign, { plugin_id: 'reply', thread_id: 't_501' });
 
 const chat = (id: string, campaign: string | null): ChatWait => ({
     conversationId: id,
@@ -66,6 +73,33 @@ describe('what Needs you lists', () => {
             'question:dec_1',
             'chat:conv_1',
         ]);
+    });
+
+    it('holds under Inbox the approvals that answer a reply and the questions about a thread, by what the runtime listed', () => {
+        const about = input({ questions: [question('dec_1', 'cmp_1'), aboutAReply('dec_2', 'cmp_2')] });
+        expect(waitingOf(about, 'inbox', null).map((each) => `${each.kind}:${each.id}`)).toEqual([
+            'approval:apr_2',
+            'question:dec_2',
+        ]);
+        expect(waitingOf(about, 'inbox', 'cmp_1')).toEqual([]);
+        expect(waitingOf(about, 'questions', null).map((each) => each.id)).toEqual(['dec_1', 'dec_2']);
+        expect(countOf(about, 'inbox')).toEqual({ n: 2, more: false });
+    });
+
+    it('puts no question under Inbox from a runtime that does not say what its questions are about', () => {
+        const older = question('dec_3', 'cmp_1');
+        delete older.thread;
+        const some = input({ questions: [older] });
+        expect(waitingOf(some, 'inbox', null).map((each) => each.id)).toEqual(['apr_2']);
+        expect(waitingOf(some, 'questions', null).map((each) => each.id)).toEqual(['dec_3']);
+    });
+
+    it('says Inbox may hold more while either list has another page, since it holds rows of both', () => {
+        expect(countOf(input({ more: { approvals: false, questions: true } }), 'inbox')).toEqual({ n: 1, more: true });
+        expect(countOf(input({ more: { approvals: true, questions: false } }), 'inbox')).toEqual({ n: 1, more: true });
+        expect(moreUnder(input({ more: { approvals: false, questions: true } }), 'inbox')).toBe(true);
+        expect(moreUnder(input({ more: { approvals: false, questions: true } }), 'approvals')).toBe(false);
+        expect(moreUnder(input({ more: { approvals: true, questions: true } }), 'chats')).toBe(false);
     });
 
     it('counts under Inbox only the approvals that answer a reply, by the operation the runtime listed', () => {

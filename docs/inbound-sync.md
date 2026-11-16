@@ -57,7 +57,10 @@ One thread has at most one open responder: while a responder the runtime created
 ended, a further move is recorded on it — the move appended to `inbound_reply.moves` (the newest 20 kept),
 `move_count` one higher, `last_activity_at` the new moment — through the same patch any update makes, never a second
 item. A move after it
-ended makes a new pair. A responder is never given an `idempotency_key`.
+ended makes a new pair. A responder is never given an `idempotency_key`. A question such a responder raises names the thread on its
+row, `thread` (`plugin_id` and `thread_id`), taken from `inbound_reply` once, when it is raised, by the same rule that finds
+the thread's open responder, and only while nobody but the runtime has patched that key: a person's, a role's or an
+attempt's `workitem.update` of it leaves the question's `thread` null, as a responder a person or a role created does.
 
 The step creates nothing, and still moves past the line, when `Responder:OnReply` is false; for a line older than
 `Responder:MaxAgeSeconds` (`reply_too_old`); for an events line found through the person rather than the campaign's own

@@ -23,6 +23,7 @@ import {
     agentsOf,
     countWords,
     filtersOf,
+    moreUnder,
     pick,
     waitingOf,
     type Chosen,
@@ -900,7 +901,7 @@ const nothing: Readonly<Record<NeedsFilter, string>> = {
     approvals: 'No approvals waiting.',
     questions: 'No questions for you.',
     chats: 'No chat waits for you.',
-    inbox: 'No answer to a reply waits for you.',
+    inbox: 'Nothing about a reply waits for you.',
 };
 
 function bar(input: NeedsInput): Html {
@@ -934,9 +935,7 @@ function bar(input: NeedsInput): Html {
 function panes(now: number, busy: boolean): Html {
     const input = needsInput();
     const { items, shown } = listed();
-    const more =
-        (filter.value !== 'questions' && filter.value !== 'chats' && input.more.approvals) ||
-        (filter.value !== 'approvals' && filter.value !== 'inbox' && filter.value !== 'chats' && input.more.questions);
+    const more = moreUnder(input, filter.value);
     return html`${bar(input)}
         ${
             reasked.value.length > 0

@@ -19,7 +19,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Spring",
-        "contact_name": null
+        "contact_name": null,
+        "thread": null
       },
       {
         "id": "dec_3",
@@ -31,7 +32,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Spring",
-        "contact_name": null
+        "contact_name": null,
+        "thread": null
       },
       {
         "id": "dec_2",
@@ -43,7 +45,8 @@
         "answered_at": null,
         "answered_by": null,
         "campaign_name": "Spring",
-        "contact_name": "Pia Example"
+        "contact_name": "Pia Example",
+        "thread": null
       }
     ],
     "next_cursor": null
