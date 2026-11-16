@@ -97,6 +97,29 @@ public sealed class TestWorkspace : IDisposable
         });
 
     /// <summary>
+    /// The next call under this key is held open at the account before it does anything, until <see cref="Release"/>:
+    /// <see cref="HeldAsync"/> answers once the account has it, so a test reads the runtime while the call is out.
+    /// </summary>
+    public TestWorkspace HoldOnce(string key) =>
+        Edit(InstructionsFile, instructions => instructions["hold_once"] = new JsonObject { ["key"] = key });
+
+    /// <summary>Whether the account holds the call under this key, waited for within ten seconds.</summary>
+    public async Task<bool> HeldAsync(string key, CancellationToken ct)
+    {
+        var held = Path.Combine(Root, "held-" + key);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!File.Exists(held) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50, ct);
+        }
+
+        return File.Exists(held);
+    }
+
+    /// <summary>Lets the held call under this key go on.</summary>
+    public void Release(string key) => File.WriteAllText(Path.Combine(Root, "release-" + key), string.Empty);
+
+    /// <summary>
     /// What this account holds as a campaign's name, which need not be a string: a provider that answers with
     /// something the operation's own schema refuses is what makes <c>result_invalid</c> reachable for real.
     /// </summary>

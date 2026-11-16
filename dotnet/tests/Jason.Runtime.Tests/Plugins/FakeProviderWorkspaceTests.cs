@@ -188,6 +188,26 @@ public class FakeProviderWorkspaceTests
         Assert.NotEmpty(stderr);
     }
 
+    [Fact]
+    public async Task An_enrolment_held_once_does_nothing_until_it_is_released_and_the_next_one_is_not_held()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WithContact("p_1001", Email, Marta).WithCampaign("seq_1", "Spring", "Active");
+        workspace.HoldOnce(Key);
+
+        var call = EnrollAsync(workspace, "seq_1", "p_1001", Key, "skip");
+        Assert.True(await workspace.HeldAsync(Key, Ct), "The account never said it holds the call.");
+        Assert.False(call.IsCompleted);
+        Assert.Empty(workspace.EnrollmentsIn("seq_1"));
+
+        workspace.Release(Key);
+        Assert.Equal("enrolled", (string?)(await call)!["status"]);
+        Assert.Equal(["p_1001"], workspace.EnrollmentsIn("seq_1"));
+
+        var again = await EnrollAsync(workspace, "seq_1", "p_1001", Key, "skip");
+        Assert.True((bool)again!["from_ledger"]!, "The second call was held as well, or not answered from the ledger.");
+    }
+
     private static async Task<JsonObject?> AddAsync(TestWorkspace workspace, string list, string contact, string key)
     {
         var (_, answer, _) = await workspace.RunAsync(
