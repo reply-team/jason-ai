@@ -1,6 +1,6 @@
 // Pure: the cards the chat's AI asks for. The AI ends a reply with one fenced block whose info string is `card`, holding
 // one JSON object with a `kind`; the page takes every such block out of the words it draws, and draws the last block of
-// a turn as a card. Six kinds, a closed list, each held to its schema: every member's type and length, own keys only,
+// a turn as a card. Eight kinds, a closed list, each held to its schema: every member's type and length, own keys only,
 // nothing the schema does not name. A block is read once, by `JSON.parse` alone, and never mended, cut or guessed: a
 // block that does not read draws one line in the desktop's words, and what it held is never shown.
 //
@@ -19,7 +19,16 @@ import { locksChoice, unseen, type Chat } from './chat-model';
 const cardUnseen = new RegExp(`${unseen.source.slice(0, -1)}\\p{Cs}\\p{Co}\\u2800]`, 'u');
 
 /** The kinds a card may be, in the order the chat's instructions list them. */
-export const cardKinds = ['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan'] as const;
+export const cardKinds = [
+    'choice',
+    'people_list',
+    'agent_status',
+    'needs',
+    'accounts',
+    'ai_setup',
+    'reply_setup',
+    'plan',
+] as const;
 export type CardKind = (typeof cardKinds)[number];
 
 /** Why a card block did not draw, as the desktop's log names it. */
@@ -131,6 +140,8 @@ export const passiveWords: readonly string[] = [
     'Show them',
     'Open',
     'More in Needs you',
+    'Open Accounts',
+    'Open Connect',
     'People',
     'Inbox',
     'Results',
@@ -205,6 +216,16 @@ export interface AccountsCard {
     kind: 'accounts';
 }
 
+/** A card that only leads to a place of the window: Connect, where the AI hosts and the model keys are. */
+export interface AiSetupCard {
+    kind: 'ai_setup';
+}
+
+/** A card that only leads to a place of the window: the Accounts page, where Reply's sign-in and its accounts are. */
+export interface ReplySetupCard {
+    kind: 'reply_setup';
+}
+
 export interface PlanStep {
     when?: string;
     channel: PlanChannel;
@@ -227,7 +248,8 @@ export interface PlanCard {
     options?: CardOption[];
 }
 
-export type Card = ChoiceCard | PeopleListCard | AgentStatusCard | NeedsCard | AccountsCard | PlanCard;
+export type Card =
+    ChoiceCard | PeopleListCard | AgentStatusCard | NeedsCard | AccountsCard | AiSetupCard | ReplySetupCard | PlanCard;
 
 /** A card block as a text holds it: the text between its fences, and whether a fence closed it. */
 export interface CardBlock {
@@ -433,6 +455,8 @@ const allowedIn: Readonly<Record<CardKind, readonly CardPlace[]>> = {
     agent_status: ['agent', 'setup', 'feed'],
     needs: ['agent', 'setup', 'feed'],
     accounts: ['agent', 'setup', 'feed'],
+    ai_setup: ['agent', 'setup', 'feed'],
+    reply_setup: ['agent', 'setup', 'feed'],
     plan: ['agent', 'setup'],
 };
 
@@ -469,6 +493,9 @@ function cardOf(kind: CardKind, object: Fields, place: CardPlace): Card {
             return id === undefined ? { kind } : { kind, campaign: id };
         }
         case 'accounts':
+        case 'ai_setup':
+        case 'reply_setup':
+            // A card of its kind alone: it names no campaign and carries nothing of the AI's.
             shaped(object, ['kind']);
             return { kind };
         case 'plan':

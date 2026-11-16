@@ -8,6 +8,7 @@ import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
 import { accountsCard } from './card-accounts';
+import { placeCard } from './card-places';
 import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
 import { needsCard } from './card-needs';
 import { peopleCard } from './card-people';
@@ -627,6 +628,8 @@ const kindWords: Readonly<Record<CardKind, string>> = {
     agent_status: 'an agent status',
     needs: 'a needs',
     accounts: 'an accounts',
+    ai_setup: 'an AI',
+    reply_setup: 'a Reply',
     plan: 'a plan',
 };
 
@@ -647,6 +650,8 @@ const cardHeaders: Readonly<Record<CardKind, string>> = {
     agent_status: 'Agent',
     needs: 'Waiting for your decision',
     accounts: 'Accounts',
+    ai_setup: 'AI',
+    reply_setup: 'Reply',
     plan: 'Jason’s proposal',
 };
 
@@ -784,6 +789,10 @@ function cardView(
                 }
                 case 'accounts':
                     return accountsCard(chat, index, last, cardHeaders.accounts);
+                case 'ai_setup':
+                case 'reply_setup':
+                    // It only leads to a place, and reads nothing.
+                    return placeCard(reading.card.kind, cardHeaders[reading.card.kind]);
             }
     }
 }
