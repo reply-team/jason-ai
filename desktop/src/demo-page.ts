@@ -99,8 +99,8 @@ export function demoViewPreferences(view: DemoView): WebPreferences {
  * The content policy, a header of the one response: the page's inline script and inline style, its fonts and images as
  * `data:` addresses, and nothing else: no address to fetch, connect or open a socket to, no frame, worker, plugin, form
  * target or base. Its `sandbox` is the page's own frame, the one it was built and walked in: scripts and nothing more.
- * Without same-origin the page's origin is opaque, so its storage is refused and it keeps what it keeps in memory; it
- * leaves out forms, pop-ups, top-level navigation, downloads, modal dialogs and printing, pointer lock, presentation and
+ * Without same-origin the page's origin is opaque (`null`): it shares nothing with any other page and sets no cookie, and
+ * what it keeps lives in the view's session, which is in memory only. It leaves out forms, pop-ups, top-level navigation, downloads, modal dialogs and printing, pointer lock, presentation and
  * orientation lock. The desktop's own refusals below hold the page to the same whatever the policy does.
  */
 export const demoPolicy = [

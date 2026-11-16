@@ -328,8 +328,8 @@ carries the same switch, with **Demo** to come back.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
-sandboxed to its script alone, the frame it was built for: its origin is opaque, so it can keep nothing in storage, and
-what it keeps it keeps in memory while it is shown. The view loads the
+sandboxed to its script alone, the frame it was built for: its origin is opaque, so it shares nothing with any other
+page and sets no cookie, and what it keeps is held in memory only. The view loads the
 page's own file and nothing else: every other request the page makes, to the network, to a file or to this computer, is
 refused, and a link, a form, a pop-up, a download and any other way to leave the page are refused too; a move to a blank
 page, which nothing is asked about, is undone by loading the page again. No host name is resolved for it, or for anything

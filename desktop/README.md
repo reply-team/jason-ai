@@ -566,7 +566,7 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   in-memory partition of its own, and `src/demo-page.ts` seals it: its session answers its own `jason-demo:` or
   `jason-switch:` address alone through a protocol handler that sends the content policy as a header (inline script
   and style, `data:` fonts and images, nothing else, and a `sandbox` of scripts alone, the page's own frame, so its
-  origin is opaque and its storage refused); `http`, `https` and `file` answer 403 there, every request but
+  origin is opaque, `null`, and it sets no cookie); `http`, `https` and `file` answer 403 there, every request but
   the page's own address or a `data:` one is cancelled, and a proxy that leads nowhere stands behind them; WebRTC keeps
   to the proxy. Pop-ups, navigation, redirects, frames' navigation, webviews, downloads, devtools, a login, a
   certificate error and an unload prompt are refused or cancelled, a main frame that ends anywhere but its own address
