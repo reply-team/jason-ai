@@ -2,10 +2,13 @@ import { expect, test } from './fixtures';
 
 // What the screen tests cannot see is where a screen is drawn. These rows measure the boxes in a real browser at a wide
 // window: a screen shown in the console's one area fills it, the panels once drawn for a narrow column keep a measure of
-// their own, and the console in a browser keeps its sidebar and gives the rest of the width to its area.
+// their own, Needs you is drawn across the whole area, and the console in a browser keeps its sidebar and gives the rest of
+// the width to its area.
 const WIDE = { width: 2000, height: 900 };
 // A screen is drawn across the panel, not in a column of it: at least this share of the panel's width.
 const FILLS = 0.9;
+// The measure the panels drawn for a narrow column keep, and the words read in Needs you's pane with them.
+const MEASURE = 880;
 
 // The desktop's seam as far as the console needs it to mount and show a page: nothing answers, nothing is running.
 function quietDesktop(): void {
@@ -95,10 +98,7 @@ test('in the console a screen shown in the one area fills it, whichever screen i
     }
 });
 
-test('in the console Needs you, Agents and Activity keep a measure in the wide area, centred in it', async ({
-    page,
-    jason,
-}) => {
+test('in the console Agents and Activity keep a measure in the wide area, centred in it', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);
     const { url } = await jason.uiOpen();
@@ -108,7 +108,6 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
         () => typeof (window as unknown as { menuCommand?: unknown }).menuCommand === 'function',
     );
     for (const [command, title] of [
-        ['navigate.attention', 'Needs you'],
         ['navigate.campaigns', 'Agents'],
         ['navigate.activity', 'Activity'],
     ] as const) {
@@ -140,7 +139,7 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
         });
         expect(room, `${command}: a panel body is drawn`).not.toBeNull();
         // Narrower than the panel, by a measure of its own, with as much room on its left as on its right.
-        expect(room!.width, `${command}: its measure ${JSON.stringify(room)}`).toBeLessThanOrEqual(880);
+        expect(room!.width, `${command}: its measure ${JSON.stringify(room)}`).toBeLessThanOrEqual(MEASURE);
         expect(room!.width, `${command}: narrower than the panel ${JSON.stringify(room)}`).toBeLessThan(
             room!.panelWidth,
         );
@@ -148,6 +147,34 @@ test('in the console Needs you, Agents and Activity keep a measure in the wide a
             2,
         );
     }
+});
+
+test('in the console Needs you is drawn across the whole wide area, as its two panes need', async ({ page, jason }) => {
+    await page.setViewportSize(WIDE);
+    await page.addInitScript(quietDesktop);
+    const { url } = await jason.uiOpen();
+    await page.goto(url);
+    await expect(page.locator('.jc-console .area')).toBeVisible();
+    await page.waitForFunction(
+        () => typeof (window as unknown as { menuCommand?: unknown }).menuCommand === 'function',
+    );
+    await page.evaluate(() =>
+        (window as unknown as { menuCommand: (name: string) => void }).menuCommand('navigate.attention'),
+    );
+    // What the runtime gives it: nothing waits in a fresh installation, and the panel is measured as it is drawn then.
+    // The panes' columns and the measure of the words read in the pane are the sheet's, held by its row in the screen
+    // layer, where there is something to read.
+    const painted = page.locator('.jc-console .area > .pane:not([hidden]) .painted');
+    await expect(painted.getByRole('heading', { name: 'Needs you', level: 1 })).toBeVisible();
+    await expect(painted.getByText('Reading what waits…')).toHaveCount(0);
+    const room = await painted.evaluate((panel) => {
+        const drawn = panel.querySelector('.needs-panel')!.getBoundingClientRect();
+        return { width: drawn.width, panelWidth: panel.clientWidth };
+    });
+    expect(room.panelWidth, `the panel is wide ${JSON.stringify(room)}`).toBeGreaterThan(MEASURE);
+    expect(room.width / room.panelWidth, `Needs you fills the panel ${JSON.stringify(room)}`).toBeGreaterThanOrEqual(
+        FILLS,
+    );
 });
 
 test('in a browser tab with no desktop the sidebar keeps its width and the area takes the rest', async ({

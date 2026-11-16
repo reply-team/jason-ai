@@ -400,6 +400,40 @@
     text-decoration: underline;
 }
 
+/* The accounts card: Reply's part under its own label above the runtime's facts, its accounts as a table of what Reply
+   wrote, the runtime's facts as label and value. */
+.jc-console .chat-data .card-line,
+.jc-console .chat-data .card-fact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+.jc-console .chat-data .card-fact {
+    margin-top: 4px;
+}
+.jc-console .chat-data .card-tbl {
+    width: 100%;
+    margin-top: 8px;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.jc-console .chat-data .card-tbl th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--faint);
+    padding: 4px 10px 4px 0;
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .chat-data .card-tbl td {
+    padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+.jc-console .chat-data .card-tbl tr:last-child td {
+    border-bottom: 0;
+}
+
 /* A plan the AI proposes, in the data cards' frame: its first part the AI's, in the frame's dashed box and in the ink of
    words rather than the muted look of a query: its fields as labelled rows, its steps, each draft opened in place under
    its own caption and drawn as plain text with its line breaks, never in the look of an approval's message. Its second

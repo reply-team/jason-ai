@@ -7,6 +7,7 @@ import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
+import { accountsCard } from './card-accounts';
 import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
 import { needsCard } from './card-needs';
 import { peopleCard } from './card-people';
@@ -732,10 +733,9 @@ function asksView(
 
 /**
  * The card a turn's last block draws, right after the text entry that held it, with no speaker's label over it: a
- * choice; a plan, its part that reads drawn as a stub unless it is the conversation's last card that reads (`last`); the
- * frame that says a data card is about another agent; one line in the desktop's words for a block that did not read,
- * said once to the desktop's log; nothing for a block still being written. The kinds this release does not draw yet say
- * so in a line.
+ * choice; a data card or a plan, what it reads drawn as a stub unless it is the conversation's last card that reads
+ * (`last`); the frame that says a data card is about another agent; one line in the desktop's words for a block that did
+ * not read, said once to the desktop's log; nothing for a block still being written. Every kind is drawn.
  */
 function cardView(
     chat: Chat,
@@ -782,8 +782,8 @@ function cardView(
                             : asksView(chat, index, question, options, host, 'proposal-asks');
                     return planView(chat, index, reading.card, last, asks);
                 }
-                default:
-                    return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+                case 'accounts':
+                    return accountsCard(chat, index, last, cardHeaders.accounts);
             }
     }
 }

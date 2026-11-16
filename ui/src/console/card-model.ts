@@ -14,7 +14,7 @@ import { channelWords } from './live';
  * only as a line that it is not drawn reads nothing either, so it never turns an earlier card into a stub. A unit that
  * draws a kind that reads adds it here.
  */
-export const readingKinds: readonly CardKind[] = ['people_list', 'agent_status', 'needs', 'plan'];
+export const readingKinds: readonly CardKind[] = ['people_list', 'agent_status', 'needs', 'accounts', 'plan'];
 
 /**
  * The index of the conversation's last card that reads, among the cards its turns drew (`kind` null for a block that
