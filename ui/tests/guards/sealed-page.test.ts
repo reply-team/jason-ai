@@ -50,7 +50,7 @@ function counted(page: string, list: AddressList): string[] {
     return findings;
 }
 
-/** Every way the text asks for a place with no scheme of its own, or for a lookup ahead, as what it names. */
+/** Every way the text asks for a place with no scheme of its own, a mail or telephone address, or a lookup ahead. */
 function lookups(text: string): string[] {
     const found: string[] = [];
     for (const match of text.matchAll(
@@ -58,6 +58,8 @@ function lookups(text: string): string[] {
     ))
         found.push(match[1]!);
     for (const match of text.matchAll(/(?:url\(|@import)\s*["'`]?\s*(\/\/[^\s"'`<>)/]*)/gi)) found.push(match[1]!);
+    // An address of mail or a telephone, which a press hands to another program on this computer.
+    for (const match of text.matchAll(/\b(?:mailto|tel):[^\s"'`<>()[\]{},;]+/gi)) found.push(match[0]);
     for (const match of text.matchAll(
         /\brel\s*=\s*["'`]?\s*(dns-prefetch|preconnect|prefetch|preload|prerender|modulepreload)\b/gi,
     ))
@@ -108,6 +110,12 @@ describe('the reading of it', () => {
         expect(lookups('<link href=//fonts.example/a>')).toEqual(['//fonts.example']);
         expect(lookups('a{background:url(//img.example/b.png)}')).toEqual(['//img.example']);
         expect(lookups('@import "//css.example/c.css";')).toEqual(['//css.example']);
+    });
+
+    it('finds an address of mail or a telephone, and not a word that only ends in the scheme', () => {
+        expect(lookups('<a href="mailto:someone@example.com">')).toEqual(['mailto:someone@example.com']);
+        expect(lookups("location.href = 'tel:+15550100';")).toEqual(['tel:+15550100']);
+        expect(lookups('const channels = { sms: 1, tel: [] }; hotel: x')).toEqual([]);
     });
 
     it('finds a hint that looks a name up, connects or fetches ahead', () => {
