@@ -1,7 +1,8 @@
 import { signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../../api/client';
 import { session } from '../../api/session';
-import type {
+import {
+    interestedWord,
     AddContactsResult,
     Approval,
     ApprovalSummary,
@@ -27,7 +28,6 @@ import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { bucketOf, periodWindow } from '../../time/periods';
 import { createBody, unfinishedCreate } from './kind';
-import { interestedWord } from '../../console/dashboard-model';
 
 /**
  * What every read of a campaign's people or counts on the campaign screens adds, the Results and the Performance page
