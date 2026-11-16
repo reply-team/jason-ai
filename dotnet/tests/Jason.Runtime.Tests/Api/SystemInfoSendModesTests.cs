@@ -16,6 +16,7 @@ public class SystemInfoSendModesTests
     private static readonly DateTimeOffset Nine = new(2026, 11, 14, 9, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    [Critical(Family.P2, BrokenUntouched.Migration)]
     public async Task The_section_says_each_mode_in_force_and_where_it_comes_from_and_names_nobody()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
