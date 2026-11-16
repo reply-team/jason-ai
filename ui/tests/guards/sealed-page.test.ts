@@ -1,33 +1,63 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sealedPage } from '../../scripts/package-lib.mjs';
 
 // The page under sealed/ is served unable to act, but a browser may look a host name up before any policy speaks: from
 // an address in the markup it is about to parse, or from a hint that asks it to. No request log shows such a lookup, so
-// the file itself is read: it names no address with a host in it, and asks for no lookup or connection ahead. The three
-// XML namespaces a page's SVG and markup are written in are names, not places, and pass by their exact text alone. A
-// host written as plain text, `example.com/path` say, is not an address a browser acts on, and passes.
+// the file itself is read. The addresses it holds are counted in one list beside it, `desktop/demo/addresses.txt`, each
+// exact string with how many times it stands in the page and why it is inert there; the desktop's tests read the same
+// list, and a page that brings an address, or one more of a listed one, fails both until the list says why. Beyond the
+// list the page holds no address with no scheme where markup or a style takes one, and no hint that looks a name up,
+// connects or fetches ahead. What keeps a listed address inert is where the page is shown: a frame whose every request is
+// refused, which the browser smoke and the sealed probe try.
 
-/** The namespaces of SVG, XLink and XHTML, matched exactly: a browser reads them as names and never fetches them. */
-const namespaces = ['http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink', 'http://www.w3.org/1999/xhtml'];
+const listFile = join(dirname(sealedPage.from), 'addresses.txt');
 
-/** Every way the text names a place a browser may look up, as the address it names, one line each. */
-function addresses(text: string): string[] {
-    const found: string[] = [];
-    // An address with an authority, of any scheme: `https://host`, `ws://host`, `ftp://host`, `file://host`.
-    for (const match of text.matchAll(/[a-z][a-z0-9+.-]*:\/\/[^\s"'`<>()\\]*/gi)) {
-        const address = match[0];
-        if (namespaces.includes(address)) continue;
-        found.push(address.replace(/^([^/]*\/\/[^/?#]*).*$/, '$1'));
+interface AddressList {
+    pattern: RegExp;
+    entries: { text: string; count: number; why: string }[];
+}
+
+/** The list as written: one `pattern<TAB>expression` line, then `<count><TAB><exact string><TAB><why>` lines. */
+function addressList(text: string): AddressList {
+    const lines = text.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    const patterns = lines.filter((line) => line.startsWith('pattern\t'));
+    if (patterns.length !== 1) throw new Error(`${listFile} has ${patterns.length} pattern lines, not one`);
+    const entries = lines
+        .filter((line) => !line.startsWith('pattern\t'))
+        .map((line) => {
+            const [count = '', found = '', why = '', ...rest] = line.split('\t');
+            if (rest.length > 0 || !/^[1-9][0-9]*$/.test(count)) throw new Error(`${listFile}: not an entry: ${line}`);
+            return { text: found, count: Number(count), why };
+        });
+    return { pattern: new RegExp(patterns[0]!.slice('pattern\t'.length), 'g'), entries };
+}
+
+/** What differs between the page and its list: a string not listed, a count other than the listed one, one gone. */
+function counted(page: string, list: AddressList): string[] {
+    const found = new Map<string, number>();
+    for (const match of page.matchAll(list.pattern)) found.set(match[0], (found.get(match[0]) ?? 0) + 1);
+    const listed = new Map(list.entries.map((entry) => [entry.text, entry.count]));
+    const findings: string[] = [];
+    for (const [text, count] of found) {
+        if (!listed.has(text)) findings.push(`not listed: ${text} (${count})`);
+        else if (listed.get(text) !== count)
+            findings.push(`${text}: the page holds ${count}, the list says ${listed.get(text)}`);
     }
-    // An address with no scheme of its own, `//host`, where markup or a style takes an address.
+    for (const [text, count] of listed)
+        if (!found.has(text)) findings.push(`${text}: the list says ${count}, the page holds none`);
+    return findings;
+}
+
+/** Every way the text asks for a place with no scheme of its own, or for a lookup ahead, as what it names. */
+function lookups(text: string): string[] {
+    const found: string[] = [];
     for (const match of text.matchAll(
         /\b(?:src|href|action|formaction|poster|ping|srcset|data|background|cite|manifest|xlink:href)\s*=\s*["'`]?\s*(\/\/[^\s"'`<>/]*)/gi,
     ))
         found.push(match[1]!);
     for (const match of text.matchAll(/(?:url\(|@import)\s*["'`]?\s*(\/\/[^\s"'`<>)/]*)/gi)) found.push(match[1]!);
-    // A hint that asks the browser to look a name up, or connect, or fetch, ahead of the page's need.
     for (const match of text.matchAll(
         /\brel\s*=\s*["'`]?\s*(dns-prefetch|preconnect|prefetch|preload|prerender|modulepreload)\b/gi,
     ))
@@ -35,51 +65,64 @@ function addresses(text: string): string[] {
     return found;
 }
 
+const page = () => readFileSync(sealedPage.from, 'utf8');
+const list = () => addressList(readFileSync(listFile, 'utf8'));
+
 describe('the page under sealed/', () => {
-    it('names no address with a host and asks for no lookup ahead', () => {
-        expect(addresses(readFileSync(sealedPage.from, 'utf8'))).toEqual([]);
+    it('holds exactly the addresses its list counts, each listed once with why it is inert', () => {
+        const read = list();
+        expect(counted(page(), read)).toEqual([]);
+        expect(new Set(read.entries.map((entry) => entry.text)).size).toBe(read.entries.length);
+        for (const entry of read.entries) {
+            expect(entry.text, entry.text).toMatch(new RegExp(`^${read.pattern.source}$`));
+            expect(entry.why.trim().length, entry.text).toBeGreaterThan(10);
+        }
+    });
+
+    it('takes no address with no scheme, and asks for no lookup ahead', () => {
+        expect(lookups(page())).toEqual([]);
     });
 });
 
 describe('the reading of it', () => {
-    it('finds an address of any scheme, by its host alone', () => {
-        expect(addresses('<a href="https://reply.example/path?x=1">x</a>')).toEqual(['https://reply.example']);
-        expect(addresses("const base = 'wss://socket.example:443/feed';")).toEqual(['wss://socket.example:443']);
-        expect(addresses('ftp://files.example/a file://share/b HTTP://LOUD.EXAMPLE')).toEqual([
-            'ftp://files.example',
-            'file://share',
-            'HTTP://LOUD.EXAMPLE',
+    const shape = { pattern: list().pattern, entries: [{ text: 'https://listed.example', count: 1, why: 'a sample' }] };
+
+    it('refuses an address not listed, one more or one fewer of a listed one, of any scheme', () => {
+        expect(counted('"https://listed.example"', shape)).toEqual([]);
+        expect(counted('"https://listed.example" "wss://socket.example/x"', shape)).toEqual([
+            'not listed: wss://socket.example (1)',
         ]);
-        expect(addresses('"https://"')).toEqual(['https://']);
+        expect(counted('https://listed.example https://listed.example', shape)).toEqual([
+            'https://listed.example: the page holds 2, the list says 1',
+        ]);
+        expect(counted('nothing', shape)).toEqual(['https://listed.example: the list says 1, the page holds none']);
+        expect(counted('ftp://files.example file://share', shape)).toEqual([
+            'not listed: ftp://files.example (1)',
+            'not listed: file://share (1)',
+            'https://listed.example: the list says 1, the page holds none',
+        ]);
     });
 
     it('finds an address with no scheme where markup or a style takes one', () => {
-        expect(addresses('<img src="//cdn.example/x.png">')).toEqual(['//cdn.example']);
-        expect(addresses('<link href=//fonts.example/a>')).toEqual(['//fonts.example']);
-        expect(addresses('a{background:url(//img.example/b.png)}')).toEqual(['//img.example']);
-        expect(addresses('@import "//css.example/c.css";')).toEqual(['//css.example']);
+        expect(lookups('<img src="//cdn.example/x.png">')).toEqual(['//cdn.example']);
+        expect(lookups('<link href=//fonts.example/a>')).toEqual(['//fonts.example']);
+        expect(lookups('a{background:url(//img.example/b.png)}')).toEqual(['//img.example']);
+        expect(lookups('@import "//css.example/c.css";')).toEqual(['//css.example']);
     });
 
     it('finds a hint that looks a name up, connects or fetches ahead', () => {
-        expect(addresses('<link rel="dns-prefetch" href="#"><link rel=preconnect href="#">')).toEqual([
+        expect(lookups('<link rel="dns-prefetch" href="#"><link rel=preconnect href="#">')).toEqual([
             'rel=dns-prefetch',
             'rel=preconnect',
         ]);
         expect(
-            addresses('<link rel="prefetch"><link rel="preload"><link rel="prerender"><link rel="modulepreload">'),
+            lookups('<link rel="prefetch"><link rel="preload"><link rel="prerender"><link rel="modulepreload">'),
         ).toEqual(['rel=prefetch', 'rel=preload', 'rel=prerender', 'rel=modulepreload']);
-    });
-
-    it('lets the three namespaces pass by their exact text, and nothing that only starts like one', () => {
-        expect(addresses(namespaces.map((each) => `<svg xmlns="${each}">`).join(''))).toEqual([]);
-        expect(addresses('const ns = "http://www.w3.org/2000/svg";')).toEqual([]);
-        expect(addresses('<a href="http://www.w3.org/2000/svgx">')).toEqual(['http://www.w3.org']);
-        expect(addresses('<a href="http://www.w3.org/TR/CSP3/">')).toEqual(['http://www.w3.org']);
     });
 
     it('lets a host written as text, a relative path, a fragment and data: pass', () => {
         expect(
-            addresses(
+            lookups(
                 'linkedin.com/in/someone-sample · a@example.com <a href="#top"> <img src="data:image/png;base64,AA"> <a href="sealed/x.html">',
             ),
         ).toEqual([]);
@@ -87,7 +130,8 @@ describe('the reading of it', () => {
 });
 
 describe('the page it reads', () => {
-    it('is the one the desktop shows and the build carries', () => {
+    it('is the one the desktop shows and the build carries, beside its list', () => {
         expect(sealedPage.from).toBe(join(import.meta.dirname, '..', '..', '..', 'desktop', 'demo', 'index.html'));
+        expect(listFile).toBe(join(import.meta.dirname, '..', '..', '..', 'desktop', 'demo', 'addresses.txt'));
     });
 });
