@@ -325,9 +325,9 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 ## The account's events
 
 `reply inbox changes` reads Reply's change feed: the threads that moved in the account, oldest first, a page at a time,
-from a cursor or from a moment. Each item is read as one event, a `thread_moved` or, for a bounce notice (below), a
-`bounce`. A moved thread is the thread, its contact and its sequence by Reply's identifiers, the channel, when it
-moved, and Reply's judgement that it asks for a meeting. Its moment is the thread's last activity, written as
+from a cursor or from a moment. Each item is read as one event: a `thread_moved`, a `message_sent` for the account's
+own message (below) or, for a bounce notice (below), a `bounce`. A moved thread is the thread, its contact and its
+sequence by Reply's identifiers, the channel, when it moved, and Reply's judgement that it asks for a meeting. Its moment is the thread's last activity, written as
 `conversation.list` writes `last_activity_at`, to the millisecond, so a move both reads find is said once. Who moved it
 is read from the thread's last message and Reply's flag that the thread holds a reply (`flags.hasReply`):
 
@@ -346,12 +346,30 @@ that line again; the read of the account's threads, `conversation.list`, does th
 of meeting intent or a deletion moves nothing — so there is no move of Reply's own to name, and the thread's last
 activity is never compared with its last message's date.
 
-A move by the account is read and not kept: the package leaves it out of the page's events, so it says no line in any
-campaign, while the cursor moves past it and a move at or past the end of a span still ends that span. A page of
-nothing but the account's moves hands back no events, and its cursor and whether more follows as Reply said them. A
-later detector of sends made outside Jason therefore needs a source of its own. The other side's move, or one that
-names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
-sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.
+A move by the account, an `account` mover above, is read as one `message_sent`, a send, by whoever sent it: Jason, a
+sequence or a person in Reply's own screens, which the feed cannot tell apart. It carries no flag saying which, and
+nothing anybody wrote, no subject, preview, address or name:
+
+- `contact` — the thread's contact; `campaign` — its sequence, or `null` for a thread outside every sequence, such as a
+  direct send's; `thread` — the thread; `channel` — the thread's channel;
+- `message` — Reply's identifier for the thread's last message, or `null` where the feed gives none;
+- `occurred_at` — the message's own moment, which stays the same however often the thread comes back into the feed, so a
+  send read twice, as the hour a read after a finished one reads again brings it back, is one event. A send the feed
+  gives no date for, or one that is not a date, is not reported: the thread's last activity moves when any other message
+  lands, so a send keyed by it could be said twice.
+
+A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and so is a
+send the feed gives no date for. The package writes one line on stderr for each, which carries the thread's and the
+sequence's identifiers and the thread's last activity, and nothing anybody wrote. A send at or past the end of a span
+still ends that span, and the cursor moves past every item as before. A message the account sends on a thread that holds
+a reply stays a move that names nobody. The other side's move, or one that names nobody, says `inbound_reply_observed`.
+A thread outside every sequence — the reply to a direct send — names no sequence, so it reaches the campaigns that hold
+its contact pinned, by `contact_pin`.
+
+The send is reported for email. Another channel's sends are reported the same way if the provider's feed carries them,
+which has not been seen on a real account. This reading needs Jason 0.47.0 or newer: an older runtime refuses the whole
+page that holds a `message_sent`, so replies and bounces stop being read through events until Jason is updated. Update
+Jason before the package.
 
 `unread` is always `null`: the feed does not say.
 
@@ -372,8 +390,8 @@ manager; it says no `inbound_reply_observed`, so no responder is raised for it. 
 bounce is the one of Reply's four reply flags that is set: a thread flagged as holding a reply, an automatic reply or an
 absence as well stays a moved thread, read as above, since the flags are permanent and the feed cannot say which message
 came last, so reading the thread decides. A flag on a thread whose last message is the account's, or where Reply gave no
-last message, changes nothing. A bounce on a thread Reply names no contact for is left out of the page, as the account's
-moves are, and the package writes one line on stderr saying so, which carries the thread's and the sequence's
+last message, changes nothing. A bounce on a thread Reply names no contact for is left out of the page, as a send to nobody is,
+and the package writes one line on stderr saying so, which carries the thread's and the sequence's
 identifiers and the thread's last activity, and nothing anybody wrote. A Reply whose feed never sets the flag reads
 exactly as before.
 
