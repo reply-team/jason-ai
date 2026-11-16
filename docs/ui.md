@@ -296,7 +296,8 @@ line about the person, of any kind. Opening a person
 shows where they are and their local time, the campaigns they are on, an excluded one outlined, and **Add to agent**
 (`jason campaign add-contacts`). The **Timeline** puts their open work above the now line and what happened to them
 below it: the journal's lines about them (`jason journal list --contact`), narrowed by chips to replies, work, decisions
-or changes, with their additions to and exclusions from campaigns in place. **Details** is their record: channels,
+or changes, with their additions to and exclusions from campaigns in place. Under All, a person's timeline also holds the
+messages the account sent to them, as "Sent from the account", under no chip; a campaign's timeline holds none. **Details** is their record: channels,
 facts, custom fields, and what each provider calls them. A person a provider knows has their threads there, read from
 the provider only when the section is opened (`jason contact threads`, and `jason contact thread` for one), outside any
 work item: the runtime takes only the route's half of the claim, the plugin is loaded and available, it performs the
