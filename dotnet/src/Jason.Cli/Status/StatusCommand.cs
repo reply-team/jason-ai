@@ -47,10 +47,11 @@ public static class StatusCommand
                                         asks for | a route is configured | a binding names an account | a
                                         provider CLI you name answers | the skill packs are deployed to an agent
                                         harness, and the files their record names are there | every enabled
-                                        profile names an agent host detected on this machine | autostart is
-                                        registered | notifications reach you | a UI is installed, and the
-                                        default one is this release's | the harness root can take the first
-                                        project or campaign
+                                        profile names an agent host detected on this machine | a default
+                                        execution profile is named for the AI roles to run on, and is enabled
+                                        | autostart is registered | notifications reach you | a UI is
+                                        installed, and the default one is this release's | the harness root can
+                                        take the first project or campaign
 
         The path check is ok in two cases. 'jason' resolves in this shell; or it does not, and this account
         keeps its directory for shells not yet started — its Path value on Windows, on macOS and Linux the one
@@ -81,6 +82,19 @@ public static class StatusCommand
         never 'jason runtime start': a runtime started any other way would run outside the update and leave
         its last steps undone, so 'jason runtime start' refuses then, and so does the start a sign-in
         registration makes. An update ledger that cannot be read fails the runtime check and names the file.
+
+        The roles check reads the same profiles, and Roles:DefaultExecutionProfile as the runtime would:
+        JASON_Roles__DefaultExecutionProfile over the settings file, the value as written, with nothing trimmed;
+        a padded, capitalised or blank value is one the runtime refuses, and the check says so. It is ok only
+        where that default names an enabled profile, since a role's work that nothing else names a profile
+        for runs on it and otherwise fails at its claim: role_not_launchable where none is named and the role
+        has no entry command, profile_not_found or profile_disabled where the profile named is not there or
+        is out of service. It does not read a profile a work item, a campaign's policy or a role's policy
+        names, nor an entry command. Absent, it names what is missing of the repair: jason profile create
+        claude-code --host claude_code --program claude, then "Roles": {"DefaultExecutionProfile":
+        "claude-code"} in the settings file, which the runtime reads without a restart; only the line where
+        the profile is there, and the name of your own profile where you have one and name none. Its fix is
+        the command alone, never the line. It never decides readiness.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

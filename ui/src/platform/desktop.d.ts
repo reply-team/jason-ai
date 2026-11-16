@@ -345,6 +345,12 @@ export interface DesktopHost {
      * be read. A name is the person's own text: the Connect page draws it as text and nothing else reads it.
      */
     ownServers: string[];
+    /**
+     * The name of the execution profile the agents' roles run on by default, where `Roles:DefaultExecutionProfile` names an
+     * enabled profile on this program and the chat can use the program: it drives the chat, is found here and is at its
+     * version floor. Null otherwise, and for every key provider. The Connect row says it in one line.
+     */
+    runsRoles: string | null;
 }
 
 /** An account Reply holds, as the Reply CLI lists it. */

@@ -43,6 +43,8 @@ export const templates = {
     reply_wired: 'Jason’s Reply plugin was placed and granted reply; global default written {RouteWritten}; jason plugin reload exited {Exit}',
     program_installed: 'npm install of {Program} exited {Exit}',
     own_servers_unread: 'The MCP servers of {Program} were not listed: its file is {Kind}',
+    roles_profile: 'The agents’ roles were looked at for a profile of their own: {Outcome}',
+    roles_profile_unmarked: 'The mark of a profile for the agents’ roles could not be written to the desktop’s settings, so none was made',
     reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
     tray_state: 'The tray shows the state {State}',
@@ -108,6 +110,10 @@ export const templates = {
     // The mode: Live or Demo.
     mode_set: 'The mode was set to {Mode}; the desktop starts again on that installation',
     mode_write_failed: 'The mode {Mode} could not be written; the desktop was not started again',
+    // The Demo: the page the application carries, in its sealed view (`demo-page.ts`). A refusal is said once per kind.
+    demo_shown: 'The demo page was shown in its sealed view, with the switch over it',
+    demo_unshown: 'The demo page could not be shown; the window says so',
+    demo_refused: 'The demo {View} was refused a {Kind}; each kind is said once a run',
     demo_unopened: 'The demo data directory could not be made or used; this run is on the person’s own installation and the mode is Live again',
     demo_runtime_stopped: 'The demo runtime was asked to stop as the demo run quit: {Outcome}',
     demo_runtime_stop_timed_out: 'The demo runtime did not answer the stop within the cap as the demo run quit; the quit went on',
@@ -190,6 +196,11 @@ export function lineOf(level: Level, name: TemplateName, fields: Readonly<Record
 }
 
 const filePattern = /^desktop-(\d{8})(?:_(\d{3,9}))?\.jsonl$/;
+
+/** Whether a file of the logs folder is one of the desktop's own, by its name. */
+export function isDesktopLog(name: string): boolean {
+    return filePattern.test(name);
+}
 
 /** The day in a file name, as the runtime's sink writes it: the machine's local date. */
 export function dayOf(at: Date): string {

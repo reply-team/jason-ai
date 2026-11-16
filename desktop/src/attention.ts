@@ -9,7 +9,7 @@ import type { Cli } from './cli.ts';
 import type { Logger } from './log.ts';
 import { windowTitle } from './window-title.ts';
 
-export type Attention = { state: 'reading' } | { state: 'up'; approvals: number; questions: number } | { state: 'unreachable' };
+export type Attention = { state: 'reading' } | { state: 'up'; approvals: number; questions: number } | { state: 'unreachable' } | { state: 'demo' };
 
 export interface Waiting {
     approvals: number;
@@ -72,6 +72,8 @@ export interface TrayView {
 
 export function trayView(attention: Attention): TrayView {
     if (attention.state === 'reading') return { title: '', tooltip: windowTitle, status: 'Reading what waits on you…' };
+    // The Demo is the sample page: nothing is read, and nothing waits.
+    if (attention.state === 'demo') return { title: '', tooltip: `${windowTitle}: the demo`, status: 'The demo: sample data, nothing is sent' };
     if (attention.state === 'unreachable') return { title: '!', tooltip: `${windowTitle}: the runtime is not answering`, status: 'The runtime is not answering' };
     const total = attention.approvals + attention.questions;
     if (total === 0) return { title: '', tooltip: `${windowTitle}: nothing waits on you`, status: 'Nothing waits on you' };

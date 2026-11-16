@@ -408,6 +408,7 @@ describe('the model and the effort a chat is sent with', () => {
         typedModel: true,
         modelsUnread: null,
         ownServers: [],
+        runsRoles: null,
     };
     const codex: DesktopHost = {
         ...claude,
@@ -653,13 +654,13 @@ describe("a chat's access mode", () => {
 
     it('says Auto-edit is on in its own line under the composer', () => {
         expect(autoEditLine).toBe(
-            "Auto-edit: the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first.",
+            "Auto-edit · the AI creates, moves, copies and removes files in the chat's own folder without asking; everything else is as in Ask first",
         );
     });
 
     it('says Full access is on in the line under the composer, from the mode the desktop holds alone', () => {
         expect(fullAccessLine).toBe(
-            'Full access: the AI runs commands without asking, except those Jason cannot read.',
+            'Full access · the AI runs commands without asking, except those Jason cannot read',
         );
     });
 });

@@ -163,7 +163,12 @@ test('inside the desktop the console mounts under the runtime policy, and follow
     // The built page loads the console's stylesheet as its own chunk's: styles only console.css gives are applied. The
     // elements alone would be there unstyled.
     await expect(page.locator('.jc-console .shell')).toHaveCSS('display', 'flex');
-    await expect(page.locator('.jc-console .side')).toHaveCSS('width', '232px');
+    await expect(page.locator('.jc-console .side')).toHaveCSS('width', '284px');
+    // The strip right of the sidebar is 38 pixels high and the window's drag region; its controls are not.
+    const strip = page.locator('.jc-console .mainc > .mode-strip');
+    await expect(strip).toHaveCSS('height', '38px');
+    await expect(strip).toHaveCSS('-webkit-app-region', 'drag');
+    await expect(strip.getByRole('button', { name: 'Live' })).toHaveCSS('-webkit-app-region', 'no-drag');
 
     // Live's sidebar draws no row for Activity, the Feed or Connect; Search finds each.
     const search = (text: string) => openBySearch(page, text);

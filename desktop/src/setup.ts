@@ -21,6 +21,7 @@ import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import { OwnServers, type UnreadKind } from './own-servers.ts';
+import { hostWords, profileProgram, readProfile, readProfilePage, roleHostOf, roleProfiles, rolesNext, type RoleHost } from './roles-profile.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
@@ -56,10 +57,11 @@ import {
     type ReplyCliChannel,
     type ReplyCliPending,
 } from './reply-cli-account.ts';
-import type { DesktopSettings } from './settings.ts';
+import type { DesktopSettings, RolesMark } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
+    defaultProfileOf,
     defaultRoutePlugin,
     hasBinding,
     isConfigured,
@@ -77,6 +79,7 @@ import {
     versionIn,
     withPluginConfigured,
     withPluginDisconnected,
+    withDefaultProfile,
     withReplyWired,
     type PluginRuntime,
     type PluginValues,
@@ -127,6 +130,13 @@ export interface HostState {
      * nothing else; empty for every other host, for a host not found, and for a file that is not there or cannot be read.
      */
     ownServers: string[];
+    /**
+     * The name of the execution profile the agents' roles run on by default, where `Roles:DefaultExecutionProfile` names
+     * an enabled profile whose host is this program and the chat can use this program: it drives the chat, is found here
+     * and is at its version floor. Null otherwise, and for every key provider, which runs no role. The Connect row says it
+     * in one line.
+     */
+    runsRoles: string | null;
 }
 
 export interface ReplyState {
@@ -229,6 +239,11 @@ export interface SetupDeps {
     /** Whether the runtime runs from the jason the desktop carries (`own-runtime.ts`), as the start found it; absent, it does not. */
     runtimeIsOurs?(): boolean;
     settings(): DesktopSettings;
+    /**
+     * Writes the desktop's own settings whole, and holds them as `settings()` answers from then on: the mark of a profile
+     * being made for the roles (`connectRoles`). Absent, no mark can be written, and no profile is made.
+     */
+    saveSettings?(next: DesktopSettings): void;
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
@@ -255,6 +270,29 @@ export interface SetupDeps {
 }
 
 const signInLimit = 5 * 60_000;
+/** How long `jason profile create` is given. */
+const profileLimit = 60_000;
+
+/**
+ * What one call of `connectRoles` came to: nothing to do in the demo, already settled in this run, a settings file it
+ * cannot read, a default already named, profiles it could not read, profiles that are there, no connected host, no
+ * mark it could write, a create refused, a default it could not write, a profile made and named, a profile made beside a
+ * default a person named meanwhile, which is kept, or a profile made earlier named now.
+ */
+export type RolesOutcome =
+    | 'demo'
+    | 'settled'
+    | 'settings_unread'
+    | 'default_named'
+    | 'profiles_unread'
+    | 'profiles_exist'
+    | 'no_host'
+    | 'unmarked'
+    | 'create_refused'
+    | 'default_unwritten'
+    | 'made'
+    | 'made_unnamed'
+    | 'named';
 const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
@@ -346,6 +384,8 @@ export class Setup {
     #own: OwnServers;
     /** The kind each program's file was last logged as unread with; absent while it lists. */
     #unread = new Map<string, UnreadKind>();
+    /** Whether `connectRoles` came to an end in this run: it then asks nothing more until the next start. */
+    #rolesSettled = false;
 
     constructor(deps: SetupDeps) {
         this.#deps = deps;
@@ -441,6 +481,17 @@ export class Setup {
                             : claude.fullAccess
                         : null;
         const autoEditOn = (program: string, drives: boolean) => (drives && program === 'codex' ? codexAutoEdit : null);
+
+        let settings: unknown = {};
+        let settingsRefused = this.#reloadRefusal;
+        try {
+            settings = parseInstallationSettings(readText(dataLayout(this.#deps.paths.data).userSettingsFile));
+        } catch (error) {
+            settings = {};
+            settingsRefused = (error as Error).message;
+        }
+        const roles = await this.#rolesDefault(settings);
+
         const programHosts: HostState[] = [];
         for (const host of hosts) {
             const found = programs.find(host.program) !== null;
@@ -458,6 +509,8 @@ export class Setup {
                 autoEdit: autoEditOn(host.program, host.drivesChat),
                 ...offered(host.id, host.label),
                 ownServers: await this.#ownServers(host.program, found),
+                // Said only under a host the chat can use, as the page counts it connected: found, and at its floor.
+                runsRoles: found && host.drivesChat && (own?.belowFloor ?? null) === null && roles !== null && hostWords[host.program] === roles.host ? roles.name : null,
             });
         }
         const providerHosts: HostState[] = keyProviders.map((provider) => ({
@@ -473,21 +526,13 @@ export class Setup {
             autoEdit: autoEditOn(provider.program, hosts.find((host) => host.program === provider.program)?.drivesChat ?? false),
             ...offered(provider.id, provider.label),
             ownServers: [],
+            runsRoles: null,
         }));
         // Shown from what is kept; Codex is asked again in the background where it is on the PATH or its key is stored.
         this.#deps.models?.refresh([
             ...(programs.find('codex') !== null ? ['codex'] : []),
             ...(stored.has('codex-api-key') ? ['codex-api-key'] : []),
         ]);
-
-        let settings: unknown = {};
-        let settingsRefused = this.#reloadRefusal;
-        try {
-            settings = parseInstallationSettings(readText(dataLayout(this.#deps.paths.data).userSettingsFile));
-        } catch (error) {
-            settings = {};
-            settingsRefused = (error as Error).message;
-        }
 
         // One question to the runtime answers both the Reply card and the plugins' cards.
         const listed = await this.#deps.cli.run(['plugin', 'list']);
@@ -514,6 +559,19 @@ export class Setup {
             })),
             settingsRefused,
         };
+    }
+
+    /**
+     * The profile `Roles:DefaultExecutionProfile` names, by its name and its host word, where the runtime answers it as an
+     * enabled one; null where none is named or none answers.
+     */
+    async #rolesDefault(settings: unknown): Promise<{ name: string; host: string } | null> {
+        const { name } = defaultProfileOf(settings);
+        // Only a name the runtime takes reaches the command line, so none is read as an option.
+        if (name === null || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) return null;
+        const got = await this.#deps.cli.run(['profile', 'get', name]);
+        const profile = got.exit === 0 ? readProfile(got.stdout) : null;
+        return profile !== null && profile.name === name && !profile.disabled && profile.host !== null ? { name, host: profile.host } : null;
     }
 
     /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
@@ -900,6 +958,111 @@ export class Setup {
             if (!(error instanceof AgentFolderUnowned)) throw error;
             this.#deps.log.warn('agent_folder_unowned', { Code: error.code });
         }
+    }
+
+    /**
+     * The agents' roles put on the AI the chat runs on, called at a Live start once the runtime is up, with the host the
+     * chat is set to run on, and at each chat turn's start, with the turn's host. Only where the installation's settings
+     * name no `Roles:DefaultExecutionProfile` and the runtime holds no execution profile at all, a disabled one included:
+     * the desktop's mark is written, one profile is made with `jason profile create` for the host `roleHostOf` picks (its
+     * name, its host word and its program, the verb's own defaults for the rest), and the default is written into the
+     * settings file the Connect cards edit, which the runtime reads without a restart; then the mark is taken away. The
+     * mark holds the profile's name, and once the create succeeded the id it answered: a start that finds the one profile
+     * there with that id and no default writes the default only. A mark that cannot show the profile there is the
+     * desktop's — no id, or another — is let go and nothing is written. Never in the demo; a profile or a default a person
+     * made is never touched, now or at any later start, a default named between the look and the write included. Each end
+     * but a runtime that did not answer and no connected host settles it for this run.
+     */
+    connectRoles(chosen: string | null): Promise<RolesOutcome> {
+        if (this.#deps.demo === true) return Promise.resolve('demo');
+        return this.#serial(async () => {
+            const outcome = await this.#connectRoles(chosen);
+            if (outcome !== 'settled' && outcome !== 'profiles_unread' && outcome !== 'no_host') this.#rolesSettled = true;
+            this.#deps.log.info('roles_profile', { Outcome: outcome });
+            return outcome;
+        });
+    }
+
+    async #connectRoles(chosen: string | null): Promise<RolesOutcome> {
+        if (this.#rolesSettled) return 'settled';
+        let settings: Record<string, unknown>;
+        try {
+            ({ settings } = this.#readForEdit());
+        } catch {
+            return 'settings_unread';
+        }
+        const pending = this.#deps.settings().rolesProfilePending ?? null;
+        if (defaultProfileOf(settings).named) {
+            this.#mark(null);
+            return 'default_named';
+        }
+        const listed = await this.#deps.cli.run(['profile', 'list', '--include-disabled', '--limit', '2']);
+        const page = listed.exit === 0 ? readProfilePage(listed.stdout) : null;
+        if (page === null) return 'profiles_unread';
+        const next = rolesNext(page.profiles, page.more, pending, page.profiles.length === 0 ? roleHostOf(chosen, await this.#rolesConnected()) : null);
+        if (next.kind === 'leave') {
+            if (next.why === 'profiles_exist') this.#mark(null);
+            return next.why;
+        }
+        if (next.kind === 'name') {
+            const named = this.#nameDefault(next.name);
+            return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : 'default_unwritten';
+        }
+
+        const { name, host } = roleProfiles[next.host];
+        const found = this.#deps.programs.find(next.host);
+        if (found === null) return 'no_host';
+        // The mark first: a profile made and never named is finished by the next start, and only then.
+        if (!this.#mark({ name })) return 'unmarked';
+        const made = await this.#deps.cli.run(['profile', 'create', name, '--host', host, '--program', profileProgram(next.host, found)], { timeoutMs: profileLimit });
+        if (made.exit !== 0) return 'create_refused';
+        // Then the id it answered, the one proof a later start has that the profile there is the desktop's own.
+        const id = readProfile(made.stdout)?.id ?? null;
+        if (id !== null) this.#mark({ name, id });
+        const named = this.#nameDefault(name);
+        return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : 'default_unwritten';
+    }
+
+    /** Whether Claude Code and Codex are connected as the cards say it: found, and Claude Code at its floor. */
+    async #rolesConnected(): Promise<Record<RoleHost, boolean>> {
+        const claude = this.#deps.programs.find('claude') !== null && (await this.#claude()).belowFloor === null;
+        return { claude, codex: this.#deps.programs.find('codex') !== null };
+    }
+
+    /**
+     * Writes `Roles:DefaultExecutionProfile` into the settings file as it is just before the write, where it names none,
+     * then takes the mark away and has the cards read again: `written`, or `theirs` where the file names one by then, which
+     * is kept; `unwritten` where the file could not be read or written, the mark kept.
+     */
+    #nameDefault(name: string): 'written' | 'theirs' | 'unwritten' {
+        let written: boolean;
+        try {
+            const { file, settings } = this.#readForEdit();
+            written = !defaultProfileOf(settings).named;
+            if (written) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}\n`);
+        } catch {
+            return 'unwritten';
+        }
+        this.#mark(null);
+        this.#changed();
+        return written ? 'written' : 'theirs';
+    }
+
+    /** Writes the mark, or takes it away; false where it could not be written. */
+    #mark(mark: RolesMark | null): boolean {
+        const save = this.#deps.saveSettings;
+        if (save === undefined) return mark === null;
+        const settings = this.#deps.settings();
+        const held = settings.rolesProfilePending ?? null;
+        if (held?.name === mark?.name && held?.id === mark?.id) return true;
+        const { rolesProfilePending: _, ...rest } = settings;
+        try {
+            save(mark === null ? rest : { ...rest, rolesProfilePending: mark });
+        } catch {
+            this.#deps.log.warn('roles_profile_unmarked', {});
+            return false;
+        }
+        return true;
     }
 
     setProviderKey(providerId: unknown, key: unknown): Promise<void> {

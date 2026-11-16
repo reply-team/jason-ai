@@ -1,15 +1,18 @@
-import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { registry } from '../platform/slots';
+import { setPlace } from '../platform/places';
 import { mode, type Mode } from '../platform/mode';
 import { parseRoute, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -295,5 +298,248 @@ describe('the sidebar', () => {
         await waitFor(() => expect(inFront()).toBe('Connect'));
         fireEvent.click(side().getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
+    });
+});
+
+describe('the sidebar’s look', () => {
+    /** The console drawn, and what waits read: the sidebar is painted afresh no more. */
+    const settled = async () => {
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => expect(attention.loaded.value).toBe(true));
+        await waitFor(() => side().getByText('Recent'));
+    };
+
+    it('is 284 px wide, and marks the row in front bold on the hover ground', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const aside = document.querySelector<HTMLElement>('.jc-console .side')!;
+        expect(styleOf(aside)).toMatchObject({ width: '284px', flex: '0 0 284px', background: 'var(--side-bg)' });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        const needs = within(menu()).getByRole('button', { name: /^Needs you/ });
+        expect(needs.getAttribute('aria-current')).toBe('true');
+        expect(styleOf(needs)).toMatchObject({ background: 'var(--hover)', 'font-weight': '600' });
+        expect(styleOf(within(menu()).getByRole('button', { name: /^Search/ }))['font-weight']).toBeUndefined();
+    });
+
+    it('counts what waits on Needs you in red with white figures, and a conversation’s in amber', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const count = await waitFor(() => {
+            const found = within(menu())
+                .getByRole('button', { name: /^Needs you/ })
+                .querySelector('.count');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(styleOf(count)).toMatchObject({
+            background: 'var(--count-bg)',
+            color: '#fff',
+            'font-size': '11px',
+            'font-weight': '700',
+            'border-radius': '9px',
+            'line-height': '17px',
+        });
+        const row = document.createElement('button');
+        row.className = 'item recent-row';
+        row.innerHTML = '<span class="count">1</span>';
+        document.querySelector('.jc-console .side nav[aria-label="Conversations"]')!.append(row);
+        expect(styleOf(row.querySelector('.count')!)).toMatchObject({
+            background: 'var(--amber-2)',
+            color: 'var(--amber)',
+            'font-weight': '700',
+        });
+    });
+
+    it('draws Needs you as a check in a circle, Settings as a cog, and Recent’s filter as two sliders', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        // Each icon's lines, in the order the icon table draws them.
+        const drawn = (icon: Element) =>
+            [...icon.children].map((each) =>
+                each.tagName === 'circle'
+                    ? `circle ${each.getAttribute('cx')},${each.getAttribute('cy')} r${each.getAttribute('r')}`
+                    : `path ${each.getAttribute('d')}`,
+            );
+        const needs = within(menu()).getByRole('button', { name: /^Needs you/ });
+        expect(drawn(needs.querySelector('svg')!)).toEqual(['circle 12,12 r10', 'path M8.5 11.8l2.6 2.6 4.6-5']);
+        const settings = side().getByRole('button', { name: 'Settings' });
+        expect(drawn(settings.querySelector('svg')!)).toEqual([
+            'path M9.6 4.4L10.4 1.5L13.6 1.5L14.4 4.4L15.7 4.9L18.3 3.5L20.5 5.7L19.1 8.3L19.6 9.6L22.5 10.4L22.5 13.6' +
+                'L19.6 14.4L19.1 15.7L20.5 18.3L18.3 20.5L15.7 19.1L14.4 19.6L13.6 22.5L10.4 22.5L9.6 19.6L8.3 19.1' +
+                'L5.7 20.5L3.5 18.3L4.9 15.7L4.4 14.4L1.5 13.6L1.5 10.4L4.4 9.6L4.9 8.3L3.5 5.7L5.7 3.5L8.3 4.9z',
+            'circle 12,12 r3.5',
+        ]);
+        const filter = side().getByRole('button', { name: 'Filter' });
+        expect(drawn(filter.querySelector('svg')!)).toEqual([
+            'path M4 7h10M18 7h2M4 17h2M10 17h10',
+            'circle 16,7 r2',
+            'circle 8,17 r2',
+        ]);
+    });
+
+    it('gives the count on Needs you a ground its white figures read on, in the light theme and both dark ones', async () => {
+        renderConsole(stubDesktop(), 'live');
+        // The sidebar is painted afresh as what it shows changes: the count's style is read while it is drawn.
+        const style = await waitFor(() => {
+            const found = within(menu())
+                .getByRole('button', { name: /^Needs you/ })
+                .querySelector('.count');
+            expect(found).not.toBeNull();
+            const read = styleOf(found!);
+            expect(read.background).toBeDefined();
+            return read;
+        });
+        // Each dark theme's tokens, read from the file: the one the system asks for sits under `@media`, which the
+        // cascade reader leaves out. The run starts in ui/.
+        const sheet = readFileSync('src/console/console.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+        const darkTokens = (head: string) => {
+            const at = sheet.indexOf(head + ' {');
+            expect(at, head).toBeGreaterThanOrEqual(0);
+            const body = sheet.slice(sheet.indexOf('{', at) + 1, sheet.indexOf('}', at));
+            return Object.fromEntries(
+                [...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((each) => [each[1]!, each[2]!.trim()]),
+            );
+        };
+        const system = darkTokens("    :root:not([data-theme='light']) .jc-console");
+        const chosen = darkTokens(":root[data-theme='dark'] .jc-console");
+        // The dark theme is the same whether the system or the person chose it, the strip's tokens included.
+        expect(system).toEqual(chosen);
+        const resolve = (value: string, dark: Record<string, string>): string => {
+            const named = /^var\((--[\w-]+)\)$/.exec(value);
+            return named ? resolve(dark[named[1]!] ?? tokenOf(named[1]!) ?? '', dark) : value;
+        };
+        const luminance = (hex: string) => {
+            const six = hex.length === 4 ? [...hex.slice(1)].map((c) => c + c).join('') : hex.slice(1);
+            const [r, g, b] = [0, 2, 4].map((at) => {
+                const c = parseInt(six.slice(at, at + 2), 16) / 255;
+                return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            });
+            return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+        };
+        for (const [theme, dark] of [
+            ['light', {}],
+            ['dark', chosen],
+        ] as const) {
+            const ground = resolve(style.background!, dark);
+            const figures = resolve(style.color!, dark);
+            expect([ground, figures], theme).toEqual([
+                expect.stringMatching(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i),
+                expect.stringMatching(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i),
+            ]);
+            const [hi, lo] = [luminance(ground), luminance(figures)].sort((x, y) => y - x);
+            expect((hi! + 0.05) / (lo! + 0.05), theme).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    it('heads the sidebar with the mark and the wordmark at the brand’s height', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        // The sidebar is painted afresh as what it shows changes: each element is read once it has settled.
+        const brand = document.querySelector<HTMLElement>('.jc-console .side .brand')!;
+        expect(styleOf(brand)).toMatchObject({ padding: '18px 18px 12px' });
+        expect(styleOf(brand.querySelector('.mark')!)).toMatchObject({ width: '20px', height: '20px' });
+        expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
+    });
+
+    it('draws New GTM agent as one full-width box, its caret a quiet end of the same box', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await settled();
+        const button = () => side().getByRole('button', { name: 'New GTM agent' });
+        const row = () => button().closest<HTMLElement>('.newrow')!;
+        expect(row().contains(caret())).toBe(true);
+        // Start is in front: the whole box is marked, the caret's end with it.
+        expect(button().getAttribute('aria-current')).toBe('true');
+        expect(styleOf(row())).toMatchObject({ background: 'var(--hover)', 'border-color': 'var(--accent-line)' });
+        fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
+        await waitFor(() => expect(inFront()).toBe('Needs you'));
+        expect(styleOf(row())).toMatchObject({
+            margin: '2px 14px 8px',
+            border: '1px solid var(--line)',
+            'border-radius': '12px',
+            background: 'var(--panel)',
+        });
+        expect(styleOf(button())).toMatchObject({ border: '0', background: 'none', flex: '1' });
+        expect(styleOf(caret())).toMatchObject({ border: '0', background: 'none' });
+    });
+
+    it('heads Recent quietly, scrolls the rows, and keeps Settings at the foot of the window', async () => {
+        renderConsole(stubDesktop(), 'live');
+        await waitFor(() => side().getByText('Recent'));
+        const header = document.querySelector<HTMLElement>('.jc-console .side .recent')!;
+        expect(styleOf(header)).toMatchObject({
+            padding: '14px 10px 4px',
+            color: 'var(--faint)',
+            'font-size': '13px',
+            'font-weight': '400',
+        });
+        const body = document.querySelector<HTMLElement>('.jc-console .side .side-body')!;
+        expect(styleOf(body)).toMatchObject({ display: 'flex', 'flex-direction': 'column', flex: '1' });
+        const scroll = body.querySelector<HTMLElement>(':scope > .sscroll')!;
+        expect(styleOf(scroll)).toMatchObject({ flex: '1', 'overflow-y': 'auto', padding: '0 8px 10px' });
+        expect(scroll.contains(menu())).toBe(true);
+        expect(scroll.contains(side().getByRole('navigation', { name: 'Conversations' }))).toBe(true);
+        expect(body.lastElementChild?.classList.contains('sfoot')).toBe(true);
+    });
+});
+
+describe('the sidebar in the Mac desktop’s window, which has no title bar', () => {
+    const mac = () => Object.assign(stubDesktop(), { platform: 'darwin' as const });
+    const band = () => document.querySelector<HTMLElement>('.jc-console > .title-drag');
+
+    it('leaves the window’s buttons 26 px over the sidebar and drags the window by a 284 x 26 band there', async () => {
+        renderConsole(mac(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        const root = document.querySelector<HTMLElement>('.jc-console')!;
+        expect(root.classList.contains('desktop-mac')).toBe(true);
+        expect(styleOf(document.querySelector('.jc-console .side')!)).toMatchObject({ 'padding-top': '26px' });
+        expect(band()).not.toBeNull();
+        expect(band()!.getAttribute('aria-hidden')).toBe('true');
+        expect(band()!.childElementCount).toBe(0);
+        expect(styleOf(band()!)).toMatchObject({
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: '284px',
+            height: '26px',
+            '-webkit-app-region': 'drag',
+        });
+        // The strip beside it is the rest of the window's drag region.
+        expect(styleOf(screen.getByRole('region', { name: 'Mode bar' }))['-webkit-app-region']).toBe('drag');
+    });
+
+    it('keeps whatever floats over the drag regions out of them: menus, the palette and dialogs', async () => {
+        renderConsole(mac(), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        fireEvent.click(caret());
+        const floating = [
+            side().getByRole('menu', { name: 'Create' }),
+            document.querySelector('.jc-console .menu-away')!,
+        ];
+        for (const each of floating) expect(styleOf(each)['-webkit-app-region'], each.className).toBe('no-drag');
+        for (const name of ['palette-away', 'palette', 'overlay', 'dialog', 'act-dialog']) {
+            const made = document.createElement('div');
+            made.className = name;
+            document.querySelector('.jc-console .area')!.append(made);
+            expect(styleOf(made)['-webkit-app-region'], name).toBe('no-drag');
+        }
+    });
+
+    it('draws no band and no room in a browser tab on a Mac, which keeps its own title bar', async () => {
+        setPlace('tab', mac());
+        renderConsole(mac(), 'live');
+        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
+        expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
+        expect(band()).toBeNull();
+    });
+
+    it('draws no band on Windows and Linux, whose windows keep their frame', async () => {
+        for (const platform of ['win32', 'linux'] as const) {
+            renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            expect(document.querySelector('.jc-console')!.classList.contains('desktop-mac')).toBe(false);
+            expect(band()).toBeNull();
+            cleanup();
+        }
     });
 });

@@ -5,7 +5,7 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, safeStorage, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -15,11 +15,11 @@ import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
 import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
-import { carriedOf, isOtherCopy, removeOtherCopies, type Carried } from './bundle-copy.ts';
-import { cliAt } from './cli.ts';
+import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
+import { cliAt, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
-import { editorEnvironment, openInHarnessRoot } from './open-in-env.ts';
+import { editorEnvironment } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
@@ -39,23 +39,18 @@ import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistra
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLines, fileLogger, limitsFrom, LogHold, releaseAtQuit, releasedAfter, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
-import { demoPlaces, openOnTheSample, placesProblem, SampleNotReady, seedDepsOnDisk, startDemoOver, type DemoPlaces } from './demo-seed.ts';
-import { carryOutOnDisk, CarryOutRefused, carryOutStartOver, dropStartOver, leftRuntimeStops, noteLeftStopped, placingInFlight, requestStartOver } from './demo-over.ts';
-import { demoRuntimeAlive } from './demo-alive.ts';
-import { processIsRunning } from './own-runtime.ts';
-import { applyMode, demoDirectory, demoMenu, demoPreparing, demoUnopened, enterRun, keepFirstStart, offersOf, personsOwnOf, readMode, relaunchAsPerson, relaunchOptions, startOn, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type PersonsOwn, type StartRun } from './mode.ts';
-import { holdDemoQuit, stopDemoRuntime, stopLeftDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { carriedDemoPlugin, placeDemoPlugin } from './demo-plugin.ts';
-import { claimDemoFolder, hasDemoMarker, markPlacedFolder } from './demo-folders.ts';
-import { beginPlacing, clearPlaced, demoArchiveOf, placingPlan, placingWords, projectsWhole, settlePlacing, writeSampleWhole, type PlacingOutcome, type PlacingPlan } from './demo-archive.ts';
-import { openDemoDirectory, prepareDemo, writeDemoRoute } from './demo-start.ts';
-import { writeDemoSettings } from './demo-settings.ts';
+import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+// Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
+import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
+import { demoBeforeReady } from './demo-page.ts';
+import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
 import { ProviderKeys } from './providers.ts';
 import { applyDailyTrends, keptDailyTrends, readSettings, settingsAtStart, writeSettings, type DesktopSettings } from './settings.ts';
 import { applyTheme, darkBackground, isNewInstallation, lightBackground, startingTheme } from './theme.ts';
 import { Setup } from './setup.ts';
+import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
@@ -65,6 +60,7 @@ import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from 
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
+import { frameOf, keepMovable } from './window-frame.ts';
 
 function readText(file: string): string | null {
     try {
@@ -236,22 +232,19 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
-    // A start that places the demo began reading it already, for the import and the runtime it starts.
-    const pathRead = pathReadAtStart ?? loginPath(pathOf(process.env), home);
+    const pathRead = loginPath(pathOf(process.env), home);
     process.env.PATH = await pathRead;
     const form = linuxForm();
     // Every child gets the person's PATH and libraries: nothing of an AppImage's mount, which the AppRun put on them.
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
 
     const paths: DesktopPaths = desktopPaths(dataDirectory(process.env, home));
-    // Held while the prepared demo is placed (`demo-archive.ts`); its file is opened, and the limits read, once it is let go.
     const log = logHold.logger(() => fileLines(paths.logs, limitsFrom(readText(dataLayout(paths.data).userSettingsFile))));
     const packaged = bundleDirectory();
     const version = bundleVersion(packaged);
     // What this start carries (`bundle-copy.ts`): an AppImage's copy under <data>/desktop/bundle/<version>/, the bundle
-    // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason. A start
-    // that places the prepared demo made it already, for the import.
-    const carried = carriedAtStart ?? carriedOf({ form, packaged, version, bundles: paths.bundle });
+    // where it is installed for anything else; with no copy, nothing that outlasts the run names the mount's jason.
+    const carried = carriedOf({ form, packaged, version, bundles: paths.bundle });
     if (carried.failure !== null) log.error('bundle_copy_failed', { Differs: carried.failure.differs });
     const { bundle, uncopied } = carried;
     log.info('desktop_started', { Version: version ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
@@ -266,6 +259,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
+        // On macOS no title bar: the page leaves the window's buttons their band and marks where it is dragged by.
+        ...frameOf(process.platform),
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
@@ -289,6 +284,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
     keepWindowTitle(window);
+    // With no title bar on macOS, every page the window shows is given a band to drag the window by.
+    keepMovable(window, process.platform);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
     window.setMenuBarVisibility(conduct.menuBar);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
@@ -329,21 +326,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
     const jason = cliAt(executable, env);
     const cli = loggedCli(jason, log);
-    // A demo run's quit, the switch back to Live included, first stops the demo's runtime, by the demo's run file and the
-    // existing stop; the person's runtime is never stopped. A live run's quit leaves its runtime running, as ever.
-    // The stop is waited for at most `demoStopCapMs`; the quit then goes on all the same.
-    holdDemoQuit(app, runOn.mode, {
-        stop: async () => {
-            // An import still placing the demo is let end first: the runtime it starts is then the one stopped.
-            if (placement !== null) await placement;
-            const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
-            log.info('demo_runtime_stopped', { Outcome: outcome.kind });
-        },
-        timedOut: () => log.warn('demo_runtime_stop_timed_out', {}),
-    });
-    if (runOn.unopened !== null) log.warn('demo_unopened', {});
-    if (demoPlacing.kind === 'make') log.warn('demo_archive_unplaced', { Step: demoPlacing.step, Code: 'none' });
-    if (startOverNotCarriedOut !== null) log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut });
     // The count and the re-pair loop begin at the first pairing that succeeds: the start's, or a Reload's after a start
     // that failed.
     const begin = atFirstPairing(() => {
@@ -353,9 +335,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const repairer = new Repairer({ readRunFile: () => readText(paths.runFile), cli, log, load: async (link) => void (await current?.loadURL(link)), paired: begin });
     // On Linux the session starts the launcher: the AppImage file itself, whose mount lasts only while it runs.
     const login = new LoginItem({ platform: process.platform, home, executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead, log, env: process.env });
-    // A demo run writes nothing of the demo into what outlasts it: no update, no start at logon, no PATH command, no
-    // Remove What Jason Placed; the menu says to go back to the person's own installation for them, and offers the way
-    // back (`offersOf`, `demoMenu`).
+    // This run is Live's (a Demo start runs `runDemo`), which offers every act that outlasts it (`offersOf`).
     const offers = offersOf(runOn.mode);
     const autostart = !offers.autostart || version === null || !carried.outlives ? null : new RuntimeAutostart({ cli, log });
     // The updater runs only in an installed build: a development build has no installer to hand an update to.
@@ -433,91 +413,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
           })
         : null;
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
-    // directory, also from a demo run, and the desktop then starts again on the installation it names; a write that fails
-    // starts nothing.
-    const modeDeps = {
-        write: (mode: Mode) => {
-            try {
-                writeMode(desktopPaths(runOn.person).mode, mode);
-            } catch (error) {
-                log.warn('mode_write_failed', { Mode: mode });
-                throw error;
-            }
-            log.info('mode_set', { Mode: mode });
-        },
-        // The new start inherits this process's environment: the person's is put back first (`relaunchAsPerson`).
-        relaunch: () =>
-            relaunchAsPerson({
-                env: process.env,
-                person: personEnvironment,
-                relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
-                quit: () => app.quit(),
-            }),
-    };
-    // Back to Your Own Installation, in a demo run's tray and menu: the way back that needs no page, for a demo whose
-    // start failed.
-    // True while the demo's sample is made behind the page (`openOnTheSample`): the switch, the way back and Start the Demo
-    // Over wait for it, each saying so, and the page shows the mark.
-    let sampleMaking = false;
-    const back = () => {
-        const refusal = applyMode('live', modeDeps, sampleMaking);
-        if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
-    };
-    // Start the Demo Over: one question first (everything done in the demo goes), then the demo's runtime is stopped, a
-    // request is left in the person's own desktop folder and the desktop starts again. This run lives inside the demo's
-    // folders, so it removes none: the next start removes them before anything names the demo's directory
-    // (`carryOutStartOver` in `chooseInstallation`). Refused in Live; the person's own installation is never touched.
-    // True from the window opening until this run's own start of the runtime has answered: a stop in that window finds no run
-    // file and says none, though a runtime is booting, so Start the Demo Over waits for the start.
-    let startInFlight = true;
-    const startOver = async (): Promise<{ refused: string } | null> => {
-        if (runOn.mode !== 'demo') return { refused: 'Start the Demo Over is only in the demo.' };
-        if (startInFlight) return { refused: 'The demo is still starting. Try again in a moment.' };
-        if (sampleMaking) return { refused: demoPreparing };
-        const parent = current;
-        const options = { type: 'question' as const, title: windowTitle, message: 'Start the demo over?', detail: 'Everything you did in the demo is removed, and the demo starts again from the beginning. Your own installation is not touched.', buttons: ['Start Over', 'Cancel'], defaultId: 1, cancelId: 1 };
-        const { response } = parent === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(parent, options);
-        if (response !== 0) return null;
-        const outcome = await startDemoOver({
-            places: demoWhere,
-            exists: (path) => existsSync(path),
-            marked: hasDemoMarker,
-            stopRuntime: async () => {
-                const stopped = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
-                log.info('demo_runtime_stopped', { Outcome: stopped.kind });
-                return stopped.kind === 'stopped' || stopped.kind === 'none';
-            },
-            request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver),
-            relaunch: () => modeDeps.relaunch(),
-        });
-        if (outcome.kind === 'refused') {
-            log.warn('demo_start_over_refused', { Cause: outcome.reason });
-            return { refused: outcome.why };
-        }
-        log.info('demo_start_over', {});
-        return null;
-    };
-    const startOverFromMenu = () => {
-        void startOver().then(
-            (refusal) => {
-                if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
-            },
-            () => {
-                log.warn('demo_start_over_refused', { Cause: 'threw' });
-                dialog.showErrorBox(windowTitle, 'The demo could not be started over.');
-            },
-        );
-    };
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode, removalOffered(process.platform)), back, startOver: startOverFromMenu });
+    // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
+    const modeDeps = modeSwitch(log, form);
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps) });
     desk.open();
-    // The mark, said to the page, which shows it and holds its switch, and to the menu, which draws its lines again.
-    const setPreparing = (on: boolean) => {
-        sampleMaking = on;
-        desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));
-        toPage('mode.preparing', on);
-    };
-    // The import is already running: the switch, the way back and Start the Demo Over wait for it from the first menu.
-    if (placement !== null) setPreparing(true);
     showWindow = () => desk.show();
     const repointed = (async () => {
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
@@ -563,9 +462,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         (on) => void (settings = applyDailyTrends(on, settings, (next) => writeSettings(paths.settings, next))),
         refused,
     );
-    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking }), refused);
-    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);
-    handle(seam, 'mode.startOver', origin, () => startOver(), refused);
+    handle(seam, 'mode.get', origin, (): ModeAnswer => ({ mode: runOn.mode, unopened: runOn.unopened, preparing: false }), refused);
+    handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps), refused);
+    // The demo is a page now, with nothing to start over; the seam's member stays until the earlier demo's code goes.
+    handle(seam, 'mode.startOver', origin, () => ({ refused: startOverGone }), refused);
     // The page reports the id of the UI token it holds, never the token; the one before it is revoked then.
     const windowPairing = new WindowPairing({
         cli,
@@ -574,43 +474,51 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         save: (next) => writeWindowPairing(paths.windowPairing, next),
     });
     handle(seam, 'pairing.paired', origin, (tokenId) => windowPairing.paired(tokenId), refused);
-    registerSetup(
-        seam,
-        new Setup({
-            paths,
-            cli,
-            programs,
-            keys,
-            log,
-            bundleVersion: version ?? 'unprepared',
-            runtimeVersion: () => runtimeVersion,
-            runtimeIsOurs: () => runtimeIsOurs,
-            settings: () => settings,
-            models,
-            // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
-            ownServers: { env: process.env, home },
-            // A demo run offers no Full access (`demoFullAccess`).
-            demo: runOn.mode === 'demo',
-            // A box is closed, and read as a no, when its window is hidden or closed.
-            confirm: (box) =>
-                askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
-                    window.once('hide', abort);
-                    window.once('close', abort);
-                    return () => {
-                        window.removeListener('hide', abort);
-                        window.removeListener('close', abort);
-                    };
-                }),
-            // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
-            // kept nowhere.
-            openLink: toBrowser,
-            // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
-            copyLink: (link) => clipboard.writeText(link),
-        }),
-        origin,
+    const setup = new Setup({
+        paths,
+        cli,
+        programs,
+        keys,
         log,
-        () => toPage('setup.changed'),
-    );
+        bundleVersion: version ?? 'unprepared',
+        runtimeVersion: () => runtimeVersion,
+        runtimeIsOurs: () => runtimeIsOurs,
+        settings: () => settings,
+        // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
+        saveSettings: (next) => {
+            settings = next;
+            writeSettings(paths.settings, next);
+        },
+        models,
+        // Claude Code's and Codex's own files are where this process's environment and home say; only names leave them.
+        ownServers: { env: process.env, home },
+        // A demo run offers no Full access (`demoFullAccess`).
+        demo: runOn.mode === 'demo',
+        // A box is closed, and read as a no, when its window is hidden or closed.
+        confirm: (box) =>
+            askBox(current, (window, options, signal) => dialog.showMessageBox(window, { ...options, buttons: [...options.buttons], signal }), box, (window, abort) => {
+                window.once('hide', abort);
+                window.once('close', abort);
+                return () => {
+                    window.removeListener('hide', abort);
+                    window.removeListener('close', abort);
+                };
+            }),
+        // A link the Reply CLI made goes from here to the person's browser, the navigation lock's one way out, and is
+        // kept nowhere.
+        openLink: toBrowser,
+        // A link the person asked to hand on goes from here to the clipboard, and is neither kept nor logged.
+        copyLink: (link) => clipboard.writeText(link),
+    });
+    registerSetup(seam, setup, origin, log, () => toPage('setup.changed'));
+    // The agents' roles are put on the AI the chat runs on, in Live alone: at a start once the runtime is up, with the host
+    // the chat holds, and as each turn starts on its host (`Setup.connectRoles`). Nothing it meets stops the start or the turn.
+    const roles = rolesMoments(runOn.mode, {
+        connect: (chosen) => setup.connectRoles(chosen),
+        chosen: () => chat.chosenHost(),
+        failed: () => log.warn('roles_profile', { Outcome: 'failed' }),
+    });
+    const turns = loggedTurns(log);
     // A start holds it while it deploys skills into the chat folder; a send waits for it (`SkillsGate`).
     const skillsGate = new SkillsGate();
     const chat = new Chat({
@@ -618,7 +526,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         env,
         bundle,
         dataNamed,
-        personsOwn,
         // A demo run offers no Full access by any path, and applies no standing choice (`demoFullAccess`).
         demo: runOn.mode === 'demo',
         bundleVersion: version,
@@ -641,10 +548,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             const { response, checkboxChecked } = await dialog.showMessageBox(parent, fullAccessDialog());
             return fullAccessAnswer(response, checkboxChecked);
         },
-        ...loggedTurns(log),
+        ...turns,
+        started: (host, resumed, mode) => {
+            turns.started(host, resumed, mode);
+            roles.atTurn(host);
+        },
         // The menu and the System screen follow the standing choice wherever it changed; the log hears it too.
         standingChanged: (standing, why) => {
-            loggedTurns(log).standingChanged(standing, why);
+            turns.standingChanged(standing, why);
             toPage('fullAccess.changed', standing);
         },
     });
@@ -658,7 +569,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
         cli,
-        harnessRoot: () => openInHarnessRoot(runOn.mode, demoWhere.harnessRoot, () => harnessRoot(process.env, homedir(), dataLayout(runOn.person).userSettingsFile)),
+        harnessRoot: () => harnessRoot(process.env, homedir(), dataLayout(runOn.person).userSettingsFile),
         isDirectory: isFolder,
         remembered: () => settings.openIn ?? null,
         remember: (id: PlaceId) => {
@@ -707,45 +618,19 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         void bridges.close();
     });
 
-    await showStarting(window, placement !== null ? placingWords : 'Starting Jason…', false);
+    await showStarting(window, 'Starting Jason…', false);
     if (uncopied !== null) {
-        startInFlight = false;
         desk.notStarted();
         await showStarting(window, uncopied, true);
         return;
     }
     if (version === null) {
-        startInFlight = false;
         desk.notStarted();
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
     }
 
     try {
-        // The prepared demo, placed from the first instant of this start, is waited for before the runtime is started; a
-        // placing that failed has been taken away and the demo prepared for its sample to be made, as before.
-        if (placement !== null) {
-            try {
-                await settlePlacing(placement, {
-                    log,
-                    // The runtime the import started answers which folder each placed project is recorded at.
-                    linked: () => projectsWhole(cli, demoWhere.harnessRoot),
-                    release: () => logHold.release(),
-                    markRoot: () => markPlacedFolder(demoWhere.harnessRoot),
-                    seal: () => writeSampleWhole(demoWhere.data),
-                    drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
-                    runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
-                    stopRuntime: async () => {
-                        const stopped = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
-                        return stopped.kind === 'stopped' || stopped.kind === 'none';
-                    },
-                    clear: () => clearPlaced(demoWhere),
-                    prepareLive: () => prepareLive(demoWhere.data),
-                });
-            } finally {
-                setPreparing(false);
-            }
-        }
         const started = await startInstallation({
             cli,
             paths,
@@ -766,45 +651,20 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         if (started.versionsDiffer) runtimeIsOurs = (await whoseRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli))).whose === 'ours';
         // What an earlier version's page kept on disk is unpaired and removed first, once (`window-pairing.ts`).
         const kept = readWindowPairing(paths.windowPairing);
-        // A demo's runtime is up: every start cancels the open AI-role reviews, because no AI role runs in the demo, and a
-        // demo with no sample gets it made behind the page, which loads first on the link the start minted (good for a
-        // minute; the seed takes longer) and shows the data as it lands.
-        let opened;
-        try {
-            opened = await openOnTheSample({
-                sample: runOn.mode === 'demo' ? seedDepsOnDisk({ cli, places: demoWhere, scratch: join(paths.data, 'seed-scratch'), progress: (step) => log.info('demo_seed_step', { Step: step }) }) : null,
-                load: () =>
-                    loadWindow(
-                        { cleared: kept.cleared, found: earlierPageWasFound },
-                        {
-                            cli,
-                            clearSession: async () => {
-                                await session.defaultSession.clearStorageData();
-                                await session.defaultSession.clearCache();
-                            },
-                            remove: (folder) => rmSync(folder, { recursive: true, force: true }),
-                            electron: paths.electron,
-                            log,
-                        },
-                        () => window.loadURL(started.link),
-                    ),
-                preparing: setPreparing,
-                // A making cut short leaves the person's request to start the demo over, so the next start makes the sample
-                // whole rather than show the half; it is taken away once the sample is whole.
-                request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),
-                drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),
-            });
-        } catch (error) {
-            if (!(error instanceof SampleNotReady)) throw error;
-            log.error('demo_seed_failed', { Step: error.outcome.step ?? 'marker', Code: error.outcome.code ?? 'none' });
-            throw new Error(error.outcome.why);
-        }
-        void opened.making?.then(async (made) => {
-            if (made.kind !== 'failed') return;
-            log.error('demo_seed_failed', { Step: made.step ?? 'marker', Code: made.code ?? 'none' });
-            if (current !== null) await showStarting(current, made.why, true);
-        });
-        const { cleared } = opened.loaded;
+        const { cleared } = await loadWindow(
+            { cleared: kept.cleared, found: earlierPageWasFound },
+            {
+                cli,
+                clearSession: async () => {
+                    await session.defaultSession.clearStorageData();
+                    await session.defaultSession.clearCache();
+                },
+                remove: (folder) => rmSync(folder, { recursive: true, force: true }),
+                electron: paths.electron,
+                log,
+            },
+            () => window.loadURL(started.link),
+        );
         if (cleared !== kept.cleared) {
             try {
                 writeWindowPairing(paths.windowPairing, { ...readWindowPairing(paths.windowPairing), cleared });
@@ -813,6 +673,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             }
         }
         log.info('window_loaded', { Origin: started.origin });
+        roles.atStart();
         settleStart(rollback, app.getVersion(), true, log);
         repairer.pairedWith(readText(paths.runFile));
         begin();
@@ -832,8 +693,6 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
             process.platform,
         );
         if (current !== null) await showStarting(current, notice, true);
-    } finally {
-        startInFlight = false;
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {
@@ -856,6 +715,95 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     }
 }
 
+/**
+ * The Demo's run: the window, its tray and menu, and the page the application carries with our Demo | Live switch over
+ * it (`demo-window.ts`, sealed by `demo-page.ts`). It has nothing to do with any installation: it makes no jason, starts
+ * and stops no runtime, reads no shell, asks no program anything and writes nothing but the desktop's own log, and the
+ * window's own contents have no preload and load nothing but the starting page when the page cannot be shown. A link
+ * that arrives waits, as it waits for any page, and only brings the window forward.
+ */
+async function runDemo(_links: LinkPost): Promise<void> {
+    const paths: DesktopPaths = desktopPaths(runOn.person);
+    const log = logHold.logger(() => fileLines(paths.logs));
+    const form = linuxForm();
+    log.info('desktop_started', { Version: bundleVersion(bundleDirectory()) ?? 'unprepared', Platform: process.platform, DataDirectory: paths.data });
+    // The page is drawn light, as it was built; the person's choice of theme is neither read nor written here.
+    nativeTheme.themeSource = 'light';
+    const conduct = windowConduct(process.platform);
+    const atLogin = openedAtLogin(process.argv);
+    const window = new BrowserWindow({
+        width: 1280,
+        height: 860,
+        minWidth: 900,
+        minHeight: 600,
+        title: windowTitle,
+        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); elsewhere the system's.
+        ...frameOf(process.platform),
+        show: !atLogin || conduct.atLogin === 'minimized',
+        backgroundColor: lightBackground,
+        webPreferences: {
+            // Nothing is put into the window's pages: nothing in the Demo's window reaches the main process.
+            partition: windowPartition,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
+            spellcheck: false,
+            devTools: !app.isPackaged,
+        },
+    });
+    let current: BrowserWindow | null = window;
+    window.on('closed', () => {
+        current = null;
+    });
+    keepWindowTitle(window);
+    if (atLogin && conduct.atLogin === 'minimized') window.minimize();
+    window.setMenuBarVisibility(conduct.menuBar);
+    // The tray keeps the application, as in Live: closing the window hides it; on Linux closing it quits.
+    let quitting = false;
+    app.on('before-quit', () => {
+        quitting = true;
+    });
+    window.on('close', (event) => {
+        if (quitting || conduct.closeQuits) return;
+        event.preventDefault();
+        window.hide();
+    });
+    // The window's own contents, under the two views, go nowhere, open nothing and are granted nothing.
+    window.webContents.on('will-navigate', (event) => event.preventDefault());
+    window.webContents.on('will-attach-webview', (event) => event.preventDefault());
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    window.webContents.session.setPermissionCheckHandler(() => false);
+
+    const modeDeps = modeSwitch(log, form);
+    // The Demo runs no jason: the tray's count is never read here, and anything that asked would be refused.
+    const noJason: Cli = { run: () => Promise.reject(new Error('The demo runs no jason.')) };
+    let views: DemoViews | null = null;
+    const login = new LoginItem({ platform: process.platform, home: homedir(), executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead: Promise.resolve(), log, env: process.env });
+    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
+    desk.open();
+    showWindow = () => desk.show();
+
+    const unshown = 'The demo could not be shown. Choose Back to Your Own Installation in the Jason menu or the tray.';
+    try {
+        views = await openDemo(window, {
+            appPath: app.getAppPath(),
+            platform: process.platform,
+            refused: (view, kind) => log.warn('demo_refused', { View: view, Kind: kind }),
+            live: () => backToLive(modeDeps),
+            unshown: () => {
+                log.error('demo_unshown', {});
+                if (current !== null) void showStarting(current, unshown, true);
+            },
+        });
+        log.info('demo_shown', {});
+    } catch {
+        log.error('demo_unshown', {});
+        if (current !== null) await showStarting(current, unshown, true);
+    }
+}
+
 // Electron's own files follow the data directory, before anything opens: its profile, the page's storage and its own
 // logs are under <data>/desktop/electron, never the account's application data, so a second installation (one
 // JASON_DATA_DIR names) is a second desktop with its own lock, and a purge of the data directory takes all of it. Every
@@ -871,33 +819,18 @@ function keepElectronUnderData(): void {
 // --no-sandbox, which an AppImage's launcher adds where the system refuses the sandbox, says why once Electron is ready
 // and quits, with no lock taken, no copy made, no jason started and no window made (`sandbox.ts`).
 const unsandboxed = sandboxRefusal(app.commandLine.hasSwitch('no-sandbox'), process.argv, linuxForm());
-// Which installation this run is on, what the person's environment said, the person's own directories a demo run's chat
-// refuses, whether the installation is new and whether an earlier page left its storage: decided once by
-// `chooseInstallation`, after the sandbox and the link, before anything else of a start resolves a path, and read only by
-// what runs after it.
+
+// Which installation this run is on, what the person's environment said, whether the installation is new and whether an
+// earlier page left its storage: decided once by `chooseInstallation`, after the sandbox and the link, before anything
+// else of a start resolves a path, and read only by what runs after it.
 let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
-let personsOwn: PersonsOwn | undefined;
-let demoWhere!: DemoPlaces;
-/**
- * The prepared demo (`demo-archive.ts`): what this start does with the archive the application carries, decided by
- * `chooseInstallation`; the import, once begun by `startDesktop`; what it carries, made for the import; and the demo's
- * preparation for a sample made at the start, which a placing that failed falls back to.
- */
-let demoPlacing: PlacingPlan = { kind: 'none' };
-let placement: Promise<PlacingOutcome> | null = null;
-let carriedAtStart: Carried | null = null;
-/** The login shell's PATH, begun by a start that places the demo, so the import and the runtime it starts have it too. */
-let pathReadAtStart: Promise<string> | null = null;
-let prepareLive: (demo: string) => void = () => undefined;
-/** The desktop's log, held while the prepared demo is placed: `<data>/logs/` is a part an import places. */
+/** The desktop's log, held until a run makes its own (`log.ts`). */
 const logHold = new LogHold();
-/** Whether this start only stops a demo runtime a crashed making or placing left, and starts again (`stopLeftDemoRuntime`). */
-let leftDemoRuntime = false;
-/** Why the start over the run before asked for was not carried out at this start, as a code; null when nothing was refused. */
-let startOverNotCarriedOut: string | null = null;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
+/** What the seam's Start the Demo Over answers: the demo is a page that keeps nothing, so there is nothing to start over. */
+const startOverGone = 'Start the Demo Over is no longer offered: the demo is a page that keeps nothing.';
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -911,85 +844,54 @@ if (unsandboxed !== null) {
 }
 
 /**
- * Which installation this run is on (`mode.ts`): the record in the person's directory says Live or Demo, and for Demo
- * the demo's directory becomes this run's data directory, so the profile, the lock, the logs, the runtime it starts, the
- * chat's hosts and every jason verb are the demo installation's by the rule they already follow. The installer's and
- * the uninstaller's starts ignore the record. A demo directory that cannot be made, used or prepared makes this run the
- * person's own: the record goes back to Live, and the first screen says the demo could not be opened. Before the demo's
- * runtime is ever started, its settings are written into its own settings file (`prepare`, the seam for whatever else
- * the demo installation must hold before it runs); the harness root is a sibling of the person's.
+ * The switch between Live and Demo, the page's and the menu's: the record written in the person's directory, then the
+ * desktop started again with the person's environment, which a run no longer changes (`relaunchAsPerson`).
+ */
+function modeSwitch(log: Logger, form: LinuxPackage | null): { write(mode: Mode): void; relaunch(): void } {
+    return {
+        write: (mode: Mode) => {
+            try {
+                writeMode(desktopPaths(runOn.person).mode, mode);
+            } catch (error) {
+                log.warn('mode_write_failed', { Mode: mode });
+                throw error;
+            }
+            log.info('mode_set', { Mode: mode });
+        },
+        relaunch: () =>
+            relaunchAsPerson({
+                env: process.env,
+                person: personEnvironment,
+                relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
+                quit: () => app.quit(),
+            }),
+    };
+}
+
+/** Back to Your Own Installation, in a demo run's tray and menu: what Live on the switch does. */
+function backToLive(deps: { write(mode: Mode): void; relaunch(): void }): void {
+    const refusal = applyMode('live', deps);
+    if (refusal !== null) dialog.showErrorBox(windowTitle, refusal.refused);
+}
+
+/**
+ * Which installation this run is on (`mode.ts`): the record in the person's directory says Live or Demo, and both run on
+ * the person's directory, where the desktop keeps its own records (the mode, Electron's profile, its log). Demo is the
+ * page the application carries and starts, makes or touches nothing else: no runtime, no folder of the earlier demo. The
+ * installer's and the uninstaller's starts ignore the record.
  */
 function chooseInstallation(installerStart: boolean): void {
     const personDirectory = dataDirectory(process.env, homedir());
-    const personHarness = harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile);
-    demoWhere = demoPlaces(personDirectory, personHarness);
     // Whether this installation is new is read first, of the person's directory: before this start writes anything there,
     // before Electron makes its profile, before the single-instance lock. A new installation's first start opens on the
     // demo (`keepFirstStart`), the record being the one thing written in the person's directory before they choose Live.
     installationWasNew = isNewInstallation(personDirectory);
     keepFirstStart(desktopPaths(personDirectory).mode, installationWasNew, installerStart);
-    // Before the demo's directory is claimed, and before anything of this run names it, a start over asked by the run
-    // before is carried out (`demo-over.ts`), and a demo whose places break the rule is refused. Either makes this run the
-    // person's own, as an unusable directory does; a failed removal keeps its request for the next demo start.
-    let refused = false;
-    if (readMode(desktopPaths(personDirectory).mode) === 'demo' && !installerStart) {
-        try {
-            const problem = placesProblem(demoWhere, personDirectory, personHarness);
-            if (problem !== null) throw new CarryOutRefused('places', problem);
-            carryOutStartOver({
-                ...carryOutOnDisk(desktopPaths(personDirectory).demoStartOver, demoWhere, processIsRunning),
-                runtimeAlive: () => demoRuntimeAlive(desktopPaths(demoWhere.data).runFile),
-                exists: (folder) => existsSync(folder),
-                marked: hasDemoMarker,
-            });
-        } catch (error) {
-            // A demo runtime that a crashed making or placing left is the one thing holding the request back, and nothing
-            // else would ever stop it: this start stays on the demo, opens no window, stops it and starts again
-            // (`stopLeftDemoRuntime`). Any other refusal makes this start the person's own.
-            const reason = error instanceof CarryOutRefused ? error.reason : 'failed';
-            if (reason === 'runtime_alive' && leftRuntimeStops(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning)) {
-                leftDemoRuntime = true;
-            } else {
-                refused = true;
-                startOverNotCarriedOut = reason;
-                try {
-                    writeMode(desktopPaths(personDirectory).mode, 'live');
-                } catch {
-                    // The record stays as it was; this start is the person's all the same.
-                }
-            }
-        }
-    }
-    // The demo's start-up order in one place (`demo-start.ts`): the provider and its route, then the fixed settings. It runs
-    // after the directory is made and before any runtime start, and a step that fails makes this run the person's own.
-    prepareLive = (demo) =>
-        prepareDemo(demo, {
-            harnessRoot: () => claimDemoFolder(demoDirectory(harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile))),
-            place: (data) => placeDemoPlugin(carriedDemoPlugin(bundleDirectory()), data, personDirectory),
-            route: writeDemoRoute,
-            fixedSettings: (data) => writeDemoSettings(data, harnessRoot(process.env, homedir(), dataLayout(personDirectory).userSettingsFile)),
-            runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),
-        });
-    // A demo that holds nothing yet is placed from the archive the application carries, when it is fresh, rather than made
-    // (`demo-archive.ts`): it is then not prepared here, since the import moves aside what it finds, its harness root
-    // included, which the import makes.
-    // A second start while another run places the demo prepares nothing either; it loses the instance lock and quits.
-    const placingElsewhere = placingInFlight(readText(desktopPaths(personDirectory).demoStartOver), process.pid, processIsRunning);
-    demoPlacing =
-        readMode(desktopPaths(personDirectory).mode) === 'demo' && !installerStart ? placingPlan({ archive: demoArchiveOf(bundleDirectory()), places: demoWhere, now: new Date() }) : { kind: 'none' };
-    runOn = startOn(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart, {
-        open: openDemoDirectory,
-        prepare: (demo) => (demoPlacing.kind === 'place' || placingElsewhere ? undefined : prepareLive(demo)),
-        keep: (mode) => writeMode(desktopPaths(personDirectory).mode, mode),
-    });
-    if (runOn.mode !== 'demo') demoPlacing = { kind: 'none' };
-    if (refused && runOn.mode === 'live') runOn = { ...runOn, unopened: demoUnopened };
-    // The person's own directories, which a demo run's chat refuses whole: read while the person's variables still stand.
-    personsOwn = personsOwnOf(runOn, () => personHarness);
+    runOn = startRun(personDirectory, readMode(desktopPaths(personDirectory).mode), installerStart);
     // What the person's environment said, put back before the desktop starts itself again (`relaunchAsPerson`).
-    personEnvironment = enterRun(process.env, runOn);
+    personEnvironment = personEnvironmentOf(process.env);
     // Whether an earlier version's page left its storage on disk, read before Electron is ready (`window-pairing.ts`).
-    earlierPageWasFound = earlierPageFound(desktopPaths(dataDirectory(process.env, homedir())).electron);
+    earlierPageWasFound = earlierPageFound(desktopPaths(personDirectory).electron);
 }
 
 function startDesktop(): void {
@@ -1019,14 +921,7 @@ function startDesktop(): void {
         void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
     } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
-    } else if (leftDemoRuntime) {
-        // The demo's instance lock is held, so no demo run is open; the runtime a crashed making or placing left is
-        // stopped through the demo's own stop, and the desktop starts again, which carries the request out.
-        void app.whenReady().then(() => stopLeftRuntimeAndStart(startLog()));
     } else {
-        // The prepared demo is placed from here, the first instant this start is the only one, beside the window's own
-        // start and before this start's log is opened (`demo-archive.ts`).
-        placement = beginDemoPlacement();
         const early = startLog();
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
@@ -1048,78 +943,9 @@ function startDesktop(): void {
         app.on('window-all-closed', () => app.quit());
         // However the run ends, and as the application quits, every line still held is written (`log.ts`).
         releaseAtQuit(app, logHold);
-        void app.whenReady().then(() => releasedAfter(logHold, () => run(links, installationWasNew)));
+        // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
+        // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
+        if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
+        void app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))));
     }
-}
-
-/**
- * Begins `jason import` of the prepared demo when this start places it (`placingPlan`), with the jason this start carries
- * (on an AppImage its copy, made here for the import) on the demo's data directory. A start whose jason is not carried
- * answers a failed placing at once; it then shows why it cannot start, as before.
- */
-function beginDemoPlacement(): Promise<PlacingOutcome> | null {
-    if (demoPlacing.kind !== 'place') return null;
-    const form = linuxForm();
-    const packaged = bundleDirectory();
-    const version = bundleVersion(packaged);
-    carriedAtStart = carriedOf({ form, packaged, version, bundles: desktopPaths(runOn.data).bundle });
-    // A start whose jason is not carried places nothing; it shows why it cannot start, as before.
-    if (carriedAtStart.uncopied !== null || version === null) return null;
-    const executable = join(carriedAtStart.bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
-    // The import, and the runtime it starts, which serves the whole run, get the login shell's PATH as every child does:
-    // it is read here, the import waiting for it, and the run uses the same reading.
-    const pathRead = loginPath(pathOf(process.env), homedir());
-    pathReadAtStart = pathRead;
-    const request = desktopPaths(runOn.person).demoStartOver;
-    return beginPlacing({
-        cli: { run: async (args, options) => cliAt(executable, withoutMount(withPath(process.env, await pathRead), mountOf(form, process.env))).run(args, options) },
-        archive: demoPlacing.archive,
-        places: demoWhere,
-        // A making's request that names a placing: a second start while it runs carries nothing out (`carryOutStartOver`)
-        // and prepares nothing (`placingInFlight`); a next start after a run cut short starts the demo over.
-        request: () => requestStartOver(request, process.pid, true, true),
-        // Then the import's own process, which may outlive this run: a start while it still writes waits for it (`importedBy`).
-        spawned: (pid) => requestStartOver(request, process.pid, true, true, pid),
-        hold: () => logHold.hold(),
-    });
-}
-
-/**
- * The start that only stops the demo runtime a crashed making or placing left (`leftDemoRuntime`): the demo's own stop,
- * by the demo's run file with the jason this application carries, never the person's runtime; then the desktop starts
- * again on the demo. A stop that fails refuses as a carry-out refuses: the record set to Live, the person told, and the
- * desktop started again on their own installation, the request kept for the next demo start.
- */
-async function stopLeftRuntimeAndStart(log: Logger): Promise<void> {
-    const form = linuxForm();
-    const packaged = bundleDirectory();
-    const executable = join(carriedOf({ form, packaged, version: bundleVersion(packaged), bundles: desktopPaths(runOn.data).bundle }).bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
-    const env = withoutMount(withPath(process.env, process.env.PATH ?? ''), mountOf(form, process.env));
-    const again = () =>
-        relaunchAsPerson({
-            env: process.env,
-            person: personEnvironment,
-            relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
-            quit: () => app.quit(),
-        });
-    await stopLeftDemoRuntime({
-        stop: async () => {
-            const outcome = await stopDemoRuntime({ platform: process.platform, executable, person: runOn.person, env });
-            log.info('demo_runtime_stopped', { Outcome: outcome.kind });
-            return outcome;
-        },
-        // Once for this request: a runtime back by the next start is refused as any other.
-        note: () => noteLeftStopped(desktopPaths(runOn.person).demoStartOver),
-        startAgain: again,
-        refuse: () => {
-            log.warn('demo_start_over_not_carried_out', { Cause: 'runtime_alive' });
-            try {
-                writeMode(desktopPaths(runOn.person).mode, 'live');
-            } catch {
-                // The record stays as it was.
-            }
-            dialog.showErrorBox(windowTitle, demoUnopened);
-            again();
-        },
-    });
 }
