@@ -75,8 +75,9 @@ public class DecisionThreadMigrationTests
                 """);
         }
 
+        // To this migration by name and no further, so a later migration's own change is not read as this one's.
         SqliteConnection.ClearAllPools();
-        new DatabaseMigrator(dir.Paths).Migrate();
+        Migrate(dir, ThisMigration);
 
         using var after = Open(dir);
         Assert.Equal(
