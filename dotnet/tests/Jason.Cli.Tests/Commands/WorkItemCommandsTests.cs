@@ -1198,15 +1198,30 @@ public class WorkItemCommandsTests
         var interrupted = new AttemptDto(
             "att_A", 1, AttemptStatus.Interrupted, WorkItemKind.AiRole, null, null, null,
             Moment.AddMinutes(1), Moment.AddMinutes(1), null, null, Moment.AddHours(1), null);
-        var succeeded = new AttemptDto(
-            "att_B", 2, AttemptStatus.Succeeded, WorkItemKind.AiRole, null, null, null,
-            Moment.AddMinutes(5), Moment.AddMinutes(5), Moment.AddMinutes(6), null, Moment.AddHours(1), null);
-        using var cli = new CliRun(Serialize(Item([interrupted, succeeded], attemptCount: 0)));
+        var running = new AttemptDto(
+            "att_B", 2, AttemptStatus.Running, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(5), Moment.AddMinutes(5), null, null, Moment.AddHours(1), null);
+        using var cli = new CliRun(Serialize(Item([interrupted, running], attemptCount: 0, currentAttemptId: "att_B")));
 
         var exit = await cli.RunAsync("workitem", "get", "wi_A", "--snapshots", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("Attempts:     2 made, 0 counted toward the limit, current att_A", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("Attempts:     2 made, 0 counted toward the limit, current att_B", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_one_made_and_none_counted_for_an_item_that_succeeded_the_first_time()
+    {
+        var succeeded = new AttemptDto(
+            "att_A", 1, AttemptStatus.Succeeded, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(5), Moment.AddMinutes(5), Moment.AddMinutes(6), null, Moment.AddHours(1), null);
+        using var cli = new CliRun(Serialize(Item([succeeded], attemptCount: 0, currentAttemptId: null)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--snapshots", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Attempts:     1 made, 0 counted toward the limit", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("current", cli.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1253,7 +1268,8 @@ public class WorkItemCommandsTests
         IReadOnlyList<ReportSummaryDto>? externalReports = null,
         LineageDto? lineage = null,
         AttemptErrorDto? lastError = null,
-        int attemptCount = 1) => new(
+        int attemptCount = 1,
+        string? currentAttemptId = "att_A") => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -1275,7 +1291,7 @@ public class WorkItemCommandsTests
         null,
         null,
         attemptCount,
-        "att_A",
+        currentAttemptId,
         lastError ?? new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
         attempts,
         externalReports,
