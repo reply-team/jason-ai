@@ -1,19 +1,19 @@
 // `events.read`: what moved in the Reply account, read from Reply's change feed a page at a time by `reply inbox changes`.
 //
 // Reply's feed lists the threads that moved, oldest first, from a cursor or from a moment, and holds the last 30 days.
-// Each item is one `thread_moved`, or a `bounce` (below): the thread, its contact and sequence, the channel, and who
-// moved it, from the thread's last message and Reply's flag that the thread holds a reply — the other side's, the
-// account's, and nobody this package can name where the account's message tops a thread that holds a reply or where
-// Reply gave no last message. A thread moves in this feed only when a message lands on it, so no move is Reply's own. A
-// move by the account is read as a `message_sent`, the account's own send: the person it went to, the sequence it belongs
-// to, the thread, the message and its moment, and the channel, and nothing anybody wrote. One item is a `bounce` instead:
-// a bounce notice lands on the thread of the
-// send it answers as an inbound message, with nothing in the message saying it is one, so where Reply flags the thread
-// as holding a bounce and no reply and its last message is inbound, that message is the notice and no move of the other
-// side. An item is a bounce only where the bounce is the one of Reply's four reply flags that is set: with a reply, an
-// automatic reply or an absence flagged as well it stays a moved thread, since the flags never clear and the feed
-// cannot say which message is newest. Reply's flags for an automatic reply and an absence are not carried, and nothing
-// anybody wrote is in an item at all.
+// Each item is one of three kinds: a `thread_moved`, a `message_sent` or a `bounce` (below). A move is the thread, its
+// contact and sequence, the channel, and who moved it, from the thread's last message and Reply's flag that the thread
+// holds a reply: the other side's, the account's, and nobody this package can name where the account's message tops a
+// thread that holds a reply or where Reply gave no last message. A thread moves in this feed only when a message lands
+// on it, so no move is Reply's own. A move by the account is a `message_sent`, the account's own send: the person it
+// went to, the sequence it belongs to, the thread, the message and its moment, and the channel, and nothing anybody
+// wrote. The third kind, a `bounce`, answers a send: a bounce notice lands on the thread of the send it answers as an
+// inbound message, with nothing in the message saying it is one, so where Reply flags the thread as holding a bounce
+// and no reply and its last message is inbound, that message is the notice and no move of the other side. An item is a
+// bounce only where the bounce is the one of Reply's four reply flags that is set: with a reply, an automatic reply or
+// an absence flagged as well it stays a moved thread, since the flags never clear and the feed cannot say which message
+// is newest. Reply's flags for an automatic reply and an absence are not carried, and nothing anybody wrote is in an
+// item at all.
 //
 // The cursor this package hands back has three forms, each with a prefix of its own, so that one of any other shape is
 // none it wrote. While a read goes on, `c|<Reply's cursor>` asks for the next page from where the last one ended. Once a

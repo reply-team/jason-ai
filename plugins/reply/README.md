@@ -325,9 +325,9 @@ of [docs/plugins.md](../../docs/plugins.md) §7, and each operation's document s
 ## The account's events
 
 `reply inbox changes` reads Reply's change feed: the threads that moved in the account, oldest first, a page at a time,
-from a cursor or from a moment. Each item is read as one event, a `thread_moved`, a `message_sent` for the account's own message (below) or, for a
-bounce notice (below), a `bounce`. A moved thread is the thread, its contact and its sequence by Reply's identifiers, the channel, when it
-moved, and Reply's judgement that it asks for a meeting. Its moment is the thread's last activity, written as
+from a cursor or from a moment. Each item is read as one event: a `thread_moved`, a `message_sent` for the account's
+own message (below) or, for a bounce notice (below), a `bounce`. A moved thread is the thread, its contact and its
+sequence by Reply's identifiers, the channel, when it moved, and Reply's judgement that it asks for a meeting. Its moment is the thread's last activity, written as
 `conversation.list` writes `last_activity_at`, to the millisecond, so a move both reads find is said once. Who moved it
 is read from the thread's last message and Reply's flag that the thread holds a reply (`flags.hasReply`):
 
@@ -354,16 +354,21 @@ nothing anybody wrote, no subject, preview, address or name:
   direct send's; `thread` — the thread; `channel` — the thread's channel;
 - `message` — Reply's identifier for the thread's last message, or `null` where the feed gives none;
 - `occurred_at` — the message's own moment, which stays the same however often the thread comes back into the feed, so a
-  send read twice, as the hour a read after a finished one reads again brings it back, is one event; where the feed gives
-  the message no moment, the thread's last activity.
+  send read twice, as the hour a read after a finished one reads again brings it back, is one event. Where the feed gives
+  the message no moment, or one that is not a moment, it is the thread's last activity, which stays the same only while no
+  other message lands on the thread: a send read again after that is read under a new moment.
 
 A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and the package
 writes one line on stderr saying so, which carries the thread's and the sequence's identifiers and the thread's last
 activity, and nothing anybody wrote. A send at or past the end of a span still ends that span, and the cursor moves past
-every item as before. A message the account sends on a thread that holds a reply stays a move that names nobody. It is
-the send of an email that is described here, and nothing more is claimed. The other side's move, or one that
-names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
+every item as before. A message the account sends on a thread that holds a reply stays a move that names nobody. The
+other side's move, or one that names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
 sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.
+
+The send is reported for email. Another channel's sends are reported the same way if the provider's feed carries them,
+which has not been seen on a real account. This reading needs Jason 0.47.0 or newer: an older runtime refuses the whole
+page that holds a `message_sent`, so replies and bounces stop being read through events until Jason is updated. Update
+Jason before the package.
 
 `unread` is always `null`: the feed does not say.
 

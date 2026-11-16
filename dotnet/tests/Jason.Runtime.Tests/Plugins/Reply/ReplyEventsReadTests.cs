@@ -910,6 +910,53 @@ public class ReplyEventsReadTests
     }
 
     /// <summary>
+    /// A message that carries its own moment keeps it however the thread's last activity moves: the hour a read after a
+    /// finished one reads again brings the same send back under the same moment, though the thread has since moved on.
+    /// </summary>
+    [Fact]
+    public async Task A_send_with_its_own_moment_read_twice_is_the_same_event_though_the_thread_moved_on()
+    {
+        using var account = new ReplyAccount()
+            .Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: Ago(12), activity: Ago(10))))
+            .Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: Ago(12), activity: Ago(5))));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var first = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct));
+        var again = Page(await ReadAsync(api, Input(cursor: (string)first["cursor"]!), Ct));
+
+        Assert.Equal(2, account.Calls.Count);
+        Assert.Single(first["events"]!.AsArray());
+        Assert.Equal(first["events"]!.ToJsonString(), again["events"]!.ToJsonString());
+    }
+
+    /// <summary>A message moment that is not a moment is none: the send takes the thread's last activity, and is still one valid event.</summary>
+    [Fact]
+    public async Task A_send_whose_moment_is_not_a_moment_takes_the_threads_last_activity()
+    {
+        using var account = new ReplyAccount().Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: "not a date", activity: Ago(10))));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = Assert.Single(Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct))["events"]!.AsArray())!;
+
+        Assert.Equal(("message_sent", Utc(Ago(10))), ((string?)read["kind"], (string?)read["occurred_at"]));
+    }
+
+    /// <summary>A channel Reply names that this package does not know is "other" on a send, as it is on a moved thread.</summary>
+    [Fact]
+    public async Task A_send_on_a_channel_the_package_does_not_know_is_other()
+    {
+        using var account = new ReplyAccount().Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: Ago(12), activity: Ago(10), channel: "carrierPigeon")));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var read = Assert.Single(Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct))["events"]!.AsArray())!;
+
+        Assert.Equal(("message_sent", "other"), ((string?)read["kind"], (string?)read["channel"]));
+    }
+
+    /// <summary>
     /// A last message with no identifier is a send with no message, and one with no moment of its own takes the thread's
     /// last activity, which is the moment the thread moved.
     /// </summary>
