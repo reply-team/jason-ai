@@ -1,0 +1,161 @@
+{
+  "operation": "campaign.add_contacts",
+  "case": "own-list-again",
+  "request": {
+    "campaign_id": "cmp_1",
+    "match_by": "email",
+    "contacts": [
+      {
+        "first_name": "Alma",
+        "last_name": "Novak",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "alma@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Ines",
+        "last_name": "Duarte",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "ines@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Alma",
+        "last_name": "Novak",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "alma@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Omar",
+        "last_name": "Reyes",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "omar@example.test"
+          }
+        ]
+      },
+      {
+        "first_name": "Bruno",
+        "last_name": "Silva",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "bruno-at-example"
+          }
+        ]
+      },
+      {
+        "first_name": "Chen",
+        "last_name": "Wu"
+      },
+      {
+        "first_name": "Rafa",
+        "last_name": "Costa",
+        "channels": [
+          {
+            "channel": "email",
+            "value": "rafa@example.test"
+          }
+        ]
+      }
+    ],
+    "reason": "From a list given in the chat.",
+    "actor": {
+      "type": "human",
+      "id": "ada"
+    }
+  },
+  "status": 200,
+  "response": {
+    "campaign_id": "cmp_1",
+    "summary": {
+      "added": 0,
+      "already_member": 5,
+      "rejected": 2
+    },
+    "items": [
+      {
+        "index": 0,
+        "status": "already_member",
+        "contact_id": "cnt_1",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      },
+      {
+        "index": 1,
+        "status": "already_member",
+        "contact_id": "cnt_2",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      },
+      {
+        "index": 2,
+        "status": "already_member",
+        "contact_id": "cnt_1",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      },
+      {
+        "index": 3,
+        "status": "already_member",
+        "contact_id": "cnt_3",
+        "contact_created": false,
+        "state": "excluded",
+        "error": null
+      },
+      {
+        "index": 4,
+        "status": "rejected",
+        "contact_id": null,
+        "contact_created": false,
+        "state": null,
+        "error": {
+          "code": "validation_failed",
+          "message": "Validation failed: contacts[4].channels[0].value: invalid.",
+          "retryable": false,
+          "details": [
+            {
+              "field": "contacts[4].channels[0].value",
+              "code": "invalid",
+              "message": "an email value is a bare mailbox address with a dotted domain and no display name."
+            }
+          ]
+        }
+      },
+      {
+        "index": 5,
+        "status": "rejected",
+        "contact_id": null,
+        "contact_created": false,
+        "state": null,
+        "error": {
+          "code": "no_match_key",
+          "message": "the item carries no value for the requested match_by key; dedup was asked for, so it is not created blind.",
+          "retryable": false
+        }
+      },
+      {
+        "index": 6,
+        "status": "already_member",
+        "contact_id": "cnt_4",
+        "contact_created": false,
+        "state": "enrolled",
+        "error": null
+      }
+    ]
+  }
+}

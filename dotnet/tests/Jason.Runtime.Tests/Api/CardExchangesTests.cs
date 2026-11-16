@@ -410,6 +410,63 @@ public class CardExchangesTests
         }
     }
 
+    /// <summary>
+    /// A list a person gave in the chat, added to an agent as the card sends it: each row a payload matched by its email
+    /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
+    /// out of the agent, an address that is no address, a row with no address, and a person whose record is archived; then
+    /// the same request again.
+    /// </summary>
+    [Fact]
+    public async Task A_list_given_in_the_chat_is_added_row_by_row_and_again_with_every_row_already_there()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var scene = await Scene.OpenAsync(api, "Spring launch");
+        var held = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ines", last_name = "Duarte", channels = new[] { new { channel = "email", value = "ines@example.test", primary = true } }, actor = Ada }, Ct);
+        var removed = await scene.PersonAsync("Omar", "Reyes", "email", "omar@example.test");
+        await api.PostOkAsync<RemoveContactsResult>(Operations.CampaignRemoveContacts, new { campaign_id = scene.Campaign, contact_ids = new[] { removed }, reason = "Not a fit.", actor = Ada }, Ct);
+        var archived = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Rafa", last_name = "Costa", channels = new[] { new { channel = "email", value = "rafa@example.test", primary = true } }, actor = Ada }, Ct);
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = archived.Id, actor = Ada }, Ct);
+
+        // An empty cell is left out, as the card leaves it out.
+        static object Row(string first, string last, string? email) => email is null
+            ? new { first_name = first, last_name = last }
+            : new { first_name = first, last_name = last, channels = new[] { new { channel = "email", value = email } } };
+        var request = new
+        {
+            campaign_id = scene.Campaign,
+            match_by = "email",
+            contacts = new[]
+            {
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Ines", "Duarte", "ines@example.test"),
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Omar", "Reyes", "omar@example.test"),
+                Row("Bruno", "Silva", "bruno-at-example"),
+                Row("Chen", "Wu", null),
+                Row("Rafa", "Costa", "rafa@example.test"),
+            },
+            reason = "From a list given in the chat.",
+            actor = Ada,
+        };
+        var first = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list", request, Ct);
+        Assert.Equal(7, first.Items.Count);
+        Assert.Equal(
+            [AddContactsItemStatus.Added, AddContactsItemStatus.Added, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.Added],
+            first.Items.Select(i => i.Status));
+        Assert.Equal(held.Id, first.Items[1].ContactId);
+        Assert.False(first.Items[1].ContactCreated);
+        Assert.Equal(first.Items[0].ContactId, first.Items[2].ContactId);
+        Assert.Equal(removed, first.Items[3].ContactId);
+        Assert.Equal(MembershipState.Excluded, first.Items[3].State);
+        Assert.NotEqual(archived.Id, first.Items[6].ContactId);
+        Assert.True(first.Items[6].ContactCreated, "an archived person is made again, not matched");
+
+        var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list-again", request, Ct);
+        Assert.Equal(
+            [AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.AlreadyMember],
+            again.Items.Select(i => i.Status));
+    }
+
     /// <summary>A campaign no route sends for: what the plan says of it, and the refusal the sender line meets.</summary>
     [Fact]
     public async Task A_campaign_with_no_route_is_refused_where_a_card_asks_for_one()
