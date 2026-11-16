@@ -7,18 +7,16 @@ namespace Jason.Runtime.Tests.Ui;
 /// <summary>
 /// The runtime's sealed set and the desktop's own seal around a view of untrusted content are one allow-list written
 /// twice, in C# and in TypeScript: held equal here, directive by directive and feature by feature, read from the desktop's
-/// source as it stands. They differ in three places, each stated: a browser's page frames the file, so
-/// <c>frame-ancestors</c> is the runtime's own origin rather than none; a browser has no origin of its own to give the
-/// file, so its <c>sandbox</c> never keeps the same origin, where the desktop's keeps a scheme shared with nothing; and
-/// the server sends no opener policy (below).
+/// source as it stands. They differ in two places, each stated: a browser's page frames the file, so
+/// <c>frame-ancestors</c> is the runtime's own origin rather than none; and the server sends no opener policy (below).
+/// The <c>sandbox</c> is one form in both, the page's own frame: scripts alone, never the same origin or forms.
 /// </summary>
 public class SealedAllowListTests
 {
-    /// <summary>The two directives that differ, and what the runtime's says.</summary>
+    /// <summary>The one directive that differs, and what the runtime's says.</summary>
     private static readonly Dictionary<string, string> Differences = new(StringComparer.Ordinal)
     {
         ["frame-ancestors"] = "frame-ancestors 'self'",
-        ["sandbox"] = "sandbox allow-scripts",
     };
 
     private static string Source() => File.ReadAllText(Path.Combine(RepositoryTree.Root(), "desktop", "src", "demo-page.ts"));
@@ -35,7 +33,7 @@ public class SealedAllowListTests
     private static string Directive(string text) => text.Split(' ', 2)[0];
 
     [Fact]
-    public void The_policy_is_the_desktops_but_for_the_two_directives_that_differ()
+    public void The_policy_is_the_desktops_but_for_the_directive_that_differs()
     {
         var desktop = Literals(Source(), "demoPolicy");
         Assert.True(desktop.Count >= 10, $"read {desktop.Count} directives of the desktop's policy, fewer than it has");
@@ -62,7 +60,7 @@ public class SealedAllowListTests
     }
 
     /// <summary>
-    /// Every other header is the desktop's, with the same value, and the desktop sends one more, the third difference:
+    /// Every other header is the desktop's, with the same value, and the desktop sends one more, the second difference:
     /// <c>Cross-Origin-Opener-Policy</c>, which acts on a window opened by itself and on nothing framed, and whose meeting
     /// with a sandbox set by the policy is not established, so the server's set leaves it out. The type of the content is
     /// the file's, not the set's.
