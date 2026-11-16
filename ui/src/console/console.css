@@ -462,15 +462,24 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--mute);
+    cursor: pointer;
+}
+.jc-console .caret:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .newrow .caret {
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 10px;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-    color: var(--mute);
-    cursor: pointer;
 }
-.jc-console .caret:hover,
-.jc-console .caret[aria-expanded='true'] {
+.jc-console .newrow .caret:hover,
+.jc-console .newrow .caret[aria-expanded='true'] {
+    background: var(--panel);
     border-color: var(--accent-line);
     color: var(--ink);
 }

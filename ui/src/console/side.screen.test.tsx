@@ -15,6 +15,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
+import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
 import { chats, conversations, here } from './state';
 
@@ -473,6 +474,19 @@ describe('the sidebar’s look', () => {
             background: 'var(--panel)',
             width: '34px',
         });
+    });
+
+    it('leaves the caret of a filter inside the console as it was: no border, no fill', () => {
+        const { container } = render(
+            <div className="jc-console">
+                <Picker label="All campaigns" options={[{ value: null, label: 'All campaigns' }]} onPick={() => {}} />
+            </div>,
+        );
+        const filter = styleOf(container.querySelector('.caret')!);
+        expect(filter.border).toBe('0');
+        expect(filter.background).toBe('none');
+        expect(filter['border-radius']).toBeUndefined();
+        expect(filter['box-shadow']).toBeUndefined();
     });
 
     it('heads Recent quietly, scrolls the rows, and keeps Settings at the foot of the window', async () => {
