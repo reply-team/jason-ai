@@ -722,9 +722,10 @@ export interface JasonDesktop {
         /**
          * A card the AI asked for in the chat did not draw: the desktop writes one line of its log, `chat_card_refused`,
          * with the card's kind (one of the six, or `unknown`) and why (`kind_unknown`, `too_long`, `malformed` or
-         * `schema`), and nothing of what the block held; a value outside those lists writes nothing.
+         * `schema`), and nothing of what the block held; a value outside those lists writes nothing. A place with no
+         * desktop's log, a tab or none, refuses it in its own words.
          */
-        cardRefused(chatId: string, kind: string, failure: string): Promise<null>;
+        cardRefused(chatId: string, kind: string, failure: string): Promise<null | DesktopRefusal>;
     };
     fullAccess: {
         /** The standing choice of Full access, or null when none stands. */
