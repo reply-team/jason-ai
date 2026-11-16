@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ApiProvider } from '../../../api/context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1123,5 +1124,33 @@ describe('An answer that comes after another person was opened', () => {
         await settled();
         expect(asked(api, 'contact.get')).toEqual([{ contact_id: ingrid.id }]);
         expect(store.person.value).toBeNull();
+    });
+});
+
+describe('A tab drawn as a button', () => {
+    // The panel keeps its tab itself where it has no address (an agent's People tab), so its tabs are buttons; they must
+    // draw as the link tabs do. Read from the file: the test run hands a stylesheet import back empty.
+    const sheet = readFileSync('src/styles/components.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+    const rule = (selector: string) =>
+        Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g))
+            .filter((each) => each[1]!.split(',').some((one) => one.trim() === selector))
+            .map((each) => each[2]!.replace(/\s+/g, ' ').trim())
+            .join(' ');
+    const button = "button[role='tab']";
+
+    it('is in every rule of a link tab: the font, the colour, the hover and the underline of the one shown', () => {
+        for (const state of ['', ':hover', '.active']) expect(rule(`.tabs a${state}`), state).not.toBe('');
+        expect(rule(`.tabs ${button}`)).toMatch(/height: 36px;/);
+        expect(rule(`.tabs ${button}:hover`)).toBe(rule('.tabs a:hover'));
+        expect(rule(`.tabs ${button}.active`)).toBe(rule('.tabs a.active'));
+        expect(rule(`.tabs ${button}.active`)).toMatch(/border-bottom-color: var\(--accent\)/);
+    });
+
+    it('has no box of its own: no border, no ground, the surrounding font', () => {
+        const own = rule(`.tabs ${button}`);
+        expect(own).toMatch(/padding: 0;/);
+        expect(own).toMatch(/border: 0;/);
+        expect(own).toMatch(/background: transparent;/);
+        expect(own).toMatch(/font: inherit;/);
     });
 });
