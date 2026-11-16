@@ -7,6 +7,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -29,7 +30,7 @@ async function renderConsole(seed: (desktop: StubDesktop) => void = () => undefi
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

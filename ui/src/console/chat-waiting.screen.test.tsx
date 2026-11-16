@@ -13,6 +13,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -71,7 +72,7 @@ function renderConsole(
                     ? 'approval.list/pending'
                     : 'approval.list/empty';
         });
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

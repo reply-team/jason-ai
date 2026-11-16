@@ -8,6 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
 import { cardReads } from './card-frame';
@@ -82,7 +83,7 @@ function renderConsole(
         .answer('campaign.list', 'campaign.list/screen');
     if (!fake.offers('campaign.summary')) fake.answer('campaign.summary', 'campaign.summary/all');
     if (!fake.offers('system.info')) fake.answer('system.info', 'system.info/with-ui');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -268,7 +269,11 @@ describe('a plan the AI proposes', () => {
         );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
         expect(part.textContent!.match(/\d+/g)).toEqual(['2']);
-        expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([{ campaign_id: 'cmp_5' }]);
+        // The card reads the agent once; the agent's header over the chat reads it once more for itself.
+        expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([
+            { campaign_id: 'cmp_5' },
+            { campaign_id: 'cmp_5' },
+        ]);
         // A send names its channel, so where each channel's sends go is read by naming it, as the claim does.
         expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
             { campaign_id: 'cmp_5', operation: 'message.send', channel: 'email' },
