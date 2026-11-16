@@ -70,6 +70,7 @@ export const controlWords: readonly string[] = [
     'Stop',
     'Send',
     'Send when the turn ends',
+    'Send your own answer',
     'Replace',
     'Save',
     'Save name',
@@ -115,8 +116,6 @@ export const passiveWords: readonly string[] = [
     'Edit',
     'Edit message',
     'Something else',
-    // The choice card's field: a click sends the words the person typed as their own message, and acts on nothing.
-    'Send your own answer',
     'Show more',
     'Show the whole message',
     'Keep it',
