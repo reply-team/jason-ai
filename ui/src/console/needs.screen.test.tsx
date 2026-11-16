@@ -34,6 +34,9 @@ async function renderConsole(fake: FakeApi, journal: StubStream = stubStream()):
     fake.answer('system.info', 'system.info/with-ui')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
+    // The sending name under an email's From is read for every approval the pane shows (its own rows are in
+    // `needs-sender-line.screen.test.tsx`); a test that says nothing of it is answered with a name.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     const desktop = stubDesktop();
     render(<Console api={fake} desktop={desktop} stream={journal.stream} />);
     // Needs you is a page of the sidebar's menu, chosen as a person chooses it once the window has read what waits.
@@ -826,10 +829,19 @@ describe('Needs you', () => {
                 .answer('workitem.get', 'workitem.get/needs-message-parked')
                 .answer('workitem.update', 'workitem.update/needs-message-edited');
 
+        /**
+         * Presses Edit once the pane has painted what it reads for the approval, the sending name last: a paint
+         * replaces the pane's buttons, so a press is made on the one drawn last.
+         */
+        async function pressEdit(): Promise<void> {
+            await waitFor(() => within(pane()).getByText(/^Sending name at Reply now:/));
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Edit' }));
+        }
+
         it('opens the boxes on the words the work item holds, saves them through the work item, and says Jason asks again', async () => {
             const fake = edits();
             await renderConsole(fake);
-            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await pressEdit();
             const body = await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
             expect((body as HTMLTextAreaElement).value).toBe('Hi Ines, thanks for the talk at the meetup.');
             expect((within(pane()).getByRole('textbox', { name: 'Subject' }) as HTMLInputElement).value).toBe(
@@ -862,7 +874,7 @@ describe('Needs you', () => {
 
         it('says before Save that saving approves nothing', async () => {
             await renderConsole(edits());
-            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await pressEdit();
             await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
             expect(words(pane().querySelector('.needs-save-says')!)).toBe(
                 'Saving changes the words only and approves nothing: Jason asks you again.',
@@ -872,7 +884,7 @@ describe('Needs you', () => {
         it('writes nothing and says nothing of asking again when Save is pressed on the words as they were', async () => {
             const fake = edits();
             await renderConsole(fake);
-            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await pressEdit();
             await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
             await settle();
             fireEvent.click(within(pane()).getByRole('button', { name: 'Save' }));
@@ -886,7 +898,7 @@ describe('Needs you', () => {
         it('closes the boxes on Cancel having written nothing', async () => {
             const fake = edits();
             await renderConsole(fake);
-            fireEvent.click(await waitFor(() => within(pane()).getByRole('button', { name: 'Edit' })));
+            await pressEdit();
             await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
             fireEvent.click(within(pane()).getByRole('button', { name: 'Cancel' }));
             await waitFor(() => expect(within(pane()).queryByRole('textbox', { name: 'Body' })).toBeNull());

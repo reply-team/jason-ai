@@ -15,6 +15,8 @@ import type {
     RouteResolution,
     RouteResolveRequest,
     Routes,
+    SenderListRequest,
+    SenderListResponse,
     SystemInfo,
     UiRevoke,
     UiRevokeRequest,
@@ -70,6 +72,9 @@ import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
 import approvalApproveNeedsPageTwoApproved from '../../../docs/api/fixtures/approval.approve/needs-page-two-approved.json';
 import approvalApproveNeedsTwoFirstApproved from '../../../docs/api/fixtures/approval.approve/needs-two-first-approved.json';
+import approvalGetCardInvitation from '../../../docs/api/fixtures/approval.get/card-invitation.json';
+import approvalGetCardMessage from '../../../docs/api/fixtures/approval.get/card-message.json';
+import approvalGetCardMessageReasked from '../../../docs/api/fixtures/approval.get/card-message-reasked.json';
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
@@ -93,6 +98,10 @@ import approvalGetReleasedAutomatically from '../../../docs/api/fixtures/approva
 import approvalGetWithDoubts from '../../../docs/api/fixtures/approval.get/with-doubts.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
+import approvalListCardInvitationPending from '../../../docs/api/fixtures/approval.list/card-invitation-pending.json';
+import approvalListCardMessageReasked from '../../../docs/api/fixtures/approval.list/card-message-reasked.json';
+import approvalListCardMessageAfterEdit from '../../../docs/api/fixtures/approval.list/card-message-after-edit.json';
+import approvalListCardMessagePending from '../../../docs/api/fixtures/approval.list/card-message-pending.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
 import approvalListByWorkItem from '../../../docs/api/fixtures/approval.list/by-work-item.json';
 import approvalListDecided from '../../../docs/api/fixtures/approval.list/decided.json';
@@ -402,6 +411,11 @@ import workitemGetNeedsMessageParked from '../../../docs/api/fixtures/workitem.g
 import workitemGetNeedsPageTwoParked from '../../../docs/api/fixtures/workitem.get/needs-page-two-parked.json';
 import workitemGetNeedsTwoFirstParked from '../../../docs/api/fixtures/workitem.get/needs-two-first-parked.json';
 import workitemGetParkedEditedSend from '../../../docs/api/fixtures/workitem.get/parked-edited-send.json';
+import senderListCardMessageSender from '../../../docs/api/fixtures/sender.list/card-message-sender.json';
+import senderListCardSenderOther from '../../../docs/api/fixtures/sender.list/card-sender-other.json';
+import senderListCardSenderUnnamed from '../../../docs/api/fixtures/sender.list/card-sender-unnamed.json';
+import senderListCardSenderUnread from '../../../docs/api/fixtures/sender.list/card-sender-unread.json';
+import workitemGetCardMessageParked from '../../../docs/api/fixtures/workitem.get/card-message-parked.json';
 import workitemGetParkedSend from '../../../docs/api/fixtures/workitem.get/parked-send.json';
 import workitemGetOpen from '../../../docs/api/fixtures/workitem.get/open.json';
 import workitemGetSucceeded from '../../../docs/api/fixtures/workitem.get/succeeded.json';
@@ -534,6 +548,12 @@ export const fixtures = {
         ApprovalDecisionRequest,
         Approval
     >,
+    'approval.get/card-invitation': approvalGetCardInvitation satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/card-message': approvalGetCardMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/card-message-reasked': approvalGetCardMessageReasked satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
@@ -583,6 +603,22 @@ export const fixtures = {
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
         Approval
+    >,
+    'approval.list/card-invitation-pending': approvalListCardInvitationPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-reasked': approvalListCardMessageReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-after-edit': approvalListCardMessageAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-pending': approvalListCardMessagePending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
     >,
     'approval.list/by-campaign-pending': approvalListByCampaignPending satisfies Exchange<
         ApprovalListRequest,
@@ -1252,6 +1288,19 @@ export const fixtures = {
     >,
     'project.get/by-id': projectGetById satisfies Exchange<{ project_id: string }, Project>,
     'project.get/by-slug': projectGetBySlug satisfies Exchange<{ slug: string }, Project>,
+    'sender.list/card-message-sender': senderListCardMessageSender satisfies Exchange<
+        SenderListRequest,
+        SenderListResponse
+    >,
+    'sender.list/card-sender-other': senderListCardSenderOther satisfies Exchange<
+        SenderListRequest,
+        SenderListResponse
+    >,
+    'sender.list/card-sender-unnamed': senderListCardSenderUnnamed satisfies Exchange<
+        SenderListRequest,
+        SenderListResponse
+    >,
+    'sender.list/card-sender-unread': senderListCardSenderUnread satisfies Exchange<SenderListRequest, ErrorEnvelope>,
     'system.info/with-ui': systemInfoWithUi satisfies Exchange<object, SystemInfo>,
     'system.info/without-ui': systemInfoWithoutUi satisfies Exchange<object, SystemInfo>,
     'ui.revoke/never-used': uiRevokeNeverUsed satisfies Exchange<UiRevokeRequest, UiRevoke>,
@@ -1337,6 +1386,10 @@ export const fixtures = {
         WorkItem
     >,
     'workitem.get/parked-edited-send': workitemGetParkedEditedSend satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'workitem.get/card-message-parked': workitemGetCardMessageParked satisfies Exchange<
         { work_item_id: string },
         WorkItem
     >,

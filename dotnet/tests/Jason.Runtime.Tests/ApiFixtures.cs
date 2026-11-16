@@ -25,7 +25,7 @@ public static class ApiFixtures
     //
     //   message waiting:  approval.list card-message-pending|-after-edit|-reasked, approval.get card-message|
     //                     -withdrawn|-reasked, workitem.get card-message-parked, workitem.update card-message-edited,
-    //                     sender.list card-message-sender|card-sender-other.
+    //                     sender.list card-message-sender|card-sender-other|card-sender-unnamed.
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
     //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
@@ -64,8 +64,8 @@ public static class ApiFixtures
     // binding {workspace: a}), so plugin.list/card-accounts and the binding in route.list/card-accounts and
     // route.resolve/card-plan-message-send show a stand-in's content, not a real package's; (2) the provider's own
     // answers are a stand-in's: the external id c_7714 in campaign.get/card-status, and every account (name, address,
-    // vendor block) in sender.list/card-message-sender and card-sender-other. The accounts (Reply) story is the
-    // exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
+    // vendor block) in sender.list/card-message-sender, card-sender-other and card-sender-unnamed. The accounts (Reply)
+    // story is the exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
     // the plugin host), and only the vendor's command-line tool is the test harness's fake, holding invented accounts, so
     // plugin.list|route.list|sender.list card-accounts-reply are what an installation with that package would answer
     // (the executable's path is recorded as <bin>/reply). A card that shows plugins or accounts is drawn from the -reply files.
@@ -491,6 +491,7 @@ public static class ApiFixtures
         "sender.list/card-accounts-reply",
         "sender.list/card-message-sender",
         "sender.list/card-sender-other",
+        "sender.list/card-sender-unnamed",
         "sender.list/card-sender-unread",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",

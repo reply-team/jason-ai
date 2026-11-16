@@ -27,6 +27,24 @@ export type Approval = ApprovalSummary & {
     preview: Record<string, unknown>;
     decision_reason: string | null;
 };
+/** One page of the provider's accounts a send can go from, read for a campaign (`sender.list`). */
+export type SenderListRequest = {
+    campaign_id: string;
+    owners: string;
+    sender_channel?: string;
+    limit?: number;
+    offset?: number;
+};
+export type SenderAccount = {
+    external_id: string;
+    channel: string;
+    /** The sending name the provider holds for the account now; null where it holds none. */
+    name: string | null;
+    address: string | null;
+    status: string;
+    owner: string;
+};
+export type SenderListResponse = { plugin_id: string; items: SenderAccount[]; has_more: boolean };
 export type ApprovalListRequest = {
     status?: string;
     statuses?: string[];

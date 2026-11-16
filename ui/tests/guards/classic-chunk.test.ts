@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// One build, two shells (`src/main.tsx`): the classic shell, which any other browser loads, shares only seven small
+// One build, two shells (`src/main.tsx`): the classic shell, which any other browser loads, shares only nine small
 // modules of the console with it. Whatever `classic.tsx` imports, directly or through the modules it imports, may not
 // reach another file under `src/console/`: the console's Connect, chat and desktop seam belong to its own chunk.
 
@@ -11,7 +11,10 @@ const src = join(import.meta.dirname, '..', '..', 'src');
 // the console's Connect, chat and desktop seam stay out. `console/waiting.ts` and `console/waiting-model.ts` are the
 // sixth and seventh: the gate an approval is approved by, read whole first, which the Work items page approves through
 // as the chat's cards and Needs you do, so that there is one gate and no copy of it; they import nothing of the console
-// but each other and `live.ts`. Dynamic imports (the browser chat tab) are chunks of their own and are not followed.
+// but each other and `live.ts`. `console/senders.ts` and `console/senders-model.ts` are the eighth and ninth: the sending
+// name an approval's card reads under its sender's address, one piece on the chat's cards and on Needs you's panel; they
+// import nothing of the console but each other and, for a type, `waiting-model.ts`. Dynamic imports (the browser chat
+// tab) are chunks of their own and are not followed.
 const shared = [
     'console/html.ts',
     'console/painted.tsx',
@@ -20,6 +23,8 @@ const shared = [
     'console/state.ts',
     'console/waiting.ts',
     'console/waiting-model.ts',
+    'console/senders.ts',
+    'console/senders-model.ts',
 ];
 
 const specifier =
