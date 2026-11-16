@@ -16,15 +16,19 @@
     margin: -22px -28px -60px;
     background: var(--panel);
 }
-/* The console's own list rule gives it a margin; what is left of it takes none. */
+/* The console's own list rule gives it a margin; what is left of it takes none. Drawn at every width: the shell's narrow
+   rule takes the whole list out, which would take its notices with it. */
 .jc-console .harness .main.campaigns:not(.single) > .list {
+    display: flex;
     margin: 0;
     border: 0;
 }
 .jc-console .harness .main.campaigns:not(.single) > .list > :not(.notice) {
     display: none;
 }
-.jc-console .harness .main.campaigns:not(.single) > .list > .notice {
+/* What the screen says, in the list or in the agent's own panel, stands above the bar at the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .list > .notice,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .notice {
     margin: 14px 28px 0;
     padding: 9px 14px;
     border: 0;

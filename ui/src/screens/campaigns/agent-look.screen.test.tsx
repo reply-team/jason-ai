@@ -95,6 +95,12 @@ describe('the sheet of an agent’s page in the console', () => {
             if (/display: none/.test(rule.body)) expect(rule.selectors).toEqual([hiding]);
         }
         expect(body(hiding)).toBe('display: none;');
+        // The list itself is drawn at every width, against the shell's narrow rule that takes the whole of it out.
+        expect(body(`${page} > .list`)).toMatch(/display: flex;/);
+        // What the screen says stands above the bar at the bar's margin, from the list and from the agent's own panel.
+        const notice = body(`${page} > .list > .notice`);
+        expect(notice).toMatch(/margin: 14px 28px 0;/);
+        expect(body(`${agent} > .notice`)).toBe(notice);
         expect(body(page)).toMatch(/grid-template-columns: minmax\(0, 1fr\)/);
         expect(body(page)).toMatch(/background: var\(--panel\)/);
         // What is left of the list takes its notices' height and no share of the page's.
