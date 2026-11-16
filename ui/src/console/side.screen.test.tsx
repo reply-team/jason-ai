@@ -442,25 +442,37 @@ describe('the sidebar’s look', () => {
         expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
     });
 
-    it('draws New GTM agent as one full-width box, its caret a quiet end of the same box', async () => {
+    it('draws New GTM agent as a light button beside a drop-down button of its own', async () => {
         renderConsole(stubDesktop(), 'live');
         await settled();
         const button = () => side().getByRole('button', { name: 'New GTM agent' });
         const row = () => button().closest<HTMLElement>('.newrow')!;
+        // Two controls in one row, the main one first in the keyboard order, each its own accessible name.
+        const controls = Array.from(row().querySelectorAll('button'));
+        expect(controls).toEqual([button(), caret()]);
+        expect(button()).not.toBe(caret());
+        expect(button().getAttribute('aria-label')).toBeNull();
+        expect(caret().getAttribute('aria-label')).toBe('More to create');
         expect(row().contains(caret())).toBe(true);
-        // Start is in front: the whole box is marked, the caret's end with it.
+        // Start is in front: the main button is marked and the drop-down is not.
         expect(button().getAttribute('aria-current')).toBe('true');
-        expect(styleOf(row())).toMatchObject({ background: 'var(--hover)', 'border-color': 'var(--accent-line)' });
+        expect(styleOf(button())).toMatchObject({ 'border-color': 'var(--accent-line)', background: 'var(--hover)' });
         fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
-        expect(styleOf(row())).toMatchObject({
-            margin: '2px 14px 8px',
+        expect(styleOf(row())).toMatchObject({ margin: '2px 14px 8px', gap: '8px' });
+        expect(styleOf(button())).toMatchObject({
             border: '1px solid var(--line)',
-            'border-radius': '12px',
+            'border-radius': '10px',
             background: 'var(--panel)',
+            'font-weight': '500',
+            flex: '1',
         });
-        expect(styleOf(button())).toMatchObject({ border: '0', background: 'none', flex: '1' });
-        expect(styleOf(caret())).toMatchObject({ border: '0', background: 'none' });
+        expect(styleOf(caret())).toMatchObject({
+            border: '1px solid var(--line)',
+            'border-radius': '10px',
+            background: 'var(--panel)',
+            width: '34px',
+        });
     });
 
     it('heads Recent quietly, scrolls the rows, and keeps Settings at the foot of the window', async () => {
