@@ -552,6 +552,25 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(creates(desktop)).toEqual([]);
     });
 
+    it('gives way to a set-up chat that becomes the agent’s, carrying the words typed', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'typed in the unmade chat' } });
+        fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${setupChat}`));
+        // The set-up chat is chosen for the agent: it becomes the agent's conversation.
+        desktop.kept.get(setupChat)!.campaignId = 'cmp_2';
+        flush(() => desktop.emit(setupChat, { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' }));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_2/chat'));
+        await waitFor(() => expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]));
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${setupChat}`));
+        expect(shownBox().value).toBe('typed in the unmade chat');
+        expect(creates(desktop)).toEqual([]);
+    });
+
     it('a create refused leaves the words in the box and says why in the chat', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');
@@ -594,8 +613,36 @@ describe.each<Place>(['window', 'tab'])('An archived agent with no conversation,
         expect(tab('Chat').getAttribute('aria-selected')).toBe('true');
         expect(document.querySelector('[data-pane^="chat:"]')).toBeNull();
         expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]);
-        expect(within(line.closest<HTMLElement>('[data-pane]')!).queryByRole('button')).toBeNull();
+        // Nothing that makes a conversation: no composer, no host, model or access menu, no starter chip.
+        const nothingToMake = () => {
+            const area = document.querySelector<HTMLElement>('.area')!;
+            const shownPane = area.querySelector<HTMLElement>('.pane:not([hidden])')!;
+            expect(within(shownPane).queryByRole('textbox')).toBeNull();
+            expect(within(shownPane).queryByRole('button')).toBeNull();
+            expect(area.querySelector('[data-pane^="chat:"]')).toBeNull();
+            expect(shownPane.querySelector('.sug, .crow, [aria-haspopup="menu"]')).toBeNull();
+            expect(
+                [...head()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].some((each) => !each.disabled),
+            ).toBe(false);
+        };
+        nothingToMake();
+        // No act there makes one: its tab again, a page tab and back, Back and Forward, and its "…".
+        fireEvent.click(tab('Chat'));
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_4/chat'));
+        await back('#/campaigns/cmp_4/people');
+        await forward('#/campaigns/cmp_4/chat');
+        await waitFor(() =>
+            expect(document.querySelector('[data-pane="page"]:not([hidden])')?.textContent).toBe(
+                'This agent is archived.',
+            ),
+        );
+        fireEvent.click(within(head()!).getByRole('button', { name: "More for this agent's conversation" }));
+        nothingToMake();
         expect(desktop.calls.filter((each) => each.name === 'chat.create')).toEqual([]);
+        expect(desktop.calls.filter((each) => each.name === 'chat.send')).toEqual([]);
     });
 });
 
