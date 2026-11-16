@@ -357,7 +357,7 @@ describe('the build', () => {
         const script = readFileSync(join(ui, '..', 'desktop', 'scripts', 'notices.mjs'), 'utf8');
         const list = /const demoCarries = \[(?<body>[^\]]*)\]/.exec(script)?.groups?.body ?? '';
         const desktop = [...list.matchAll(/\{(?<entry>[^}]*)\}/g)].map(({ groups }) => {
-            const field = (key: string) => new RegExp(`${key}: '([^']*)'`).exec(groups!.entry)?.[1];
+            const field = (key: string) => new RegExp(`${key}: '([^']*)'`).exec(groups!.entry!)?.[1];
             return { name: field('name'), version: field('version'), licence: field('licence'), file: field('file') };
         });
         expect(desktop.length).toBeGreaterThan(0);
