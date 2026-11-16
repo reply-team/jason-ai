@@ -454,6 +454,76 @@ public class ProfileLaunchTests
             attempt.Provenance.Agent.Args.Skip(1));
     }
 
+    /// <summary>
+    /// A fresh installation, as the install line and the desktop leave it: no profile, no default, and a builtin role's
+    /// work fails at its claim. Then the repair <c>jason status</c> prints, typed back into the real CLI against the real
+    /// runtime with the stand-in host as the program, and the line of settings its fact gives, written beside what the
+    /// file holds: the next item of the same role is claimed, launched on the profile the default names and succeeds,
+    /// with no restart. The desktop makes the same two acts, by the same command and the same key.
+    /// </summary>
+    [Fact]
+    public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_profile_status_names_is_made_the_default()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var campaign = await host.CampaignAsync(Ct);
+        var before = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "researcher", context = new { behaviour = "succeed" } }, Ct);
+
+        await host.ScanAsync(Ct);
+        var failed = await host.GetAsync(before.Id, Ct);
+        Assert.Equal(WorkItemStatus.Failed, failed.Status);
+        Assert.Equal(AttemptErrors.RoleNotLaunchable, failed.LastError!.Code);
+
+        var check = await RolesCheckAsync(host);
+        Assert.Equal("absent", (string?)check["state"]);
+        var repair = ((string?)check["fix"])!.Split(' ');
+        Assert.Equal(["jason", "profile", "create", "claude-code", "--host", "claude_code", "--program", "claude"], repair);
+
+        var made = new StringWriter();
+        var error = new StringWriter();
+        var exit = await Jason.Cli.CliApp.RunAsync([.. repair[1..^1], ProfileFixture.Program], new Jason.Cli.CliEnvironment(made, error, host.Paths), Ct);
+        Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, error.ToString()));
+
+        // Made and not yet named: every role's work would still fail, so the check is not ok, and the line is the step left.
+        var half = await RolesCheckAsync(host);
+        Assert.Equal(("absent", null), ((string?)half["state"], (string?)half["fix"]));
+
+        // The line between the fact's second pair of backticks, written into the file beside the dispatcher's settings.
+        var line = ((string?)check["fact"])!.Split('`')[3];
+        Assert.Equal("""
+            "Roles": {"DefaultExecutionProfile": "claude-code"}
+            """, line);
+        await File.WriteAllTextAsync(host.Paths.UserSettingsFile, FakeHostRuntime.Settings.TrimEnd()[..^1] + "," + line + "}", Ct);
+        var roles = host.Fixture.Resolve<Microsoft.Extensions.Options.IOptionsMonitor<Jason.Runtime.Configuration.RolesOptions>>();
+        Assert.True(await FakeHostRuntime.EventuallyAsync(() => Task.FromResult(roles.CurrentValue.DefaultExecutionProfile == "claude-code"), Ct));
+
+        var after = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "researcher", context = new { behaviour = "succeed" } }, Ct);
+        await host.ScanAsync(Ct);
+        var done = await host.WaitForStatusAsync(after.Id, WorkItemStatus.Succeeded, Ct);
+
+        var agent = done.Attempts![0].Provenance!.Agent!;
+        Assert.Equal(ProfileResolutionSource.GlobalDefault, agent.ResolutionSource);
+        Assert.Equal("claude-code", agent.ProfileName);
+        Assert.Equal(AgentHostKind.ClaudeCode, agent.Host);
+        Assert.NotNull(done.Attempts[0].Launch);
+        Assert.Equal("ok", (string?)(await RolesCheckAsync(host))["state"]);
+    }
+
+    /// <summary>The <c>roles_launchable</c> check as <c>jason status</c> prints it against this runtime, with no variable of the suite's own read.</summary>
+    private static async Task<JsonNode> RolesCheckAsync(FakeHostRuntime host)
+    {
+        var status = new StringWriter();
+        await Jason.Cli.CliApp.RunAsync(
+            ["status"],
+            new Jason.Cli.CliEnvironment(
+                status,
+                new StringWriter(),
+                host.Paths,
+                Harnesses: Jason.Cli.Skills.HarnessLocators.At(Path.Combine(host.Paths.Root, "no-harness-here")),
+                Variables: new Dictionary<string, string>()),
+            Ct);
+        return JsonNode.Parse(status.ToString())!["checks"]!.AsArray().Single(each => (string?)each!["name"] == "roles_launchable")!;
+    }
+
     private static async Task UnresolveAsync(FakeHostRuntime host, string workItemId)
     {
         await using var scope = host.Fixture.Resolve<IServiceScopeFactory>().CreateAsyncScope();

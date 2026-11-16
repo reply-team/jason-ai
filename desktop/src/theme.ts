@@ -4,7 +4,8 @@
  */
 
 import { readdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
+import { isDesktopLog } from './log.ts';
 import { desktopPaths } from './paths.ts';
 import { isTheme, type DesktopSettings, type ThemeChoice } from './settings.ts';
 
@@ -14,9 +15,10 @@ export const darkBackground = '#1b1b1a';
 
 /**
  * Whether no earlier use of this installation left anything in its data directory: it is absent, empty, or holds only the
- * desktop's own records that a start writes before the installation is made, the mode and a request to start the demo
- * over. A new installation's first start opens on the demo and writes the first, so the person's own installation is
- * still new when they first choose Live.
+ * desktop's own records that a start writes before the installation is made: the mode, a request to start the demo over
+ * that an earlier version left, Electron's own profile (`desktop/electron/`) and the desktop's own log files
+ * (`logs/desktop-*.jsonl`), which a Demo run writes and nothing else. A new installation's first start opens on the demo
+ * and writes the first, so the person's own installation is still new when they first choose Live.
  */
 export function isNewInstallation(dataDirectory: string, list: (directory: string) => string[] = readdirSync): boolean {
     let entries: string[];
@@ -27,10 +29,15 @@ export function isNewInstallation(dataDirectory: string, list: (directory: strin
     }
     if (entries.length === 0) return true;
     const desktop = desktopPaths(dataDirectory);
-    if (entries.length !== 1 || entries[0] !== basename(desktop.desktop)) return false;
-    const records = [basename(desktop.mode), basename(desktop.demoStartOver)];
+    const logs = basename(desktop.logs);
+    if (!entries.every((name) => name === basename(desktop.desktop) || name === logs)) return false;
+    const records = [basename(desktop.mode), basename(desktop.demoStartOver), basename(desktop.electron)];
     try {
-        return list(join(dataDirectory, basename(desktop.desktop))).every((name) => records.includes(name));
+        // Each is listed, so a file where a folder of these would be is no record of the desktop's.
+        const own = entries.includes(basename(desktop.desktop)) ? list(desktop.desktop) : [];
+        if (own.includes(basename(desktop.electron))) list(desktop.electron);
+        const logged = entries.includes(logs) ? list(desktop.logs) : [];
+        return own.every((name) => records.includes(name)) && logged.every(isDesktopLog);
     } catch {
         return false;
     }

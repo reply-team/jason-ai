@@ -83,6 +83,8 @@ test('the tray says what waits, or that the runtime is not answering, by counts 
     assert.deepEqual(trayView({ state: 'up', approvals: 1, questions: 0 }), { title: '1', tooltip: 'Jason AI Harness: 1 approval waits on you', status: '1 approval waits on you' });
     assert.deepEqual(trayView({ state: 'unreachable' }), { title: '!', tooltip: 'Jason AI Harness: the runtime is not answering', status: 'The runtime is not answering' });
     assert.deepEqual(trayView({ state: 'reading' }), { title: '', tooltip: 'Jason AI Harness', status: 'Reading what waits on you…' });
+    // The Demo reads nothing: it is the sample, and the tray says so.
+    assert.deepEqual(trayView({ state: 'demo' }), { title: '', tooltip: 'Jason AI Harness: the demo', status: 'The demo: sample data, nothing is sent' });
 });
 
 test('a notification carries counts only, never a campaign’s name, a person’s name or a question’s text', () => {

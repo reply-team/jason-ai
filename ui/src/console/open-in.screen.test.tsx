@@ -87,14 +87,15 @@ afterEach(() => {
 });
 
 describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
-    it('sits in the open-in slot, left of the Demo | Live switch, above the sidebar and the area', async () => {
+    it('sits in the open-in slot, left of the Demo | Live switch, in the strip right of the sidebar', async () => {
         await renderConsole(kept);
         await waitFor(() => split());
         const slot = split().closest('[data-slot="open-in"]')!;
         const bar = slot.parentElement!;
         expect(bar.classList.contains('mode-strip')).toBe(true);
-        expect(bar.parentElement).toBe(document.querySelector('.jc-console'));
-        expect(bar.nextElementSibling?.classList.contains('shell')).toBe(true);
+        expect(bar.parentElement?.classList.contains('mainc')).toBe(true);
+        expect(bar.parentElement?.previousElementSibling?.classList.contains('side')).toBe(true);
+        expect(bar.nextElementSibling?.classList.contains('area')).toBe(true);
         expect(slot.nextElementSibling).toBe(within(bar).getByRole('group', { name: 'Data' }));
         expect(document.querySelector('.top-bar')).toBeNull();
     });
@@ -176,6 +177,18 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         fireEvent.click(mainPart());
         await waitFor(() => expect(opens(desktop)).toHaveLength(2));
         expect(opens(desktop)[1]!.args).toEqual(['vscode', undefined]);
+    });
+
+    it('draws the main place’s glyph before its name: a prompt for a command line, brackets for an editor', async () => {
+        const desktop = await renderConsole(kept);
+        const glyph = () => mainPart().querySelector('svg.oi-glyph')?.getAttribute('data-glyph');
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        expect(glyph()).toBe('prompt');
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in VS Code'));
+        expect(glyph()).toBe('editor');
+        expect(opens(desktop)).toHaveLength(1);
     });
 
     it('copies the path from the menu without making Copy path the default', async () => {

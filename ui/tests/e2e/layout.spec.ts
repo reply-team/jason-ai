@@ -163,8 +163,8 @@ test('in a browser tab with no desktop the sidebar keeps its width and the area 
     const area = await page.locator('.jc-console .area').boundingBox();
     expect(sidebar).not.toBeNull();
     expect(area).not.toBeNull();
-    expect(sidebar!.width).toBe(232);
+    expect(sidebar!.width).toBe(284);
     // The area starts where the sidebar ends and takes most of the rest of the window.
     expect(area!.x).toBeGreaterThanOrEqual(sidebar!.x + sidebar!.width - 1);
-    expect(area!.width).toBeGreaterThan((WIDE.width - 232) * 0.8);
+    expect(area!.width).toBeGreaterThan((WIDE.width - 284) * 0.8);
 });

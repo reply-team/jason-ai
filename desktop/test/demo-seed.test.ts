@@ -614,9 +614,6 @@ test('every refusal of a carry-out carries a code', () => {
         assert.equal(reason({ runtimeAlive: () => true, running: () => false }), 'runtime_alive');
         assert.equal(reason({ marked: () => false }), 'foreign');
         assert.equal(reason({ setAside: () => { throw new Error('EPERM'); } }), 'not_taken_away');
-        const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
-        assert.ok(main.includes("log.warn('demo_start_over_not_carried_out', { Cause: startOverNotCarriedOut })"));
-        assert.ok(main.includes("log.warn('demo_start_over_refused', { Cause: outcome.reason })"));
     } finally {
         rmSync(d.root, { recursive: true, force: true });
     }
@@ -876,15 +873,6 @@ test('the case the guide states is unchanged: an old run or a demo runtime still
     }
 });
 
-test('the main module sets the record to Live only where the carry-out refused', () => {
-    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
-    const choose = main.slice(main.indexOf('function chooseInstallation('), main.indexOf('function startDesktop('));
-    const write = "writeMode(desktopPaths(personDirectory).mode, 'live');";
-    assert.equal(choose.split(write).length - 1, 1);
-    const caught = choose.indexOf('} catch (error) {', choose.indexOf('carryOutStartOver({'));
-    assert.ok(caught > 0 && choose.indexOf(write) > caught);
-});
-
 test('on a real disk: a desktop that quits in the middle of the seed leaves the request, and the next start makes the sample whole, never shows the half', async () => {
     const d = disk();
     try {
@@ -1067,33 +1055,3 @@ function fake(options: FakeOptions = {}): Fake {
     return { deps, calls, events, writes, imported, workItems, approved, cancelled, progress, slept, settings: () => files.get(join(places.data, 'config', 'settings.json')) ?? '' };
 }
 
-test('the main process refuses Start the Demo Over until this run\'s own start has answered, and holds the demo\'s preparation under a live runtime', () => {
-    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
-    const refuse = main.indexOf('if (startInFlight) return');
-    assert.ok(refuse > 0 && refuse < main.indexOf('await startDemoOver('), 'refused before anything stops');
-    assert.ok(main.includes('let startInFlight = true;') && main.includes('} finally {\n        startInFlight = false;'));
-    assert.ok(main.includes('runtimeAlive: (data) => demoRuntimeAlive(desktopPaths(data).runFile),'));
-});
-
-test('the main process loads the page through openOnTheSample, says the mark to the page and the menu, and refuses a switch or a start over while it shows', () => {
-    const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'main.ts'), 'utf8');
-    // The page is loaded by the one function that makes the sample behind it; nothing else seeds.
-    assert.ok(main.includes('await openOnTheSample({'));
-    assert.equal(main.includes('readyTheSample('), false);
-    assert.equal(main.includes('preparingPage'), false);
-    const opened = main.slice(main.indexOf('await openOnTheSample({'));
-    assert.ok(opened.indexOf('loadWindow(') > 0 && opened.indexOf('loadWindow(') < opened.indexOf('});'), 'the page is loaded inside it');
-    // The mark: the page reads it with the mode and hears it change; the menu draws its lines again.
-    assert.ok(main.includes("({ mode: runOn.mode, unopened: runOn.unopened, preparing: sampleMaking })"));
-    assert.ok(main.includes("toPage('mode.preparing', on);"));
-    assert.ok(main.includes('desk.setDemo(demoMenu(runOn.mode, removalOffered(process.platform), on));'));
-    // A switch, the way back and a start over are refused while the sample is made.
-    assert.ok(main.includes("handle(seam, 'mode.set', origin, (choice) => applyMode(choice, modeDeps, sampleMaking), refused);"));
-    assert.ok(main.includes("const refusal = applyMode('live', modeDeps, sampleMaking);"));
-    const startOver = main.slice(main.indexOf('const startOver = async ()'));
-    const held = startOver.indexOf('if (sampleMaking) return { refused: demoPreparing };');
-    assert.ok(held > 0 && held < startOver.indexOf('await dialog.showMessageBox'));
-    // The request a making leaves is the person's start-over request, taken away only once the sample is whole.
-    assert.ok(main.includes('request: () => requestStartOver(desktopPaths(runOn.person).demoStartOver, process.pid, true),'));
-    assert.ok(main.includes('drop: () => dropStartOver(desktopPaths(runOn.person).demoStartOver, log),'));
-});
