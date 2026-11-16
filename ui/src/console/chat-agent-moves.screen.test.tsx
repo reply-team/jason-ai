@@ -14,9 +14,9 @@ import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { chats, conversations } from './state';
 
-// A campaign's chat carries the agent's state and its one move, Start, Pause or Resume, in the chat's bar: the agent
-// page's own control and its own confirmation, drawn from the campaign's state as the runtime lists it. A set-up chat
-// carries none until it becomes a campaign's.
+// A campaign's chat is under the agent's header, which carries the agent's state and its one move, Start, Pause or
+// Resume: the agent page's own control and its own confirmation, drawn from the campaign as the runtime holds it. A
+// set-up chat has no header until it becomes a campaign's.
 
 function renderConsole(desktop: StubDesktop, fake: FakeApi): void {
     watch(fake);
@@ -34,11 +34,15 @@ function renderConsole(desktop: StubDesktop, fake: FakeApi): void {
 }
 
 function consoleApi(): FakeApi {
-    return nothingWaitsInChats(new FakeApi())
-        .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
-        .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
-        .answer('preference.list', 'preference.list/set')
-        .answer('campaign.list', 'campaign.list/screen');
+    return (
+        nothingWaitsInChats(new FakeApi())
+            .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
+            .answer('decision.list', 'decision.list/pending', 'decision.list/by-campaign-pending')
+            .answer('preference.list', 'preference.list/set')
+            .answer('campaign.list', 'campaign.list/screen')
+            // The header asks whether a provider campaign is being made for a started agent with none pinned.
+            .answerAnyRequest('workitem.list', 'workitem.list/creating-none')
+    );
 }
 
 const side = () => document.querySelector<HTMLElement>('.side')!;
@@ -48,8 +52,14 @@ const sent = (api: FakeApi, operation: string) =>
     api.calls.filter((c) => c.operation === operation).map((c) => c.body as Record<string, unknown>);
 /** The bar of the chat the area shows. */
 const bar = () => shownPane()!.querySelector<HTMLElement>('.chat-bar')!;
-/** The agent's part of the bar: its state and its move. */
-const agent = () => within(bar()).queryByRole('group', { name: 'This agent' });
+/** The agent's header over the chat, once it has read the agent's state. */
+const agent = () => {
+    const header = document.querySelector<HTMLElement>('.agent-head');
+    return header?.querySelector('.agent-state') ? header : null;
+};
+/** The header's moves, by their words. */
+const moves = (header: HTMLElement) =>
+    [...header.querySelectorAll('.agent-acts .agent-move')].map((each) => each.textContent?.trim());
 
 /** Opens a conversation the desktop keeps for a campaign, from the sidebar's list. */
 async function openKept(desktop: StubDesktop, campaignId: string, title: string): Promise<void> {
@@ -67,7 +77,7 @@ beforeEach(() => {
     classicCampaigns.shown.value = null;
 });
 
-describe('the agent’s move in its chat', () => {
+describe('the agent’s move over its chat', () => {
     it('a draft’s chat says Draft and offers Start, which opens the agent page’s own confirmation', async () => {
         const desktop = chatDesktop();
         const fake = consoleApi()
@@ -78,17 +88,10 @@ describe('the agent’s move in its chat', () => {
 
         const group = agent()!;
         expect(within(group).getByText('Draft')).toBeTruthy();
-        expect(
-            within(group)
-                .getAllByRole('button')
-                .map((each) => each.textContent?.trim()),
-        ).toEqual(['Start']);
-        // The bar's own buttons are as they were, the agent's move after them.
-        expect(
-            within(bar())
-                .getAllByRole('button')
-                .map((each) => each.textContent?.trim()),
-        ).toEqual(['Rename', 'Start afresh', 'Remove', 'Start']);
+        expect(moves(group)).toEqual(['Start']);
+        // The conversation's own acts are in the header's "…", and the chat's bar holds none of them.
+        expect(within(shownPane()!).queryByRole('button', { name: 'Rename' })).toBeNull();
+        expect(within(shownPane()!).queryByRole('button', { name: 'Remove' })).toBeNull();
 
         fireEvent.click(within(group).getByRole('button', { name: 'Start' }));
         const dialog = await screen.findByRole('dialog', { name: 'Start Autumn' });
@@ -145,19 +148,20 @@ describe('the agent’s move in its chat', () => {
 
     it('a paused agent’s chat says Paused and offers Resume', async () => {
         const desktop = chatDesktop();
-        renderConsole(desktop, consoleApi().answer('campaign.summary', 'campaign.summary/all'));
+        renderConsole(
+            desktop,
+            consoleApi()
+                .answer('campaign.summary', 'campaign.summary/all')
+                .answer('campaign.get', 'campaign.get/summer'),
+        );
         await openKept(desktop, 'cmp_3', 'Summer referrals');
 
         const group = agent()!;
         expect(within(group).getByText('Paused')).toBeTruthy();
-        expect(
-            within(group)
-                .getAllByRole('button')
-                .map((each) => each.textContent?.trim()),
-        ).toEqual(['Resume']);
+        expect(moves(group)).toEqual(['Resume']);
     });
 
-    it('a click on the bar’s Start sends nothing; the dialog’s Start sends one start with the reason, then reads the list again', async () => {
+    it('a click on the header’s Start sends nothing; the dialog’s Start sends one start with the reason, then reads the list again', async () => {
         const desktop = chatDesktop();
         const fake = consoleApi()
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
@@ -179,17 +183,29 @@ describe('the agent’s move in its chat', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(sent(fake, 'campaign.start')).toEqual([{ campaign_id: 'cmp_2', reason: 'The plan is agreed.' }]);
         await waitFor(() => expect(sent(fake, 'campaign.list').length).toBe(listsBefore + 1));
+        // The header reads the agent again, from the runtime.
+        await waitFor(() =>
+            expect(sent(fake, 'campaign.get').filter((each) => each['campaign_id'] === 'cmp_2').length).toBeGreaterThan(
+                1,
+            ),
+        );
     });
 
-    it('an archived campaign’s chat draws no state and no move', async () => {
+    it('an archived campaign’s chat says Archived over it and offers no move', async () => {
         const desktop = chatDesktop();
-        // The list of campaigns leaves an archived one out, so its conversation finds no campaign to draw.
+        // The list of campaigns leaves an archived one out: the header reads the agent, and its count, for it alone.
         desktop.keep({ id: 'conv_01JDKEPT000000000000000004', campaignId: 'cmp_4', title: 'Winter' });
-        renderConsole(desktop, consoleApi().answer('campaign.summary', 'campaign.summary/all'));
+        renderConsole(
+            desktop,
+            consoleApi()
+                .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/archived')
+                .answer('campaign.get', 'campaign.get/archived'),
+        );
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         fireEvent.click(await waitFor(() => within(listed()).getByRole('button', { name: 'Winter' })));
-        await waitFor(() => expect(shownPane()?.querySelector('.chat-bar')).toBeTruthy());
-        expect(agent()).toBeNull();
+        await waitFor(() => expect(agent()).not.toBeNull());
+        expect(within(agent()!).getByText('Archived')).toBeTruthy();
+        expect(moves(agent()!)).toEqual([]);
         expect(within(bar()).queryByText('Archived')).toBeNull();
     });
 
@@ -197,7 +213,9 @@ describe('the agent’s move in its chat', () => {
         const desktop = chatDesktop();
         const fake = consoleApi()
             .answer('campaign.list', 'campaign.list/screen-empty', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all');
+            // Not in the first list, the agent's count is read for it alone.
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
+            .answer('campaign.get', 'campaign.get/unlinked');
         renderConsole(desktop, fake);
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         expect(consoleCampaigns.campaigns.value).toEqual([]);
@@ -223,7 +241,12 @@ describe('the agent’s move in its chat', () => {
 
     it('a set-up chat carries no agent’s move, and carries it as soon as it becomes a campaign’s', async () => {
         const desktop = chatDesktop();
-        renderConsole(desktop, consoleApi().answer('campaign.summary', 'campaign.summary/all'));
+        renderConsole(
+            desktop,
+            consoleApi()
+                .answer('campaign.summary', 'campaign.summary/all')
+                .answer('campaign.get', 'campaign.get/unlinked'),
+        );
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {

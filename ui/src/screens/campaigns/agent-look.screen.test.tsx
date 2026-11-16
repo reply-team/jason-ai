@@ -11,7 +11,7 @@ import { mode } from '../../platform/mode';
 import { activatePlugins } from '../../platform/plugin';
 import { browserPlugins } from '../../plugins';
 import { route } from '../../router';
-import { inFront } from '../../test/area';
+import { bringForward, inFront } from '../../test/area';
 import { stubDesktop, stubStream, type StubDesktop } from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
 import type { FixtureName } from '../../test/fixtures';
@@ -19,24 +19,32 @@ import { nothingWaitsInChats } from '../../test/waiting';
 import * as store from './store';
 
 // An agent's page in the console's look: one sheet of the console's own, which draws the browser shell's agent page as
-// the console draws an agent - the agent alone in the area, its name, state and type in a bar with its moves at the
-// right, the tabs under it, its own Settings as cards of rows. Look alone, but for one rule: while an agent is open the
-// list beside it is not drawn, but for what the screen says in it, and Close gives it back. Everything else reaches the
-// agent's own panel alone: what is drawn in its place (an approval, a question, a person) and the dialogs its moves open
-// keep their own look. Read from the file: the test run hands a stylesheet import back empty, and it starts in ui/.
+// the console draws an agent - the agent alone in the area under the console's header for it, a tab's body under that
+// header, its own Settings as cards of rows. Look alone, but for one rule: while an agent is open the list beside it is
+// not drawn, but for what the screen says in it. Everything else reaches the agent's own panel alone: what is drawn in
+// its place (an approval, a question, a person) and the dialogs its moves open keep their own look. The header is the
+// console's own, with a sheet of its own. Read from the files: the test run hands a stylesheet import back empty, and it
+// starts in ui/.
 
 const sheetFile = 'src/console/agent.css';
+const read = (file: string) => {
+    const text = readFileSync(file, 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+    return Array.from(text.matchAll(/([^{}]+)[{]([^{}]*)[}]/g), (rule) => ({
+        // A rule inside a media query is matched past the query's own brace, so its selectors are the rule's alone.
+        selectors: rule[1]!.split(',').map((each) => each.replace(/\s+/g, ' ').trim()),
+        body: rule[2]!.replace(/\s+/g, ' ').trim(),
+    }));
+};
 const sheet = readFileSync(sheetFile, 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
-const rules = Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g), (rule) => ({
-    // A rule inside a media query is matched past the query's own brace, so its selectors are the rule's alone.
-    selectors: rule[1]!.split(',').map((each) => each.replace(/\s+/g, ' ').trim()),
-    body: rule[2]!.replace(/\s+/g, ' ').trim(),
-}));
-const body = (selector: string) =>
-    rules
+const rules = read(sheetFile);
+const headRules = read('src/console/agent-head.css');
+const bodyIn = (from: typeof rules) => (selector: string) =>
+    from
         .filter((rule) => rule.selectors.includes(selector))
         .map((rule) => rule.body)
         .join(' ');
+const body = bodyIn(rules);
+const headBody = bodyIn(headRules);
 const page = '.jc-console .harness .main.campaigns:not(.single)';
 const agent = `${page} > .panel[data-panel='agent']`;
 const darkRoots = [`:root[data-theme='dark'] ${agent}`, `:root:not([data-theme='light']) ${agent}`];
@@ -80,9 +88,10 @@ describe('the sheet of an agent’s page in the console', () => {
         expect(users).toEqual(['src/console/mount.tsx']);
         const mount = readFileSync('src/console/mount.tsx', 'utf8');
         const sheets = Array.from(mount.matchAll(/^import '(\.\/[\w-]+\.css)';\r?$/gm), (each) => each[1]);
-        // After the shell's own sheet, so that its rules are the word on the agent's page.
+        // After the shell's own sheet, so that its rules are the word on the agent's page; the header's after both.
         expect(sheets.indexOf('./harness.css')).toBeGreaterThan(-1);
         expect(sheets.indexOf('./agent.css')).toBeGreaterThan(sheets.indexOf('./harness.css'));
+        expect(sheets.indexOf('./agent-head.css')).toBeGreaterThan(sheets.indexOf('./agent.css'));
     });
 
     // Look alone: nothing of the page is cut or replaced by words of the sheet's; the one thing it does not draw is the
@@ -107,48 +116,30 @@ describe('the sheet of an agent’s page in the console', () => {
         expect(body(page)).toMatch(/align-content: start;/);
     });
 
-    it('draws the header as the console’s bar: the name and its pills at the left, the moves and Close at the right', () => {
-        expect(body(agent)).toMatch(/display: grid; grid-template-columns: minmax\(0, 1fr\) auto auto;/);
-        expect(body(agent)).toMatch(/grid-auto-flow: row dense/);
-        expect(body(`${agent} > .panel-header`)).toBe('display: contents;');
-        expect(body(`${agent} > .panel-header > .heading`)).toMatch(/grid-column: 1;/);
-        expect(body(`${agent} > .panel-actions`)).toMatch(/grid-column: 2;/);
-        expect(body(`${agent} > .panel-header > .close`)).toMatch(/grid-column: 3;/);
-        expect(body(`${agent} > .panel-header h2`)).toMatch(/font-size: 17px; font-weight: 650;/);
-        expect(body(`${agent} > .panel-header > .close`)).toMatch(/width: 28px; height: 28px;/);
+    it('draws the header as the console’s bar: the name and its pills at the left, the move and “…” at the right', () => {
+        expect(headBody('.jc-console .area.agent-shown')).toMatch(/display: flex; flex-direction: column;/);
+        expect(headBody('.jc-console .agent-bar')).toMatch(/display: flex;/);
+        expect(headBody('.jc-console .agent-title')).toMatch(/flex: 1; min-width: 0;/);
+        expect(headBody('.jc-console .agent-title h2')).toMatch(/font-size: 17px; font-weight: 650;/);
+        expect(headBody('.jc-console .agent-acts')).toMatch(/flex: none;/);
+        expect(headBody('.jc-console .agent-more')).toMatch(/width: 30px; height: 30px;/);
+        // The page under it no longer draws a header, a Close, a line of numbers or a row of tabs of its own.
+        for (const part of ['.panel-header', '.panel-actions', '.stats', '.campaign-tabs ', '.close'])
+            expect(sheet.includes(part), part).toBe(false);
     });
 
-    it('draws the state and the type as the console’s pills, each state its own', () => {
-        const pill = body(`${agent} > .panel-header .sub .badge`);
-        expect(pill).toMatch(
-            /border: 1px solid var\(--line\); border-radius: 999px; padding: 1px 9px; font-size: 12px;/,
-        );
-        expect(body(`${agent} > .panel-header .badge[data-status]`)).toMatch(/text-transform: capitalize/);
-        expect(body(`${agent} > .panel-header .badge[data-status='active']`)).toMatch(
-            /color: var\(--green\); background: var\(--green-2\); border-color: transparent/,
-        );
-        expect(body(`${agent} > .panel-header .badge[data-status='paused']`)).toMatch(
-            /color: var\(--amber\); background: var\(--amber-2\); border-color: transparent/,
-        );
-        expect(body(`${agent} > .panel-header .badge.kind[data-kind='sequence']`)).toMatch(
+    it('draws the type as the console’s pills, each type its own', () => {
+        expect(headBody(".jc-console .agent-kind[data-kind='sequence']")).toMatch(
             /color: var\(--blue\); background: var\(--blue-2\); border-color: transparent/,
         );
-        expect(body(`${agent} > .panel-header .badge.kind[data-kind='adaptive']`)).toMatch(
+        expect(headBody(".jc-console .agent-kind[data-kind='adaptive']")).toMatch(
             /color: var\(--violet\); background: var\(--violet-2\); border-color: transparent/,
         );
     });
 
-    it('makes Start and Resume the primary move and leaves Pause plain', () => {
-        const primary = /background: var\(--teal\); border-color: var\(--teal\); color: var\(--on-teal\)/;
-        expect(body(`${agent} > .panel-actions > .btn.agent-move-start`)).toMatch(primary);
-        expect(body(`${agent} > .panel-actions > .btn.agent-move-resume`)).toMatch(primary);
-        expect(body(`${agent} > .panel-actions > .btn.agent-move-pause`)).toBe('');
-        expect(body(`${agent} > .panel-actions > .btn`)).toMatch(/border-radius: 9px;/);
-    });
-
     it('draws the tabs as the console’s: a row with a teal underline under the one shown', () => {
-        expect(body(`${agent} > .campaign-tabs`)).toMatch(/gap: 22px; padding: 0 28px;/);
-        expect(body(`${agent} > .campaign-tabs .tabs a.active`)).toMatch(
+        expect(headBody('.jc-console .agent-head .tabs')).toMatch(/gap: 22px;/);
+        expect(headBody('.jc-console .agent-head .tabs a.active')).toMatch(
             /color: var\(--teal\); border-bottom-color: var\(--teal\)/,
         );
         // The timeline's chips and rows sit at the bar's margin: 12px of the page's and 16px of their own.
@@ -209,24 +200,16 @@ function renderConsole(fake: FakeApi): StubDesktop {
     return desktop;
 }
 
-/** The agent's header once its page is drawn under the name given. */
+/** The agent's header once it says the name given. */
 async function headerOf(name: string): Promise<HTMLElement> {
     return waitFor(() => {
-        const found = document.querySelector<HTMLElement>('.harness .main.campaigns .panel-header');
+        const found = document.querySelector<HTMLElement>('.agent-head');
         expect(found?.querySelector('h2')?.textContent).toBe(name);
         return found!;
     });
 }
 
-/** The agents list drawn again, with a row of it in sight. */
-async function listDrawn(): Promise<void> {
-    await waitFor(() => {
-        const list = document.querySelector<HTMLElement>('.harness .main.campaigns.single > .list');
-        expect(list).not.toBeNull();
-        const spring = within(list!).getByText('Spring');
-        expect(hiddenBy(spring)).toEqual([]);
-    });
-}
+const painted = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
 
 const opened = async (desktop: StubDesktop, id: string, name: string) => {
     await screen.findByRole('heading', { name: 'Who do you want to reach?' });
@@ -235,8 +218,7 @@ const opened = async (desktop: StubDesktop, id: string, name: string) => {
 };
 
 /** The agent's People tab, chosen in its header. */
-const peopleTab = (header: HTMLElement) =>
-    fireEvent.click(within(header.closest<HTMLElement>('.panel')!).getByRole('tab', { name: 'People' }));
+const peopleTab = (header: HTMLElement) => fireEvent.click(within(header).getByRole('tab', { name: /^People/ }));
 
 /** A person's row on the People tab, by their name. */
 const row = async (name: string) => (await screen.findByText(name)).closest('.row') as HTMLElement;
@@ -258,20 +240,18 @@ describe('an agent’s page drawn in the console', () => {
     });
     afterEach(() => cleanup());
 
-    it('says its state and its move by attributes the sheet reads, and Close from a deep link leads to the list', async () => {
+    it('says its state by an attribute on its pill and its move as a button, and draws no Close', async () => {
         const desktop = renderConsole(agentApi(() => 'campaign.get/details'));
         const header = await opened(desktop, 'cmp_1', 'Spring');
-        expect(header.closest('.panel')?.getAttribute('data-panel')).toBe('agent');
-        expect(header.querySelector('.badge[data-status]')?.getAttribute('data-status')).toBe('active');
-        expect(header.querySelector('.badge[data-status]')?.textContent).toBe('active');
-        expect(screen.getByRole('button', { name: 'Pause' }).className).toBe('btn agent-move-pause');
-        // A deep link opens the page as an open agent, the one state where the sheet leaves the list out; Close leads to
-        // the list, drawn again, and not to nowhere.
-        expect(header.closest('.main.campaigns')!.classList.contains('single')).toBe(false);
-        fireEvent.click(within(header).getByRole('button', { name: 'Close' }));
-        await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns' }));
-        expect(route.value).not.toHaveProperty('id');
-        await listDrawn();
+        expect(header.querySelector('.agent-state')?.getAttribute('data-status')).toBe('active');
+        expect(header.querySelector('.agent-state')?.textContent).toBe('Active');
+        expect(within(header).getByRole('button', { name: 'Pause' }).className).toBe('btn agent-move');
+        // A deep link opens the page as an open agent, the one state where the sheet leaves the list out, under the
+        // header; the list is the sidebar's Agents, and nothing closes the agent.
+        const panel = await waitFor(() => document.querySelector<HTMLElement>('.panel[data-panel="agent"]')!);
+        expect(panel.closest('.main.campaigns')!.classList.contains('single')).toBe(false);
+        expect(within(header).queryByRole('button', { name: 'Close' })).toBeNull();
+        expect(panel.querySelector('.panel-header')).toBeNull();
     });
 
     it('says a read that failed while an agent is open, out of the list’s hiding', async () => {
@@ -293,7 +273,11 @@ describe('an agent’s page drawn in the console', () => {
         const desktop = renderConsole(agentApi(() => get));
         await screen.findByRole('heading', { name: 'Who do you want to reach?' });
         desktop.link({ page: 'campaign', id: 'cmp_1' });
-        fireEvent.click(await screen.findByRole('button', { name: move }));
+        fireEvent.click(
+            within(await headerOf(get === 'campaign.get/details' ? 'Spring' : 'Spring outreach')).getByRole('button', {
+                name: move,
+            }),
+        );
         const dialog = await screen.findByRole('dialog');
         const buttons = within(dialog).getAllByRole('button');
         expect(buttons.length).toBeGreaterThan(1);
@@ -335,17 +319,17 @@ describe('an agent’s page drawn in the console', () => {
         for (const each of touched) expect(reached(each), each.className).toEqual([]);
     });
 
-    it('opened from the list, gives the list back to the browser’s Back', async () => {
-        const desktop = renderConsole(agentApi(() => 'campaign.get/details'));
-        const first = await opened(desktop, 'cmp_1', 'Spring');
-        fireEvent.click(within(first).getByRole('button', { name: 'Close' }));
-        await listDrawn();
-        fireEvent.click(
-            within(document.querySelector<HTMLElement>('.harness .main.campaigns > .list')!).getByText('Spring'),
-        );
+    it('opened from the Agents list, gives the list back to the browser’s Back', async () => {
+        renderConsole(agentApi(() => 'campaign.get/details'));
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
+        bringForward('Agents');
+        const spring = await waitFor(() => within(painted('Agents')).getByText('Spring').closest('tr')!);
+        fireEvent.click(within(spring).getByRole('button', { name: 'Open' }));
         await headerOf('Spring');
         history.back();
-        await listDrawn();
+        await waitFor(() => expect(inFront()).toBe('Agents'));
+        expect(document.querySelector('.agent-head')).toBeNull();
     });
 
     it('from one agent to another by the palette shows the other’s header, and the sidebar’s entry still opens its panel', async () => {
@@ -364,13 +348,13 @@ describe('an agent’s page drawn in the console', () => {
         await waitFor(() => expect(inFront()).toBe('Needs you'));
     });
 
-    it('opened by two links in a row shows the second, and Close leads to the list', async () => {
+    it('opened by two links in a row shows the second, and Back the first', async () => {
         const fake = agentApi((id) => (id === 'cmp_2' ? 'campaign.get/unlinked' : 'campaign.get/details'));
         const desktop = renderConsole(fake);
         await opened(desktop, 'cmp_1', 'Spring');
         desktop.link({ page: 'campaign', id: 'cmp_2' });
-        const header = await headerOf('Autumn');
-        fireEvent.click(within(header).getByRole('button', { name: 'Close' }));
-        await listDrawn();
+        await headerOf('Autumn');
+        history.back();
+        await headerOf('Spring');
     });
 });
