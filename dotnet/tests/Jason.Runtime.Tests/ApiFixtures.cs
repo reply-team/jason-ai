@@ -195,6 +195,8 @@ public static class ApiFixtures
         "campaign.add_contacts/move-in",
         "campaign.add_contacts/move-in-rejected",
         "campaign.add_contacts/one-person",
+        "campaign.add_contacts/own-list",
+        "campaign.add_contacts/own-list-again",
         "campaign.add_contacts/re-enrol-excluded",
         "campaign.add_contacts/several",
         "campaign.add_contacts/to-archived",
