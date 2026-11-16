@@ -65,6 +65,15 @@ describe('which card of a conversation reads', () => {
                 { index: 4, kind: 'accounts' },
             ]),
         ).toBe(4);
+        // The two cards that lead to a place read nothing, so a data card before them is still the one that reads.
+        expect(
+            lastReading([
+                { index: 1, kind: 'needs' },
+                { index: 4, kind: 'ai_setup' },
+                { index: 6, kind: 'reply_setup' },
+            ]),
+        ).toBe(1);
+        expect(lastReading([{ index: 2, kind: 'reply_setup' }])).toBeNull();
         // A plan reads what is on record, so a plan after a data card is the one that reads.
         expect(
             lastReading([

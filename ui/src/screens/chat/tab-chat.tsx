@@ -21,6 +21,9 @@ import './tab-chat.css';
 
 const noop = () => undefined;
 
+/** The conversation shown when the screen was left, so that coming back to it shows the same one. */
+let lastShown: string | null = null;
+
 /** There is no console's area in a tab: the chat is the whole of it. */
 const tabDock: Dock = { show: noop, chat: noop, showChat: noop, dropChat: noop, page: noop };
 
@@ -31,7 +34,13 @@ export function TabChat({ bridge }: { bridge: Bridge }) {
     const api = useApi();
     const root = useRef<HTMLDivElement>(null);
     const [ready, setReady] = useState(false);
-    const [shown, setShown] = useState<string | null>(null);
+    const [shown, setShownNow] = useState<string | null>(
+        lastShown !== null && chats.value[lastShown] ? lastShown : null,
+    );
+    const setShown = (id: string | null) => {
+        lastShown = id;
+        setShownNow(id);
+    };
 
     useEffect(() => {
         const desktop = asDesktop(bridge.seam());

@@ -15,7 +15,12 @@ import { nothingWaitsInChats } from '../../test/waiting';
 // label, and every act only the desktop's own window may do is not drawn.
 
 const campaigns = () =>
-    new FakeApi().answer('campaign.list', 'campaign.list/screen').answer('campaign.summary', 'campaign.summary/all');
+    new FakeApi()
+        .answer('campaign.list', 'campaign.list/screen')
+        .answer('campaign.summary', 'campaign.summary/all')
+        .answer('plugin.list', 'plugin.list/none')
+        .answer('route.list', 'route.list/empty')
+        .answer('ui.tokens', 'ui.tokens/two');
 
 let desktop: StubDesktop;
 let stand: StandIn;
@@ -91,6 +96,26 @@ describe('the Chat screen in a tab the desktop opened', () => {
         await waitFor(() => screen.getByText('Hello from the desktop'));
         expect(stand.asked.filter((each) => each.member === 'chat.feed')).toEqual([]);
         expect(stand.asked.filter((each) => each.path === '/events')).toHaveLength(1);
+    });
+});
+
+describe('coming back to the Chat screen in a tab', () => {
+    it('shows the conversation that was shown, with its box, after another page and Back', async () => {
+        desktop.keep({ id: 'conv_1', title: 'Spring outreach' });
+        await openTab();
+        fireEvent.click(await waitFor(() => within(list()).getByRole('button', { name: 'Spring outreach' })));
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        flush(() => {
+            route.value = { screen: 'system' };
+        });
+        await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Chats' })).toBeNull());
+        flush(() => {
+            route.value = { screen: 'chat' };
+        });
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        expect(within(list()).getByRole('button', { name: 'Spring outreach' }).getAttribute('aria-current')).toBe(
+            'true',
+        );
     });
 });
 
