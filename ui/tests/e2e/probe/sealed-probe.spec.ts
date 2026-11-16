@@ -135,7 +135,9 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
 
         const { url } = await jason.uiOpen();
         await page.goto(url);
-        await expect(page.locator('.jc-console .side')).toBeVisible();
+        // A tab with no desktop draws one page and the switch that shows the demo in this tab; the frame is the same one a
+        // tab the desktop opened draws, which only a tab (never the desktop's window) does.
+        await expect(page.locator('.jc-console.no-desktop')).toBeVisible();
         const token = await page.evaluate(() => localStorage.getItem('jason.ui.session'));
         expect(token).not.toBeNull();
         await page.getByRole('group', { name: 'Data' }).getByRole('button', { name: 'Demo' }).click();
@@ -154,7 +156,7 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
         ]);
         expect(seen.received).toEqual([]);
 
-        // The page above is the console's, where it was, holding what it held.
+        // The page above is the tab's, where it was, holding what it held.
         expect(page.url()).toMatch(/\/ui\/#\/demo$/);
         expect(await page.evaluate(() => localStorage.getItem('jason.ui.session'))).toBe(token);
         await expect(page.locator('.demo-over')).toBeVisible();

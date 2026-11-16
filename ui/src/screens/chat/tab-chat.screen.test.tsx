@@ -180,10 +180,10 @@ describe('what a tab never says yes to', () => {
         expect(label.textContent).toBe('Ask first');
     });
 
-    it('draws no Start afresh, no Remove, no Open folder, no Reply card and no Connect button', async () => {
+    it('draws no Start fresh, no Remove, no Open folder, no Reply card and no Connect button', async () => {
         await shown({ entries: [{ kind: 'notice', text: 'Made a folder', folder: 'spring' }] as never });
         expect(screen.getByText('Made a folder')).toBeTruthy();
-        for (const name of ['Start afresh', 'Remove', 'Open folder', 'Connect', 'Not now'])
+        for (const name of ['Start fresh', 'Remove', 'Open folder', 'Connect', 'Not now'])
             expect(screen.queryByRole('button', { name })).toBeNull();
         // The one act in the table that the bar keeps.
         expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();

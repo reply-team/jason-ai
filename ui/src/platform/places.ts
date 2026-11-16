@@ -27,6 +27,12 @@ export const releasesPage = 'https://github.com/reply-team/jason-ai/releases';
 
 export type PlaceKind = 'window' | 'tab' | 'none';
 
+/**
+ * Whether a page in a place of this kind draws the console. The desktop's own window does, and so does a tab the desktop
+ * opened; a tab with no desktop draws one page of text and the Demo | Live switch. The one place that says so.
+ */
+export const showsConsole = (kind: PlaceKind = placeKind()): boolean => kind !== 'none';
+
 /** The subscriptions the bridge's event stream feeds: not calls of the table, but a tab has them. */
 const streamed: readonly string[] = ['chat.onEvent', 'setup.onChanged', 'fullAccess.onChanged'];
 

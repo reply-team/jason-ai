@@ -178,6 +178,47 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(within(menu()).queryByText('Agents')).toBeNull();
     });
 
+    it('paints an application’s own icon the desktop sends on a canvas, and draws the glyph for a place without one', async () => {
+        const desktop = chatDesktop();
+        // Two pixels by two, red, green, blue and see-through: pixels only, as the desktop sends them, never a path.
+        const rgba = btoa(String.fromCharCode(255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0));
+        desktop.openInKept = {
+            places: [
+                { id: 'claude', label: 'Claude Code' },
+                { id: 'terminal', label: '' },
+                { id: 'vscode', label: 'VS Code', icon: { width: 2, height: 2, rgba } },
+                // Pixels that do not fill the size the icon says are not painted: the glyph is drawn.
+                { id: 'zed', label: 'Zed', icon: { width: 4, height: 4, rgba } },
+                { id: 'files', label: 'File Explorer', icon: { width: 2, height: 2, rgba } },
+                { id: 'copy', label: '' },
+            ],
+            default: 'claude',
+            folder: 'Jason',
+        };
+        await renderConsole(kept, desktop);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        const icon = (name: RegExp) => within(menu()).getByRole('menuitem', { name }).querySelector('.oi-icon')!;
+        for (const name of [/^VS Code/, /^File Explorer/]) {
+            const canvas = icon(name).querySelector('canvas.oi-app');
+            expect(canvas?.getAttribute('width')).toBe('2');
+            expect(canvas?.getAttribute('height')).toBe('2');
+            expect(icon(name).querySelector('svg')).toBeNull();
+        }
+        for (const [name, glyph] of [
+            [/^Claude Code/, 'prompt'],
+            [/^New terminal/, 'terminal'],
+            [/^Zed/, 'editor'],
+            [/^Copy path/, 'copy'],
+        ] as const) {
+            expect(icon(name).querySelector('canvas')).toBeNull();
+            expect(icon(name).querySelector('svg.oi-glyph')?.getAttribute('data-glyph')).toBe(glyph);
+        }
+        // No image element and no address of one: the page's content policy needs no image source.
+        expect(menu().querySelector('img')).toBeNull();
+        expect(menu().outerHTML).not.toMatch(/data:|blob:|src=/);
+    });
+
     it('opens a place chosen from the menu, closes the menu, and the place used last becomes the main part', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));

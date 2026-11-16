@@ -1,4 +1,4 @@
-import { expect, openSystem, test } from './fixtures';
+import { expect, openSystem, quietDesktop, test } from './fixtures';
 
 const policy = "default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
 
@@ -6,6 +6,7 @@ test('the bundle runs under the policy the runtime sends: no refused resource, n
     page,
     jason,
 }) => {
+    await page.addInitScript(quietDesktop);
     const violations: string[] = [];
     page.on('console', (message) => {
         if (/Content Security Policy|Refused to/.test(message.text())) violations.push(message.text());

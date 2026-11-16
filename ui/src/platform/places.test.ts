@@ -10,6 +10,7 @@ import {
     can,
     cannotHere,
     canIn,
+    showsConsole,
     currentDesktop,
     gated,
     noDesktop,
@@ -42,6 +43,14 @@ const at = (object: unknown, member: string): ((...args: unknown[]) => unknown) 
 afterEach(() => {
     setPlace('window');
     vi.unstubAllGlobals();
+});
+
+describe('which places draw the console', () => {
+    it('is the window and a tab the desktop opened, and never a tab with no desktop', () => {
+        expect(showsConsole('window')).toBe(true);
+        expect(showsConsole('tab')).toBe(true);
+        expect(showsConsole('none')).toBe(false);
+    });
 });
 
 describe('what each place can do', () => {

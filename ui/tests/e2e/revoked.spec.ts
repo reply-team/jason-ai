@@ -1,6 +1,7 @@
-import { expect, test } from './fixtures';
+import { expect, quietDesktop, test } from './fixtures';
 
 test('a revoked token lands on the pair-again screen and the stored pairing is cleared', async ({ page, jason }) => {
+    await page.addInitScript(quietDesktop);
     const { url } = await jason.uiOpen();
     await page.goto(url);
     await expect(page.locator('.jc-console .side')).toBeVisible();

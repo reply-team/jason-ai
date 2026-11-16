@@ -1,6 +1,7 @@
-import { expect, openSystem, test } from './fixtures';
+import { expect, openSystem, quietDesktop, test } from './fixtures';
 
 test('every request the page makes is an operation, the door, or a file under /ui/', async ({ page, jason }) => {
+    await page.addInitScript(quietDesktop);
     const seen: string[] = [];
     page.on('request', (request) => seen.push(`${request.method()} ${request.url()}`));
 

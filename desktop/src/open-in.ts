@@ -17,6 +17,7 @@
  */
 
 import { posix, win32 } from 'node:path';
+import type { PlaceIcon } from './open-in-icons.ts';
 import type { JasonOnPath } from './path-command.ts';
 
 /** Every place the menu can offer, in the order it offers them. */
@@ -48,6 +49,11 @@ const labels: Readonly<Record<PlaceId, string>> = {
 export interface Place {
     id: PlaceId;
     label: string;
+    /**
+     * The application's own icon, as pixels, where the desktop could read it (`open-in-icons.ts`); absent, the page draws
+     * its own glyph for the place. Never a path or a file.
+     */
+    icon?: PlaceIcon;
 }
 
 /** The hosts a chat can be continued in, by the id the chat keeps each one's session under. */
@@ -165,6 +171,33 @@ export function fileManager(probes: Probes): string | null {
     return probes.onPath('xdg-open');
 }
 
+/** Where macOS keeps the file manager and the terminal, whose own icons the menu draws for them. */
+export const finderApp = '/System/Library/CoreServices/Finder.app';
+export const terminalApp = '/System/Applications/Utilities/Terminal.app';
+
+/**
+ * The application whose own icon a place draws, by the desktop's own detection and never by anything the page sends; null
+ * for a place with no application of its own (Claude Code, Codex, a browser, Copy path) and for every place on Linux.
+ * Windows: an editor's program and File Explorer; its Terminal is the command line's to choose, so not known here. macOS:
+ * an editor's application, Finder and Terminal.
+ */
+export function iconPath(id: PlaceId, probes: Probes): string | null {
+    if (probes.platform === 'win32') {
+        if (id === 'files') return fileManager(probes);
+        if (!(editorIds as readonly string[]).includes(id)) return null;
+        const found = findEditor(id as EditorId, probes);
+        return found !== null && win32.extname(found.path).toLowerCase() === '.exe' ? found.path : null;
+    }
+    if (probes.platform === 'darwin') {
+        if (id === 'files') return finderApp;
+        if (id === 'terminal') return terminalApp;
+        if (!(editorIds as readonly string[]).includes(id)) return null;
+        const found = findEditor(id as EditorId, probes);
+        return found !== null && found.kind === 'app' ? found.path : null;
+    }
+    return null;
+}
+
 /** A file and its arguments, as the starter takes them. */
 export interface Line {
     file: string;
@@ -279,6 +312,11 @@ export interface OpenInDeps {
     changeJason?: ChangeJasonDeps;
     /** Which `jason` the PATH finds by name (`PathCommand.onPath`); absent, or undefined, where that is not told. */
     jason?(): JasonOnPath | undefined;
+    /**
+     * The own icon of the application at a path `iconPath` gave, or null (`IconReader.icon`): it never waits long, and a
+     * place without one keeps the page's glyph. Absent, no place carries an icon.
+     */
+    icon?(path: string): Promise<PlaceIcon | null>;
 }
 
 /** The refusals of the entry that continues a chat, in the desktop's own words. */
@@ -387,7 +425,7 @@ export class OpenIn {
     async targets(campaignId?: unknown, chatId?: unknown): Promise<OpenInAnswer | OpenInRefusal> {
         const folder = await this.#folder(campaignId);
         if (typeof folder !== 'string') return folder;
-        const places = placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined);
+        const places = await this.#withIcons(placesFound(this.#deps.probes, this.#deps.hosts(), this.#deps.browser !== undefined));
         const name = (this.#deps.probes.platform === 'win32' ? win32 : posix).basename(folder);
         const answer: OpenInAnswer = { places, default: defaultPlace(places, this.#deps.remembered()), folder: name };
         const found = chatId === undefined || chatId === null ? null : this.#deps.continuable(chatId);
@@ -401,6 +439,22 @@ export class OpenIn {
         }
         if (jason !== undefined) answer.jason = jason;
         return answer;
+    }
+
+    /** The places, each with its application's own icon where one was read; a read that fails or is slow leaves the glyph. */
+    async #withIcons(places: Place[]): Promise<Place[]> {
+        const deps = this.#deps;
+        if (deps.icon === undefined) return places;
+        return Promise.all(
+            places.map(async (place) => {
+                const path = iconPath(place.id, deps.probes);
+                if (path === null) return place;
+                const icon = await Promise.resolve()
+                    .then(() => deps.icon?.(path) ?? null)
+                    .catch(() => null);
+                return icon === null ? place : { ...place, icon };
+            }),
+        );
     }
 
     /**

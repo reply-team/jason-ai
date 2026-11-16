@@ -49,7 +49,7 @@ export type Entry =
     | { kind: 'attached'; title: string }
     /** The turn started a fresh session of the host, and why: said in the page, not kept by the desktop. */
     | { kind: 'fresh'; reason: 'host_changed' | 'not_found' }
-    /** The person started the conversation afresh: said in the page, not kept by the desktop. */
+    /** The person started the conversation fresh: said in the page, not kept by the desktop. */
     | { kind: 'afresh' }
     /**
      * A sentence the desktop said once, in its own words, not kept by the desktop. `folder` is the name of an ended Full
@@ -703,7 +703,7 @@ export const told = (chat: Chat, error: string): Chat => ({
     entries: [...chat.entries, { kind: 'error', text: error }],
 });
 
-/** The person asked to start the conversation afresh, and the desktop did. */
+/** The person asked to start the conversation fresh, and the desktop did. */
 export const afresh = (chat: Chat): Chat => ({ ...chat, entries: [...chat.entries, { kind: 'afresh' }] });
 
 /** The steps between two messages fold into one line; the last group stays open while the turn runs. */
@@ -804,7 +804,7 @@ export type ChoiceState =
  * or after the entry's moment (`acts`, read for that moment), and drawn locked when the entry has no moment or the read
  * failed: an unknown state never leaves a live button. `maySend` says a host drives the chat and this place may send.
  * A choice read from the desktop's record when the page opened the chat, with nothing after it, is drawn locked: the
- * record keeps no notice, no campaign attached and no session started afresh, so what locked it may be gone from it. An
+ * record keeps no notice, no campaign attached and no session started fresh, so what locked it may be gone from it. An
  * act of the person's during the turn, before the moment the words were kept, does not lock it.
  */
 export function choiceState(
