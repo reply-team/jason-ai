@@ -1738,9 +1738,12 @@ body,
     z-index: 30;
     display: flex;
     flex-direction: column;
-    min-width: 210px;
+    width: 300px;
+    /* Inside the window: the strip above it is 38 pixels, and a menu taller than what is left scrolls within itself. */
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
     margin-top: 6px;
-    padding: 4px;
+    padding: 6px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1750,10 +1753,43 @@ body,
     white-space: normal;
 }
 .jc-console .open-in-header {
-    padding: 6px 10px 2px;
-    color: var(--mute);
+    padding: 6px 10px 4px;
+    color: var(--faint);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
+}
+/* In a menu that scrolls, nothing is squeezed to fit: each child keeps its own height. */
+.jc-console .open-in-menu > * {
+    flex: none;
+}
+.jc-console .open-in-rule {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--line);
+}
+/* An item: its icon in a column of its own, then its words. The names and the one-line hints stay on one line at this
+   width; a note's sentence is the one thing that wraps. */
+.jc-console .open-in-menu .oi-icon {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--mute);
+}
+.jc-console .open-in-menu .oi-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.jc-console .open-in-menu .oi-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jc-console .open-in-menu .oi-about {
+    display: none;
 }
 .jc-console .open-in-menu small {
     display: block;
@@ -1761,8 +1797,8 @@ body,
     font-size: 12px;
 }
 .jc-console .open-in-note {
-    max-width: 260px;
-    padding: 6px 10px 4px;
+    margin-top: 4px;
+    padding: 8px 10px 4px;
     border-top: 1px solid var(--line);
     color: var(--mute);
     font-size: 12px;
@@ -1772,7 +1808,10 @@ body,
     font-size: 13px;
 }
 .jc-console .open-in-menu button {
-    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
     border: 0;
     border-radius: 6px;
     background: transparent;
@@ -1787,9 +1826,8 @@ body,
 .jc-console .open-in-continue {
     display: flex;
     flex-direction: column;
-    max-width: 320px;
-    margin-top: 4px;
-    padding-top: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px solid var(--line);
 }
 .jc-console .open-in-menu button:disabled {
@@ -1885,6 +1923,11 @@ body,
 }
 /* In a narrow tab the strip's sentence is read whole: the strip grows to the lines it needs. */
 @media (max-width: 520px) {
+    /* The strip wraps here and can stand three lines (about 62 pixels), and the menu hangs from the button centred in it,
+       so its top lands near 50 pixels down; 88 leaves the menu a breath above the window's edge. */
+    .jc-console .open-in-menu {
+        max-height: calc(100vh - 88px);
+    }
     .jc-console .mode-strip {
         height: auto;
         min-height: 38px;
