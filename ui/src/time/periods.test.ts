@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { periodWindow } from './periods';
+import { bucketOf, periodWindow } from './periods';
 
 describe('periodWindow', () => {
     it.each([
@@ -28,5 +28,16 @@ describe('periodWindow', () => {
         // Santiago's clocks go forward at midnight on 6 September 2026: the day has no 00:00 and begins at 01:00.
         const skipped = new Date('2026-09-06T12:00:00.000Z');
         expect(periodWindow('today', skipped, 'America/Santiago').since).toBe('2026-09-06T04:00:00.000Z');
+    });
+});
+
+describe('bucketOf', () => {
+    it('cuts today by the hour, a week or a month by the day and a quarter by the week', () => {
+        expect(['today', '7d', '30d', '90d'].map((period) => bucketOf(period as 'today'))).toEqual([
+            'hour',
+            'day',
+            'day',
+            'week',
+        ]);
     });
 });

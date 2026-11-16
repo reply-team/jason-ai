@@ -351,6 +351,8 @@ import pluginListCardAccountsReply from '../../../docs/api/fixtures/plugin.list/
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
+import replyCountPeriodNone from '../../../docs/api/fixtures/reply.count/period-none.json';
+import replyCountPeriodSpring from '../../../docs/api/fixtures/reply.count/period-spring.json';
 import replyCountUntilBeforeSince from '../../../docs/api/fixtures/reply.count/until-before-since.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListChannelRoutes from '../../../docs/api/fixtures/route.list/channel-routes.json';
@@ -450,6 +452,8 @@ import workitemListOliOpen from '../../../docs/api/fixtures/workitem.list/oli-op
 import workitemListPlanned from '../../../docs/api/fixtures/workitem.list/planned.json';
 import workitemListPlannedMany from '../../../docs/api/fixtures/workitem.list/planned-many.json';
 import workitemListPlannedManyNext from '../../../docs/api/fixtures/workitem.list/planned-many-next.json';
+import workitemListReviewLatest from '../../../docs/api/fixtures/workitem.list/review-latest.json';
+import workitemListReviewNone from '../../../docs/api/fixtures/workitem.list/review-none.json';
 import workitemListSmbNow from '../../../docs/api/fixtures/workitem.list/smb-now.json';
 import workitemListSmbOperationsPlanned from '../../../docs/api/fixtures/workitem.list/smb-operations-planned.json';
 import workitemListSmbPlanned from '../../../docs/api/fixtures/workitem.list/smb-planned.json';
@@ -1309,6 +1313,8 @@ export const fixtures = {
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
+    'reply.count/period-none': replyCountPeriodNone satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
+    'reply.count/period-spring': replyCountPeriodSpring satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/until-before-since': replyCountUntilBeforeSince satisfies Exchange<ReplyCountRequest, ErrorEnvelope>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
     'route.list/channel-routes': routeListChannelRoutes satisfies Exchange<object, Routes>,
@@ -1733,6 +1739,11 @@ export const fixtures = {
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,
+    'workitem.list/review-latest': workitemListReviewLatest satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'workitem.list/review-none': workitemListReviewNone satisfies Exchange<WorkItemListRequest, Page<WorkItemSummary>>,
     'workitem.list/researcher-findings-two': personWorkitemListResearcherFindingsTwo satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
