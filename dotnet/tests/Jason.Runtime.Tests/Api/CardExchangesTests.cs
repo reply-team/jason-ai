@@ -393,6 +393,14 @@ public class CardExchangesTests
             Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-archived", new { status = "pending", campaign_id = winter.Campaign, limit = 50 }, Ct)).Items);
             Assert.Empty((await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "card-archived", new { status = "pending", campaign_id = winter.Campaign, limit = 50 }, Ct)).Items);
             Assert.Equal(0, Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "card-archived-30-days", new { campaign_ids = new[] { winter.Campaign }, since = "2026-09-17T00:00:00.000Z", until = archivedAt, exclude_archived_contacts = true }, Ct)).Campaigns).Contacted);
+
+            // Last of all, two of what waits read whole as Needs you opens them, and the approval again once a person
+            // has approved it since: what an Open on a card read before then lands on.
+            var inesApproval = Assert.Single(waiting.Items).Id;
+            Assert.Equal("pending", (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-needs-pending", new { approval_id = inesApproval }, Ct)).Status.ToString().ToLowerInvariant());
+            Assert.Equal(springQuestion.Id, (await api.RecordAsync<DecisionDto>(Operations.DecisionGet, "card-needs-question", new { decision_id = springQuestion.Id }, Ct)).Id);
+            await api.PostOkAsync<ApprovalDto>(Operations.ApprovalApprove, new { approval_id = inesApproval, actor = Ada }, Ct);
+            Assert.Equal("approved", (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-needs-decided", new { approval_id = inesApproval }, Ct)).Status.ToString().ToLowerInvariant());
         }
         finally
         {

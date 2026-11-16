@@ -12,8 +12,8 @@ import { chats, here } from './state';
 // answered ("As of"), a Refresh that reads it again and decides nothing, "On record now" over the runtime's facts, and
 // the stub an earlier card of a conversation opened again stands as until "Show now" reads it. A card reads once, when
 // it is first drawn, and again only on its own Refresh: it never follows the journal, and nothing it read is kept in the
-// conversation. What it read is held here, by chat and by the index of the text entry that holds the card, for as long
-// as that entry is the one drawn: a conversation opened again draws entries of its own, so it reads afresh.
+// conversation. What it read is held here, by chat and by the index of the text entry that holds the card, matched by
+// that entry's words and the chat's scope, until the conversation is opened afresh (`forgetCards`).
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -28,10 +28,24 @@ export const saidOf = (error: unknown): Said =>
         ? { code: error.code, message: error.message }
         : { code: null, message: error instanceof Error ? error.message : String(error) };
 
-/** One card's read: the entry it was drawn from, and where the read stands; `at` is the moment it was answered. */
-export type Held<T> = { entry: object; serial: number } & (
-    { state: 'reading' } | { state: 'read'; at: number; facts: T }
-);
+/**
+ * What a card's read was made for: the words of the entry that holds the card, and the chat's place and campaign then.
+ * The page builds an entry afresh whenever a turn ends or the chat's mode changes, so a read is matched by the words,
+ * never by the object; and a chat given a campaign since reads under its new scope, never shows the old read.
+ */
+export interface ReadFor {
+    text: string;
+    scope: string;
+}
+
+/** What a card in a chat's entry is read for now. */
+export function readFor(chat: Chat, index: number): ReadFor {
+    const entry = chat.entries[index];
+    return { text: entry?.kind === 'text' ? entry.text : '', scope: `${placeOf(chat)} ${chat.campaignId ?? ''}` };
+}
+
+/** One card's read: what it was made for, and where it stands; `at` is the moment it was answered. */
+export type Held<T> = ReadFor & { serial: number } & ({ state: 'reading' } | { state: 'read'; at: number; facts: T });
 
 /** By chat id, then by the index of the text entry that holds the card: what each data card drawn has read. */
 export const cardReads = signal<Readonly<Record<string, Readonly<Record<number, Held<unknown>>>>>>({});
@@ -42,24 +56,32 @@ function put(chatId: string, index: number, held: Held<unknown>): void {
     cardReads.value = { ...cardReads.value, [chatId]: { ...cardReads.value[chatId], [index]: held } };
 }
 
-/** What a card has read, when the entry drawn is the one it read for; null for a card not read in this drawing. */
-export function heldOf<T>(chatId: string, index: number, entry: object): Held<T> | null {
+/**
+ * Forgets what a chat's cards read: a conversation opened afresh reads its last card again and draws the earlier ones
+ * as stubs. The chat calls it when it holds a conversation from the desktop's record.
+ */
+export function forgetCards(chatId: string): void {
+    if (cardReads.value[chatId] === undefined) return;
+    cardReads.value = Object.fromEntries(Object.entries(cardReads.value).filter(([id]) => id !== chatId));
+}
+
+/** What a card has read for what it is now; null for a card not read since the conversation was opened. */
+export function heldOf<T>(chatId: string, index: number, now: ReadFor): Held<T> | null {
     const held = cardReads.value[chatId]?.[index];
-    return held !== undefined && held.entry === entry ? (held as Held<T>) : null;
+    return held !== undefined && held.text === now.text && held.scope === now.scope ? (held as Held<T>) : null;
 }
 
 /**
  * Reads a card's facts now: "Reading..." until `read` answers, then what it answered and when. `read` says a refusal in
- * its facts and never throws. A read already under way for the card is left to finish.
+ * its facts and never throws. A read started again (Refresh, while one is under way) fences the earlier one: only the
+ * last read started lands.
  */
-export function startRead<T>(chatId: string, index: number, entry: object, read: () => Promise<T>): void {
-    if (heldOf(chatId, index, entry)?.state === 'reading') return;
+export function startRead<T>(chatId: string, index: number, now: ReadFor, read: () => Promise<T>): void {
     const serial = ++serials;
-    put(chatId, index, { entry, serial, state: 'reading' });
+    put(chatId, index, { ...now, serial, state: 'reading' });
     void read().then((facts) => {
-        // Only the read the card is waiting for lands; a conversation drawn afresh since has forgotten it.
         if (cardReads.value[chatId]?.[index]?.serial === serial)
-            put(chatId, index, { entry, serial, state: 'read', at: Date.now(), facts });
+            put(chatId, index, { ...now, serial, state: 'read', at: Date.now(), facts });
     });
 }
 
@@ -67,8 +89,8 @@ export function startRead<T>(chatId: string, index: number, entry: object, read:
 const asked = new Set<string>();
 
 /**
- * How a card is drawn now, and its read asked for when it is the conversation's last card that reads and this drawing
- * has not read it: a thread is drawn inside a computed value, so the read starts once the drawing is done.
+ * How a card is drawn now, and its read asked for when it is the conversation's last card that reads and has not been
+ * read for what it is now: a thread is drawn inside a computed value, so the read starts once the drawing is done.
  */
 export function drawn<T>(
     chat: Chat,
@@ -76,8 +98,8 @@ export function drawn<T>(
     last: number | null,
     read: () => Promise<T>,
 ): { held: Held<T> | null; stub: boolean } {
-    const entry = chat.entries[index]!;
-    const held = heldOf<T>(chat.id, index, entry);
+    const now = readFor(chat, index);
+    const held = heldOf<T>(chat.id, index, now);
     const how = drawsAs(index, last, held !== null);
     if (how === 'read') {
         const key = `${chat.id} ${index}`;
@@ -85,7 +107,7 @@ export function drawn<T>(
             asked.add(key);
             queueMicrotask(() => {
                 asked.delete(key);
-                if (heldOf(chat.id, index, entry) === null) startRead(chat.id, index, entry, read);
+                if (heldOf(chat.id, index, now) === null) startRead(chat.id, index, now, read);
             });
         }
     }
@@ -111,20 +133,29 @@ export function cardAt<K extends CardKind>(
     chatId: unknown,
     index: unknown,
     kind: K,
-): { chat: Chat; entry: object; card: Extract<Card, { kind: K }> } | null {
+): { chat: Chat; now: ReadFor; card: Extract<Card, { kind: K }> } | null {
     if (typeof chatId !== 'string' || typeof index !== 'number') return null;
     const chat = chats.value[chatId];
     const placed = chat === undefined ? undefined : cardLayout(chat.entries).cards.get(index);
     if (chat === undefined || placed === undefined) return null;
     const reading = readingOf(chat, placed);
     return reading.state === 'card' && reading.card.kind === kind
-        ? { chat, entry: chat.entries[index]!, card: reading.card as Extract<Card, { kind: K }> }
+        ? { chat, now: readFor(chat, index), card: reading.card as Extract<Card, { kind: K }> }
         : null;
 }
 
 /** The campaign a data card is about: the one it names, else in an agent's chat that chat's own; none for everyone. */
 export const campaignOf = (card: { campaign?: string }, chat: Pick<Chat, 'main' | 'campaignId'>): string | null =>
     card.campaign ?? (placeOf(chat) === 'agent' ? chat.campaignId : null);
+
+/**
+ * The caption that names the AI over words of its own on any card it asked for ("Jason asks", "Jason's proposal"): the
+ * first row of the AI's frame, in plain weight, never in the look of a fact.
+ */
+export const aiCaption = (words: string): Html => html`<div class="card-who">${words}</div>`;
+
+/** A card's header in the desktop's words, in plain weight: the first thing in its top row. */
+export const cardHead = (words: string): Html => html`<span class="card-head">${words}</span>`;
 
 /** What a row says beside its name, the parts the runtime gave, in one quiet line; nothing when it gave none. */
 export function metaLine(parts: readonly (string | null)[]): Html | null {
@@ -159,18 +190,16 @@ export function frame<T>(view: {
     if (view.stub && held === null)
         return html`<div class="ask chat-card chat-data stub" role="group" aria-label="${header}">
             <div class="ask-h card-top">
-                <span class="card-head">${header}</span>
+                ${cardHead(header)}
                 <button class="btn sm card-read" type="button" ${control}>Show now</button>
             </div>
         </div>`;
     const read = held?.state === 'read' ? held : null;
     return html`<div class="ask chat-card chat-data" role="group" aria-label="${header}">
         <div class="ask-h card-top">
-            <span class="card-head">${header}</span>
+            ${cardHead(header)}
             ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
-            <button class="btn sm ghost card-read" type="button" ${read === null ? html`disabled` : control}>
-                Refresh
-            </button>
+            <button class="btn sm ghost card-read" type="button" ${control}>Refresh</button>
         </div>
         ${view.before ?? null}
         <div class="card-facts">
@@ -191,9 +220,11 @@ define('card.page', ([hash]) => {
  */
 define('card.waits', ([chatId, campaignId], element) => {
     const chat = typeof chatId === 'string' ? chats.value[chatId] : undefined;
-    if (chat !== undefined && placeOf(chat) === 'agent' && chat.campaignId === campaignId) {
-        element.closest('.chat-panel')?.querySelector('.chat-waiting-for')?.scrollIntoView({ block: 'start' });
-        return;
-    }
-    here().dock.show('needs');
+    // The waiting cards are drawn only while something waits: with none below, Needs you is where to look.
+    const below =
+        chat !== undefined && placeOf(chat) === 'agent' && chat.campaignId === campaignId
+            ? element.closest('.chat-panel')?.querySelector('.chat-waiting-for')
+            : null;
+    if (below) below.scrollIntoView({ block: 'start' });
+    else here().dock.show('needs');
 });

@@ -10,10 +10,11 @@ import type { CardKind, Standing } from './cards';
 import { channelWords } from './live';
 
 /**
- * The kinds whose card reads the runtime (or the desktop) when it is drawn: every kind but a choice. A plan's second
- * part reads, so a plan counts.
+ * The kinds whose card reads when it is drawn, among those this build draws: a choice reads nothing, and a kind drawn
+ * only as a line that it is not drawn reads nothing either, so it never turns an earlier card into a stub. A unit that
+ * draws a kind that reads adds it here.
  */
-export const readingKinds: readonly CardKind[] = ['people_list', 'agent_status', 'needs', 'accounts', 'plan'];
+export const readingKinds: readonly CardKind[] = ['people_list', 'agent_status', 'needs'];
 
 /**
  * The index of the conversation's last card that reads, among the cards its turns drew (`kind` null for a block that
@@ -161,3 +162,30 @@ const items = (listed: Listed, one: string, many: string): string =>
 /** The needs card's count line: items waiting, never people. */
 export const needsLine = (approvals: Listed, questions: Listed): string =>
     `${items(approvals, 'approval', 'approvals')} and ${items(questions, 'question', 'questions')} waiting for your decision`;
+
+/**
+ * The address the people list's footer opens: the agent's People tab, under the count's filter, when the card counts the
+ * agent's people; else the People page, with the card's search, its agent and its standing as the page's stage, when
+ * the page offers that count.
+ */
+export function peoplePlace(card: { search?: string; standing?: Standing }, campaignId: string | null): string {
+    const id = campaignId === null ? null : encodeURIComponent(campaignId);
+    if (id !== null && card.search === undefined)
+        return `#/campaigns/${id}/people${card.standing === undefined ? '' : `?filter=${card.standing}`}`;
+    const stage = card.standing !== undefined && card.standing !== 'removed' && id !== null ? card.standing : null;
+    const parts = [
+        ...(card.search === undefined ? [] : [`q=${encodeURIComponent(card.search)}`]),
+        ...(id === null ? [] : [`campaign=${id}`]),
+        ...(stage === null ? [] : [`stage=${stage}`]),
+    ];
+    return `#/people${parts.length === 0 ? '' : `?${parts.join('&')}`}`;
+}
+
+/** The most rows a card lists; the rest are counted, and the page they come from holds them. */
+export const cardRows = 10;
+
+/** A list's rows as a card shows them: the first ten, and how many more there are. */
+export const capped = <T>(rows: readonly T[]): { shown: T[]; rest: number } => ({
+    shown: rows.slice(0, cardRows),
+    rest: Math.max(0, rows.length - cardRows),
+});

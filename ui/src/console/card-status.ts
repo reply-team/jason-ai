@@ -135,5 +135,5 @@ define('card.status', ([chatId, index]) => {
     const at = cardAt(chatId, index, 'agent_status');
     const campaignId = at === null ? null : campaignOf(at.card, at.chat);
     if (at === null || campaignId === null) return;
-    startRead(at.chat.id, index as number, at.entry, () => readStatus(here().api, campaignId));
+    startRead(at.chat.id, index as number, at.now, () => readStatus(here().api, campaignId));
 });

@@ -6,7 +6,7 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
-import { cardReads, lastReadingCard } from './card-frame';
+import { cardReads, forgetCards, lastReadingCard } from './card-frame';
 import { needsCard } from './card-needs';
 import { peopleCard } from './card-people';
 import { statusCard } from './card-status';
@@ -170,7 +170,11 @@ export async function reloadConversations(): Promise<void> {
 async function hold(id: string): Promise<string> {
     if (chats.value[id]) return id;
     const record = unless(await here().desktop.chat.open(id));
-    if (!chats.value[record.id]) chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    if (!chats.value[record.id]) {
+        // A conversation opened afresh reads its last data card again, and draws the earlier ones as stubs.
+        forgetCards(record.id);
+        chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    }
     return record.id;
 }
 

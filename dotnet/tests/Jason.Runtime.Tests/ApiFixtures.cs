@@ -40,7 +40,8 @@ public static class ApiFixtures
     //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
     //                     card-chips, plugin.list|route.list card-accounts, and last an archived campaign:
     //                     campaign.get|summary|list_contacts, approval.list|decision.list card-archived, campaign.activity
-    //                     card-archived-30-days.
+    //                     card-archived-30-days; then approval.get card-needs-pending, decision.get card-needs-question, and
+    //                     after a person approves that approval, approval.get card-needs-decided.
     //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //
@@ -70,6 +71,8 @@ public static class ApiFixtures
         "approval.get/card-message",
         "approval.get/card-message-reasked",
         "approval.get/card-message-withdrawn",
+        "approval.get/card-needs-decided",
+        "approval.get/card-needs-pending",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -333,6 +336,7 @@ public static class ApiFixtures
         "contact.update/person-saved",
         "decision.answer/answered",
         "decision.answer/card-free-text",
+        "decision.get/card-needs-question",
         "decision.get/card-question-2",
         "decision.get/card-question-3",
         "decision.get/for-campaign-row",

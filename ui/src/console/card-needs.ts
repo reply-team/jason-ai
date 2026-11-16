@@ -2,12 +2,11 @@ import type { Api } from '../api/client';
 import type { ApprovalSummary, Campaign, DecisionSummary, Page } from '../api/types';
 import { clock } from '../time/format';
 import { campaignOf, cardAt, drawn, frame, metaLine, saidOf, saidView, startRead, type Said } from './card-frame';
-import { needsLine } from './card-model';
+import { capped, needsLine } from './card-model';
 import { placeOf, type NeedsCard } from './cards';
 import { act, define } from './actions';
 import type { Chat } from './chat-model';
 import { html, type Html } from './html';
-import { attention } from './needs';
 import { here } from './state';
 import { toApprovalCard, toQuestionCard } from './waiting-model';
 
@@ -50,8 +49,9 @@ async function readNeeds(api: Api, campaignId: string | null): Promise<NeedsRead
     }
 }
 
+/** Open: Needs you's own open, which shows the item there, where it is decided under its own gate. */
 const open = (kind: 'approvals' | 'questions', id: string): Html =>
-    html`<button class="btn sm card-open" type="button" ${act('card.open', kind, id)}>Open</button>`;
+    html`<button class="btn sm card-open" type="button" ${act('needs.open', kind, id)}>Open</button>`;
 
 function needsFacts(chat: Chat, campaignId: string | null, read: NeedsRead, at: number): Html {
     if (read.state === 'gone') return html`<div class="ask-w">This agent is not in this installation.</div>`;
@@ -74,25 +74,38 @@ function needsFacts(chat: Chat, campaignId: string | null, read: NeedsRead, at: 
             <div class="ask-a">
                 <button class="btn sm" type="button" ${act('card.waits', chat.id, campaignId)}>Show them</button>
             </div>`;
+    // Questions first, then approvals, as Needs you lists them; ten rows at most, the rest said as a count that leads
+    // to Needs you.
+    const rows = [
+        ...questions.items.map((row) => {
+            const card = toQuestionCard(row, undefined, at);
+            return html`<li class="card-item">
+                <span class="card-name">Question</span>
+                <span class="card-question">${card.question}</span>
+                ${metaLine([row.contact_name, row.campaign_name, card.age])} ${open('questions', row.id)}
+            </li>`;
+        }),
+        ...approvals.items.map((row) => {
+            const card = toApprovalCard(row, undefined, at);
+            return html`<li class="card-item">
+                <span class="card-name">${card.what}</span>
+                ${metaLine([card.to, row.campaign_name, card.age])} ${open('approvals', row.id)}
+            </li>`;
+        }),
+    ];
+    const { shown, rest } = capped(rows);
     return html`${archived}
         <div class="card-count-line">${line}</div>
         <ul class="card-rows card-needs" aria-label="Waiting for your decision">
-            ${questions.items.map((row) => {
-                const card = toQuestionCard(row, undefined, at);
-                return html`<li class="card-item">
-                    <span class="card-name">Question</span>
-                    <span class="card-question">${card.question}</span>
-                    ${metaLine([row.contact_name, row.campaign_name, card.age])} ${open('questions', row.id)}
-                </li>`;
-            })}
-            ${approvals.items.map((row) => {
-                const card = toApprovalCard(row, undefined, at);
-                return html`<li class="card-item">
-                    <span class="card-name">${card.what}</span>
-                    ${metaLine([card.to, row.campaign_name, card.age])} ${open('approvals', row.id)}
-                </li>`;
-            })}
-        </ul>`;
+            ${shown}
+        </ul>
+        ${
+            rest > 0
+                ? html`<button class="card-more" type="button" ${act('card.waits', chat.id, null)}>
+                      ${rest} more in Needs you
+                  </button>`
+                : null
+        }`;
 }
 
 /** The needs card, read when it is drawn as the conversation's last card that reads, and on its Refresh. */
@@ -114,12 +127,5 @@ define('card.needs', ([chatId, index]) => {
     const at = cardAt(chatId, index, 'needs');
     if (at === null) return;
     const campaignId = campaignOf(at.card, at.chat);
-    startRead(at.chat.id, index as number, at.entry, () => readNeeds(here().api, campaignId));
-});
-
-/** Open: the item shown in Needs you, where it is decided under its own gate. Navigation only. */
-define('card.open', ([kind, id]) => {
-    if ((kind !== 'approvals' && kind !== 'questions') || typeof id !== 'string') return;
-    here().dock.show('needs');
-    void attention.open(here().api, kind, id);
+    startRead(at.chat.id, index as number, at.now, () => readNeeds(here().api, campaignId));
 });

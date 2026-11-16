@@ -287,6 +287,9 @@ import approvalListCardArchived from '../../../docs/api/fixtures/approval.list/c
 import decisionListCardStatusWaiting from '../../../docs/api/fixtures/decision.list/card-status-waiting.json';
 import decisionListCardNeedsAll from '../../../docs/api/fixtures/decision.list/card-needs-all.json';
 import decisionListCardArchived from '../../../docs/api/fixtures/decision.list/card-archived.json';
+import approvalGetCardNeedsPending from '../../../docs/api/fixtures/approval.get/card-needs-pending.json';
+import approvalGetCardNeedsDecided from '../../../docs/api/fixtures/approval.get/card-needs-decided.json';
+import decisionGetCardNeedsQuestion from '../../../docs/api/fixtures/decision.get/card-needs-question.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
@@ -1073,6 +1076,18 @@ export const fixtures = {
     'decision.list/card-archived': decisionListCardArchived satisfies Exchange<
         DecisionListRequest,
         Page<DecisionSummary>
+    >,
+    'approval.get/card-needs-pending': approvalGetCardNeedsPending satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'approval.get/card-needs-decided': approvalGetCardNeedsDecided satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
+    'decision.get/card-needs-question': decisionGetCardNeedsQuestion satisfies Exchange<
+        { decision_id: string },
+        Decision
     >,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,

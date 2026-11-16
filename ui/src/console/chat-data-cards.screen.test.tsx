@@ -15,7 +15,7 @@ import { cardReads } from './card-frame';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
-import { chats, conversations, feedId, feedUnseen } from './state';
+import { activePanel, chats, conversations, feedId, feedUnseen } from './state';
 import { forgetWaiting } from './waiting';
 
 // The data cards the chat's AI asks for by an id alone, as a person meets them: a card reads the runtime once, when it
@@ -131,7 +131,8 @@ describe('the status card', () => {
         const pane = await openChat('Spring');
         const reading = await waitFor(() => card(pane, 'Agent'));
         expect(within(reading).getByText('Reading...')).toBeTruthy();
-        expect(within(reading).getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(true);
+        // Refresh stays usable while a read is under way: a read that never answers is never the card's last word.
+        expect(within(reading).getByRole('button', { name: 'Refresh' }).hasAttribute('disabled')).toBe(false);
         release();
         const read = await waitFor(() => card(pane, 'Agent: Spring launch'));
         expect(within(read).getByText('As of 09:05')).toBeTruthy();
@@ -151,15 +152,20 @@ describe('the status card', () => {
         ]);
         expect(words(read)).toContain('People who have not replied yet: Every message waits for you');
         expect(words(read)).not.toMatch(/Meeting|%|Interested|Sequence pill|Adaptive/i);
-        // Every number on the card is one the recordings hold, or the minute it was read.
-        const recorded = new Set(
-            [
-                ...Object.values(fixtures['campaign.summary/card-status'].response.campaigns[0]!),
-                ...Object.values(fixtures['campaign.activity/card-status-30-days'].response.campaigns[0]!),
-            ].map(String),
-        );
-        const shown = (words(read).match(/\d+/g) ?? []).filter((each) => !['09', '05', '30'].includes(each));
-        expect(shown.filter((each) => !recorded.has(each))).toEqual([]);
+        // Every count is the recording's own number for its key, and no other number is on the card but the minute
+        // it was read and the thirty days of its window.
+        const counted: Record<string, number> = {
+            ...fixtures['campaign.summary/card-status'].response.campaigns[0]!,
+            ...fixtures['campaign.activity/card-status-30-days'].response.campaigns[0]!,
+        } as unknown as Record<string, number>;
+        const tilesByKey = [...read.querySelectorAll<HTMLElement>('.card-count')].map((tile) => [
+            tile.dataset['count']!,
+            Number(tile.querySelector('b')!.textContent),
+        ]);
+        expect(tilesByKey).toEqual(tilesByKey.map(([key]) => [key, counted[key as string]]));
+        const rest = read.cloneNode(true) as HTMLElement;
+        for (const tile of rest.querySelectorAll('.card-count, .card-asof')) tile.remove();
+        expect(words(rest).replace('Last 30 days', '')).not.toMatch(/\d/);
         expect(notStart(fake)).toEqual([
             { op: 'campaign.get', body: { campaign_id: 'cmp_1' } },
             { op: 'campaign.summary', body: { campaign_ids: ['cmp_1'], exclude_archived_contacts: true } },
@@ -425,9 +431,11 @@ describe('what waits for a decision', () => {
             .answer('campaign.get', 'campaign.get/card-status')
             .answer('approval.list', 'approval.list/pending', 'approval.list/card-status-waiting')
             .answer('decision.list', 'decision.list/pending', 'decision.list/card-status-waiting');
-        // The waiting cards below read each item whole, which this story did not record: they are not this test's.
-        fake.unreachable('approval.get');
-        fake.unreachable('decision.get');
+        // The waiting cards below read each item whole, as the story recorded them.
+        fake.answer('approval.get', 'approval.get/card-needs-pending').answer(
+            'decision.get',
+            'decision.get/card-needs-question',
+        );
         renderConsole([spring(turn({ kind: 'needs' }))], fake);
         const pane = await openChat('Spring');
         const read = await waitFor(() => card(pane, 'Waiting for your decision'));
@@ -530,5 +538,170 @@ describe('a conversation opened again', () => {
         await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
         expect(within(card(pane, 'People')).getByText('12 people in this agent')).toBeTruthy();
         expect(reads(fake, ['campaign.list_contacts'])).toHaveLength(1);
+    });
+});
+
+describe('a card’s read, as the chat moves on', () => {
+    const springRead = () =>
+        nothingWaitsInChats(new FakeApi())
+            .answer('campaign.get', 'campaign.get/card-status')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status')
+            .answer('campaign.activity', 'campaign.activity/card-status-30-days');
+
+    it('is not read again when its turn is marked a plan, a later turn ends, or the chat’s mode changes', async () => {
+        const fake = springRead();
+        const { desktop } = renderConsole([spring(turn({ kind: 'agent_status' }))], fake);
+        const pane = await openChat('Spring');
+        await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
+        // The desktop marks the turn's words a plan, then a later turn ends, and the mode changes: each draws the
+        // entry afresh with the same words.
+        flush(() => desktop.emit(springChat, { kind: 'done', error: null, plan: true }));
+        flush(() => desktop.emit(springChat, { kind: 'done', error: null }));
+        await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
+        flush(() => desktop.emit(springChat, { kind: 'done', error: null, plan: true }));
+        flush(() => desktop.emit(springChat, { kind: 'mode', mode: 'ask_first' }));
+        await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
+        await flush(async () => {
+            await Promise.resolve();
+        });
+        expect(reads(fake, ['campaign.activity'])).toHaveLength(1);
+        expect(within(card(pane, 'Agent: Spring launch')).getByText('As of 09:05')).toBeTruthy();
+    });
+
+    it('is read again under a chat’s new campaign, never drawn under it from before', async () => {
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('contact.list', 'contact.list/card-people-everyone')
+            .answer('campaign.get', 'campaign.get/card-status')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/card-people-first')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status');
+        const { desktop } = renderConsole([setUp(turn({ kind: 'people_list' }))], fake);
+        const pane = await openChat('Looking');
+        await waitFor(() => within(card(pane, 'People')).getByText('More on the People page'));
+        flush(() => desktop.emit(setupChat, { kind: 'attached', campaignId: 'cmp_1', title: 'Spring launch' }));
+        await waitFor(() => within(card(pane, 'People')).getByText('12 people in this agent'));
+        expect(within(card(pane, 'People')).queryByText('More on the People page')).toBeNull();
+        expect(reads(fake, ['campaign.list_contacts'])).toHaveLength(1);
+    });
+});
+
+describe('where a card’s controls lead', () => {
+    it('opens a person from a row and the agent’s People tab from the footer', async () => {
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('campaign.get', 'campaign.get/card-status')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/card-people-first')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status');
+        // The screens a link opens read what they show; this test is about where it lands.
+        fake.unreachable('contact.get');
+        fake.unreachable('contact.list');
+        fake.unreachable('campaign.summary', (body) => idsOf(body).length === 0);
+        fake.unreachable('campaign.list_contacts', (body) => (body as { limit?: number }).limit !== 10);
+        renderConsole([spring(turn({ kind: 'people_list' }))], fake);
+        let pane = await openChat('Spring');
+        await waitFor(() => within(card(pane, 'People')).getByText('12 people in this agent'));
+        fireEvent.click(within(card(pane, 'People')).getByRole('button', { name: /^Ines Duarte/ }));
+        await waitFor(() => expect(route.value).toMatchObject({ screen: 'people', id: 'cnt_1' }));
+        expect(activePanel.value).toBe('page');
+        pane = await openChat('Spring');
+        fireEvent.click(within(card(pane, 'People')).getByRole('button', { name: '12 people in this agent' }));
+        await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_1', tab: 'people' }));
+        expect(activePanel.value).toBe('page');
+    });
+
+    it('opens the item an Open names in Needs you, by its own read, and an item decided since as it is now', async () => {
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('approval.list', 'approval.list/card-needs-all')
+            .answer('decision.list', 'decision.list/card-needs-all')
+            .answer('decision.get', 'decision.get/card-needs-question')
+            .answer('approval.get', 'approval.get/card-needs-decided');
+        renderConsole([setUp(turn({ kind: 'needs' }))], fake);
+        const pane = await openChat('Looking');
+        const read = await waitFor(() => card(pane, 'Waiting for your decision'));
+        await waitFor(() => within(read).getByText('2 approvals and 2 questions waiting for your decision'));
+        // Needs you reads its own rows whole as it is shown; Autumn's approval is not this story's to answer.
+        fake.unreachable('approval.get', (body) => (body as { approval_id?: string }).approval_id !== 'apr_1');
+        const opened = (op: string, id: string) =>
+            fake.calls.filter((each) => each.operation === op && Object.values(each.body).includes(id)).length;
+        fireEvent.click(within(read).getAllByRole('button', { name: 'Open' })[0]!);
+        await waitFor(() => expect(attention.detail.value?.item.id).toBe('dec_1'));
+        expect(activePanel.value).toBe('needs');
+        // The Open read that question once and no other.
+        expect(reads(fake, ['decision.get'])).toEqual([{ op: 'decision.get', body: { decision_id: 'dec_1' } }]);
+        // Ines's approval was approved after the card was read: Needs you shows it as it stands now, by one read of
+        // its own.
+        const before = opened('approval.get', 'apr_1');
+        await openChat('Looking');
+        fireEvent.click(
+            within(
+                card(document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!, 'Waiting for your decision'),
+            ).getAllByRole('button', { name: 'Open' })[2]!,
+        );
+        await waitFor(() => expect(attention.detail.value?.item.id).toBe('apr_1'));
+        expect(attention.detail.value?.item.status).toBe('approved');
+        expect(opened('approval.get', 'apr_1')).toBe(before + 1);
+        expect(reads(fake, ['decision.get'])).toHaveLength(1);
+    });
+
+    it('shows Needs you from Show what waits when no waiting card is below the conversation', async () => {
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('campaign.get', 'campaign.get/card-status')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status')
+            .answer('campaign.activity', 'campaign.activity/card-status-30-days');
+        // Needs you reads its own rows as it is shown; they are not this test's.
+        fake.unreachable('approval.get');
+        fake.unreachable('decision.get');
+        renderConsole([spring(turn({ kind: 'agent_status' }))], fake);
+        const pane = await openChat('Spring');
+        const read = await waitFor(() => card(pane, 'Agent: Spring launch'));
+        await waitFor(() => within(read).getByRole('button', { name: 'Show what waits' }));
+        expect(pane.querySelector('.chat-waiting-for')).toBeNull();
+        fireEvent.click(within(read).getByRole('button', { name: 'Show what waits' }));
+        await waitFor(() => expect(activePanel.value).toBe('needs'));
+    });
+});
+
+describe('the keyboard on a card', () => {
+    it('keeps its focus on Refresh through a read, and Show now hands it to the card’s Refresh', async () => {
+        const fake = nothingWaitsInChats(new FakeApi())
+            .answer('campaign.get', 'campaign.get/card-status')
+            .answer('campaign.list_contacts', 'campaign.list_contacts/card-people-first')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status')
+            .answer('campaign.activity', 'campaign.activity/card-status-30-days');
+        renderConsole([spring([...turn({ kind: 'people_list' }), ...turn({ kind: 'agent_status' })])], fake);
+        const pane = await openChat('Spring');
+        await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
+        const refresh = within(card(pane, 'Agent: Spring launch')).getByRole('button', { name: 'Refresh' });
+        refresh.focus();
+        fireEvent.click(refresh);
+        await waitFor(() => expect(reads(fake, ['campaign.activity'])).toHaveLength(2));
+        await waitFor(() => expect(tiles(card(pane, 'Agent: Spring launch'))).toHaveLength(10));
+        expect(document.activeElement).toBe(
+            within(card(pane, 'Agent: Spring launch')).getByRole('button', { name: 'Refresh' }),
+        );
+        const show = within(card(pane, 'People')).getByRole('button', { name: 'Show now' });
+        show.focus();
+        fireEvent.click(show);
+        await waitFor(() => within(card(pane, 'People')).getByText('12 people in this agent'));
+        expect(document.activeElement).toBe(within(card(pane, 'People')).getByRole('button', { name: 'Refresh' }));
+    });
+
+    it('lets Refresh start a new read while one never answers, and draws only the new one', async () => {
+        const fake = nothingWaitsInChats(new FakeApi()).answer('contact.list', 'contact.list/card-people-query');
+        const release = fake.hold('contact.list');
+        renderConsole([setUp(turn({ kind: 'people_list', search: 'ines' }))], fake);
+        const pane = await openChat('Looking');
+        await waitFor(() => within(card(pane, 'People')).getByText('Reading...'));
+        release();
+        await waitFor(() => within(card(pane, 'People')).getByText('Ines Duarte'));
+        fake.hold('contact.list');
+        fireEvent.click(within(card(pane, 'People')).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => within(card(pane, 'People')).getByText('Reading...'));
+        // The read under way never answers; Refresh is still there to press, and its read is the one drawn.
+        const again = within(card(pane, 'People')).getByRole('button', { name: 'Refresh' });
+        expect(again.hasAttribute('disabled')).toBe(false);
+        const third = fake.hold('contact.list');
+        fireEvent.click(again);
+        third();
+        await waitFor(() => within(card(pane, 'People')).getByText('Ines Duarte'));
+        expect(reads(fake, ['contact.list'])).toHaveLength(3);
     });
 });

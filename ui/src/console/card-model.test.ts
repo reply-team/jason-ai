@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CampaignActivityRow, CampaignSummaryRow, Contact } from '../api/types';
 import {
     asOf,
+    capped,
     drawsAs,
     lastReading,
     modesInForce,
@@ -10,6 +11,7 @@ import {
     nowCounts,
     peopleEmpty,
     peopleFooter,
+    peoplePlace,
     personRow,
     statusSentence,
 } from './card-model';
@@ -56,19 +58,19 @@ describe('which card of a conversation reads', () => {
         ).toBe(3);
         expect(lastReading([{ index: 2, kind: 'choice' }])).toBeNull();
         expect(lastReading([])).toBeNull();
-        // The kinds a later unit draws read too, so a card before them is a stub.
+        // A kind this build draws only as a line that it is not drawn reads nothing, so the card before it still reads.
         expect(
             lastReading([
                 { index: 1, kind: 'needs' },
                 { index: 4, kind: 'accounts' },
             ]),
-        ).toBe(4);
+        ).toBe(1);
         expect(
             lastReading([
                 { index: 1, kind: 'needs' },
                 { index: 4, kind: 'plan' },
             ]),
-        ).toBe(4);
+        ).toBe(1);
     });
 
     it('draws a card already read as it was read, the last as a read, and every earlier one as a stub', () => {
@@ -205,7 +207,28 @@ describe('the people list', () => {
     });
 });
 
+describe('where a people list’s footer leads', () => {
+    it('opens the agent’s People tab under the count it counts, else the People page with the card’s own filters', () => {
+        expect(peoplePlace({}, 'cmp_1')).toBe('#/campaigns/cmp_1/people');
+        expect(peoplePlace({ standing: 'waiting' }, 'cmp_1')).toBe('#/campaigns/cmp_1/people?filter=waiting');
+        expect(peoplePlace({ search: 'ines' }, null)).toBe('#/people?q=ines');
+        expect(peoplePlace({}, null)).toBe('#/people');
+        // A search with a standing keeps the standing, as the People page's stage.
+        expect(peoplePlace({ search: 'ines', standing: 'waiting' }, 'cmp_1')).toBe(
+            '#/people?q=ines&campaign=cmp_1&stage=waiting',
+        );
+        // Removed is no stage the People page offers: the agent and the search stay.
+        expect(peoplePlace({ search: 'ines', standing: 'removed' }, 'cmp_1')).toBe('#/people?q=ines&campaign=cmp_1');
+    });
+});
+
 describe('what waits for a decision', () => {
+    it('lists ten rows at most and counts the rest', () => {
+        const twelve = Array.from({ length: 12 }, (_, at) => at);
+        expect(capped(twelve)).toEqual({ shown: twelve.slice(0, 10), rest: 2 });
+        expect(capped([1, 2])).toEqual({ shown: [1, 2], rest: 0 });
+    });
+
     it('counts items, never people, and says "50 or more" where a list has a further page', () => {
         expect(needsLine({ count: 2, more: false }, { count: 2, more: false })).toBe(
             '2 approvals and 2 questions waiting for your decision',

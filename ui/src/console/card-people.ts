@@ -1,7 +1,7 @@
 import type { Api } from '../api/client';
 import type { Campaign, CampaignSummaryResponse, Contact, MembershipItem, Page } from '../api/types';
 import { campaignOf, cardAt, drawn, frame, metaLine, saidOf, saidView, startRead, type Said } from './card-frame';
-import { peopleEmpty, peopleFooter, personRow } from './card-model';
+import { cardRows, peopleEmpty, peopleFooter, peoplePlace, personRow } from './card-model';
 import type { PeopleListCard } from './cards';
 import { act, define } from './actions';
 import type { Chat } from './chat-model';
@@ -11,8 +11,6 @@ import { here } from './state';
 // The people list the chat's AI asks for: up to ten people as the runtime lists them, of one agent or of everyone, by
 // the AI's search and a count's standing when it names them. The search is the AI's query, shown as such above the
 // facts; every row and count under "On record now" is the runtime's answer. Its only controls open a page.
-
-const LIMIT = 10;
 
 /** What the card read: the people, whether more stand behind them, the count its footer says, or why it could not. */
 type PeopleRead =
@@ -29,7 +27,7 @@ async function readPeople(api: Api, card: PeopleListCard, campaignId: string | n
     const query = card.search === undefined ? {} : { query: card.search };
     try {
         if (campaignId === null) {
-            const page = await api.call<Page<Contact>>('contact.list', { ...query, limit: LIMIT });
+            const page = await api.call<Page<Contact>>('contact.list', { ...query, limit: cardRows });
             return { state: 'read', archived: false, people: page.items, more: page.next_cursor !== null, count: null };
         }
         let campaign: Campaign;
@@ -44,7 +42,7 @@ async function readPeople(api: Api, card: PeopleListCard, campaignId: string | n
                 campaign_id: campaignId,
                 ...query,
                 ...(card.standing === undefined ? {} : { summary: card.standing }),
-                limit: LIMIT,
+                limit: cardRows,
                 exclude_archived_contacts: true,
             }),
             card.search === undefined
@@ -65,18 +63,6 @@ async function readPeople(api: Api, card: PeopleListCard, campaignId: string | n
     } catch (error) {
         return { state: 'failed', said: saidOf(error) };
     }
-}
-
-/** The address of the People page or tab the footer opens: the agent's tab under its count, else the People page. */
-function morePlace(card: PeopleListCard, campaignId: string | null): string {
-    const id = campaignId === null ? null : encodeURIComponent(campaignId);
-    if (id !== null && card.search === undefined)
-        return `#/campaigns/${id}/people${card.standing === undefined ? '' : `?filter=${card.standing}`}`;
-    const parts = [
-        ...(card.search === undefined ? [] : [`q=${encodeURIComponent(card.search)}`]),
-        ...(id === null ? [] : [`campaign=${id}`]),
-    ];
-    return `#/people${parts.length === 0 ? '' : `?${parts.join('&')}`}`;
 }
 
 function facts(card: PeopleListCard, campaignId: string | null, read: PeopleRead): Html {
@@ -109,7 +95,7 @@ function facts(card: PeopleListCard, campaignId: string | null, read: PeopleRead
     ${
         footer === null
             ? null
-            : html`<button class="lk card-more" type="button" ${act('card.page', morePlace(card, campaignId))}>
+            : html`<button class="lk card-more" type="button" ${act('card.page', peoplePlace(card, campaignId))}>
                   ${footer}
               </button>`
     }`;
@@ -143,5 +129,5 @@ define('card.people', ([chatId, index]) => {
     const at = cardAt(chatId, index, 'people_list');
     if (at === null) return;
     const campaignId = campaignOf(at.card, at.chat);
-    startRead(at.chat.id, index as number, at.entry, () => readPeople(here().api, at.card, campaignId));
+    startRead(at.chat.id, index as number, at.now, () => readPeople(here().api, at.card, campaignId));
 });
