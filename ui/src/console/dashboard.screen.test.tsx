@@ -858,7 +858,7 @@ describe('the cards', () => {
         consoleCampaigns.campaigns.value = consoleCampaigns.campaigns.value.filter((each) => each.status !== 'active');
         await waitFor(() => expect(dash().querySelector('.dash-no-agents')).toBeTruthy());
         expect(words(dash().querySelector('.dash-no-agents')!)).toBe(
-            'None of your agents is running yet. An agent starts when you tell it to in its chat, or with Start at the top of its page.',
+            'None of your agents is running yet. An agent starts when you press Start at the top of its chat or of its page.',
         );
     });
 
