@@ -4,6 +4,7 @@
 // stand-in for Electron's contents and session that records what was installed and lets the test act as the page.
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -83,8 +84,11 @@ test('the two schemes are standard and secure and nothing more: the policy is ne
 test('the content policy allows the page’s inline script and style and its data: fonts and images, and nothing else', () => {
     assert.equal(
         demoPolicy,
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-forms",
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts",
     );
+    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and storage is refused;
+    // no forms.
+    assert.ok(!/allow-same-origin|allow-forms/.test(demoPolicy));
     // No source names an address, a scheme to fetch from, 'self' or eval.
     assert.ok(!/https?:|wss?:|blob:|'self'|unsafe-eval|\*/.test(demoPolicy));
     // The sandbox leaves out pop-ups, top navigation, downloads, modals, printing and the rest.
@@ -569,7 +573,20 @@ test('our switch’s page holds no script, links only to the choice of Live, and
     const css = page.replace(/\s+/g, ' ');
     assert.ok(/html, body \{[^}]*-webkit-app-region: drag;/.test(css), 'the strip drags the window');
     assert.ok(/\.switch \{[^}]*-webkit-app-region: no-drag;/.test(css), 'the switch takes the click');
-    assert.ok(/body \{[^}]*background: #fff4d6;[^}]*border-bottom: 1px solid #f2dc9c;/.test(css), 'the Demo strip’s colours');
+    // The page's strip shows through with its own dot and words: ours draws the switch alone, at the strip's right end,
+    // on the strip's own colour, so the tail of a sentence it stands over is covered rather than drawn through.
+    assert.ok(/html, body \{[^}]*background: transparent;/.test(css), 'the strip’s ground is the page’s own');
+    assert.ok(/body \{[^}]*justify-content: flex-end;/.test(css), 'the switch at the right end');
+    assert.ok(/\.switch \{[^}]*background: linear-gradient\(rgba\(20, 33, 43, \.08\), rgba\(20, 33, 43, \.08\)\), #fff4d6;[^}]*box-shadow: 0 0 0 5px #fff4d6;/.test(css), 'on the Demo strip’s colour');
+    const body = page.slice(page.indexOf('<body>'), page.indexOf('</body>'));
+    assert.deepEqual([...body.matchAll(/<(\w+)[\s>]/g)].map((match) => match[1]), ['body', 'nav', 'span', 'a'], 'the switch and nothing else: no dot, no sentence');
+    assert.ok(!/Open in/.test(body), 'the Demo has nothing to open');
+});
+
+test('our switch’s view is transparent, so the page’s strip shows through it', () => {
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.ok(window.includes("ours.setBackgroundColor('#00000000');"));
+    assert.ok(window.indexOf("ours.setBackgroundColor('#00000000');") < window.indexOf('window.contentView.addChildView(ours);'), 'before it is shown');
 });
 
 test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags', () => {
@@ -611,4 +628,105 @@ test('the Demo’s two modules reach no jason, no runtime, no program, no proces
     assert.deepEqual(importsOf('demo-window.ts'), ['electron', 'node:fs', 'node:path', './demo-page.ts']);
     // demo-page.ts takes Electron's types alone, so its code runs here without Electron.
     assert.match(readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8'), /^import type \{[^}]*\} from 'electron';$/m);
+});
+
+// ---- The page as it was built, and the addresses it holds -------------------------------------------------------------
+
+/** The counted list of the addresses the page holds (`demo/addresses.txt`): its pattern, and each exact string's count and reason. */
+interface AddressList {
+    pattern: RegExp;
+    entries: { text: string; count: number; why: string }[];
+}
+
+function addressList(text: string): AddressList {
+    const lines = text.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    const patterns = lines.filter((line) => line.startsWith('pattern\t'));
+    assert.equal(patterns.length, 1, 'one pattern line');
+    const entries = lines
+        .filter((line) => !line.startsWith('pattern\t'))
+        .map((line) => {
+            const [count, found, why, ...rest] = line.split('\t');
+            assert.equal(rest.length, 0, line);
+            assert.match(count ?? '', /^[1-9][0-9]*$/, line);
+            return { text: found ?? '', count: Number(count), why: why ?? '' };
+        });
+    return { pattern: new RegExp(patterns[0]!.slice('pattern\t'.length), 'g'), entries };
+}
+
+/** Every text of the page the list's pattern matches, with how many times it stands there. */
+function addressesIn(page: string, pattern: RegExp): Map<string, number> {
+    const found = new Map<string, number>();
+    for (const match of page.matchAll(pattern)) found.set(match[0], (found.get(match[0]) ?? 0) + 1);
+    return found;
+}
+
+/** What differs between the page and its list: a string not listed, a count other than the listed one, a listed string gone. */
+function scan(page: string, list: AddressList): string[] {
+    const found = addressesIn(page, list.pattern);
+    const listed = new Map(list.entries.map((entry) => [entry.text, entry.count]));
+    const findings: string[] = [];
+    for (const [text, count] of found) {
+        if (!listed.has(text)) findings.push(`not listed: ${text} (${count})`);
+        else if (listed.get(text) !== count) findings.push(`${text}: the page holds ${count}, the list says ${listed.get(text)}`);
+    }
+    for (const [text, count] of listed) if (!found.has(text)) findings.push(`${text}: the list says ${count}, the page holds none`);
+    return findings;
+}
+
+const pageText = () => readFileSync(join(root, 'demo', 'index.html'), 'utf8');
+const listed = () => addressList(readFileSync(join(root, 'demo', 'addresses.txt'), 'utf8'));
+
+test('the page holds exactly the addresses its list counts, each once in the list and each with its reason', () => {
+    const list = listed();
+    assert.deepEqual(scan(pageText(), list), []);
+    assert.equal(new Set(list.entries.map((entry) => entry.text)).size, list.entries.length, 'each string once');
+    for (const entry of list.entries) {
+        assert.match(entry.text, new RegExp(`^${list.pattern.source}$`), `${entry.text} is of the pattern's shape`);
+        assert.ok(entry.why.trim().length > 10, `${entry.text} says why it is inert`);
+    }
+    // The bare scheme, a placeholder with no host, is listed like any other.
+    assert.ok(list.entries.some((entry) => entry.text === 'https://'));
+});
+
+test('the counted scan refuses an address not listed, one more or one fewer of a listed one, and a scheme of any name', () => {
+    const page = pageText();
+    const list = listed();
+    assert.deepEqual(scan(`${page}<link rel="dns-prefetch" href="https://names.example.net">`, list), ['not listed: https://names.example.net (1)']);
+    assert.deepEqual(scan(`${page}https://api.deepseek.com`, list), ['https://api.deepseek.com: the page holds 2, the list says 1']);
+    assert.deepEqual(scan(page.replace('https://api.deepseek.com', 'about:blank'), list), ['https://api.deepseek.com: the list says 1, the page holds none']);
+    assert.deepEqual(scan(`${page}ws://127.0.0.1`, list), ['not listed: ws://127.0.0.1 (1)']);
+    assert.deepEqual(scan(`${page}x-custom+scheme://host`, list), ['not listed: x-custom+scheme://host (1)']);
+});
+
+test('the page is the file its README names, by its digest: a built page, received as it is and never edited', () => {
+    const readme = readFileSync(join(root, 'demo', 'README.md'), 'utf8');
+    const named = /SHA-256 `([0-9a-f]{64})`/.exec(readme)?.[1];
+    assert.ok(named, 'the README names the page by its SHA-256');
+    assert.equal(createHash('sha256').update(readFileSync(join(root, 'demo', 'index.html'))).digest('hex'), named);
+    assert.ok(readme.includes('(addresses.txt)'), 'the README points at the counted list');
+});
+
+test('every request from the page’s view to an address the page holds, or to any other, is refused before it leaves', async () => {
+    const view = await sealed();
+    const verdict = (url: string) => {
+        let answer: { cancel?: boolean } | undefined;
+        call(view.handler('onBeforeRequest'), { url }, (response: { cancel?: boolean }) => (answer = response));
+        return answer?.cancel;
+    };
+    const urls: string[] = [];
+    for (const entry of listed().entries) {
+        const rest = entry.text.slice(entry.text.indexOf('://') + 3);
+        for (const scheme of ['http', 'https', 'ws', 'wss']) urls.push(`${scheme}://${rest === '' ? 'localhost' : rest}/x`);
+    }
+    urls.push('http://127.0.0.1:5000/v1/system.info', 'file:///C:/Users/someone/.jason/config/settings.json', 'ftp://example.com/', 'jason-switch://switch/live');
+    for (const url of urls) {
+        assert.equal(requestAllowed(demoPage, url), false, url);
+        assert.equal(verdict(url), true, url);
+    }
+    // And a request that got past the filter meets a scheme that answers nothing.
+    for (const url of urls.filter((url) => /^(https?|file):/.test(url))) {
+        const scheme = url.slice(0, url.indexOf(':'));
+        const answer = (await call(view.protocols.get(scheme), { url, method: 'GET' })) as Response;
+        assert.equal(answer.status, 403, url);
+    }
 });
