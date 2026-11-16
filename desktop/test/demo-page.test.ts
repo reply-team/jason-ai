@@ -89,8 +89,8 @@ test('the content policy allows the page’s inline script and style and its dat
         demoPolicy,
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts",
     );
-    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and storage is refused;
-    // no forms.
+    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and it sets no cookie;
+    // what it stores stays in the view's in-memory session. No forms.
     assert.ok(!/allow-same-origin|allow-forms/.test(demoPolicy));
     // No source names an address, a scheme to fetch from, 'self' or eval.
     assert.ok(!/https?:|wss?:|blob:|'self'|unsafe-eval|\*/.test(demoPolicy));
@@ -721,7 +721,20 @@ test('every request from the page’s view to an address the page holds, or to a
         const rest = entry.text.slice(entry.text.indexOf('://') + 3);
         for (const scheme of ['http', 'https', 'ws', 'wss']) urls.push(`${scheme}://${rest === '' ? 'localhost' : rest}/x`);
     }
-    urls.push('http://127.0.0.1:5000/v1/system.info', 'file:///C:/Users/someone/.jason/config/settings.json', 'ftp://example.com/', 'jason-switch://switch/live');
+    urls.push(
+        'http://127.0.0.1:5000/v1/system.info',
+        'file:///C:/Users/someone/.jason/config/settings.json',
+        'ftp://example.com/',
+        'jason-switch://switch/live',
+        // A blob of the page's own opaque origin, the page's own scheme at another file, with a query and at another
+        // host, a scheme of nobody's, and Chromium's own pages.
+        'blob:null/0f0e0d0c-0b0a-0908-0706-050403020100',
+        'jason-demo://page/other.html',
+        'jason-demo://page/index.html?x',
+        'jason-demo://other/index.html',
+        'x-custom://host/',
+        'chrome://gpu',
+    );
     for (const url of urls) {
         assert.equal(requestAllowed(demoPage, url), false, url);
         assert.equal(verdict(url), true, url);
