@@ -238,10 +238,15 @@ async function fill(api: Api, waiting: Waiting): Promise<void> {
  * longer hold goes, as that item's card did.
  */
 export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
+    await listWaiting(api, waiting);
+    await fill(api, waiting);
+}
+
+/** The campaign's two lists read again; a refusal whose item they no longer hold goes. */
+async function listWaiting(api: Api, waiting: Waiting): Promise<void> {
     await waiting.store.load(api, false);
     const refused = waiting.refused.value;
     if (refused !== null && !listedIds(waiting.store).has(refused.id)) waiting.refused.value = null;
-    await fill(api, waiting);
 }
 
 /**
@@ -319,5 +324,6 @@ export function editedWaiting(api: Api, waiting: Waiting, approval: Approval): v
         ...waiting.reasked.value.filter((each) => each.workItemId !== approval.work_item_id),
         { workItemId: approval.work_item_id, approvalId: approval.id },
     ];
-    void readWaiting(api, waiting);
+    // The save is an act of the person's: the cards' acts stay held until the lists read after it have answered.
+    void waiting.store.hold(() => listWaiting(api, waiting)).then(() => fill(api, waiting));
 }
