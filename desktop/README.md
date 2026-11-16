@@ -183,7 +183,8 @@ forwarder is admitted to); each card's note says where those are set.
 
 ## The chat's conversations
 
-A campaign has one conversation, found or made the first time it is opened, and the chat may hold any number of set-up
+A campaign has one conversation, found when it is opened and made at the person's first message or choice in it (the
+page asks for `create` then, never when it only draws the agent's Chat), and the chat may hold any number of set-up
 chats, which are about no campaign yet. Each is a record, `<data>/desktop/conversations/conv_<id>.json`: the campaign
 it is about, its title, the session each agent host named for it (and, beside it in `plain_sessions`, whether the last
 turn to name or answer with that session was a plain one, on the person's own Claude Code or Codex outside Full access:
