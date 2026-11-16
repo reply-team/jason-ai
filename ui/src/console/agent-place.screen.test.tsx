@@ -211,6 +211,35 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
         expect(tab(/^People/).getAttribute('aria-selected')).toBe('true');
     });
 
+    it('keeps a running turn’s Thinking… and Stop through the People tab and Back, and Stop stops it', async () => {
+        const { desktop } = await renderAt(place);
+        // The desktop runs a turn of the agent's conversation.
+        desktop.keep({
+            id: spring,
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            running: true,
+            entries: [{ kind: 'user', text: 'How is it doing?' }],
+        });
+        await openSpring();
+        const running = () => {
+            expect(within(springPane()).getByText('Thinking…')).toBeTruthy();
+            return within(springPane()).getByRole('button', { name: 'Stop' });
+        };
+        await waitFor(running);
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await springChatShown();
+        running();
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        await back('#/campaigns/cmp_1/chat');
+        await springChatShown();
+        fireEvent.click(running());
+        expect(desktop.calls.filter((each) => each.name === 'chat.stop').map((each) => each.args)).toEqual([[spring]]);
+    });
+
     it('moves its People tab’s line and Add people into the tab, and draws no line of counts twice', async () => {
         await renderAt(place, '#/campaigns/cmp_1/people');
         await headOf('Spring');
