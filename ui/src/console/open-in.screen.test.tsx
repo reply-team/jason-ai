@@ -65,7 +65,7 @@ const menu = () => screen.getByRole('menu');
 const items = () =>
     within(menu())
         .getAllByRole('menuitem')
-        .map((each) => each.querySelector('span')?.textContent);
+        .map((each) => each.querySelector('.oi-name')?.textContent);
 
 beforeEach(() => {
     chats.value = {};
@@ -126,9 +126,11 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
             'open-in-header',
             'on',
             '',
+            'open-in-rule',
             'open-in-header',
             '',
             '',
+            'open-in-rule',
             '',
             '',
             '',
@@ -136,9 +138,15 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         ]);
         expect(within(menu()).getByText('Agents')).not.toBeNull();
         expect(within(menu()).getByText('Editors')).not.toBeNull();
-        expect(
-            within(menu()).getAllByText('A new session in a terminal, with your own settings and tools'),
-        ).toHaveLength(2);
+        // The line drawn is the short form; the whole sentence stays each agent's description, for a pointer and a screen reader.
+        expect(within(menu()).getAllByText('A new session in a terminal')).toHaveLength(2);
+        for (const agent of ['Claude Code', 'Codex']) {
+            const entry = within(menu()).getByRole('menuitem', { name: agent });
+            expect(entry.getAttribute('title')).toBe('A new session in a terminal, with your own settings and tools');
+            expect(document.getElementById(entry.getAttribute('aria-describedby')!)?.textContent).toBe(
+                'A new session in a terminal, with your own settings and tools',
+            );
+        }
         // Copy path carries the folder as its subtitle; the arrow carries its own title.
         expect(within(within(menu()).getByRole('menuitem', { name: /^Copy path/ })).getByText('Jason')).not.toBeNull();
         expect(arrow().getAttribute('title')).toBe('Open in…');
@@ -455,7 +463,7 @@ describe('Continue this chat in a terminal', () => {
             await waitFor(() => expect(entry()).not.toBeNull());
             const all = within(menu()).getAllByRole('menuitem');
             expect(all.at(-1)).toBe(entry());
-            expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+            expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Claude Code');
             expect(entry().querySelector('small')?.textContent).toBe(note);
             expect((entry() as HTMLButtonElement).disabled).toBe(false);
             expect(entry().className).not.toBe('on');
@@ -479,7 +487,7 @@ describe('Continue this chat in a terminal', () => {
         const id = await chatInFront();
         desktop.openInContinue.set(id, { host: 'codex', label: 'Codex', running: false });
         fireEvent.click(arrow());
-        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        await waitFor(() => expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex'));
         fireEvent.click(entry());
         await waitFor(() => expect(continues(desktop)).toHaveLength(1));
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(2));
@@ -570,12 +578,12 @@ describe('Continue this chat in a terminal', () => {
         currentChat.value = second;
         await waitFor(() => expect(targets(desktop).some((each) => each.args[1] === second)).toBe(true));
         fireEvent.click(arrow());
-        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        await waitFor(() => expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex'));
         // The first chat's answer lands late, after the second chat's: it is dropped, and the entry stays the second's.
         land();
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(within(menu()).getAllByRole('menuitem', { name: /^Continue this chat/ })).toHaveLength(1);
-        expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex');
+        expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex');
         fireEvent.click(entry());
         await waitFor(() => expect(continues(desktop)).toHaveLength(1));
         expect(continues(desktop)[0]!.args).toEqual([second]);
@@ -643,7 +651,7 @@ describe('Change Jason itself', () => {
         await offered();
         fireEvent.click(arrow());
         await waitFor(() => expect(entry()).not.toBeNull());
-        expect(entry().querySelector('span')?.textContent).toBe('Change Jason itself');
+        expect(entry().querySelector('.oi-name')?.textContent).toBe('Change Jason itself');
         expect(entry().querySelector('small')?.textContent).toBe(line);
         expect(entry().textContent).not.toMatch(/Claude Code|Codex/);
         expect((entry() as HTMLButtonElement).disabled).toBe(false);
@@ -712,7 +720,7 @@ describe('Change Jason itself', () => {
         );
         const all = within(menu()).getAllByRole('menuitem');
         expect(all.at(-2)).toBe(entry());
-        expect(all.at(-1)?.querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+        expect(all.at(-1)?.querySelector('.oi-name')?.textContent).toBe('Continue this chat in Claude Code');
         const groups = [...menu().children].map((each) => each.className);
         expect(groups.slice(-2)).toEqual(['open-in-change', 'open-in-continue']);
     });
