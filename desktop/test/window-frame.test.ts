@@ -28,11 +28,14 @@ test('on Windows and Linux the window keeps its native frame: nothing is set', (
     assert.deepEqual(frameOf('linux'), {});
 });
 
-test('the window is made with the frame of the platform it runs on', () => {
+test('every window is made with the frame of the platform it runs on, the Demo’s too', () => {
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
-    const made = main.slice(main.indexOf('new BrowserWindow({'));
-    const options = made.slice(0, made.indexOf('webPreferences'));
-    assert.match(options, /\.\.\.frameOf\(process\.platform\),/);
+    const windows = main.split('new BrowserWindow({').slice(1);
+    assert.equal(windows.length, 2, 'Live’s window and the Demo’s');
+    for (const made of windows) {
+        const options = made.slice(0, made.indexOf('webPreferences'));
+        assert.match(options, /\.\.\.frameOf\(process\.platform\),/);
+    }
     assert.doesNotMatch(main, /titleBarStyle|trafficLightPosition|titleBarOverlay|frame:\s*false/);
 });
 

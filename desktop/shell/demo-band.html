@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jason</title>
+<!--
+The band above the demo page on macOS: the Demo window's own contents, 26 pixels high over the window's whole width,
+where the traffic lights stand once the title bar is hidden (src/demo-page.ts, demoLayout and demoMacFrame). It is the
+sidebar's colour over the page's 284-pixel sidebar and the strip's colour beyond, holds no script and nothing to click,
+and all of it is the window's drag region, so the window moves whatever else is drawn.
+-->
+<style>
+:root { color-scheme: light; }
+html { margin: 0; height: 100%; overflow: hidden; -webkit-app-region: drag; background: linear-gradient(to right, #f3f5f9 0 284px, #fff4d6 284px); }
+body { margin: 0; height: 100%; -webkit-app-region: drag; }
+</style>
+</head>
+<body></body>
+</html>

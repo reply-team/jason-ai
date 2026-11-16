@@ -75,27 +75,51 @@ test('a data directory that holds only the desktop’s own mode record, or that 
     assert.equal(isNewInstallation(person), false, 'the desktop’s settings');
     const other = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
     writeMode(desktopPaths(other).mode, 'live');
-    mkdirSync(join(other, 'logs'));
+    mkdirSync(join(other, 'run'));
     assert.equal(isNewInstallation(other), false, 'a folder beside the record');
+    const runtimeLog = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(runtimeLog).mode, 'demo');
+    mkdirSync(desktopPaths(runtimeLog).logs);
+    writeFileSync(join(desktopPaths(runtimeLog).logs, 'jason-20261115.jsonl'), '{}\n');
+    assert.equal(isNewInstallation(runtimeLog), false, 'a runtime’s log');
     // A desktop entry that is a file, not the desktop's folder, is no record of the desktop's.
     const odd = mkdtempSync(join(tmpdir(), 'theme-new-'));
     writeFileSync(join(odd, 'desktop'), '');
     assert.equal(isNewInstallation(odd), false);
 });
 
-test('a new person meets Light in the demo they see first, and again in their own installation when they first choose Live', () => {
+test('what a Demo run writes, Electron’s profile and the desktop’s own log, leaves a new installation new', () => {
+    const person = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(person).mode, 'demo');
+    mkdirSync(join(desktopPaths(person).electron, 'Partitions'), { recursive: true });
+    writeFileSync(join(desktopPaths(person).electron, 'Local State'), '{}');
+    mkdirSync(desktopPaths(person).logs);
+    writeFileSync(join(desktopPaths(person).logs, 'desktop-20261115.jsonl'), '{}\n');
+    writeFileSync(join(desktopPaths(person).logs, 'desktop-20261115_002.jsonl'), '{}\n');
+    assert.equal(isNewInstallation(person), true);
+    // Electron's profile as a file, or a log of anything but the desktop's, is no record of the desktop's.
+    writeFileSync(join(desktopPaths(person).logs, 'notes.txt'), '');
+    assert.equal(isNewInstallation(person), false, 'another file in the logs');
+    const file = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(file).mode, 'demo');
+    writeFileSync(desktopPaths(file).electron, '');
+    assert.equal(isNewInstallation(file), false, 'electron as a file');
+    const logsFile = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
+    writeMode(desktopPaths(logsFile).mode, 'demo');
+    writeFileSync(desktopPaths(logsFile).logs, '');
+    assert.equal(isNewInstallation(logsFile), false, 'logs as a file');
+});
+
+test('a new person meets the demo first, and Light in their own installation when they first choose Live', () => {
     const person = join(mkdtempSync(join(tmpdir(), 'theme-first-')), '.jason');
     // The first start: newness is read of the person's directory before anything is written, then the record is kept.
     const isNew = isNewInstallation(person);
     assert.equal(isNew, true);
     assert.equal(keepFirstStart(desktopPaths(person).mode, isNew, false), true);
     assert.equal(readMode(desktopPaths(person).mode), 'demo');
-    // The demo run's own settings meet Light, by the person's newness, though the demo's directory is not empty by then.
-    const demo = demoDirectory(person);
-    mkdirSync(join(demo, 'plugins', 'demo'), { recursive: true });
-    assert.equal(isNewInstallation(demo), false, 'what makes the demo run read the person’s newness, not its own');
-    assert.equal(startingTheme(null, isNew), 'light');
-    assert.equal(settingsAtStart(desktopPaths(demo).settings, isNew).theme, 'light');
+    // The demo run writes no settings; no folder of the earlier demo is made.
+    assert.equal(existsSync(desktopPaths(person).settings), false);
+    assert.equal(existsSync(demoDirectory(person)), false);
     // Live: the record says so, and the person's directory, holding only it, is still new: their own first start is Light.
     writeMode(desktopPaths(person).mode, 'live');
     assert.deepEqual(readdirSync(person), ['desktop']);
@@ -121,7 +145,7 @@ test('whether the installation is new is decided in the main module before Elect
     const read = choose.indexOf('installationWasNew = isNewInstallation(personDirectory);');
     assert.ok(read > 0);
     assert.ok(choose.indexOf('keepFirstStart(') > read, 'the record is written after newness is read');
-    assert.ok(choose.indexOf('runOn = startOn(') > read && choose.indexOf('enterRun(process.env, runOn)') > read);
+    assert.ok(choose.indexOf('runOn = startRun(') > read && choose.indexOf('personEnvironment = personEnvironmentOf(process.env);') > read);
     assert.equal(choose.split('isNewInstallation(').length - 1, 1, 'read once');
     const start = main.slice(main.indexOf('function startDesktop('));
     const chosen = start.indexOf('chooseInstallation(uninstalling');
