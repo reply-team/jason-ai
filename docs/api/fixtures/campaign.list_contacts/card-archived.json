@@ -1,0 +1,149 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "card-archived",
+  "request": {
+    "campaign_id": "cmp_5",
+    "limit": 10,
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_11",
+          "first_name": "Mira",
+          "last_name": "Sato",
+          "company": "Kavali",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "mira@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_5",
+              "campaign_name": "Winter plan",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_12",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "human",
+              "id": "ada"
+            },
+            "kind": "contact_created",
+            "campaign_id": null,
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": "cnt_11",
+            "old": null,
+            "new": null,
+            "reason": null,
+            "contact_id": "cnt_11",
+            "campaign_name": null,
+            "contact_name": "Mira Sato",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_5"
+          }
+        ]
+      },
+      {
+        "contact": {
+          "id": "cnt_12",
+          "first_name": "Nils",
+          "last_name": "Aho",
+          "company": "Kavali",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "nils@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_5",
+              "campaign_name": "Winter plan",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "new"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_13",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "human",
+              "id": "ada"
+            },
+            "kind": "contact_created",
+            "campaign_id": null,
+            "work_item_id": null,
+            "attempt_id": null,
+            "key": "cnt_12",
+            "old": null,
+            "new": null,
+            "reason": null,
+            "contact_id": "cnt_12",
+            "campaign_name": null,
+            "contact_name": "Nils Aho",
+            "work_item_kind": null,
+            "work_item_role": null,
+            "work_item_operation": null,
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_5"
+          }
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

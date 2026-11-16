@@ -1,0 +1,15 @@
+{
+  "operation": "campaign.get",
+  "case": "card-unknown-campaign",
+  "request": {
+    "campaign_id": "cmp_4"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_4'.",
+      "retryable": false
+    }
+  }
+}

@@ -114,6 +114,17 @@ export const passiveWords: readonly string[] = [
     'Open the shared mailbox page',
     'Needs you',
     'You chose this',
+    // The data cards' controls: a read again, which decides nothing, and the places they open.
+    'Show now',
+    'Refresh',
+    'Show what waits',
+    'Show them',
+    'Open',
+    'More in Needs you',
+    'People',
+    'Inbox',
+    'Results',
+    'Settings',
 ];
 
 /**
