@@ -111,6 +111,35 @@ public sealed class HarnessRootReportTests
         }
     }
 
+    /// <summary>
+    /// A runtime whose settings name a harness root keeps its folders there: it reports that root, makes the project's
+    /// folder under it, and makes nothing at the root a runtime on the same home would default to.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_keeps_its_folders_under_the_root_its_settings_name_and_never_at_the_default()
+    {
+        string? named = null;
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            named = Path.Combine(TempDataDir.HomeOf(paths.Root), "Jason-elsewhere");
+            File.WriteAllText(paths.UserSettingsFile, new System.Text.Json.Nodes.JsonObject
+            {
+                ["Dispatcher"] = new System.Text.Json.Nodes.JsonObject { ["Enabled"] = false },
+                ["Harness"] = new System.Text.Json.Nodes.JsonObject { ["Root"] = named },
+            }.ToJsonString());
+        });
+        var before = await api.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, new { }, Ct);
+        Assert.Equal(new HarnessInfo(named!, HarnessRootState.Absent), before.Harness);
+
+        var project = await api.PostOkAsync<ProjectDto>(Operations.ProjectCreate, new { name = "Acme Corp" }, Ct);
+
+        var relative = Path.GetRelativePath(named!, project.FolderPath!);
+        Assert.False(relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative), $"{project.FolderPath} is under {named}.");
+        var after = await api.PostOkAsync<SystemInfoResponse>(Operations.SystemInfo, new { }, Ct);
+        Assert.Equal(new HarnessInfo(named!, HarnessRootState.Marked), after.Harness);
+        Assert.False(Directory.Exists(RootOf(api)), "Nothing is made at the default harness root.");
+    }
+
     /// <summary>The root the test runtime was given: <c>Jason</c> in the home beside its data directory.</summary>
     private static string RootOf(RuntimeApiFixture api) => Path.Combine(TempDataDir.HomeOf(api.Paths.Root), "Jason");
 }
