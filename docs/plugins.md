@@ -335,16 +335,6 @@ asks for and the `jason plugin grant` command that grants it, in force at once. 
 `.staging-<id>-…` or `.old-<id>-…` directory beside the
 packages is what an interrupted install left: the runtime never reads it, and an `.old-` one holds the package
 the install replaced. Every other package is installed by copying its directory in.
-A sixth package, [`plugins/demo/`](../plugins/demo/README.md), is published with no release: the desktop of 0.44 and
-earlier carried it and placed it in the demo installation it made, the desktop of 0.45 carried it and placed it nowhere,
-and no desktop carries it from 0.46; its demo is a page that
-runs no installation ([the desktop guide](desktop.md#the-demo)). `jason plugin install demo` has nothing to install.
-It is also the plainest example of a provider package. Its manifest requests no capability, so by §9 it can call no host
-and run no program, and a send made to it is answered `sent` and goes to nobody; it performs `message.send`,
-`social_invitation.send`, `conversation.reply`, `sender.list`, `conversation.list` and `conversation.get`, and declares
-`contracts.events`, so its `events.read` reports the replies its sample story wrote, by a cursor of its own. Its people,
-threads and replies are data inside the package, and the moment the story starts is a value under `Plugins:Config:demo`.
-Read its [README](../plugins/demo/README.md) beside its `plugin.yaml` when you write a provider of your own.
 Step 3 of [the wiring check](golden-path.md) runs the verb.
 The runtime carries each package its own release publishes and says in `system.info`'s `released_plugins` whether the
 one installed of that id is it, by content digest, so `jason status` names an earlier release's package left behind
@@ -1909,11 +1899,12 @@ the way §12 describes, with an input like the one above. The ntfy package's own
 ## 15. Writing an events plugin
 
 An events plugin is a provider plugin that also reads what happened in its accounts: a thread that moved, a reply the
-provider detected, an invitation accepted, a message that bounced. It is invoked for the events contract
-[`events.read`](contracts/events/events.read.md) by the runtime itself, once for each page of a read, with the binding
-of the account it reads; no work item names it and no route carries it. A read belongs to no campaign, and the
-runtime finds the campaigns an event concerns by the identifiers your operations pinned or, where that finds none, by the
-contact pinned at the plugin, through every campaign that is not archived and holds them as a member.
+provider detected, an invitation accepted, a message that bounced, a message the account sent. It is invoked for the
+events contract [`events.read`](contracts/events/events.read.md) by the runtime itself, once for each page of a read,
+with the binding of the account it reads; no work item names it and no route carries it. A read belongs to no
+campaign, and the runtime finds the campaigns an event concerns by the identifiers your operations pinned or, where that
+finds none, by the contact pinned at the plugin, through every campaign that is not archived and holds them as a
+member; a message the account sent is found by its provider campaign alone, and never by the person.
 
 **The manifest.** `kind: provider`, its `operations` as ever, and the events contract version it speaks:
 
@@ -1930,7 +1921,7 @@ or `null`; `limit` is at most 100. `context.binding` is the route's binding, and
 item or attempt.
 
 **What it answers.** `{ result: { events, cursor, has_more } }`: the events of the page in the provider's order, a
-cursor to read on from — always, even when the page is empty — and whether more follow now. Every event is one of four
+cursor to read on from — always, even when the page is empty — and whether more follow now. Every event is one of five
 closed kinds of identifiers, moments and the provider's own flags; a subject, a preview or a name is refused with the
 whole page. The cursor is yours: 1 to 2048 printable ASCII characters with no space, which the runtime stores and hands
 back unchanged and never reads. Say who moved a thread with `moved_by` — `other_side`, `account`, `provider`, or
@@ -1946,7 +1937,12 @@ plugin on the strength of that. A move that names no campaign reaches, by the pe
 and holds them as a member; naming the campaign is still the right course, because the first rule decides alone when it
 finds one, and because a reply that names no campaign is taken as a campaign's own where that campaign alone had
 written to the person before it, as the reply to a direct send is: a sequence's thread left unnamed would be answered
-by a campaign that never wrote in it. Return no `external_ids`: a read pins nothing.
+by a campaign that never wrote in it. Report a message sent as the account, by whoever sent it,
+as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by
+the other side. Name under `campaign` the provider campaign it belongs to, by the identifier `campaign.get` pins, and
+give as `occurred_at` the moment it was sent, the same at every read: a send reaches a campaign by that identifier
+alone, one that names none reaches no campaign, and one given two moments is said twice. Return no `external_ids`: a
+read pins nothing.
 
 **Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
 `until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and

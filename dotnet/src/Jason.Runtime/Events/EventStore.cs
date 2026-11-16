@@ -74,6 +74,7 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         [ReadEvent.ReplyDetected] = ["thread"],
         [ReadEvent.InvitationAccepted] = ["account"],
         [ReadEvent.Bounce] = ["message", "bounce"],
+        [ReadEvent.MessageSent] = ["thread", "message"],
     };
 
     /// <param name="db">The context the page is written through.</param>
@@ -324,9 +325,11 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
     /// <summary>
     /// The line an event says in a campaign, or none. A thread the other side moved — or one the provider cannot say who
     /// moved — is said as the inbound read says a reply, with the same fields and under the same key; a thread the
-    /// account or the provider moved is no reply and says nothing; every other kind is said as a provider event, with
-    /// its kind. Either says which rule found the campaign, under <c>attributed_by</c>; a reply found by the contact's pin on
-    /// a thread that is the campaign's own also says <c>campaign_own</c>, true, and no other line carries it.
+    /// account or the provider moved is no reply and says nothing; a message the account sent is said as a send of the
+    /// provider's, a kind of its own, so that nothing that reads replies or provider events reads it; every other kind is
+    /// said as a provider event, with its kind. Each says which rule found the campaign, under <c>attributed_by</c>; a reply
+    /// found by the contact's pin on a thread that is the campaign's own also says <c>campaign_own</c>, true, and no other
+    /// line carries it.
     /// </summary>
     private static (string Kind, string Key, JsonObject New)? Line(string pluginId, ReadEvent read, ProviderEvent row, ContactPin? contact, string rule, bool campaignOwn)
     {
@@ -357,22 +360,26 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             return (JournalKinds.InboundReplyObserved, EventKeys.Line(pluginId, read), reply);
         }
 
-        var updated = new JsonObject
+        // A send's line is a kind of its own, so it names no event kind: the line's kind says it.
+        var send = read.Kind == ReadEvent.MessageSent;
+        var updated = new JsonObject();
+        if (!send)
         {
-            ["kind"] = read.Kind,
-            ["plugin"] = pluginId,
-            ["event_id"] = row.PublicId,
-            ["occurred_at"] = EventKeys.Moment(read),
-            ["channel"] = read.Text("channel"),
-            ["contact_id"] = contact?.ContactPublicId,
-            ["attributed_by"] = rule,
-        };
+            updated["kind"] = read.Kind;
+        }
+
+        updated["plugin"] = pluginId;
+        updated["event_id"] = row.PublicId;
+        updated["occurred_at"] = EventKeys.Moment(read);
+        updated["channel"] = read.Text("channel");
+        updated["contact_id"] = contact?.ContactPublicId;
+        updated["attributed_by"] = rule;
         foreach (var name in Carried[read.Kind])
         {
             updated[name] = read.Data[name]?.DeepClone();
         }
 
-        return (JournalKinds.ProviderEventObserved, EventKeys.Line(pluginId, read), updated);
+        return (send ? JournalKinds.ProviderSendObserved : JournalKinds.ProviderEventObserved, EventKeys.Line(pluginId, read), updated);
     }
 
     private static string Instant(DateTime moment) => Dispatch.InboundSync.Instant(new DateTimeOffset(DateTime.SpecifyKind(moment, DateTimeKind.Utc)));
@@ -437,7 +444,11 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
         return new PinFacts(campaigns, contacts, members);
     }
 
-    /// <summary>Which of these lines these campaigns have already said, by kind and key: one query for the page.</summary>
+    /// <summary>
+    /// Which of these lines these campaigns have already said, by kind and key: one query for the page, one part a kind.
+    /// Each part names its kind as a constant, so each is read through the filtered unique index that kind has, and never
+    /// by walking the campaigns' whole chronicles, as one condition over the three kinds together would.
+    /// </summary>
     private static async Task<HashSet<(int Campaign, string Kind, string Key)>> SaidAsync(
         JasonDbContext db,
         List<int> campaignIds,
@@ -449,13 +460,15 @@ public sealed class EventStore(JournalWriter journal, TimeProvider clock, IEvent
             return [];
         }
 
-        var said = await db.Journal
+        var lines = db.Journal
             .AsNoTracking()
-            .Where(entry => entry.CampaignId != null
-                && campaignIds.Contains(entry.CampaignId.Value)
-                && (entry.Kind == JournalKinds.InboundReplyObserved || entry.Kind == JournalKinds.ProviderEventObserved)
-                && keys.Contains(entry.Key!))
+            .Where(entry => entry.CampaignId != null && campaignIds.Contains(entry.CampaignId.Value) && keys.Contains(entry.Key!));
+        var said = await lines.Where(entry => entry.Kind == JournalKinds.InboundReplyObserved)
             .Select(entry => new { Campaign = entry.CampaignId!.Value, entry.Kind, Key = entry.Key! })
+            .Concat(lines.Where(entry => entry.Kind == JournalKinds.ProviderEventObserved)
+                .Select(entry => new { Campaign = entry.CampaignId!.Value, entry.Kind, Key = entry.Key! }))
+            .Concat(lines.Where(entry => entry.Kind == JournalKinds.ProviderSendObserved)
+                .Select(entry => new { Campaign = entry.CampaignId!.Value, entry.Kind, Key = entry.Key! }))
             .ToListAsync(ct)
             .ConfigureAwait(false);
         return [.. said.Select(entry => (entry.Campaign, entry.Kind, entry.Key))];

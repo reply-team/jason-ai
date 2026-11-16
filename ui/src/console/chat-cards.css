@@ -32,6 +32,11 @@
 .jc-console .thread .sugs {
     justify-content: center;
 }
+/* The chips under the last answer stand at the answer's edge, not centred. */
+.jc-console .thread .sugs.next {
+    justify-content: flex-start;
+    margin: 2px 0 14px;
+}
 
 /* The trail of steps: an arrow that turns as the list opens, none while the turn still runs. */
 .jc-console .vsteps > summary::after {
@@ -176,6 +181,257 @@
 }
 .jc-console .waiting-card form.ask-a .inp:last-child {
     flex-basis: 100%;
+}
+
+/* A card the AI asked for. Its frame's label names the AI as the speaker of what stands under it, in the first row,
+   in plain weight, where nothing it holds can push it away; the AI's words are drawn as plain text, never in the look
+   of a fact. */
+.jc-console .chat-card .card-who {
+    color: inherit;
+    font-size: 12.5px;
+    font-weight: 400;
+    margin-bottom: 4px;
+}
+/* A choice's option: its label, the AI's detail under it, never sent; once answered, the one chosen outlined with a
+   check and the rest at the faint tone. */
+.jc-console .chat-choice .ui-opt {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+}
+.jc-console .chat-choice .ui-opt .opt-d {
+    color: var(--mute);
+    font-size: 12px;
+    font-weight: 400;
+}
+.jc-console .chat-choice .ui-opt.chosen:disabled {
+    opacity: 1;
+    border-color: var(--teal);
+    background: var(--teal-2);
+    color: var(--teal);
+    font-weight: 600;
+}
+.jc-console .chat-choice .ui-opt .opt-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    font-weight: 500;
+}
+.jc-console .chat-choice .ui-opt.faint:disabled {
+    opacity: 1;
+    color: var(--faint);
+}
+.jc-console .chat-choice .choice-said {
+    margin-top: 9px;
+}
+
+/* A data card: its header, the minute it was read and Refresh on the first row; the AI's words, when it carries any,
+   in a dashed frame of their own above the facts; and the runtime's facts under "On record now". A stub is its first
+   row alone. */
+.jc-console .chat-card .card-head {
+    font-size: 13.5px;
+    font-weight: 400;
+}
+.jc-console .chat-data .card-top .card-asof {
+    margin-left: auto;
+}
+.jc-console .chat-data .card-top .card-read {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.jc-console .chat-data .card-top .card-asof + .card-read {
+    margin-left: 0;
+}
+.jc-console .chat-data .card-top .card-head + .card-read {
+    margin-left: auto;
+}
+.jc-console .chat-data.stub {
+    padding-top: 9px;
+    padding-bottom: 9px;
+}
+.jc-console .chat-data .card-ai {
+    margin-top: 10px;
+    padding: 8px 11px;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    color: var(--mute);
+}
+.jc-console .chat-data .card-ai .card-query {
+    color: var(--ink);
+}
+.jc-console .chat-data .card-ai .card-match {
+    margin-top: 3px;
+}
+.jc-console .chat-data .card-facts {
+    margin-top: 10px;
+}
+.jc-console .chat-data .card-rec,
+.jc-console .chat-data .card-lab {
+    color: var(--faint);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.jc-console .chat-data .card-lab {
+    margin-top: 12px;
+    text-transform: none;
+    letter-spacing: 0.01em;
+}
+.jc-console .chat-data .card-reading,
+.jc-console .chat-data .card-empty,
+.jc-console .chat-data .card-archived {
+    color: var(--mute);
+    font-size: 13px;
+}
+.jc-console .chat-data .card-archived {
+    margin: 0 0 6px;
+}
+.jc-console .chat-data .card-said {
+    margin-top: 4px;
+}
+.jc-console .chat-data .card-status,
+.jc-console .chat-data .card-count-line {
+    font-weight: 600;
+    font-size: 13.5px;
+}
+/* The status card's counts: the runtime's number over the desktop's word for it, in a row that wraps. */
+.jc-console .chat-data .card-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.jc-console .chat-data .card-count {
+    display: flex;
+    flex-direction: column;
+    min-width: 92px;
+    padding: 7px 10px;
+    border: 1px solid var(--line2);
+    border-radius: 9px;
+    background: var(--panel-2);
+}
+.jc-console .chat-data .card-count b {
+    font-size: 17px;
+    font-variant-numeric: tabular-nums;
+}
+.jc-console .chat-data .card-count span {
+    color: var(--mute);
+    font-size: 11.5px;
+}
+.jc-console .chat-data .card-modes {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+    color: var(--mute);
+}
+.jc-console .chat-data .card-modes b {
+    color: var(--ink);
+    font-weight: 600;
+}
+.jc-console .chat-data .card-nav {
+    margin-top: 12px;
+}
+/* A list's rows: a person who opens on a click, or an item waiting, with Open at its end. */
+.jc-console .chat-data .card-rows {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line2);
+}
+.jc-console .chat-data .card-rows li {
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .chat-data .card-row,
+.jc-console .chat-data .card-item {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    width: 100%;
+    padding: 7px 2px;
+    font-size: 13px;
+    text-align: left;
+}
+.jc-console .chat-data .card-row {
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+}
+.jc-console .chat-data .card-row:hover {
+    background: var(--hover);
+}
+.jc-console .chat-data .card-name {
+    font-weight: 600;
+}
+.jc-console .chat-data .card-question {
+    flex-basis: 100%;
+    order: 1;
+    color: var(--ink);
+}
+.jc-console .chat-data .card-item .card-meta {
+    order: 2;
+}
+.jc-console .chat-data .card-item .card-open {
+    order: 3;
+    margin-left: auto;
+}
+.jc-console .chat-data .stage {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--gray-2);
+    color: var(--mute);
+    font-size: 11.5px;
+}
+.jc-console .chat-data .card-more {
+    margin-top: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--teal);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+.jc-console .chat-data .card-more:hover {
+    text-decoration: underline;
+}
+
+/* The accounts card: Reply's part under its own label above the runtime's facts, its accounts as a table of what Reply
+   wrote, the runtime's facts as label and value. */
+.jc-console .chat-data .card-line,
+.jc-console .chat-data .card-fact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+.jc-console .chat-data .card-fact {
+    margin-top: 4px;
+}
+.jc-console .chat-data .card-tbl {
+    width: 100%;
+    margin-top: 8px;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.jc-console .chat-data .card-tbl th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--faint);
+    padding: 4px 10px 4px 0;
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .chat-data .card-tbl td {
+    padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+.jc-console .chat-data .card-tbl tr:last-child td {
+    border-bottom: 0;
 }
 
 /* The dark theme, chosen by the system or by the person: the same values both ways. */

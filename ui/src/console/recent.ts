@@ -4,7 +4,7 @@ import { campaigns } from './campaigns';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
-import { attention } from './needs';
+import { needsInput } from './needs';
 import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type RecentRow } from './recent-rows';
 import { chats, clock, conversations, currentChat } from './state';
 
@@ -88,7 +88,7 @@ function dotTitle(row: RecentRow): Html | null {
 
 function rowView(row: RecentRow): Html {
     const said = [
-        row.waiting > 0 ? t('recent.waiting', { count: String(row.waiting) }) : null,
+        row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
         row.age === '' ? null : row.age,
         row.agent === null ? null : dotTitles[row.dot],
     ]
@@ -104,7 +104,7 @@ function rowView(row: RecentRow): Html {
     >
         <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>
         <span class="rt">${row.title}</span>
-        ${row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waiting}</span>` : null}
+        ${row.waiting > 0 ? html`<span class="count" aria-hidden="true">${row.waitingWords}</span>` : null}
         <span class="t" aria-hidden="true">${row.age}</span>
     </button>`;
 }
@@ -137,8 +137,7 @@ export function recentView(): Html {
         titles: (id) => chats.value[id]?.title,
         running: (id) => chats.value[id]?.running,
         campaigns: campaigns.value,
-        approvals: attention.approvals.value,
-        questions: attention.questions.value,
+        ...needsInput(),
         now: clock.value,
     });
     const { rows: shown, more } = shownRows(rows, filter.value, text.value, limit.value);

@@ -186,9 +186,9 @@ its result, three failure codes, its timeout and its conformance list. Its fixtu
 A third family is published here, and it is neither a canonical operation nor a delivery:
 [`events/events.read.json`](events/events.read.md), what a provider plugin that declares `contracts.events: [1]` is
 invoked for — read what happened in one account after the point the plugin's own cursor names: a thread that moved, a
-reply the provider detected, an invitation accepted, a message that bounced. A read of an account belongs to no
-campaign, so no work item names it and no route carries it; it is under `events/` and read by a catalog of its own, for
-the same reason the delivery contract is. It has the delivery contract's fields and nothing more: its input, its
+reply the provider detected, an invitation accepted, a message that bounced, a message the account sent. A read of
+an account belongs to no campaign, so no work item names it and no route carries it; it is under `events/` and read by
+a catalog of its own, for the same reason the delivery contract is. It has the delivery contract's fields and nothing more: its input, its
 result, four failure codes, its timeout and its conformance list. What it returns is identifiers, moments and the
 provider's own flags — every kind a closed object, with nothing anybody wrote — and it pins nothing: a read finds the
 identifiers operations pinned and writes none. Its fixtures live beside the others' under
@@ -446,6 +446,7 @@ Every kind this build reserves, rendered from the documents by a test and compar
 | [`provider_block_cleared`](journal/provider_block_cleared.json) | `0.18.0` | yes | campaign, attempt, provider_block | An open provider block that had held work of a campaign cleared, through a trial that got past it or by a person. |
 | [`provider_blocked`](journal/provider_blocked.json) | `0.18.0` | yes | campaign, work_item, attempt, plugin, provider_block | An open provider block held work of a campaign, said once in each campaign it holds work of. |
 | [`provider_event_observed`](journal/provider_event_observed.json) | `0.12.0` | yes | campaign, contact, plugin | A provider event read from an account reached a campaign: a reply the provider detected, an invitation accepted, or a bounce. |
+| [`provider_send_observed`](journal/provider_send_observed.json) | `0.46.0` | yes | campaign, contact, plugin | A message the account sent, read from the account's events, reached the campaign whose provider campaign it belongs to. |
 | [`reply_classified`](journal/reply_classified.json) | `0.25.0` | yes | campaign, contact, work_item, attempt, plugin, decision | A reply in a campaign was given a verdict: what kind of reply it is, how sure the verdict is, and what is to be done about it. |
 | [`role_added`](journal/role_added.json) | `0.1.0` | yes | role | A role was registered, so work can name it and an attempt can run as it. |
 | [`role_note_set`](journal/role_note_set.json) | `0.1.0` | yes | campaign, project, role | A role's note at one level, a campaign, a project or the client, was written; the line records its size and hash, never what it says. |
@@ -899,6 +900,12 @@ lists.
   plugin does at the provider grows. The operation's page says in one sentence what the policy was before. A refusal
   that protects a person — `suppressed`, a channel conflict, a stop the register or the provider holds — never relaxes:
   taking such a refusal away is breaking.
+
+A branch added to an output's `anyOf` keeps the version too, as a new kind of event under `events.read` does: a
+runtime that predates the branch refuses a page that carries it as `result_invalid`, stores nothing from it, keeps the
+cursor where it was and reads again at the doubled cadence, so a newer plugin under an older runtime fails where it can
+be seen rather than being read as something else, and once the account's reads stop succeeding the inbound read of its
+campaigns' threads takes over again ([inbound sync](../inbound-sync.md)).
 
 A route to a plugin whose family versions do not contain the operation's version is refused when the
 route is activated, as `route_contract_incompatible`, and again at the claim as

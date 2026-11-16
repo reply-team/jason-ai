@@ -1,0 +1,1911 @@
+{
+  "operation": "approval.list",
+  "case": "needs-first-page",
+  "request": {},
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_2",
+        "work_item_id": "wi_2",
+        "campaign_id": "cmp_2",
+        "operation": "conversation.reply",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-2",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Autumn outreach",
+        "contact_name": "Kai Lindt",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_3",
+        "work_item_id": "wi_4",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-6",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 001",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_4",
+        "work_item_id": "wi_5",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-7",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 002",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_5",
+        "work_item_id": "wi_6",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-8",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 003",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_6",
+        "work_item_id": "wi_7",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-9",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 004",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_7",
+        "work_item_id": "wi_8",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-10",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 005",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_8",
+        "work_item_id": "wi_9",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-11",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 006",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_9",
+        "work_item_id": "wi_10",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-12",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 007",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_10",
+        "work_item_id": "wi_11",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-13",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 008",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_11",
+        "work_item_id": "wi_12",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-14",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 009",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_12",
+        "work_item_id": "wi_13",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-15",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 010",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_13",
+        "work_item_id": "wi_14",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-16",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 011",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_14",
+        "work_item_id": "wi_15",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-17",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 012",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_15",
+        "work_item_id": "wi_16",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-18",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 013",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_16",
+        "work_item_id": "wi_17",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-19",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 014",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_17",
+        "work_item_id": "wi_18",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-20",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 015",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_18",
+        "work_item_id": "wi_19",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-21",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 016",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_19",
+        "work_item_id": "wi_20",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-22",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 017",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_20",
+        "work_item_id": "wi_21",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-23",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 018",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_21",
+        "work_item_id": "wi_22",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-24",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 019",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_22",
+        "work_item_id": "wi_23",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-25",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 020",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_23",
+        "work_item_id": "wi_24",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-26",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 021",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_24",
+        "work_item_id": "wi_25",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-27",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 022",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_25",
+        "work_item_id": "wi_26",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-28",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 023",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_26",
+        "work_item_id": "wi_27",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-29",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 024",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_27",
+        "work_item_id": "wi_28",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-30",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 025",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_28",
+        "work_item_id": "wi_29",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-31",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 026",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_29",
+        "work_item_id": "wi_30",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-32",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 027",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_30",
+        "work_item_id": "wi_31",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-33",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 028",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_31",
+        "work_item_id": "wi_32",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-34",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 029",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_32",
+        "work_item_id": "wi_33",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-35",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 030",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_33",
+        "work_item_id": "wi_34",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-36",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 031",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_34",
+        "work_item_id": "wi_35",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-37",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 032",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_35",
+        "work_item_id": "wi_36",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-38",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 033",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_36",
+        "work_item_id": "wi_37",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-39",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 034",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_37",
+        "work_item_id": "wi_38",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-40",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 035",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_38",
+        "work_item_id": "wi_39",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-41",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 036",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_39",
+        "work_item_id": "wi_40",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-42",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 037",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_40",
+        "work_item_id": "wi_41",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-43",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 038",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_41",
+        "work_item_id": "wi_42",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-44",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 039",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_42",
+        "work_item_id": "wi_43",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-45",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 040",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_43",
+        "work_item_id": "wi_44",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-46",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 041",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_44",
+        "work_item_id": "wi_45",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-47",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 042",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_45",
+        "work_item_id": "wi_46",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-48",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 043",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_46",
+        "work_item_id": "wi_47",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-49",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 044",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_47",
+        "work_item_id": "wi_48",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-50",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 045",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_48",
+        "work_item_id": "wi_49",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-51",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 046",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_49",
+        "work_item_id": "wi_50",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-52",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 047",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_50",
+        "work_item_id": "wi_51",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-53",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 048",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_51",
+        "work_item_id": "wi_52",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-54",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 049",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_52",
+        "work_item_id": "wi_53",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-55",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 050",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_53",
+        "work_item_id": "wi_54",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-56",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 051",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_54",
+        "work_item_id": "wi_55",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-57",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 052",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_55",
+        "work_item_id": "wi_56",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-58",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 053",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_56",
+        "work_item_id": "wi_57",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-59",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 054",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_57",
+        "work_item_id": "wi_58",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-60",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 055",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_58",
+        "work_item_id": "wi_59",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-61",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 056",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_59",
+        "work_item_id": "wi_60",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-62",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 057",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_60",
+        "work_item_id": "wi_61",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-63",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 058",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_61",
+        "work_item_id": "wi_62",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-64",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 059",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_62",
+        "work_item_id": "wi_63",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-65",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 060",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_63",
+        "work_item_id": "wi_64",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-66",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 061",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_64",
+        "work_item_id": "wi_65",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-67",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 062",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_65",
+        "work_item_id": "wi_66",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-68",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 063",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_66",
+        "work_item_id": "wi_67",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-69",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 064",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_67",
+        "work_item_id": "wi_68",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-70",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 065",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_68",
+        "work_item_id": "wi_69",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-71",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 066",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_69",
+        "work_item_id": "wi_70",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-72",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 067",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_70",
+        "work_item_id": "wi_71",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-73",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 068",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_71",
+        "work_item_id": "wi_72",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-74",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 069",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_72",
+        "work_item_id": "wi_73",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-75",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 070",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_73",
+        "work_item_id": "wi_74",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-76",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 071",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_74",
+        "work_item_id": "wi_75",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-77",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 072",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_75",
+        "work_item_id": "wi_76",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-78",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 073",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_76",
+        "work_item_id": "wi_77",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-79",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 074",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_77",
+        "work_item_id": "wi_78",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-80",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 075",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_78",
+        "work_item_id": "wi_79",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-81",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 076",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_79",
+        "work_item_id": "wi_80",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-82",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 077",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_80",
+        "work_item_id": "wi_81",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-83",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 078",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_81",
+        "work_item_id": "wi_82",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-84",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 079",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_82",
+        "work_item_id": "wi_83",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-85",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 080",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_83",
+        "work_item_id": "wi_84",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-86",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 081",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_84",
+        "work_item_id": "wi_85",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-87",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 082",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_85",
+        "work_item_id": "wi_86",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-88",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 083",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_86",
+        "work_item_id": "wi_87",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-89",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 084",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_87",
+        "work_item_id": "wi_88",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-90",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 085",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_88",
+        "work_item_id": "wi_89",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-91",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 086",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_89",
+        "work_item_id": "wi_90",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-92",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 087",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_90",
+        "work_item_id": "wi_91",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-93",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 088",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_91",
+        "work_item_id": "wi_92",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-94",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 089",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_92",
+        "work_item_id": "wi_93",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-95",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 090",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_93",
+        "work_item_id": "wi_94",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-96",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 091",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_94",
+        "work_item_id": "wi_95",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-97",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 092",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_95",
+        "work_item_id": "wi_96",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-98",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 093",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_96",
+        "work_item_id": "wi_97",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-99",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 094",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_97",
+        "work_item_id": "wi_98",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-100",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 095",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_98",
+        "work_item_id": "wi_99",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-101",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 096",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_99",
+        "work_item_id": "wi_100",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-102",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 097",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_100",
+        "work_item_id": "wi_101",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-103",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 098",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      },
+      {
+        "id": "apr_101",
+        "work_item_id": "wi_102",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-104",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-15T12:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Person 099",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      }
+    ],
+    "next_cursor": "YXByXzAxSzdRUzAwMDAwMDAwMDAwMDAwMDAwMDk5"
+  }
+}

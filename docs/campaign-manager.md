@@ -67,6 +67,9 @@ told when the reserve runs low and when the search ends.
 going out is the course the campaign planned, and it is worth a review only where the plan waits on that moment.
 `message_bounce_observed` is out by default too, and may be added the same way: the provider's bounce event that asked
 for the read already woke the manager, and the line only adds which send bounced and of what kind.
+`provider_send_observed` is out by default as well, and may be added the same way: a message the account sent in the
+campaign's provider campaign, a sequence's next step among them, is the course the campaign planned, and a review after
+every step is cost without judgment ([events](events.md)).
 Everything about profiles, plugins, routes and roles is operator maintenance, not campaign meaning.
 
 **The rules are settings, never a skill.** `Manager:Triggers` is a list of chronicle kinds, and every

@@ -8,6 +8,12 @@ import { pendingMark } from '../../shell/attention-mark';
 export type Kind = 'approvals' | 'questions';
 
 /**
+ * A click that is the second or later of a double click: an act takes the first alone, so the second never lands on
+ * whatever moved under the pointer once the first was taken. A press from the keyboard has no count and is a press.
+ */
+export const repeated = (event: Event): boolean => event instanceof MouseEvent && event.detail > 1;
+
+/**
  * What each list is asked for under the filter: nothing (pending), or everything that no longer needs a person, several
  * statuses at once: decided by one, or ended without one (superseded by a changed input, cancelled with its work item).
  * A holder of one campaign's asks for that campaign's pending ones, as the campaign's own page does.
@@ -26,10 +32,15 @@ function statusBody(kind: Kind, decided: boolean, campaignId?: string): object {
  * Attention screen has the default one below; a view that lists them beside that screen, such as the desktop's own
  * panel, holds one of its own, so neither replaces what the other shows. A pending list read by either sets the mark.
  * A holder given a campaign reads that campaign's alone, as an agent's chat does, and leaves the mark to the others: one
- * campaign's lists say nothing of what waits elsewhere.
+ * campaign's lists say nothing of what waits elsewhere. A holder that keeps its pages reads again, at every load, as many
+ * pages of each list as the person had read with `more`, and replaces each list only once they are all in: its list never
+ * shrinks to the first page under a person's hand.
  */
-export function attentionStore(scope?: { campaignId: string }) {
+export function attentionStore(scope?: { campaignId?: string; keepPages?: boolean }) {
     const campaignId = scope?.campaignId;
+    const keepPages = scope?.keepPages === true;
+    /** How many pages of each list the person has read: one, and one more at each `more` that read one. */
+    const pages: Record<Kind, number> = { approvals: 1, questions: 1 };
     const approvals = signal<ApprovalSummary[]>([]);
     const approvalsCursor = signal<string | null>(null);
     const questions = signal<DecisionSummary[]>([]);
@@ -42,6 +53,22 @@ export function attentionStore(scope?: { campaignId: string }) {
     const loaded = signal(false);
     /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
     const refreshing = signal(false);
+    /**
+     * How many of the person's acts are under way, from the press until the lists read after it have answered: a view
+     * that draws its acts disabled meanwhile never lets a second click land on the item that takes the decided one's
+     * place. Every act of this holder counts itself; a view holds its own work around an act with `hold`.
+     */
+    const acting = signal(0);
+
+    /** Counts the work as one act of the person's until it ends, however it ends. */
+    async function hold<T>(work: () => Promise<T>): Promise<T> {
+        acting.value += 1;
+        try {
+            return await work();
+        } finally {
+            acting.value = Math.max(0, acting.value - 1);
+        }
+    }
 
     function fail(error: unknown): void {
         if (error instanceof Unpaired) {
@@ -55,15 +82,51 @@ export function attentionStore(scope?: { campaignId: string }) {
     /** Which list is shown, so the reload after an action reads the same one. */
     let shownDecided = false;
 
-    async function load(api: Api, decided: boolean): Promise<void> {
+    /** A list's first page, then, for a holder that keeps its pages, the pages after it the person had read. */
+    async function readList<T extends { id: string }>(
+        api: Api,
+        kind: Kind,
+        decided: boolean,
+        operation: 'approval.list' | 'decision.list',
+    ): Promise<Page<T>> {
+        const status = statusBody(kind, decided, campaignId);
+        const first = await api.call<Page<T>>(operation, status);
+        let items = first.items;
+        let cursor = first.next_cursor;
+        let read = 1;
+        while (keepPages && cursor && read < pages[kind]) {
+            const page = await api.call<Page<T>>(operation, { ...status, cursor });
+            items = mergePage(items, page.items, (i) => i.id);
+            cursor = page.next_cursor;
+            read += 1;
+        }
+        if (cursor === null) pages[kind] = Math.max(1, Math.min(pages[kind], read));
+        return { items, next_cursor: cursor };
+    }
+
+    /**
+     * Which load is the latest, and its promise: an earlier one that answers after it is dropped, so the lists never go
+     * back in time, and it resolves only once the latest has, so whoever waits on any load waits for the newest lists.
+     */
+    let generation = 0;
+    let latest: Promise<void> = Promise.resolve();
+
+    function load(api: Api, decided: boolean): Promise<void> {
+        const mine = ++generation;
+        latest = read(api, decided, mine);
+        return latest;
+    }
+
+    async function read(api: Api, decided: boolean, mine: number): Promise<void> {
         shownDecided = decided;
         failure.value = null;
         failureCode.value = null;
         try {
             const [a, q] = await Promise.all([
-                api.call<Page<ApprovalSummary>>('approval.list', statusBody('approvals', decided, campaignId)),
-                api.call<Page<DecisionSummary>>('decision.list', statusBody('questions', decided, campaignId)),
+                readList<ApprovalSummary>(api, 'approvals', decided, 'approval.list'),
+                readList<DecisionSummary>(api, 'questions', decided, 'decision.list'),
             ]);
+            if (mine !== generation) return await latest;
             approvals.value = a.items;
             approvalsCursor.value = a.next_cursor;
             questions.value = q.items;
@@ -71,6 +134,7 @@ export function attentionStore(scope?: { campaignId: string }) {
             if (!decided && campaignId === undefined) pendingMark.value = a.items.length + q.items.length > 0;
             loaded.value = true;
         } catch (error) {
+            if (mine !== generation) return await latest;
             fail(error);
         }
     }
@@ -84,10 +148,12 @@ export function attentionStore(scope?: { campaignId: string }) {
                 const page = await api.call<Page<ApprovalSummary>>('approval.list', { ...status, cursor });
                 approvals.value = mergePage(approvals.value, page.items, (i) => i.id);
                 approvalsCursor.value = page.next_cursor;
+                pages.approvals += 1;
             } else {
                 const page = await api.call<Page<DecisionSummary>>('decision.list', { ...status, cursor });
                 questions.value = mergePage(questions.value, page.items, (i) => i.id);
                 questionsCursor.value = page.next_cursor;
+                pages.questions += 1;
             }
         } catch (error) {
             fail(error);
@@ -143,25 +209,30 @@ export function attentionStore(scope?: { campaignId: string }) {
         }
     }
 
-    /** The call, then a reload either way, then the failure if there was one: a refusal must outlive the reload. */
-    async function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
-        busy.value = true;
-        failure.value = null;
-        failureCode.value = null;
-        let problem: unknown = null;
-        try {
-            await call();
-        } catch (error) {
-            problem = error;
-        } finally {
-            busy.value = false;
-        }
-        await load(api, shownDecided);
-        if (problem !== null) {
-            fail(problem);
-            return false;
-        }
-        return true;
+    /**
+     * The call, then a reload either way, then the failure if there was one: a refusal must outlive the reload. The act
+     * counts in `acting` until the reload, and any newer one it waits for, has answered.
+     */
+    function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
+        return hold(async () => {
+            busy.value = true;
+            failure.value = null;
+            failureCode.value = null;
+            let problem: unknown = null;
+            try {
+                await call();
+            } catch (error) {
+                problem = error;
+            } finally {
+                busy.value = false;
+            }
+            await load(api, shownDecided);
+            if (problem !== null) {
+                fail(problem);
+                return false;
+            }
+            return true;
+        });
     }
 
     function approve(api: Api, id: string): Promise<boolean> {
@@ -185,6 +256,12 @@ export function attentionStore(scope?: { campaignId: string }) {
         return act(api, () => api.call('decision.answer', { ...body, ...(reason ? { reason } : {}) }, 'write'));
     }
 
+    /** Forgets the pages read: the next load reads the first page alone. */
+    function forgetPages(): void {
+        pages.approvals = 1;
+        pages.questions = 1;
+    }
+
     return {
         approvals,
         approvalsCursor,
@@ -196,6 +273,8 @@ export function attentionStore(scope?: { campaignId: string }) {
         busy,
         loaded,
         refreshing,
+        acting,
+        hold,
         load,
         more,
         open,
@@ -205,6 +284,7 @@ export function attentionStore(scope?: { campaignId: string }) {
         approve,
         reject,
         answer,
+        forgetPages,
     };
 }
 

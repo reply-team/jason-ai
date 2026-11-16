@@ -624,6 +624,11 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
                     keep({ id: 'conv_01JDFEED000000000000000000', main: true, title: 'Feed', updatedAt: now() });
                 return summaryOf(feed);
             }),
+            // What the desktop logs of a card that did not draw: recorded, and answered as the desktop answers it.
+            cardRefused: (...args: unknown[]): Promise<null> => {
+                calls.push({ name: 'chat.cardRefused', args });
+                return Promise.resolve(null);
+            },
         },
         setup: {
             status: () => {
