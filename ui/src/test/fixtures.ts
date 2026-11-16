@@ -308,12 +308,15 @@ import decisionListCardArchived from '../../../docs/api/fixtures/decision.list/c
 import approvalGetCardNeedsPending from '../../../docs/api/fixtures/approval.get/card-needs-pending.json';
 import approvalGetCardNeedsDecided from '../../../docs/api/fixtures/approval.get/card-needs-decided.json';
 import decisionGetCardNeedsQuestion from '../../../docs/api/fixtures/decision.get/card-needs-question.json';
+// What the accounts card reads of the runtime: the official Reply package as it lists it, and the global route to it.
+import pluginListCardAccountsReply from '../../../docs/api/fixtures/plugin.list/card-accounts-reply.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
 import replyCountUntilBeforeSince from '../../../docs/api/fixtures/reply.count/until-before-since.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
 import routeListChannelRoutes from '../../../docs/api/fixtures/route.list/channel-routes.json';
+import routeListCardAccountsReply from '../../../docs/api/fixtures/route.list/card-accounts-reply.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
 import routeResolveElsewhere from '../../../docs/api/fixtures/route.resolve/elsewhere.json';
 import routeResolveElsewhereFirst from '../../../docs/api/fixtures/route.resolve/elsewhere-first.json';
@@ -1156,12 +1159,14 @@ export const fixtures = {
         { decision_id: string },
         Decision
     >,
+    'plugin.list/card-accounts-reply': pluginListCardAccountsReply satisfies Exchange<object, object>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/until-before-since': replyCountUntilBeforeSince satisfies Exchange<ReplyCountRequest, ErrorEnvelope>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
     'route.list/channel-routes': routeListChannelRoutes satisfies Exchange<object, Routes>,
+    'route.list/card-accounts-reply': routeListCardAccountsReply satisfies Exchange<object, Routes>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
     'route.resolve/elsewhere': routeResolveElsewhere satisfies Exchange<RouteResolveRequest, RouteResolution>,
     'route.resolve/elsewhere-first': routeResolveElsewhereFirst satisfies Exchange<

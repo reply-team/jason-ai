@@ -191,6 +191,11 @@ export function frame<T>(view: {
     held: Held<T> | null;
     stub: boolean;
     before?: Html | null;
+    /**
+     * Facts read from outside the runtime (a provider, as the desktop reads it), drawn once read above "On record now"
+     * under their own label, so nothing the runtime did not say stands under it.
+     */
+    outside?: (facts: T, at: number) => Html | null;
     /** The facts read, drawn; `at` is the moment the read was answered. */
     facts: (facts: T, at: number) => Html;
 }): Html {
@@ -209,7 +214,7 @@ export function frame<T>(view: {
             ${head.view} ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
             <button class="btn sm ghost card-read" type="button" ${control}>Refresh</button>
         </div>
-        ${view.before ?? null}
+        ${view.before ?? null} ${read === null || view.outside === undefined ? null : view.outside(read.facts, read.at)}
         <div class="card-facts">
             <div class="card-rec">On record now</div>
             ${read === null ? html`<div class="card-reading" role="status">Reading...</div>` : view.facts(read.facts, read.at)}
