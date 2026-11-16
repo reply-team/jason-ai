@@ -326,7 +326,7 @@ public static class SessionOpener
 
     /// <summary>
     /// What a person types to run this jason: the bare name, or, where its folder holds the separator of PATH and so no shell
-    /// finds it by name, its full path quoted.
+    /// finds it by name, its full path quoted for the shell a person types it in: PowerShell's call operator on Windows, the POSIX quote elsewhere.
     /// </summary>
     private static string ByHandProgram(CliEnvironment env)
     {
@@ -334,7 +334,7 @@ public static class SessionOpener
             ?? (OperatingSystem.IsWindows() ? TerminalPlatform.Windows : OperatingSystem.IsMacOS() ? TerminalPlatform.MacOs : TerminalPlatform.Linux);
         var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
         return Own(env).ExecutableFolder is { } folder && executable is not null && TerminalPlan.Split(platform, folder) is not null
-            ? "\"" + executable + "\""
+            ? platform == TerminalPlatform.Windows ? "& '" + executable.Replace("'", "''", StringComparison.Ordinal) + "'" : TerminalPlan.ShellQuote(executable)
             : "jason";
     }
 

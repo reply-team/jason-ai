@@ -951,7 +951,10 @@ internal static partial class StatusChecks
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
     }
 
-    /// <summary>Whether <paramref name="resolved"/> is <paramref name="own"/> itself or a link that leads to it.</summary>
+    /// <summary>
+    /// Whether <paramref name="resolved"/> and <paramref name="own"/> are one file by their final paths, a link in the file or
+    /// in a folder above it followed; an unreadable link is not one.
+    /// </summary>
     private static bool IsThisFile(string? resolved, string? own)
     {
         if (resolved is null || own is null)
@@ -961,16 +964,28 @@ internal static partial class StatusChecks
 
         try
         {
-            var target = System.IO.Path.GetFullPath(own);
-            var found = System.IO.Path.GetFullPath(resolved);
-            var linked = new FileInfo(found).ResolveLinkTarget(returnFinalTarget: true)?.FullName;
-            return string.Equals(found, target, StringComparison.OrdinalIgnoreCase)
-                || (linked is not null && string.Equals(System.IO.Path.GetFullPath(linked), target, StringComparison.OrdinalIgnoreCase));
+            var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            return string.Equals(FinalPath(resolved), FinalPath(own), comparison);
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    /// <summary>The full path of <paramref name="path"/> with a link in the file, or else in its folder, followed to its target.</summary>
+    private static string FinalPath(string path)
+    {
+        var full = System.IO.Path.GetFullPath(path);
+        if (new FileInfo(full).ResolveLinkTarget(returnFinalTarget: true)?.FullName is { } file)
+        {
+            return System.IO.Path.GetFullPath(file);
+        }
+
+        var folder = System.IO.Path.GetDirectoryName(full);
+        return folder is not null && new DirectoryInfo(folder).ResolveLinkTarget(returnFinalTarget: true)?.FullName is { } target
+            ? System.IO.Path.Combine(System.IO.Path.GetFullPath(target), System.IO.Path.GetFileName(full))
+            : full;
     }
 
     /// <summary>

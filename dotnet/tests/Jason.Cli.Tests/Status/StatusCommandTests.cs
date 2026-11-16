@@ -1229,6 +1229,33 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// The same file reached through a directory junction (no privilege needed on Windows) in a folder on PATH is found by name.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_in_a_separator_folder_reached_through_a_junction_on_path_is_found_by_name()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A directory junction is Windows's; the link row covers the other systems.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs", "a;b")).FullName;
+        var installed = Path.Combine(folder, "jason.exe");
+        File.WriteAllText(installed, string.Empty);
+        var junction = Path.Combine(dir.Paths.Root, "junction");
+        using (var made = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junction}\" \"{folder}\"") { CreateNoWindow = true, RedirectStandardOutput = true }))
+        {
+            await made!.WaitForExitAsync(Ct);
+            Assert.Equal(0, made.ExitCode);
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = junction }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Each repair once, in the order it was first called for.
     /// </summary>
     /// <remarks>

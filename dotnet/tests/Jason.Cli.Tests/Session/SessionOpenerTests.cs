@@ -799,8 +799,9 @@ public sealed class SessionOpenerTests : IDisposable
         _run.Programs.Add("x-terminal-emulator", executable: true);
         _run.Programs.AddProgram("claude");
         // Joined by hand: on Windows a combined "a:b" would be read as a path on the drive a.
-        var folder = _run.DataDirectory + Path.DirectorySeparatorChar + "a" + separator + "b";
+        var folder = _run.DataDirectory + Path.DirectorySeparatorChar + "a" + separator + "b c'd";
         _run.InstallPath = Path.Combine(folder, "jason");
+        var typed = os == TerminalPlatform.Windows ? "& '" + _run.InstallPath.Replace("'", "''", StringComparison.Ordinal) + "'" : TerminalPlan.ShellQuote(_run.InstallPath);
 
         string[] args = dryRun ? ["session", "open", "--approval", "apr_1", "--dry-run"] : ["session", "open", "--approval", "apr_1"];
         var exit = await _run.Cli(args);
@@ -809,7 +810,7 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
         Assert.Empty(_run.Output.ToString());
         Assert.Contains(
-            $"did not start (this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first). To work on it by hand, run `\"{_run.InstallPath}\" approval get apr_1 --prompt` in a terminal of your own",
+            $"did not start (this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first). To work on it by hand, run `{typed} approval get apr_1 --prompt` in a terminal of your own",
             _run.Error.ToString(),
             StringComparison.Ordinal);
         Assert.DoesNotContain("`jason approval get", _run.Error.ToString(), StringComparison.Ordinal);
