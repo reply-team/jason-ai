@@ -1303,8 +1303,8 @@ body,
 }
 .jc-console .chat-bar .btn.ib {
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 32px;
     padding: 0;
     justify-content: center;
     border-color: transparent;
