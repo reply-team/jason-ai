@@ -130,6 +130,17 @@ export const en = {
     'openIn.opened': 'Opened {folder} in {place}.',
     'openIn.sameData': 'Jason there works with the same data as this window.',
     'openIn.editorDemo': "An editor's own terminal may work with your own installation, not the demo.",
+    'openIn.jason.this': "jason on your PATH is this window's Jason, so a terminal there works with the same data.",
+    'openIn.jason.other':
+        "jason on your PATH is another Jason, not this window's: what you run there may work with other data.",
+    'openIn.jason.none': 'jason is not on your PATH, so a terminal there does not find Jason.',
+    'openIn.jason.put': 'In the Jason menu, Command Line, "{act}" puts it there.',
+    'openIn.jason.name':
+        'In the Jason menu, Command Line, "{act}" gives this window\'s Jason the name jason-desktop; the other keeps jason.',
+    'openIn.jason.point': 'In the Jason menu, Command Line, choose "{act}".',
+    'openIn.jason.type': "Type jason-desktop there instead: it runs this window's Jason.",
+    'openIn.jasonLine.other': "jason on your PATH is another Jason, not this window's.",
+    'openIn.jasonLine.none': 'jason is not on your PATH.',
     'openIn.copied': 'Copied the path of {folder}.',
     'openIn.continue': 'Continue this chat in {place}',
     'openIn.continueNote':

@@ -399,3 +399,45 @@ test('the executables a command of ours runs are read back, under either name, a
     writeFileSync(join(folder, 'jason'), '#!/bin/sh\nexec /usr/lib/jason/jason "$@"\n');
     assert.deepEqual(command.named(), [], 'a jason the desktop did not write names nothing of ours');
 });
+
+test('which jason the PATH finds by name: this window’s, another or none, with the way out the Command Line submenu really offers', (t) => {
+    // None: the folder is on the PATH and nothing answers, so the act that puts jason there is the way out; with the folder
+    // off the PATH no act would help, and none is named.
+    const fresh = windows(t);
+    assert.deepEqual(fresh.command.onPath(), { found: 'none', way: 'put', act: 'Put jason on the PATH…' });
+    assert.deepEqual(windows(t, { onPath: false }).command.onPath(), { found: 'none' });
+
+    // This: our command, running this executable with the data directory the desktop runs on, is what the PATH finds.
+    fresh.command.place();
+    assert.deepEqual(fresh.command.onPath(), { found: 'this' });
+    const elsewhere = new PathCommand({ platform: 'win32', folder: fresh.folder, executable: windowsExe, dataDirectory: 'D:\\Jason data', path: () => fresh.folder, isProgram: present, log: memoryLog() });
+    assert.deepEqual(elsewhere.onPath(), { found: 'other', way: 'point', act: 'Point jason at This Jason…' }, 'our command naming other data is another Jason');
+
+    // Another: an older copy our command still runs, by the act that points it back.
+    const older = windows(t);
+    writeFileSync(join(older.folder, 'jason.cmd'), `@echo off\r\n"D:\\Old\\Jason\\resources\\bundle\\jason.exe" %*\r\n`);
+    assert.deepEqual(older.command.onPath(), { found: 'other', way: 'point', act: 'Point jason at This Jason…' });
+
+    // Another installation's jason: the act gives this window's Jason the name jason-desktop, and once that is placed it is
+    // typed by that name, with no act.
+    const other = 'C:\\Tools\\Jason\\jason.exe';
+    const foreign = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
+    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'name', act: 'Put jason-desktop on the PATH…' });
+    foreign.command.place();
+    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'type' });
+
+    // Our jason placed, but another earlier on the PATH: no act of the desktop's would help.
+    const behind = windows(t, { onPath: false, others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
+    const shadowed = new PathCommand({ platform: 'win32', folder: behind.folder, executable: windowsExe, dataDirectory: null, path: () => behind.folder, isProgram: present, log: memoryLog() });
+    shadowed.place();
+    const ahead = new PathCommand({ platform: 'win32', folder: behind.folder, executable: windowsExe, dataDirectory: null, path: () => `C:\\Tools\\Jason;${behind.folder}`, isProgram: (file) => file === other || present(file), log: memoryLog() });
+    assert.equal(ahead.status().state, 'placed');
+    assert.deepEqual(ahead.onPath(), { found: 'other' });
+
+    // The bundled executable itself, its folder on the PATH, is this window's Jason.
+    const bundled = new PathCommand({ platform: 'darwin', folder: '/Users/someone/.local/bin', executable: macExe, dataDirectory: null, path: () => '/Applications/Jason.app/Contents/Resources/bundle', isProgram: (file) => file === macExe, log: memoryLog() });
+    assert.deepEqual(bundled.onPath(), { found: 'this' });
+
+    // Where the command is not offered, nothing is told.
+    assert.equal(new PathCommand({ platform: 'freebsd', folder: null, executable: macExe, dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() }).onPath(), undefined);
+});

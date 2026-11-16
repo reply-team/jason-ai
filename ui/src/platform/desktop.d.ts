@@ -549,7 +549,23 @@ export interface DesktopOpenInAnswer {
      * `openIn.changeJason` opens. It names no host: the person's preference chooses one when the entry is chosen.
      */
     changeJason?: true;
+    /**
+     * Which `jason` the PATH an editor is started with finds by name: this window's, another, or none, with the way out the
+     * desktop's Jason menu offers. Absent where the desktop cannot tell, or offers no PATH command: in the demo, say.
+     */
+    jason?: DesktopOpenInJason;
 }
+
+/**
+ * Which `jason` the PATH finds by name, and the way out the Jason menu's Command Line really offers: `put` places `jason`,
+ * `name` places this window's Jason as `jason-desktop` (the other keeps `jason`), `point` points a command of the desktop's
+ * back at this window's Jason, each by `act`, that act's label in the menu; `type` says `jason-desktop` already finds this
+ * window's Jason. No way where the desktop offers none that would help.
+ */
+export type DesktopOpenInJason =
+    | { found: 'this' }
+    | { found: 'none'; way?: 'put'; act?: string }
+    | { found: 'other'; way?: 'name' | 'point' | 'type'; act?: string };
 
 /**
  * The entry that continues the chat in front in a terminal: the host whose own conversation it continues, by its product's

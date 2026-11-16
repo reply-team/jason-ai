@@ -3,6 +3,7 @@ import { can } from '../platform/places';
 import type {
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
+    DesktopOpenInJason,
     DesktopOpenInPlace,
     DesktopRefusal,
     JasonDesktop,
@@ -136,6 +137,19 @@ function nameOf(place: { id: DesktopOpenInPlace; label: string }): string {
             : t('openIn.copy');
 }
 
+/**
+ * What `jason` typed in an editor's terminal finds, by the PATH the desktop starts an editor with: never more than the
+ * desktop could tell. An editor already running keeps the PATH it started with, so the sentences speak of your PATH and
+ * never of the editor.
+ */
+function jasonSaid(jason: DesktopOpenInJason): string {
+    const found = t(`openIn.jason.${jason.found}`);
+    if (jason.found === 'this' || jason.way === undefined) return found;
+    if (jason.way === 'type') return found + ' ' + t('openIn.jason.type');
+    const way = jason.way;
+    return jason.act === undefined ? found : found + ' ' + t(`openIn.jason.${way}`, { act: jason.act });
+}
+
 export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const campaignId = campaignOfChat();
     const chatId = chatInFront();
@@ -155,24 +169,27 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // True while a Change Jason itself the person chose is being opened: a second choice meanwhile opens nothing.
     const changing = useRef(false);
 
-    const read = useCallback(async () => {
-        if (!can('openIn.targets')) return;
+    // Answers the places read, or null where the read was refused, failed or was overtaken by a later one.
+    const read = useCallback(async (): Promise<DesktopOpenInAnswer | null> => {
+        if (!can('openIn.targets')) return null;
         const asked = ++reads.current;
         try {
             const kept = await desktop.openIn.targets(campaignId, chatId);
-            if (asked !== reads.current) return;
+            if (asked !== reads.current) return null;
             if (refused(kept)) {
                 setAnswer(null);
                 setProblem(kept.refused);
-            } else {
-                setAnswer(kept);
-                setAnswerChat(chatId);
-                setProblem(null);
+                return null;
             }
+            setAnswer(kept);
+            setAnswerChat(chatId);
+            setProblem(null);
+            return kept;
         } catch (error) {
-            if (asked !== reads.current) return;
+            if (asked !== reads.current) return null;
             setAnswer(null);
             setProblem(error instanceof Error ? error.message : String(error));
+            return null;
         }
     }, [desktop, campaignId, chatId]);
     // The entry is drawn only with a chat in front, and only from the answer read for that chat.
@@ -215,8 +232,9 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             (result) => (result === null ? null : result.refused),
             (error: unknown) => (error instanceof Error ? error.message : String(error)),
         );
-        // The place used last is the next default; a refusal stays on screen after the read.
-        await read();
+        // The place used last is the next default; a refusal stays on screen after the read, which also says which jason the
+        // PATH finds now.
+        const fresh = await read();
         if (said !== null) {
             setProblem(said);
             return;
@@ -226,21 +244,26 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         if (place === 'copy') setToast(t('openIn.copied', { folder }));
         else if (place === 'browser') setToast(t('openIn.browserOpened'));
         else {
-            // Jason in a terminal works with this window's data. An editor already running keeps the environment it started
-            // with, so in the demo an editor is said to be the other way about, and the file manager says nothing of data.
+            // Jason in a terminal works with this window's data: `jason session open` puts this jason first on its PATH. An
+            // editor gets the person's own environment, so what it says is which jason that PATH finds, as the desktop tells
+            // it, and nothing where it cannot; in the demo it is said to be the other way about. The file manager runs
+            // nothing and says nothing of data.
             const terminal = place === 'claude' || place === 'codex' || place === 'terminal';
-            const editor = place !== 'files';
-            const same = terminal || mode.value !== 'demo';
+            const jason = (fresh ?? answer)?.jason;
+            const said = terminal
+                ? t('openIn.sameData')
+                : place === 'files'
+                  ? null
+                  : mode.value === 'demo'
+                    ? t('openIn.editorDemo')
+                    : jason === undefined
+                      ? null
+                      : jasonSaid(jason);
             setToast(
                 t('openIn.opened', {
                     folder,
                     place: chosen === undefined ? '' : nameOf(chosen),
-                }) +
-                    (same
-                        ? ' ' + t('openIn.sameData')
-                        : editor && mode.value === 'demo'
-                          ? ' ' + t('openIn.editorDemo')
-                          : ''),
+                }) + (said === null ? '' : ' ' + said),
             );
         }
     };
@@ -388,6 +411,11 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     {agents.length > 0 && editors.length > 0 && rule}
                     {editors.length > 0 && <div className="open-in-header">{t('openIn.editors')}</div>}
                     {editors.map((place) => item(place))}
+                    {editors.length > 0 && answer?.jason !== undefined && answer.jason.found !== 'this' && (
+                        <div className="open-in-note open-in-jason" title={jasonSaid(answer.jason)}>
+                            {t(`openIn.jasonLine.${answer.jason.found}`)}
+                        </div>
+                    )}
                     {agents.length + editors.length > 0 && rest.length > 0 && rule}
                     {rest.map((place) =>
                         item(

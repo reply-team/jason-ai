@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -6,6 +6,7 @@ import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
+import type { DesktopOpenInJason } from '../platform/desktop';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { styleOf } from '../test/stylesheet';
@@ -211,17 +212,15 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(mainPart().textContent).toBe('Open in Claude Code');
     });
 
-    it('says nothing of data after the file manager in the demo, and the same sentence as ever in Live', async () => {
-        await renderConsole(kept);
+    it('says nothing of data after the file manager, which runs nothing, whichever jason the PATH finds', async () => {
+        const desktop = chatDesktop();
+        desktop.openInKept.jason = { found: 'this' };
+        await renderConsole(kept, desktop);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^File manager/ }));
         await waitFor(() =>
-            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
-                kept === 'demo'
-                    ? 'Opened Jason in File manager.'
-                    : 'Opened Jason in File manager. Jason there works with the same data as this window.',
-            ),
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe('Opened Jason in File manager.'),
         );
     });
 
@@ -246,12 +245,13 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         );
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
-        // An editor already running keeps its own environment, so in the demo the second sentence is left off.
+        // An editor already running keeps its own environment, so in the demo the second sentence is the other way about;
+        // in Live it says which jason the PATH finds, and nothing where the desktop does not tell.
         await waitFor(() =>
             expect(document.querySelector('.open-in-toast')?.textContent).toBe(
                 kept === 'demo'
                     ? "Opened Jason in VS Code. An editor's own terminal may work with your own installation, not the demo."
-                    : 'Opened Jason in VS Code. Jason there works with the same data as this window.',
+                    : 'Opened Jason in VS Code.',
             ),
         );
         fireEvent.click(arrow());
@@ -378,6 +378,83 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         const before = targets(desktop).length;
         fireEvent.focus(window);
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(before));
+    });
+});
+
+describe('Which jason an editor finds on the PATH', () => {
+    // The desktop starts an editor with the person's own environment, so a jason typed there is whichever the PATH finds:
+    // the desktop tells this window's, another or none, with the way out its Jason menu really offers.
+    async function openVsCode(jason: DesktopOpenInJason): Promise<string | null | undefined> {
+        const desktop = chatDesktop();
+        desktop.openInKept.jason = jason;
+        await renderConsole('live', desktop);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
+        await waitFor(() => expect(document.querySelector('.open-in-toast')).not.toBeNull());
+        return document.querySelector('.open-in-toast')?.textContent;
+    }
+
+    it('says the same data only where jason on the PATH is this window’s Jason', async () => {
+        expect(await openVsCode({ found: 'this' })).toBe(
+            "Opened Jason in VS Code. jason on your PATH is this window's Jason, so a terminal there works with the same data.",
+        );
+    });
+
+    it('says another Jason, never other data for certain, with the way out the Jason menu offers', async () => {
+        const other =
+            "Opened Jason in VS Code. jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
+        expect(await openVsCode({ found: 'other', way: 'name', act: 'Put jason-desktop on the PATH…' })).toBe(
+            other +
+                ' In the Jason menu, Command Line, "Put jason-desktop on the PATH…" gives this window\'s Jason the name jason-desktop; the other keeps jason.',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other', way: 'type' })).toBe(
+            other + " Type jason-desktop there instead: it runs this window's Jason.",
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other', way: 'point', act: 'Point jason at This Jason…' })).toBe(
+            other + ' In the Jason menu, Command Line, choose "Point jason at This Jason…".',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other' })).toBe(other);
+    });
+
+    it('says jason is not on the PATH where none is, with the act that puts it there', async () => {
+        const none = 'Opened Jason in VS Code. jason is not on your PATH, so a terminal there does not find Jason.';
+        expect(await openVsCode({ found: 'none', way: 'put', act: 'Put jason on the PATH…' })).toBe(
+            none + ' In the Jason menu, Command Line, "Put jason on the PATH…" puts it there.',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'none' })).toBe(none);
+    });
+
+    it('carries one quiet line under Editors only while jason on the PATH is another or none', async () => {
+        const line = () => menu().querySelector('.open-in-jason');
+        const cases: [DesktopOpenInJason | undefined, string | null][] = [
+            [{ found: 'other', way: 'type' }, "jason on your PATH is another Jason, not this window's."],
+            [{ found: 'none', way: 'put', act: 'Put jason on the PATH…' }, 'jason is not on your PATH.'],
+            [{ found: 'this' }, null],
+            [undefined, null],
+        ];
+        for (const [jason, said] of cases) {
+            const desktop = chatDesktop();
+            if (jason !== undefined) desktop.openInKept.jason = jason;
+            await renderConsole('live', desktop);
+            await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+            fireEvent.click(arrow());
+            expect(line()?.textContent ?? null).toBe(said);
+            if (said !== null) {
+                // Right under the last editor, with the whole sentence and the way out for a pointer.
+                expect(line()?.previousElementSibling?.textContent).toContain('Zed');
+                expect(line()?.getAttribute('title')).toBe(
+                    jason?.found === 'none'
+                        ? 'jason is not on your PATH, so a terminal there does not find Jason. In the Jason menu, Command Line, "Put jason on the PATH…" puts it there.'
+                        : "jason on your PATH is another Jason, not this window's: what you run there may work with other data. Type jason-desktop there instead: it runs this window's Jason.",
+                );
+            }
+            cleanup();
+        }
     });
 });
 

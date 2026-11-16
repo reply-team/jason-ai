@@ -35,6 +35,17 @@ export type CommandStatus =
     /** Both names are taken in the folder by files the desktop did not write. */
     | { state: 'taken'; files: readonly string[]; executable: string };
 
+/**
+ * Which `jason` the PATH finds by name (`PathCommand.onPath`), and the way out the Command Line submenu really offers:
+ * `put` places `jason`, `name` places this window's Jason as `jason-desktop` (the other keeps `jason`), `point` points a
+ * command of ours back at this window's Jason, each by `act`, the act's label in the menu; `type` says `jason-desktop`
+ * already finds this window's Jason. No way where the desktop offers none that would help.
+ */
+export type JasonOnPath =
+    | { found: 'this' }
+    | { found: 'none'; way?: 'put'; act?: string }
+    | { found: 'other'; way?: 'name' | 'point' | 'type'; act?: string };
+
 /** The folder the command goes in, or null where none is offered. */
 export function commandFolder(platform: NodeJS.Platform, env: Readonly<Record<string, string | undefined>>, home: string): string | null {
     if (platform === 'win32') return env['LOCALAPPDATA'] ? win32.join(env['LOCALAPPDATA'], 'Microsoft', 'WindowsApps') : null;
@@ -210,6 +221,36 @@ export class PathCommand {
         this.write(status.name);
         this.deps.log.info('path_command_repointed', { Name: status.name, Platform: this.deps.platform });
         return true;
+    }
+
+    /**
+     * Which `jason` the PATH finds by name: this window's (the bundled executable, or a file of a command of ours that runs
+     * it with the data directory the desktop runs on), another, or none; with the way out the Command Line submenu really
+     * offers, by its act's label, or `jason-desktop` to type where a command of ours by that name is what the PATH finds.
+     * Undefined where it cannot be told (`unsupported`, `taken`). The PATH read is the one every program the desktop starts
+     * is given, an editor's among them. A look writes nothing and starts no process.
+     */
+    onPath(): JasonOnPath | undefined {
+        const status = this.status();
+        if (status.state === 'unsupported' || status.state === 'taken') return undefined;
+        const { platform } = this.deps;
+        const lookup = (name: Name) => findOnPath(name, { platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
+        const ours = (name: Name, file: string) =>
+            sameFile(platform, file, this.deps.executable) ||
+            this.looksOf(name).some((look) => sameFile(platform, look.file, file) && look.target !== null && look.target.executable === look.runs && look.target.dataDirectory === this.deps.dataDirectory);
+        const place = commandMenuOf(status).acts.find((act) => act.act === 'place')?.label;
+        const found = lookup('jason');
+        if (found === null) {
+            return status.state === 'absent' && status.name === 'jason' && status.folderOnPath && place !== undefined ? { found: 'none', way: 'put', act: place } : { found: 'none' };
+        }
+        if (ours('jason', found)) return { found: 'this' };
+        const desktop = lookup('jason-desktop');
+        if (desktop !== null && ours('jason-desktop', desktop)) return { found: 'other', way: 'type' };
+        // The act helps only where the file it writes is the one the PATH would then find.
+        if (place !== undefined && status.state === 'absent' && status.name === 'jason-desktop' && status.folderOnPath && desktop === null) return { found: 'other', way: 'name', act: place };
+        const pointed = status.state === 'elsewhere' ? lookup(status.name) : null;
+        if (place !== undefined && status.state === 'elsewhere' && pointed !== null && status.files.some((file) => sameFile(platform, file, pointed))) return { found: 'other', way: 'point', act: place };
+        return { found: 'other' };
     }
 
     /** The executables the files of a command of ours run, under either name; a file that is not ours names none. */
