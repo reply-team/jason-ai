@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { clock, relative } from '../../time/format';
@@ -11,6 +11,8 @@ import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
 import { MessageEditor } from './message-editor';
+import { SenderLine } from './sender-line';
+import { senderReads } from '../../console/senders';
 import { Doubts } from '../send-modes/doubts';
 import { SendModesQuestion } from '../send-modes/question';
 import { ReleasedBySendMode } from '../send-modes/released';
@@ -62,6 +64,8 @@ export function ApprovalPanel({
     reaskPoll,
 }: Props) {
     const api = useApi();
+    // The accounts a pending send's sender line reads, once per campaign and channel while this panel is drawn.
+    const senders = useMemo(() => senderReads(), []);
     const [rejecting, setRejecting] = useState(false);
     // A message approval is checked against its work item before Approve is offered, and again at the press.
     const watched = approval.status === 'pending' && isMessage(approval.operation);
@@ -197,7 +201,10 @@ export function ApprovalPanel({
                     {from && (
                         <>
                             <dt>From</dt>
-                            <dd>{from}</dd>
+                            <dd>
+                                {from}
+                                {pending && <SenderLine approval={approval} reads={senders} />}
+                            </dd>
                         </>
                     )}
                     {channel && (

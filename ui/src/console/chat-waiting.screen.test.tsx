@@ -56,6 +56,10 @@ function renderConsole(
                 ? 'decision.get/pending-with-options'
                 : 'decision.get/for-campaign-row',
         );
+    // A card's sender line reads the accounts of the send's campaign and channel; these tests are of the rest of the
+    // card, so every such read is answered with one recorded list of accounts, which draws one line and holds nothing.
+    // Its wordings are `chat-sender-line.screen.test.tsx`'s.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     if (!fake.offers('approval.list'))
         fake.answerAnyRequest('approval.list', (body) => {
             const campaign = (body as { campaign_id?: string }).campaign_id;

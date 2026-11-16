@@ -676,3 +676,6 @@ button.row:hover .what .cue { text-decoration: underline; }
 /* The message an approval would send: the person's text with its line breaks, never as markup. */
 .message-card .message-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .message-card .hint { color: var(--text-muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
+/* The sending name the provider holds now, under the address a send goes from, and when it was read. */
+.sender-line { margin-top: var(--space-1); }
+.sender-line .sender-when { color: var(--text-muted); font-size: var(--text-sm); }
