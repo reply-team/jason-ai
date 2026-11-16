@@ -17,6 +17,8 @@ import {
 import { doubtWords } from '../screens/send-modes/model';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
+import { svg } from './icons';
+import { offUnless } from './off';
 import { ageOf, toApprovalDetail, toApprovalRow, toQuestionRow } from './live';
 import { chatWaits } from './needs-chats';
 import {
@@ -988,8 +990,13 @@ export function needsView(): Html {
                 ? html`<div class="empty">Reading what waits…</div>`
                 : none
                   ? html`<div class="card needs-empty">
+                        <span class="needs-disc">${svg('check', 22)}</span>
                         <div class="bd">You're all caught up</div>
+                        <div class="needs-none-says">Nothing is waiting for your decision.</div>
                         <div class="ask-a">
+                            <button class="btn sm p" type="button" ${act('side.start')} ${offUnless('chat.create')}>
+                                New GTM agent
+                            </button>
                             <button class="btn sm" type="button" ${act('needs.campaigns')}>Open your agents</button>
                         </div>
                     </div>`

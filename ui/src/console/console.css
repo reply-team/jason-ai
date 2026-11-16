@@ -1532,6 +1532,9 @@ body,
 .jc-console .needs-panel .needs-pane {
     margin: 0;
     padding: 18px 22px 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
 }
 .jc-console .needs-pane .needs-title {
     margin: 12px 0 0;
@@ -1612,12 +1615,39 @@ body,
     }
 }
 .jc-console .needs-empty {
-    color: var(--faint);
+    box-sizing: border-box;
+    width: min(440px, 100%);
+    margin: 8vh auto 0;
+    padding: 32px 28px 26px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    color: var(--mute);
     text-align: center;
+}
+.jc-console .needs-empty .needs-disc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 12px;
+    border-radius: 50%;
+    background: var(--green-2);
+    color: var(--green);
+}
+.jc-console .needs-empty .bd {
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 600;
+}
+.jc-console .needs-empty .needs-none-says {
+    margin: 6px 0 16px;
+    font-size: 13.5px;
 }
 .jc-console .needs-empty > .ask-a {
     justify-content: center;
-    margin: 0 0 16px;
+    margin: 0;
 }
 
 .jc-console .chat-panel .chat-reply {
