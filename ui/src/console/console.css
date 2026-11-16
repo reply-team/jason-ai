@@ -2736,3 +2736,41 @@ body,
         padding-top: 24px;
     }
 }
+/* A browser tab with no desktop: one page of text on a plain ground, in the theme in force, with the Demo | Live switch at
+   the top right. Nothing of the console is drawn here. */
+.jc-console.no-desktop {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    height: auto;
+}
+.jc-console .no-desktop-top {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px;
+}
+.jc-console .no-desktop-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 0 16px 64px;
+    text-align: center;
+}
+.jc-console .no-desktop-page h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    line-height: 1.3;
+}
+.jc-console .no-desktop-page p {
+    margin: 0;
+}
+.jc-console .no-desktop-page .no-desktop-waiting {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--mute);
+}

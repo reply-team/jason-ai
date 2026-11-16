@@ -88,6 +88,20 @@ export const en = {
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
+    'noDesktop.title': 'Live Mode is only available in Jason Desktop.',
+    'noDesktop.download': 'To access Live Mode, {link}. The desktop app starts an AI session locally on your computer.',
+    'noDesktop.link': 'download Jason Desktop',
+    'noDesktop.alternative':
+        'Alternatively, you can build your own web interface or work directly with Jason from a terminal session with your AI using the installed Jason skills.',
+    'noDesktop.approval.one': '{n} approval',
+    'noDesktop.approval.many': '{n} approvals',
+    'noDesktop.question.one': '{n} question',
+    'noDesktop.question.many': '{n} questions',
+    'noDesktop.both': '{approvals} and {questions}',
+    'noDesktop.waiting.one': '{what} is waiting in Jason. {where}',
+    'noDesktop.waiting.many': '{what} are waiting in Jason. {where}',
+    'noDesktop.where':
+        'Decide in Jason Desktop, or ask your agent what Jason is waiting for, or run jason approval list and jason decision list.',
     'mode.strip': 'Mode bar',
     'mode.nav': 'Sidebar',
     'mode.strip.name': 'Demo:',

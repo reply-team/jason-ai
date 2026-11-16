@@ -34,7 +34,8 @@ test('the demo shows in the tab’s frame, asks for nothing but its own page, an
 
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    await expect(page.locator('.jc-console .side')).toBeVisible();
+    // No desktop: one page, never the console, with the switch that shows the demo.
+    await expect(page.locator('.jc-console.no-desktop')).toBeVisible();
     await page.getByRole('group', { name: 'Data' }).getByRole('button', { name: 'Demo' }).click();
 
     await expect(page).toHaveURL(/#\/demo$/);
@@ -50,6 +51,7 @@ test('the demo shows in the tab’s frame, asks for nothing but its own page, an
     expect(problems).toEqual([]);
 
     await page.getByRole('group', { name: 'Data' }).getByRole('button', { name: 'Live' }).click();
-    await expect(page.locator('.jc-console .side')).toBeVisible();
+    await expect(page.locator('.jc-console.no-desktop')).toBeVisible();
+    await expect(page.locator('.jc-console .side')).toHaveCount(0);
     await expect(frame).toHaveCount(0);
 });

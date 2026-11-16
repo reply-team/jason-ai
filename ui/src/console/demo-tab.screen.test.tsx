@@ -26,7 +26,8 @@ const frame = () => document.querySelector<HTMLIFrameElement>('iframe');
 const switchIn = (where: HTMLElement | Document = document) =>
     within(where as HTMLElement).getByRole('group', { name: 'Data' });
 const button = (name: 'Demo' | 'Live') => within(switchIn()).getByRole('button', { name }) as HTMLButtonElement;
-const consoleShown = () => document.querySelector('.side') !== null;
+// Where the tab has its home: the console, or with no desktop the one page that stands in its place.
+const consoleShown = () => document.querySelector('.side') !== null || document.querySelector('.no-desktop') !== null;
 
 let present = true;
 const realPresent = demoPage.present;

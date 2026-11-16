@@ -49,10 +49,10 @@ describe('the start of the page', () => {
         expect(made.startConsole).toHaveBeenCalledWith(tabObject, true);
     });
 
-    it('starts the console over the object that does nothing of the desktop in a browser tab with no bridge', async () => {
+    it('starts the page over the object that does nothing of the desktop in a browser tab with no bridge, which draws one page and not the console', async () => {
         const { made, order } = deps();
         await start(made);
-        // The place that has no desktop is named, so it can do nothing of one.
+        // The place that has no desktop is named, so it can do nothing of one, and the console decides it draws none.
         expect(order).toEqual(['bootstrap', 'place:none', 'console:true']);
         expect(made.startConsole).toHaveBeenCalledWith(noneObject, true);
         expect(made.tabDesktop).not.toHaveBeenCalled();
