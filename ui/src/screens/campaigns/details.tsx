@@ -1,16 +1,19 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { Campaign } from '../../api/types';
 import { shortDate } from '../../time/format';
 import { AgentSendModes } from '../send-modes/agent-modes';
 
-type Props = { campaign: Campaign; now: Date; zone: string };
+type Props = { campaign: Campaign; now: Date; zone: string; last?: ReactNode };
 
 function value(v: unknown): string {
     return typeof v === 'string' ? v : JSON.stringify(v);
 }
 
-/** The campaign's record: its facts, its context as the roles read it, and what each provider calls it. */
-export function Details({ campaign, now, zone }: Props) {
+/**
+ * The campaign's record: its facts, its context as the roles read it, and what each provider calls it; `last` is drawn
+ * after the raw record, as the record's last part.
+ */
+export function Details({ campaign, now, zone, last }: Props) {
     const context = Object.entries(campaign.context ?? {});
     const pins = campaign.external_ids ?? [];
     return (
@@ -85,6 +88,7 @@ export function Details({ campaign, now, zone }: Props) {
                 <summary>Raw agent record</summary>
                 <pre>{JSON.stringify(campaign, null, 2)}</pre>
             </details>
+            {last}
         </div>
     );
 }

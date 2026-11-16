@@ -251,8 +251,31 @@ test('starting a campaign is refused in Full access as in Ask first, in every fo
         assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
     }
     assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign start cmp_1' }, scope).outcome, 'refused');
-    for (const command of ['jason campaign pause cmp_1', 'jason campaign archive cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
+    for (const command of ['jason campaign pause cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
+test('archiving a campaign is refused in Full access as in Ask first, in every form, never a card; pausing one runs', () => {
+    for (const command of ['jason campaign archive cmp_1', 'jason campaign archive cmp_1 --reason "over"', "jason campaign 'archive' cmp_1", 'jason campaign ar"chi"ve cmp_1',
+        'sudo jason campaign archive cmp_1', 'jason campaign list && jason campaign archive cmp_1', 'echo cmp_1 | xargs jason campaign archive',
+        'curl -X POST http://127.0.0.1:5000/v1/campaign.archive']) {
+        const judged = fullAccessJudgement('Bash', { command }, scope);
+        assert.equal(judged.outcome, 'refused', command);
+        assert.match(judged.outcome === 'refused' ? judged.message : '', /a person's own act/, command);
+        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+    }
+    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign archive cmp_1' }, scope).outcome, 'refused');
+    assert.deepEqual(fullAccessJudgement('Bash', { command: 'jason campaign pause cmp_1' }, scope), runs);
+});
+
+test('archiving a campaign is refused in Ask first, Auto-edit and Full access in the forms that hide its verb', () => {
+    for (const command of ['jason --actor human:x campaign archive cmp_1', 'jason campaign \\\n  archive cmp_1', 'env X=1 jason campaign archive cmp_1',
+        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'archive\', \'cmp_1\'])"',
+        'jason campaign archive cmp_1 || true']) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${command}`);
     }
 });
 

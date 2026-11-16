@@ -48,6 +48,7 @@ public class ConfinedVerbsTests
         ["role add"] = ["role", "add", "researcher", "--execution-profile", "local-claude"],
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
         ["campaign start"] = ["campaign", "start", "cmp_A"],
+        ["campaign archive"] = ["campaign", "archive", "cmp_A"],
     };
 
     public static TheoryData<string> Entries() => [.. ConfinedVerbs.Table.Select(entry => entry.Command)];
@@ -98,6 +99,7 @@ public class ConfinedVerbsTests
     [InlineData("route set")]
     [InlineData("role add")]
     [InlineData("campaign start")]
+    [InlineData("campaign archive")]
     public async Task Unset_the_verb_reaches_the_runtime(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(WithActor(entry), new Dictionary<string, string>());
@@ -215,6 +217,8 @@ public class ConfinedVerbsTests
     [InlineData("--actor", "human:x", "Approval", "approve", "apr_A")]
     [InlineData("Campaign", "Start", "cmp_A")]
     [InlineData("campaign", "START", "cmp_A")]
+    [InlineData("Campaign", "Archive", "cmp_A")]
+    [InlineData("campaign", "ARCHIVE", "cmp_A")]
     public async Task A_table_verb_in_another_letter_case_is_a_usage_error_and_nothing_is_sent(params string[] args)
     {
         foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string>() })
@@ -271,12 +275,35 @@ public class ConfinedVerbsTests
     }
 
     /// <summary>
-    /// The chat keeps the acts that stop reaching a person: pausing a campaign, archiving one, adding to the do-not-contact
-    /// register, cancelling work and recording a verdict on a reply run with the variable set.
+    /// Archiving a campaign is final: no verb undoes it, and it cancels the campaign's open work but a search's stop, with
+    /// each item's approval whether still asked or already given, stops its running attempts once the archive is
+    /// committed, and cancels its pending questions. In the chat it is the person's own act: every form of the command is
+    /// refused with the variable set, with a reason, an actor or an attempt named, and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("campaign", "archive", "cmp_A")]
+    [InlineData("campaign", "archive", "cmp_A", "--reason", "The person said it is over.")]
+    [InlineData("--actor", "human:x", "campaign", "archive", "cmp_A")]
+    [InlineData("--actor", "agent:chat", "campaign", "archive", "cmp_A", "--reason", "The offer has ended.")]
+    [InlineData("campaign", "archive", "cmp_A", "--actor", "human:x")]
+    public async Task Confined_archiving_a_campaign_is_refused_in_every_form_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string> { [Variable] = "1", ["JASON_ATTEMPT_ID"] = Attempt } })
+        {
+            var run = await DefaultActorTests.RunEachAsync(args, variables);
+
+            Assert.Equal(ExitCodes.ApiError, run.Exit);
+            Assert.Empty(run.Requests);
+            Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+        }
+    }
+
+    /// <summary>
+    /// The chat keeps the acts that stop reaching a person: pausing a campaign, adding to the do-not-contact register,
+    /// cancelling work and recording a verdict on a reply run with the variable set.
     /// </summary>
     [Theory]
     [InlineData("campaign", "pause", "cmp_A")]
-    [InlineData("campaign", "archive", "cmp_A")]
     [InlineData("suppression", "add", "--channel", "email", "--value", "someone@example.com")]
     [InlineData("workitem", "cancel", "wi_A")]
     [InlineData("reply", "record", "cmp_A", "--plugin", "mailbox", "--thread", "thr_A", "--message", "msg_A", "--message-at", "2026-10-12T00:00:00Z", "--category", "interested", "--confidence", "0.9", "--reaction", "draft")]
