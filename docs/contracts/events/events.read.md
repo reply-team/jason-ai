@@ -95,8 +95,9 @@ event names none. `channel` is `email`, `linkedin` or `other`.
 
 **A message the account sent.** `message_sent` is a message sent as the account to a person, whoever sent it: Jason, a
 sequence, or a person in the provider's own screens — the provider cannot tell them apart, and the runtime does not ask.
-A plugin reports sends where the provider can tell them, and one that cannot leaves them out. `contact` is the person
-it went to; a send that names nobody is not reported. `campaign` is the provider campaign the send belongs to, by the
+A plugin reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment
+the message was sent, and otherwise leaves it out; never as a move by the other side. `contact` is the person it went
+to; a send that names nobody is not reported. `campaign` is the provider campaign the send belongs to, by the
 identifier `campaign.get` pins, and `null` for a send outside every provider campaign: a send reaches a campaign by that
 identifier alone, never by the person, so one that names no provider campaign reaches no campaign. `occurred_at` is the
 moment the message was sent, as the provider stamps it, and the same at every read of that send: the moment is part of
@@ -116,9 +117,10 @@ move:
 
 Only a move by the other side reads as a reply. Never report a move by the account or the provider as `other_side`.
 Report `null` only where the provider truly cannot say: such a move wakes the campaign's manager as a reply would, so a
-follow-up sent into a thread that already has a reply reads as one too. A move by the account is a message, and where
-the provider can tell, a send: report it as `message_sent`, or leave it out, and never as `other_side`. You may leave
-out moves by the provider altogether.
+follow-up sent into a thread that already has a reply reads as one too. A move by the account is a message:
+report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message
+was sent, and otherwise leave it out; never as a move by the other side. You may leave out moves by the provider
+altogether.
 
 **Nothing else travels.** Each kind is a closed object: a member the table does not name — a subject, a preview, a
 person's name — is refused with the whole page, and so is a kind outside the five. A schema cannot prove that an
@@ -183,8 +185,8 @@ A plugin that performs this contract:
   the events on the strength of this line, so naming the campaign is still the right course: the first rule decides alone
   when it finds one, and a move that names none reaches the campaigns the person is in rather than the one whose thread
   it is;
-- where the provider can tell, reports a message sent as the account, by whoever sent it, as `message_sent`, and never as
-  a move by the other side;
+- reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment the message
+  was sent, and otherwise leaves it out; never as a move by the other side;
 - names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it
   cannot place names `null`, and reaches no campaign;
 - gives a `message_sent` as its `occurred_at` the moment the message was sent, the same at every read of that send, so

@@ -1946,11 +1946,12 @@ plugin on the strength of that. A move that names no campaign reaches, by the pe
 and holds them as a member; naming the campaign is still the right course, because the first rule decides alone when it
 finds one, and because a reply that names no campaign is taken as a campaign's own where that campaign alone had
 written to the person before it, as the reply to a direct send is: a sequence's thread left unnamed would be answered
-by a campaign that never wrote in it. Where the provider can tell, report a message sent as the account as
-`message_sent`, never as a move by the other side, with under `campaign` the provider campaign it belongs to, by the
-identifier `campaign.get` pins, and as `occurred_at` the moment it was sent, the same at every read: a send reaches a
-campaign by that identifier alone, one that names none reaches no campaign, and one given two moments is said twice.
-Return no `external_ids`: a read pins nothing.
+by a campaign that never wrote in it. Report a message sent as the account, by whoever sent it,
+as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by
+the other side. Name under `campaign` the provider campaign it belongs to, by the identifier `campaign.get` pins, and
+give as `occurred_at` the moment it was sent, the same at every read: a send reaches a campaign by that identifier
+alone, one that names none reaches no campaign, and one given two moments is said twice. Return no `external_ids`: a
+read pins nothing.
 
 **Reading by date.** With `since`, return across the pages your cursors chain every event at or after it (and before
 `until`); page a provider that pages only by offset newest first until the last item's moment passes `since`, and

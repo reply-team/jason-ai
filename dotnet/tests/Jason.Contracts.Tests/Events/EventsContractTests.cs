@@ -93,15 +93,16 @@ public sealed class EventsContractTests
     }
 
     /// <summary>
-    /// A provider that can tell reports a send as a send, never as a move by the other side; it names the provider campaign
-    /// the send belongs to, by which alone the send reaches a campaign; and it gives the send one moment at every read,
-    /// since the moment is part of what makes two reads one send. Reporting sends is no obligation: a provider that cannot
-    /// tell leaves them out. All three are the plugin's to keep, so the document says so, and the plugin author's pages.
+    /// A plugin reports a send as a send where it can give the moment the message was sent, and never as a move by the
+    /// other side; it names the provider campaign the send belongs to, by which alone the send reaches a campaign; and it
+    /// gives the send one moment at every read, since the moment is part of what makes two reads one send. A send it
+    /// cannot date it leaves out, so reporting sends is no obligation. All three are the plugin's to keep, so the document
+    /// says so, and the plugin author's pages, each in the same sentence.
     /// </summary>
     [Fact]
     public void The_conformance_says_a_send_is_reported_as_one_named_by_its_provider_campaign_at_one_moment()
     {
-        const string AsASend = "Where the provider can tell, reports a message sent as the account, by whoever sent it, as message_sent, and never as a move by the other side.";
+        const string AsASend = "Reports a message sent as the account, by whoever sent it, as message_sent where it can give the moment the message was sent, and otherwise leaves it out; never as a move by the other side.";
         const string ByItsCampaign = "Names under campaign the provider campaign the send belongs to, by the identifier campaign.get pins; a send it cannot place names null, and reaches no campaign.";
         const string OneMoment = "Gives a message_sent as its occurred_at the moment the message was sent, the same at every read of that send, so that a send read twice is said once.";
         var contract = EventsCatalog.Find("events.read")!;
@@ -113,7 +114,9 @@ public sealed class EventsContractTests
 
         var page = Flat(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"));
         Assert.Contains("## The five kinds", page, StringComparison.Ordinal);
-        Assert.Contains("where the provider can tell, reports a message sent as the account, by whoever sent it, as `message_sent`, and never as a move by the other side", page, StringComparison.Ordinal);
+        Assert.Contains("reports a message sent as the account, by whoever sent it, as `message_sent` where it can give the moment the message was sent, and otherwise leaves it out; never as a move by the other side", page, StringComparison.Ordinal);
+        Assert.Contains("report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by the other side", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("where the provider can tell", page, StringComparison.Ordinal);
         Assert.Contains("names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it cannot place names `null`, and reaches no campaign", page, StringComparison.Ordinal);
         Assert.Contains("gives a `message_sent` as its `occurred_at` the moment the message was sent, the same at every read of that send, so that a send read twice is said once", page, StringComparison.Ordinal);
         Assert.DoesNotContain("the moment the thread last moved with it", page, StringComparison.Ordinal);
@@ -121,7 +124,7 @@ public sealed class EventsContractTests
 
         var guide = Flat(Path.Combine(OperationContracts.ContractFiles.Root, "docs", "plugins.md"));
         Assert.Contains("Every event is one of five closed kinds", guide, StringComparison.Ordinal);
-        Assert.Contains("Where the provider can tell, report a message sent as the account as `message_sent`", guide, StringComparison.Ordinal);
+        Assert.Contains("Report a message sent as the account, by whoever sent it, as `message_sent` where you can give the moment the message was sent, and otherwise leave it out; never as a move by the other side.", guide, StringComparison.Ordinal);
         Assert.DoesNotContain("four closed kinds", guide, StringComparison.Ordinal);
 
         var readme = Flat(Path.Combine(OperationContracts.ContractFiles.Package, "README.md"));
