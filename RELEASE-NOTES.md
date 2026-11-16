@@ -19,54 +19,45 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.47.1
+# Jason 0.47.2
 
-## What is new since 0.47.0
+## What is new since 0.47.1
 
-This patch release is about what a person meets in the console: the Demo in Jason Desktop is now the console's own Demo,
-built to be shown inside another application, a browser tab can show it too, and the console's existing screens look
-more like one style.
+This patch release is about one thing in the console: an agent is now one place. Its chat and its page's tabs stand
+under one header, in Jason Desktop's window and in a browser tab alike.
 
-- **The Demo in Jason Desktop is the console's Demo.** The window shows the same mock of Jason at work on sample data as
-  before, now as the console's Demo built for embedding. It runs on scripts alone, with an opaque origin, so it shares
-  nothing with any other page and sets no cookie; what you type or keep in it stays in the window's in-memory session,
-  and no request reaches any address.
-  - The page's top strip carries the page's own words, and the desktop's **Demo | Live** switch stands alone at its
-    right end. The Demo has no installation, so it offers no **Open in**.
-  - On Windows the strip's sentence stays clear of the switch and the caption buttons at every width: where the window
-    is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn a
-    little tighter.
-- **A browser tab can show the Demo.** In a tab, with or without Jason Desktop behind it, the console's **Demo | Live**
-  switch is on. **Demo** moves the address to `#/demo` and shows the same page over the whole tab, with the
-  switch at the right end of the page's own top strip; **Live**, the browser's Back or any other address
-  brings the console back where it was, and a reload at `#/demo` shows the page again from its beginning.
-  - The switch changes that tab only: nothing is kept, the runtime is not told, and the installation's mode and your
-    installation stay as they were. In Jason Desktop's own window the switch is the desktop's, as before.
-  - The page is sealed in the same way as in the desktop: scripts alone, never the console's origin, so it holds nothing
-    of the runtime's, the console's token included. Narrower than 900 pixels the page keeps that width and scrolls
-    sideways under a strip that holds the switch. A custom UI build without the page says so in its place.
-- **The console looks more like one style.** Each screen says and does what it did, with one button
-  added in Needs you.
-  - The sidebar's rows sit a little further apart. The row you are on has its own darker fill and a medium weight, so it
-    no longer looks like a row under the pointer.
-  - In the access menu each mode carries its own mark at the left, the same mark the button shows.
-  - On a plan card, what you do by hand is an amber box, and each step's channel is a coloured tag.
-  - On an accounts card an account is its name over its address, the channel has a glyph, and the status is a chip that
-    shows the provider's own word; only `connected` and `enabled` are tinted green.
-  - On an agent's status card the agent's state is a pill at the top, from the runtime's own status.
-  - An agent's empty Inbox tab is centred in the tab.
-  - In Needs you, the state where nothing waits is a centred card with a check mark and a **New GTM agent**
-    button beside **Open your agents**, and the pane that reads an item is a white rounded card.
-  - In Settings the list of sections has a group label and a mark for each entry.
+- **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox** and **Settings**
+  stand under one header that stays while you move between the tabs. The header holds the agent's name, its state and
+  kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **...** menu. It shows only
+  what it has read from the runtime, and it follows the journal's lines without a reload. The page under it no longer
+  draws a header, a Close or a row of numbers of its own.
+  - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox` and `/settings`, so a reload, a deep
+    link, Back and Forward land on the tab the address names. An old link still lands: an agent's bare address and an
+    old tab's address open its first tab. The first tab is Chat wherever a chat can be made; a browser tab with no
+    desktop draws no Chat and opens on People.
+  - **What moved into People:** the line the page's header used to carry, how many people the agent holds and the
+    provider campaign it is linked to, and **Add people**, now sit at the top of the People tab.
+  - **What moved into the ...:** the conversation's acts, **Rename conversation**, **Start conversation afresh** and
+    **Remove conversation**. They act on the conversation and the agent stays as it is, which Remove's question says.
+  - **Places with no address,** Start, a set-up chat, the Feed and the sidebar's panels, stand at `#/chat`. Leaving an
+    agent for one of them adds one entry to the browser's history, so Back returns to the agent's tab with the words you
+    had typed there.
+  - **An agent's conversation is made at your first message or choice in it,** a send, a chip, or opening one of the
+    composer's menus, which show what the new conversation will take. Opening the Chat, by a link, a reload, Back or the
+    Agents list, makes nothing, and typing alone makes nothing. If making the conversation is refused, the messages not
+    sent go back to the box in the order you wrote them and the reason shows in the chat.
+  - **An archived agent** shows its archived pill, no move, and its tabs to read. One with no conversation says on its
+    Chat tab that it is archived, and nothing is made there; one with a conversation shows it.
+  - **An address naming an agent the runtime does not know** is closed with a notice, as the page closes it. When the
+    desktop cannot open an agent's conversation, its Chat tab says why under that agent's header, with **Try again**.
 
-## Upgrading from 0.47.0
+## Upgrading from 0.47.1
 
-Nothing stops and no setting is renamed, and no migration runs.
+Nothing stops, no setting is renamed and no migration runs.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
   console's changes.
-- **A custom UI build:** a page it places under `sealed/` is served with scripts alone now, so a form in a page under
-  `sealed/` no longer raises its submit event.
+- **Links:** an old `#/campaigns/<id>` link now opens the agent's first tab.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
-- **From 0.46.x or earlier,** the notes of each release in between apply as well.
+- **From 0.47.0 or earlier,** the notes of each release in between apply as well.
