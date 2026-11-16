@@ -10,7 +10,6 @@ const FILLS = 0.9;
 // The measure the panels drawn for a narrow column keep, and the words read in Needs you's pane with them.
 const MEASURE = 880;
 
-
 test('in the console a screen shown in the one area fills it, whichever screen it is', async ({ page, jason }) => {
     await page.setViewportSize(WIDE);
     await page.addInitScript(quietDesktop);

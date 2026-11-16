@@ -12,7 +12,9 @@ for (const size of [
         await page.goto(url);
         const shown = page.locator('.jc-console.no-desktop');
         await expect(shown).toBeVisible();
-        await expect(page.getByRole('heading', { level: 1 })).toHaveText('Live Mode is only available in Jason Desktop.');
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+            'Live Mode is only available in Jason Desktop.',
+        );
         await expect(page.getByRole('link', { name: 'download Jason Desktop' })).toHaveAttribute(
             'href',
             'https://github.com/reply-team/jason-ai/releases',
