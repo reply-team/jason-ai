@@ -23,8 +23,9 @@ replaces the title and the body together.
 
 ## What is new since 0.47.0
 
-This patch release is about two things a person meets in the console: the Demo in Jason Desktop is now the console's own
-Demo, built to be shown inside another application, and the console's existing screens look more like one style.
+This patch release is about what a person meets in the console: the Demo in Jason Desktop is now the console's own Demo,
+built to be shown inside another application, a browser tab can show it too, and the console's existing screens look
+more like one style.
 
 - **The Demo in Jason Desktop is the console's Demo.** The window shows the same mock of Jason at work on sample data as
   before, now as the console's Demo built for embedding, received as built. It runs on scripts alone, with an opaque
@@ -35,6 +36,15 @@ Demo, built to be shown inside another application, and the console's existing s
   - On Windows the strip's sentence stays clear of the switch and the caption buttons at every width: where the window
     is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn a
     little tighter.
+- **A browser tab can show the Demo.** In a tab, with or without Jason Desktop behind it, the console's **Demo | Live**
+  switch is on. **Demo** moves the address to `#/demo` and shows the same page over the whole tab, with the switch at the
+  right end of the page's own top strip; **Live**, the browser's Back or any other address brings the console back where
+  it was, and a reload at `#/demo` shows the page again from its beginning.
+  - The switch changes that tab only: nothing is kept, the runtime is not told, and the installation's mode and your
+    installation stay as they were. In Jason Desktop's own window the switch is the desktop's, as before.
+  - The page is sealed in the same way as in the desktop: scripts alone, never the console's origin, so it holds nothing
+    of the runtime's, the console's token included. Narrower than 900 pixels the page keeps that width and scrolls
+    sideways under a strip that holds the switch. A custom UI build without the page says so in its place.
 - **The console looks more like one style.** Nothing here changes what a screen says or does.
   - The sidebar's rows sit a little further apart. The row you are on has its own darker fill and a medium weight, so it
     no longer looks like a row under the pointer.
@@ -54,6 +64,8 @@ Nothing stops and no setting is renamed, and no migration runs.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
   console's changes.
+- **A custom UI build:** a page it places under `sealed/` is served with scripts alone now, so a form in a page under
+  `sealed/` no longer raises its submit event.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
 - **From 0.46.x or earlier,** the notes of each release in between apply as well.
