@@ -9,7 +9,7 @@ import { useCampaignChat } from './campaign-chat';
 import { ActionsRow } from '../../layout/actions-row';
 import { PanelHeader } from '../../layout/panel-header';
 import { Tabs } from '../../layout/tabs';
-import { transitions, verbs, type Transition } from './pause-dialog';
+import { CampaignMoves } from './moves';
 import { agentKind, asksForCreate, firstTabName, kindWord } from './kind';
 import * as store from './store';
 
@@ -19,7 +19,9 @@ type Props = {
     campaign: Campaign;
     at: At;
     counted: CampaignSummaryRow | CampaignActivityRow | null;
-    onAct: (act: Transition | 'add') => void;
+    onAct: (act: 'add') => void;
+    /** A move the runtime took: Start, Pause or Resume. */
+    onMoved: () => void;
     onClose: () => void;
 };
 
@@ -45,7 +47,7 @@ function sub(campaign: Campaign, people: number | null): string {
 }
 
 /** The campaign, laid out as People's and Work items' panels are: the header, its numbers, and the tabs. */
-export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) {
+export function CampaignPanel({ campaign, at, counted, onAct, onMoved, onClose }: Props) {
     const to = (tab: CampaignTab): At => ({
         screen: 'campaigns',
         id: campaign.id,
@@ -77,7 +79,10 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 title={campaign.name}
                 sub={
                     <>
-                        <span className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}>
+                        <span
+                            className={`badge${campaign.status === 'active' ? ' success' : ' outline'}`}
+                            data-status={campaign.status}
+                        >
                             {campaign.status}
                         </span>{' '}
                         {word && (
@@ -96,11 +101,8 @@ export function CampaignPanel({ campaign, at, counted, onAct, onClose }: Props) 
                 <button className="btn" type="button" onClick={() => onAct('add')}>
                     Add people
                 </button>
-                {transitions(campaign).map((move) => (
-                    <button key={move} className="btn" type="button" onClick={() => onAct(move)}>
-                        {verbs[move]}
-                    </button>
-                ))}
+                {/* Each move named in its class, so a sheet can tell Start and Resume from Pause. */}
+                <CampaignMoves campaign={campaign} buttonClass={(move) => `btn agent-move-${move}`} onDone={onMoved} />
             </ActionsRow>
             {row && (
                 <div className="stats">

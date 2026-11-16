@@ -23,6 +23,10 @@ export const acts = signal<Readonly<Record<string, ActsHeld>>>({});
 const PAGE = 50;
 const PAGES = 5;
 
+/** By chat id, the number of the read that may settle its check: a read asked again makes an earlier one's answer stale. */
+const reads = new Map<string, number>();
+let readsMade = 0;
+
 const put = (chatId: string, held: ActsHeld | null): void => {
     const rest = Object.fromEntries(Object.entries(acts.value).filter(([id]) => id !== chatId));
     acts.value = held === null ? rest : { ...rest, [chatId]: held };
@@ -34,9 +38,28 @@ const put = (chatId: string, held: ActsHeld | null): void => {
  * function that forgets the check, which the chat calls once it is no longer drawn or asks another.
  */
 export function readActs(api: Api, chatId: string, campaignId: string, at: string): () => void {
-    const held: ActsHeld = { campaignId, at, read: 'reading' };
-    put(chatId, held);
+    read(api, chatId, campaignId, at);
     const mine = () => acts.value[chatId]?.campaignId === campaignId && acts.value[chatId]?.at === at;
+    return () => {
+        if (mine()) put(chatId, null);
+    };
+}
+
+/**
+ * Reads every held check again, as a resume of the journal's stream the runtime refused lost the lines written while it
+ * was away. A choice an act already locked stays locked.
+ */
+export function readActsAgain(api: Api): void {
+    for (const [chatId, held] of Object.entries(acts.value))
+        if (held.read !== 'acted') read(api, chatId, held.campaignId, held.at);
+}
+
+function read(api: Api, chatId: string, campaignId: string, at: string): void {
+    const number = ++readsMade;
+    reads.set(chatId, number);
+    put(chatId, { campaignId, at, read: 'reading' });
+    const mine = () =>
+        reads.get(chatId) === number && acts.value[chatId]?.campaignId === campaignId && acts.value[chatId]?.at === at;
     const settle = (read: ActsRead) => {
         // A line the stream brought while the read was under way has already said acted; nothing unsays it.
         if (mine() && acts.value[chatId]!.read === 'reading') put(chatId, { campaignId, at, read });
@@ -61,9 +84,6 @@ export function readActs(api: Api, chatId: string, campaignId: string, at: strin
             settle('unread');
         }
     })();
-    return () => {
-        if (mine()) put(chatId, null);
-    };
 }
 
 /** A line of the journal's stream: it locks each drawn chat's choice it is a person's act after. */

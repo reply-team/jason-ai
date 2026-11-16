@@ -77,6 +77,8 @@ export interface Chat {
     /** Whether the person chose to type a model's full name, on a host that takes one. */
     typing: boolean;
     entries: Entry[];
+    /** How many of its entries were read from the desktop's record when the page opened it; 0 for a chat made here. */
+    reopened: number;
     running: boolean;
     /** What is typed in the message box. */
     draft: string;
@@ -139,6 +141,7 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         effort: null,
         typing: false,
         entries: [],
+        reopened: 0,
         running: false,
         draft: '',
         waiting: null,
@@ -201,6 +204,7 @@ export function fromRecord(record: DesktopConversationRecord, host: string | nul
         campaignId: record.campaignId,
         main: record.main === true,
         entries: record.entries.map(entryOf),
+        reopened: record.entries.length,
         dropped: record.dropped,
         // A turn of it runs: a page loaded again shows it running, with Stop, and its events follow.
         running: record.running,
@@ -752,13 +756,13 @@ export const actKinds = [
  * neither is a person named from inside a run, which the runtime records as that run's.
  */
 export function personActed(
-    line: { kind: string; campaign_id: string | null; ts: string; actor: { type: string } },
+    line: { kind: string; campaign_id: string | null; ts: string; actor?: { type: string } | null },
     campaignId: string,
     since: string,
 ): boolean {
     return (
         line.campaign_id === campaignId &&
-        line.actor.type === 'human' &&
+        line.actor?.type === 'human' &&
         (actKinds as readonly string[]).includes(line.kind) &&
         Date.parse(line.ts) >= Date.parse(since)
     );
@@ -780,7 +784,8 @@ export type ChoiceState =
     | { state: 'own_words' }
     | { state: 'locked' }
     | { state: 'acted' }
-    | { state: 'unread' };
+    | { state: 'unread' }
+    | { state: 'reopened' };
 
 /**
  * The state of the choice held by the text entry at `index`, with `labels` its options. The first locking entry after it
@@ -788,7 +793,9 @@ export type ChoiceState =
  * any other locks it with no mark. Nothing after it, in an agent's chat it is locked by a person's act on that agent at
  * or after the entry's moment (`acts`, read for that moment), and drawn locked when the entry has no moment or the read
  * failed: an unknown state never leaves a live button. `maySend` says a host drives the chat and this place may send.
- * Everything is read from the kept entries, which nobody edits, so a reload derives the same state.
+ * A choice read from the desktop's record when the page opened the chat, with nothing after it, is drawn locked: the
+ * record keeps no notice, no campaign attached and no session started afresh, so what locked it may be gone from it. An
+ * act of the person's during the turn, before the moment the words were kept, does not lock it.
  */
 export function choiceState(
     chat: Chat,
@@ -805,6 +812,7 @@ export function choiceState(
         return label === undefined ? { state: 'own_words' } : { state: 'chosen', label };
     }
     if (next !== undefined) return { state: 'locked' };
+    if (index < chat.reopened) return { state: 'reopened' };
     if (chat.campaignId !== null && !chat.main) {
         const at = entry?.kind === 'text' ? entry.at : undefined;
         if (at === undefined) return { state: 'unread' };

@@ -154,8 +154,17 @@ export const campaignOf = (card: { campaign?: string }, chat: Pick<Chat, 'main' 
  */
 export const aiCaption = (words: string): Html => html`<div class="card-who">${words}</div>`;
 
-/** A card's header in the desktop's words, in plain weight: the first thing in its top row. */
-export const cardHead = (words: string): Html => html`<span class="card-head">${words}</span>`;
+/**
+ * A card's header in the desktop's words, in plain weight: the first thing in its top row, and its name for a screen
+ * reader. It is made only here, and it is what a frame takes: a card of facts names itself by its header, so it can
+ * never stand under the AI's caption alone.
+ */
+export interface CardHead {
+    readonly words: string;
+    readonly view: Html;
+}
+export const cardHead = (words: string): CardHead =>
+    Object.freeze({ words, view: html`<span class="card-head">${words}</span>` });
 
 /** What a row says beside its name, the parts the runtime gave, in one quiet line; nothing when it gave none. */
 export function metaLine(parts: readonly (string | null)[]): Html | null {
@@ -177,7 +186,7 @@ export const saidView = (said: Said): Html =>
 export function frame<T>(view: {
     chatId: string;
     index: number;
-    header: string;
+    head: CardHead;
     action: string;
     held: Held<T> | null;
     stub: boolean;
@@ -185,20 +194,19 @@ export function frame<T>(view: {
     /** The facts read, drawn; `at` is the moment the read was answered. */
     facts: (facts: T, at: number) => Html;
 }): Html {
-    const { chatId, index, header, held } = view;
+    const { chatId, index, head, held } = view;
     const control = act(view.action, chatId, index);
     if (view.stub && held === null)
-        return html`<div class="ask chat-card chat-data stub" role="group" aria-label="${header}">
+        return html`<div class="ask chat-card chat-data stub" role="group" aria-label="${head.words}">
             <div class="ask-h card-top">
-                ${cardHead(header)}
+                ${head.view}
                 <button class="btn sm card-read" type="button" ${control}>Show now</button>
             </div>
         </div>`;
     const read = held?.state === 'read' ? held : null;
-    return html`<div class="ask chat-card chat-data" role="group" aria-label="${header}">
+    return html`<div class="ask chat-card chat-data" role="group" aria-label="${head.words}">
         <div class="ask-h card-top">
-            ${cardHead(header)}
-            ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
+            ${head.view} ${read === null ? null : html`<span class="meta card-asof">${asOf(read.at, zone)}</span>`}
             <button class="btn sm ghost card-read" type="button" ${control}>Refresh</button>
         </div>
         ${view.before ?? null}

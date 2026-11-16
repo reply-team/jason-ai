@@ -8,7 +8,7 @@ import type {
 } from '../api/types';
 import { t } from '../platform/i18n';
 import { periodWindow } from '../time/periods';
-import { campaignOf, cardAt, drawn, frame, saidOf, saidView, startRead, type Said } from './card-frame';
+import { campaignOf, cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
 import { modesInForce, monthCounts, nowCounts, statusSentence, type Count } from './card-model';
 import type { AgentStatusCard } from './cards';
 import { act, define } from './actions';
@@ -123,7 +123,7 @@ export function statusCard(chat: Chat, index: number, card: AgentStatusCard, las
     return frame<StatusRead>({
         chatId: chat.id,
         index,
-        header: read?.state === 'read' ? `Agent: ${read.campaign.name}` : 'Agent',
+        head: cardHead(read?.state === 'read' ? `Agent: ${read.campaign.name}` : 'Agent'),
         action: 'card.status',
         held,
         stub,

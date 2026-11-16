@@ -894,12 +894,22 @@ describe('a choice the AI asked', () => {
         expect(state(said(after(asked(), entry), 'From me'))).toEqual({ state: 'chosen', label: 'From me' });
     });
 
-    it('is derived again from the kept entries on a reload', () => {
+    it('is drawn locked once the chat is opened again, as the desktop keeps fewer entries than lock it, and answered as it was', () => {
         const asking: DesktopConversationRecord['entries'] = [
             { kind: 'user', text: 'Set it up' },
             { kind: 'text', text: 'Who?', at },
         ];
-        expect(state(fromRecord(record(asking), 'claude'))).toEqual({ state: 'live' });
+        // A notice, a campaign attached or a session started afresh locked it; the record keeps none of them.
+        expect(state(fromRecord(record(asking), 'claude'))).toEqual({ state: 'reopened' });
+        expect(state(fromRecord({ ...record(asking), campaignId: 'cmp_1' }, 'claude'), clear)).toEqual({
+            state: 'reopened',
+        });
+        expect(state(after(asked(), { kind: 'afresh' }))).toEqual({ state: 'locked' });
+        // A choice asked after the chat was opened again is live as any other.
+        const later = received(said(fromRecord(record(asking), 'claude'), 'And?'), { kind: 'text', text: 'Who?', at });
+        expect(choiceState(received(later, { kind: 'done', error: null }), 3, labels, null, true)).toEqual({
+            state: 'live',
+        });
         expect(state(fromRecord(record([...asking, { kind: 'user', text: 'From me' }]), 'claude'))).toEqual({
             state: 'chosen',
             label: 'From me',
@@ -952,6 +962,13 @@ describe('a person’s act on an agent, as a journal line', () => {
         ts: '2026-10-16T09:07:00.000Z',
         actor: { type: 'human' },
         ...fields,
+    });
+
+    it('is not a line with no actor, which is skipped and throws nothing', () => {
+        const bare: Record<string, unknown> = { ...line({}) };
+        delete bare.actor;
+        expect(personActed(bare as never, 'cmp_1', since)).toBe(false);
+        expect(personActed({ ...bare, actor: null } as never, 'cmp_1', since)).toBe(false);
     });
 
     it.each(actKinds)('is %s with a person as its actor', (kind) => {

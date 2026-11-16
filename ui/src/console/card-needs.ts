@@ -1,7 +1,18 @@
 import type { Api } from '../api/client';
 import type { ApprovalSummary, Campaign, DecisionSummary, Page } from '../api/types';
 import { clock } from '../time/format';
-import { campaignOf, cardAt, drawn, frame, metaLine, saidOf, saidView, startRead, type Said } from './card-frame';
+import {
+    campaignOf,
+    cardAt,
+    cardHead,
+    drawn,
+    frame,
+    metaLine,
+    type Said,
+    saidOf,
+    saidView,
+    startRead,
+} from './card-frame';
 import { capped, needsLine } from './card-model';
 import { placeOf, type NeedsCard } from './cards';
 import { act, define } from './actions';
@@ -74,8 +85,8 @@ function needsFacts(chat: Chat, campaignId: string | null, read: NeedsRead, at: 
             <div class="ask-a">
                 <button class="btn sm" type="button" ${act('card.waits', chat.id, campaignId)}>Show them</button>
             </div>`;
-    // Questions first, then approvals, as Needs you lists them; ten rows at most, the rest said as a count that leads
-    // to Needs you.
+    // Questions first, then approvals, as Needs you lists them; ten rows at most, and the rest behind a button that
+    // shows Needs you.
     const rows = [
         ...questions.items.map((row) => {
             const card = toQuestionCard(row, undefined, at);
@@ -94,15 +105,17 @@ function needsFacts(chat: Chat, campaignId: string | null, read: NeedsRead, at: 
         }),
     ];
     const { shown, rest } = capped(rows);
+    // A list with a further page holds more than its count says: the button says only that there are more.
+    const further = approvals.next_cursor !== null || questions.next_cursor !== null;
     return html`${archived}
         <div class="card-count-line">${line}</div>
         <ul class="card-rows card-needs" aria-label="Waiting for your decision">
             ${shown}
         </ul>
         ${
-            rest > 0
+            rest > 0 || further
                 ? html`<button class="card-more" type="button" ${act('card.waits', chat.id, null)}>
-                      ${rest} more in Needs you
+                      More in Needs you
                   </button>`
                 : null
         }`;
@@ -115,7 +128,7 @@ export function needsCard(chat: Chat, index: number, card: NeedsCard, last: numb
     return frame<NeedsRead>({
         chatId: chat.id,
         index,
-        header: 'Waiting for your decision',
+        head: cardHead('Waiting for your decision'),
         action: 'card.needs',
         held,
         stub,

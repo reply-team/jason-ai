@@ -6,7 +6,7 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
-import { cardReads, forgetCards, lastReadingCard } from './card-frame';
+import { aiCaption, cardHead, cardReads, forgetCards, lastReadingCard } from './card-frame';
 import { needsCard } from './card-needs';
 import { peopleCard } from './card-people';
 import { statusCard } from './card-status';
@@ -60,12 +60,13 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns } from './campaigns';
+import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
-import { chatHosts, isSignInFailure, signInSentence } from './live';
+import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
+import { CampaignMoves } from '../screens/campaigns/moves';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
@@ -536,7 +537,8 @@ function planCard(
     host: DesktopHost | null,
     words: string = entry.text,
 ): Html {
-    const last = entry === chat.entries.at(-1);
+    // Approve and run is offered over words a person can read: never over a plan of none.
+    const last = entry === chat.entries.at(-1) && words.trim() !== '';
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -648,6 +650,7 @@ const choiceWords: Partial<Record<ReturnType<typeof choiceState>['state'], strin
     own_words: 'You answered in your own words.',
     acted: 'You acted on this agent after this was asked; write your answer below if it still stands.',
     unread: 'Whether this still stands could not be read; write your answer below.',
+    reopened: 'This was asked before the chat was opened again; write your answer below.',
 };
 
 /** The entries whose card that did not draw the desktop was told of, so a redraw does not tell it again. */
@@ -687,7 +690,7 @@ function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHo
         choiceWords[state.state] ??
         (state.state === 'idle' && inTab() && !tabMaySend(chat.mode) ? answeredInDesktop : null);
     return html`<div class="ask chat-card chat-choice${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
-        <div class="card-who">${cardHeaders.choice}</div>
+        ${aiCaption(cardHeaders.choice)}
         <div class="ask-s">${card.question}</div>
         <div class="ui-opts">
             ${card.options.map((option, at) => {
@@ -733,11 +736,13 @@ function cardView(
         case 'failed':
             tellRefused(chat.id, entry, reading.kind, reading.failure);
             return noteLine(cardRefusedLine(reading.kind, reading.failure));
-        case 'elsewhere':
-            return html`<div class="ask chat-card" role="group" aria-label="${cardHeaders[reading.kind]}">
-                <div class="ask-h"><b>${cardHeaders[reading.kind]}</b></div>
+        case 'elsewhere': {
+            const head = cardHead(cardHeaders[reading.kind]);
+            return html`<div class="ask chat-card" role="group" aria-label="${head.words}">
+                <div class="ask-h">${head.view}</div>
                 <div class="ask-w">This chat shows only its own agent.</div>
             </div>`;
+        }
         case 'card':
             // A data card reads when it is the conversation's last card that reads (`last`), else stands as a stub.
             switch (reading.card.kind) {
@@ -760,7 +765,7 @@ function cardView(
  * chat of no agent, one with no open choice, and one whose choice has no moment, which draws locked without a read.
  */
 function actsAsked(
-    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running'>,
+    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
 ): { campaignId: string; at: string } | null {
     if (chat.campaignId === null || chat.main) return null;
     const open = openChoice(chat);
@@ -851,8 +856,8 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'text': {
                 const index = indexOf.get(entry) ?? -1;
                 const cut = layout.words.get(index);
-                // A plan the desktop marked is drawn by the plan's card, its card blocks taken out of its words.
-                if (entry.plan === true && !chat.main) return planCard(chat, entry, host, cut?.trim() ?? entry.text);
+                // A plan the desktop marked is drawn by the plan's card, whole: its turn draws no card (`cardLayout`).
+                if (entry.plan === true && !chat.main) return planCard(chat, entry, host);
                 const words = cut ?? entry.text;
                 const placed = layout.cards.get(index);
                 const card = placed === undefined ? null : cardView(chat, index, placed, host, lastReads);
@@ -1050,6 +1055,29 @@ export function ChatNotes({ chat }: { chat: Chat }) {
     );
 }
 
+/**
+ * The agent a campaign's chat is about, in the chat's bar: its state as the runtime lists the campaign, and its one move,
+ * the agent page's own control with its own confirmation. The dialog is the browser shell's, so it is drawn inside that
+ * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
+ */
+function AgentInBar({ campaignId }: { campaignId: string }) {
+    const campaign = campaigns.value.find((each) => each.id === campaignId);
+    // An archived campaign is over: it has no move, and its chat says nothing of a state.
+    if (!campaign || campaign.status === 'archived') return null;
+    const { state, tone } = toCampaignRow(campaign, undefined);
+    return (
+        <div className="chat-agent" role="group" aria-label="This agent">
+            <span className={`pillc chat-agent-state ${tone}`}>{state}</span>
+            <CampaignMoves
+                campaign={campaign}
+                buttonClass={(move) => (move === 'pause' ? 'btn sm chat-agent-move' : 'btn sm p chat-agent-move')}
+                frame={(dialog) => <div className="harness">{dialog}</div>}
+                onDone={() => void reloadCampaigns()}
+            />
+        </div>
+    );
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -1107,9 +1135,10 @@ export function ChatPanel({ chatId }: { chatId: string }) {
     const campaignId = record?.campaignId ?? null;
     const main = record?.main === true;
     const running = record?.running === true;
+    const reopened = record?.reopened ?? 0;
     const asked = useMemo(
-        () => (entries === undefined ? null : actsAsked({ entries, campaignId, main, running })),
-        [entries, campaignId, main, running],
+        () => (entries === undefined ? null : actsAsked({ entries, campaignId, main, running, reopened })),
+        [entries, campaignId, main, running, reopened],
     );
     useEffect(
         () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),
@@ -1224,6 +1253,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         Remove
                     </button>
                 )}
+                {chat.campaignId !== null && !chat.main && <AgentInBar campaignId={chat.campaignId} />}
             </div>
             {chat.removing && (
                 <div

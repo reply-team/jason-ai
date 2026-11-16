@@ -1,6 +1,17 @@
 import type { Api } from '../api/client';
 import type { Campaign, CampaignSummaryResponse, Contact, MembershipItem, Page } from '../api/types';
-import { campaignOf, cardAt, drawn, frame, metaLine, saidOf, saidView, startRead, type Said } from './card-frame';
+import {
+    campaignOf,
+    cardAt,
+    cardHead,
+    drawn,
+    frame,
+    metaLine,
+    type Said,
+    saidOf,
+    saidView,
+    startRead,
+} from './card-frame';
 import { cardRows, peopleEmpty, peopleFooter, peoplePlace, personRow } from './card-model';
 import type { PeopleListCard } from './cards';
 import { act, define } from './actions';
@@ -116,7 +127,7 @@ export function peopleCard(chat: Chat, index: number, card: PeopleListCard, last
     return frame<PeopleRead>({
         chatId: chat.id,
         index,
-        header: 'People',
+        head: cardHead('People'),
         action: 'card.people',
         held,
         stub,
