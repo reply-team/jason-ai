@@ -613,7 +613,7 @@ public sealed class Claimer(
     /// plugin would receive changed meanwhile — the operator approved an effect, and a provider timing out did not change
     /// what that effect is. What they did not approve is a different document, and that is what the hash is for. A pin
     /// learned where the approved subject held none, by the failed attempt or by another item, is not such a change: it
-    /// tells the provider which record it already holds, and the person read nothing about it. A pin that holds another
+    /// tells the provider which record it already holds, and it moves nothing the person read. A pin that holds another
     /// value or is gone is, and so is everything else. That holds for <c>confirm_each</c> as for
     /// <c>confirm_once</c>: the decision is this item's alone and the item is one person, so a retry after a failure
     /// that sent nothing performs the one act the person approved, and an end that may have sent is never repeated

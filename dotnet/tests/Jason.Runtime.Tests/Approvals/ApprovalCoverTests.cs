@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
 using Jason.Contracts.Ids;
 using Jason.Contracts.Operations;
@@ -14,8 +15,9 @@ namespace Jason.Runtime.Tests.Approvals;
 /// <summary>
 /// What an approval covers, as the one test the claim, the automatic mode's retry and the review hearing all ask. It covers
 /// the subject it was given about, and the same subject with a provider identifier added where it held none, for the person
-/// or for the campaign: that is not something the person read. A pin it held with another value, a pin it held and the
-/// subject no longer carries, and every other member of the subject are something else, so it covers none of them.
+/// or for the campaign: such a pin is either not shown to the person at all or bound to a value they read. A pin it held
+/// with another value, a pin it held and the subject no longer carries, and every other member of the subject are something
+/// else, so it covers none of them.
 /// </summary>
 public class ApprovalCoverTests
 {
@@ -101,32 +103,40 @@ public class ApprovalCoverTests
     }
 
     /// <summary>
-    /// Every other member of the subject still asks again, alone and with a pin added beside it: the arguments, a field of
-    /// the person, the address the send goes to, the campaign's name and status, the plugin, the account, the operation's
-    /// version, the operation and the work item.
+    /// Every other member of the subject still asks again with a pin added beside it, so what an added pin keeps never widens
+    /// to anything else: the arguments, a field of the person, the address the send goes to, the campaign's name and status,
+    /// the plugin, the account, the operation's version, the operation and the work item.
     /// </summary>
     [Theory]
-    [InlineData("an argument", false)]
-    [InlineData("an argument", true)]
-    [InlineData("a field of the person", false)]
-    [InlineData("a field of the person", true)]
-    [InlineData("the address", false)]
-    [InlineData("the address", true)]
-    [InlineData("the campaign's name", false)]
-    [InlineData("the campaign's name", true)]
-    [InlineData("the campaign's status", false)]
-    [InlineData("the campaign's status", true)]
-    [InlineData("the plugin", false)]
-    [InlineData("the plugin", true)]
-    [InlineData("the account", false)]
-    [InlineData("the account", true)]
-    [InlineData("the operation's version", false)]
-    [InlineData("the operation's version", true)]
-    [InlineData("the operation", false)]
-    [InlineData("the operation", true)]
-    [InlineData("the work item", false)]
-    [InlineData("the work item", true)]
-    public void Every_other_member_that_changed_ends_the_cover_with_or_without_a_pin_added(string member, bool pinAdded)
+    [Critical(Family.S2, "anything else beside an added pin needs a new approval")]
+    [InlineData("an argument")]
+    [InlineData("a field of the person")]
+    [InlineData("the address")]
+    [InlineData("the campaign's name")]
+    [InlineData("the campaign's status")]
+    [InlineData("the plugin")]
+    [InlineData("the account")]
+    [InlineData("the operation's version")]
+    [InlineData("the operation")]
+    [InlineData("the work item")]
+    public void Every_other_member_that_changed_beside_a_pin_added_ends_the_cover(string member) =>
+        AnotherMember(member, pinAdded: true);
+
+    /// <summary>The same members, changed with no pin added, end the cover as they always do.</summary>
+    [Theory]
+    [InlineData("an argument")]
+    [InlineData("a field of the person")]
+    [InlineData("the address")]
+    [InlineData("the campaign's name")]
+    [InlineData("the campaign's status")]
+    [InlineData("the plugin")]
+    [InlineData("the account")]
+    [InlineData("the operation's version")]
+    [InlineData("the operation")]
+    [InlineData("the work item")]
+    public void Every_other_member_that_changed_ends_the_cover(string member) => AnotherMember(member, pinAdded: false);
+
+    private static void AnotherMember(string member, bool pinAdded)
     {
         var scene = new Scene();
         var approved = scene.Approved(NoPins, NoPins);
@@ -257,42 +267,130 @@ public class ApprovalCoverTests
     }
 
     /// <summary>
-    /// Adding a pin moves nothing else that is composed: for every operation of the catalog that may carry a pin of the
-    /// person or of the campaign, the input composed with one is the input composed without it, plus that one pin at its
-    /// one place. So the cover a pin keeps is never also a cover of something else the pin brought with it.
+    /// Composing with a pin added moves nothing else: for every operation of the catalog, and each of the catalog's two pin
+    /// kinds — the person's <c>contact</c> and the campaign's <c>campaign</c> — whether the operation declares it or not, the
+    /// input composed with the pin is the input composed without it, plus that one pin at its one place, or the same input
+    /// where the operation composes no such entity. Its reach is the composing function; the claim's own gathering of facts
+    /// is held by the claim's rows, which compare what a claim composed with the approved subject.
     /// </summary>
     [Fact]
-    public void A_pin_added_moves_nothing_else_in_any_operation_s_composed_input()
+    public void Composing_with_a_pin_added_moves_nothing_else_in_any_operation_s_input()
     {
-        var checkedOperations = 0;
+        var composedWithAPlace = 0;
         foreach (var contract in OperationCatalog.All)
         {
-            foreach (var (kind, declared) in contract.ExternalIds.Where(entry => entry.Value.Entity != PinnedEntity.WorkItem))
+            foreach (var (person, kind, value) in new[] { (true, "contact", "p-48211"), (false, "campaign", "sq-1129") })
             {
                 var scene = new Scene(contract.Id);
-                var person = declared.Entity == PinnedEntity.Contact ? Pins(kind, "p-48211") : NoPins;
-                var campaign = declared.Entity == PinnedEntity.Campaign ? Pins(kind, "sq-1129") : NoPins;
                 var without = CanonicalInput.Compose(contract, scene.Facts(NoPins, NoPins));
-                var with = CanonicalInput.Compose(contract, scene.Facts(person, campaign));
+                var with = CanonicalInput.Compose(contract, scene.Facts(person ? Pins(kind, value) : NoPins, person ? NoPins : Pins(kind, value)));
 
-                var place = declared.Entity == PinnedEntity.Contact
-                    ? with["contacts"]?[0]?["external_ids"]
-                    : with["campaign"]?["external_ids"];
+                var place = person ? with["contacts"]?[0]?["external_ids"] : with["campaign"]?["external_ids"];
                 if (place is null)
                 {
-                    // The operation composes no person, so a person's pin travels nowhere and nothing moves at all.
                     Assert.True(JsonNode.DeepEquals(without, with), $"{contract.Id}: a pin that travels nowhere moved the input.");
                     continue;
                 }
 
-                Assert.Equal(declared.Entity == PinnedEntity.Contact ? "p-48211" : "sq-1129", (string?)place[kind]);
+                Assert.Equal(value, (string?)place[kind]);
                 place.AsObject().Remove(kind);
                 Assert.True(JsonNode.DeepEquals(without, with), $"{contract.Id}: adding the {kind} pin moved more than the pin.");
-                checkedOperations++;
+                composedWithAPlace++;
             }
         }
 
-        Assert.True(checkedOperations > 10, $"Only {checkedOperations} pins were checked.");
+        Assert.True(composedWithAPlace > OperationCatalog.All.Count, $"Only {composedWithAPlace} pins had a place to go.");
+    }
+
+    /// <summary>
+    /// An added pin keeps the cover only because the person never read one that matters: every operation a person approves
+    /// whose preview names a pin, in its sentence or among the values it highlights, either is never approved without that
+    /// pin — a person's pin an operation works by alone, <c>provider_contact: pinned_only</c>, whose absence is refused before
+    /// anybody is asked — or binds it to an argument the person read: the input requires the argument or the pin, and a pin
+    /// that contradicts the argument is refused before the gate. A document that breaks this turns the row red.
+    /// </summary>
+    [Fact]
+    [Critical(Family.S2, "a pin a person reads is never one added after their approval")]
+    public void Every_pin_a_preview_shows_is_held_when_approved_or_bound_to_an_argument()
+    {
+        var shown = 0;
+        foreach (var contract in OperationCatalog.All.Where(contract => contract.Approval.Value != "auto"))
+        {
+            var problems = PreviewPinProblems(contract);
+            Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+            shown += ShownPins(contract).Count;
+        }
+
+        Assert.True(shown >= 3, $"Only {shown} pins are shown by a preview; the row checks nothing.");
+    }
+
+    /// <summary>The row above is not vacuous: a document that shows a pin it neither requires nor binds is caught.</summary>
+    [Theory]
+    [InlineData("contact.delete", "it no longer works by the person's pin alone")]
+    [InlineData("campaign.activate", "its input no longer requires the argument or the pin")]
+    [InlineData("enrollment.stop", "its argument is no longer the pin's")]
+    public void A_preview_showing_a_pin_neither_held_nor_bound_is_caught(string operation, string broken)
+    {
+        var contract = OperationCatalog.Find(operation)!;
+        var doctored = broken switch
+        {
+            "it no longer works by the person's pin alone" => contract with { Preflight = contract.Preflight with { ProviderContact = ProviderContact.FindOrCreate } },
+            "its input no longer requires the argument or the pin" => contract with { InputSchema = Without(contract.InputSchema, "anyOf") },
+            _ => contract with { ExternalIds = contract.ExternalIds.Where(entry => entry.Key != "campaign").ToDictionary() },
+        };
+
+        Assert.Empty(PreviewPinProblems(contract));
+        Assert.NotEmpty(PreviewPinProblems(doctored));
+    }
+
+    private static readonly Regex PinPointer = new(@"/(contacts/0|campaign)/external_ids/([a-z_]+)", RegexOptions.CultureInvariant);
+
+    /// <summary>The pins a preview shows: (true for the person, the kind), from its sentence and its highlights.</summary>
+    private static List<(bool Person, string Kind)> ShownPins(OperationContract contract) =>
+        contract.Preview is not { } preview
+            ? []
+            : [.. preview.Highlights.Append(preview.Summary.Text)
+                .SelectMany(text => PinPointer.Matches(text))
+                .Select(match => (match.Groups[1].Value == "contacts/0", match.Groups[2].Value))
+                .Distinct()];
+
+    private static List<string> PreviewPinProblems(OperationContract contract)
+    {
+        var problems = new List<string>();
+        foreach (var (person, kind) in ShownPins(contract))
+        {
+            if (person)
+            {
+                if (contract.Preflight.ProviderContact != ProviderContact.PinnedOnly || kind != "contact")
+                {
+                    problems.Add($"{contract.Id}: its preview shows the person's '{kind}' pin, and it is approved without that pin.");
+                }
+
+                continue;
+            }
+
+            var bound = contract.ExternalIds.TryGetValue(kind, out var declared) && declared.Entity == PinnedEntity.Campaign
+                && contract.ArgumentSchema["properties"]?[kind]?["required"] is JsonArray required
+                && required.Any(member => (string?)member == "external_id");
+            var eitherRequired = contract.InputSchema["anyOf"] is JsonArray branches
+                && branches.Count == 2
+                && branches.Any(branch => branch?["properties"]?["args"]?["required"] is JsonArray args && args.Any(member => (string?)member == kind))
+                && branches.Any(branch => branch?["properties"]?["campaign"]?["properties"]?["external_ids"]?["required"] is JsonArray pins
+                    && pins.Any(member => (string?)member == kind));
+            if (!bound || !eitherRequired)
+            {
+                problems.Add($"{contract.Id}: its preview shows the campaign's '{kind}' pin, which is neither required with the argument the person read nor bound to it.");
+            }
+        }
+
+        return problems;
+    }
+
+    private static JsonObject Without(JsonObject schema, string member)
+    {
+        var copy = schema.DeepClone().AsObject();
+        copy.Remove(member);
+        return copy;
     }
 
     private static ApprovalSubject Rewritten(ApprovalSubject subject, Action<JsonObject> change)

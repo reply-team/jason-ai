@@ -172,9 +172,11 @@ public static class CanonicalInput
     }
 
     /// <summary>
-    /// A composed input without the pins one attempt <paramref name="learned"/>: what the same facts composed before that
-    /// attempt recorded them, since a pin is written once, by the attempt that learned it, and every pin travels in the
-    /// input under the kind it is known by.
+    /// A composed input without the pins of the kinds <paramref name="learned"/> names, for the person and for the campaign.
+    /// For the kinds the attempts a repeat is compared with recorded, it is what the same facts composed before those
+    /// attempts recorded them, since a pin is written once, by the attempt that learned it, and every pin travels in the
+    /// input under the kind it is known by; for the kinds <see cref="Added"/> finds, it is the input less the pins added
+    /// since an earlier document was composed, by whichever attempt learned them.
     /// </summary>
     public static JsonObject Without(JsonObject input, PinsLearned learned)
     {

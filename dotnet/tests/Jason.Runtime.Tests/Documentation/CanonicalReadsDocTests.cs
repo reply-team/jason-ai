@@ -310,6 +310,7 @@ public sealed partial class CanonicalReadsDocTests
 
         Assert.Contains("One difference is not such a change: a pin added where the approved subject held none", text, StringComparison.Ordinal);
         Assert.Contains("It does change what reaches the plugin", text, StringComparison.Ordinal);
+        Assert.Contains("an added pin is either not shown to them at all, or bound to a value they read", text, StringComparison.Ordinal);
         Assert.Contains("a pin that now holds another value, or is gone, parks the work again with `input_changed`", text, StringComparison.Ordinal);
         Assert.Contains("tells an exact match from a match less added pins", text, StringComparison.Ordinal);
         Assert.DoesNotContain("A pin that the item's own earlier attempt learned is such a change", text, StringComparison.Ordinal);

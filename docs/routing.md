@@ -807,7 +807,7 @@ fake-provider  contact  p_1001  -         -
   beside the pin as a **divergence**, with the attempt that returned it — the original stands, both values
   are visible, and later attempts keep receiving the value Jason recorded rather than the one it disputes.
   So a divergence changes nothing an approval covers, and a pin added where an approved subject held none does
-  not end its cover either: a pin that now holds another value, or is gone, does
+  not end its cover either; should a pin ever hold another value or be gone, it does
   ([work-execution](work-execution.md) §Approvals, what is approved is a subject).
 - The attempt **still succeeds** when a pin diverges. The plugin's answer is the plugin's; the pin is
   Jason's record. Failing the attempt would throw away work that really happened at the provider, and

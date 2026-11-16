@@ -23,6 +23,7 @@ public partial class ClaimerTests
     private const string Covering = "stand-in-provider";
 
     [Theory]
+    [InlineData("the failed attempt learned nothing")]
     [InlineData("the failed attempt pinned the person")]
     [InlineData("the failed attempt pinned the campaign")]
     [InlineData("the failed attempt pinned both")]
@@ -51,12 +52,14 @@ public partial class ClaimerTests
             learnedBy = await AnotherItemsAttemptAsync(db, item.Campaign!);
         }
 
-        if (learned.EndsWith("the person", StringComparison.Ordinal) || learned.EndsWith("both", StringComparison.Ordinal))
+        var personPinned = learned.EndsWith("the person", StringComparison.Ordinal) || learned.EndsWith("both", StringComparison.Ordinal);
+        var campaignPinned = learned.EndsWith("the campaign", StringComparison.Ordinal) || learned.EndsWith("both", StringComparison.Ordinal);
+        if (personPinned)
         {
             item.Contact!.ExternalIds.Add(LearnedPin("contact", "p-48211", learnedBy));
         }
 
-        if (learned.EndsWith("the campaign", StringComparison.Ordinal) || learned.EndsWith("both", StringComparison.Ordinal))
+        if (campaignPinned)
         {
             item.Campaign!.ExternalIds.Add(LearnedPin("campaign", "sq-1129", learnedBy));
         }
@@ -69,8 +72,8 @@ public partial class ClaimerTests
         Assert.Equal(item.PublicId, work.WorkItemPublicId);
         var input = work.Plan!.Input;
         var pins = (Person: input["contacts"]![0]!["external_ids"]!.AsObject(), Campaign: input["campaign"]!["external_ids"]!.AsObject());
-        Assert.Equal(learned.EndsWith("the campaign", StringComparison.Ordinal) ? null : "p-48211", (string?)pins.Person["contact"]);
-        Assert.Equal(learned.EndsWith("the person", StringComparison.Ordinal) ? null : "sq-1129", (string?)pins.Campaign["campaign"]);
+        Assert.Equal(personPinned ? "p-48211" : null, (string?)pins.Person["contact"]);
+        Assert.Equal(campaignPinned ? "sq-1129" : null, (string?)pins.Campaign["campaign"]);
 
         // The record: one approval, still the person's, about what they approved; the attempt names it and what it sent.
         await using var fresh = database.Open();
@@ -83,6 +86,11 @@ public partial class ClaimerTests
         Assert.Equal(work.AttemptPublicId, ran.PublicId);
         Assert.Equal(row.PublicId, ran.Provenance!.ApprovalId);
         Assert.Equal(CanonicalInput.Digest(input), ran.Provenance.InputDigest);
+
+        // Whoever audits the send tells the two matches apart from the record alone: the approved input's digest is the
+        // attempt's where it ran on an exact match, and another where it ran on a match less the pins added since.
+        var exact = !personPinned && !campaignPinned;
+        Assert.Equal(exact, CanonicalInput.Digest(row.Subject["input"]!.AsObject()) == ran.Provenance.InputDigest);
         var kinds = await fresh.Journal.AsNoTracking().Select(e => e.Kind).ToListAsync(Ct);
         Assert.DoesNotContain(JournalKinds.ApprovalSuperseded, kinds);
         Assert.Single(kinds, kind => kind == JournalKinds.ApprovalRequested);
@@ -247,9 +255,145 @@ public partial class ClaimerTests
         Assert.Equal((hearing, approved.PublicId), (reading.Hearing, reading.Approval?.PublicId));
     }
 
-    private static Harness CoverHarness() => new(
-        plugin: TestPlugins.Loaded(Covering, ["campaign.enroll"]),
-        route: new Route(Covering, null, null));
+    /// <summary>
+    /// A campaign pin added since is the identifier the arguments named, or it never reaches the gate: another item pinning
+    /// the campaign as a different provider campaign than the approved enrollment names is refused as a conflict at that
+    /// argument, before anything is asked or run, and the approval stays exactly as the person gave it.
+    /// </summary>
+    [Fact]
+    public async Task Cover_ACampaignPinAddedThatContradictsTheArgument_IsRefusedAndRunsNothingUnderTheApproval()
+    {
+        using var harness = CoverHarness();
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approved) = await ApprovedEnrolmentAsync(harness, db, personPin: null, campaignPin: null);
+        item.Campaign!.ExternalIds.Add(LearnedPin("campaign", "sq-2240", await AnotherItemsAttemptAsync(db, item.Campaign)));
+        await db.SaveChangesAsync(Ct);
+
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        await using var fresh = database.Open();
+        var refused = await fresh.Attempts.AsNoTracking().SingleAsync(a => a.WorkItemId == item.Id, Ct);
+        Assert.Equal("input_invalid", refused.Error!.Code);
+        Assert.Contains(refused.Error.Details!, detail => detail.Field == "/args/campaign/external_id" && detail.Code == "conflict");
+        Assert.NotEqual(approved.PublicId, refused.Provenance?.ApprovalId);
+        Assert.Null(refused.StartedAt);
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((approved.PublicId, approved.SubjectHash), (row.PublicId, row.SubjectHash));
+        Assert.True(JsonNode.DeepEquals(approved.Subject, row.Subject), "The approval's subject was rewritten.");
+    }
+
+    /// <summary>
+    /// Approved work let through as a block's trial, where the attempt the block refused learned the person's pin, runs as
+    /// the trial under the decision the person made.
+    /// </summary>
+    [Fact]
+    public async Task Cover_ATrialWhoseRefusedAttemptLearnedAPin_RunsUnderTheSameApproval()
+    {
+        using var harness = CoverHarness(BlockRows.Plugin);
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var (item, approved) = await ApprovedEnrolmentAsync(harness, db, personPin: null, campaignPin: null, plugin: BlockRows.Plugin);
+
+        // The first attempt ran into the account's block; the provider's answer named the person before it refused.
+        Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var refused = await db.Attempts.SingleAsync(Ct);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Processing, Noon);
+        refused.StartedAt = Noon;
+        refused.Status = AttemptStatus.Failed;
+        refused.FinishedAt = Noon;
+        refused.Error = new AttemptErrorDto("provider_blocked", "The account is restricted.", Retriable: true, Class: FailureClass.Blocked);
+        WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon);
+        item.Contact!.ExternalIds.Add(LearnedPin("contact", "p-48211", refused.PublicId, BlockRows.Plugin));
+        var block = OpenBlock(db, item.Campaign!, nextTrialAt: Noon);
+        await db.SaveChangesAsync(Ct);
+
+        var trial = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(item.PublicId, trial.WorkItemPublicId);
+        Assert.Equal("p-48211", (string?)trial.Plan!.Input["contacts"]![0]!["external_ids"]!["contact"]);
+        await using var fresh = database.Open();
+        Assert.Equal(item.Id, (await fresh.ProviderBlocks.AsNoTracking().SingleAsync(b => b.Id == block.Id, Ct)).TrialWorkItemId);
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((approved.PublicId, ApprovalStatus.Approved, approved.SubjectHash), (row.PublicId, row.Status, row.SubjectHash));
+        Assert.Equal(row.PublicId, (await fresh.Attempts.AsNoTracking().SingleAsync(a => a.Number == 2 && a.WorkItemId == item.Id, Ct)).Provenance!.ApprovalId);
+    }
+
+    /// <summary>
+    /// A message a person approved, whose person another item pinned since, goes under that approval, and the review hearing
+    /// asks the same question: the claim would run it and read no review.
+    /// </summary>
+    [Fact]
+    public async Task Cover_AMessageThePersonApproved_RunsUnderItWhenAnotherItemPinsThePerson()
+    {
+        using var harness = new Harness(plugin: TestPlugins.Loaded(Covering, ["message.send"]), route: new Route(Covering, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign("Q3 founders", now: Noon);
+        db.Campaigns.Add(campaign);
+        var contact = new Contact { PublicId = PublicId.New("cnt"), FirstName = "Ada", CreatedAt = Noon, UpdatedAt = Noon };
+        contact.Channels.Add(new ContactChannel { Channel = "email", Value = "ada@example.test", IsPrimary = true });
+        db.Contacts.Add(contact);
+        var item = WorkItemFactory.NewProviderOp(campaign, "message.send", Noon);
+        item.Contact = contact;
+        item.Context = new JsonObject
+        {
+            [WorkItemService.InputKey] = new JsonObject
+            {
+                ["channel"] = "email",
+                ["sender"] = new JsonObject { ["external_id"] = "snd-1", ["address"] = "marta@example.com" },
+                ["message"] = new JsonObject { ["format"] = "email", ["subject"] = "Hello", ["body"] = "Hello, Ada." },
+            },
+        };
+        db.WorkItems.Add(item);
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var approved = await Decide(db, ApprovalStatus.Approved);
+        contact.ExternalIds.Add(LearnedPin("contact", "p-48211", await AnotherItemsAttemptAsync(db, campaign)));
+        await db.SaveChangesAsync(Ct);
+
+        var hearing = await harness.Claimer.RunsUnderAsync(db, item, Ct);
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal((ReviewHearing.NotRead, approved.PublicId), (hearing.Hearing, hearing.Approval?.PublicId));
+        Assert.Equal("p-48211", (string?)work.Plan!.Input["contacts"]![0]!["external_ids"]!["contact"]);
+        await using var fresh = database.Open();
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((approved.PublicId, ApprovalStatus.Approved, approved.SubjectHash), (row.PublicId, row.Status, row.SubjectHash));
+        Assert.Equal(row.PublicId, (await fresh.Attempts.AsNoTracking().SingleAsync(a => a.WorkItemId == item.Id, Ct)).Provenance!.ApprovalId);
+    }
+
+    /// <summary>
+    /// A delete a person approved works by the person's pin, which it was approved with; a campaign pin another item learned
+    /// since is added, shown nowhere in what they read, and the delete runs under their decision.
+    /// </summary>
+    [Fact]
+    public async Task Cover_ADeleteThePersonApproved_RunsUnderItWhenTheCampaignIsPinnedSince()
+    {
+        using var harness = new Harness(plugin: TestPlugins.Loaded(Covering, ["contact.delete"]), route: new Route(Covering, null, null));
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var campaign = WorkItemFactory.NewCampaign(now: Noon);
+        db.Campaigns.Add(campaign);
+        var item = Deletion(db, campaign, ContactPin(Covering, "48211"));
+        await db.SaveChangesAsync(Ct);
+        Assert.Empty(await harness.Claimer.ClaimAsync(db, 4, Ct));
+        var approved = await Decide(db, ApprovalStatus.Approved);
+        campaign.ExternalIds.Add(LearnedPin("campaign", "sq-1129", await AnotherItemsAttemptAsync(db, campaign)));
+        await db.SaveChangesAsync(Ct);
+
+        var work = Assert.Single(await harness.Claimer.ClaimAsync(db, 4, Ct));
+
+        Assert.Equal(item.PublicId, work.WorkItemPublicId);
+        Assert.Equal("sq-1129", (string?)work.Plan!.Input["campaign"]!["external_ids"]!["campaign"]);
+        await using var fresh = database.Open();
+        var row = Assert.Single(await fresh.Approvals.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal((approved.PublicId, ApprovalStatus.Approved, approved.SubjectHash), (row.PublicId, row.Status, row.SubjectHash));
+    }
+
+    private static Harness CoverHarness(string plugin = Covering) => new(
+        plugin: TestPlugins.Loaded(plugin, ["campaign.enroll"]),
+        route: new Route(plugin, null, null));
 
     /// <summary>
     /// An enrollment parked and approved by a person, with the pins given held when they approved. Its arguments name the
@@ -262,7 +406,8 @@ public partial class ClaimerTests
         JasonDbContext db,
         string? personPin,
         string? campaignPin,
-        bool? named = null)
+        bool? named = null,
+        string plugin = Covering)
     {
         var campaign = WorkItemFactory.NewCampaign("Q3 founders", now: Noon);
         db.Campaigns.Add(campaign);
@@ -275,12 +420,12 @@ public partial class ClaimerTests
         db.WorkItems.Add(item);
         if (personPin is not null)
         {
-            contact.ExternalIds.Add(LearnedPin("contact", personPin, PublicId.New("att")));
+            contact.ExternalIds.Add(LearnedPin("contact", personPin, PublicId.New("att"), plugin));
         }
 
         if (campaignPin is not null)
         {
-            campaign.ExternalIds.Add(LearnedPin("campaign", campaignPin, PublicId.New("att")));
+            campaign.ExternalIds.Add(LearnedPin("campaign", campaignPin, PublicId.New("att"), plugin));
         }
 
         await db.SaveChangesAsync(Ct);
@@ -339,9 +484,9 @@ public partial class ClaimerTests
         WorkItemTransitions.Apply(item, WorkItemStatus.Created, Noon);
     }
 
-    private static ExternalId LearnedPin(string kind, string value, string attempt) => new()
+    private static ExternalId LearnedPin(string kind, string value, string attempt, string plugin = Covering) => new()
     {
-        PluginId = Covering,
+        PluginId = plugin,
         Kind = kind,
         Value = value,
         RecordedAt = Noon,

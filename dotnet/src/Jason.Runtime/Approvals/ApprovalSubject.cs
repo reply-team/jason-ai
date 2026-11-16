@@ -51,10 +51,12 @@ public sealed record ApprovalSubject(JsonObject Document, string Hash)
 
     /// <summary>
     /// This subject less every pin it carries, for the person or for the campaign, of a kind <paramref name="approved"/>
-    /// does not carry at the same place: what this subject would have been had nothing been learned since that one was
-    /// written. A pin added changes what reaches the plugin, which then addresses a record the provider already holds rather
-    /// than making one; it is not something the person read. A kind both carry stays, with its value now, so another value
-    /// or a pin gone still makes another document. This subject itself where nothing was added.
+    /// does not carry at the same place: this subject as it would be had no pin been added since that one was written, by
+    /// whichever attempt learned it; every other change since stays in it. A pin added changes what reaches the plugin,
+    /// which then addresses a record the provider already holds rather than making one; it moves nothing the person read,
+    /// since such a pin is either not shown to them or bound to an argument they read. A kind both carry stays, with its
+    /// value now, so another value or a pin gone still makes another document. This subject itself where nothing was
+    /// added.
     /// </summary>
     public ApprovalSubject Less(JsonObject? approved)
     {

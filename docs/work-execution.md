@@ -316,8 +316,13 @@ decision no longer matches, so the item is parked again with the reason `input_c
 run under a decision nobody made about it. One difference is not such a change: a pin added where the approved
 subject held none, for the person or for the campaign, whether this item's earlier attempt learned it or another
 item did. It does change what reaches the plugin — the provider addresses a record it already holds rather than
-making one — but it is nothing the person read, so the claim compares the subject composed now, less the pin kinds
-the approved subject does not hold, with the approved hash, and runs the work under the decision when they match. A
+making one — but it moves nothing the person read: an added pin is either not shown to them at all, or bound to a
+value they read. An operation that works by the person's pin alone (`preflight.provider_contact: pinned_only`) is
+refused before anybody is asked while that pin is missing, so it is approved with the pin, which is then held and never
+added; and an operation whose preview shows the campaign's pin takes either that pin or an argument naming the
+campaign, so a pin added since is the identifier the argument named, since a pin that contradicts an argument is
+refused before the gate. So the claim compares the subject composed now, less the pin kinds the approved
+subject does not hold, with the approved hash, and runs the work under the decision when they match. A
 kind the approved subject holds is held to its value: a pin that now holds another value, or is gone, parks the work
 again with `input_changed`, and so does every other difference, a pin added beside it or not — an argument, a field
 of the person, the address, the campaign's name, the plugin, the account. A divergence changes nothing composed,
