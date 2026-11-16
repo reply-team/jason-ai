@@ -6,6 +6,10 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
+import { cardReads, lastReadingCard } from './card-frame';
+import { needsCard } from './card-needs';
+import { peopleCard } from './card-people';
+import { statusCard } from './card-status';
 import {
     cardLayout,
     openChoice,
@@ -706,7 +710,13 @@ function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHo
  * not read, said once to the desktop's log; nothing for a block still being written. The kinds this release does not
  * draw yet say so in a line.
  */
-function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHost | null): Html | null {
+function cardView(
+    chat: Chat,
+    index: number,
+    placed: PlacedCard,
+    host: DesktopHost | null,
+    last: number | null,
+): Html | null {
     const entry = chat.entries[index]!;
     const reading = readCard(placed, {
         place: placeOf(chat),
@@ -725,9 +735,19 @@ function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHo
                 <div class="ask-w">This chat shows only its own agent.</div>
             </div>`;
         case 'card':
-            return reading.card.kind === 'choice'
-                ? choiceView(chat, index, reading.card, host)
-                : noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+            // A data card reads when it is the conversation's last card that reads (`last`), else stands as a stub.
+            switch (reading.card.kind) {
+                case 'choice':
+                    return choiceView(chat, index, reading.card, host);
+                case 'people_list':
+                    return peopleCard(chat, index, reading.card, last);
+                case 'agent_status':
+                    return statusCard(chat, index, reading.card, last);
+                case 'needs':
+                    return needsCard(chat, index, reading.card, last);
+                default:
+                    return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+            }
     }
 }
 
@@ -798,6 +818,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     // The cards the AI asked for: each text's words without its card blocks, and each turn's last block, by the index of
     // the text entry that held it.
     const layout = cardLayout(chat.entries);
+    const lastReads = lastReadingCard(chat, layout.cards);
     const indexOf = new Map<object, number>(chat.entries.map((entry, index) => [entry, index]));
     // The speaker is named over the agent's first words of each turn: after the person's message, or at the start. A
     // card has no speaker's label over it: a turn's words after one are named instead.
@@ -830,7 +851,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 if (entry.plan === true && !chat.main) return planCard(chat, entry, host, cut?.trim() ?? entry.text);
                 const words = cut ?? entry.text;
                 const placed = layout.cards.get(index);
-                const card = placed === undefined ? null : cardView(chat, index, placed, host);
+                const card = placed === undefined ? null : cardView(chat, index, placed, host, lastReads);
                 if (cut !== undefined && words.trim() === '') return card;
                 const who = named ? null : html`<div class="who">Jason</div>`;
                 named = true;
@@ -902,6 +923,7 @@ function threadOf(chatId: string) {
         now: number;
         card: string;
         asked: unknown;
+        read: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -918,6 +940,8 @@ function threadOf(chatId: string) {
         // A choice the AI asked is live by the person's acts on the agent as read. A message waits only while a turn
         // runs, after the person's message, which has locked every choice already.
         const asked = acts.value[chatId];
+        // A data card draws what it read, once its read is answered.
+        const read = cardReads.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
@@ -927,10 +951,11 @@ function threadOf(chatId: string) {
             last.chat.running === chat.running &&
             last.card === card &&
             last.asked === asked &&
+            last.read === read &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, asked, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, card, asked, read, view: threadView(chat, host) };
         return last!.view;
     });
 }
