@@ -411,9 +411,9 @@ public class CardExchangesTests
     }
 
     /// <summary>
-    /// A list a person gave in the chat, added to an agent as the card sends it: each row a payload matched by its email
+    /// A list a person gave in the chat, added to a campaign as the card sends it: each row matched by its email
     /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
-    /// out of the agent, an address that is no address, a row with no address, and a person whose record is archived; then
+    /// out of the campaign, an address that is no address, a row with no address, and a person whose record is archived; then
     /// the same request again.
     /// </summary>
     [Fact]
@@ -426,6 +426,7 @@ public class CardExchangesTests
         await api.PostOkAsync<RemoveContactsResult>(Operations.CampaignRemoveContacts, new { campaign_id = scene.Campaign, contact_ids = new[] { removed }, reason = "Not a fit.", actor = Ada }, Ct);
         var archived = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Rafa", last_name = "Costa", channels = new[] { new { channel = "email", value = "rafa@example.test", primary = true } }, actor = Ada }, Ct);
         await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = archived.Id, actor = Ada }, Ct);
+        var heldBefore = await HeldRecordAsync(api, held.Id);
 
         // An empty cell is left out, as the card leaves it out.
         static object Row(string first, string last, string? email) => email is null
@@ -438,7 +439,7 @@ public class CardExchangesTests
             contacts = new[]
             {
                 Row("Alma", "Novak", "alma@example.test"),
-                Row("Ines", "Duarte", "ines@example.test"),
+                Row("Ines", "Duarte-Lopes", "ines@example.test"),
                 Row("Alma", "Novak", "alma@example.test"),
                 Row("Omar", "Reyes", "omar@example.test"),
                 Row("Bruno", "Silva", "bruno-at-example"),
@@ -460,11 +461,27 @@ public class CardExchangesTests
         Assert.Equal(MembershipState.Excluded, first.Items[3].State);
         Assert.NotEqual(archived.Id, first.Items[6].ContactId);
         Assert.True(first.Items[6].ContactCreated, "an archived person is made again, not matched");
+        Assert.NotNull((await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = archived.Id }, Ct)).ArchivedAt);
+        Assert.Equal(heldBefore, await HeldRecordAsync(api, held.Id));
 
         var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list-again", request, Ct);
         Assert.Equal(
             [AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.AlreadyMember],
             again.Items.Select(i => i.Status));
+        Assert.Equal(first.Items.Select(i => i.ContactId), again.Items.Select(i => i.ContactId));
+        Assert.Equal(
+            [MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Excluded, null, null, MembershipState.Enrolled],
+            again.Items.Select(i => i.State));
+        Assert.All(again.Items, i => Assert.False(i.ContactCreated));
+    }
+
+    /// <summary>A person's own record, without the campaigns and activity that adding them to one is meant to change.</summary>
+    private static async Task<string> HeldRecordAsync(RuntimeApiFixture api, string id)
+    {
+        var record = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = id }, Ct)))!.AsObject();
+        record.Remove("Campaigns");
+        record.Remove("LastActivity");
+        return record.ToJsonString();
     }
 
     /// <summary>A campaign no route sends for: what the plan says of it, and the refusal the sender line meets.</summary>
