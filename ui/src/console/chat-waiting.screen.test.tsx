@@ -870,6 +870,229 @@ describe('what waits in an agent’s chat', () => {
     });
 });
 
+describe('a card’s acts, held from a press until the lists read after it have answered', () => {
+    /** Spring with two first messages, each read whole: the first is approved, and the second is left waiting. */
+    function two(journal: StubStream = stubStream(), fake: FakeApi = new FakeApi()) {
+        springApprovals = 'approval.list/needs-two';
+        elsewhere = 'nothing';
+        if (!fake.offers('approval.approve'))
+            fake.answer('approval.approve', 'approval.approve/needs-two-first-approved');
+        const rendered = renderConsole(fake, journal);
+        rendered.fake
+            .answer('approval.get', 'approval.get/needs-two-first', 'approval.get/needs-two-second')
+            .answer('workitem.get', 'workitem.get/needs-two-first-parked');
+        return rendered;
+    }
+    const button = (pane: HTMLElement, id: string, name: string) =>
+        within(card(pane, id)!).getByRole('button', { name });
+    const usable = (pane: HTMLElement, id: string, name: string) => !button(pane, id, name).hasAttribute('disabled');
+    /** Lets every answer the fake gave be taken in. */
+    const settle = () => flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    /** Holds the chat's next read of its campaign's approvals, and only that one, until released. */
+    function holdNextList(fake: FakeApi): () => void {
+        let seen = 0;
+        return fake.hold('approval.list', (body) => 'campaign_id' in body && ++seen === 1);
+    }
+    async function bothDrawn(pane: HTMLElement): Promise<void> {
+        await drawn(pane, 'apr_1');
+        await drawn(pane, 'apr_2');
+    }
+
+    it('takes the second click of a double click on Approve as no press: one approval, never the next card’s', async () => {
+        const { fake } = two();
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        await drawn(pane, 'apr_2');
+        // The second click of the double click arrives once the first act has settled, on the card that moved up.
+        fireEvent.click(button(pane, 'apr_2', 'Approve'), { detail: 2 });
+        await settle();
+        expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
+    });
+
+    it('holds the next card’s Approve, Edit and Reject, and a question’s options, from the approval’s answer until the lists’ answer', async () => {
+        const { fake } = two();
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        await waitFor(() => button(pane, 'dec_1', 'Pause until the news'));
+        springApprovals = 'approval.list/needs-two-after';
+        const release = holdNextList(fake);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+        await settle();
+        expect(card(pane, 'apr_1')).not.toBeNull();
+        for (const name of ['Approve', 'Edit', 'Reject']) expect(usable(pane, 'apr_2', name)).toBe(false);
+        expect(usable(pane, 'dec_1', 'Pause until the news')).toBe(false);
+        await flush(async () => release());
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        await drawn(pane, 'apr_2');
+        expect(usable(pane, 'dec_1', 'Pause until the news')).toBe(true);
+        expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
+    });
+
+    it('holds a question’s options and Answer, and the approvals’ acts, from an answer until the lists’ answer', async () => {
+        const { fake } = two();
+        fake.answerAnyRequest('decision.answer', 'decision.answer/answered');
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        await waitFor(() => button(pane, 'dec_1', 'Pause until the news'));
+        let seen = 0;
+        const release = fake.hold('decision.list', (body) => 'campaign_id' in body && ++seen === 1);
+        fireEvent.click(button(pane, 'dec_1', 'Pause until the news'), { detail: 1 });
+        await waitFor(() => expect(sent(fake, 'decision.answer')).toHaveLength(1));
+        await settle();
+        expect(usable(pane, 'dec_1', 'Keep going')).toBe(false);
+        fireEvent.change(within(card(pane, 'dec_2')!).getByRole('textbox', { name: 'Your answer' }), {
+            target: { value: 'Only to Pia' },
+        });
+        expect(usable(pane, 'dec_2', 'Answer')).toBe(false);
+        expect(usable(pane, 'apr_1', 'Approve')).toBe(false);
+        await flush(async () => release());
+        await waitFor(() => expect(usable(pane, 'dec_2', 'Answer')).toBe(true));
+        await drawn(pane, 'apr_1');
+        expect(sent(fake, 'decision.answer')).toHaveLength(1);
+    });
+
+    it('lets the acts go after an act the runtime refused', async () => {
+        const { fake } = two(
+            stubStream(),
+            new FakeApi().answer('approval.approve', 'approval.approve/already-decided'),
+        );
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => within(waiting(pane)).getByRole('alert'));
+        await drawn(pane, 'apr_1');
+        await drawn(pane, 'apr_2');
+        expect(sent(fake, 'approval.approve')).toHaveLength(1);
+    });
+
+    it('lets the acts go after the lists read after an act failed, and keeps the lists it had', async () => {
+        const { fake } = two();
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        fake.unreachable('approval.list', (body) => 'campaign_id' in body);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(words(within(waiting(pane)).getByRole('alert'))).toContain('Failed to fetch'));
+        await drawn(pane, 'apr_2');
+        expect(card(pane, 'apr_1')).not.toBeNull();
+    });
+
+    it('holds the acts through a reload the journal starts during the act’s own read, and never brings the approved card back', async () => {
+        const journal = stubStream();
+        const { fake } = two(journal);
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        const release = holdNextList(fake);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+        const lists = sent(fake, 'approval.list').length;
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_401', kind: 'approval_decided' }));
+        });
+        // The journal's reload answers first and draws the lists without the approved card; the act's own read still waits.
+        await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(lists), { timeout: 3000 });
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        await settle();
+        expect(usable(pane, 'apr_2', 'Approve')).toBe(false);
+        springApprovals = 'approval.list/needs-two';
+        await flush(async () => release());
+        await drawn(pane, 'apr_2');
+        expect(card(pane, 'apr_1')).toBeNull();
+    });
+
+    it('lets the acts go when the newest read of the lists fails during an act, and keeps the lists it had', async () => {
+        const journal = stubStream();
+        const { fake } = two(journal);
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        let seen = 0;
+        fake.unreachable('approval.list', (body) => 'campaign_id' in body && ++seen >= 2);
+        const release = fake.hold('approval.list', (body) => 'campaign_id' in body && seen === 1);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_402', kind: 'approval_decided' }));
+        });
+        await waitFor(() => expect(seen).toBeGreaterThanOrEqual(2), { timeout: 3000 });
+        await settle();
+        expect(usable(pane, 'apr_2', 'Approve')).toBe(false);
+        await flush(async () => release());
+        await drawn(pane, 'apr_2');
+        expect(card(pane, 'apr_1')).not.toBeNull();
+    });
+
+    it('lets the acts go once the newest of two reloads during one act has answered', async () => {
+        const journal = stubStream();
+        const { fake } = two(journal);
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        const release = holdNextList(fake);
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 1 });
+        await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+        const lists = sent(fake, 'approval.list').length;
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_403', kind: 'approval_decided' }));
+        });
+        await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(lists), { timeout: 3000 });
+        const again = sent(fake, 'approval.list').length;
+        flush(() => journal.send(journalLine({ id: 'jrn_404', kind: 'approval_decided' })));
+        await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(again), { timeout: 3000 });
+        await settle();
+        expect(usable(pane, 'apr_2', 'Approve')).toBe(false);
+        await flush(async () => release());
+        await drawn(pane, 'apr_2');
+        expect(card(pane, 'apr_1')).toBeNull();
+    });
+
+    it('takes a lone click with a detail above one as no press on every act of a card', async () => {
+        const { fake } = two();
+        fake.answerAnyRequest('decision.answer', 'decision.answer/answered');
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        await waitFor(() => button(pane, 'dec_1', 'Pause until the news'));
+        fireEvent.click(button(pane, 'apr_1', 'Approve'), { detail: 2 });
+        fireEvent.click(button(pane, 'apr_2', 'Reject'), { detail: 1 });
+        const asking = within(card(pane, 'apr_2')!).getByRole('alertdialog');
+        fireEvent.click(within(asking).getByRole('button', { name: 'Reject' }), { detail: 2 });
+        fireEvent.click(button(pane, 'dec_1', 'Pause until the news'), { detail: 3 });
+        fireEvent.change(within(card(pane, 'dec_2')!).getByRole('textbox', { name: 'Your answer' }), {
+            target: { value: 'Only to Pia' },
+        });
+        fireEvent.click(button(pane, 'dec_2', 'Answer'), { detail: 2 });
+        fireEvent.click(button(pane, 'apr_1', 'Edit'), { detail: 1 });
+        fireEvent.change(await waitFor(() => within(card(pane, 'apr_1')!).getByRole('textbox', { name: 'Body' })), {
+            target: { value: 'Hi Ines, shall we talk next week?' },
+        });
+        fireEvent.click(button(pane, 'apr_1', 'Save'), { detail: 2 });
+        await settle();
+        for (const operation of ['approval.approve', 'approval.reject', 'decision.answer', 'workitem.update'])
+            expect(sent(fake, operation)).toEqual([]);
+    });
+
+    it('approves once when Approve is pressed twice from the keyboard', async () => {
+        const { fake } = two();
+        const pane = await openChat('Spring');
+        await bothDrawn(pane);
+        springApprovals = 'approval.list/needs-two-after';
+        const approve = button(pane, 'apr_1', 'Approve');
+        fireEvent.click(approve, { detail: 0 });
+        fireEvent.click(approve, { detail: 0 });
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        await drawn(pane, 'apr_2');
+        expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
+    });
+});
+
 describe('the sheet of the chat and its cards', () => {
     // Read from the file: the test run hands a stylesheet import back empty. The run starts in ui/.
     const sheet = readFileSync('src/console/chat-cards.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');

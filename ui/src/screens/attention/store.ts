@@ -8,6 +8,12 @@ import { pendingMark } from '../../shell/attention-mark';
 export type Kind = 'approvals' | 'questions';
 
 /**
+ * A click that is the second or later of a double click: an act takes the first alone, so the second never lands on
+ * whatever moved under the pointer once the first was taken. A press from the keyboard has no count and is a press.
+ */
+export const repeated = (event: Event): boolean => event instanceof MouseEvent && event.detail > 1;
+
+/**
  * What each list is asked for under the filter: nothing (pending), or everything that no longer needs a person, several
  * statuses at once: decided by one, or ended without one (superseded by a changed input, cancelled with its work item).
  * A holder of one campaign's asks for that campaign's pending ones, as the campaign's own page does.
@@ -47,6 +53,22 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
     const loaded = signal(false);
     /** True while a refresh the person asked for is under way: long enough to be seen, even when the answer is instant. */
     const refreshing = signal(false);
+    /**
+     * How many of the person's acts are under way, from the press until the lists read after it have answered: a view
+     * that draws its acts disabled meanwhile never lets a second click land on the item that takes the decided one's
+     * place. Every act of this holder counts itself; a view holds its own work around an act with `hold`.
+     */
+    const acting = signal(0);
+
+    /** Counts the work as one act of the person's until it ends, however it ends. */
+    async function hold<T>(work: () => Promise<T>): Promise<T> {
+        acting.value += 1;
+        try {
+            return await work();
+        } finally {
+            acting.value = Math.max(0, acting.value - 1);
+        }
+    }
 
     function fail(error: unknown): void {
         if (error instanceof Unpaired) {
@@ -187,25 +209,30 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         }
     }
 
-    /** The call, then a reload either way, then the failure if there was one: a refusal must outlive the reload. */
-    async function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
-        busy.value = true;
-        failure.value = null;
-        failureCode.value = null;
-        let problem: unknown = null;
-        try {
-            await call();
-        } catch (error) {
-            problem = error;
-        } finally {
-            busy.value = false;
-        }
-        await load(api, shownDecided);
-        if (problem !== null) {
-            fail(problem);
-            return false;
-        }
-        return true;
+    /**
+     * The call, then a reload either way, then the failure if there was one: a refusal must outlive the reload. The act
+     * counts in `acting` until the reload, and any newer one it waits for, has answered.
+     */
+    function act(api: Api, call: () => Promise<unknown>): Promise<boolean> {
+        return hold(async () => {
+            busy.value = true;
+            failure.value = null;
+            failureCode.value = null;
+            let problem: unknown = null;
+            try {
+                await call();
+            } catch (error) {
+                problem = error;
+            } finally {
+                busy.value = false;
+            }
+            await load(api, shownDecided);
+            if (problem !== null) {
+                fail(problem);
+                return false;
+            }
+            return true;
+        });
     }
 
     function approve(api: Api, id: string): Promise<boolean> {
@@ -246,6 +273,8 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         busy,
         loaded,
         refreshing,
+        acting,
+        hold,
         load,
         more,
         open,
