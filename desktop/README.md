@@ -556,8 +556,9 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live switch stand left of
   them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left of the buttons and as
   high as they are, placed by the same variables, so a page that marks no drag region still moves the window; a double
-  click on a drag region maximizes it, as the system does for a title bar. The menu bar stays hidden, as it was: the
-  tray carries its acts and its keys work without it. Linux keeps the native frame, and none of this is added there.
+  click on a drag region maximizes it, as the system does for a title bar: a drag region answers the system's hit test
+  as the caption, the buttons as minimize, maximize and close. The menu bar stays hidden, as it was, and the tray
+  carries its acts. Linux keeps the native frame, and none of this is added there.
 - In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
   and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an

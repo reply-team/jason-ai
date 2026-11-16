@@ -133,7 +133,7 @@ its settings and the starting page and the window's background before the page l
 window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
-On Windows the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's acts.
+On Windows the window shows no menu bar, and the tray's menu carries the Jason menu's acts.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through

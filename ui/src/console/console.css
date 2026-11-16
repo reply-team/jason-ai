@@ -1637,12 +1637,21 @@ body,
     align-items: center;
     gap: 10px;
 }
+/* In a narrow strip the sentence gives way, cut short with the whole of it on hover, so the buttons after it keep their
+   place: the slot and the control may shrink, the split button may not. */
+.jc-console .open-in {
+    min-width: 0;
+}
 .jc-console .open-in-problem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--red);
     font-size: 13px;
 }
 .jc-console .open-in-split {
     display: flex;
+    flex: none;
 }
 /* Open in: a split button in the strip's quiet look, the segments' track with its parts plain until pointed at. */
 .jc-console .open-in-split {
@@ -1798,7 +1807,8 @@ body,
 }
 .jc-console .mode-open-in {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
     align-items: center;
     margin-right: 4px;
 }

@@ -8,6 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { styleOf } from '../test/stylesheet';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -276,6 +277,27 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(alert.textContent).toBe('Jason’s folder is not there yet; it is made with the first agent.');
         expect((mainPart() as HTMLButtonElement).disabled).toBe(true);
         expect((arrow() as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('lets its sentence give way in a narrow strip, cut short with the whole of it on hover, its buttons whole', async () => {
+        const desktop = chatDesktop();
+        const sentence = 'Jason’s folder is not there yet; it is made with the first agent.';
+        desktop.refuse.set('openIn.targets', sentence);
+        await renderConsole(kept, desktop);
+        const alert = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.open-in-problem');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(alert.title).toBe(sentence);
+        expect(styleOf(alert)).toMatchObject({ 'min-width': '0', overflow: 'hidden', 'text-overflow': 'ellipsis' });
+        // The slot and the control shrink before anything after them is pushed out of the strip; the buttons do not.
+        expect(styleOf(document.querySelector('.jc-console .mode-open-in')!)).toMatchObject({
+            flex: '0 1 auto',
+            'min-width': '0',
+        });
+        expect(styleOf(document.querySelector('.jc-console .open-in')!)['min-width']).toBe('0');
+        expect(styleOf(split())['flex']).toBe('none');
     });
 
     it('reads the places again when the arrow is opened, and recovers after a refusal', async () => {

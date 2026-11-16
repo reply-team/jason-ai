@@ -275,7 +275,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     return (
         <div className="open-in" ref={root}>
             {problem !== null && (
-                <span className="open-in-problem" role="alert">
+                <span className="open-in-problem" role="alert" title={problem}>
                     {problem}
                 </span>
             )}
