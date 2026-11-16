@@ -4,15 +4,18 @@
 <meta charset="utf-8">
 <title>Jason</title>
 <!--
-The band above the demo page on macOS: the Demo window's own contents, 26 pixels high over the window's whole width,
-where the traffic lights stand once the title bar is hidden (src/demo-page.ts, demoLayout and demoMacFrame). It is the
-sidebar's colour over the page's 284-pixel sidebar and the strip's colour beyond, holds no script and nothing to click,
-and all of it is the window's drag region, so the window moves whatever else is drawn.
+The band above the demo page on macOS, where the traffic lights stand once the title bar is hidden: the Demo window's own
+contents, seen in the window's top 26 pixels over its whole width, above the page's view and our switch's, which start
+below it (src/demo-page.ts, demoLayout). It is the sidebar's colour over the page's 284-pixel sidebar and the strip's
+colour beyond, and holds no script and nothing to click. The document itself fills the whole window, under the two
+views, and Electron asks the window's own contents first whether a point is in a drag region, whichever view is drawn
+there. So the body alone drags, exactly as high as the band (demoGeometry.macBand), and the document as a whole carries
+no drag region: one would take every click meant for the page and the switch.
 -->
 <style>
 :root { color-scheme: light; }
-html { margin: 0; height: 100%; overflow: hidden; -webkit-app-region: drag; background: linear-gradient(to right, #f3f5f9 0 284px, #fff4d6 284px); }
-body { margin: 0; height: 100%; -webkit-app-region: drag; }
+html { margin: 0; height: 100%; overflow: hidden; background: linear-gradient(to right, #f3f5f9 0 284px, #fff4d6 284px); }
+body { margin: 0; height: 26px; -webkit-app-region: drag; }
 </style>
 </head>
 <body></body>
