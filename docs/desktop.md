@@ -541,8 +541,10 @@ a card that does not hold what its kind needs is drawn as one line saying so, an
 - **Agent**: how one agent is doing, its counts now and over the last thirty days.
 - **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
 - **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
-- **AI**: only leads to Connect, where the AI hosts and the model keys are, with **Open Connect**.
-- **Reply**: only leads to the Accounts page, where Reply's sign-in and its accounts are, with **Open Accounts**.
+- **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
+  Connect**.
+- **Reply**, the card that opens Accounts: it only leads to the Accounts page, where Reply's sign-in and its accounts
+  are, with **Open Accounts**.
 - **Jason's proposal**: a plan the agent proposes, with what is on record under it.
 - **Your list**: a list of people you gave the chat, in an agent's own chat only (below).
 
