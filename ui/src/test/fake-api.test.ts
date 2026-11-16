@@ -34,3 +34,51 @@ describe('the fake answers a request only with the recording made for it', () =>
         ]);
     });
 });
+
+describe('a fallback answers only what nothing else the test said answers', () => {
+    const contactRead = () => ({ ...fixtures['contact.list/by-campaign'].request });
+
+    it('leaves a read it names nothing for unanswered, and an operation it does not name too', async () => {
+        const fake = new FakeApi().otherwise('contact.list', () => undefined);
+
+        await expect(fake.call('contact.list', { order: 'activity', limit: 7 })).rejects.toThrow(/nothing recorded/);
+        await expect(fake.call('contact.get', { contact_id: 'ct_1' })).rejects.toThrow(/nothing recorded/);
+        expect(fake.unanswered.map((each) => each.operation)).toEqual(['contact.list', 'contact.get']);
+    });
+
+    it('never takes a queued case: each stays for the call it was recorded for', async () => {
+        const fake = new FakeApi()
+            .answer('contact.list', 'contact.list/by-activity', 'contact.list/by-campaign')
+            .otherwise('contact.list', () => 'contact.list/by-activity');
+
+        // A request no queued case fits is the fallback's; the queue is left as it was.
+        await fake.call('contact.list', { order: 'activity', limit: 7 });
+        expect(await fake.call('contact.list', contactRead())).toEqual(fixtures['contact.list/by-campaign'].response);
+        expect(await fake.call('contact.list', contactRead())).toEqual(fixtures['contact.list/by-campaign'].response);
+        expect(fake.unanswered).toEqual([]);
+    });
+
+    it('gives way to a queued case that fits, a recording for every request, a hold and an unreachable runtime', async () => {
+        const fake = new FakeApi()
+            .answer('contact.list', 'contact.list/by-campaign')
+            .otherwise('contact.list', () => 'contact.list/by-activity');
+        expect(await fake.call('contact.list', contactRead())).toEqual(fixtures['contact.list/by-campaign'].response);
+
+        fake.answerAnyRequest('contact.list', 'contact.list/by-campaign');
+        expect(await fake.call('contact.list', { order: 'activity', limit: 7 })).toEqual(
+            fixtures['contact.list/by-campaign'].response,
+        );
+
+        const release = fake.hold('contact.list');
+        let answered = false;
+        const held = fake.call('contact.list', contactRead()).then(() => (answered = true));
+        await Promise.resolve();
+        expect(answered).toBe(false);
+        release();
+        await held;
+
+        const back = fake.unreachable('contact.list');
+        await expect(fake.call('contact.list', contactRead())).rejects.toThrow('Failed to fetch');
+        back();
+    });
+});
