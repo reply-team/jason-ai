@@ -82,11 +82,20 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         return { items, next_cursor: cursor };
     }
 
-    /** Which load is the latest: an earlier one that answers after it is dropped, so the lists never go back in time. */
+    /**
+     * Which load is the latest, and its promise: an earlier one that answers after it is dropped, so the lists never go
+     * back in time, and it resolves only once the latest has, so whoever waits on any load waits for the newest lists.
+     */
     let generation = 0;
+    let latest: Promise<void> = Promise.resolve();
 
-    async function load(api: Api, decided: boolean): Promise<void> {
+    function load(api: Api, decided: boolean): Promise<void> {
         const mine = ++generation;
+        latest = read(api, decided, mine);
+        return latest;
+    }
+
+    async function read(api: Api, decided: boolean, mine: number): Promise<void> {
         shownDecided = decided;
         failure.value = null;
         failureCode.value = null;
@@ -95,7 +104,7 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
                 readList<ApprovalSummary>(api, 'approvals', decided, 'approval.list'),
                 readList<DecisionSummary>(api, 'questions', decided, 'decision.list'),
             ]);
-            if (mine !== generation) return;
+            if (mine !== generation) return await latest;
             approvals.value = a.items;
             approvalsCursor.value = a.next_cursor;
             questions.value = q.items;
@@ -103,7 +112,8 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
             if (!decided && campaignId === undefined) pendingMark.value = a.items.length + q.items.length > 0;
             loaded.value = true;
         } catch (error) {
-            if (mine === generation) fail(error);
+            if (mine !== generation) return await latest;
+            fail(error);
         }
     }
 

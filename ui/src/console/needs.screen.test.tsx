@@ -656,6 +656,39 @@ describe('Needs you', () => {
             expect(chips()[0]).toBe('All 1');
         });
 
+        it('holds the pane, and says nothing of an item leaving, when a reload starts during the act’s own read and answers after it', async () => {
+            const fake = two();
+            await renderConsole(fake);
+            await ready();
+            await settle();
+            // The act's own read of the lists waits on its approvals; the reload started meanwhile waits on its questions.
+            let approvalReads = 0;
+            let questionReads = 0;
+            const actsRead = fake.hold('approval.list', () => ++approvalReads === 1);
+            const reloadsRead = fake.hold('decision.list', () => ++questionReads === 2);
+            fireEvent.click(approveIn());
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(1));
+            const reloading = reload();
+            await waitFor(() => expect(sent(fake, 'decision.list').length).toBeGreaterThan(2));
+
+            // The act's read answers first and is not the newest: the pane stays held on the item until the newest answers.
+            await flush(async () => actsRead());
+            await settle();
+            expect(pane().dataset['id']).toBe('apr_1');
+            expect(approveIn().hasAttribute('disabled')).toBe(true);
+            expect(needs().querySelector('.needs-left')).toBeNull();
+
+            await flush(async () => {
+                reloadsRead();
+                await reloading;
+            });
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            await settle();
+            expect(needs().querySelector('.needs-left')).toBeNull();
+            expect(sent(fake, 'approval.approve')).toHaveLength(1);
+        });
+
         it('says nothing of an item leaving when a link opened one on a page not read yet', async () => {
             const journal = stubStream();
             const fake = paged();
