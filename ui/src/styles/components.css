@@ -165,6 +165,7 @@
 .mark.off  { background: var(--inactive-bg); color: var(--inactive); }
 .mark.ask  { background: var(--warning-bg); color: var(--warning); }
 .mark.reply { background: var(--accent-bg); color: var(--accent-text); font-size: 11px; }
+.mark.sent  { background: var(--inactive-bg); color: var(--inactive); font-size: 11px; }
 
 /* The now line: the one bold element in the product */
 .now {

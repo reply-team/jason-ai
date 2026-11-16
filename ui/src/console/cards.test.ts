@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
     blockLimit,
+    cardKinds,
     cardLayout,
     controlWords,
     depthOf,
@@ -372,10 +373,15 @@ describe('what a block reads as', () => {
         ['a campaign id not of the desktop’s shape', { kind: 'needs', campaign: 'cmp_1;drop' }],
         ['a campaign id that is no string', { kind: 'needs', campaign: 1 }],
         ['an accounts card with a member', { kind: 'accounts', campaign: 'cmp_1' }],
+        ['the card that opens Connect with a member', { kind: 'ai_setup', host: 'claude_code' }],
+        ['the card that opens Accounts with a member', { kind: 'reply_setup', key: 'x' }],
+        ['the card that opens Accounts naming a campaign', { kind: 'reply_setup', campaign: 'cmp_1' }],
     ])('says schema for %s', (_, value) => expect(failure(object(value))).toMatch(/ schema$/));
 
     it('refuses __proto__, which JSON.parse makes an own key', () => {
         expect(failure(read('{"kind":"accounts","__proto__":{"x":1}}'))).toBe(schema('accounts'));
+        expect(failure(read('{"kind":"ai_setup","__proto__":{"x":1}}'))).toBe(schema('ai_setup'));
+        expect(failure(read('{"kind":"reply_setup","__proto__":{"x":1}}'))).toBe(schema('reply_setup'));
         expect(
             failure(read(`{"kind":"choice","question":"q","options":[{"label":"a","__proto__":{}},{"label":"b"}]}`)),
         ).toBe(schema('choice'));
@@ -409,6 +415,12 @@ describe('what a block reads as', () => {
         expect(failure(object({ kind: 'people_list', campaign: 'cmp_2', standing: 'interested' }, setup))).toBe(
             schema('people_list'),
         );
+    });
+
+    it('reads the two cards that only lead to a place, of their kind alone, wherever a card may stand', () => {
+        for (const kind of ['ai_setup', 'reply_setup'])
+            for (const where of [setup, agent, feed])
+                expect(object({ kind }, where)).toEqual({ state: 'card', card: { kind } });
     });
 
     it('draws the frame that says so for another campaign’s id in an agent’s chat, which is no schema failure', () => {
@@ -566,6 +578,8 @@ describe('a choice’s members', () => {
             ...buttonWords(source('card-status.ts')),
             ...buttonWords(source('card-people.ts')),
             ...buttonWords(source('card-needs.ts')),
+            ...buttonWords(source('card-accounts.ts')),
+            ...buttonWords(source('card-places.ts')),
             ...modeNames(source('chat-model.ts')),
             ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
             // The chips' words, drawn from the tables of chips.ts.
@@ -736,7 +750,7 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('teaches only the kinds this window draws, a choice, four cards of data and a plan, and each example reads as one', () => {
+    it('teaches only the kinds this window draws, a choice, four cards of data, two that lead to a place and a plan, and each example reads as one', () => {
         const shown = examples(instructions);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
             'choice',
@@ -744,8 +758,27 @@ describe('the chat’s instructions', () => {
             'agent_status',
             'needs',
             'accounts',
+            'ai_setup',
+            'reply_setup',
             'plan',
         ]);
+        expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([...cardKinds]);
         for (const example of shown) expect(read(example).state, example).toBe('card');
+    });
+
+    it('tells the AI never to ask in the chat for a key, a password or a sign-in', () => {
+        const rule = instructions.split('\n').find((line) => line.startsWith('15. ')) ?? '';
+        expect(rule).toContain('never ask in this chat for a key, a password or a sign-in');
+        expect(rule).toContain(
+            'If the person pastes a key or a password into the chat, do not use it and do not repeat it',
+        );
+    });
+});
+
+describe('the desktop’s log of a card not drawn', () => {
+    it('takes every kind this window draws, and unknown, and no other', () => {
+        const chat = readFileSync(join(import.meta.dirname, '..', '..', '..', 'desktop', 'src', 'chat.ts'), 'utf8');
+        const listed = /export const refusedCardKinds[^=]*= new Set\(\[([^\]]*)\]\)/.exec(chat)?.[1] ?? '';
+        expect(Array.from(listed.matchAll(/'([^']*)'/g), (match) => match[1])).toEqual([...cardKinds, 'unknown']);
     });
 });

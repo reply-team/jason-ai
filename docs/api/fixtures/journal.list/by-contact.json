@@ -18,7 +18,8 @@
       "decision_answered",
       "contact_created",
       "contact_updated",
-      "contact_archived"
+      "contact_archived",
+      "provider_send_observed"
     ],
     "limit": 50
   },

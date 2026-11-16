@@ -85,6 +85,7 @@ internal static class Workspace
                 return await AnswerAsync(ListEvents(root, request));
 
             case "campaign enroll":
+                await HoldingAsync(root, request);
                 return await EffectAsync(root, request, Refusing(root, request) ?? Enroll(root, request));
 
             default:
@@ -344,6 +345,32 @@ internal static class Workspace
 
         await Console.Error.WriteLineAsync("fake-cli: the effect was written and the answer was lost");
         return LostAnswer;
+    }
+
+    /// <summary>
+    /// A call a test holds open, once per key: the account says it has the call by a file named <c>held-</c> and the key,
+    /// and does nothing until the test writes one named <c>release-</c> and the key, so what the runtime does while a call
+    /// is still out is read at a moment the test chose rather than raced. A minute without a release lets the call on.
+    /// </summary>
+    private static async Task HoldingAsync(string root, JsonObject request)
+    {
+        var key = Text(request, "key");
+        var instructions = ReadObject(root, InstructionsFile);
+        if (instructions["hold_once"] is not JsonObject instruction
+            || !string.Equals(Text(instruction, "key"), key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        instructions.Remove("hold_once");
+        Write(root, InstructionsFile, instructions);
+        await File.WriteAllTextAsync(Path.Combine(root, "held-" + key), string.Empty);
+        var release = Path.Combine(root, "release-" + key);
+        var deadline = DateTime.UtcNow.AddMinutes(1);
+        while (!File.Exists(release) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
     }
 
     /// <summary>

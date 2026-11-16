@@ -1,7 +1,7 @@
 {
   "kind": "provider_send_observed",
   "version": 1,
-  "since": "0.46.0",
+  "since": "0.47.0",
   "summary": "A message the account sent, read from the account's events, reached the campaign whose provider campaign it belongs to.",
   "subscribable": true,
   "entities": {
