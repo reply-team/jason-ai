@@ -459,6 +459,70 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(location.hash).toBe('#/campaigns/cmp_2/chat');
     });
 
+    it('keeps the focus in the composer when the first send makes the conversation', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        shownBox().focus();
+        fireEvent.change(shownBox(), { target: { value: 'Find me ten founders' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:conv_')).toBe(true));
+        await waitFor(() => expect(document.activeElement).toBe(shownBox()));
+    });
+
+    it('opens a composer menu once on Space, whose click comes after the key, and makes one conversation', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        const model = await waitFor(() => within(shown()).getByRole('button', { name: /^Model: / }));
+        model.focus();
+        // The made chat's menu is opened by a click of the page's own. A browser draws between two such clicks, so a
+        // second would close the menu the first opened: they are counted.
+        const opened: Element[] = [];
+        const click = HTMLElement.prototype.click;
+        HTMLElement.prototype.click = function (this: HTMLElement) {
+            if (this.getAttribute('aria-haspopup') === 'menu') opened.push(this);
+            click.call(this);
+        };
+        try {
+            // A browser opens a button on Space with a click after the key is let go.
+            fireEvent.keyDown(model, { key: ' ' });
+            fireEvent.click(model);
+            await waitFor(() =>
+                expect(
+                    within(shown())
+                        .getByRole('button', { name: /^Model: / })
+                        .getAttribute('aria-expanded'),
+                ).toBe('true'),
+            );
+            await flush(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        } finally {
+            HTMLElement.prototype.click = click;
+        }
+        expect(opened).toHaveLength(1);
+        expect(creates(desktop)).toHaveLength(1);
+    });
+
+    it('closes its “…”, whose acts all wait for a conversation, on Escape with the focus back, and on Tab', async () => {
+        await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        const more = within(head()!).getByRole('button', { name: "More for this agent's conversation" });
+        more.focus();
+        fireEvent.click(more);
+        const menu = within(head()!).getByRole('menu');
+        expect(
+            within(menu)
+                .getAllByRole('menuitem')
+                .every((each) => (each as HTMLButtonElement).disabled),
+        ).toBe(true);
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        expect(within(head()!).queryByRole('menu')).toBeNull();
+        expect(document.activeElement).toBe(more);
+        fireEvent.click(more);
+        expect(within(head()!).getByRole('menu')).toBeTruthy();
+        fireEvent.keyDown(document.activeElement!, { key: 'Tab' });
+        expect(within(head()!).queryByRole('menu')).toBeNull();
+    });
+
     it('gives way to the conversation made for it elsewhere, carrying the words typed, through Recent and the tabs', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();

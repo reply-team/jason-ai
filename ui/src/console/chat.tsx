@@ -323,6 +323,12 @@ export function makeUnmade(id: string): Promise<string | null> {
  */
 function retire(id: string, real: string): void {
     const now = chats.value[id];
+    // The person typing in it goes on typing in the conversation: its composer takes the focus when it is drawn.
+    const focused = document.activeElement;
+    const typing =
+        focused instanceof HTMLTextAreaElement &&
+        focused.closest('.chat-panel')?.getAttribute('data-chat') === id &&
+        focused.matches(composerBox);
     if (now)
         changeChat(real, (each) => ({
             ...each,
@@ -334,7 +340,11 @@ function retire(id: string, real: string): void {
     delete rest[id];
     chats.value = rest;
     for (const hook of madeHooks) hook(id, real);
+    if (typing) whenDrawn(real, (panel) => panel.querySelector<HTMLTextAreaElement>(composerBox)?.focus());
 }
+
+/** The composer's box in a chat's panel. */
+const composerBox = 'textarea[aria-label="Your message"]';
 
 /** The agents whose conversation is being opened because an unmade chat of theirs stands in for it. */
 const opening = new Set<string>();
@@ -1353,6 +1363,9 @@ const agentMore = (): HTMLElement | null => document.querySelector<HTMLElement>(
  * Opening one of an unmade chat's menus is a choice about the conversation, so it is made first: the press is held, the
  * conversation made, and the same menu opened in its panel. A key that does not open a menu passes.
  */
+/** The unmade chats a menu is being opened in: one press opens it once, whatever events the press makes. */
+const menuOpening = new Set<string>();
+
 function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, chatId: string): void {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[aria-haspopup="menu"]');
     if (!button) return;
@@ -1366,11 +1379,15 @@ function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, c
         return;
     event.preventDefault();
     event.stopPropagation();
+    // Space opens a button with a click after its key: the press is one, and a second click would close the menu.
+    if (menuOpening.has(chatId)) return;
+    menuOpening.add(chatId);
     const menus = [...event.currentTarget.querySelectorAll('button[aria-haspopup="menu"]')];
     const which = menus.indexOf(button);
     void makeUnmade(chatId).then((real) => {
-        if (real === null) return;
+        if (real === null) return menuOpening.delete(chatId);
         whenDrawn(real, (panel) => {
+            menuOpening.delete(chatId);
             const again = panel.querySelectorAll<HTMLButtonElement>('.crow button[aria-haspopup="menu"]')[which];
             again?.focus();
             again?.click();

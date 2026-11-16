@@ -76,7 +76,10 @@ function ConversationMenu({ agent }: { agent: string }) {
         setOpen(false);
         if (focus) button.current?.focus();
     };
+    // The menu's keys are taken on the wrap around the button and the menu, so a menu whose acts are all held, which
+    // takes no focus, still closes on Escape and on Tab.
     const keys = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (!open) return;
         const all = items();
         const at = all.indexOf(document.activeElement as HTMLButtonElement);
         if (event.key === 'Escape') {
@@ -98,7 +101,7 @@ function ConversationMenu({ agent }: { agent: string }) {
     };
     const keptTitle = 'Send a message first; then the chat can be renamed';
     return (
-        <div className="agent-more-wrap">
+        <div className="agent-more-wrap" onKeyDown={keys}>
             <button
                 ref={button}
                 type="button"
@@ -118,13 +121,7 @@ function ConversationMenu({ agent }: { agent: string }) {
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
-                <div
-                    ref={menu}
-                    className="agent-menu"
-                    role="menu"
-                    aria-label="This agent's conversation"
-                    onKeyDown={keys}
-                >
+                <div ref={menu} className="agent-menu" role="menu" aria-label="This agent's conversation">
                     {can('chat.rename') && (
                         <button
                             type="button"
