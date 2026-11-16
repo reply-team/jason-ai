@@ -23,7 +23,7 @@ namespace Jason.Runtime.Tests.Api;
 /// the runtime's own claim (the scan that parks a send for a person), so the ids in a list row are the ids its
 /// <c>get</c> answers and the item a patch answers is the item the list held. Nothing here writes a row by hand.
 /// </summary>
-public class CardExchangesTests
+public partial class CardExchangesTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static readonly DateTimeOffset Nine = new(2026, 10, 16, 9, 0, 0, TimeSpan.Zero);
@@ -574,11 +574,11 @@ public class CardExchangesTests
 
         public string Campaign { get; private set; } = "";
 
-        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true)
+        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true, string[]? more = null)
         {
             if (routed)
             {
-                Route(api);
+                Route(api, more ?? []);
             }
 
             var scene = new Scene(api);
@@ -594,14 +594,15 @@ public class CardExchangesTests
             return scene;
         }
 
-        private static void Route(RuntimeApiFixture api)
+        /// <summary>The stand-in plugin routed for every campaign: the five operations the cards' stories use, and <paramref name="more"/>.</summary>
+        private static void Route(RuntimeApiFixture api, string[] more)
         {
             var routed = new JsonObject { ["workspace"] = "a" };
             var schema = JsonNode.Parse("""{ "type": "object", "properties": { "workspace": { "type": "string" } } }""")!.AsObject();
             var plugins = api.Resolve<PluginRegistry>();
             plugins.Replace(
                 new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Nine.UtcDateTime, SnapshotSource.Startup,
-                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list"], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
+                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list", .. more], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
                 new ReloadReport(Nine.UtcDateTime, SnapshotSource.Startup, Activated: true, [], []));
             api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
                 PublicId.New(RouteSnapshot.IdPrefix),
