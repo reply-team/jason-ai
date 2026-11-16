@@ -39,6 +39,36 @@ public class ProfileCommandsTests
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("\"claude-code\"", "Default profile: claude-code")]
+    [InlineData("null", "Default profile: none")]
+    public async Task Profile_list_human_says_which_profile_is_the_default(string named, string line)
+    {
+        var page = JsonSerializer.Serialize(new ProfilePageDto([Profile("local-claude", revision: 3)], "cHJmX0E", null), JasonJson.Options)
+            .Replace("\"default_execution_profile\":null", "\"default_execution_profile\":" + named, StringComparison.Ordinal);
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("profile", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var lines = cli.Text.Split('\n').Select(row => row.TrimEnd('\r')).Where(row => row.Length > 0).ToList();
+        Assert.Equal(line, lines[^2]);
+        Assert.Equal("next cursor: cHJmX0E", lines[^1].Trim());
+    }
+
+    /// <summary>An answer that carries no default, as a runtime before the field answered, prints the table as it always did.</summary>
+    [Fact]
+    public async Task Profile_list_human_from_an_answer_without_the_field_adds_no_line()
+    {
+        var page = JsonSerializer.Serialize(new Page<ExecutionProfileDto>([Profile("local-claude", revision: 3)], null), JasonJson.Options);
+        using var cli = new CliRun(page);
+
+        var exit = await cli.RunAsync("profile", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.DoesNotContain("Default profile", cli.Text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Create_sends_every_field_it_was_given()
     {
@@ -198,6 +228,55 @@ public class ProfileCommandsTests
         cli.AssertPosted(
             operation,
             "{\"name\":\"retired\",\"reason\":\"The host was uninstalled.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
+    }
+
+    [Fact]
+    public async Task Set_default_names_the_profile_and_says_who_and_why()
+    {
+        using var cli = new CliRun("{\"execution_profile\":\"claude-code\"}");
+
+        var exit = await cli.RunAsync("profile", "set-default", "claude-code", "--reason", "The roles run on Claude Code.", "--actor", "human:person-1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ProfileSetDefault,
+            "{\"name\":\"claude-code\",\"reason\":\"The roles run on Claude Code.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
+    }
+
+    [Fact]
+    public async Task Unset_default_takes_no_name()
+    {
+        using var cli = new CliRun("{\"execution_profile\":null}");
+
+        var exit = await cli.RunAsync("profile", "unset-default", "--reason", "No default any more.", "--actor", "human:person-1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        cli.AssertPosted(
+            Operations.ProfileUnsetDefault,
+            "{\"reason\":\"No default any more.\",\"actor\":{\"type\":\"human\",\"id\":\"person-1\"}}");
+    }
+
+    [Fact]
+    public async Task Set_default_without_a_name_is_a_usage_error()
+    {
+        using var cli = new CliRun();
+
+        var exit = await cli.RunAsync("profile", "set-default");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+    }
+
+    [Theory]
+    [InlineData("{\"execution_profile\":\"claude-code\"}", "Default profile: claude-code")]
+    [InlineData("{\"execution_profile\":null}", "Default profile: none")]
+    public async Task The_default_is_said_in_one_line_for_a_person(string answer, string line)
+    {
+        using var cli = new CliRun(answer);
+
+        var exit = await cli.RunAsync("profile", "set-default", "claude-code", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(line, cli.Text.Trim());
     }
 
     /// <summary>

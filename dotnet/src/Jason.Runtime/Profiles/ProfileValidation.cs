@@ -115,6 +115,25 @@ internal static partial class ProfileValidation
         ValidateReason(request.Reason, errors);
     }
 
+    /// <summary>Naming the configured default: the profile's name, and why.</summary>
+    public static void ValidateSetDefault(ProfileSetDefaultRequest request, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        ValidateName(request.Name, errors);
+        ValidateReason(request.Reason, errors);
+    }
+
+    /// <summary>Taking the configured default away: only why.</summary>
+    public static void ValidateUnsetDefault(ProfileUnsetDefaultRequest request, ValidationErrors errors)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        ValidateReason(request.Reason, errors);
+    }
+
     /// <summary>
     /// The host as the closed vocabulary spells it. A value outside it is a name this build has no launcher for,
     /// and the message says what it does have rather than leaving the caller to guess.

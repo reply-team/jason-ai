@@ -5,6 +5,7 @@ import { Toolbar } from '../../layout/toolbar';
 import { href, navigate, replace, route, type Tab } from '../../router';
 import { Filters } from './filters';
 import { WorkItemList } from './list';
+import type { Read } from './approval-section';
 import { WorkItemPanel } from './panel';
 import * as store from './store';
 import { Notice } from '../../layout/notice';
@@ -16,6 +17,12 @@ const empty: Record<Tab, string> = {
     planned: 'Nothing is planned.',
     done: 'Nothing has finished yet.',
 };
+
+/** The approval the open item waits for, as the shared gate holds it: read whole, or what the runtime said. */
+function readOf(id: string | null): Read {
+    if (id === null) return { whole: undefined, unread: undefined };
+    return { whole: store.reads.approvals.value[id], unread: store.reads.unread.value[id] };
+}
 
 export function WorkItemsScreen() {
     const api = useApi();
@@ -114,6 +121,8 @@ export function WorkItemsScreen() {
                     item={detail}
                     history={store.history.value}
                     approvalId={store.approvalId.value}
+                    read={readOf(store.approvalId.value)}
+                    checking={store.checking.value}
                     notice={store.panelNotice.value}
                     busy={store.busy.value}
                     now={now}

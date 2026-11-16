@@ -87,6 +87,8 @@ profile.get
 profile.list
 profile.disable
 profile.enable
+profile.set_default
+profile.unset_default
 ui.open
 ui.tokens
 ui.revoke

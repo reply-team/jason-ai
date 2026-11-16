@@ -1,0 +1,7 @@
+{
+  "kind": "default_profile_updated",
+  "version": 1,
+  "case": "the default is taken away",
+  "body": { "key": "Roles:DefaultExecutionProfile", "old": "claude-code", "new": null },
+  "expect": "valid"
+}

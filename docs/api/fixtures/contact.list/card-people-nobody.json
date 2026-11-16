@@ -1,0 +1,13 @@
+{
+  "operation": "contact.list",
+  "case": "card-people-nobody",
+  "request": {
+    "query": "nobody-by-this-name",
+    "limit": 10
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

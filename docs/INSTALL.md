@@ -23,9 +23,9 @@ harness installed, so §4 has somewhere to deploy.
 The background roles run on an agent host you installed and signed in to as yourself, through an execution profile, and
 an installation starts with none: until a profile is made and named the default, every AI role's work fails at its claim
 with `role_not_launchable`, and `jason status` says so under `roles_launchable`. For Claude Code, run
-`jason profile create claude-code --host claude_code --program claude`, then add
-`"Roles": {"DefaultExecutionProfile": "claude-code"}` to `~/.jason/config/settings.json`, which the runtime reads without
-a restart. Jason Desktop does both itself, in Live, where the installation holds no profile and names no default and
+`jason profile create claude-code --host claude_code --program claude`, then
+`jason profile set-default claude-code`, which the runtime writes to the settings file and applies without a restart.
+Jason Desktop does both itself, in Live, where the installation holds no profile and names no default and
 Claude Code or Codex is connected there: on the one its chat is set to run on, else Claude Code, else Codex
 ([desktop.md](desktop.md#connect)).
 

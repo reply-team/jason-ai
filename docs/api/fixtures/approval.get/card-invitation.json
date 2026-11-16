@@ -1,0 +1,157 @@
+{
+  "operation": "approval.get",
+  "case": "card-invitation",
+  "request": {
+    "approval_id": "apr_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "social_invitation.send",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-1",
+    "subject": {
+      "binding_identity": "sha256:recorded-2",
+      "input": {
+        "args": {
+          "channel": "linkedin",
+          "sender": {
+            "external_id": "s_34",
+            "address": "https://www.linkedin.com/in/owner-example"
+          },
+          "note": "Noor, I enjoyed your talk on hiring; would be good to be connected."
+        },
+        "contacts": [
+          {
+            "id": "cnt_1",
+            "first_name": "Noor",
+            "last_name": "Haddad",
+            "company": "Kavali",
+            "title": null,
+            "time_zone": null,
+            "channels": [
+              {
+                "channel": "linkedin",
+                "value": "https://www.linkedin.com/in/noor-example",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {}
+        },
+        "idempotency_key": "wi_1"
+      },
+      "operation": "social_invitation.send",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "summary": "Invite https://www.linkedin.com/in/noor-example to connect on LinkedIn, from the provider's account s_34 (https://www.linkedin.com/in/owner-example), with the note: Noor, I enjoyed your talk on hiring; would be good to be connected.; send after: —",
+      "highlights": {
+        "/contacts/0/channels/0/value": "https://www.linkedin.com/in/noor-example",
+        "/args/sender": {
+          "external_id": "s_34",
+          "address": "https://www.linkedin.com/in/owner-example"
+        },
+        "/args/note": "Noor, I enjoyed your talk on hiring; would be good to be connected.",
+        "/args/send_after": null
+      },
+      "intent": "\"Connect with them first, then talk\" — a connection request, with an optional note.",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "compensatable",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": false,
+        "detail": null
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Noor Haddad",
+        "channel": "linkedin",
+        "value": "https://www.linkedin.com/in/noor-example"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-2",
+      "subject": {
+        "binding_identity": "sha256:recorded-2",
+        "input": {
+          "args": {
+            "channel": "linkedin",
+            "sender": {
+              "external_id": "s_34",
+              "address": "https://www.linkedin.com/in/owner-example"
+            },
+            "note": "Noor, I enjoyed your talk on hiring; would be good to be connected."
+          },
+          "contacts": [
+            {
+              "id": "cnt_1",
+              "first_name": "Noor",
+              "last_name": "Haddad",
+              "company": "Kavali",
+              "title": null,
+              "time_zone": null,
+              "channels": [
+                {
+                  "channel": "linkedin",
+                  "value": "https://www.linkedin.com/in/noor-example",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {}
+          },
+          "idempotency_key": "wi_1"
+        },
+        "operation": "social_invitation.send",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_1"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-2",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-16T09:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Noor Haddad",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

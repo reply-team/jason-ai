@@ -106,91 +106,239 @@ public sealed class TerminalPlanTests : IDisposable
     }
 
     /// <summary>
-    /// Terminal is started by the system, not by the CLI, so nothing of the CLI's environment reaches the script's shell: a
-    /// CLI that runs with <c>JASON_DATA_DIR</c> has the script export it, in one line before the <c>exec</c>, so the
-    /// host's own <c>jason</c> commands reach the installation the session was opened from.
+    /// Terminal is started by the system, not by the CLI, so nothing of the CLI's environment reaches the script's shell:
+    /// the script exports the data directory the CLI runs on and puts the folder of the executable that opened it first
+    /// on Terminal's own PATH, in two lines before the <c>exec</c>, so the host's own <c>jason</c> commands are this
+    /// installation's, run on its data.
     /// </summary>
     [Fact]
-    public void The_macos_script_exports_the_data_directory_the_cli_runs_with_before_the_exec()
+    public void The_macos_script_exports_the_data_directory_and_puts_the_executables_folder_first_before_the_exec()
     {
         var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
 
-        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory: "/Users/marta/jason-test");
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, Own);
 
-        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR='/Users/marta/jason-test'"), launch.Script);
+        Assert.Equal(
+            MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR='/Users/marta/jason-test'", "export PATH='/Users/marta/.jason/bin'\"${PATH:+:$PATH}\""),
+            launch.Script);
+        Assert.Null(launch.Variables);
     }
 
-    /// <summary>
-    /// A CLI with no data directory of its own exports nothing, and the script is today's byte for byte. Empty and blank
-    /// count as unset, as they do where the CLI resolves its data directory (<c>JasonPaths.FromEnvironment</c>).
-    /// </summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void The_macos_script_exports_nothing_when_the_cli_runs_with_no_data_directory(string? dataDirectory)
+    /// <summary>A launch composed with nothing of an installation's carries nothing: the script is the plain one, byte for byte.</summary>
+    [Fact]
+    public void The_macos_script_composed_with_no_installation_exports_nothing()
     {
         var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
 
-        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory);
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item);
 
-        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", exportLine: null), launch.Script);
-        Assert.Equal(launch.Script, TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item).Script);
+        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring"), launch.Script);
     }
 
     /// <summary>
-    /// The data directory is a path a person gave, so it is quoted by the one function that quotes the folder and the
-    /// host's words: a space, an apostrophe, a dollar sign and a line break each stay inside the single quotes.
+    /// The data directory and the executable's folder are paths a person gave, so each is quoted by the one function that
+    /// quotes the folder and the host's words: a space, an apostrophe, a dollar sign and a line break each stay inside the
+    /// single quotes.
     /// </summary>
     [Theory]
     [InlineData("/Users/marta/jason test", "'/Users/marta/jason test'")]
     [InlineData("/Users/marta/marta's jason", "'/Users/marta/marta'\\''s jason'")]
     [InlineData("/Users/marta/$HOME/jason", "'/Users/marta/$HOME/jason'")]
     [InlineData("/Users/marta/jason\nexit 7", "'/Users/marta/jason\nexit 7'")]
-    public void The_exported_data_directory_is_quoted_like_every_other_word_of_the_script(string dataDirectory, string quoted)
+    public void The_exported_paths_are_quoted_like_every_other_word_of_the_script(string path, string quoted)
     {
         var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
 
-        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, dataDirectory);
+        var launch = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, new OwnJason(path, path, null));
 
-        Assert.Equal(quoted, TerminalPlan.ShellQuote(dataDirectory));
-        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR=" + quoted), launch.Script);
+        Assert.Equal(quoted, TerminalPlan.ShellQuote(path));
+        Assert.Equal(MacScript("/Users/marta/Jason/campaigns/spring", "export JASON_DATA_DIR=" + quoted, "export PATH=" + quoted + "\"${PATH:+:$PATH}\""), launch.Script);
     }
 
-    /// <summary>The data directory is the one thing of the environment the script carries: no other variable is named in it.</summary>
+    /// <summary>
+    /// The data directory and PATH are all the script carries of the environment: no other variable is named in it, and the
+    /// CLI's own search path is never written there, since the PATH the folder goes before is Terminal's.
+    /// </summary>
     [Fact]
     public void The_macos_script_names_no_other_variable()
     {
         var found = TerminalPlan.Find(TerminalPlatform.MacOs, null, null, null)!;
         var without = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item).Script!;
 
-        var with = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, "/Users/marta/jason-test").Script!;
+        var with = TerminalPlan.Compose(TerminalPlatform.MacOs, found, "/Users/marta/Jason/campaigns/spring", ["/opt/homebrew/bin/claude", "Go."], Item, Own with { SearchPath = "/opt/cli-only/bin" }).Script!;
 
         var added = with.Split('\n').Except(without.Split('\n')).ToArray();
-        Assert.Equal(["export JASON_DATA_DIR='/Users/marta/jason-test'"], added);
-        Assert.Equal(without.Split('\n').Length + 1, with.Split('\n').Length);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(with, @"\bexport\b"));
+        Assert.Equal(["export JASON_DATA_DIR='/Users/marta/jason-test'", "export PATH='/Users/marta/.jason/bin'\"${PATH:+:$PATH}\""], added);
+        Assert.Equal(without.Split('\n').Length + 2, with.Split('\n').Length);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(with, @"\bexport\b").Count);
+        Assert.DoesNotContain("cli-only", with, StringComparison.Ordinal);
         Assert.DoesNotContain("JASON_", without, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// On Windows and Linux the terminal is a child of the CLI and inherits its environment, the data directory included;
-    /// the launch there is the same with a data directory as without one.
+    /// Where no executable of this installation is known (a build run through <c>dotnet</c>), the data directory is still
+    /// passed and PATH is left as it is, on every system.
     /// </summary>
     [Theory]
     [InlineData(TerminalPlatform.Windows)]
     [InlineData(TerminalPlatform.Linux)]
-    public void On_windows_and_linux_the_launch_is_the_same_with_a_data_directory(TerminalPlatform os)
+    [InlineData(TerminalPlatform.MacOs)]
+    public void With_no_executables_folder_the_data_directory_is_passed_and_path_is_left_alone(TerminalPlatform os)
     {
-        var terminal = os == TerminalPlatform.Windows ? new TerminalFound("conhost", "C:/Windows/System32/conhost.exe") : new TerminalFound("kitty", "/usr/bin/kitty");
+        var own = Own with { ExecutableFolder = null };
 
-        var without = TerminalPlan.Compose(os, terminal, "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item);
-        var with = TerminalPlan.Compose(os, terminal, "/home/marta/Jason", ["/usr/local/bin/codex", Prompt], Item, "/home/marta/jason-test");
+        var launch = TerminalPlan.Compose(os, TerminalOf(os), "/home/marta/Jason", ["/usr/local/bin/codex"], Item, own);
 
-        Assert.Equal(without.Argv, with.Argv);
-        Assert.Equal(without.WorkingDirectory, with.WorkingDirectory);
-        Assert.Null(with.Script);
-        Assert.Null(with.ScriptName);
+        switch (os)
+        {
+            case TerminalPlatform.Windows:
+                Assert.Equal(new Dictionary<string, string> { ["JASON_DATA_DIR"] = own.DataDirectory }, launch.Variables);
+                break;
+            case TerminalPlatform.Linux:
+                Assert.Equal(["/usr/bin/kitty", "/usr/bin/env", "JASON_DATA_DIR=" + own.DataDirectory, "/usr/local/bin/codex"], launch.Argv);
+                break;
+            default:
+                Assert.Equal(MacScript("/home/marta/Jason", "export JASON_DATA_DIR='/Users/marta/jason-test'").Replace("'/opt/homebrew/bin/claude' 'Go.'", "'/usr/local/bin/codex'", StringComparison.Ordinal), launch.Script);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// On Windows the console host is the CLI's own child, and it starts the host as its own: the launch hands it the data
+    /// directory and a PATH with the executable's folder first, then the CLI's search path, in the environment it is
+    /// started with. Its argument list is the plain one: nothing is added to what the host is given.
+    /// </summary>
+    [Fact]
+    public void Windows_starts_the_console_host_with_the_data_directory_and_the_executables_folder_first()
+    {
+        var terminal = TerminalOf(TerminalPlatform.Windows);
+        var own = new OwnJason("C:/Users/marta/jason-test", "C:/Users/marta/AppData/Local/Programs/Jason", "C:/Other/bin;C:/Windows/System32");
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Windows, terminal, "C:/Jason", ["C:/Tools/claude.exe", Prompt], Item, own);
+
+        Assert.Equal([terminal.Program, "--", "C:/Tools/claude.exe", Prompt], launch.Argv);
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["JASON_DATA_DIR"] = "C:/Users/marta/jason-test",
+                ["PATH"] = "C:/Users/marta/AppData/Local/Programs/Jason;C:/Other/bin;C:/Windows/System32",
+            },
+            launch.Variables);
+        Assert.Null(launch.Script);
+    }
+
+    /// <summary>
+    /// On Linux the emulator may hand the command to a server that is already running and runs it in that server's
+    /// environment, so the variables travel on the command itself: <c>/usr/bin/env</c>, which sets them and replaces itself
+    /// with the host, no shell between, after the emulator's own form and before the host's words, on every emulator the
+    /// plan knows. Nothing is added to the host's own arguments.
+    /// </summary>
+    [Theory]
+    [InlineData("kitty", new string[0])]
+    [InlineData("foot", new string[0])]
+    [InlineData("gnome-terminal", new[] { "--" })]
+    [InlineData("xfce4-terminal", new[] { "-x" })]
+    [InlineData("mate-terminal", new[] { "-x" })]
+    [InlineData("wezterm", new[] { "start", "--cwd", "<folder>", "--" })]
+    [InlineData("x-terminal-emulator", new[] { "-e" })]
+    public void Linux_gives_each_terminal_the_data_directory_and_the_executables_folder_first_through_env(string name, string[] before)
+    {
+        var program = "/usr/bin/" + name;
+        const string Campaign = "/home/marta/Jason/projects/acme corp";
+        var own = new OwnJason("/home/marta/jason test", "/home/marta/.local/bin", "/usr/local/bin:/usr/bin");
+
+        var launch = TerminalPlan.Compose(TerminalPlatform.Linux, new TerminalFound(name, program), Campaign, ["/usr/local/bin/codex", Prompt], Item, own);
+
+        Assert.Equal(
+            [
+                program,
+                .. before.Select(word => word == "<folder>" ? Campaign : word),
+                "/usr/bin/env",
+                "JASON_DATA_DIR=/home/marta/jason test",
+                "PATH=/home/marta/.local/bin:/usr/local/bin:/usr/bin",
+                "/usr/local/bin/codex",
+                Prompt,
+            ],
+            launch.Argv);
+        Assert.Null(launch.Variables);
+        Assert.Null(launch.Script);
+    }
+
+    /// <summary>
+    /// Another <c>jason</c> earlier on the CLI's search path loses in the opened terminal: the PATH the terminal is given
+    /// finds the opening executable's folder first. Composed only; no terminal is started.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows)]
+    [InlineData(TerminalPlatform.Linux)]
+    public void Another_jason_earlier_on_the_search_path_loses_in_the_opened_terminal(TerminalPlatform os)
+    {
+        Assert.SkipWhen(os == TerminalPlatform.Linux && OperatingSystem.IsWindows(), "A Windows path holds the drive's colon, the Linux separator; the Linux legs run this row.");
+        var name = os == TerminalPlatform.Windows ? "jason.exe" : "jason";
+        var planted = Folder("planted");
+        StandIn(planted, name);
+        var installed = Folder("installed");
+        var own = StandIn(installed, name);
+        var separator = os == TerminalPlatform.Windows ? ";" : ":";
+        var cliPath = string.Join(separator, planted, Folder("system"));
+        Assert.Equal(Path.Combine(planted, name), FirstOn(cliPath, separator, name));
+
+        var launch = TerminalPlan.Compose(os, TerminalOf(os), "/home/marta/Jason", ["/usr/local/bin/codex"], Item, new OwnJason(_root, installed, cliPath));
+
+        var given = os == TerminalPlatform.Windows
+            ? launch.Variables!["PATH"]
+            : launch.Argv.Single(word => word.StartsWith("PATH=", StringComparison.Ordinal))["PATH=".Length..];
+        Assert.Equal(own, FirstOn(given, separator, name));
+        Assert.Equal(installed + separator + cliPath, given);
+    }
+
+    /// <summary>
+    /// The folder goes before the search path with one separator, and alone where the search path is empty: an empty entry
+    /// would be the folder the terminal starts in, on PATH.
+    /// </summary>
+    [Theory]
+    [InlineData(TerminalPlatform.Windows, "C:/bin;C:/other", "C:/jason;C:/bin;C:/other")]
+    [InlineData(TerminalPlatform.Windows, null, "C:/jason")]
+    [InlineData(TerminalPlatform.Windows, "", "C:/jason")]
+    [InlineData(TerminalPlatform.Linux, "/usr/bin", "C:/jason:/usr/bin")]
+    [InlineData(TerminalPlatform.Linux, "", "C:/jason")]
+    public void The_executables_folder_goes_first_with_one_separator(TerminalPlatform os, string? searchPath, string expected)
+    {
+        Assert.Equal(expected, TerminalPlan.SearchPathFirst(os, "C:/jason", searchPath));
+    }
+
+    /// <summary>
+    /// <c>/usr/bin/env</c> reads every word that holds <c>=</c> as a variable to set until the program it runs, so a host's
+    /// program whose path holds one cannot be carried: it is refused before anything is started, never run as something
+    /// else. Only Linux carries the variables on the command.
+    /// </summary>
+    [Fact]
+    public void Linux_refuses_a_hosts_program_whose_path_holds_an_equals_sign()
+    {
+        string[] host = ["/opt/a=b/claude", "Go."];
+
+        Assert.NotNull(TerminalPlan.Uncarried(TerminalPlatform.Linux, host));
+        Assert.Null(TerminalPlan.Uncarried(TerminalPlatform.Windows, host));
+        Assert.Null(TerminalPlan.Uncarried(TerminalPlatform.MacOs, host));
+        Assert.Null(TerminalPlan.Uncarried(TerminalPlatform.Linux, ["/opt/claude", "a=b"]));
+        Assert.ThrowsAny<ArgumentException>(() => TerminalPlan.Compose(TerminalPlatform.Linux, TerminalOf(TerminalPlatform.Linux), "/home/marta", host, Item, Own));
+    }
+
+    /// <summary>
+    /// The start a terminal is given carries the launch's variables, and on Windows PATH replaces the variable whatever its
+    /// spelling there (Windows' own is <c>Path</c>), so there is one. Making a start info starts nothing.
+    /// </summary>
+    [Fact]
+    public void The_terminals_start_carries_the_launchs_variables()
+    {
+        var start = TerminalStartInfo.For(
+            TerminalPlatform.Windows,
+            ["C:/Windows/System32/conhost.exe", "--", "C:/Tools/claude.exe"],
+            "C:/Jason",
+            new Dictionary<string, string> { ["JASON_DATA_DIR"] = "C:/data", ["PATH"] = "C:/jason;C:/bin" });
+
+        Assert.Equal("C:/data", start.Environment["JASON_DATA_DIR"]);
+        Assert.Equal("C:/jason;C:/bin", Assert.Single(start.Environment, pair => string.Equals(pair.Key, "PATH", StringComparison.OrdinalIgnoreCase)).Value);
     }
 
     [Theory]
@@ -352,19 +500,32 @@ public sealed class TerminalPlanTests : IDisposable
         Assert.Equal("/home/marta/Jason", start.WorkingDirectory);
     }
 
-    /// <summary>The macOS script for <c>/opt/homebrew/bin/claude 'Go.'</c> at <paramref name="folder"/>, with the export line before the <c>exec</c> or none.</summary>
-    private static string MacScript(string folder, string? exportLine) => string.Join(
+    /// <summary>The installation a row's launch carries: its data directory, its executable's folder and the CLI's search path.</summary>
+    private static readonly OwnJason Own = new("/Users/marta/jason-test", "/Users/marta/.jason/bin", "/usr/local/bin:/usr/bin");
+
+    /// <summary>The macOS script for <c>/opt/homebrew/bin/claude 'Go.'</c> at <paramref name="folder"/>, with the export lines before the <c>exec</c>.</summary>
+    private static string MacScript(string folder, params string[] exportLines) => string.Join(
         "\n",
-        new[]
-        {
+        [
             "#!/bin/sh",
             "rm -f -- \"$0\"",
             "rmdir -- \"${0%/*}\" 2>/dev/null",
             "cd -- '" + folder + "' || exit 1",
-            exportLine,
+            .. exportLines,
             "exec '/opt/homebrew/bin/claude' 'Go.'",
             string.Empty,
-        }.OfType<string>());
+        ]);
+
+    private static TerminalFound TerminalOf(TerminalPlatform os) => os switch
+    {
+        TerminalPlatform.Windows => new TerminalFound("conhost", "C:/Windows/System32/conhost.exe"),
+        TerminalPlatform.Linux => new TerminalFound("kitty", "/usr/bin/kitty"),
+        _ => new TerminalFound("Terminal", TerminalPlan.MacOpener),
+    };
+
+    /// <summary>The first file of <paramref name="name"/> in the folders of <paramref name="searchPath"/>, in its order, as a lookup by name finds it.</summary>
+    private static string? FirstOn(string searchPath, string separator, string name) =>
+        searchPath.Split(separator, StringSplitOptions.RemoveEmptyEntries).Select(folder => Path.Combine(folder, name)).FirstOrDefault(File.Exists);
 
     private string Folder(string name) => Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
 

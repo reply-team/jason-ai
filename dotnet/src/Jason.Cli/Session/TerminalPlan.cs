@@ -15,20 +15,30 @@ public sealed record TerminalFound(string Name, string Program);
 
 /// <summary>
 /// What is started to open a person's own agent host in a new window: the terminal's name, the whole argument list (the
-/// program first), the folder it starts in, and on macOS the script Terminal runs and its file name. The script's folder
-/// is made only when the launch starts, so <see cref="Argv"/> ends with <see cref="ScriptName"/> until then.
+/// program first), the folder it starts in, on macOS the script Terminal runs and its file name, and on Windows the
+/// variables the console host is started with beside the CLI's own. The script's folder is made only when the launch
+/// starts, so <see cref="Argv"/> ends with <see cref="ScriptName"/> until then.
 /// </summary>
-public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv, string WorkingDirectory, string? Script, string? ScriptName);
+public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv, string WorkingDirectory, string? Script, string? ScriptName, IReadOnlyDictionary<string, string>? Variables = null);
 
 /// <summary>
-/// The terminal per operating system, as pure strings. Windows starts the console host from the system directory, which
-/// hands the console to the person's default terminal (Windows Terminal where it is the default), and gives it the host
-/// after <c>--</c>; macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
+/// The installation the opened terminal's <c>jason</c> is to be: the data directory the CLI runs on, made absolute; the
+/// folder of the executable that opens the terminal, or null where this jason is no one installed file (a build run
+/// through <c>dotnet</c>); and the CLI's own search path, which that folder goes before where the terminal's PATH is
+/// composed here (Windows and Linux; macOS puts it before Terminal's own).
+/// </summary>
+public sealed record OwnJason(string DataDirectory, string? ExecutableFolder, string? SearchPath);
+
+/// <summary>
+/// The terminal per operating system, as pure strings. Windows starts the console host from the system directory and gives
+/// it the host after <c>--</c> (which window a person then sees is not yet measured on a machine); macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
 /// <c>open -a Terminal</c> takes no command; Linux starts the program the <c>TERMINAL</c> variable names, else
 /// <c>x-terminal-emulator</c>, with the host as several arguments in the form that program takes, chosen by its file name
 /// (<see cref="LinuxForm"/>). A terminal the
 /// operating system keeps in a fixed place is never taken from the search path: a click runs under the person's PATH, and
-/// a program of that name planted earlier on it must not be what the click starts.
+/// a program of that name planted earlier on it must not be what the click starts. And the terminal opened runs this
+/// installation's own <c>jason</c> (<see cref="OwnJason"/>): every system is handed the data directory by name and the
+/// opening executable's folder first on PATH, so another <c>jason</c> earlier on the person's PATH does not win there.
 /// </summary>
 public static class TerminalPlan
 {
@@ -40,6 +50,15 @@ public static class TerminalPlan
 
     /// <summary>The program Debian's alternatives name for the system's terminal emulator.</summary>
     public const string TerminalEmulator = "x-terminal-emulator";
+
+    /// <summary>
+    /// The program that sets variables and replaces itself with the command after them, no shell between, by the absolute
+    /// path Linux systems keep it at: the variables a Linux terminal is given travel on its command line through it.
+    /// </summary>
+    public const string EnvProgram = "/usr/bin/env";
+
+    /// <summary>The variable a search path is read from, as Jason writes it for the terminal.</summary>
+    public const string PathVariable = "PATH";
 
     /// <summary>
     /// The terminal this machine starts, or null when there is none: on Windows the console host in
@@ -96,15 +115,21 @@ public static class TerminalPlan
     /// <paramref name="folder"/>. The host's words are passed as they are, one argument each, with no shell of Jason's
     /// between; only macOS's script is read by a shell, Terminal's, and every word in it is single-quoted.
     /// </summary>
-    /// <param name="dataDirectory">
-    /// The data directory the CLI runs with when <c>JASON_DATA_DIR</c> names one, else null (empty and blank are none, as
-    /// they are to the CLI). On Windows and Linux the terminal process is the CLI's own child and inherits the variable,
-    /// so the launch there does not change, though a Linux emulator that hands the command to a server process already
-    /// running may run the host in that server's environment instead; on macOS Terminal is started by the system and its
-    /// shell carries nothing of the CLI's environment, so the script exports this one variable before the <c>exec</c>, and
-    /// nothing else.
+    /// <param name="own">
+    /// The installation the opened terminal's <c>jason</c> is to be, or null for a launch that carries nothing of one. Its
+    /// data directory is passed by name and its executable's folder, where there is one, goes first on PATH, on every
+    /// system the way that system's terminal can be given them, and nothing is added to the host's own words. On Windows
+    /// the console host is the CLI's own child and starts the host as its own, so the two are variables of the console
+    /// host's start (<see cref="TerminalLaunch.Variables"/>), PATH the folder and then the CLI's search path. On Linux an
+    /// emulator may hand its command to a server process already running, which runs it in the server's environment, so
+    /// the two travel on the command itself: <see cref="EnvProgram"/> with them, after the emulator's own form and before
+    /// the host. On macOS Terminal is started by the system and its shell carries nothing of the CLI's environment, so the
+    /// script exports the data directory and puts the folder before Terminal's own PATH, before the <c>exec</c>.
     /// </param>
-    public static TerminalLaunch Compose(TerminalPlatform os, TerminalFound terminal, string folder, IReadOnlyList<string> host, string itemId, string? dataDirectory = null)
+    /// <exception cref="ArgumentException">
+    /// The host's program cannot be carried (<see cref="Uncarried"/>), or on macOS the id names no script.
+    /// </exception>
+    public static TerminalLaunch Compose(TerminalPlatform os, TerminalFound terminal, string folder, IReadOnlyList<string> host, string itemId, OwnJason? own = null)
     {
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentException.ThrowIfNullOrEmpty(folder);
@@ -114,18 +139,61 @@ public static class TerminalPlan
             throw new ArgumentException("The host's program is missing.", nameof(host));
         }
 
+        if (own is not null && Uncarried(os, host) is { } uncarried)
+        {
+            throw new ArgumentException(uncarried, nameof(host));
+        }
+
         switch (os)
         {
             case TerminalPlatform.Windows:
-                return new TerminalLaunch(terminal.Name, [terminal.Program, "--", .. host], folder, null, null);
+                return new TerminalLaunch(terminal.Name, [terminal.Program, "--", .. host], folder, null, null, own is null ? null : Variables(os, own));
             case TerminalPlatform.Linux:
-                return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program, folder), .. host], folder, null, null);
+                IReadOnlyList<string> carried = own is null ? [] : [EnvProgram, .. Variables(os, own).Select(variable => variable.Key + "=" + variable.Value)];
+                return new TerminalLaunch(terminal.Name, [terminal.Program, .. LinuxForm(terminal.Program, folder), .. carried, .. host], folder, null, null);
             case TerminalPlatform.MacOs:
                 var name = ScriptNameFor(itemId);
-                return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host, dataDirectory), name);
+                return new TerminalLaunch(terminal.Name, [terminal.Program, "-a", "Terminal", name], folder, Script(folder, host, own), name);
             default:
                 throw new ArgumentOutOfRangeException(nameof(os), os, null);
         }
+    }
+
+    /// <summary>
+    /// Why the host's program cannot be carried to the terminal with this installation's variables, worded to follow "did
+    /// not start", or null where it can: on Linux <see cref="EnvProgram"/> reads every word holding <c>=</c> as a variable
+    /// to set until the program it runs, so a program whose path holds one would be read as a variable and the next word
+    /// run in its place. Only the program is read so; its arguments are passed as they are.
+    /// </summary>
+    public static string? Uncarried(TerminalPlatform os, IReadOnlyList<string> host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        return os == TerminalPlatform.Linux && host.Count > 0 && host[0].Contains('=', StringComparison.Ordinal)
+            ? $"the host's program {host[0]} holds '=', which {EnvProgram} reads as a variable to set rather than a program to run"
+            : null;
+    }
+
+    /// <summary>
+    /// The search path the terminal is given: <paramref name="folder"/> first, then <paramref name="searchPath"/> after the
+    /// separator of <paramref name="os"/>'s, or the folder alone where the search path is empty, since an empty entry would
+    /// put the folder the terminal starts in on PATH.
+    /// </summary>
+    public static string SearchPathFirst(TerminalPlatform os, string folder, string? searchPath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        return string.IsNullOrEmpty(searchPath) ? folder : folder + (os == TerminalPlatform.Windows ? ";" : ":") + searchPath;
+    }
+
+    /// <summary>The variables the terminal composed here is given: the data directory, and PATH where there is a folder to put first.</summary>
+    private static Dictionary<string, string> Variables(TerminalPlatform os, OwnJason own)
+    {
+        var variables = new Dictionary<string, string>(StringComparer.Ordinal) { [JasonPaths.DataDirectoryVariable] = own.DataDirectory };
+        if (!string.IsNullOrEmpty(own.ExecutableFolder))
+        {
+            variables[PathVariable] = SearchPathFirst(os, own.ExecutableFolder, own.SearchPath);
+        }
+
+        return variables;
     }
 
     /// <summary>
@@ -155,8 +223,8 @@ public static class TerminalPlan
 
     /// <summary>
     /// One word in single quotes, each apostrophe written as <c>'\''</c>: nothing inside single quotes is special to a POSIX
-    /// shell, a space, a dollar sign and a line break included. The folder, the host's words and the data directory are
-    /// quoted by it and by nothing else.
+    /// shell, a space, a dollar sign and a line break included. The folder, the host's words, the data directory and the
+    /// executable's folder are quoted by it and by nothing else.
     /// </summary>
     public static string ShellQuote(string word)
     {
@@ -166,9 +234,10 @@ public static class TerminalPlan
 
     /// <summary>
     /// The script Terminal runs: it removes itself and its folder first, enters the folder or stops, exports the data
-    /// directory where the CLI runs with one, and replaces itself with the host.
+    /// directory and puts the executable's folder before Terminal's own PATH (adding no empty entry where that is empty),
+    /// and replaces itself with the host.
     /// </summary>
-    private static string Script(string folder, IReadOnlyList<string> host, string? dataDirectory)
+    private static string Script(string folder, IReadOnlyList<string> host, OwnJason? own)
     {
         List<string> lines =
         [
@@ -177,9 +246,13 @@ public static class TerminalPlan
             "rmdir -- \"${0%/*}\" 2>/dev/null",
             "cd -- " + ShellQuote(folder) + " || exit 1",
         ];
-        if (!string.IsNullOrWhiteSpace(dataDirectory))
+        if (own is not null)
         {
-            lines.Add("export " + JasonPaths.DataDirectoryVariable + "=" + ShellQuote(dataDirectory));
+            lines.Add("export " + JasonPaths.DataDirectoryVariable + "=" + ShellQuote(own.DataDirectory));
+            if (!string.IsNullOrEmpty(own.ExecutableFolder))
+            {
+                lines.Add("export " + PathVariable + "=" + ShellQuote(own.ExecutableFolder) + "\"${" + PathVariable + ":+:$" + PathVariable + "}\"");
+            }
         }
 
         lines.Add("exec " + string.Join(' ', host.Select(ShellQuote)));

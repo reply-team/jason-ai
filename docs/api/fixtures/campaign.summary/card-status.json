@@ -1,0 +1,39 @@
+{
+  "operation": "campaign.summary",
+  "case": "card-status",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ],
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 12,
+        "waiting": 2,
+        "failed": 0,
+        "working": 2,
+        "new": 8,
+        "idle": 1,
+        "sequence": 0,
+        "out": 1,
+        "removed": 0,
+        "sequence_linked": true
+      }
+    ],
+    "total": {
+      "people": 12,
+      "waiting": 2,
+      "failed": 0,
+      "working": 2,
+      "new": 8,
+      "idle": 1,
+      "sequence": 0,
+      "out": 1,
+      "removed": 0
+    }
+  }
+}

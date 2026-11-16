@@ -372,11 +372,15 @@ jason profile list --human
 
 AI role work runs on an agent host the operator installed, described by an **execution profile**: what program
 starts it, what it may not do, and the command word it calls home with. `profile list` shows the profiles that
-can launch work; disabled ones are left out unless you ask for them.
+can launch work; disabled ones are left out unless you ask for them. Under the table it says which profile is the
+default, the one role work runs on when nothing more specific names one (`default_execution_profile` in the JSON), and
+says a default that names no profile as it stands.
 
 This is what to read when role work is failing for reasons no model produced — `profile_not_found`,
 `profile_disabled`, `profile_revision_refused` and `host_not_available` are all answered here rather than by asking for the work again.
 Registering or editing a profile is an operator's act, and it names a program on this machine: do not invent one.
+Naming the default (`jason profile set-default <name>`) or taking it away (`jason profile unset-default`) changes this
+installation's settings for every role, and is the operator's act too: propose it, and run it only when they ask.
 
 ## Keeping it current
 

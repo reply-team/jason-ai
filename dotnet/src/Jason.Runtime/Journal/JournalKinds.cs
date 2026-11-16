@@ -129,6 +129,12 @@ public static partial class JournalKinds
 
     public const string ProfileEnabled = "profile_enabled";
 
+    /// <summary>
+    /// The configured default execution profile, <c>Roles:DefaultExecutionProfile</c>, was named or taken away by
+    /// <c>profile.set_default</c> or <c>profile.unset_default</c> through the settings writer: the name in force before and after.
+    /// </summary>
+    public const string DefaultProfileUpdated = "default_profile_updated";
+
     /// <summary>A new plugin snapshot became the active one: which packages, at which digests, from when.</summary>
     public const string PluginsReloaded = "plugins_reloaded";
 
@@ -385,6 +391,7 @@ public static partial class JournalKinds
         ProfileRevised,
         ProfileDisabled,
         ProfileEnabled,
+        DefaultProfileUpdated,
         PluginsReloaded,
         RoutesUpdated,
         GlobalRoutesUpdated,

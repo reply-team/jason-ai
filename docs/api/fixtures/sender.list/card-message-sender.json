@@ -1,0 +1,46 @@
+{
+  "operation": "sender.list",
+  "case": "card-message-sender",
+  "request": {
+    "campaign_id": "cmp_1",
+    "owners": "team",
+    "sender_channel": "email",
+    "limit": 100
+  },
+  "status": 200,
+  "response": {
+    "plugin_id": "reply",
+    "items": [
+      {
+        "external_id": "s_12",
+        "channel": "email",
+        "name": "Owner Example",
+        "address": "owner@example.test",
+        "status": "active",
+        "owner": "own",
+        "vendor": {
+          "status": "active"
+        }
+      },
+      {
+        "external_id": "s_13",
+        "channel": "email",
+        "name": null,
+        "address": "colleague@example.test",
+        "status": "active",
+        "owner": "teammate",
+        "vendor": {
+          "status": "active"
+        }
+      }
+    ],
+    "has_more": false,
+    "channels": {
+      "email": "listed",
+      "linkedin": "not_asked"
+    },
+    "vendor": {
+      "ordering": "email_then_linkedin"
+    }
+  }
+}
