@@ -236,21 +236,24 @@ public sealed class SessionOpenerTests : IDisposable
         var script = printed["script"]!.GetValue<string>();
         Assert.StartsWith("#!/bin/sh\nrm -f -- \"$0\"\n", script, StringComparison.Ordinal);
         Assert.Contains("cd -- '" + _run.CampaignFolder + "' || exit 1", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("JASON_DATA_DIR", script, StringComparison.Ordinal);
+        Assert.Equal(
+            ["export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), "export PATH=" + TerminalPlan.ShellQuote(_run.InstalledFolder) + "\"${PATH:+:$PATH}\""],
+            script.Split('\n').Where(line => line.StartsWith("export ", StringComparison.Ordinal)));
     }
 
     /// <summary>
-    /// A CLI that runs with <c>JASON_DATA_DIR</c> has the macOS script export the data directory it uses, so the host's own
-    /// <c>jason</c> commands reach this installation and not the default one; a blank value is no data directory, as it
-    /// is to the CLI itself. What is exported is the directory the CLI resolved, never the variable's own spelling: a
-    /// value with a trailing separator, or one with a <c>.</c> segment, still exports the resolved root.
+    /// The macOS script exports the data directory the CLI uses, so the host's own <c>jason</c> commands reach this
+    /// installation and not the default one, whatever <c>JASON_DATA_DIR</c> says or whether it is set: a blank value is no
+    /// data directory to the CLI, which then runs on its default, and that is the one exported. What is exported is the
+    /// directory the CLI resolved, never the variable's own spelling: a value with a trailing separator, or one with a
+    /// <c>.</c> segment, still exports the resolved root.
     /// </summary>
     [Theory]
     [InlineData("root")]
     [InlineData("trailing separator")]
     [InlineData("dot segment")]
     [InlineData("blank")]
-    public async Task On_macos_the_script_carries_the_resolved_data_directory_only_when_the_cli_runs_with_one(string spelling)
+    public async Task On_macos_the_script_carries_the_resolved_data_directory_whatever_the_variable_says(string spelling)
     {
         _run.Terminals.Platform = TerminalPlatform.MacOs;
         _run.Programs.AddProgram("claude");
@@ -267,8 +270,7 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Equal(ExitCodes.Success, exit);
         var script = JsonNode.Parse(_run.Output.ToString())!["script"]!.GetValue<string>();
         var exports = script.Split('\n').Where(line => line.StartsWith("export ", StringComparison.Ordinal)).ToArray();
-        string[] expected = spelling == "blank" ? [] : ["export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory)];
-        Assert.Equal(expected, exports);
+        Assert.Equal("export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), exports[0]);
         if (spelling is "trailing separator" or "dot segment")
         {
             // The row means something only while the variable's spelling is not the root's own.
@@ -294,9 +296,77 @@ public sealed class SessionOpenerTests : IDisposable
         var launch = Assert.Single(_run.Terminals.Launches);
         var prompt = CopyPrompt.Compose(PromptKind.Approval, "apr_1", "cmp_1", "wi_1", new PromptFolder(PromptFolderLevel.Campaign, _run.CampaignFolder));
         Assert.Equal("kitty", launch.Terminal);
-        Assert.Equal([kitty, claude, prompt], launch.Argv);
+        Assert.Equal([kitty, .. _run.LinuxEnv, claude, prompt], launch.Argv);
         Assert.Equal(_run.CampaignFolder, launch.WorkingDirectory);
         Assert.Null(launch.Script);
+        Assert.Null(launch.Variables);
+    }
+
+    /// <summary>
+    /// On Windows the console host is started with the data directory the CLI runs on, named even where no
+    /// <c>JASON_DATA_DIR</c> is set, and with this jason's folder first on PATH before the CLI's own search path, so the
+    /// host's <c>jason</c> is this installation's; nothing is added to the host's words. A dry run prints the two.
+    /// </summary>
+    [Fact]
+    public async Task On_windows_the_console_host_is_given_the_data_directory_and_this_jasons_folder_first()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        var expected = _run.WindowsVariables;
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+        var launch = Assert.Single(_run.Terminals.Launches);
+        Assert.Equal(expected, launch.Variables);
+        Assert.Equal([_run.ConsoleHost, "--", claude], launch.Argv.Take(3));
+        Assert.Equal(4, launch.Argv.Count);
+
+        _run.Output.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1", "--dry-run"));
+        var printed = JsonNode.Parse(_run.Output.ToString())!["environment"]!.AsObject();
+        Assert.Equal(expected, printed.ToDictionary(pair => pair.Key, pair => pair.Value!.GetValue<string>()));
+    }
+
+    /// <summary>
+    /// A jason that is not one installed file (a build run through <c>dotnet</c>, as this suite is) has no folder to put
+    /// first: the data directory is still passed and PATH is left to the terminal.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_that_is_no_installed_file_still_passes_the_data_directory_and_leaves_path_alone()
+    {
+        _run.Programs.AddProgram("claude");
+        _run.InstallPath = null;
+
+        Assert.Equal(ExitCodes.Success, await _run.Cli("session", "open", "--approval", "apr_1"));
+
+        Assert.Equal(new Dictionary<string, string> { [JasonPaths.DataDirectoryVariable] = _run.DataDirectory }, Assert.Single(_run.Terminals.Launches).Variables);
+    }
+
+    /// <summary>
+    /// On Linux a host's program whose path holds <c>=</c> cannot follow <c>/usr/bin/env</c>, which would read it as a
+    /// variable to set: nothing is started, and the refusal says how to do the same by hand.
+    /// </summary>
+    [Fact]
+    public async Task On_linux_a_hosts_program_env_cannot_run_starts_nothing()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, "a=b")).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder + Path.PathSeparator + _run.Programs.Root;
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        var said = _run.Error.ToString();
+        Assert.Contains("did not start", said, StringComparison.Ordinal);
+        Assert.Contains("/usr/bin/env", said, StringComparison.Ordinal);
+        Assert.Contains("approval get apr_1 --prompt", said, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -664,6 +734,7 @@ public sealed class SessionOpenerTests : IDisposable
             ConsoleHost = Path.Combine(_system, "conhost.exe");
             File.WriteAllBytes(ConsoleHost, []);
             Home = Path.Combine(_dir.Paths.Root, "home");
+            InstallPath = Path.Combine(InstalledFolder, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
             Terminals = new RecordingTerminals { SystemDirectory = _system };
 
             // The recorded exchange names a folder under a home of its own; a start needs one that is there, so the answer
@@ -675,6 +746,25 @@ public sealed class SessionOpenerTests : IDisposable
 
         /// <summary>The data directory the CLI under test runs on.</summary>
         public string DataDirectory => _dir.Paths.Root;
+
+        /// <summary>The file this jason is installed as, which a launch puts the folder of first on PATH; null asks the process.</summary>
+        public string? InstallPath { get; set; }
+
+        /// <summary>The folder of <see cref="InstallPath"/> as it was first named.</summary>
+        public string InstalledFolder => Path.Combine(_dir.Paths.Root, "bin");
+
+        /// <summary>The search path the verb reads, in place of the folder of <see cref="Programs"/>.</summary>
+        public string? SearchPath { get; set; }
+
+        /// <summary>What the console host is started with on Windows: the data directory, and this jason's folder first on PATH.</summary>
+        public Dictionary<string, string> WindowsVariables => new()
+        {
+            [JasonPaths.DataDirectoryVariable] = DataDirectory,
+            ["PATH"] = InstalledFolder + ";" + (SearchPath ?? Programs.Root),
+        };
+
+        /// <summary>What a Linux terminal is given before the host's words: <c>/usr/bin/env</c> and the same two variables.</summary>
+        public string[] LinuxEnv => ["/usr/bin/env", JasonPaths.DataDirectoryVariable + "=" + DataDirectory, "PATH=" + InstalledFolder + ":" + (SearchPath ?? Programs.Root)];
 
         /// <summary>The campaign's folder as the recorded exchange names it.</summary>
         public const string RecordedFolder = "~/Jason/projects/acme-corp/campaigns/q3-leads";
@@ -776,7 +866,8 @@ public sealed class SessionOpenerTests : IDisposable
                 Error,
                 _dir.Paths,
                 handler,
-                SearchPath: Programs.Root,
+                SearchPath: SearchPath ?? Programs.Root,
+                InstallPath: InstallPath,
                 Identity: new IdentityFacts(GivenHome ?? Home, "marta", "DESK-1", null, null),
                 Variables: Variables,
                 Terminals: terminals ? Terminals : null,

@@ -32,6 +32,10 @@ public static class SessionCommands
         + "the setup brief as its first message. "
         + "Opening it changes nothing. Its answer says whether the skill customising-jason is deployed for that host, by Jason's "
         + "receipt. Not with an item, --campaign, --project, --here, --shell or --resume. "
+        + "Every form opens a terminal that runs this installation's own jason: it is given the data directory this command runs "
+        + "on as JASON_DATA_DIR, set or not, and the folder of this jason's executable first on PATH, so another jason earlier on "
+        + "PATH does not answer there as the window starts (on Windows in the console host's environment, on Linux through /usr/bin/env before the "
+        + "host, on macOS by the script); nothing is added to the host's own words; a build run through dotnet rather than installed as one file leaves PATH as it is. "
         + "Every form starts no runtime, writes no file of Jason's, and on macOS writes one script to the temporary folder that "
         + "removes itself when Terminal runs it.";
 

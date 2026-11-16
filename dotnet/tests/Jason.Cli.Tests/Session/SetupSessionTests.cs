@@ -68,6 +68,7 @@ public sealed class SetupSessionTests : IDisposable
         var launch = Assert.Single(_run.Terminals.Launches);
         Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: true), "--add-dir", _setup.PluginsDirectory], launch.Argv);
         Assert.Equal(_setup.RoleSkillsDirectory, launch.WorkingDirectory);
+        Assert.Equal(_run.WindowsVariables, launch.Variables);
         var answer = Answer();
         Assert.Equal(["kind", "folder", "plugins_folder", "host", "skill", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
         Assert.Equal("setup", (string?)answer["kind"]);
@@ -257,10 +258,36 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(["/usr/bin/open", "-a", "Terminal", "jason-setup.command"], answer["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
         var script = answer["script"]!.GetValue<string>().Split('\n');
         Assert.Contains("cd -- " + TerminalPlan.ShellQuote(_setup.RoleSkillsDirectory) + " || exit 1", script);
+        Assert.Contains("export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), script);
+        Assert.Contains("export PATH=" + TerminalPlan.ShellQuote(_run.InstalledFolder) + "\"${PATH:+:$PATH}\"", script);
         Assert.Contains(
             "exec " + string.Join(' ', new[] { claude, SetupBrief.For("claude_code", deployed: false), "--add-dir", _setup.PluginsDirectory }.Select(TerminalPlan.ShellQuote)),
             answer["script"]!.GetValue<string>(),
             StringComparison.Ordinal);
+    }
+
+    /// <summary>On Linux a host whose path holds <c>=</c> cannot follow <c>/usr/bin/env</c>: nothing is started, and the refusal is the answer.</summary>
+    [Fact]
+    public async Task Setup_on_linux_with_a_host_whose_path_holds_an_equals_sign_starts_nothing()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, "a=b")).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder + Path.PathSeparator + _run.Programs.Root;
+        DeploySkill(AgentHostKind.ClaudeCode);
+
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", (string?)Answer()["error"]!["code"]);
     }
 
     [Fact]
