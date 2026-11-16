@@ -171,7 +171,7 @@ public class ProviderSendCountsTests
 
     /// <summary>
     /// Why the Contacted list counts a person is their latest touch in the period, of their act work and the sends: Ivy's
-    /// is the sequence's step of the 15th, after her enrolment of the 12th; Hal's his only send; Tess's her own send of
+    /// is the sequence's step of the 15th, after her enrolment of the 12th and its step of the 13th; Hal's his only send; Tess's her own send of
     /// the 12th, later than the sequence's of the 11th. Under People a send names the count it is, contacted.
     /// </summary>
     [Fact]
@@ -180,6 +180,7 @@ public class ProviderSendCountsTests
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
         var world = await CampaignWorld.WriteAsync(api, Ct);
         await SendAsync(api, world.Spring, world.People["Ivy"], "2026-10-15T08:00:00.000Z");
+        await SendAsync(api, world.Spring, world.People["Ivy"], "2026-10-13T08:00:00.000Z");
         await SendAsync(api, world.Spring, world.People["Hal"], "2026-10-13T08:00:00.000Z");
         await SendAsync(api, world.Spring, world.People["Tess"], "2026-10-11T08:00:00.000Z");
 
