@@ -125,7 +125,6 @@ const answerWords: Readonly<Record<Answer, string>> = {
 export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && typeof (answer as { refused?: unknown }).refused === 'string';
 
-/** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
 /** One of the chat bar's marks, drawn in the console's stroke on its 24-unit grid; the button around it names it. */
 function BarMark({ name }: { name: keyof typeof barMarks }) {
     return (
@@ -147,6 +146,7 @@ function BarMark({ name }: { name: keyof typeof barMarks }) {
     );
 }
 
+/** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
 function unless<T>(answer: T | DesktopRefusal): T {
     if (isRefusal(answer)) throw new Error(answer.refused);
     return answer;
