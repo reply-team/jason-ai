@@ -354,13 +354,14 @@ nothing anybody wrote, no subject, preview, address or name:
   direct send's; `thread` — the thread; `channel` — the thread's channel;
 - `message` — Reply's identifier for the thread's last message, or `null` where the feed gives none;
 - `occurred_at` — the message's own moment, which stays the same however often the thread comes back into the feed, so a
-  send read twice, as the hour a read after a finished one reads again brings it back, is one event. Where the feed gives
-  the message no moment, or one that is not a moment, it is the thread's last activity, which stays the same only while no
-  other message lands on the thread: a send read again after that is read under a new moment.
+  send read twice, as the hour a read after a finished one reads again brings it back, is one event. A send the feed
+  gives no date for, or one that is not a date, is not reported: the thread's last activity moves when any other message
+  lands, so a send keyed by it could be said twice.
 
-A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and the package
-writes one line on stderr saying so, which carries the thread's and the sequence's identifiers and the thread's last
-activity, and nothing anybody wrote. A send at or past the end of a span still ends that span, and the cursor moves past
+A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and so is a send
+the feed gives no date for. The package writes one line on stderr for each, which carries the thread's and the
+sequence's identifiers and the thread's last activity, and nothing anybody wrote. A send at or past the end of a span
+still ends that span, and the cursor moves past
 every item as before. A message the account sends on a thread that holds a reply stays a move that names nobody. The
 other side's move, or one that names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
 sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.

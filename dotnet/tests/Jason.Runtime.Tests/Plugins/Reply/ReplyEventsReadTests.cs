@@ -117,8 +117,8 @@ public class ReplyEventsReadTests
     [Theory]
     [InlineData("""{"isOutbound":false}""", """{"hasReply":false}""", "other_side")]
     [InlineData("""{"isOutbound":true}""", """{"hasReply":true}""", null)]
-    [InlineData("""{"isOutbound":true}""", """{"hasReply":false}""", "message_sent")]
-    [InlineData("""{"isOutbound":true}""", null, "message_sent")]
+    [InlineData("""{"isOutbound":true,"date":"2026-11-16T02:30:00Z"}""", """{"hasReply":false}""", "message_sent")]
+    [InlineData("""{"isOutbound":true,"date":"2026-11-16T02:30:00Z"}""", null, "message_sent")]
     [InlineData(null, """{"hasReply":true}""", null)]
     public async Task Who_moved_a_thread_is_its_last_message_s_direction_and_reply_s_flag_of_a_reply(string? last, string? flags, string? mover)
     {
@@ -890,23 +890,28 @@ public class ReplyEventsReadTests
     }
 
     /// <summary>
-    /// The hour a read after a finished one reads again brings the same item back with the same last message, and the
-    /// same moment: the same send, which the runtime keeps once by its key.
+    /// A send the feed gives no date for is left out every time its thread comes back, through the hour a read after a
+    /// finished one reads again as much as the first time, each time with one line of identifiers: the thread's last
+    /// activity moves when any other message lands, so a send keyed by it could be said twice.
     /// </summary>
     [Fact]
-    public async Task A_send_read_twice_through_the_overlap_hour_is_the_same_event()
+    public async Task A_send_with_no_date_is_left_out_each_time_it_comes_back_through_the_overlap_hour()
     {
-        using var account = new ReplyAccount().WithThread(ReplyConversationListTests.Thread(501, Ago(12), inbound: false));
+        using var account = new ReplyAccount()
+            .Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: null, activity: Ago(12))))
+            .Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: null, activity: Ago(5))));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var first = Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct));
-        var again = Page(await ReadAsync(api, Input(cursor: (string)first["cursor"]!), Ct));
+        var first = await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct);
+        var again = await ReadAsync(api, Input(cursor: (string)Page(first)["cursor"]!), Ct);
 
-        Assert.StartsWith("m|", (string)first["cursor"]!, StringComparison.Ordinal);
+        Assert.StartsWith("m|", (string)Page(first)["cursor"]!, StringComparison.Ordinal);
         Assert.NotNull(account.Calls[1].Option("--since"));
-        Assert.Single(first["events"]!.AsArray());
-        Assert.Equal(first["events"]!.ToJsonString(), again["events"]!.ToJsonString());
+        Assert.Empty(Page(first)["events"]!.AsArray());
+        Assert.Empty(Page(again)["events"]!.AsArray());
+        Assert.Equal($$"""{"thread":"501","campaign":"7","at":"{{Utc(Ago(12))}}"}""", Assert.Single(PluginLines(first))["data"]!.ToJsonString());
+        Assert.Equal($$"""{"thread":"501","campaign":"7","at":"{{Utc(Ago(5))}}"}""", Assert.Single(PluginLines(again))["data"]!.ToJsonString());
     }
 
     /// <summary>
@@ -930,17 +935,26 @@ public class ReplyEventsReadTests
         Assert.Equal(first["events"]!.ToJsonString(), again["events"]!.ToJsonString());
     }
 
-    /// <summary>A message moment that is not a moment is none: the send takes the thread's last activity, and is still one valid event.</summary>
+    /// <summary>
+    /// A message date that is not a moment is none: the send is left out of the page with one line of identifiers and the
+    /// thread's moment, and nothing anybody wrote.
+    /// </summary>
     [Fact]
-    public async Task A_send_whose_moment_is_not_a_moment_takes_the_threads_last_activity()
+    public async Task A_send_whose_date_is_not_a_moment_is_left_out_with_one_line()
     {
-        using var account = new ReplyAccount().Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: "m_88", sent: "not a date", activity: Ago(10))));
+        var item = Send(501, contact: 1001, sequence: 7, message: "m_88", sent: "not a date", activity: Ago(10));
+        item["lastMessage"]!["subject"] = "Q3 pilot for Marta";
+        using var account = new ReplyAccount().Returns(Feed, Answer(item));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
-        var read = Assert.Single(Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct))["events"]!.AsArray())!;
+        var result = await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct);
 
-        Assert.Equal(("message_sent", Utc(Ago(10))), ((string?)read["kind"], (string?)read["occurred_at"]));
+        Assert.Empty(Page(result)["events"]!.AsArray());
+        var line = Assert.Single(PluginLines(result));
+        Assert.Equal("info", (string?)line["level"]);
+        Assert.Equal($$"""{"thread":"501","campaign":"7","at":"{{Utc(Ago(10))}}"}""", line["data"]!.ToJsonString());
+        Assert.DoesNotContain("Marta", Stderr(result), StringComparison.Ordinal);
     }
 
     /// <summary>A channel Reply names that this package does not know is "other" on a send, as it is on a moved thread.</summary>
@@ -956,26 +970,17 @@ public class ReplyEventsReadTests
         Assert.Equal(("message_sent", "other"), ((string?)read["kind"], (string?)read["channel"]));
     }
 
-    /// <summary>
-    /// A last message with no identifier is a send with no message, and one with no moment of its own takes the thread's
-    /// last activity, which is the moment the thread moved.
-    /// </summary>
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    public async Task A_send_with_no_message_identifier_or_no_moment_still_is_one(bool hasMessage, bool hasDate)
+    /// <summary>A last message with no identifier, but a date, is a send with no message.</summary>
+    [Fact]
+    public async Task A_send_with_no_message_identifier_still_is_one()
     {
-        var item = Send(501, contact: 1001, sequence: 7, message: hasMessage ? "m_88" : null, sent: hasDate ? Ago(12) : null, activity: Ago(10));
-        using var account = new ReplyAccount().Returns(Feed, Answer(item));
+        using var account = new ReplyAccount().Returns(Feed, Answer(Send(501, contact: 1001, sequence: 7, message: null, sent: Ago(12), activity: Ago(10))));
         using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
         await using var api = await ReplyPlugins.StartAsync(Ct);
 
         var read = Assert.Single(Page(await ReadAsync(api, Input(since: Moment(Now.AddHours(-1))), Ct))["events"]!.AsArray())!;
 
-        Assert.Equal("message_sent", (string?)read["kind"]);
-        Assert.Equal(hasMessage ? "m_88" : null, (string?)read["message"]);
-        Assert.Equal(Utc(hasDate ? Ago(12) : Ago(10)), (string?)read["occurred_at"]);
+        Assert.Equal(("message_sent", null, Utc(Ago(12))), ((string?)read["kind"], (string?)read["message"], (string?)read["occurred_at"]));
     }
 
     /// <summary>
