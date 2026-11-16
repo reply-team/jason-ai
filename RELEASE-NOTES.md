@@ -54,7 +54,10 @@ shows one item whole beside the list, and the agent's page and Settings are draw
   resumes a paused one) is refused in every access mode. The chat says when an agent is ready and that you press Start
   in the window; the Start and Resume dialogs say what starting lets go. The chat also leaves the sender's name and tone
   to you: they are set in Settings, and the chat does not set or ask for them.
-- TODO(orchestrator): the sender's line on an approval, only if it has landed in this release
+- **The sender's line on an approval.** An email approval, in the chat, in Needs you and on a work item, says under its
+  sender the name the provider holds for that mailbox, read from the runtime's sender list when the approval is shown,
+  or says truly that the mailbox has no name there, is not listed, or could not be read and why. It changes nothing
+  about Approve, and the acts do not move while it is read.
 - **The default execution profile is named through the runtime.** `jason profile set-default <name>` and
   `jason profile unset-default` write and take away `Roles:DefaultExecutionProfile`, and `jason profile list` shows the
   default in force. The install guide, the handbook and the status check name these verbs. The journal-forwarder 1.5.0
