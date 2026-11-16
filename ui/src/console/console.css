@@ -1041,6 +1041,9 @@
         --count-bg: #c2410c;
         color-scheme: dark;
     }
+    :root:not([data-theme='light']) .jc-console .content {
+        background: var(--bg);
+    }
 }
 :root[data-theme='dark'] .jc-console .brand .wordmark.light {
     display: none;
@@ -1082,6 +1085,9 @@
     --demo-ink: var(--amber);
     --count-bg: #c2410c;
     color-scheme: dark;
+}
+:root[data-theme='dark'] .jc-console .content {
+    background: var(--bg);
 }
 html,
 body,
