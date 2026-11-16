@@ -1,9 +1,11 @@
 /**
- * The demo's runtime. A demo run starts it as any run starts its installation's (`jason runtime start`); it is stopped
- * when the demo run quits, the switch back to Live included, and before the demo is started over. The stop is the
- * existing one (`stopOwnRuntime`): the runtime the demo's run file names, stopped through `jason runtime stop` on the
- * demo's directory, and only when it runs from the jason this application carries. The person's runtime is never
- * stopped here: its run file is never read.
+ * The runtime an earlier version's demo left running. Up to 0.44 the demo was a second installation beside the person's,
+ * with a runtime of its own on the demo's data directory (`demoDirectory`); a kill or a crash could leave that runtime
+ * running, and it holds the executable this application carries. Live stops it wherever it stops the person's own
+ * before that executable is replaced or removed: an update, the installer's and the uninstaller's starts, and Remove
+ * What Jason Placed (`stopWithDemo`). The stop is the existing one (`stopOwnRuntime`): the runtime the demo's run file
+ * names, stopped through `jason runtime stop` on the demo's directory, and only when it runs from the jason this
+ * application carries. The person's runtime is never stopped here: its run file is never read.
  */
 
 import { cliAt, type Cli } from './cli.ts';
@@ -27,21 +29,9 @@ export function demoRuntimeDeps(where: DemoRuntimeWhere, cliFor: (executable: st
     return ownRuntimeDeps(where.platform, where.executable, desktopPaths(data).runFile, cliFor(where.executable, { ...where.env, JASON_DATA_DIR: data }));
 }
 
-/** Stops the demo's runtime, and nothing else: what quitting a demo run and "Start the demo over" call. */
+/** Stops the demo's runtime, and nothing else. */
 export function stopDemoRuntime(where: DemoRuntimeWhere, cliFor?: (executable: string, env: Record<string, string>) => Cli): Promise<StopOutcome> {
     return stopOwnRuntime(demoRuntimeDeps(where, cliFor));
-}
-
-/** How long a demo run's quit waits for the demo's runtime to stop before it goes on all the same. */
-export const demoStopCapMs = 15_000;
-
-export interface DemoQuitDeps {
-    stop(): Promise<unknown>;
-    quit(): void;
-    /** Called once when the stop has not answered within the cap and the quit goes on without it. */
-    timedOut(): void;
-    /** The cap; `demoStopCapMs` unless a test says otherwise. */
-    capMs?: number;
 }
 
 /**
@@ -57,95 +47,4 @@ export async function stopWithDemo(person: () => Promise<StopOutcome>, demo: () 
     const other = await demo().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
     if (refused(other)) return { ...other, demo: true };
     return own.kind === 'none' ? other : own;
-}
-
-/**
- * A demo run's quit: the first is held (`beforeQuit` answers true, and Electron's `before-quit` is prevented) while the
- * demo's runtime is stopped; once the stop has answered, whatever it answered, or the cap has passed without an answer,
- * the quit is asked again and goes on.
- */
-export class DemoQuit {
-    private state: 'running' | 'stopping' | 'stopped' = 'running';
-    private readonly deps: DemoQuitDeps;
-
-    constructor(deps: DemoQuitDeps) {
-        this.deps = deps;
-    }
-
-    /** Called from `before-quit`: whether this quit is to be held. */
-    beforeQuit(): boolean {
-        if (this.state === 'stopped') return false;
-        if (this.state === 'stopping') return true;
-        this.state = 'stopping';
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const capped = new Promise<'timed_out'>((resolve) => {
-            timer = setTimeout(() => resolve('timed_out'), this.deps.capMs ?? demoStopCapMs);
-        });
-        const answered = this.deps.stop().then(
-            () => 'answered' as const,
-            () => 'answered' as const,
-        );
-        void Promise.race([answered, capped]).then((how) => {
-            clearTimeout(timer);
-            if (how === 'timed_out') this.deps.timedOut();
-            this.state = 'stopped';
-            this.deps.quit();
-        });
-        return true;
-    }
-}
-
-/** The part of Electron's app a demo run's quit is held on: its `before-quit` and its quit. */
-export interface QuittingApp {
-    on(event: 'before-quit', listener: (event: { preventDefault(): void }) => void): unknown;
-    quit(): void;
-}
-
-/**
- * Holds a demo run's quit for the demo's runtime's stop (`DemoQuit`); a Live run's quit is held for nothing and stops
- * nothing. Answers the hold, or null in Live.
- */
-export function holdDemoQuit(app: QuittingApp, mode: 'live' | 'demo', deps: Omit<DemoQuitDeps, 'quit'>): DemoQuit | null {
-    if (mode !== 'demo') return null;
-    const hold = new DemoQuit({ ...deps, quit: () => app.quit() });
-    app.on('before-quit', (event) => {
-        if (hold.beforeQuit()) event.preventDefault();
-    });
-    return hold;
-}
-
-export interface LeftRuntimeDeps {
-    /** Stops the demo's runtime (`stopDemoRuntime`): the demo's run file, the demo's directory, never the person's. */
-    stop(): Promise<StopOutcome>;
-    /** Notes in the request that this was done (`noteLeftStopped`), so it is done once; throws when it cannot. */
-    note(): void;
-    /** Starts the desktop again on the demo, which then carries the request out. */
-    startAgain(): void;
-    /** What a refused carry-out does: the record set to Live, the person told, their own installation started. */
-    refuse(): void;
-}
-
-/**
- * The start that found a demo runtime a crashed making or placing left (`leftRuntimeStops`): it opens no window, stops
- * that runtime and starts again, so the next start carries the request out; a stop that fails, or finds a runtime that
- * is not this application's, refuses as a carry-out refuses. It is done once for a request: the stop is noted in it
- * before the start again, and a request that cannot be noted is refused rather than started again without the note.
- * Answers which it did.
- */
-export async function stopLeftDemoRuntime(deps: LeftRuntimeDeps): Promise<'started-again' | 'refused'> {
-    const outcome = await deps.stop().catch((): StopOutcome => ({ kind: 'failed', exit: -1 }));
-    if (outcome.kind === 'stopped' || outcome.kind === 'none') {
-        let noted = true;
-        try {
-            deps.note();
-        } catch {
-            noted = false;
-        }
-        if (noted) {
-            deps.startAgain();
-            return 'started-again';
-        }
-    }
-    deps.refuse();
-    return 'refused';
 }

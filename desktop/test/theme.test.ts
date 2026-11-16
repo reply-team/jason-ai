@@ -7,7 +7,6 @@ import { applyTheme, darkBackground, isNewInstallation, lightBackground, startin
 import { parseSettings, settingsAtStart, writeSettings, type DesktopSettings } from '../src/settings.ts';
 import { demoDirectory, keepFirstStart, readMode, writeMode } from '../src/mode.ts';
 import { desktopPaths } from '../src/paths.ts';
-import { requestStartOver } from '../src/demo-over.ts';
 
 const base: DesktopSettings = { feed: 'http://127.0.0.1:9/manifest.json', skillsDeployedFor: '0.35.0', theme: null };
 
@@ -68,7 +67,8 @@ test('a data directory that holds only the desktop’s own mode record, or that 
     const person = join(mkdtempSync(join(tmpdir(), 'theme-new-')), '.jason');
     writeMode(desktopPaths(person).mode, 'demo');
     assert.equal(isNewInstallation(person), true, 'the record alone');
-    requestStartOver(desktopPaths(person).demoStartOver, 4242);
+    // The request an earlier version's start over left: a file of that name, whatever it holds.
+    writeFileSync(desktopPaths(person).demoStartOver, '4242');
     assert.equal(isNewInstallation(person), true, 'the record and the request');
     // Anything else of an installation in the desktop's folder, or beside it, makes it one that has been used.
     writeFileSync(desktopPaths(person).settings, '{}');

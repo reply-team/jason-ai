@@ -1,14 +1,20 @@
-// The demo's runtime: stopped by the demo's run file and the existing stop, never the person's; stopped when a demo run
-// quits, the quit held until the stop has answered or the cap has passed.
+// The runtime an earlier version's demo left running: stopped by the demo's run file and the existing stop, never the
+// person's, and asked wherever the person's own is stopped by a start of the person's.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Cli, CliResult } from '../src/cli.ts';
-import { demoRuntimeDeps, demoStopCapMs, holdDemoQuit, stopDemoRuntime } from '../src/demo-runtime.ts';
+import { demoRuntimeDeps, stopDemoRuntime, stopWithDemo } from '../src/demo-runtime.ts';
+import type { StopOutcome } from '../src/own-runtime.ts';
 import { desktopPaths } from '../src/paths.ts';
+import { runtimeRefusal as uninstallRefusal } from '../src/uninstall.ts';
+import { runtimeRefusal as updateRefusal } from '../src/updates.ts';
+
+const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const ok = (stdout: string): CliResult => ({ exit: 0, stdout, stderr: '' });
 
@@ -81,93 +87,59 @@ test('with no demo runtime running, the stop asks nothing and says so', async ()
     assert.deepEqual(made[0]!.asked, []);
 });
 
-/** Electron's app as far as a demo run's quit needs it: `before-quit` listeners, and a quit that emits it again. */
-function fakeApp() {
-    const listeners: ((event: { preventDefault(): void }) => void)[] = [];
-    const quits: { prevented: boolean }[] = [];
-    const app = {
-        on(_event: 'before-quit', listener: (event: { preventDefault(): void }) => void) {
-            listeners.push(listener);
-        },
-        quit() {
-            const quit = { prevented: false };
-            for (const listener of listeners) listener({ preventDefault: () => void (quit.prevented = true) });
-            quits.push(quit);
-        },
-    };
-    return { app, quits, listeners };
-}
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-test('a demo run’s quit is held while the demo’s runtime is stopped, then goes on, the stop asked once', async () => {
-    const { app, quits } = fakeApp();
-    let finish: () => void = () => undefined;
-    let stops = 0;
-    holdDemoQuit(app, 'demo', {
-        stop: () => {
-            stops += 1;
-            return new Promise<void>((resolve) => (finish = resolve));
-        },
-        timedOut: () => assert.fail('the stop answered in time'),
-    });
-    app.quit();
-    app.quit();
-    assert.deepEqual(quits, [{ prevented: true }, { prevented: true }], 'both quits are held while the stop runs');
-    assert.equal(stops, 1);
-    finish();
-    await settle();
-    assert.deepEqual(quits.at(-1), { prevented: false }, 'the quit asked after the stop goes on');
-    assert.equal(quits.length, 3);
-    app.quit();
-    assert.deepEqual(quits.at(-1), { prevented: false });
-    assert.equal(stops, 1);
+test('a demo runtime left running is stopped with the person’s: a refusal of either is the answer, and otherwise the person’s', async () => {
+    const stopped = async (): Promise<StopOutcome> => ({ kind: 'stopped' });
+    const none = async (): Promise<StopOutcome> => ({ kind: 'none' });
+    const another = async (): Promise<StopOutcome> => ({ kind: 'another' });
+    const failed = async (): Promise<StopOutcome> => ({ kind: 'failed', exit: 1 });
+    const unanswered = async (): Promise<StopOutcome> => ({ kind: 'unanswered', pid: 9, runFile: 'run.json' });
+    assert.deepEqual(await stopWithDemo(none, stopped), { kind: 'stopped' }, 'only the demo’s ran');
+    assert.deepEqual(await stopWithDemo(stopped, none), { kind: 'stopped' });
+    assert.deepEqual(await stopWithDemo(none, none), { kind: 'none' });
+    assert.deepEqual(await stopWithDemo(another, stopped), { kind: 'another' });
+    assert.deepEqual(await stopWithDemo(failed, stopped), { kind: 'failed', exit: 1 });
+    assert.deepEqual(await stopWithDemo(stopped, failed), { kind: 'failed', exit: 1, demo: true });
+    assert.deepEqual((await stopWithDemo(none, unanswered)).kind, 'unanswered');
+    assert.deepEqual(await stopWithDemo(stopped, async () => Promise.reject(new Error('planted'))), { kind: 'failed', exit: -1, demo: true });
+    let asked = 0;
+    await stopWithDemo(failed, async () => (asked += 1, { kind: 'none' }));
+    assert.equal(asked, 0, 'the demo’s is not asked once the person’s refused');
 });
 
-test('a stop that fails still lets the quit go on', async () => {
-    const { app, quits } = fakeApp();
-    holdDemoQuit(app, 'demo', { stop: () => Promise.reject(new Error('jason gone')), timedOut: () => assert.fail('the stop answered') });
-    app.quit();
-    await settle();
-    assert.deepEqual(quits, [{ prevented: true }, { prevented: false }]);
+test('a demo runtime that will not stop is said to be the demo’s in what the person reads, for the update and for the removal', async () => {
+    const failed = async (): Promise<StopOutcome> => ({ kind: 'failed', exit: 1 });
+    const none = async (): Promise<StopOutcome> => ({ kind: 'none' });
+    const demoRefused = await stopWithDemo(none, failed);
+    assert.deepEqual(demoRefused, { kind: 'failed', exit: 1, demo: true });
+    const personRefused = await stopWithDemo(failed, none);
+    assert.deepEqual(personRefused, { kind: 'failed', exit: 1 }, 'the person’s own refusal is not called the demo’s');
+    const unanswered = await stopWithDemo(none, async () => ({ kind: 'unanswered', pid: 5, runFile: 'run.json' }));
+    assert.equal(unanswered.kind === 'unanswered' && unanswered.demo, true);
+    for (const outcome of [demoRefused, unanswered]) {
+        assert.ok(outcome.kind === 'failed' || outcome.kind === 'unanswered');
+        const update = updateRefusal(outcome);
+        const removal = uninstallRefusal(outcome);
+        for (const text of [update, removal]) {
+            assert.match(text, /a runtime an earlier version’s demo left, on that demo’s data directory and not yours, may be running and did not stop/);
+            assert.match(text, /jason runtime stop run with JASON_DATA_DIR set to that demo’s data directory \(yours with -demo after it\)/);
+            assert.match(text, /deleting the run file in that directory’s run folder lets this go on/);
+            assert.doesNotMatch(text, /Open Jason in the demo/);
+            assert.doesNotMatch(text, /the sample installation/);
+            assert.doesNotMatch(text, /this application carries/);
+        }
+    }
+    assert.match(updateRefusal(personRefused as { kind: 'failed'; exit: number }), /the runtime this application carries did not stop/);
+    assert.match(uninstallRefusal(personRefused as { kind: 'failed'; exit: number }), /the runtime this application carries is running/);
 });
 
-test('a stop that never answers is waited for no longer than the cap: the quit goes on and says so once', async () => {
-    const { app, quits } = fakeApp();
-    let timedOut = 0;
-    holdDemoQuit(app, 'demo', { stop: () => new Promise(() => undefined), timedOut: () => void (timedOut += 1), capMs: 20 });
-    app.quit();
-    assert.deepEqual(quits, [{ prevented: true }]);
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    assert.deepEqual(quits, [{ prevented: true }, { prevented: false }]);
-    assert.equal(timedOut, 1);
-    assert.equal(demoStopCapMs, 15_000);
-});
-
-test('a live run’s quit is held for nothing and stops nothing', () => {
-    const { app, quits, listeners } = fakeApp();
-    assert.equal(holdDemoQuit(app, 'live', { stop: () => assert.fail('nothing is stopped'), timedOut: () => assert.fail('nothing waits') }), null);
-    assert.equal(listeners.length, 0);
-    app.quit();
-    assert.deepEqual(quits, [{ prevented: false }]);
-});
-
-test('quitting a demo run stops the demo’s runtime through the existing stop, and never the person’s', async () => {
-    const { person, demo, executable } = installations();
-    runFile(demo, executable, 'rt_demo');
-    const personRun = runFile(person, executable, 'rt_person');
-    const before = readFileSync(personRun, 'utf8');
-    const { made, make } = cliMaker('rt_demo');
-    const { app, quits } = fakeApp();
-    const outcomes: unknown[] = [];
-    holdDemoQuit(app, 'demo', {
-        stop: async () => void outcomes.push(await stopDemoRuntime({ platform: process.platform, executable, person, env: { JASON_DATA_DIR: demo } }, make)),
-        timedOut: () => assert.fail('the stop answered'),
-    });
-    app.quit();
-    for (let i = 0; i < 20 && quits.length < 2; i += 1) await settle();
-    assert.deepEqual(outcomes, [{ kind: 'stopped' }]);
-    assert.deepEqual(quits, [{ prevented: true }, { prevented: false }]);
-    assert.equal(made[0]!.env.JASON_DATA_DIR, demo);
-    assert.equal(readFileSync(personRun, 'utf8'), before, 'the person’s run file is untouched');
+test('the update, the installer’s stop and the uninstall stop a runtime an earlier demo left too; no start prepares a demo any more', () => {
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('stopRuntime: () => stopWithDemo(() => stopOwnRuntime(ownRuntimeDeps(process.platform, executable, paths.runFile, cli)), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env })),'));
+    for (const gone of ['prepareDemo(', 'openDemoDirectory', 'writeDemoSettings(', 'placeDemoPlugin(']) assert.equal(main.includes(gone), false, gone);
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
+    assert.ok(start.includes('runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },'));
+    const placed = readFileSync(join(desktop, 'src', 'remove-placed.ts'), 'utf8');
+    assert.ok(placed.includes('stopWithDemo(() => stopFromAny(candidates(), (executable) => input.stopAs(executable)), () => input.stopDemo())'));
 });

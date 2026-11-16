@@ -13,4 +13,19 @@ internal static class UiBuild
         File.WriteAllText(Path.Combine(directory, "favicon.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
         File.WriteAllText(Path.Combine(directory, "assets", "app-abc123.js"), $"console.log(\"{marker}\");");
     }
+
+    /// <summary>
+    /// Files under <c>sealed/</c>, each saying what it is: a page, a page a directory down, a name too long to be a short
+    /// one, a name with an accent, composed, and a script and a style, which are no page.
+    /// </summary>
+    public static void WriteSealed(string directory)
+    {
+        Directory.CreateDirectory(Path.Combine(directory, "sealed", "nested"));
+        File.WriteAllText(Path.Combine(directory, "sealed", "page.html"), "<!doctype html><title>sealed content</title><script>document.title = 'sealed content';</script>");
+        File.WriteAllText(Path.Combine(directory, "sealed", "nested", "part.html"), "<!doctype html><title>sealed content</title>");
+        File.WriteAllText(Path.Combine(directory, "sealed", "script.js"), "// sealed content");
+        File.WriteAllText(Path.Combine(directory, "sealed", "style.css"), "/* sealed content */");
+        File.WriteAllText(Path.Combine(directory, "sealed", "a-long-page-name.html"), "<!doctype html><title>sealed content</title>");
+        File.WriteAllText(Path.Combine(directory, "sealed", "caf\u00e9.html"), "<!doctype html><title>sealed content</title>");
+    }
 }

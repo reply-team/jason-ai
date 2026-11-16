@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { invokeChannels, handle, RefusedSender, type IpcRegistrar } from '../src/ipc.ts';
 import { defaultPlace, editorLine, fileManager, fileManagerLine, findEditor, OpenIn, placesFound, type Line, type OpenInDeps, type PlaceId, type Probes } from '../src/open-in.ts';
-import { editorEnvironment, openInHarnessRoot } from '../src/open-in-env.ts';
-import { enterRun, type PersonEnvironment } from '../src/mode.ts';
+import { editorEnvironment } from '../src/open-in-env.ts';
+import { personEnvironmentOf, type PersonEnvironment } from '../src/mode.ts';
 import { startDetached } from '../src/open-in-start.ts';
 import { verbOf } from '../src/installation.ts';
 import { continueFlags, terminalFlags } from '../src/open-in-terminal.ts';
@@ -292,20 +292,22 @@ test('a Windows editor found as an .exe on the PATH is started by that file, and
     assert.deepEqual(editorLine({ kind: 'program', path: 'C:\\Tools\\bin\\cursor.exe' }, 'C:\\Jason'), { file: 'C:\\Tools\\bin\\cursor.exe', args: ['C:\\Jason'] });
 });
 
-test('a demo run hands an editor the person’s environment, and the run keeps the demo’s for the terminals', () => {
+test('an editor is handed the person’s environment as it was at start, and the run’s own, which the terminals keep, is not touched', () => {
     const env: Record<string, string | undefined> = { PATH: '/bin', JASON_DATA_DIR: '/home/ada/.jason', JASON_Harness__Root: '/home/ada/Jason', HOME: '/home/ada' };
-    const person: PersonEnvironment = enterRun(env, { mode: 'demo', data: '/home/ada/.jason-demo' } as never);
-    assert.equal(env.JASON_DATA_DIR, '/home/ada/.jason-demo', 'the run is on the demo');
-    assert.equal(env.JASON_Harness__Root, undefined);
+    const person: PersonEnvironment = personEnvironmentOf(env);
+    // Whatever the run's own environment came to hold since: another data directory, and the settings variable gone.
+    env.JASON_DATA_DIR = '/home/ada/elsewhere';
+    delete env.JASON_Harness__Root;
     const forEditor = editorEnvironment(env, person, 'linux');
     assert.equal(forEditor.JASON_DATA_DIR, '/home/ada/.jason');
     assert.equal(forEditor.JASON_Harness__Root, '/home/ada/Jason');
     assert.equal(forEditor.PATH, '/bin');
-    assert.equal(env.JASON_DATA_DIR, '/home/ada/.jason-demo', 'the run’s own environment, which a terminal is started with, stays the demo’s');
+    assert.equal(env.JASON_DATA_DIR, '/home/ada/elsewhere', 'the run’s own environment, which a terminal is started with, stays as it is');
     assert.equal(env.JASON_Harness__Root, undefined);
-    // A person with no data directory of their own gets none, not the demo’s.
+    // A person with no data directory of their own gets none.
     const bare: Record<string, string | undefined> = { PATH: '/bin' };
-    const nothing = enterRun(bare, { mode: 'demo', data: '/d' } as never);
+    const nothing = personEnvironmentOf(bare);
+    bare.JASON_DATA_DIR = '/d';
     assert.equal(editorEnvironment(bare, nothing, 'linux').JASON_DATA_DIR, undefined);
 });
 
@@ -319,8 +321,6 @@ test('on Linux the program started gets XDG_CURRENT_DESKTOP back from the origin
 });
 
 test('main.ts hands an editor the person’s environment and names the person’s harness root: Open in is the window’s onto the installation alone', () => {
-    assert.equal(openInHarnessRoot('demo', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason-demo');
-    assert.equal(openInHarnessRoot('live', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason');
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
     assert.match(main, /harnessRoot: \(\) => harnessRoot\(process\.env, homedir\(\), dataLayout\(runOn\.person\)\.userSettingsFile\),/);
     assert.equal(main.includes('openInHarnessRoot('), false);
