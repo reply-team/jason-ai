@@ -593,7 +593,13 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   our switch's view. On Windows and Linux the views start at the top of the content. On Windows the caption buttons
   stand over the right end of our switch's view, which Electron tells the free title bar area in the view's own
   coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
-  them and the rest of the view moves the window. On Linux the frame is the system's.
+  them and the rest of the view moves the window. The page does not know the buttons are there: it picks its sentence
+  by the window's width alone. So on Windows the desktop puts a sheet of its own, of the user's origin, into each view
+  (`demoStripSheets`): the page's strip is inset by the buttons' width, read from the same variables, and our switch's,
+  and the page shows its own short sentence wherever the strip so inset is too narrow for its long one; where even the
+  short sentence would reach the switch, at the narrowest widths, the switch's two segments take less padding, with the
+  same words and height. No word of the page lies under the switch at any width the window allows (`demoStripAt`, held
+  by `test/demo-page.test.ts` at every width). On Linux the frame is the system's, and on Linux and macOS no sheet is put.
 
 ## Links
 
