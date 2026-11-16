@@ -49,6 +49,9 @@ public static class ApiFixtures
     // approval.list needs-first-page|-next-page (two more than the default page, read by its cursor), approval.get
     // needs-page-two, workitem.get needs-page-two-parked, approval.approve needs-page-two-approved and approval.list
     // needs-next-page-after (the second page's first approved, the page read again).
+    // A second Needs you story, two first messages of one campaign (NeedsExchangesTests, its own ids): approval.list
+    // needs-two and needs-two-after, approval.get needs-two-first|-second, workitem.get needs-two-first-parked and
+    // approval.approve needs-two-first-approved (the first approved, the second left waiting).
     //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
     // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
@@ -71,6 +74,7 @@ public static class ApiFixtures
         "approval.approve/from-campaign-row",
         "approval.approve/from-campaign-row-again",
         "approval.approve/needs-page-two-approved",
+        "approval.approve/needs-two-first-approved",
         "approval.approve/panel-doubted",
         "approval.get/by-work-item",
         "approval.get/card-invitation",
@@ -84,6 +88,8 @@ public static class ApiFixtures
         "approval.get/needs-message",
         "approval.get/needs-page-two",
         "approval.get/needs-reply",
+        "approval.get/needs-two-first",
+        "approval.get/needs-two-second",
         "approval.get/other-pending",
         "approval.get/panel-doubted",
         "approval.get/panel-moved",
@@ -118,6 +124,8 @@ public static class ApiFixtures
         "approval.list/needs-inbox",
         "approval.list/needs-next-page",
         "approval.list/needs-next-page-after",
+        "approval.list/needs-two",
+        "approval.list/needs-two-after",
         "approval.list/one-mode-unset",
         "approval.list/panel-doubted",
         "approval.list/panel-moved",
@@ -553,6 +561,7 @@ public static class ApiFixtures
         "workitem.get/failed",
         "workitem.get/needs-message-parked",
         "workitem.get/needs-page-two-parked",
+        "workitem.get/needs-two-first-parked",
         "workitem.get/open",
         "workitem.get/panel-doubted",
         "workitem.get/panel-doubted-approved",

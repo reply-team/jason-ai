@@ -12,7 +12,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
-import { attention, forgetNeeds, reads } from './needs';
+import { attention, forgetNeeds, reads, reload } from './needs';
 import { chatWaits } from './needs-chats';
 import { chats, lines } from './state';
 import { READ_LIMIT_MS, fillApprovals, forgetWaiting, wholeReads } from './waiting';
@@ -477,6 +477,8 @@ describe('Needs you', () => {
                 expect(button.hasAttribute('disabled')).toBe(false);
                 return button;
             });
+            // A browser puts the keyboard on the button pressed; the button leaves with its item.
+            approve.focus();
             fireEvent.click(approve);
             await waitFor(() =>
                 expect(sent(fake, 'approval.approve')).toEqual([
@@ -565,6 +567,130 @@ describe('Needs you', () => {
             fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
             const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
             fireEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(within(pane()).queryByRole('alertdialog')).toBeNull());
+            expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
+        });
+
+        /** Two first messages of one campaign, each read whole; the first is approved and the second is left. */
+        const two = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-two', 'approval.list/needs-two-after')
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/needs-two-first', 'approval.get/needs-two-second')
+                .answer('workitem.get', 'workitem.get/needs-two-first-parked')
+                .answer('approval.approve', 'approval.approve/needs-two-first-approved');
+        const approveIn = () => within(pane()).getByRole('button', { name: 'Approve' });
+        const ready = () =>
+            waitFor(() => {
+                expect(Object.keys(reads.approvals.value)).toHaveLength(2);
+                expect(approveIn().hasAttribute('disabled')).toBe(false);
+            });
+
+        it('takes the first click of a double click on Approve alone, so the second never lands on the next item', async () => {
+            const fake = two();
+            await renderConsole(fake);
+            await ready();
+            await settle();
+            fireEvent.click(approveIn(), { detail: 1 });
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            await settle();
+            // The next item's Approve is live where the first one was; the second click of the same double click lands on it.
+            expect(approveIn().hasAttribute('disabled')).toBe(false);
+            fireEvent.click(approveIn(), { detail: 2 });
+            await settle();
+            expect(sent(fake, 'approval.approve')).toEqual([
+                asGiven(fixtures['approval.approve/needs-two-first-approved'].request),
+            ]);
+        });
+
+        it('holds the pane’s acts from the press of Approve until the lists read after it have answered', async () => {
+            const fake = two();
+            await renderConsole(fake);
+            await ready();
+            await settle();
+            const release = fake.hold('approval.list');
+            fireEvent.click(approveIn());
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+            await settle();
+            expect(pane().dataset['id']).toBe('apr_1');
+            expect(approveIn().hasAttribute('disabled')).toBe(true);
+            expect(within(pane()).getByRole('button', { name: 'Reject' }).hasAttribute('disabled')).toBe(true);
+            await flush(async () => release());
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            await waitFor(() => expect(approveIn().hasAttribute('disabled')).toBe(false));
+        });
+
+        it('leaves the keyboard on a field the person moved to while the act was under way', async () => {
+            const fake = two();
+            await renderConsole(fake);
+            await ready();
+            await settle();
+            const release = fake.hold('approval.list');
+            fireEvent.click(approveIn());
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toHaveLength(1));
+            const picker = needs().querySelector<HTMLSelectElement>('.needs-agent')!;
+            picker.focus();
+            await flush(async () => release());
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            await settle();
+            expect(document.activeElement).toBe(needs().querySelector('.needs-agent'));
+        });
+
+        it('drops an older read of the lists that answers after a newer one', async () => {
+            const fake = two();
+            await renderConsole(fake);
+            await waitFor(() => expect(row('apr_1')).toBeTruthy());
+            // The older read is held and takes the list that still holds the first; the newer takes the one without it.
+            fake.answer('approval.list', 'approval.list/needs-two-after', 'approval.list/needs-two');
+            let calls = 0;
+            const release = fake.hold('approval.list', () => ++calls === 1);
+            const older = reload();
+            await flush(() => reload());
+            await waitFor(() => expect(needs().querySelector('[data-row="apr_1"]')).toBeNull());
+            await flush(async () => {
+                release();
+                await older;
+            });
+            await settle();
+            expect(needs().querySelector('[data-row="apr_1"]')).toBeNull();
+            expect(chips()[0]).toBe('All 1');
+        });
+
+        it('says nothing of an item leaving when a link opened one on a page not read yet', async () => {
+            const journal = stubStream();
+            const fake = paged();
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(chips()[0]).toBe('All 100+'));
+            await flush(() => attention.open(fake, 'approvals', 'apr_102'));
+            await line(journal, 'jrn_needs_5');
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBeGreaterThan(1));
+            await settle();
+            expect(needs().querySelector('.needs-left')).toBeNull();
+        });
+
+        it('keeps the lists whole when a page fails midway through being read again', async () => {
+            const journal = stubStream();
+            const fake = paged();
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(chips()[0]).toBe('All 100+'));
+            more();
+            await waitFor(() => expect(chips()[0]).toBe('All 102'));
+            fake.unreachable('approval.list', (body) => 'cursor' in body);
+            const asked = sent(fake, 'approval.list').length;
+            await line(journal, 'jrn_needs_6');
+            await waitFor(() => expect(sent(fake, 'approval.list').length).toBe(asked + 2));
+            await settle();
+            expect(chips()[0]).toBe('All 102');
+            expect(row('apr_103')).toBeTruthy();
+        });
+
+        it('closes Reject’s question on Escape and gives the keyboard back to Reject', async () => {
+            await renderConsole(inbox());
+            await waitFor(() => expect(Object.keys(reads.approvals.value).length).toBeGreaterThan(0));
+            await settle();
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
+            const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
+            fireEvent.keyDown(within(asked).getByRole('textbox'), { key: 'Escape' });
             await waitFor(() => expect(within(pane()).queryByRole('alertdialog')).toBeNull());
             expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
         });
@@ -901,7 +1027,7 @@ describe('Needs you', () => {
             expect(within(at('apr_1')).queryByText(/could not be read/)).toBeNull();
         });
 
-        it('holds only the row whose message is being checked, and that row says so', async () => {
+        it('says on the row being checked that it is, and holds every act of the pane until the press has ended', async () => {
             const fake = messages()
                 .answer('approval.get', 'approval.get/email-message', 'approval.get/linkedin-message')
                 .answer('workitem.get', 'workitem.get/parked-send')
@@ -915,8 +1041,9 @@ describe('Needs you', () => {
             await settle();
             expect(live(approve('apr_1'))).toBe(false);
             expect(words(at('apr_1'))).toContain('This message is being checked against its work item');
-            expect(live(approve('apr_2'))).toBe(true);
+            // Another item chosen meanwhile is not being checked, and its Approve waits for the press under way to end.
             expect(words(at('apr_2'))).not.toContain('being checked');
+            expect(live(approve('apr_2'))).toBe(false);
             fake.answer('approval.list', 'approval.list/empty');
             release();
             await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]));

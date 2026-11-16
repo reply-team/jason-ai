@@ -210,8 +210,13 @@ function readShown(): void {
         void openOwn('questions', shown.id);
 }
 
-/** Puts the keyboard on a line of the list, once the panel has been painted with it. */
+/**
+ * Puts the keyboard on a line of the list, once the panel has been painted with it: only when the keyboard is nowhere
+ * (on the page's body, where the button pressed left it), never taken from a field the person has moved to.
+ */
 function focusRow(id: string): void {
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
     for (const row of document.querySelectorAll<HTMLElement>('.needs-row'))
         if (row.dataset['row'] === id) {
             row.focus();
@@ -224,8 +229,15 @@ function focusPane(selector: string): void {
     document.querySelector<HTMLElement>(`.needs-pane ${selector}`)?.focus();
 }
 
-/** How many of the person's acts are under way: an item that leaves meanwhile left by their hand. */
-let acting = 0;
+/**
+ * How many of the person's acts are under way, from the press until the lists read after it have answered: the pane's
+ * acts are drawn disabled meanwhile, so a second click never lands on the next item's, and an item that leaves
+ * meanwhile left by the person's hand.
+ */
+const acting = signal(0);
+
+/** A click that is the second or later of a double click: an act takes the first alone. */
+const repeated = (event: Event): boolean => event instanceof MouseEvent && event.detail > 1;
 
 /** Whether the item the pane showed left while the person was not acting on it, until they choose or act again. */
 const left = signal(false);
@@ -235,7 +247,10 @@ function keepPlace(): boolean {
     const items = waitingOf(needsInput(), filter.value, agent.value);
     const now = chosen.value;
     const shown = placeOf(items, now);
-    const moved = now !== null && (shown === null || shown.kind !== now.kind || shown.id !== now.id);
+    // Only an item that was in the lists read can be said to have left them: one opened by a link to a page not read
+    // yet was never there.
+    const wasListed = now !== null && lastOrder.some((each) => each.kind === now.kind && each.id === now.id);
+    const moved = wasListed && (shown === null || shown.kind !== now.kind || shown.id !== now.id);
     chosen.value = shown === null ? null : { kind: shown.kind, id: shown.id };
     lastOrder = items.map((item) => ({ kind: item.kind, id: item.id }));
     return moved;
@@ -246,6 +261,12 @@ function keepPlace(): boolean {
  * read yet while the panel is drawn.
  */
 async function fill(): Promise<void> {
+    take();
+    if (drawn > 0) await fillApprovals(here().api, reads);
+}
+
+/** What `fill` does at once, before any read: what was said of items that left, and where the pane stands. */
+function take(): void {
     const listedIds = new Set(attention.approvals.value.map((row) => row.id));
     batch(() => {
         if (Object.keys(unapproved.value).some((id) => !listedIds.has(id)))
@@ -255,24 +276,26 @@ async function fill(): Promise<void> {
         reasked.value = stillAsking(reasked.value, attention.approvals.value);
         if (agent.value !== null && !agentsOf(needsInput()).some((each) => each.id === agent.value)) agent.value = null;
         // An item that leaves while no act of the person's is under way left by someone else's hand: the pane says so.
-        if (keepPlace() && acting === 0) left.value = true;
+        if (keepPlace() && acting.value === 0) left.value = true;
     });
     readShown();
-    if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
 /** An act of the person's, after which the keyboard is on the line the pane then shows, never on a button. */
 async function acted(work: () => Promise<unknown>): Promise<void> {
-    acting += 1;
-    left.value = false;
+    batch(() => {
+        acting.value += 1;
+        left.value = false;
+    });
     try {
         await work();
-        await fill();
+        take();
     } finally {
-        acting = Math.max(0, acting - 1);
+        acting.value = Math.max(0, acting.value - 1);
     }
     const shown = chosen.value;
     if (shown !== null) focusRow(shown.id);
+    if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
 /** Reads what waits again, every page the person had read, then each approval not read whole yet. */
@@ -296,7 +319,7 @@ export function forgetNeeds(): void {
     lastOrder = [];
     ownOpens.clear();
     left.value = false;
-    acting = 0;
+    acting.value = 0;
 }
 
 /** The panel is drawn: its approvals are read whole now, and at every reload while it stays drawn. */
@@ -377,7 +400,8 @@ define('needs.read', ([id]) => {
 });
 
 // Approve acts only on an approval read whole, a message checked against its work item first: the chat's cards' rule.
-define('needs.approve', ([id]) => {
+define('needs.approve', ([id], _, event) => {
+    if (repeated(event)) return;
     if (typeof id !== 'string' || checking.value.has(id)) return;
     const api = here().api;
     said(id, null);
@@ -406,7 +430,8 @@ define('needs.unreject', () => {
     focusPane('[data-action="needs.reject"]');
 });
 
-define('needs.rejected', ([id]) => {
+define('needs.rejected', ([id], _, event) => {
+    if (repeated(event)) return;
     if (typeof id !== 'string' || rejecting.value !== id) return;
     rejecting.value = null;
     // Only an approval still listed is rejected: one that left while the question stood open is no longer the person's.
@@ -446,7 +471,8 @@ define('needs.unedit', () => {
 /** The reason the journal keeps for an edit made here: what was done, in plain words. */
 export const NEEDS_EDIT_REASON = "Changed the message's words before deciding on it.";
 
-define('needs.save', ([id]) => {
+define('needs.save', ([id], _, event) => {
+    if (repeated(event)) return;
     const now = editing.value;
     const whole = typeof id === 'string' ? reads.approvals.value[id] : undefined;
     if (now === null || whole === undefined || now.id !== whole.id || now.saving) return;
@@ -495,12 +521,14 @@ define('needs.save', ([id]) => {
         });
 });
 
-define('needs.option', ([id, option]) => {
+define('needs.option', ([id, option], _, event) => {
+    if (repeated(event)) return;
     if (typeof id === 'string' && typeof option === 'string')
         void acted(() => attention.answer(here().api, id, { option }, optional(`${id}:reason`)));
 });
 
-define('needs.answer', ([id]) => {
+define('needs.answer', ([id], _, event) => {
+    if (repeated(event)) return;
     if (typeof id !== 'string') return;
     const text = optional(`${id}:text`);
     if (text) void acted(() => attention.answer(here().api, id, { text }, optional(`${id}:reason`)));
@@ -676,7 +704,12 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
     const acts = edit
         ? editBoxes(edit, summary.operation, busy)
         : asked
-          ? html`<div class="note am needs-reject" role="alertdialog" aria-label="Reject this?">
+          ? html`<div
+                class="note am needs-reject"
+                role="alertdialog"
+                aria-label="Reject this?"
+                data-escape="needs.unreject"
+            >
                 <div>Reject this? It ends the work, and a rejection cannot be taken back.</div>
                 ${field(`${summary.id}:reason`, 'Reason (optional, kept in the journal)')}
                 <div class="ask-a">
@@ -878,7 +911,7 @@ function panes(now: number, busy: boolean): Html {
 
 export function needsView(): Html {
     const now = clock.value;
-    const busy = attention.busy.value;
+    const busy = attention.busy.value || acting.value > 0;
     const failure = attention.failure.value;
     const input = needsInput();
     const none = input.approvals.length === 0 && input.questions.length === 0 && (input.chats ?? []).length === 0;

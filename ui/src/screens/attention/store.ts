@@ -82,7 +82,11 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         return { items, next_cursor: cursor };
     }
 
+    /** Which load is the latest: an earlier one that answers after it is dropped, so the lists never go back in time. */
+    let generation = 0;
+
     async function load(api: Api, decided: boolean): Promise<void> {
+        const mine = ++generation;
         shownDecided = decided;
         failure.value = null;
         failureCode.value = null;
@@ -91,6 +95,7 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
                 readList<ApprovalSummary>(api, 'approvals', decided, 'approval.list'),
                 readList<DecisionSummary>(api, 'questions', decided, 'decision.list'),
             ]);
+            if (mine !== generation) return;
             approvals.value = a.items;
             approvalsCursor.value = a.next_cursor;
             questions.value = q.items;
@@ -98,7 +103,7 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
             if (!decided && campaignId === undefined) pendingMark.value = a.items.length + q.items.length > 0;
             loaded.value = true;
         } catch (error) {
-            fail(error);
+            if (mine === generation) fail(error);
         }
     }
 

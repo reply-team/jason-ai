@@ -97,6 +97,32 @@ public class NeedsExchangesTests
         Assert.Equal([next.Items[1].Id], rest.Items.Select(a => a.Id));
     }
 
+    [Fact]
+    public async Task Two_first_messages_of_one_campaign_the_first_approved_leave_the_second_waiting()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+            var spring = WorkItemFactory.NewCampaign("Spring launch", now: Noon);
+            spring.PublicId = "cmp_01K7QR00000000000000000001";
+            db.Campaigns.Add(spring);
+            await db.SaveChangesAsync(Ct);
+            AddSend(db, spring, EmailApproval, "Ines", "Duarte", "ines@example.test");
+            AddSend(db, spring, "apr_01K7QR0000000000000000000D", "Noor", "Haddad", "noor@example.test");
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var two = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-two", new { }, Ct);
+        Assert.Equal(["Ines Duarte", "Noor Haddad"], two.Items.Select(a => a.ContactName));
+        var first = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "needs-two-first", new { approval_id = EmailApproval }, Ct);
+        await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "needs-two-second", new { approval_id = two.Items[1].Id }, Ct);
+        await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-two-first-parked", new { work_item_id = first.WorkItemId }, Ct);
+        await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "needs-two-first-approved", new { approval_id = EmailApproval, actor = new { type = "human", id = "ada" } }, Ct);
+        var after = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-two-after", new { }, Ct);
+        Assert.Equal([two.Items[1].Id], after.Items.Select(a => a.Id));
+    }
+
     private static async Task<(Campaign Spring, Campaign Autumn)> SeedAsync(RuntimeApiFixture api)
     {
         using var scope = api.Resolve<IServiceScopeFactory>().CreateScope();
