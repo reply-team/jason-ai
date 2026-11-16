@@ -478,7 +478,8 @@ details.fold pre {
 .campaign-tabs-inbox-untied .s { flex: 1; }
 .campaign-tabs-results { padding: var(--space-4) var(--space-5); }
 .campaign-tabs-results .tiles, .main:not(.single) .campaign-tabs-results .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.campaign-tabs-results .charts, .campaign-tabs-results .review { margin-top: var(--space-4); }
+.campaign-tabs-results .charts, .campaign-tabs-results .review, .campaign-tabs-results .notice { margin-top: var(--space-4); }
+.campaign-tabs-results .results-period { margin-bottom: var(--space-4); }
 .campaign-tabs-results .review { color: var(--text-muted); font-size: var(--text-sm); }
 .campaign-tabs-results .tile .none { font-weight: 400; color: var(--text-muted); }
 .campaign-tabs-results .tile, .campaign-tabs-results .tile:hover { cursor: default; background: var(--bg); }

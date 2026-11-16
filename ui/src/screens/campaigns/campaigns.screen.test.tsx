@@ -1345,6 +1345,32 @@ describe('A campaign’s Results', () => {
         expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
     });
 
+    it('choosing Last 30 days on Results puts the period in the address, reads the period again, and a reload lands on it', async () => {
+        const api = resultsApi()
+            .answerAnyRequest('campaign.activity', 'campaign.activity/one')
+            .answerAnyRequest('reply.count', 'reply.count/period-spring')
+            .answerAnyRequest('campaign.activity_by_period', 'campaign.activity_by_period/contacted-one');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        const panel = document.querySelector('.campaign-tabs-results') as HTMLElement;
+        fireEvent.click(within(panel).getByRole('button', { name: 'Last 30 days' }));
+
+        await waitFor(() => expect(location.hash).toContain('period=30d'));
+        await waitFor(() => expect(own(api, 'campaign.activity').at(-1)!['since']).toBe('2026-09-17T00:00:00.000Z'));
+        expect(own(api, 'reply.count').at(-1)!['since']).toBe('2026-09-17T00:00:00.000Z');
+        for (const body of own(api, 'campaign.activity_by_period').slice(-2)) {
+            expect(body['since']).toBe('2026-09-17T00:00:00.000Z');
+            expect(body['period']).toBe('day');
+        }
+        const shown = await figures();
+        expect(shown[0]).toBe('People now, 22');
+        expect(shown[1]).toBe('Contacted in the last 30 days, 4');
+        // The address is the truth: a reload of it opens Results on the same period.
+        expect(parseRoute(location.hash)).toMatchObject({ tab: 'results', period: '30d' });
+        expect(within(panel).getByRole('button', { name: 'Last 30 days' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
     it('another period sends the period’s reads again with its own window and bars, and People stays now', async () => {
         const api = resultsApi()
             .answerAnyRequest('campaign.activity', 'campaign.activity/one')

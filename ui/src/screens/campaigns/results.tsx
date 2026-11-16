@@ -1,5 +1,6 @@
 import type { ActivityBucket, CampaignActivityRow, CampaignSummaryRow } from '../../api/types';
 import { Notice } from '../../layout/notice';
+import { PeriodSwitch } from '../../layout/period-switch';
 import { t } from '../../platform/i18n';
 import type { Period } from '../../router';
 import { number, relative } from '../../time/format';
@@ -24,6 +25,8 @@ type Props = {
     failed: boolean;
     zone: string;
     now: Date;
+    /** The person chose another period: the tab's one switch, shared with the page's other period switches. */
+    onPeriod: (period: Period) => void;
 };
 
 const column = (columns: readonly Column[], key: string): Column => columns.find((c) => c.key === key)!;
@@ -98,7 +101,7 @@ function reviewLine(review: Read<Review>, now: Date): string | null {
  * the period's contacted and replied by bucket, and when Jason last reviewed the agent. A read that fails alone says so
  * where it would be drawn. Each tile says what it measures over beside its figure, so none reads as one measure.
  */
-export function CampaignResults({ period, shown, failed, zone, now }: Props) {
+export function CampaignResults({ period, shown, failed, zone, now, onPeriod }: Props) {
     if (failed) return null;
     const measure = over(period);
     const tiles: Tile[] = [
@@ -128,6 +131,9 @@ export function CampaignResults({ period, shown, failed, zone, now }: Props) {
     const line = shown ? reviewLine(shown.review, now) : null;
     return (
         <div className="campaign-tabs-results">
+            <div className="results-period">
+                <PeriodSwitch value={period} onChange={onPeriod} />
+            </div>
             <Tiles tiles={tiles} busy={shown === null} />
             {shown?.series.state === 'failed' ? (
                 <Notice danger>

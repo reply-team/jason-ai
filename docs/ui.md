@@ -223,7 +223,7 @@ it is loading, empty or failed, or by the toolbar's while the tab is open. Its *
 its people now and who was contacted, replied, bounced and opted out in the period (`jason campaign summary`, `jason campaign
 activity`), and the conversations a role judged interested in it (`jason reply count`, the Dashboard's own count), with nothing
 divided on the page; under them, contacted and replied by the hour, day or week (`jason campaign activity-by-period`) and when Jason
-last finished reviewing the agent (`jason workitem list --campaign <id> --role manager --status succeeded --order finished --limit 1`). While nobody
+last finished reviewing the agent (`jason workitem list --campaign <id> --role manager --status succeeded --order finished --limit 1`). The tab has the page's one period switch (today, the last 7 or 30 days); the period is in the address (`?period=30d`), so a reload lands on it. While nobody
 has been contacted, one line says the results fill in as people get their first messages. A read of the Inbox or the Results that
 failed says so over that tab of that campaign alone, never as loading, and is gone once you leave the tab; the Results' reads of
 the judged conversations, the charts and the last review fail one at a time, each saying so where it would be drawn. Its **Settings** are its record, its

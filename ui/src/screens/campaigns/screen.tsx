@@ -200,7 +200,7 @@ export function CampaignsScreen() {
             screen: 'campaigns',
             tab: at.tab,
             view,
-            period: view === 'activity' ? (next.period ?? at.period) : '7d',
+            period: view === 'activity' || at.tab === 'results' ? (next.period ?? at.period) : '7d',
             filters: next.filters ?? at.filters,
         };
         if (selected) moved.id = selected;
@@ -426,6 +426,7 @@ export function CampaignsScreen() {
                                     failed={tabFailure !== null}
                                     zone={zone}
                                     now={new Date()}
+                                    onPeriod={(period) => reshape({ period })}
                                 />
                             )}
                             {at.tab === 'settings' && (

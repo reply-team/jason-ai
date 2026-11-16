@@ -160,16 +160,25 @@ function campaigns(segments: string[], query: string): Route {
     const id = segments[0] ? decode(segments[0]) : null;
     const params = new URLSearchParams(query);
     const view: CampaignView = params.get('view') === 'activity' ? 'activity' : 'summary';
-    const asked = params.get('period');
-    const period: Period = view === 'activity' && (asked === 'today' || asked === '30d') ? asked : '7d';
     const filters: CampaignFilters = {};
     const q = params.get('q');
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
-    if (id === null) return { screen: 'campaigns', tab: firstCampaignTab.value, view, period, filters };
+    const asked = params.get('period');
+    const periodAsked: Period = asked === 'today' || asked === '30d' ? asked : '7d';
+    if (id === null)
+        return {
+            screen: 'campaigns',
+            tab: firstCampaignTab.value,
+            view,
+            period: view === 'activity' ? periodAsked : '7d',
+            filters,
+        };
     // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
     const named = segments[1] === 'details' ? 'settings' : segments[1];
     const tab: CampaignTab = agentTabs.find((each) => each === named) ?? firstCampaignTab.value;
+    // The period belongs to the table's Activity view and to an agent's Results; anywhere else it is the default.
+    const period: Period = view === 'activity' || tab === 'results' ? periodAsked : '7d';
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');
@@ -226,7 +235,8 @@ function performanceQuery(route: Extract<Route, { screen: 'performance' }>): str
 function campaignQuery(route: Extract<Route, { screen: 'campaigns' }>): string {
     const parts: string[] = [];
     if (route.view === 'activity') parts.push('view=activity');
-    if (route.view === 'activity' && route.period !== '7d') parts.push(`period=${route.period}`);
+    if ((route.view === 'activity' || (route.id !== undefined && route.tab === 'results')) && route.period !== '7d')
+        parts.push(`period=${route.period}`);
     if (route.filters.q) parts.push(`q=${encodeURIComponent(route.filters.q)}`);
     if (route.filters.archived) parts.push('archived=1');
     if (route.filter) parts.push(`filter=${route.filter}`);
