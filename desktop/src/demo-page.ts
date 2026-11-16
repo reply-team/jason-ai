@@ -1,11 +1,13 @@
 /**
  * The seal around a view of the Demo: the page the application carries as one static file (`demo/index.html`), shown as
- * it was built, and the desktop's own Demo | Live switch drawn over it (`shell/demo-switch.html`). The page is not the
- * desktop's code, so its view is made harmless whatever its script does: no preload and so no bridge to the main process,
- * Chromium's sandbox, a session of its own that Electron keeps in memory, the one file it is served from and nothing
- * else, no pop-up, no navigation away, no download, every permission and every device chooser refused, and a content
- * policy sent as a header of the protocol that serves the file, before a byte of the page is read, so nothing in the
- * page can loosen it: a policy the page states itself is one more that also applies, never one that replaces it.
+ * it was built, and the desktop's own Demo | Live switch drawn over the place its strip leaves for one
+ * (`shell/demo-switch.html`). The page is not the desktop's code, so its view is made harmless whatever its script does:
+ * no preload and so no bridge to the main process, Chromium's sandbox, a session of its own that Electron keeps in
+ * memory, the one file it is served from and nothing else, no pop-up, no navigation away, no download, every permission
+ * and every device chooser refused, and a content policy sent as a header of the protocol that serves the file, before a
+ * byte of the page is read, so nothing in the page can loosen it: a policy the page states itself is one more that also
+ * applies, never one that replaces it. The policy's `sandbox` is the page's own frame, scripts alone, so its origin is
+ * opaque.
  *
  * Every piece of it is here, pure or wired onto the view's own contents and session (`sealView`), so a test runs the same
  * code over stand-ins and holds each piece; `demo-window.ts` makes the views and calls it before anything is loaded.
@@ -61,9 +63,9 @@ export function demoBeforeReady(commandLine: BeforeReady['commandLine'], protoco
 export const noDragSheet = '*, *::before, *::after { -webkit-app-region: no-drag !important; }';
 
 /**
- * How the two schemes are registered before Electron is ready: standard, so a page has an origin of its own and its
- * storage works, and secure, as a page served from the application is. Nothing else: never `bypassCSP`, never the Fetch
- * API, CORS, service workers or streams.
+ * How the two schemes are registered before Electron is ready: standard, so an address has a host and a path, and secure,
+ * as a page served from the application is. Nothing else: never `bypassCSP`, never the Fetch API, CORS, service workers
+ * or streams. The page's origin is opaque all the same: its policy's `sandbox` leaves out same-origin.
  */
 export function demoSchemes(): { scheme: string; privileges: { standard: boolean; secure: boolean } }[] {
     return [demoPage, demoSwitch].map((view) => ({ scheme: view.scheme, privileges: { standard: true, secure: true } }));
@@ -96,9 +98,10 @@ export function demoViewPreferences(view: DemoView): WebPreferences {
 /**
  * The content policy, a header of the one response: the page's inline script and inline style, its fonts and images as
  * `data:` addresses, and nothing else: no address to fetch, connect or open a socket to, no frame, worker, plugin, form
- * target or base. Its `sandbox` keeps scripts and the page's own origin, so its storage works, and lets its forms raise
- * their events for its script, which `form-action` keeps from going anywhere; it leaves out pop-ups, top-level
- * navigation, downloads, modal dialogs and printing, pointer lock, presentation and orientation lock.
+ * target or base. Its `sandbox` is the page's own frame, the one it was built and walked in: scripts and nothing more.
+ * Without same-origin the page's origin is opaque (`null`): it shares nothing with any other page and sets no cookie, and
+ * what it keeps lives in the view's session, which is in memory only. It leaves out forms, pop-ups, top-level
+ * navigation, downloads, modal dialogs and printing, pointer lock, presentation and orientation lock. The desktop's own refusals below hold the page to the same whatever the policy does.
  */
 export const demoPolicy = [
     "default-src 'none'",
@@ -116,7 +119,7 @@ export const demoPolicy = [
     "form-action 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
-    'sandbox allow-scripts allow-same-origin allow-forms',
+    'sandbox allow-scripts',
 ].join('; ');
 
 /** The browser features a page may ask for, each allowed to no origin, its own included. */
@@ -177,7 +180,7 @@ export interface DemoAnswer {
 
 /**
  * Pure: whether an address is the view's own: the same text up to its fragment, which names a place in the page and asks
- * nothing more of the scheme. The page moves itself to `#start` once it is loaded, so a reload asks for that. A fragment
+ * nothing more of the scheme, so a page that moved itself to a fragment is still its own page when reloaded. A fragment
  * begins at the first `#` of an address, so the scheme, the host, the path and the query are compared whole.
  */
 export function isOwnAddress(view: DemoView, url: string): boolean {
@@ -223,6 +226,8 @@ export interface SealDeps {
     read(): Uint8Array;
     /** Told what was refused, each kind at most once (`onceEach`). */
     refused(kind: DemoRefusal): void;
+    /** A sheet of the desktop's own, of the user's origin, put into every document of the view (`demoStripSheets`). */
+    sheet?: string | undefined;
     /**
      * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
      * answers true when it was one, which is then not told as a refusal.
@@ -337,10 +342,11 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
         refuse('navigation');
         if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
     });
-    if (!view.drags) {
+    const sheets = [...(view.drags ? [] : [noDragSheet]), ...(deps.sheet === undefined ? [] : [deps.sheet])];
+    if (sheets.length > 0) {
         contents.on('dom-ready', () => {
-            // A document gone before the sheet lands refuses it; the next document gets its own.
-            contents.insertCSS(noDragSheet, { cssOrigin: 'user' }).catch(() => undefined);
+            // A document gone before a sheet lands refuses it; the next document gets its own.
+            for (const sheet of sheets) contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined);
         });
     }
     contents.setWindowOpenHandler(() => {
@@ -384,8 +390,9 @@ export function switchChoice(url: string): 'live' | null {
 
 /**
  * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of it
- * its top strip is 38 high (the strip and its one-pixel border), the window's drag region, where it draws its own switch.
- * Ours covers that strip whole, from the sidebar to the window's right edge. On macOS the window's title bar is hidden,
+ * its top strip is 38 high (the strip and its one-pixel border), with its own dot and words at its left and its right end
+ * left free for a switch. Our view lies over that strip whole, from the sidebar to the window's right edge, the window's
+ * drag region; it is transparent, so the page's words show through, and draws the switch alone at the right end. On macOS the window's title bar is hidden,
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
  * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
  * Windows the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
@@ -407,5 +414,96 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
         page: { x: 0, y: top, width, height: Math.max(0, height - top) },
         switch: { x: demoGeometry.sidebar, y: top, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
         band: top === 0 ? null : { x: 0, y: 0, width, height: top },
+    };
+}
+
+/**
+ * The page's strip on Windows. The caption buttons stand over the strip's right end, and the page cannot know they are
+ * there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a sentence
+ * that does not fit end in an ellipsis of its own. So on Windows the desktop puts two sheets of its own into the views,
+ * each of the user's origin and important, which no rule of a page outranks: into the page's view, one that insets the
+ * strip by the caption buttons' width, read from the overlay's geometry (`env(titlebar-area-*)`), and our switch beside
+ * them, and has the page show its own short sentence wherever the strip so inset is too narrow for its long one; into our
+ * switch's view, one that, where even the short sentence would reach the switch, makes the switch tighter: less padding
+ * inside its two segments, the same words and the same height. Nothing of the page is edited, and no word of ours is
+ * drawn over it.
+ *
+ * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium
+ * with the system's Segoe UI, from the strip's left edge (its 16 pixels of padding included); `test/demo-page.test.ts`
+ * holds the page's rules they rest on. `margin` is the room kept beyond them before the switch takes its normal form or
+ * the page its long sentence.
+ */
+const sentence = { short: 390.16, long: 604.5 } as const;
+const page = { padStart: 16, gap: 8, shortUpTo: 1100 } as const;
+const segment = { normal: 12, tight: 3 } as const;
+/** Our switch, measured at its normal form: four segment paddings, its two words and its own padding of 2 each side. */
+const normal = 106.16;
+const ours = { padStart: 16, padEnd: 12, shadow: 5, normal, tight: normal - 4 * (segment.normal - segment.tight), segment } as const;
+const margin = 8;
+export const demoStrip = {
+    sentence,
+    page,
+    ours,
+    margin,
+    /** The page's strip's right padding beyond the caption buttons: our tight switch, its shadow and padding, less the page's own gap. */
+    inset: Math.floor(ours.padEnd + ours.tight + ours.shadow - page.gap),
+    /** The page's strip's content width, so inset, from which its long sentence stands clear of our normal switch. */
+    longFrom: Math.ceil(sentence.long + ours.padEnd + ours.normal + ours.shadow + margin - page.padStart - Math.floor(ours.padEnd + ours.tight + ours.shadow - page.gap)),
+    /** Our switch's content width below which the switch takes its tight form: where the short sentence would reach its normal one. */
+    tightBelow: Math.ceil(sentence.short + ours.padEnd + ours.normal + ours.shadow + margin - ours.padStart - ours.padEnd),
+} as const;
+
+/** The two sheets on `platform`: on Windows alone, where the caption buttons stand over the strip. */
+export function demoStripSheets(platform: NodeJS.Platform): { page: string; switch: string } | null {
+    if (platform !== 'win32') return null;
+    const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
+    const tight = demoStrip.ours.segment.tight;
+    return {
+        page:
+            `.jc-console #mode-bar { container: jason-strip / inline-size !important; padding-right: calc(${demoStrip.inset}px + ${caption}) !important; } ` +
+            `@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`,
+        switch:
+            // Its widths are measured in Segoe UI, so its words are drawn in that font by name, never by the system's.
+            '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' +
+            'body { container: jason-switch / inline-size !important; } ' +
+            `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
+    };
+}
+
+/** What the strip shows at a window width: which sentence and switch, where the sentence ends and where the switch begins. */
+export interface DemoStripAt {
+    form: 'long' | 'short';
+    switchForm: 'normal' | 'tight';
+    /** Whether the sentence stands whole, with no ellipsis. */
+    whole: boolean;
+    /** Where the sentence ends, from the strip's left edge. */
+    textEnd: number;
+    /** Where our switch, its shadow of the strip's colour included, begins. */
+    coveredFrom: number;
+}
+
+/**
+ * Pure: the strip at a window's content width on `platform` with caption buttons this wide (0 where there are none), as
+ * the page's rules and the sheets above lay it out. The tests hold every width from the window's least up to it.
+ */
+export function demoStripAt(platform: NodeJS.Platform, width: number, caption: number): DemoStripAt {
+    const strip = width - demoGeometry.sidebar;
+    const sheets = demoStripSheets(platform) !== null;
+    const room = strip - caption;
+    const pagePadEnd = sheets ? caption + demoStrip.inset : 12;
+    const longByPage = width > demoStrip.page.shortUpTo;
+    const longBySheet = !sheets || room - demoStrip.page.padStart - demoStrip.inset >= demoStrip.longFrom;
+    const form = longByPage && longBySheet ? 'long' : 'short';
+    const switchContent = strip - demoStrip.ours.padStart - demoStrip.ours.padEnd - caption;
+    const switchForm = sheets && switchContent < demoStrip.tightBelow ? 'tight' : 'normal';
+    const switchWidth = switchForm === 'tight' ? demoStrip.ours.tight : demoStrip.ours.normal;
+    const limit = strip - pagePadEnd - demoStrip.page.gap;
+    const end = demoStrip.sentence[form];
+    return {
+        form,
+        switchForm,
+        whole: end <= limit,
+        textEnd: Math.min(end, limit),
+        coveredFrom: strip - demoStrip.ours.padEnd - caption - switchWidth - demoStrip.ours.shadow,
     };
 }

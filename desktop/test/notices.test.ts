@@ -45,7 +45,8 @@ test('the notices name what the demo page carries inside it, the Inter font, wit
     assert.ok(text.includes('\n@fontsource-variable/inter 5.3.0: OFL-1.1\n'));
     assert.ok(text.includes('https://github.com/rsms/inter'));
     const licence = readFileSync(join(root, 'demo', 'LICENSE-Inter.txt'), 'utf8').trim();
-    assert.ok(licence.startsWith('Copyright 2016 The Inter Project Authors'));
+    // The text the page's build recorded for the font it embeds, both its files named in the copyright line.
+    assert.equal(licence.split('\n')[0],'Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)');
     assert.ok(licence.includes('SIL OPEN FONT LICENSE Version 1.1'));
     assert.ok(text.includes(licence), 'the licence text whole');
     assert.ok(text.indexOf('3. What the demo page carries') > text.indexOf('2. The packages'));
