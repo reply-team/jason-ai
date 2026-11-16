@@ -1,4 +1,4 @@
-import { effect, signal } from '@preact/signals-react';
+import { effect, signal, untracked } from '@preact/signals-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
@@ -28,9 +28,11 @@ import {
     catchUpFeed,
     ChatPanel,
     handLine,
+    isUnmade,
     onChatMade,
     openConversation,
     reloadConversations,
+    retireShadowed,
     startChat,
     unmadeChat,
 } from './chat';
@@ -269,7 +271,8 @@ function restore(): void {
 
 /** The conversation of an agent: the one held open, else the one the desktop keeps, else one made now. */
 async function chatOfAgent(id: string): Promise<string | null> {
-    const held = Object.values(chats.value).find((each) => !each.main && each.campaignId === id);
+    // A conversation made for it wins over its unmade chat, which gives way to it.
+    const held = Object.values(chats.value).find((each) => !each.main && each.campaignId === id && !isUnmade(each.id));
     if (held) return held.id;
     const kept = conversations.value.find((each) => !each.main && each.campaignId === id);
     if (kept) return openConversation(kept.id);
@@ -277,7 +280,9 @@ async function chatOfAgent(id: string): Promise<string | null> {
     await reloadConversations();
     const listed = conversations.value.find((each) => !each.main && each.campaignId === id);
     if (listed) return openConversation(listed.id);
-    const meanwhile = Object.values(chats.value).find((each) => !each.main && each.campaignId === id);
+    const meanwhile = Object.values(chats.value).find(
+        (each) => !each.main && each.campaignId === id && !isUnmade(each.id),
+    );
     if (meanwhile) return meanwhile.id;
     // None yet: its Chat is drawn, and its conversation made at the person's first act that needs one.
     const name =
@@ -468,7 +473,14 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             followHistory(to);
         });
         const made = onChatMade(chatMade);
+        // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
+        const shadowed = effect(() => {
+            void chats.value;
+            void conversations.value;
+            untracked(retireShadowed);
+        });
         return () => {
+            shadowed();
             made();
             followed();
             unbound();

@@ -8,7 +8,7 @@ import { agentKind, firstTabName, kindWord } from '../screens/campaigns/kind';
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { agentChatRoute } from './agent-place';
 import { agentFacts, peopleOf, readAgent } from './agent-facts';
-import { openConversation, restartChat } from './chat';
+import { isUnmade, openConversation, restartChat } from './chat';
 import type { Chat } from './chat-model';
 import { read as listedRead, reload as reloadCampaigns } from './campaigns';
 import { toCampaignRow } from './live';
@@ -36,7 +36,9 @@ const number = new Intl.NumberFormat('en-US');
 
 /** The agent's conversation the console holds open, else the one the desktop keeps; the Feed is nobody's. */
 function conversationOf(id: string): { chat: Chat | undefined; kept: string | undefined } {
-    const chat = Object.values(chats.value).find((each) => !each.main && each.campaignId === id);
+    // A conversation made for it before its unmade chat, which stands in for one only while there is none.
+    const ofAgent = Object.values(chats.value).filter((each) => !each.main && each.campaignId === id);
+    const chat = ofAgent.find((each) => !isUnmade(each.id)) ?? ofAgent[0];
     const kept = conversations.value.find((each) => !each.main && each.campaignId === id)?.id;
     return { chat, kept };
 }

@@ -309,22 +309,60 @@ export function makeUnmade(id: string): Promise<string | null> {
             if (now) changeChat(id, (each) => told(everyWordBack(each), why));
             return null;
         }
-        if (now)
-            changeChat(real, (each) => ({
-                ...each,
-                draft: each.draft.trim() ? each.draft : now.draft,
-                waiting: each.waiting ?? now.waiting,
-                held: each.waiting === null ? now.held : each.held,
-            }));
-        const rest = { ...chats.value };
-        delete rest[id];
-        chats.value = rest;
-        for (const hook of madeHooks) hook(id, real);
+        retire(id, real);
         return real;
     })();
     making.set(id, made);
     void made.finally(() => making.delete(id));
     return made;
+}
+
+/**
+ * An unmade chat gives way to its agent's conversation, held now: the words typed and a message waiting go with it, the
+ * unmade chat goes, and the area shows the conversation in its place.
+ */
+function retire(id: string, real: string): void {
+    const now = chats.value[id];
+    if (now)
+        changeChat(real, (each) => ({
+            ...each,
+            draft: each.draft.trim() ? each.draft : now.draft,
+            waiting: each.waiting ?? now.waiting,
+            held: each.waiting === null ? now.held : each.held,
+        }));
+    const rest = { ...chats.value };
+    delete rest[id];
+    chats.value = rest;
+    for (const hook of madeHooks) hook(id, real);
+}
+
+/** The agents whose conversation is being opened because an unmade chat of theirs stands in for it. */
+const opening = new Set<string>();
+
+/**
+ * An unmade chat stands in for its agent's conversation only while there is none. Once one is held (opened from Recent,
+ * or a set-up chat chosen for the agent) the unmade chat gives way to it; once the desktop lists one (made in another
+ * place on the same agent) it is opened, and the unmade chat gives way to it. One being made here is left to its make.
+ */
+export function retireShadowed(): void {
+    for (const chat of Object.values(chats.value)) {
+        const agent = chat.campaignId;
+        if (!isUnmade(chat.id) || agent === null || making.has(chat.id)) continue;
+        const held = Object.values(chats.value).find(
+            (each) => !each.main && each.campaignId === agent && !isUnmade(each.id),
+        );
+        if (held) {
+            retire(chat.id, held.id);
+            continue;
+        }
+        const listed = conversations.value.find((each) => !each.main && each.campaignId === agent);
+        if (!listed || opening.has(agent)) continue;
+        opening.add(agent);
+        void openConversation(listed.id).finally(() => {
+            opening.delete(agent);
+            retireShadowed();
+        });
+    }
 }
 
 /** Runs `then` with a chat's panel once the area has drawn it, or gives up after a few frames. */

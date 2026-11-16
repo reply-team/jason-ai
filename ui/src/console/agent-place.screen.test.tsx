@@ -17,6 +17,7 @@ import { agentFacts } from './agent-facts';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
+import { reloadConversations } from './chat';
 import { closeMenus } from './side';
 import { forgetWaiting } from './waiting';
 import { activePanel, chats, conversations, feedId, here, lines, setup, setupError } from './state';
@@ -427,6 +428,35 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(creates(desktop)).toHaveLength(1);
         expect(sends(desktop)).toEqual([]);
         expect(location.hash).toBe('#/campaigns/cmp_2/chat');
+    });
+
+    it('gives way to the conversation made for it elsewhere, carrying the words typed, through Recent and the tabs', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'typed before it was made' } });
+        // Another place on the same agent sent, so the desktop holds its conversation, and the list says so.
+        const autumn = 'conv_01JDKEPT0000000000000000A1';
+        desktop.keep({ id: autumn, campaignId: 'cmp_2', title: 'Autumn' });
+        await flush(() => reloadConversations());
+        fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Autumn' })));
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${autumn}`));
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${autumn}`));
+        expect(location.hash).toBe('#/campaigns/cmp_2/chat');
+        expect(shownBox().value).toBe('typed before it was made');
+        expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]);
+        await back('#/campaigns/cmp_2/people');
+        await back('#/campaigns/cmp_2/chat');
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${autumn}`));
+        // Its "…" holds the made conversation's acts.
+        fireEvent.click(within(head()!).getByRole('button', { name: "More for this agent's conversation" }));
+        expect(within(head()!).getByRole('menuitem', { name: 'Rename conversation' })).toHaveProperty(
+            'disabled',
+            false,
+        );
+        expect(creates(desktop)).toEqual([]);
     });
 
     it('a create refused leaves the words in the box and says why in the chat', async () => {
