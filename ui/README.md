@@ -8,9 +8,12 @@ The browser UI the Jason runtime serves at `http://127.0.0.1:<port>/ui/`. One mo
 
 Node 24. `npm ci`, then `npm run build` writes `dist/`, with the `THIRD-PARTY-NOTICES` of exactly the packages the
 bundle carries. `npm run package` wraps it as `artifacts/jason-ui.zip`: `index.html`,
-`manifest.json`, `favicon.svg` (the mark), `brand-wordmark.svg` and `brand-wordmark-dark.svg` (the wordmark for a light and a dark ground), `assets/*`, `THIRD-PARTY-NOTICES` at the root. The build refuses a package it carries
-that has no licence file, and the package step refuses notices that leave out a package `package.json` names as a
-dependency.
+`manifest.json`, `favicon.svg` (the mark), `brand-wordmark.svg` and `brand-wordmark-dark.svg` (the wordmark for a light and a dark ground), `assets/*`, `THIRD-PARTY-NOTICES` at the root, and `sealed/demo.html`: the desktop's demo page,
+`../desktop/demo/index.html`, copied byte for byte, which a browser tab shows at `#/demo` and the runtime serves unable
+to act ([docs/ui.md](../docs/ui.md#the-demo-in-a-browser-tab)). The notices name what that page carries in a part of
+their own. The build refuses a package it carries that has no licence file, and the package step refuses notices that
+leave out a package `package.json` names as a dependency, a directory other than `assets/` and `sealed/`, and anything
+under `sealed/` but a page.
 
 The brand files are the mark, the two wordmarks and the app icons under `desktop/`; the small `Alpha` label beside the wordmark
 is text in the page, in the browser and in the desktop alike, and the first screen of the desktop says the interface is optional and that a terminal with your AI, through the CLI and API, does the same.
@@ -140,6 +143,15 @@ only through its painter, and carries no inline handler or style attribute in ma
 named once more in `tests/guards/desktop-seam.test.ts`, so a member added or dropped is a red build, and every use of one is held to the bridge's table or to the one question (`tests/guards/desktop-calls.test.ts`); the classic shell's chunk
 reaches no console file but the few it shares (`tests/guards/classic-chunk.test.ts`); only
 `tests/e2e/harness.ts` may start a process, and it gives each runtime a data directory and a harness root of its own;
-the CI job runs all of it on every push.
+the demo's frame is drawn in one place with its attributes from one constant, its switch as high as the strip the desktop
+stands its own over, and nothing listens for a message but the journal's socket (`tests/guards/demo-frame.test.ts`); the
+demo page's addresses are held to the counted list beside it (`tests/guards/sealed-page.test.ts`); the CI job runs all
+of it on every push.
 
-**Running.** `npm test` (unit and screen), `npm run e2e` (needs `npm run build`, a runtime built from its source in Release, or `JASON_EXE` naming an installed `jason`, and `npx playwright install chromium` once).
+**The sealed probe.** `tests/e2e/probe/` puts a hostile page where the demo page stands and has the console show it in
+its frame; every way out it can name aims at a witness, a server of the test's own on the loopback, or at a file the
+UI serves, and the witness must hear nothing and the file must not be reached, which only the sealed content policy
+ensures; a probe that stays green with that policy's network rules removed proves nothing. It runs in the CI job alone, which sets
+`JASON_SEALED_PROBE=1`, in Chromium, Firefox and WebKit; without that variable `playwright test` leaves it out.
+
+**Running.** `npm test` (unit and screen), `npm run e2e` (needs `npm run build`, a runtime built from its source in Release, or `JASON_EXE` naming an installed `jason`, and `npx playwright install chromium` once; the probe runs in CI, not on a person's machine).

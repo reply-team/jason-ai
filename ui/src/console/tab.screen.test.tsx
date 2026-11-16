@@ -145,14 +145,14 @@ describe('The console in a tab', () => {
         expect(document.querySelector('[data-slot="open-in"]')?.children).toHaveLength(0);
     });
 
-    it('draws the Demo | Live switch off, with its sentence on each button', async () => {
+    it('draws the Demo | Live switch on, as this tab’s own view, never the desktop’s mode', async () => {
         await renderTab();
         const group = screen.getByRole('group', { name: 'Data' });
         const buttons = within(group).getAllByRole('button') as HTMLButtonElement[];
         expect(buttons.length).toBe(2);
         for (const each of buttons) {
-            expect(each.disabled).toBe(true);
-            expect(each.title).toBe(elsewhere);
+            expect(each.disabled).toBe(false);
+            expect(each.title).not.toBe(elsewhere);
         }
     });
 

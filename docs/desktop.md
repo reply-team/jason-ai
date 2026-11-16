@@ -283,8 +283,10 @@ chat in Ask first or Plan only; for a chat in any other mode its box is locked, 
 never answers a permission card or a plan card, which say they are answered in Jason Desktop, never changes a chat's mode
 and never chooses Full access, and a chat started from a tab starts in Ask first, whatever the standing choice of Full
 access says. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
-with one sentence, "Done in Jason Desktop's own window.": the Demo | Live switch, the account acts of Connect and of the
-Accounts page, the access modes other than the chat's own, and the take-back of the standing choice of Full access. A tab
+with one sentence, "Done in Jason Desktop's own window.": the account acts of Connect and of the Accounts page, the access
+modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
+shows the demo page in that tab alone and leaves the desktop's mode as it is
+([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
 draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it. The tab shows the
 Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
@@ -339,6 +341,10 @@ else of the desktop in Demo, so it cannot even ask your network's name server ab
 denied: the camera, the microphone, your location, notifications, reading the clipboard, the screen and any device. Its
 content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
 What you type into it stays in it. A file you drop onto it can be read by the page's script, which can send it nowhere.
+
+**In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
+with its own switch over the page's strip, while the desktop stays on your installation
+([ui.md](ui.md#the-demo-in-a-browser-tab)).
 
 **What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH and no Remove What Jason Placed:
