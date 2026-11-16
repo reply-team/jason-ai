@@ -160,7 +160,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   in an append-only store — `event_sources`, `events`, `event_attributions`, under the journal's three guards — each
   event once by a key per plugin, and an event no pin matches is kept. An event reaches a campaign only by the campaign
   identifier its operations pinned, decided once when it is stored, as a reserved line: a thread the other side moved as
-  `inbound_reply_observed` under inbound sync's key, every other kind as `provider_event_observed`. A scan step
+  `inbound_reply_observed` under inbound sync's key, a message the account sent as `provider_send_observed`, never by
+  the person and no default manager trigger, every other kind as `provider_event_observed`. A scan step
   between the lease enforcer and inbound sync hands one read at a time to a reader off the scan — never a work item or a
   handler slot — for every account a route binds, on `Dispatcher:EventsCadenceSeconds`, thirty days deep, a span older
   than that said once as `events_gap_observed`; inbound sync skips a campaign routed to such a plugin only where an
