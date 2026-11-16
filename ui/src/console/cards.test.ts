@@ -373,9 +373,9 @@ describe('what a block reads as', () => {
         ['a campaign id not of the desktop’s shape', { kind: 'needs', campaign: 'cmp_1;drop' }],
         ['a campaign id that is no string', { kind: 'needs', campaign: 1 }],
         ['an accounts card with a member', { kind: 'accounts', campaign: 'cmp_1' }],
-        ['an AI card with a member', { kind: 'ai_setup', host: 'claude_code' }],
-        ['a Reply card with a member', { kind: 'reply_setup', key: 'x' }],
-        ['a Reply card that names a campaign', { kind: 'reply_setup', campaign: 'cmp_1' }],
+        ['the card that opens Connect with a member', { kind: 'ai_setup', host: 'claude_code' }],
+        ['the card that opens Accounts with a member', { kind: 'reply_setup', key: 'x' }],
+        ['the card that opens Accounts naming a campaign', { kind: 'reply_setup', campaign: 'cmp_1' }],
     ])('says schema for %s', (_, value) => expect(failure(object(value))).toMatch(/ schema$/));
 
     it('refuses __proto__, which JSON.parse makes an own key', () => {
@@ -769,6 +769,9 @@ describe('the chat’s instructions', () => {
     it('tells the AI never to ask in the chat for a key, a password or a sign-in', () => {
         const rule = instructions.split('\n').find((line) => line.startsWith('15. ')) ?? '';
         expect(rule).toContain('never ask in this chat for a key, a password or a sign-in');
+        expect(rule).toContain(
+            'If the person pastes a key or a password into the chat, do not use it and do not repeat it',
+        );
     });
 });
 

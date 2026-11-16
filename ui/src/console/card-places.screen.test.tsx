@@ -21,8 +21,8 @@ import { attention } from './needs';
 import { chats, conversations, feedId, feedUnseen } from './state';
 import { forgetWaiting } from './waiting';
 
-// The two cards the chat's AI asks for that only lead to a place of the window: the AI card, which opens Connect, where
-// the AI hosts and the model keys are, and the Reply card, which opens the Accounts page, where Reply's sign-in and its
+// The two cards the chat's AI asks for that only lead to a place of the window: the card that opens Connect, where
+// the AI hosts and the model keys are, and the card that opens Accounts, the Accounts page, where Reply's sign-in and its
 // accounts are. Each is its header, one sentence of the window's and one button. Neither reads anything, so neither
 // says when it was read or has a Refresh, and neither turns an earlier card of facts into a stub; neither holds a key,
 // a login, a form or a link, and a click on its button opens the place and does nothing else.
@@ -126,7 +126,7 @@ afterEach(() => {
     mode.value = 'live';
 });
 
-describe('the AI card', () => {
+describe('the card that opens Connect', () => {
     it('is its header, the window’s sentence and Open Connect, and says nothing of a read', async () => {
         renderConsole([setUp(turn('ai_setup'))]);
         const pane = await openChat('Setting up');
@@ -155,7 +155,7 @@ describe('the AI card', () => {
     });
 });
 
-describe('the Reply card', () => {
+describe('the card that opens Accounts', () => {
     it('is its header, the window’s sentence and Open Accounts, and says nothing of a read', async () => {
         const { fake } = renderConsole([setUp(turn('reply_setup'))]);
         const pane = await openChat('Setting up');
@@ -241,7 +241,9 @@ describe('where the two cards stand', () => {
         const pane = await openChat('Setting up');
         await waitFor(() =>
             expect(
-                within(pane).getByText('Jason’s card did not hold what an AI card needs, so it is not shown.'),
+                within(pane).getByText(
+                    'Jason’s card did not hold what the card that opens Connect needs, so it is not shown.',
+                ),
             ).toBeTruthy(),
         );
         expect(pane.textContent).not.toContain('sk-planted');
@@ -275,6 +277,14 @@ describe('the two cards in a browser tab', () => {
             expect(words(await card(pane, 'AI'))).toBe(`AI ${aiSentence} Open Connect`);
             fireEvent.click(within(reply).getByRole('button', { name: 'Open Accounts' }));
             await waitFor(() => expect(route.value).toEqual({ screen: 'accounts' }));
+            // Each place says itself what only the desktop's window does.
+            const offHere = "Done in Jason Desktop's own window.";
+            await waitFor(() => expect(within(shownPane()).getByRole('heading', { name: 'Provider' })).toBeTruthy());
+            await waitFor(() => expect(within(shownPane()).getAllByText(offHere).length).toBeGreaterThan(0));
+            const again = await openChat('Setting up');
+            fireEvent.click(within(await card(again, 'AI')).getByRole('button', { name: 'Open Connect' }));
+            await waitFor(() => expect(within(shownPane()).getByRole('heading', { name: 'Connect' })).toBeTruthy());
+            await waitFor(() => expect(within(shownPane()).getAllByText(offHere).length).toBeGreaterThan(0));
         } finally {
             cleanup();
             setPlace('window');

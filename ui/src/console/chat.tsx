@@ -621,16 +621,16 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
 
-/** A kind as the line of a card that did not hold what it needs names it. */
+/** A kind as the line of a card that did not hold what it needs names it: the card, by its kind or by where it leads. */
 const kindWords: Readonly<Record<CardKind, string>> = {
-    choice: 'a choice',
-    people_list: 'a people list',
-    agent_status: 'an agent status',
-    needs: 'a needs',
-    accounts: 'an accounts',
-    ai_setup: 'an AI',
-    reply_setup: 'a Reply',
-    plan: 'a plan',
+    choice: 'a choice card',
+    people_list: 'a people list card',
+    agent_status: 'an agent status card',
+    needs: 'a needs card',
+    accounts: 'an accounts card',
+    ai_setup: 'the card that opens Connect',
+    reply_setup: 'the card that opens Accounts',
+    plan: 'a plan card',
 };
 
 /** The line drawn in place of a card that did not draw, in the desktop's words; never anything the block held. */
@@ -640,7 +640,7 @@ export const cardRefusedLine = (kind: CardKind | 'unknown', failure: string): st
         : failure === 'too_long'
           ? 'Jason’s card was too long to read, so it is not shown.'
           : failure === 'schema' && kind !== 'unknown'
-            ? `Jason’s card did not hold what ${kindWords[kind]} card needs, so it is not shown.`
+            ? `Jason’s card did not hold what ${kindWords[kind]} needs, so it is not shown.`
             : 'Jason’s card could not be read, so it is not shown.';
 
 /** The header of each kind's card, in the desktop's words. */
