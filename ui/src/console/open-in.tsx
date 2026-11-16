@@ -307,33 +307,38 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         subtitle?: string,
         text?: string,
         description?: string,
-    ) => (
-        <button
-            key={place.id}
-            type="button"
-            role="menuitem"
-            className={place.id === answer?.default ? 'on' : undefined}
-            aria-labelledby={description === undefined ? undefined : `${menuId}-${place.id}-name`}
-            aria-describedby={description === undefined ? undefined : `${menuId}-${place.id}-about`}
-            title={description}
-            onClick={() => void open(place.id)}
-        >
-            <span className="oi-icon">
-                <PlaceGlyph glyph={kindOf(place.id)} />
-            </span>
-            <span className="oi-text">
-                <span className="oi-name" id={`${menuId}-${place.id}-name`}>
-                    {text ?? nameOf(place)}
+    ) => {
+        // The name can be cut by its ellipsis, so every item carries it whole as its title; an agent's title adds its
+        // full sentence after the name.
+        const words = text ?? nameOf(place);
+        return (
+            <button
+                key={place.id}
+                type="button"
+                role="menuitem"
+                className={place.id === answer?.default ? 'on' : undefined}
+                aria-labelledby={description === undefined ? undefined : `${menuId}-${place.id}-name`}
+                aria-describedby={description === undefined ? undefined : `${menuId}-${place.id}-about`}
+                title={description === undefined ? words : `${words}: ${description}`}
+                onClick={() => void open(place.id)}
+            >
+                <span className="oi-icon">
+                    <PlaceGlyph glyph={kindOf(place.id)} />
                 </span>
-                {subtitle !== undefined && <small>{subtitle}</small>}
-                {description !== undefined && (
-                    <span className="oi-about" id={`${menuId}-${place.id}-about`}>
-                        {description}
+                <span className="oi-text">
+                    <span className="oi-name" id={`${menuId}-${place.id}-name`}>
+                        {words}
                     </span>
-                )}
-            </span>
-        </button>
-    );
+                    {subtitle !== undefined && <small>{subtitle}</small>}
+                    {description !== undefined && (
+                        <span className="oi-about" id={`${menuId}-${place.id}-about`}>
+                            {description}
+                        </span>
+                    )}
+                </span>
+            </button>
+        );
+    };
     const rule = <div className="open-in-rule" role="separator" />;
     return (
         <div className="open-in" ref={root}>

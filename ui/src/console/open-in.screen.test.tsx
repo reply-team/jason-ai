@@ -142,7 +142,9 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(within(menu()).getAllByText('A new session in a terminal')).toHaveLength(2);
         for (const agent of ['Claude Code', 'Codex']) {
             const entry = within(menu()).getByRole('menuitem', { name: agent });
-            expect(entry.getAttribute('title')).toBe('A new session in a terminal, with your own settings and tools');
+            expect(entry.getAttribute('title')).toBe(
+                `${agent}: A new session in a terminal, with your own settings and tools`,
+            );
             expect(document.getElementById(entry.getAttribute('aria-describedby')!)?.textContent).toBe(
                 'A new session in a terminal, with your own settings and tools',
             );

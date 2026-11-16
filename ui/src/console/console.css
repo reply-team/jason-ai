@@ -1922,6 +1922,11 @@ body,
 }
 /* In a narrow tab the strip's sentence is read whole: the strip grows to the lines it needs. */
 @media (max-width: 520px) {
+    /* The strip wraps here and can stand three lines (about 62 pixels), and the menu hangs from the button centred in it,
+       so its top lands near 50 pixels down; 88 leaves the menu a breath above the window's edge. */
+    .jc-console .open-in-menu {
+        max-height: calc(100vh - 88px);
+    }
     .jc-console .mode-strip {
         height: auto;
         min-height: 38px;
