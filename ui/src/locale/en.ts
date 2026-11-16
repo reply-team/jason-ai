@@ -88,6 +88,7 @@ export const en = {
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
     'mode.strip': 'Mode bar',
+    'mode.nav': 'Sidebar',
     'mode.strip.name': 'Demo:',
     'mode.strip.long': 'an example of what you can build on Jason. The data is samples, and nothing is sent.',
     'mode.strip.short': 'Sample data. Nothing is sent.',

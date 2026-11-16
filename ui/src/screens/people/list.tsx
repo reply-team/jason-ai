@@ -31,10 +31,12 @@ function channelsOf(person: Contact): { names: string; values: string } {
 }
 
 /** The people, newest activity first as the runtime ordered them, one row each; the person the row names opens in the panel. */
+import { ScrollBox } from '../../layout/scroll-box';
+
 export function PeopleList({ people, filters, drawn, tab, selected, more, me, now, zone }: Props) {
     const open = (id: string) => navigate({ screen: 'people', id, tab, filters });
     return (
-        <div className="tablewrap">
+        <ScrollBox label="People">
             <table className="ptable">
                 <thead>
                     <tr>
@@ -115,6 +117,6 @@ export function PeopleList({ people, filters, drawn, tab, selected, more, me, no
                 </tbody>
             </table>
             <More more={more} />
-        </div>
+        </ScrollBox>
     );
 }
