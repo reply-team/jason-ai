@@ -60,6 +60,12 @@ const winter = (entries: DesktopKeptEntry[]) => ({
     entries,
 });
 const spring = (entries: DesktopKeptEntry[]) => ({ id: springChat, campaignId: 'cmp_1', title: 'Spring', entries });
+/** A plan that sends on one channel alone. */
+const only = (channel: 'email' | 'linkedin') => ({
+    ...plan,
+    channels: [channel],
+    steps: [{ when: 'First', channel, body: 'A short note.' }],
+});
 const setUp = (entries: DesktopKeptEntry[]) => ({ id: setupChat, campaignId: null, title: 'Sending', entries });
 
 /** The console over a fake that answers what the console reads at its start, with the given conversations kept. */
@@ -90,12 +96,15 @@ function renderConsole(
     return { fake, desktop };
 }
 
-/** What the draft agent's plan card reads: the agent, its people now, and the plugin routed to send its messages. */
+/**
+ * What the draft agent's plan card reads: the agent, its people now, and the plugin a send takes on each channel the
+ * plan names.
+ */
 const winterReads = () =>
     new FakeApi()
         .answer('campaign.get', 'campaign.get/card-plan-draft')
         .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-plan-draft')
-        .answer('route.resolve', 'route.resolve/card-plan-message-send');
+        .answer('route.resolve', 'route.resolve/card-plan-email', 'route.resolve/card-plan-linkedin');
 /** What a chat about no agent yet reads: the installation's send modes and its routes. */
 const setupReads = () =>
     new FakeApi()
@@ -236,15 +245,19 @@ describe('a plan the AI proposes', () => {
         expect(within(part).getByText('It is a draft: none of its work starts until it is started.')).toBeTruthy();
         expect(within(part).getAllByText('Every message waits for you')).toHaveLength(2);
         expect(within(part).getByText('2 people in this agent')).toBeTruthy();
-        expect(words(part)).toContain('Plugin that sends messages: reply');
-        expect(within(part).getByText('It can send this agent’s messages now.')).toBeTruthy();
+        expect(words(part)).toContain('Plugin that sends email: reply It can send this agent’s email now.');
+        expect(words(part)).toContain(
+            'Plugin that sends LinkedIn messages: reply It can send this agent’s LinkedIn messages now.',
+        );
         // No number of the AI's stands under "On record now": the only one there is the runtime's count of people.
         const counted = part.cloneNode(true) as HTMLElement;
         counted.querySelector('.card-asof')!.remove();
         expect(counted.textContent!.match(/\d+/g)).toEqual(['2']);
         expect(calls(fake, 'campaign.get').map((each) => each.body)).toEqual([{ campaign_id: 'cmp_5' }]);
+        // A send names its channel, so where each channel's sends go is read by naming it, as the claim does.
         expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
-            { campaign_id: 'cmp_5', operation: 'message.send' },
+            { campaign_id: 'cmp_5', operation: 'message.send', channel: 'email' },
+            { campaign_id: 'cmp_5', operation: 'message.send', channel: 'linkedin' },
         ]);
         expect(calls(fake, 'campaign.summary').at(-1)!.body).toEqual({
             campaign_ids: ['cmp_5'],
@@ -258,29 +271,46 @@ describe('a plan the AI proposes', () => {
         const card = await read(pane);
         const made = fake.calls.length;
         fireEvent.click(within(facts(card)).getByRole('button', { name: 'Refresh' }));
-        await waitFor(() => expect(fake.calls.length).toBe(made + 3));
+        await waitFor(() => expect(fake.calls.length).toBe(made + 4));
         await read(pane);
         expect(
             fake.calls
                 .slice(made)
                 .map((each) => each.operation)
                 .sort(),
-        ).toEqual(['campaign.get', 'campaign.summary', 'route.resolve']);
+        ).toEqual(['campaign.get', 'campaign.summary', 'route.resolve', 'route.resolve']);
         expect(writes(fake)).toEqual([]);
         expect(sends(desktop)).toEqual([]);
     });
 
-    it('says no plugin is routed to send messages for an agent the routes send nowhere', async () => {
+    it('says no plugin is routed to send email for an agent the routes send nowhere', async () => {
         const fake = new FakeApi()
-            .answer('campaign.get', 'campaign.get/card-status')
-            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-status')
-            .answer('route.resolve', 'route.resolve/card-plan-no-route');
-        renderConsole([spring(turn())], fake);
+            .answer('campaign.get', 'campaign.get/card-plan-unrouted')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-plan-unrouted')
+            .answer('route.resolve', 'route.resolve/card-plan-no-route-email');
+        renderConsole([spring(turn(only('email')))], fake);
         const pane = await openChat('Spring');
         const card = await read(pane);
-        expect(within(facts(card)).getByText('No plugin is routed to send messages for this agent.')).toBeTruthy();
-        expect(within(facts(card)).getByText('It is active.')).toBeTruthy();
-        expect(words(facts(card))).not.toContain('Plugin that sends messages:');
+        expect(within(facts(card)).getByText('No plugin is routed to send email for this agent.')).toBeTruthy();
+        expect(within(facts(card)).getByText('0 people in this agent')).toBeTruthy();
+        expect(words(facts(card))).not.toContain('Plugin that sends');
+    });
+
+    it('names the plugin a channel route of the agent’s own sends its LinkedIn messages by', async () => {
+        const fake = new FakeApi()
+            .answer('campaign.get', 'campaign.get/card-plan-channels')
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/card-plan-channels')
+            .answer('route.resolve', 'route.resolve/on-a-channel');
+        renderConsole([spring(turn(only('linkedin')))], fake);
+        const pane = await openChat('Spring');
+        const card = await read(pane);
+        expect(words(facts(card))).toContain(
+            'Plugin that sends LinkedIn messages: other-tool It can send this agent’s LinkedIn messages now.',
+        );
+        expect(words(facts(card))).not.toContain('email');
+        expect(calls(fake, 'route.resolve').map((each) => each.body)).toEqual([
+            { campaign_id: 'cmp_1', operation: 'message.send', channel: 'linkedin' },
+        ]);
     });
 
     it('in a chat about no agent yet says so, with how messages go for every agent and the plugin the routes send them by', async () => {
@@ -290,10 +320,24 @@ describe('a plan the AI proposes', () => {
         expect(within(part).getByText('No agent is created yet.')).toBeTruthy();
         expect(words(part)).toContain('People who have not replied yet: Goes automatically');
         expect(words(part)).toContain('People who have replied: Every message waits for you');
-        expect(words(part)).toContain('Plugin that sends messages: reply');
+        expect(words(part)).toContain('Plugin that sends email: reply');
+        expect(words(part)).toContain('Plugin that sends LinkedIn messages: reply');
         expect(calls(fake, 'route.list').map((each) => each.body)).toEqual([{}]);
         expect(calls(fake, 'campaign.get')).toEqual([]);
         expect(calls(fake, 'route.resolve')).toEqual([]);
+    });
+
+    it('in a chat about no agent yet names the plugin a global channel route sends that channel’s messages by', async () => {
+        const fake = new FakeApi()
+            .answer('system.info', 'system.info/with-ui', 'system.info/send-modes-set')
+            .answer('route.list', 'route.list/card-plan-global-channels');
+        renderConsole([setUp(turn())], fake);
+        const pane = await openChat('Sending');
+        const part = facts(await read(pane));
+        expect(Array.from(part.querySelectorAll('.card-line')).map(words).slice(-2)).toEqual([
+            'Plugin that sends email: reply',
+            'Plugin that sends LinkedIn messages: other-tool',
+        ]);
     });
 
     it('after a reopen reads only for the conversation’s last plan, an earlier one waiting on Show now', async () => {

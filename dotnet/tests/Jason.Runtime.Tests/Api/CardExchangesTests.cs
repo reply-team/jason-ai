@@ -354,6 +354,13 @@ public class CardExchangesTests
             Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-draft", new { campaign_ids = new[] { winter.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
             var route = await api.RecordAsync<JsonObject>(Operations.RouteResolve, "card-plan-message-send", new { campaign_id = winter.Campaign, operation = "message.send" }, Ct);
             Assert.Equal((true, "reply"), ((bool?)route["usable"], (string?)route["plugin_id"]));
+            // A send names its channel, and a channel may have a route of its own: the same read for each channel a plan
+            // names, which here falls to the global default.
+            foreach (var channel in new[] { "email", "linkedin" })
+            {
+                var sent = await api.RecordAsync<JsonObject>(Operations.RouteResolve, $"card-plan-{channel}", new { campaign_id = winter.Campaign, operation = "message.send", channel }, Ct);
+                Assert.Equal(("reply", channel), ((string?)sent["plugin_id"], (string?)sent["channel"]));
+            }
 
             // The campaigns a chip is chosen from: the page the panel lists and the counts it reads for them.
             var listed = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "card-chips", new { limit = 100 }, Ct);
@@ -398,6 +405,10 @@ public class CardExchangesTests
         var scene = await Scene.OpenAsync(api, "Winter plan", routed: false);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route", new { campaign_id = scene.Campaign, operation = "message.send" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.SenderList, "card-sender-unread", new { campaign_id = scene.Campaign, owners = "team", sender_channel = "email", limit = 100 }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
+        // What a plan for it reads: the campaign, its people, and where its email would go, which is nowhere.
+        Assert.Equal(CampaignStatus.Draft, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "card-plan-unrouted", new { campaign_id = scene.Campaign }, Ct)).Status);
+        Assert.Equal(0, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-unrouted", new { campaign_ids = new[] { scene.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
+        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route-email", new { campaign_id = scene.Campaign, operation = "message.send", channel = "email" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
     }
 
     /// <summary>

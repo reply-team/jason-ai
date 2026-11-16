@@ -8,6 +8,8 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import * as consoleCampaigns from './campaigns';
+import { proposals } from './card-plan';
+import { openConversation } from './chat';
 import { Console } from './console';
 import { chats, conversations } from './state';
 import { choicesOf, chooseIn, closeMenu, currentOf, menuButton, waitForMenus } from '../test/menus';
@@ -50,6 +52,7 @@ const chatId = () => Object.keys(chats.value)[0]!;
 beforeEach(() => {
     chats.value = {};
     conversations.value = [];
+    proposals.value = {};
     consoleCampaigns.campaigns.value = [];
     consoleCampaigns.read.value = false;
     classicCampaigns.shown.value = null;
@@ -615,6 +618,7 @@ describe('Plan only’s plan card', () => {
             await planned(desktop, `Here is the plan.\n${other}`);
             await waitFor(() => expect(card()).not.toBeNull());
             expect(card()!.querySelector('.plan-text')!.textContent).toBe(`Here is the plan.\n${other}`);
+            expect(within(card()!).queryByText(/its drafts included/)).toBeNull();
             expect(proposal()).toBeNull();
             expect(within(card()!).queryByRole('group', { name: 'Jason asks' })).toBeNull();
             expect(approve()).not.toBeNull();
@@ -650,6 +654,102 @@ describe('Plan only’s plan card', () => {
         expect(routeReads()).toHaveLength(1);
         fireEvent.click(within(proposal()!).getByRole('button', { name: 'Refresh' }));
         await waitFor(() => expect(routeReads()).toHaveLength(2));
+    });
+
+    /**
+     * A Plan only turn whose words arrive while it runs and are read there, then end marked the plan: what a person sees
+     * on a real turn. Returns the chat's id and the reads of the routes the card made.
+     */
+    async function readWhileRunning(): Promise<{ desktop: StubDesktop; id: string; reads: () => number }> {
+        let fake!: FakeApi;
+        const desktop = renderConsole(chatDesktop(), (given) => routes((fake = given)));
+        await waitFor(() => menu());
+        choose('plan_only');
+        await waitForMenus(() => expect(value()).toBe('plan_only'));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Plan it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        const id = calls(desktop, 'chat.send')[0]!.args[0] as string;
+        flush(() => desktop.emit(id, { kind: 'text', text: block }));
+        await waitFor(() => screen.getByText('No agent is created yet.'));
+        return { desktop, id, reads: () => fake.calls.filter((each) => each.operation === 'route.list').length };
+    }
+    const drawn = () => screen.queryByRole('group', { name: 'Jason’s proposal' });
+    /** Lets what the page queued once it drew again run: a read a card asked for starts there. */
+    const settled = () => flush(() => new Promise((done) => setTimeout(done, 20)));
+    const asOf = () => drawn()!.querySelector('.card-asof')!.textContent;
+
+    it('keeps its one read when the chat leaves Plan only after the turn’s end marked the plan', async () => {
+        const { desktop, id, reads } = await readWhileRunning();
+        flush(() => desktop.emit(id, { kind: 'done', error: null, plan: true }));
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        const read = asOf();
+        choose('ask_first');
+        await waitForMenus(() => expect(value()).toBe('ask_first'));
+        await waitFor(() => expect(card()).toBeNull());
+        expect(drawn()).not.toBeNull();
+        expect(within(drawn()!).getByText('No agent is created yet.')).toBeTruthy();
+        await settled();
+        expect(asOf()).toBe(read);
+        expect(reads()).toBe(1);
+    });
+
+    it('keeps its one read when the plan is approved and the next turn ends', async () => {
+        const { desktop, id, reads } = await readWhileRunning();
+        flush(() => desktop.emit(id, { kind: 'done', error: null, plan: true }));
+        await waitFor(() => expect(approve()).not.toBeNull());
+        fireEvent.click(approve()!);
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
+        flush(() => {
+            desktop.emit(id, { kind: 'text', text: 'Done as planned.' });
+            desktop.emit(id, { kind: 'done', error: null });
+        });
+        await waitFor(() => screen.getByText('Done as planned.'));
+        await settled();
+        expect(drawn()).not.toBeNull();
+        expect(within(drawn()!).getByText('No agent is created yet.')).toBeTruthy();
+        expect(reads()).toBe(1);
+    });
+
+    it('keeps a draft opened while the turn ran open across its end and after the chat leaves Plan only', async () => {
+        const { desktop, id } = await readWhileRunning();
+        fireEvent.click(within(drawn()!).getByRole('button', { name: 'Show the draft' }));
+        await waitFor(() => within(drawn()!).getByText('Jason’s draft'));
+        flush(() => desktop.emit(id, { kind: 'done', error: null, plan: true }));
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(within(proposal()!).getByText('Jason’s draft')).toBeTruthy();
+        choose('ask_first');
+        await waitForMenus(() => expect(value()).toBe('ask_first'));
+        await waitFor(() => expect(card()).toBeNull());
+        await settled();
+        expect(within(drawn()!).getByText('Jason’s draft')).toBeTruthy();
+    });
+
+    it('reads afresh, its drafts closed, when the conversation is opened again from the desktop’s record', async () => {
+        const { desktop, id, reads } = await readWhileRunning();
+        fireEvent.click(within(drawn()!).getByRole('button', { name: 'Show the draft' }));
+        await waitFor(() => within(drawn()!).getByText('Jason’s draft'));
+        flush(() => desktop.emit(id, { kind: 'done', error: null, plan: true }));
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(reads()).toBe(1);
+        // The desktop's record of the conversation, its plan marked as kept, read again by the page.
+        desktop.kept.get(id)!.entries = structuredClone(chats.value[id]!.entries) as never;
+        chats.value = {};
+        await flush(() => openConversation(id));
+        await waitFor(() => expect(reads()).toBe(2));
+        await waitFor(() => expect(drawn()!.querySelector('.card-asof')).not.toBeNull());
+        expect(within(drawn()!).queryByText('Jason’s draft')).toBeNull();
+    });
+
+    it('says over Approve and run that the plan is approved as written, its drafts included, open or not', async () => {
+        const desktop = renderConsole(chatDesktop(), routes);
+        await planned(desktop, block);
+        await waitFor(() => expect(approve()).not.toBeNull());
+        const said = within(card()!).getByText(
+            'Approve and run approves this plan as written, its drafts included, open or not.',
+        );
+        expect(said.compareDocumentPosition(approve()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(proposal()!.compareDocumentPosition(said) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('offers no Approve and run over a plan of no words', async () => {

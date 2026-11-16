@@ -68,7 +68,8 @@ public class RouteResolveExchangesTests
     [Fact]
     public async Task A_channel_route_answers_the_calls_on_its_channel_and_the_list_shows_it_beside_the_operations_own()
     {
-        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        // A fixed moment, as the campaign's row is recorded too.
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero)), prepare: paths =>
         {
             File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
             TestPlugins.Write(paths, "reply", Sender("reply"), "export function invoke() {}");
@@ -83,6 +84,10 @@ public class RouteResolveExchangesTests
         var described = await api.RecordAsync<OperationDescriptionDto>(Operations.OperationDescribe, "on-a-channel", new { campaign_id = campaign, operation = "message.send", channel = "linkedin" }, Ct);
         var refusedResolve = await api.RecordErrorAsync(Operations.RouteResolve, "unknown-channel", new { campaign_id = campaign, operation = "message.send", channel = "sms" }, HttpStatusCode.BadRequest, Ct);
         var refusedDescribe = await api.RecordErrorAsync(Operations.OperationDescribe, "unknown-channel", new { campaign_id = campaign, operation = "message.send", channel = "sms" }, HttpStatusCode.BadRequest, Ct);
+        // What a plan card in this campaign's chat reads beside the route: the campaign and its people.
+        var planned = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "card-plan-channels", new { campaign_id = campaign }, Ct);
+        var people = await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-channels", new { campaign_ids = new[] { campaign }, exclude_archived_contacts = true }, Ct);
+        Assert.Equal((campaign, 0), (planned.Id, Assert.Single(people.Campaigns).People));
 
         Assert.Equal(("other-tool", "linkedin"), (described.PluginId, described.Channel));
         Assert.All(new[] { refusedResolve, refusedDescribe }, error => Assert.Equal("validation_failed", error.Code));
@@ -91,6 +96,28 @@ public class RouteResolveExchangesTests
         var routes = Assert.Single(listed.Campaigns);
         Assert.Equal("reply", routes.Operations["message.send"].PluginId);
         Assert.Equal("other-tool", routes.Channels!["message.send"]["linkedin"].PluginId);
+    }
+
+    /// <summary>
+    /// An installation that sends through one plugin by default and LinkedIn messages through another: the list of its
+    /// routes, as a chat about no campaign yet reads where a new campaign's messages would go.
+    /// </summary>
+    [Fact]
+    public async Task A_global_channel_route_is_listed_beside_the_global_default()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            TestPlugins.Write(paths, "reply", Sender("reply"), "export function invoke() {}");
+            TestPlugins.Write(paths, "other-tool", Sender("other-tool"), "export function invoke() {}");
+            TestRoutes.WriteGlobal(paths, TestRoutes.GlobalDefault("reply"));
+        });
+        await api.PostOkAsync<RoutesDto>(Operations.RouteSet, new { scope = "global", operation = "message.send", channel = "linkedin", plugin = "other-tool" }, Ct);
+
+        var listed = await api.RecordAsync<RoutesDto>(Operations.RouteList, "card-plan-global-channels", new { }, Ct);
+
+        Assert.Equal("reply", listed.Global.Default!.PluginId);
+        Assert.Equal("other-tool", listed.Global.Channels!["message.send"]["linkedin"].PluginId);
     }
 
     /// <summary>A package that sends messages and reads its accounts' events: what a channel route may name.</summary>

@@ -6,7 +6,7 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
-import { askedAsWords, lastReading, planView, proposalOf, proposals } from './card-plan';
+import { askedAsWords, forgetProposals, lastReading, planView, proposalOf, proposals } from './card-plan';
 import {
     cardLayout,
     openChoice,
@@ -168,7 +168,11 @@ export async function reloadConversations(): Promise<void> {
 async function hold(id: string): Promise<string> {
     if (chats.value[id]) return id;
     const record = unless(await here().desktop.chat.open(id));
-    if (!chats.value[record.id]) chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    if (!chats.value[record.id]) {
+        // Read from the record, its cards read afresh: nothing they held before belongs to these entries.
+        forgetProposals(record.id);
+        chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    }
     return record.id;
 }
 
@@ -530,6 +534,7 @@ function planCard(
     host: DesktopHost | null,
     words: string = entry.text,
     drawn: Html | null = null,
+    drafts = false,
 ): Html {
     // Approve and run is offered over what a person can read: never over a plan of none.
     const last = entry === chat.entries.at(-1) && (words.trim() !== '' || drawn !== null);
@@ -551,6 +556,7 @@ function planCard(
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
         ${words.trim() === '' ? null : html`<div class="said plan-text">${words}</div>`} ${drawn}
         ${line === null ? null : html`<div class="ask-w">${line}</div>`}
+        ${drafts && (live || approving) ? html`<div class="ask-w plan-drafts">${planDrafts}</div>` : null}
         ${
             (live || approving) && inTab()
                 ? html`<div class="perm-done">${answeredInDesktop}</div>`
@@ -577,6 +583,9 @@ function planCard(
         }
     </div>`;
 }
+
+/** Said over Approve and run where the plan drawn in it has drafts: what it approves is the plan as written. */
+const planDrafts = 'Approve and run approves this plan as written, its drafts included, open or not.';
 
 /** A campaign a pick names: by the name the console read for it, else by its id. */
 const campaignName = (id: string): string => campaigns.value.find((each) => each.id === id)?.name ?? id;
@@ -879,6 +888,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                         host,
                         marked.words,
                         planView(chat, index, marked.card, lastReads, asks),
+                        (marked.card.steps ?? []).some((step) => step.body !== undefined),
                     );
                 }
                 const words = cut ?? entry.text;

@@ -37,9 +37,10 @@ public static class ApiFixtures
     //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
     //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
     //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
-    //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
+    //                     card-unknown-campaign, route.resolve card-plan-message-send|-email|-linkedin, campaign.list|summary
     //                     card-chips, plugin.list|route.list card-accounts.
-    //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
+    //   no route:         route.resolve card-plan-no-route|-no-route-email, campaign.get|summary card-plan-unrouted,
+    //                     sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
@@ -168,7 +169,9 @@ public static class ApiFixtures
         "campaign.audience/three-audiences",
         "campaign.audience/unknown-campaign",
         "campaign.get/archived",
+        "campaign.get/card-plan-channels",
         "campaign.get/card-plan-draft",
+        "campaign.get/card-plan-unrouted",
         "campaign.get/card-status",
         "campaign.get/card-status-draft",
         "campaign.get/details",
@@ -244,7 +247,9 @@ public static class ApiFixtures
         "campaign.summary/audience-unknown",
         "campaign.summary/audience-without-archived",
         "campaign.summary/card-chips",
+        "campaign.summary/card-plan-channels",
         "campaign.summary/card-plan-draft",
+        "campaign.summary/card-plan-unrouted",
         "campaign.summary/card-status",
         "campaign.summary/card-status-draft",
         "campaign.summary/card-status-later",
@@ -426,10 +431,14 @@ public static class ApiFixtures
         "rolenote.set/two-levels",
         "route.list/card-accounts",
         "route.list/card-accounts-reply",
+        "route.list/card-plan-global-channels",
         "route.list/channel-routes",
         "route.list/empty",
+        "route.resolve/card-plan-email",
+        "route.resolve/card-plan-linkedin",
         "route.resolve/card-plan-message-send",
         "route.resolve/card-plan-no-route",
+        "route.resolve/card-plan-no-route-email",
         "route.resolve/elsewhere",
         "route.resolve/elsewhere-first",
         "route.resolve/global-default",

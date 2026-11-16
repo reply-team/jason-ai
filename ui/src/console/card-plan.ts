@@ -13,7 +13,17 @@ import { t } from '../platform/i18n';
 import { modeWords } from '../screens/send-modes/model';
 import { clock } from '../time/format';
 import { act, define } from './actions';
-import { cardLayout, lastCardOf, placeOf, readCard, type CardOption, type PlacedCard, type PlanCard } from './cards';
+import {
+    cardLayout,
+    lastCardOf,
+    placeOf,
+    planChannels,
+    readCard,
+    type CardOption,
+    type PlacedCard,
+    type PlanCard,
+    type PlanChannel,
+} from './cards';
 import type { Chat, Entry } from './chat-model';
 import { html, type Html } from './html';
 import { channelWords } from './live';
@@ -54,8 +64,11 @@ async function part<T>(read: Promise<T>): Promise<Part<T>> {
     }
 }
 
-/** The plugin that would send a campaign's messages, or null when no route sends them anywhere. */
+/** The plugin that would send a campaign's messages on a channel, or null when no route sends them anywhere. */
 type Sender = { plugin: string; usable: boolean; problems: ErrorDetail[] } | null;
+
+/** Where the messages of one channel go: for an agent, the route a send on that channel resolves to; for none, a plugin. */
+type Sending<T> = { channel: PlanChannel; sender: Part<T> };
 
 /** What part 2 read: of an agent, of a chat about no agent yet. */
 type Facts =
@@ -66,15 +79,34 @@ type Facts =
           state: 'read';
           campaign: Campaign;
           people: Part<number | null>;
-          sender: Part<Sender>;
+          sending: Sending<Sender>[];
       }
-    | { place: 'setup'; modes: Part<SystemInfo['send_modes']>; sender: Part<string | null> };
+    | { place: 'setup'; modes: Part<SystemInfo['send_modes']>; sending: Sending<string | null>[] };
+
+/** The channels a plan's sends would go on: the ones it names, or every one a send takes when it names none. */
+const channelsOf = (card: PlanCard): readonly PlanChannel[] => card.channels ?? planChannels;
+
+/** Where a send on `channel` goes for the campaign: a channel route of its own counts, as the claim reads it. */
+const resolveSender = (api: Api, campaignId: string, channel: PlanChannel): Promise<Part<Sender>> =>
+    api
+        .call<RouteResolution>('route.resolve', { campaign_id: campaignId, operation: 'message.send', channel })
+        .then((resolved): Part<Sender> => ({
+            ok: true,
+            value:
+                resolved.plugin_id === null
+                    ? null
+                    : { plugin: resolved.plugin_id, usable: resolved.usable, problems: resolved.problems },
+        }))
+        .catch((error: unknown): Part<Sender> => {
+            const said = saidOf(error);
+            return said.code === 'no_route' ? { ok: true, value: null } : { ok: false, said };
+        });
 
 /**
  * An agent's facts: its row first (an agent this installation does not hold is said so, and nothing else is read),
- * then, side by side, its people now and where its messages go.
+ * then, side by side, its people now and where its messages go on each channel the plan names.
  */
-async function readAgent(api: Api, campaignId: string): Promise<Facts> {
+async function readAgent(api: Api, campaignId: string, channels: readonly PlanChannel[]): Promise<Facts> {
     let campaign: Campaign;
     try {
         campaign = await api.call<Campaign>('campaign.get', { campaign_id: campaignId });
@@ -84,7 +116,7 @@ async function readAgent(api: Api, campaignId: string): Promise<Facts> {
             ? { place: 'agent', state: 'gone' }
             : { place: 'agent', state: 'failed', said };
     }
-    const [people, sender] = await Promise.all([
+    const [people, ...sent] = await Promise.all([
         part(
             api
                 .call<CampaignSummaryResponse>('campaign.summary', {
@@ -93,41 +125,39 @@ async function readAgent(api: Api, campaignId: string): Promise<Facts> {
                 })
                 .then((answer) => answer.campaigns[0]?.people ?? null),
         ),
-        api
-            .call<RouteResolution>('route.resolve', { campaign_id: campaignId, operation: 'message.send' })
-            .then((resolved): Part<Sender> => ({
-                ok: true,
-                value:
-                    resolved.plugin_id === null
-                        ? null
-                        : { plugin: resolved.plugin_id, usable: resolved.usable, problems: resolved.problems },
-            }))
-            .catch((error: unknown): Part<Sender> => {
-                const said = saidOf(error);
-                return said.code === 'no_route' ? { ok: true, value: null } : { ok: false, said };
-            }),
+        ...channels.map((channel) => resolveSender(api, campaignId, channel)),
     ]);
-    return { place: 'agent', state: 'read', campaign, people, sender };
+    const sending = channels.map((channel, at) => ({ channel, sender: sent[at]! }));
+    return { place: 'agent', state: 'read', campaign, people, sending };
 }
 
 /**
- * The plugin the routes send a new agent's messages by: the global route of `message.send` when one is set, else the
- * global default; null for none.
+ * The plugin the routes send a new agent's messages on a channel by, in the order the claim reads the global routes: the
+ * channel's own route, then the route of `message.send`, then the default; null for none.
  */
-const globalSender = (routes: Routes): string | null =>
-    routes.global.operations['message.send']?.plugin_id ?? routes.global.default?.plugin_id ?? null;
+const globalSender = (routes: Routes, channel: PlanChannel): string | null =>
+    routes.global.channels['message.send']?.[channel]?.plugin_id ??
+    routes.global.operations['message.send']?.plugin_id ??
+    routes.global.default?.plugin_id ??
+    null;
 
-/** A chat about no agent yet: how messages go for every agent, and the plugin the routes send them by. */
-async function readSetup(api: Api): Promise<Facts> {
-    const [modes, sender] = await Promise.all([
+/** A chat about no agent yet: how messages go for every agent, and the plugin the routes send each channel's by. */
+async function readSetup(api: Api, channels: readonly PlanChannel[]): Promise<Facts> {
+    const [modes, routes] = await Promise.all([
         part(api.call<SystemInfo>('system.info').then((info) => info.send_modes)),
-        part(api.call<Routes>('route.list', {}).then(globalSender)),
+        part(api.call<Routes>('route.list', {})),
     ]);
-    return { place: 'setup', modes, sender };
+    const sending = channels.map((channel): Sending<string | null> => ({
+        channel,
+        sender: routes.ok ? { ok: true, value: globalSender(routes.value, channel) } : routes,
+    }));
+    return { place: 'setup', modes, sending };
 }
 
-const readFacts = (chat: Pick<Chat, 'main' | 'campaignId'>): Promise<Facts> =>
-    placeOf(chat) === 'agent' ? readAgent(here().api, chat.campaignId!) : readSetup(here().api);
+const readFacts = (chat: Pick<Chat, 'main' | 'campaignId'>, card: PlanCard): Promise<Facts> =>
+    placeOf(chat) === 'agent'
+        ? readAgent(here().api, chat.campaignId!, channelsOf(card))
+        : readSetup(here().api, channelsOf(card));
 
 /** One read of part 2: under way, or answered at a moment. */
 type Read = { serial: number } & ({ state: 'reading' } | { state: 'read'; at: number; facts: Facts });
@@ -143,17 +173,19 @@ interface Shown {
 export const proposals = signal<Readonly<Record<string, Readonly<Record<number, Shown>>>>>({});
 
 /**
- * Whether what a card holds was drawn from this entry: the same entry, or the same words with the mark of a Plan only
- * turn's plan put on as the turn ended or taken off as the chat left Plan only. A conversation opened again draws entries
- * of its own, marked as they were kept, so it starts afresh.
+ * Whether what a card holds was drawn from this entry: the same kind, words and moment, whatever the mark of a Plan only
+ * turn's plan says, which is put on as the turn ends and taken off as the chat leaves Plan only or its next turn ends.
+ * A conversation opened again from the desktop's record forgets what its cards held (`forgetProposals`).
  */
 const sameEntry = (held: Entry, entry: Entry): boolean =>
     held === entry ||
-    (held.kind === 'text' &&
-        entry.kind === 'text' &&
-        (held.plan === true) !== (entry.plan === true) &&
-        held.text === entry.text &&
-        held.at === entry.at);
+    (held.kind === 'text' && entry.kind === 'text' && held.text === entry.text && held.at === entry.at);
+
+/** Forgets what the plan cards of a chat read and opened: it is opened again from the desktop's record, and reads afresh. */
+export function forgetProposals(chatId: string): void {
+    if (proposals.value[chatId] === undefined) return;
+    proposals.value = Object.fromEntries(Object.entries(proposals.value).filter(([id]) => id !== chatId));
+}
 
 function shownOf(chatId: string, index: number, entry: Entry): Shown | null {
     const shown = proposals.value[chatId]?.[index];
@@ -167,13 +199,13 @@ function put(chatId: string, index: number, shown: Shown): void {
 let serials = 0;
 
 /** Reads part 2 now: "Reading..." until it is answered, then what it answered and when. A read under way is left to finish. */
-function startRead(chat: Chat, index: number): void {
+function startRead(chat: Chat, index: number, card: PlanCard): void {
     const entry = chat.entries[index]!;
     const shown = shownOf(chat.id, index, entry);
     if (shown?.read?.state === 'reading') return;
     const serial = ++serials;
     put(chat.id, index, { entry, open: shown?.open ?? [], read: { serial, state: 'reading' } });
-    void readFacts(chat).then((facts) => {
+    void readFacts(chat, card).then((facts) => {
         // Only the read the card waits for lands; a conversation drawn afresh since has forgotten it.
         const now = proposals.value[chat.id]?.[index];
         if (now?.read?.serial === serial)
@@ -271,28 +303,32 @@ function modesView(inForce: { cold: ModeInForce; warm: ModeInForce } | undefined
         </ul>`;
 }
 
-/** The plugin routed to send messages, and whether it could take them now, with each problem the claim would name. */
-function senderView(sender: Part<Sender | string | null>, none: string): Html {
-    if (!sender.ok)
-        return html`<div class="card-lab">Sending</div>
-            ${saidView(sender.said)}`;
-    const value = sender.value;
-    if (value === null)
-        return html`<div class="card-lab">Sending</div>
-            <div class="card-line">${none}</div>`;
-    if (typeof value === 'string')
-        return html`<div class="card-lab">Sending</div>
-            <div class="card-line">Plugin that sends messages: <b>${value}</b></div>`;
+/** What a channel's sends are, as a line names the plugin that sends them. */
+const sendWords: Readonly<Record<PlanChannel, string>> = { email: 'email', linkedin: 'LinkedIn messages' };
+
+/**
+ * Where each channel's messages go, one line for each: the plugin routed to send them, and for an agent whether it could
+ * send them now, with each problem the claim would name; or that no plugin is routed to send them.
+ */
+function sendingView(sending: readonly Sending<Sender | string | null>[], whose: string): Html {
     return html`<div class="card-lab">Sending</div>
-        <div class="card-line">Plugin that sends messages: <b>${value.plugin}</b></div>
-        ${
-            value.usable
-                ? html`<div class="card-line">It can send this agent’s messages now.</div>`
-                : html`<div class="card-line">It cannot send this agent’s messages now:</div>
-                      <ul class="card-problems">
-                          ${value.problems.map((each) => html`<li><code>${each.code}</code> ${each.message}</li>`)}
-                      </ul>`
-        }`;
+        ${sending.map(({ channel, sender }) => {
+            const what = sendWords[channel];
+            if (!sender.ok) return saidView(sender.said);
+            const value = sender.value;
+            if (value === null) return html`<div class="card-line">No plugin is routed to send ${what} ${whose}.</div>`;
+            if (typeof value === 'string')
+                return html`<div class="card-line">Plugin that sends ${what}: <b>${value}</b></div>`;
+            return html`<div class="card-line">Plugin that sends ${what}: <b>${value.plugin}</b></div>
+                ${
+                    value.usable
+                        ? html`<div class="card-line card-usable">It can send this agent’s ${what} now.</div>`
+                        : html`<div class="card-line card-usable">It cannot send this agent’s ${what} now:</div>
+                              <ul class="card-problems">
+                                  ${value.problems.map((each) => html`<li><code>${each.code}</code> ${each.message}</li>`)}
+                              </ul>`
+                }`;
+        })}`;
 }
 
 function factsView(facts: Facts): Html {
@@ -304,7 +340,7 @@ function factsView(facts: Facts): Html {
                     : html`<div class="card-lab">${t('modes.settings.heading')}</div>
                           ${saidView(facts.modes.said)}`
             }
-            ${senderView(facts.sender, 'No plugin is routed to send messages yet.')}`;
+            ${sendingView(facts.sending, 'yet')}`;
     if (facts.state === 'gone') return html`<div class="card-line">This agent is not in this installation.</div>`;
     if (facts.state === 'failed') return saidView(facts.said);
     const count = facts.people;
@@ -318,7 +354,7 @@ function factsView(facts: Facts): Html {
                       ${count.value === null ? 'The runtime counted nothing.' : `${people(count.value)} in this agent`}
                   </div>`
         }
-        ${senderView(facts.sender, 'No plugin is routed to send messages for this agent.')}`;
+        ${sendingView(facts.sending, 'for this agent')}`;
 }
 
 /** Part 2: "On record now", the minute it was read and Refresh in its first row; or, as a stub, "Show now" alone. */
@@ -455,7 +491,7 @@ export function planView(chat: Chat, index: number, card: PlanCard, last: number
                 const now = chats.value[chat.id];
                 const held = now?.entries[index];
                 if (now === undefined || held === undefined || !sameEntry(entry, held)) return;
-                if ((shownOf(now.id, index, held)?.read ?? null) === null) startRead(now, index);
+                if ((shownOf(now.id, index, held)?.read ?? null) === null) startRead(now, index, card);
             });
         }
     }
@@ -468,7 +504,7 @@ export function planView(chat: Chat, index: number, card: PlanCard, last: number
 /** "Refresh" and "Show now": part 2 read again. It decides nothing. */
 define('card.plan', ([chatId, index]) => {
     const at = planAt(chatId, index);
-    if (at !== null) startRead(at.chat, index as number);
+    if (at !== null) startRead(at.chat, index as number, at.card);
 });
 
 /** "Show the draft" and "Hide the draft": one draft opened or closed in place. It sends nothing. */
