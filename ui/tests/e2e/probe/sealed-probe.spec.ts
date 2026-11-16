@@ -32,7 +32,20 @@ const inside = [
     'own image',
 ];
 /** What the witness and this test's listeners decide: the page says only that it made them. */
-const outside = ['witness top', 'witness window.open', 'witness form', 'alert', 'download'];
+const outside = ['witness window.open', 'alert'];
+
+/**
+ * Starts the tries that would move the page away (a form, a download, the top's address, the frame's own move), once
+ * what the page wrote is read: a browser may begin to move a page before it refuses, and a page that is moving cannot be
+ * read. The call is not awaited past a bound, as the page may be moving when it returns.
+ */
+async function leave(target: { evaluate: Page['evaluate'] }): Promise<void> {
+    await Promise.race([
+        target.evaluate(() => (window as unknown as { probeLeave: () => void }).probeLeave()).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+}
 
 /** A server that answers every request and every upgrade, and keeps what it heard. */
 async function startWitness(): Promise<{ origin: string; heard: string[]; close: () => Promise<void> }> {
@@ -132,10 +145,7 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
         expect(written.map(([name]) => name).sort()).toEqual([...inside, ...outside].sort());
         expect(written.filter(([name, outcome]) => inside.includes(name) && outcome !== 'refused')).toEqual([]);
 
-        // The frame moving itself to the witness, which no page under sealed/ may frame its way to.
-        const frame = page.frames().find((each) => each.parentFrame() !== null)!;
-        await frame.evaluate((to) => location.assign(`${to}/move`), witness.origin).catch(() => undefined);
-        await page.waitForTimeout(2_000);
+        await leave(page.frames().find((each) => each.parentFrame() !== null)!);
 
         record(info, seen, witness.heard);
         expect(witness.heard).toEqual([]);
@@ -164,7 +174,9 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
     try {
         placeProbe(jason, witness.origin);
         const popups: string[] = [];
+        const downloads: string[] = [];
         page.on('popup', (popup) => popups.push(popup.url()));
+        page.on('download', (download) => downloads.push(download.suggestedFilename()));
         page.on('dialog', (dialog) => void dialog.dismiss());
         const seen = watchNetwork(page, false);
         await page.goto(`${jason.origin}/ui/sealed/demo.html`);
@@ -175,7 +187,7 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         expect(own.map(([name]) => name)).toContain('origin');
         expect(own.filter(([, outcome]) => outcome !== 'refused')).toEqual([]);
 
-        await page.waitForTimeout(1_000);
+        await leave(page);
         record(info, seen, witness.heard);
         expect(witness.heard).toEqual([]);
         // A tab's icon at the root of the address is the browser's own request, made for any page, not the page's.
@@ -185,6 +197,7 @@ test('a page under sealed/, opened by itself, has an origin of its own and reach
         ]);
         expect(seen.received).toEqual([]);
         expect(popups).toEqual([]);
+        expect(downloads).toEqual([]);
         expect(page.url()).toBe(`${jason.origin}/ui/sealed/demo.html`);
     } finally {
         await witness.close();

@@ -9,7 +9,8 @@ a witness, a server of the smoke's own on the loopback, in place of __WITNESS_OR
 the witness, so what decides a try is whether the witness heard it, never the page's own word: the policy is the only
 thing between the page and an address that answers. Two tries aim at the runtime's own address, at a file the UI serves,
 which answers as well. The page also writes what each try came back with, one item per try, which the smoke reads for the
-tries that stay inside the page: its origin, its storage and the page above it.
+tries that stay inside the page: its origin, its storage and the page above it. The tries that would move the page away
+wait for the smoke to start them (probeLeave), after it has read the rest.
 -->
         <style>
             body {
@@ -143,32 +144,53 @@ tries that stay inside the page: its origin, its storage and the page above it.
                 });
 
                 // Out of the page, at the witness: the witness hearing any of these is the seal broken.
-                if (framed)
-                    tried('witness top', function () {
-                        top.location.href = witness + '/top';
-                    });
-                else say('witness top', 'not-framed');
                 tried('witness window.open', function () {
                     window.open(witness + '/popup', '_blank');
                 });
-                tried('witness form', function () {
-                    var form = document.createElement('form');
-                    form.method = 'post';
-                    form.action = witness + '/form';
-                    document.body.appendChild(form);
-                    form.submit();
-                });
-                // Decided outside the page, by the smoke's own listeners: a dialog shown, a download begun.
+                // Decided outside the page, by the smoke's own listener: a dialog shown.
                 tried('alert', function () {
                     window.alert('probe');
                 });
-                tried('download', function () {
-                    var link = document.createElement('a');
-                    link.href = 'data:text/plain,probe';
-                    link.download = 'probe.txt';
-                    document.body.appendChild(link);
-                    link.click();
-                });
+
+                // The ways that would move a page away: a form, a download, the top's address and the page's own move.
+                // A browser may begin to move the page for one before it refuses it, and a page that is moving cannot be
+                // read, so they wait until the smoke has read what the page wrote, and the smoke starts them; the
+                // witness and the smoke's own listeners decide them, and the page writes nothing of them.
+                window.probeLeave = function () {
+                    var tries = [
+                        function () {
+                            var form = document.createElement('form');
+                            form.method = 'post';
+                            form.action = witness + '/form';
+                            document.body.appendChild(form);
+                            form.submit();
+                        },
+                        function () {
+                            var link = document.createElement('a');
+                            link.href = 'data:text/plain,probe';
+                            link.download = 'probe.txt';
+                            document.body.appendChild(link);
+                            link.click();
+                        },
+                        function () {
+                            if (framed) top.location.href = witness + '/top';
+                        },
+                        // Opened by itself the page may move its own tab, a residual docs/ui.md states: only in a frame
+                        // is its own move a way out to try.
+                        function () {
+                            if (framed) location.assign(witness + '/move');
+                        },
+                    ];
+                    tries.forEach(function (each, index) {
+                        setTimeout(function () {
+                            try {
+                                each();
+                            } catch (error) {
+                                // Refused at once; the witness decides all the same.
+                            }
+                        }, index * 300);
+                    });
+                };
 
                 Promise.all([
                     asyncTry('indexedDB', function () {
