@@ -1,7 +1,7 @@
 /**
  * The Demo in the window: the page the application carries, in a view of its own sealed by `demo-page.ts`, and over it
- * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip where the
- * page draws a switch of its own (`demoLayout`). Nothing of an installation is here: no jason, no runtime, no chat, no
+ * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip whose right
+ * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an installation is here: no jason, no runtime, no chat, no
  * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
  * above the page (`shell/demo-band.html`, no script, the window's drag region).
  */
@@ -9,7 +9,7 @@
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { demoLayout, demoPage, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
+import { demoLayout, demoPage, demoStripSheets, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
 
 export interface DemoWindowDeps {
     /** The application's folder, where `demo/index.html`, `shell/demo-switch.html` and `shell/demo-band.html` are. */
@@ -49,9 +49,12 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     }
     const page = new WebContentsView({ webPreferences: demoViewPreferences(demoPage) });
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
-    await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)) });
+    // On Windows, the strip kept clear of the caption buttons (`demoStripSheets`); elsewhere nothing.
+    const sheets = demoStripSheets(deps.platform);
+    await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)), sheet: sheets?.page });
     await sealView(ours.webContents, demoSwitch, {
         read: fileOf(switchFile),
+        sheet: sheets?.switch,
         refused: onceEach((kind) => deps.refused('switch', kind)),
         asked: (url) => {
             if (switchChoice(url) !== 'live') return false;
@@ -59,6 +62,8 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
             return true;
         },
     });
+    // Ours is transparent, so the page's strip shows through it but for the switch.
+    ours.setBackgroundColor('#00000000');
     // The page first, then ours: a view added later is drawn over the ones before it.
     window.contentView.addChildView(page);
     window.contentView.addChildView(ours);

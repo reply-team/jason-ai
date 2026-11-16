@@ -4,6 +4,7 @@
 // stand-in for Electron's contents and session that records what was installed and lets the test act as the page.
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -24,6 +25,9 @@ import {
     sealView,
     demoGeometry,
     demoLayout,
+    demoStrip,
+    demoStripAt,
+    demoStripSheets,
     demoBeforeReady,
     demoResolverRule,
     noDragSheet,
@@ -83,8 +87,11 @@ test('the two schemes are standard and secure and nothing more: the policy is ne
 test('the content policy allows the page’s inline script and style and its data: fonts and images, and nothing else', () => {
     assert.equal(
         demoPolicy,
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts allow-same-origin allow-forms",
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts",
     );
+    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and it sets no cookie;
+    // what it stores stays in the view's in-memory session. No forms.
+    assert.ok(!/allow-same-origin|allow-forms/.test(demoPolicy));
     // No source names an address, a scheme to fetch from, 'self' or eval.
     assert.ok(!/https?:|wss?:|blob:|'self'|unsafe-eval|\*/.test(demoPolicy));
     // The sandbox leaves out pop-ups, top navigation, downloads, modals, printing and the rest.
@@ -569,7 +576,20 @@ test('our switch’s page holds no script, links only to the choice of Live, and
     const css = page.replace(/\s+/g, ' ');
     assert.ok(/html, body \{[^}]*-webkit-app-region: drag;/.test(css), 'the strip drags the window');
     assert.ok(/\.switch \{[^}]*-webkit-app-region: no-drag;/.test(css), 'the switch takes the click');
-    assert.ok(/body \{[^}]*background: #fff4d6;[^}]*border-bottom: 1px solid #f2dc9c;/.test(css), 'the Demo strip’s colours');
+    // The page's strip shows through with its own dot and words: ours draws the switch alone, at the strip's right end,
+    // on the strip's own colour, so the tail of a sentence it stands over is covered rather than drawn through.
+    assert.ok(/html, body \{[^}]*background: transparent;/.test(css), 'the strip’s ground is the page’s own');
+    assert.ok(/body \{[^}]*justify-content: flex-end;/.test(css), 'the switch at the right end');
+    assert.ok(/\.switch \{[^}]*background: linear-gradient\(rgba\(20, 33, 43, \.08\), rgba\(20, 33, 43, \.08\)\), #fff4d6;[^}]*box-shadow: 0 0 0 5px #fff4d6;/.test(css), 'on the Demo strip’s colour');
+    const body = page.slice(page.indexOf('<body>'), page.indexOf('</body>'));
+    assert.deepEqual([...body.matchAll(/<(\w+)[\s>]/g)].map((match) => match[1]), ['body', 'nav', 'span', 'a'], 'the switch and nothing else: no dot, no sentence');
+    assert.ok(!/Open in/.test(body), 'the Demo has nothing to open');
+});
+
+test('our switch’s view is transparent, so the page’s strip shows through it', () => {
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.ok(window.includes("ours.setBackgroundColor('#00000000');"));
+    assert.ok(window.indexOf("ours.setBackgroundColor('#00000000');") < window.indexOf('window.contentView.addChildView(ours);'), 'before it is shown');
 });
 
 test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags', () => {
@@ -611,4 +631,233 @@ test('the Demo’s two modules reach no jason, no runtime, no program, no proces
     assert.deepEqual(importsOf('demo-window.ts'), ['electron', 'node:fs', 'node:path', './demo-page.ts']);
     // demo-page.ts takes Electron's types alone, so its code runs here without Electron.
     assert.match(readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8'), /^import type \{[^}]*\} from 'electron';$/m);
+});
+
+// ---- The page as it was built, and the addresses it holds -------------------------------------------------------------
+
+/** The counted list of the addresses the page holds (`demo/addresses.txt`): its pattern, and each exact string's count and reason. */
+interface AddressList {
+    pattern: RegExp;
+    entries: { text: string; count: number; why: string }[];
+}
+
+function addressList(text: string): AddressList {
+    const lines = text.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    const patterns = lines.filter((line) => line.startsWith('pattern\t'));
+    assert.equal(patterns.length, 1, 'one pattern line');
+    const entries = lines
+        .filter((line) => !line.startsWith('pattern\t'))
+        .map((line) => {
+            const [count, found, why, ...rest] = line.split('\t');
+            assert.equal(rest.length, 0, line);
+            assert.match(count ?? '', /^[1-9][0-9]*$/, line);
+            return { text: found ?? '', count: Number(count), why: why ?? '' };
+        });
+    return { pattern: new RegExp(patterns[0]!.slice('pattern\t'.length), 'g'), entries };
+}
+
+/** Every text of the page the list's pattern matches, with how many times it stands there. */
+function addressesIn(page: string, pattern: RegExp): Map<string, number> {
+    const found = new Map<string, number>();
+    for (const match of page.matchAll(pattern)) found.set(match[0], (found.get(match[0]) ?? 0) + 1);
+    return found;
+}
+
+/** What differs between the page and its list: a string not listed, a count other than the listed one, a listed string gone. */
+function scan(page: string, list: AddressList): string[] {
+    const found = addressesIn(page, list.pattern);
+    const listed = new Map(list.entries.map((entry) => [entry.text, entry.count]));
+    const findings: string[] = [];
+    for (const [text, count] of found) {
+        if (!listed.has(text)) findings.push(`not listed: ${text} (${count})`);
+        else if (listed.get(text) !== count) findings.push(`${text}: the page holds ${count}, the list says ${listed.get(text)}`);
+    }
+    for (const [text, count] of listed) if (!found.has(text)) findings.push(`${text}: the list says ${count}, the page holds none`);
+    return findings;
+}
+
+const pageText = () => readFileSync(join(root, 'demo', 'index.html'), 'utf8');
+const listed = () => addressList(readFileSync(join(root, 'demo', 'addresses.txt'), 'utf8'));
+
+test('the page holds exactly the addresses its list counts, each once in the list and each with its reason', () => {
+    const list = listed();
+    assert.deepEqual(scan(pageText(), list), []);
+    assert.equal(new Set(list.entries.map((entry) => entry.text)).size, list.entries.length, 'each string once');
+    for (const entry of list.entries) {
+        assert.match(entry.text, new RegExp(`^${list.pattern.source}$`), `${entry.text} is of the pattern's shape`);
+        assert.ok(entry.why.trim().length > 10, `${entry.text} says why it is inert`);
+    }
+    // The bare scheme, a placeholder with no host, is listed like any other.
+    assert.ok(list.entries.some((entry) => entry.text === 'https://'));
+});
+
+test('the counted scan refuses an address not listed, one more or one fewer of a listed one, and a scheme of any name', () => {
+    const page = pageText();
+    const list = listed();
+    assert.deepEqual(scan(`${page}<link rel="dns-prefetch" href="https://names.example.net">`, list), ['not listed: https://names.example.net (1)']);
+    assert.deepEqual(scan(`${page}https://api.deepseek.com`, list), ['https://api.deepseek.com: the page holds 2, the list says 1']);
+    assert.deepEqual(scan(page.replace('https://api.deepseek.com', 'about:blank'), list), ['https://api.deepseek.com: the list says 1, the page holds none']);
+    assert.deepEqual(scan(`${page}ws://127.0.0.1`, list), ['not listed: ws://127.0.0.1 (1)']);
+    assert.deepEqual(scan(`${page}x-custom+scheme://host`, list), ['not listed: x-custom+scheme://host (1)']);
+});
+
+test('the page is the file its README names, by its digest: a built page, received as it is and never edited', () => {
+    const readme = readFileSync(join(root, 'demo', 'README.md'), 'utf8');
+    const named = /SHA-256 `([0-9a-f]{64})`/.exec(readme)?.[1];
+    assert.ok(named, 'the README names the page by its SHA-256');
+    assert.equal(createHash('sha256').update(readFileSync(join(root, 'demo', 'index.html'))).digest('hex'), named);
+    assert.ok(readme.includes('(addresses.txt)'), 'the README points at the counted list');
+});
+
+test('every request from the page’s view to an address the page holds, or to any other, is refused before it leaves', async () => {
+    const view = await sealed();
+    const verdict = (url: string) => {
+        let answer: { cancel?: boolean } | undefined;
+        call(view.handler('onBeforeRequest'), { url }, (response: { cancel?: boolean }) => (answer = response));
+        return answer?.cancel;
+    };
+    const urls: string[] = [];
+    for (const entry of listed().entries) {
+        const rest = entry.text.slice(entry.text.indexOf('://') + 3);
+        for (const scheme of ['http', 'https', 'ws', 'wss']) urls.push(`${scheme}://${rest === '' ? 'localhost' : rest}/x`);
+    }
+    urls.push(
+        'http://127.0.0.1:5000/v1/system.info',
+        'file:///C:/Users/someone/.jason/config/settings.json',
+        'ftp://example.com/',
+        'jason-switch://switch/live',
+        // A blob of the page's own opaque origin, the page's own scheme at another file, with a query and at another
+        // host, a scheme of nobody's, and Chromium's own pages.
+        'blob:null/0f0e0d0c-0b0a-0908-0706-050403020100',
+        'jason-demo://page/other.html',
+        'jason-demo://page/index.html?x',
+        'jason-demo://other/index.html',
+        'x-custom://host/',
+        'chrome://gpu',
+    );
+    for (const url of urls) {
+        assert.equal(requestAllowed(demoPage, url), false, url);
+        assert.equal(verdict(url), true, url);
+    }
+    // And a request that got past the filter meets a scheme that answers nothing.
+    for (const url of urls.filter((url) => /^(https?|file):/.test(url))) {
+        const scheme = url.slice(0, url.indexOf(':'));
+        const answer = (await call(view.protocols.get(scheme), { url, method: 'GET' })) as Response;
+        assert.equal(answer.status, 403, url);
+    }
+});
+
+// ---- The strip on Windows, where the caption buttons stand over its right end -------------------------------------------
+
+// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%.
+const captions = [138, 137.33];
+
+test('the page’s strip, as the desktop’s sheet names it, is still in the page: the selectors, the strip’s padding and its breakpoint', () => {
+    const page = pageText();
+    const sheets = demoStripSheets('win32');
+    assert.ok(sheets);
+    const named = new Set([...sheets.page.matchAll(/\.jc-console [#.][\w-]+/g)].map((match) => match[0]));
+    assert.deepEqual([...named].sort(), ['.jc-console #mode-bar', '.jc-console .mb-long', '.jc-console .mb-short']);
+    for (const selector of named) assert.ok(page.includes(`${selector}{`), `${selector} is a rule of the page`);
+    // The numbers the sheet is computed from are the page's own: its strip's left edge and padding, the gap before its
+    // empty right-hand slot, and the width at which it takes its short sentence.
+    assert.ok(page.includes('.jc-console #mode-bar{box-sizing:border-box;z-index:20;white-space:nowrap;-webkit-app-region:drag;align-items:center;gap:8px;height:38px;padding:0 12px 0 16px;'));
+    assert.ok(page.includes('left:284px;right:0}'));
+    assert.ok(page.includes('@media (width<=1100px){.jc-console .mb-long{display:none}.jc-console .mb-short{display:inline}}'));
+    assert.ok(page.includes('<span class="mb-long">${long}</span><span class="mb-short">${short}</span>'));
+    assert.ok(page.includes('.jc-console #mode-bar>span{text-overflow:ellipsis;overflow:hidden}'), 'a sentence that does not fit ends in an ellipsis of the page’s own');
+    // The two sentences whose ends the numbers are measured from, as the page states them.
+    assert.ok(page.includes("say('an example of what you can build on Jason. The data is samples, and nothing is sent.','an example of what you can build. Nothing is sent.')"));
+});
+
+test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
+    const sheets = demoStripSheets('win32');
+    assert.ok(sheets);
+    const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
+    assert.ok(sheets.page.includes(`padding-right: calc(${demoStrip.inset}px + ${caption}) !important;`));
+    assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
+    assert.ok(sheets.page.includes(`@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`));
+    assert.ok(sheets.switch.includes('body { container: jason-switch / inline-size !important; }'));
+    // The switch's widths are measured in Segoe UI, so on Windows its words are drawn in that font by name, not by
+    // whatever the system's font is.
+    assert.ok(sheets.switch.startsWith('.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } '));
+    assert.ok(sheets.switch.includes(`@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${demoStrip.ours.segment.tight}px !important; padding-right: ${demoStrip.ours.segment.tight}px !important; } }`));
+    // Only the segments' inner padding changes: the words, the height and the rest of the switch stay.
+    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.slice(sheets.switch.indexOf('@container'))));
+    assert.equal(demoStrip.ours.segment.normal, 12);
+    assert.ok(/\.switch a, \.switch span \{[^}]*padding: 2px 12px;/.test(readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8').replace(/\s+/g, ' ')));
+});
+
+test('on Windows from 1101 to 1149 pixels the page shows its own short sentence, whole, clear of our switch', () => {
+    for (const caption of captions) {
+        for (let width = 1101; width <= 1149; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.equal(at.form, 'short', `${width}`);
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}: no word under the switch`);
+        }
+    }
+    // Wide enough, the page's long sentence comes back, clear of the switch.
+    const wide = demoStripAt('win32', 1440, 138);
+    assert.equal(wide.form, 'long');
+    assert.ok(wide.whole && wide.textEnd <= wide.coveredFrom);
+});
+
+test('on Windows from 900 to 933 pixels our switch takes its tighter form and the short sentence stands whole', () => {
+    for (const caption of captions) {
+        for (let width = 900; width <= 933; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.equal(at.switchForm, 'tight', `${width}`);
+            assert.equal(at.form, 'short');
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}: no word under the switch`);
+        }
+    }
+});
+
+test('on Windows at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
+    for (const caption of captions) {
+        for (let width = 900; width <= 2600; width++) {
+            const at = demoStripAt('win32', width, caption);
+            assert.ok(at.whole, `${width} whole`);
+            assert.ok(at.textEnd <= at.coveredFrom, `${width}`);
+        }
+    }
+});
+
+test('on macOS and Linux nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        assert.equal(demoStripSheets(platform), null);
+        for (let width = 900; width <= 2600; width++) {
+            const at = demoStripAt(platform, width, 0);
+            assert.equal(at.form, width <= 1100 ? 'short' : 'long');
+            assert.equal(at.switchForm, 'normal');
+            assert.ok(at.whole && at.textEnd <= at.coveredFrom, `${platform} ${width}`);
+        }
+    }
+    const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.ok(window.includes('const sheets = demoStripSheets(deps.platform);'));
+    assert.ok(window.includes('sheet: sheets?.page'));
+    assert.ok(window.includes('sheet: sheets?.switch'));
+});
+
+test('a sheet given to the seal is put into every document of the view, of the user’s origin', async () => {
+    const made = stand();
+    await sealView(made.contents, demoSwitch, { read: () => pageBytes, refused: () => undefined, sheet: 'body { color: red; }' });
+    call(made.on.get('dom-ready'));
+    await Promise.resolve();
+    assert.ok(made.calls.includes('insertCSS:user:body { color: red; }'));
+    const page = stand();
+    await sealView(page.contents, demoPage, { read: () => pageBytes, refused: () => undefined, sheet: 'p { color: red; }' });
+    call(page.on.get('dom-ready'));
+    await Promise.resolve();
+    assert.ok(page.calls.includes(`insertCSS:user:${noDragSheet}`));
+    assert.ok(page.calls.includes('insertCSS:user:p { color: red; }'));
+});
+
+test('the sheets’ three numbers are the ones the strip’s measures give, and the tight switch is the normal one less its segments’ padding', () => {
+    assert.equal(demoStrip.inset, 79);
+    assert.equal(demoStrip.longFrom, 641);
+    assert.equal(demoStrip.tightBelow, 494);
+    assert.equal(Math.round(demoStrip.ours.tight * 100) / 100, 70.16);
 });
