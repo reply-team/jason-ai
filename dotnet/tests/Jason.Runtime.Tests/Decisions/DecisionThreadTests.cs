@@ -5,6 +5,7 @@ using Jason.Runtime.Dispatch;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Decisions;
 
@@ -112,6 +113,69 @@ public class DecisionThreadTests
         await using var fresh = database.Open();
         var got = await Service(fresh).GetAsync(new DecisionGetRequest(raised.Id), Ct);
         Assert.Equal(new DecisionThread("mailbox", "501"), got.Thread);
+    }
+
+    /// <summary>
+    /// The runtime vouches for the thread only while nobody but the runtime has patched the reserved key: a person's, a
+    /// role's or an attempt's patch of it before the raise gives null, as the rule every reserved value follows says. The
+    /// dispatcher's own patch of a further move is the runtime's and still counts, and a person's patch of another key of
+    /// the context leaves the thread standing. Each patch is the line <c>workitem.update</c> writes, one per key.
+    /// </summary>
+    [Theory]
+    [InlineData(ActorType.Human, "dana", "inbound_reply", false)]
+    [InlineData(ActorType.Attempt, "att_live", "inbound_reply", false)]
+    [InlineData(ActorType.Role, "manager", "inbound_reply", false)]
+    [InlineData(ActorType.System, "dispatcher", "inbound_reply", true)]
+    [InlineData(ActorType.Human, "dana", "brief", true)]
+    public async Task A_thread_counts_only_while_nobody_but_the_runtime_patched_its_key(ActorType type, string id, string key, bool vouched)
+    {
+        using var database = new TestDatabase();
+        await using var db = database.Open();
+        var seed = await SeedAsync(db, RuntimesOwn, Recorded("mailbox", "501"));
+        new JournalWriter(new FixedClock(Noon)).Append(
+            db,
+            new ActorRef(type, id),
+            JournalKinds.WorkItemContextUpdated,
+            campaign: null,
+            key: key,
+            old: null,
+            updated: new JsonObject { ["plugin"] = "mailbox", ["thread"] = "501" },
+            reason: null,
+            workItem: seed.Item);
+        await db.SaveChangesAsync(Ct);
+
+        var raised = await Service(db).RaiseAsync(Ask(seed), Ct);
+
+        Assert.Equal(vouched ? new DecisionThread("mailbox", "501") : null, raised.Thread);
+    }
+
+    /// <summary>
+    /// The same through the API a person uses: a <c>workitem.update</c> that rewrites the runtime's responder's reserved key
+    /// is taken, as any patch of an open item's context is, and the question its run raises afterwards names no thread.
+    /// </summary>
+    [Fact]
+    public async Task A_person_who_rewrites_the_key_through_the_api_leaves_the_question_about_no_thread()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Noon));
+        Seed seed;
+        using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+        {
+            seed = await SeedAsync(scope.ServiceProvider.GetRequiredService<JasonDbContext>(), RuntimesOwn, Recorded("mailbox", "501"));
+        }
+
+        await api.PostOkAsync<WorkItemDto>(
+            Operations.WorkItemUpdate,
+            new
+            {
+                WorkItemId = seed.Item.PublicId,
+                Set = new JsonObject { [Responder.InboundReplyKey] = new JsonObject { ["plugin"] = "mailbox", ["thread"] = "777" } },
+                Actor = new ActorRef(ActorType.Human, "dana"),
+            },
+            Ct);
+
+        using var raising = api.Resolve<IServiceScopeFactory>().CreateScope();
+        var raised = await raising.ServiceProvider.GetRequiredService<DecisionService>().RaiseAsync(Ask(seed), Ct);
+        Assert.Null(raised.Thread);
     }
 
     private static JsonObject Recorded(string plugin, string thread) => new()

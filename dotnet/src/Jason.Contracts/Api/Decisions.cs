@@ -19,9 +19,10 @@ public sealed record DecisionReference(DecisionReferenceKind? Kind, string Id);
 /// </summary>
 /// <remarks>
 /// Written once, when the question is raised, and only by the runtime: a question raised by a responder the runtime
-/// itself woke for a reply names the thread that reply moved, from the identifiers the runtime recorded when it woke it.
-/// Every other question is about no thread and says so with null. Nothing a role writes sets it, and nothing recomputes
-/// it later.
+/// itself woke for a reply names the thread that reply moved, from the identifiers the runtime recorded when it woke it,
+/// and only while nobody but the runtime has changed the context key that records them. Every other question says null:
+/// one about no thread, and one whose record anybody else rewrote, which the runtime no longer vouches for. Nothing a
+/// role or a person writes sets it, and nothing recomputes it later.
 /// </remarks>
 public sealed record DecisionThread(string PluginId, string ThreadId);
 

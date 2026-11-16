@@ -86,6 +86,14 @@ describe('what Needs you lists', () => {
         expect(countOf(about, 'inbox')).toEqual({ n: 2, more: false });
     });
 
+    it('puts no question under Inbox from a runtime that does not say what its questions are about', () => {
+        const older = question('dec_3', 'cmp_1');
+        delete older.thread;
+        const some = input({ questions: [older] });
+        expect(waitingOf(some, 'inbox', null).map((each) => each.id)).toEqual(['apr_2']);
+        expect(waitingOf(some, 'questions', null).map((each) => each.id)).toEqual(['dec_3']);
+    });
+
     it('says Inbox may hold more while either list has another page, since it holds rows of both', () => {
         expect(countOf(input({ more: { approvals: false, questions: true } }), 'inbox')).toEqual({ n: 1, more: true });
         expect(countOf(input({ more: { approvals: true, questions: false } }), 'inbox')).toEqual({ n: 1, more: true });

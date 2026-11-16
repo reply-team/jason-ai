@@ -45,8 +45,8 @@ public sealed class Decision
 
     /// <summary>
     /// The plugin of the thread the question is about, beside <see cref="ThreadId"/>: both or neither. Written once at the
-    /// raise, from what the runtime recorded on its own responder, and never recomputed: a later patch of the item's
-    /// context changes nothing here.
+    /// raise, from what the runtime recorded on its own responder while nobody but the runtime had patched that record, and
+    /// never recomputed: a later patch of the item's context changes nothing here.
     /// </summary>
     public string? ThreadPluginId { get; set; }
 

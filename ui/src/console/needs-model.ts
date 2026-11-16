@@ -62,7 +62,7 @@ const inFilter = (item: WaitingItem, filter: NeedsFilter): boolean => {
         case 'inbox':
             return (
                 (item.kind === 'approval' && item.row.operation === REPLY_OPERATION) ||
-                (item.kind === 'question' && item.row.thread !== null)
+                (item.kind === 'question' && item.row.thread != null)
             );
     }
 };

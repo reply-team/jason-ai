@@ -69,8 +69,11 @@ export type DecisionSummary = {
     answered_by: ActorRef | null;
     campaign_name: string;
     contact_name: string | null;
-    /** What the question is about: the thread the runtime's own responder was woken for, or null for no thread. */
-    thread: DecisionThread | null;
+    /**
+     * What the question is about: the thread the runtime woke its own responder for and vouches for, or null. Absent from
+     * a runtime older than the field, which says nothing of it.
+     */
+    thread?: DecisionThread | null;
 };
 export type Decision = DecisionSummary & {
     attempt_id: string;

@@ -11,9 +11,9 @@ namespace Jason.Runtime.Tests.Persistence;
 /// <summary>
 /// The thread a question is about is two nullable columns of <c>decisions</c>. An installation upgraded from the
 /// migration before keeps every question it had, and each names the thread by the rule a raise follows from now on: a
-/// question of the runtime's own responder names the thread its reserved key records, pending or answered; every other
-/// question names none. No stored context fails the upgrade: one the rule cannot read leaves its row null. <c>Down</c>
-/// takes the two columns away and nothing more.
+/// question of the runtime's own responder names the thread its reserved key records, pending or answered, unless anybody
+/// but the runtime patched that key; every other question names none. No stored context fails the upgrade: one the rule
+/// cannot read leaves its row null. <c>Down</c> takes the two columns away and nothing more.
 /// </summary>
 public class DecisionThreadMigrationTests
 {
@@ -47,7 +47,19 @@ public class DecisionThreadMigrationTests
                        ('wi_nokey', 1, 'ai_role', 'responder', 'succeeded', 0, 'system', 'dispatcher',
                         '{"trigger":"inbound_reply_observed"}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root'),
                        ('wi_number', 1, 'ai_role', 'responder', 'succeeded', 0, 'system', 'dispatcher',
-                        '{"inbound_reply":{"plugin":"mailbox","thread":505}}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root');
+                        '{"inbound_reply":{"plugin":"mailbox","thread":505}}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root'),
+                       ('wi_patched', 1, 'ai_role', 'responder', 'succeeded', 0, 'system', 'dispatcher',
+                        '{"inbound_reply":{"plugin":"mailbox","thread":"506"}}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root'),
+                       ('wi_moved', 1, 'ai_role', 'responder', 'succeeded', 0, 'system', 'dispatcher',
+                        '{"inbound_reply":{"plugin":"mailbox","thread":"507"}}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root'),
+                       ('wi_briefed', 1, 'ai_role', 'responder', 'succeeded', 0, 'system', 'dispatcher',
+                        '{"inbound_reply":{"plugin":"mailbox","thread":"508"},"brief":"read it"}', 1, '2026-11-01 09:00:00', '2026-11-01 09:00:00', 'root');
+                -- A person rewrote one responder's reserved key, the dispatcher recorded a further move on another, and a person
+                -- patched another key of a third: only the first loses its thread.
+                INSERT INTO journal (public_id, ts, actor_type, actor_id, kind, key, campaign_id, work_item_id)
+                VALUES ('jrn_1', '2026-11-01 09:05:00', 'human', 'dana', 'workitem_context_updated', 'inbound_reply', NULL, 'wi_patched'),
+                       ('jrn_2', '2026-11-01 09:05:00', 'system', 'dispatcher', 'workitem_context_updated', 'inbound_reply', NULL, 'wi_moved'),
+                       ('jrn_3', '2026-11-01 09:05:00', 'human', 'dana', 'workitem_context_updated', 'brief', NULL, 'wi_briefed');
                 INSERT INTO attempts (public_id, work_item_id, number, command, status, context_snapshot_json, claimed_at, lock_until, finished_at)
                 SELECT 'att_' || substr(public_id, 4), id, 1, 'ai_role', 'succeeded', '{}', '2026-11-01 09:10:00', '2026-11-01 09:40:00', '2026-11-01 09:20:00'
                 FROM work_items ORDER BY id;
@@ -70,15 +82,18 @@ public class DecisionThreadMigrationTests
         Assert.Equal(
             [
                 "dec_answered mailbox 502",
+                "dec_briefed mailbox 508",
                 "dec_manager - -",
+                "dec_moved mailbox 507",
                 "dec_nokey - -",
                 "dec_number - -",
+                "dec_patched - -",
                 "dec_pending mailbox 501",
                 "dec_person - -",
             ],
             Rows(after, "SELECT public_id || ' ' || ifnull(thread_plugin_id, '-') || ' ' || ifnull(thread_id, '-') FROM decisions ORDER BY public_id"));
         Assert.Equal(
-            ["dec_answered answered", "dec_pending pending"],
+            ["dec_answered answered", "dec_briefed pending", "dec_moved pending", "dec_pending pending"],
             Rows(after, "SELECT public_id || ' ' || status FROM decisions WHERE thread_id IS NOT NULL ORDER BY public_id"));
     }
 
