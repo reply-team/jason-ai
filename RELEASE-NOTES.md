@@ -43,9 +43,9 @@ an editor is opened.
 
 - **Models and Connect tell what is on this computer apart from what is not.** The card is one drawing, on Connect and
   in Settings' Models, and it draws two groups.
-  - **On this computer:** each program found is a card of its own, with its name, its version as a pill and **In use** on
-    the program the agents' roles run on by default; what the program does is set apart from the how-to lines under it.
-    One row, **Model keys**, shows each provider whose key is set; with no key saved the row is absent.
+  - **On this computer:** each program found is a card of its own, with its name, its version as a pill and **In use**
+    on the program the agents' roles run on by default; what the program does is set apart from the how-to lines under
+    it. One row, **Model keys**, shows each provider whose key is set; with no key saved the row is absent.
   - **Add or change,** a tinted panel under it: the programs not found are named on one quiet line, those that can be
     installed first, each with its own **Install**. The model keys are one panel: a **Provider** select that says
     "key set" in the option of a provider that has one, an API key field with **Save key** for the provider shown, and,
@@ -54,12 +54,18 @@ an editor is opened.
   - **The button that saves a typed key says Save key,** where it said Keep.
   - In Settings, the card's own "AI" heading is left out under the section's "Models" heading.
 
+- **The Reply card no longer draws the CLI's version, and its button reads Sign in with Reply.** On the Reply card of
+  Settings' Accounts and of the chat's Connect card, which are one control, the plain "Reply CLI" line with its version
+  is gone. The sentences a person acts on stay: the CLI not found, and the CLI older than the account acts need.
+
 - **The Open in menu has an icon column, one-line hints and dividers, and stays inside the window.** Every item starts
-  with a glyph for its kind. The hint under Claude Code and Codex is the one line "A new session in a terminal"; the
-  whole sentence is still the item's description and its tooltip. A divider follows the Agents group and another the
-  Editors group, beside the one before Change Jason itself. The menu is 300 pixels wide, so names and one-line hints no
-  longer wrap, and a menu taller than what is left below the strip scrolls inside itself instead of running past the
-  window's bottom edge.
+  with an icon: on Windows and macOS an installed application's own icon, read from the application itself (on macOS
+  from the application's own bundle), and on Linux, and on every row with no application (Claude Code, Codex, Browser,
+  Copy path, and Terminal on Windows), a glyph for its kind. The hint under Claude Code and Codex is the one line "A new
+  session in a terminal"; the whole sentence is still the item's description and its tooltip. A divider follows the
+  Agents group and another the Editors group, beside the one before Change Jason itself. The menu is 300 pixels wide, so
+  names and one-line hints no longer wrap, and a menu taller than what is left below the strip scrolls inside itself
+  instead of running past the window's bottom edge.
 
 - **After an editor is opened from Open in, the window says which Jason a terminal there finds.** It reads the PATH the
   desktop gives the editor, and says one of three things: "jason on your PATH is this window's Jason, so a terminal
@@ -67,11 +73,11 @@ an editor is opened.
   with other data."; or "jason is not on your PATH, so a terminal there does not find Jason." Each is followed by the
   way out that the Jason menu's Command Line item offers, named by its label (**Put jason on the PATH…**, **Put
   jason-desktop on the PATH…**, **Point jason at This Jason…** or **Point jason-desktop at This Jason…**), or says to
-  type `jason-desktop` there; where no act would help, none is named. While `jason` on your PATH is another one or none,
-  the Open in menu carries one quiet line under Editors that says so. After the file manager the window says nothing
-  about data. The message opens under the split button, as wide as the menu.
+  type `jason-desktop` there; where no act would help, none is named. While `jason` on your PATH is another one or
+  none, the Open in menu carries one quiet line under Editors that says so. After the file manager the window says
+  nothing about data. The message opens under the split button, as wide as the menu.
 
-- **The chat bar's Rename, Start afresh and Remove are icon buttons:** a pencil, a circular arrow and a bin, quiet in
+- **The chat bar's Rename, Start fresh and Remove are icon buttons:** a pencil, a circular arrow and a bin, quiet in
   the muted colour. Each keeps its name and has a tooltip saying what it does; Remove's reads "Remove this
   conversation". What each does and when it is off are as before.
 
@@ -92,9 +98,12 @@ an editor is opened.
 - **In the Demo on macOS, clicks reach the page again.** The sidebar, the prompt box and the buttons took no click,
   because the band above the Demo's page was marked as a drag region over the whole window. It now drags over its own
   26 pixels alone. The Demo on Windows and on Linux was not affected.
-- **The person panel's tabs, where they are buttons, look like the link tabs.** An agent's People tab keeps its tab
-  itself, and its tabs showed as the browser's grey boxed buttons; they now have the height, font, colour, hover and
-  underline of the link tabs.
+- **Inside an agent's People tab, the person panel's tabs look like the link tabs.** There the panel's tabs are buttons,
+  not links, and they showed as the browser's grey boxed buttons; they now have the link tabs' height, font, colour,
+  hover and underline.
+- **The act that drops an agent's sessions and keeps its record is worded "Start fresh"** where a person reads it,
+  where it said "Start afresh": the chat bar's button and its tooltip, the agent's menu ("Start conversation fresh") and
+  the notice after it ("Started fresh: ..."). The act itself is unchanged.
 
 ## Upgrading from 0.47.2
 
@@ -102,8 +111,8 @@ Nothing stops, no setting is renamed and no migration runs.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
   console's changes.
-- **A bookmark or a link into the browser UI** now opens the one page described above, in a tab no desktop opened; the
-  console is in Jason Desktop. A build of your own in `ui/custom` draws whatever it draws.
+- **A bookmark, a link or a notification's click into the browser UI** now opens the one page described above, in a tab
+  no desktop opened; the console is in Jason Desktop. A build of your own in `ui/custom` draws whatever it draws.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
 - **From 0.47.1 or earlier,** the notes of each release in between apply as well.
