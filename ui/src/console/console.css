@@ -1215,6 +1215,11 @@ body,
 .jc-console .panel-body {
     padding: 18px 20px;
 }
+/* A painted view inside a card of a screen takes its own height, so the card closes under it. */
+.jc-console .harness .sys > .card > .painted {
+    height: auto;
+    overflow: visible;
+}
 .jc-console .chat-panel {
     display: flex;
     flex-direction: column;
