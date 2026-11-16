@@ -112,9 +112,9 @@
     box-sizing: border-box;
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--field-line);
     border-radius: 7px;
-    background: var(--panel);
+    background: var(--field-bg);
     color: var(--ink);
     font: inherit;
     line-height: 1.5;

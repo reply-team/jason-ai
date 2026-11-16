@@ -183,7 +183,7 @@
     > .btn.agent-move-resume {
     background: var(--teal);
     border-color: var(--teal);
-    color: #fff;
+    color: var(--on-teal);
 }
 .jc-console
     .harness
@@ -390,6 +390,12 @@
     }
     .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts {
         grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > .btn {
+        justify-self: start;
     }
     .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt {
         padding-bottom: 0;
