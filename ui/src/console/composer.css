@@ -235,6 +235,16 @@
     font-size: 12px;
     line-height: 1.4;
 }
+.jc-console .cmenu-panel .marked {
+    padding-left: 36px;
+}
+.jc-console .cmenu-panel .accmark {
+    position: absolute;
+    top: 9px;
+    left: 11px;
+    display: flex;
+    color: var(--mute);
+}
 .jc-console .cmenu-panel .acck {
     position: absolute;
     top: 8px;
