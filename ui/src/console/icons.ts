@@ -16,6 +16,16 @@ export const accessMarks = {
     ],
 } as const;
 
+/**
+ * The marks of the chat bar's three icon buttons, as path data, so the bar (drawn in JSX) and this table draw the same
+ * lines: Rename a pencil, Start afresh a circular arrow, Remove a bin.
+ */
+export const barMarks = {
+    rename: ['M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z', 'M14.5 6.5l3 3'],
+    restart: ['M20.5 15a8.5 8.5 0 11-2-8.8L21 9', 'M21 4v5h-5'],
+    remove: ['M4 7h16', 'M10 4h4', 'M6 7l1 13h10l1-13', 'M10 11v5', 'M14 11v5'],
+} as const;
+
 const lines = (paths: readonly string[]): Html => html`${paths.map((each) => html`<path d="${each}" />`)}`;
 
 // The console's line icons: paths on a 24-unit grid, stroked in the current colour. Needs you is a check in a circle,

@@ -80,7 +80,7 @@ import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
-import { svg } from './icons';
+import { barMarks, svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
 import { Painted } from './painted';
@@ -124,6 +124,27 @@ const answerWords: Readonly<Record<Answer, string>> = {
 /** Whether the desktop answered a call with a refusal: its sentence, as a value, never a thrown error. */
 export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && typeof (answer as { refused?: unknown }).refused === 'string';
+
+/** One of the chat bar's marks, drawn in the console's stroke on its 24-unit grid; the button around it names it. */
+function BarMark({ name }: { name: keyof typeof barMarks }) {
+    return (
+        <svg
+            width={15}
+            height={15}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            {barMarks[name].map((each) => (
+                <path key={each} d={each} />
+            ))}
+        </svg>
+    );
+}
 
 /** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
 function unless<T>(answer: T | DesktopRefusal): T {
@@ -1515,8 +1536,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     !underHead && (
                         <button
                             ref={renameButton}
-                            className="btn sm"
+                            className="btn sm ib"
                             type="button"
+                            aria-label="Rename"
                             disabled={!keptByDesktop || chat.removing}
                             title={
                                 keptByDesktop
@@ -1525,7 +1547,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             }
                             onClick={() => changeChat(chatId, (each) => ({ ...each, renaming: each.title }))}
                         >
-                            Rename
+                            <BarMark name="rename" />
                         </button>
                     )
                 ) : (
@@ -1562,24 +1584,27 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                 )}
                 {!inTab() && !underHead && (
                     <button
-                        className="btn sm"
+                        className="btn sm ib"
                         type="button"
+                        aria-label="Start afresh"
                         disabled={chat.running || chat.removing}
                         title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
                         onClick={() => restartChat(chatId)}
                     >
-                        Start afresh
+                        <BarMark name="restart" />
                     </button>
                 )}
                 {chat.main || inTab() || underHead ? null : (
                     <button
                         ref={removeButton}
-                        className="btn sm"
+                        className="btn sm ib"
                         type="button"
+                        aria-label="Remove"
                         disabled={chat.running || chat.removing}
+                        title="Remove this conversation"
                         onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
                     >
-                        Remove
+                        <BarMark name="remove" />
                     </button>
                 )}
                 {chat.campaignId !== null && !chat.main && !underHead && <AgentInBar campaignId={chat.campaignId} />}
