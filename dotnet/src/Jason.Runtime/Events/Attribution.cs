@@ -151,19 +151,13 @@ public static class CampaignPinRule
 /// else about the person counts: a contact pinned at another plugin, a value kept as a divergence, an identifier two
 /// contacts are pinned with, an excluded membership and an archived contact all find nobody.
 /// </summary>
-/// <remarks>
-/// A message the account sent is never found by the person: the rule is there for what no provider campaign places, a
-/// direct email's reply, and for a send that audience is wrong. A direct send of one campaign to a person who is also in
-/// another would count as the other's, so a send that names no provider campaign, or one no sole campaign holds, reaches
-/// no campaign.
-/// </remarks>
 public sealed class ContactPinAttribution : IEventAttribution
 {
     public IReadOnlyList<Attributed> Attribute(ReadEvent read, PinFacts pins)
     {
         ArgumentNullException.ThrowIfNull(read);
         ArgumentNullException.ThrowIfNull(pins);
-        if (read.Kind == ReadEvent.MessageSent || pins.ContactOf(read) is not { } contact)
+        if (pins.ContactOf(read) is not { } contact)
         {
             return [];
         }
