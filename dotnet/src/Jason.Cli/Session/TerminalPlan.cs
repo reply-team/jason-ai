@@ -170,7 +170,8 @@ public static class TerminalPlan
     /// (<see cref="SearchPathEntry"/>). On Windows the console host runs the system's expansion over the whole command line it hands
     /// on, replacing every <c>%NAME%</c> of a variable in the environment it was started with, before the host reads a
     /// word of it: where <paramref name="inherited"/> is given, the first word that expansion would change is refused,
-    /// since the host would be given something Jason did not write. Nothing is escaped instead.
+    /// since the host would be given something Jason did not write. The scan reads each word alone, while the console host reads the composed
+    /// line: they differ only where a name spans two words, which takes a variable whose name holds a space or a quote. Nothing is escaped instead.
     /// </summary>
     /// <param name="own">The installation the launch carries, whose variables the console host is started with too.</param>
     /// <param name="inherited">
@@ -212,7 +213,7 @@ public static class TerminalPlan
     /// null. A drive's colon at the start is not read as macOS's or Linux's separator: the plan's rows for those systems run
     /// on Windows too, where this jason's folder starts with a drive, and on those systems a folder starts with its root.
     /// </summary>
-    private static string? Split(TerminalPlatform os, string folder)
+    internal static string? Split(TerminalPlatform os, string folder)
     {
         var separator = SearchPathEntry.Separator(os == TerminalPlatform.Windows);
         var judged = os != TerminalPlatform.Windows && folder.Length >= 2 && char.IsAsciiLetter(folder[0]) && folder[1] == ':' ? folder[2..] : folder;

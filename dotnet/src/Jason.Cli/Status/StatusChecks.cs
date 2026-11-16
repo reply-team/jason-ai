@@ -867,7 +867,10 @@ internal static partial class StatusChecks
         // First, whatever answers by name: a folder whose name holds the separator of PATH is two entries to every reader,
         // so this jason is on no PATH, a role's agent is not given it first, and another jason answering by name would
         // only hide that. No line is offered: the one that puts a folder on PATH would write the same split entry again.
-        if (OwnFolder(env) is { } own && SearchPathEntry.Problem(own) is { } split)
+        // Not where the name answers with this very file through a link in a folder that is a whole entry: that is how a
+        // manager reaches an installation, and there a shell does find this jason by name.
+        if (OwnFolder(env) is { } own && SearchPathEntry.Problem(own) is { } split
+            && !IsThisFile(Executables.OnPath("jason", env.SearchPath), env.InstallPath ?? SelfExecutable.InstalledImage))
         {
             return new StatusCheck(
                 "path",
@@ -946,6 +949,28 @@ internal static partial class StatusChecks
         }
 
         return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+    }
+
+    /// <summary>Whether <paramref name="resolved"/> is <paramref name="own"/> itself or a link that leads to it.</summary>
+    private static bool IsThisFile(string? resolved, string? own)
+    {
+        if (resolved is null || own is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var target = System.IO.Path.GetFullPath(own);
+            var found = System.IO.Path.GetFullPath(resolved);
+            var linked = new FileInfo(found).ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+            return string.Equals(found, target, StringComparison.OrdinalIgnoreCase)
+                || (linked is not null && string.Equals(System.IO.Path.GetFullPath(linked), target, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

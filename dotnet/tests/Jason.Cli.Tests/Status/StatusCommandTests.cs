@@ -1175,6 +1175,60 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// The check judges the separator alone (what PATH itself cannot carry): a jason answering by name from a folder holding
+    /// a character only an installer cannot write, a dollar sign, a quote or a <c>%NAME%</c>, is a working installation.
+    /// </summary>
+    [Theory]
+    [InlineData("a$b")]
+    [InlineData("a%JASON_TEST_NAME%b")]
+    [InlineData("a\"b")]
+    public async Task A_jason_found_by_name_in_a_folder_only_an_installer_cannot_write_is_on_path(string name)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows() && name.Contains('"', StringComparison.Ordinal), "Windows names no folder with a quote.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", name, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.StartsWith("'jason' resolves to ", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder holding the separator that a manager's link reaches, from a folder on PATH, is found by name: it is the same
+    /// file, so the check does not say no shell finds it.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_in_a_separator_folder_reached_through_a_link_on_path_is_found_by_name()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var file = OperatingSystem.IsWindows() ? "jason.exe" : "jason";
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs", "a" + Path.PathSeparator + "b")).FullName;
+        var installed = Path.Combine(folder, file);
+        File.WriteAllText(installed, string.Empty);
+        var bin = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "links")).FullName;
+        try
+        {
+            File.CreateSymbolicLink(Path.Combine(bin, file), installed);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+        {
+            Assert.Skip("This account may not make a symbolic link.");
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = bin }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Each repair once, in the order it was first called for.
     /// </summary>
     /// <remarks>

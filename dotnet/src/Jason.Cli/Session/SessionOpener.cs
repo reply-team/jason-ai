@@ -57,10 +57,12 @@ public static class SessionOpener
             return ExitCodes.ApiError;
         }
 
-        var byHand = $"To work on it by hand, run `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` in a terminal of your own and give the brief to your agent host.";
+        // A jason in a folder PATH cannot carry is found by no shell by name: its full path is what a person types.
+        var typedJason = ByHandProgram(env);
+        var byHand = $"To work on it by hand, run `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` in a terminal of your own and give the brief to your agent host.";
         if (item.DecidedState is { } decided)
         {
-            env.Error.WriteLine($"Nothing waits on this {noun}: {item.Id} was already {decided}, so no session was started; `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` still prints its brief.");
+            env.Error.WriteLine($"Nothing waits on this {noun}: {item.Id} was already {decided}, so no session was started; `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` still prints its brief.");
             return ExitCodes.ApiError;
         }
 
@@ -117,7 +119,7 @@ public static class SessionOpener
             : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, Variable(env, "TERMINAL"), SearchPath(env));
         if (terminals is null || terminal is null)
         {
-            env.Error.WriteLine($"No terminal was found to start {hostWord} in. In a terminal of your own, at {shown}, run `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` and give the brief to your host.");
+            env.Error.WriteLine($"No terminal was found to start {hostWord} in. In a terminal of your own, at {shown}, run `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` and give the brief to your host.");
             return ExitCodes.ApiError;
         }
 
@@ -321,6 +323,20 @@ public static class SessionOpener
 
     internal static string? Variable(CliEnvironment env, string name) =>
         env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
+
+    /// <summary>
+    /// What a person types to run this jason: the bare name, or, where its folder holds the separator of PATH and so no shell
+    /// finds it by name, its full path quoted.
+    /// </summary>
+    private static string ByHandProgram(CliEnvironment env)
+    {
+        var platform = env.Terminals?.Platform
+            ?? (OperatingSystem.IsWindows() ? TerminalPlatform.Windows : OperatingSystem.IsMacOS() ? TerminalPlatform.MacOs : TerminalPlatform.Linux);
+        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+        return Own(env).ExecutableFolder is { } folder && executable is not null && TerminalPlan.Split(platform, folder) is not null
+            ? "\"" + executable + "\""
+            : "jason";
+    }
 
     /// <summary>
     /// The installation the opened terminal's <c>jason</c> is to be: the data directory this CLI runs on, the one it

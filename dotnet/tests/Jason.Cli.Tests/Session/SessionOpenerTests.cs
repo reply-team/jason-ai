@@ -809,9 +809,10 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
         Assert.Empty(_run.Output.ToString());
         Assert.Contains(
-            $"did not start (this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first). To work on it by hand",
+            $"did not start (this jason's folder {folder} holds '{separator}', which separates the entries of PATH, so no PATH entry can name it, and the window's PATH could not put this jason first). To work on it by hand, run `\"{_run.InstallPath}\" approval get apr_1 --prompt` in a terminal of your own",
             _run.Error.ToString(),
             StringComparison.Ordinal);
+        Assert.DoesNotContain("`jason approval get", _run.Error.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A campaign folder whose name holds <paramref name="part"/>, made on disk and named by the campaign's answer.</summary>

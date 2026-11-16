@@ -89,6 +89,50 @@ public partial class InstallScriptTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(temp));
     }
 
+    /// <summary>
+    /// A percent sign that names no variable is not one Windows would expand, so the script does not refuse it: an undefined
+    /// <c>%NOPE%</c> and a lone <c>100%</c> reach the manifest, with -NoModifyPath and without it.
+    /// </summary>
+    [Theory]
+    [InlineData("%NOPE_JASON_TEST%", false)]
+    [InlineData("100%", false)]
+    [InlineData("%NOPE_JASON_TEST%", true)]
+    [InlineData("100%", true)]
+    public void Install_ps1_does_not_refuse_a_percent_that_names_no_variable(string name, bool noModifyPath)
+    {
+        using var tree = new TempTree();
+        var install = Path.Combine(tree.Root, name, "jason");
+
+        var (exit, _, stderr, _) = RunPs1(tree, install, noModifyPath);
+
+        Assert.NotEqual(0, exit);
+        Assert.DoesNotContain("cannot write", stderr, StringComparison.Ordinal);
+        Assert.Contains("manifest.json", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A space, an apostrophe and a letter outside ASCII are carried by the profile line's double quotes: not refused, with
+    /// --no-modify-path and without it.
+    /// </summary>
+    [Theory]
+    [InlineData(" ", false)]
+    [InlineData("'", false)]
+    [InlineData("é", false)]
+    [InlineData(" ", true)]
+    [InlineData("'", true)]
+    [InlineData("é", true)]
+    public void Install_sh_does_not_refuse_a_directory_its_profile_line_carries(string character, bool noModifyPath)
+    {
+        using var tree = new TempTree();
+        var install = Path.Combine(tree.Root, "a" + character + "b", "bin");
+
+        var (exit, _, stderr, _) = RunSh(tree, install, noModifyPath);
+
+        Assert.NotEqual(0, exit);
+        Assert.DoesNotContain("cannot write", stderr, StringComparison.Ordinal);
+        Assert.Contains("manifest.json", stderr, StringComparison.Ordinal);
+    }
+
     /// <summary>A directory holding <c>:</c> is refused, with --no-modify-path and without it, before a temporary folder or the directory exists.</summary>
     [Theory]
     [InlineData(true)]
