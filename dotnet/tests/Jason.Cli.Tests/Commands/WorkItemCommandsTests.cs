@@ -882,7 +882,7 @@ public class WorkItemCommandsTests
             Not before:   -
             Due:          2026-09-14 12:00:00 UTC
             Retry after:  -
-            Attempts:     1, current att_A
+            Attempts:     1 counted toward the limit, current att_A
             Last error:   executor_exited — the process exited with code 1
             Created:      2026-09-14 10:00:00 UTC
             Updated:      2026-09-14 10:00:00 UTC
@@ -1155,8 +1155,8 @@ public class WorkItemCommandsTests
         var exit = await cli.RunAsync("workitem", "list", "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Contains("ID    CAMPAIGN         PERSON        KIND     ROLE/OP     STATUS   ELIGIBLE  PRIO  ATTEMPTS  CREATED", cli.Text, StringComparison.Ordinal);
-        Assert.Contains("wi_A  Autumn outreach  Ada Lovelace  ai_role  researcher  created  yes       5     0         2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("ID    CAMPAIGN         PERSON        KIND     ROLE/OP     STATUS   ELIGIBLE  PRIO  FAILED TRIES  CREATED", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("wi_A  Autumn outreach  Ada Lovelace  ai_role  researcher  created  yes       5     0             2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
         Assert.Contains("next cursor: d2lfQQ", cli.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("{", cli.Text, StringComparison.Ordinal);
     }
@@ -1193,6 +1193,66 @@ public class WorkItemCommandsTests
     }
 
     [Fact]
+    public async Task Human_mode_says_how_many_attempts_were_made_and_how_many_count_toward_the_limit()
+    {
+        var interrupted = new AttemptDto(
+            "att_A", 1, AttemptStatus.Interrupted, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(1), Moment.AddMinutes(1), null, null, Moment.AddHours(1), null);
+        var running = new AttemptDto(
+            "att_B", 2, AttemptStatus.Running, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(5), Moment.AddMinutes(5), null, null, Moment.AddHours(1), null);
+        using var cli = new CliRun(Serialize(Item([interrupted, running], attemptCount: 0, currentAttemptId: "att_B")));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--snapshots", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Attempts:     2 made, 0 counted toward the limit, current att_B", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_says_one_made_and_none_counted_for_an_item_that_succeeded_the_first_time()
+    {
+        var succeeded = new AttemptDto(
+            "att_A", 1, AttemptStatus.Succeeded, WorkItemKind.AiRole, null, null, null,
+            Moment.AddMinutes(5), Moment.AddMinutes(5), Moment.AddMinutes(6), null, Moment.AddHours(1), null);
+        using var cli = new CliRun(Serialize(Item([succeeded], attemptCount: 0, currentAttemptId: null)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--snapshots", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Attempts:     1 made, 0 counted toward the limit", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("current", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_names_no_number_of_attempts_made_when_the_answer_carries_no_list()
+    {
+        using var cli = new CliRun(Serialize(Item(null, attemptCount: 2)));
+
+        var exit = await cli.RunAsync("workitem", "get", "wi_A", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("Attempts:     2 counted toward the limit, current att_A", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("made", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Human_mode_lists_the_failed_tries_of_an_item_that_failed_twice_and_then_succeeded()
+    {
+        var twice = new WorkItemSummaryDto(
+            "wi_A", "cmp_A", null, WorkItemKind.AiRole, "planner", null, null, WorkItemStatus.Succeeded, false, 5, null, null, null,
+            new ActorRef(ActorType.Human, null), 2, null, null, Moment, Moment, null, "Autumn outreach", null);
+        using var cli = new CliRun(Serialize(new Page<WorkItemSummaryDto>([twice], null)));
+
+        var exit = await cli.RunAsync("workitem", "list", "--human");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Contains("FAILED TRIES", cli.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ATTEMPTS", cli.Text, StringComparison.Ordinal);
+        Assert.Contains("no        5     2             2026-09-14 10:00:00 UTC", cli.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Human_mode_falls_back_to_the_raw_body_when_the_shape_is_unknown()
     {
         using var cli = new CliRun("{\"unexpected\":true}");
@@ -1207,7 +1267,9 @@ public class WorkItemCommandsTests
         IReadOnlyList<AttemptDto>? attempts,
         IReadOnlyList<ReportSummaryDto>? externalReports = null,
         LineageDto? lineage = null,
-        AttemptErrorDto? lastError = null) => new(
+        AttemptErrorDto? lastError = null,
+        int attemptCount = 1,
+        string? currentAttemptId = "att_A") => new(
         "wi_A",
         "cmp_A",
         "cnt_A",
@@ -1228,8 +1290,8 @@ public class WorkItemCommandsTests
         new JsonObject { ["icp"] = "founders", ["tone"] = "plain" },
         null,
         null,
-        1,
-        "att_A",
+        attemptCount,
+        currentAttemptId,
         lastError ?? new AttemptErrorDto("executor_exited", "the process exited with code 1", true),
         attempts,
         externalReports,
