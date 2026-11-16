@@ -242,7 +242,7 @@ export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
     await fill(api, waiting);
 }
 
-/** The campaign's two lists read again; a refusal whose item they no longer hold goes. */
+/** The campaign's two lists read again; a refusal whose item they do not hold now goes. */
 async function listWaiting(api: Api, waiting: Waiting): Promise<void> {
     await waiting.store.load(api, false);
     const refused = waiting.refused.value;
