@@ -1,0 +1,51 @@
+{
+  "operation": "decision.list",
+  "case": "card-questions-pending",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_1",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "dec_1",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "status": "pending",
+        "question": "What should the follow-up to Ines say about the pricing change?",
+        "raised_at": "2026-10-16T09:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte"
+      },
+      {
+        "id": "dec_2",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "status": "pending",
+        "question": "Pause outreach to Kavali until their funding news?",
+        "raised_at": "2026-10-16T09:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte"
+      },
+      {
+        "id": "dec_3",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "status": "pending",
+        "question": "Move Ines to the autumn campaign?",
+        "raised_at": "2026-10-16T09:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte"
+      }
+    ],
+    "next_cursor": null
+  }
+}

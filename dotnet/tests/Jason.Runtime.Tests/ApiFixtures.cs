@@ -18,6 +18,42 @@ public static class ApiFixtures
 {
     public const string UpdateVariable = "JASON_UPDATE_FIXTURES";
 
+    // The "card-" files are the desktop chat's cards' exchanges, recorded as stories (CardExchangesTests and
+    // CardAccountsReplyExchangesTests). The list below is sorted by operation, so a story's files are not together;
+    // this says which files belong to which. Ids are numbered afresh in each story, so cmp_1, cnt_1 or wi_1 mean other
+    // things in one story than in another: a screen test stays inside ONE story's files and never mixes two.
+    //
+    //   message waiting:  approval.list card-message-pending|-after-edit|-reasked, approval.get card-message|
+    //                     -withdrawn|-reasked, workitem.get card-message-parked, workitem.update card-message-edited,
+    //                     sender.list card-message-sender|card-sender-other.
+    //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
+    //                     card-invitation-parked.
+    //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
+    //                     decision.answer card-free-text.
+    //   many messages:    approval.list card-messages-first-page|-next-page.
+    //   status:           campaign.get|summary card-status, campaign.summary
+    //                     card-status-later (the same request after one more member), journal.list
+    //                     card-choice-acts|-none (a person's pause since a moment, and none), campaign.activity card-status-30-days,
+    //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
+    //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
+    //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.summary
+    //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
+    //                     card-chips, plugin.list|route.list card-accounts.
+    //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
+    //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
+    //
+    // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
+    // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
+    // its content is invented: (1) the test plugin of the message, invitation, status and no-route stories is a bare
+    // one (version 1.0.0, digest sha256 recorded-1, null name, description and homepage, five operations, an invented
+    // binding {workspace: a}), so plugin.list/card-accounts and the binding in route.list/card-accounts and
+    // route.resolve/card-plan-message-send show a stand-in's content, not a real package's; (2) the provider's own
+    // answers are a stand-in's: the external id c_7714 in campaign.get/card-status, and every account (name, address,
+    // vendor block) in sender.list/card-message-sender and card-sender-other. The accounts (Reply) story is the
+    // exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
+    // the plugin host), and only the vendor's command-line tool is the test harness's fake, holding invented accounts, so
+    // plugin.list|route.list|sender.list card-accounts-reply are what an installation with that package would answer
+    // (the executable's path is recorded as <bin>/reply). A card that shows plugins or accounts is drawn from the -reply files.
     /// <summary>Every recorded case, as <c>operation/case</c>. A recording not listed here fails; a file not listed here fails the catalog test.</summary>
     public static readonly string[] Cases =
     [
@@ -26,11 +62,19 @@ public static class ApiFixtures
         "approval.approve/approved-and-allowed",
         "approval.approve/from-campaign-row",
         "approval.approve/from-campaign-row-again",
+        "approval.approve/panel-doubted",
+        "approval.get/by-work-item",
+        "approval.get/card-invitation",
+        "approval.get/card-message",
+        "approval.get/card-message-reasked",
+        "approval.get/card-message-withdrawn",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
         "approval.get/modes-chosen",
         "approval.get/other-pending",
+        "approval.get/panel-doubted",
+        "approval.get/panel-moved",
         "approval.get/park-answers-no-verdict",
         "approval.get/park-awaiting-judgement",
         "approval.get/park-awaiting-nature",
@@ -46,10 +90,20 @@ public static class ApiFixtures
         "approval.get/with-doubts",
         "approval.list/by-campaign-pending",
         "approval.list/by-work-item",
+        "approval.list/card-invitation-pending",
+        "approval.list/card-message-after-edit",
+        "approval.list/card-message-pending",
+        "approval.list/card-message-reasked",
+        "approval.list/card-messages-first-page",
+        "approval.list/card-messages-next-page",
+        "approval.list/card-needs-all",
+        "approval.list/card-status-waiting",
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/messages-pending",
         "approval.list/one-mode-unset",
+        "approval.list/panel-doubted",
+        "approval.list/panel-moved",
         "approval.list/pending",
         "approval.list/summer-pending",
         "approval.list/unauthorized",
@@ -80,6 +134,7 @@ public static class ApiFixtures
         "campaign.activity/all-today",
         "campaign.activity/audience",
         "campaign.activity/audience-nobody-landed",
+        "campaign.activity/card-status-30-days",
         "campaign.activity/last-7-days",
         "campaign.activity/many",
         "campaign.activity/many-one",
@@ -113,6 +168,9 @@ public static class ApiFixtures
         "campaign.audience/three-audiences",
         "campaign.audience/unknown-campaign",
         "campaign.get/archived",
+        "campaign.get/card-plan-draft",
+        "campaign.get/card-status",
+        "campaign.get/card-status-draft",
         "campaign.get/details",
         "campaign.get/gone",
         "campaign.get/gone-here",
@@ -129,6 +187,7 @@ public static class ApiFixtures
         "campaign.get/unlinked",
         "campaign.list/by-project",
         "campaign.list/campaigns-for-picker",
+        "campaign.list/card-chips",
         "campaign.list/first-page",
         "campaign.list/for-picker",
         "campaign.list/inbox",
@@ -153,6 +212,10 @@ public static class ApiFixtures
         "campaign.list_contacts/audience-activity-replied",
         "campaign.list_contacts/audience-summary-waiting",
         "campaign.list_contacts/audience-unknown",
+        "campaign.list_contacts/card-people-empty",
+        "campaign.list_contacts/card-people-first",
+        "campaign.list_contacts/card-people-query",
+        "campaign.list_contacts/card-people-waiting",
         "campaign.list_contacts/everyone",
         "campaign.list_contacts/from-a-search",
         "campaign.list_contacts/query",
@@ -180,6 +243,12 @@ public static class ApiFixtures
         "campaign.summary/audience-two-campaigns",
         "campaign.summary/audience-unknown",
         "campaign.summary/audience-without-archived",
+        "campaign.summary/card-chips",
+        "campaign.summary/card-plan-draft",
+        "campaign.summary/card-status",
+        "campaign.summary/card-status-draft",
+        "campaign.summary/card-status-later",
+        "campaign.summary/card-unknown-campaign",
         "campaign.summary/everyone",
         "campaign.summary/everyone-without-archived",
         "campaign.summary/everyone-without-archived-empty",
@@ -226,6 +295,9 @@ public static class ApiFixtures
         "contact.list/by-campaign-without-archived",
         "contact.list/campaign-picker",
         "contact.list/campaign-picker-zoe",
+        "contact.list/card-people-everyone",
+        "contact.list/card-people-nobody",
+        "contact.list/card-people-query",
         "contact.list/first-page",
         "contact.list/gone-campaign",
         "contact.list/many",
@@ -252,9 +324,16 @@ public static class ApiFixtures
         "contact.update/person-refused",
         "contact.update/person-saved",
         "decision.answer/answered",
+        "decision.answer/card-free-text",
+        "decision.get/card-question-2",
+        "decision.get/card-question-3",
         "decision.get/for-campaign-row",
         "decision.get/pending-with-options",
         "decision.list/by-campaign-pending",
+        "decision.list/card-needs-all",
+        "decision.list/card-questions-after-answer",
+        "decision.list/card-questions-pending",
+        "decision.list/card-status-waiting",
         "decision.list/decided",
         "decision.list/empty",
         "decision.list/pending",
@@ -277,12 +356,20 @@ public static class ApiFixtures
         "journal.list/by-failed-item",
         "journal.list/by-succeeded-item",
         "journal.list/by-work-item",
+        "journal.list/card-choice-acts",
+        "journal.list/card-choice-acts-none",
         "journal.list/oli",
+        "journal.list/panel-doubted",
+        "journal.list/panel-doubted-approved",
+        "journal.list/panel-moved",
+        "journal.list/panel-moved-edited",
         "journal.list/summer",
         "operation.describe/audience-search",
         "operation.describe/campaign-get",
         "operation.describe/on-a-channel",
         "operation.describe/unknown-channel",
+        "plugin.list/card-accounts",
+        "plugin.list/card-accounts-reply",
         "plugin.list/none",
         "preference.list/mode-automatic-voice-unset",
         "preference.list/modes-every-message",
@@ -337,8 +424,12 @@ public static class ApiFixtures
         "rolenote.set/client",
         "rolenote.set/project",
         "rolenote.set/two-levels",
+        "route.list/card-accounts",
+        "route.list/card-accounts-reply",
         "route.list/channel-routes",
         "route.list/empty",
+        "route.resolve/card-plan-message-send",
+        "route.resolve/card-plan-no-route",
         "route.resolve/elsewhere",
         "route.resolve/elsewhere-first",
         "route.resolve/global-default",
@@ -348,6 +439,10 @@ public static class ApiFixtures
         "route.resolve/unknown-channel",
         "route.resolve/unrouted-first",
         "route.set/orphans-search",
+        "sender.list/card-accounts-reply",
+        "sender.list/card-message-sender",
+        "sender.list/card-sender-other",
+        "sender.list/card-sender-unread",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",
         "subscription.rewind/since-without-offset",
@@ -394,6 +489,18 @@ public static class ApiFixtures
         "workitem.count/many-now",
         "workitem.count/many-planned",
         "workitem.count/now",
+        "workitem.count/panel-doubted-approved-done",
+        "workitem.count/panel-doubted-approved-now",
+        "workitem.count/panel-doubted-approved-planned",
+        "workitem.count/panel-doubted-done",
+        "workitem.count/panel-doubted-now",
+        "workitem.count/panel-doubted-planned",
+        "workitem.count/panel-moved-done",
+        "workitem.count/panel-moved-edited-done",
+        "workitem.count/panel-moved-edited-now",
+        "workitem.count/panel-moved-edited-planned",
+        "workitem.count/panel-moved-now",
+        "workitem.count/panel-moved-planned",
         "workitem.count/planned",
         "workitem.count/planned-on-16",
         "workitem.count/planned-on-17",
@@ -421,9 +528,15 @@ public static class ApiFixtures
         "workitem.create/researcher-asked",
         "workitem.create/researcher-asked-plain",
         "workitem.get/awaiting",
+        "workitem.get/card-invitation-parked",
+        "workitem.get/card-message-parked",
         "workitem.get/expired",
         "workitem.get/failed",
         "workitem.get/open",
+        "workitem.get/panel-doubted",
+        "workitem.get/panel-doubted-approved",
+        "workitem.get/panel-moved",
+        "workitem.get/panel-moved-edited",
         "workitem.get/parked-edited-send",
         "workitem.get/parked-send",
         "workitem.get/researcher-finding",
@@ -446,6 +559,10 @@ public static class ApiFixtures
         "workitem.list/failed-on-17",
         "workitem.list/now",
         "workitem.list/oli-open",
+        "workitem.list/panel-doubted-approved-now",
+        "workitem.list/panel-doubted-now",
+        "workitem.list/panel-moved-edited-now",
+        "workitem.list/panel-moved-now",
         "workitem.list/planned",
         "workitem.list/planned-many",
         "workitem.list/planned-many-next",
@@ -459,6 +576,7 @@ public static class ApiFixtures
         "workitem.list/summer-running",
         "workitem.list/tomas-now",
         "workitem.list/unknown-campaign",
+        "workitem.update/card-message-edited",
         "workitem.update/dates",
         "workitem.update/finished-meanwhile",
     ];
@@ -526,13 +644,19 @@ public static class ApiFixtures
     }
 }
 
+/// <summary>A cursor under a scrubbing that numbers cursors is not the base64url of an id: the recording row cannot write it.</summary>
+public sealed class CursorNotScrubbableException(string cursor)
+    : Exception($"The cursor '{cursor}' is not the base64url of an id, so it cannot be numbered like the ids it holds.");
+
 /// <summary>
 /// Replaces what varies between runs with stable words: ids by prefix in order of first appearance, digests in order of
 /// first appearance, the data directory by a mark, the home the runtime was given by <c>~</c> — so a folder under the harness root
 /// reads as it would on a person's machine, <c>~/Jason/projects/…</c> — and the values the clock does not control by
-/// fixed ones.
+/// fixed ones. A page's cursor is the base64 of the id of the row it stopped at, so where the ids are the runtime's own
+/// and not fixed by the test (<paramref name="cursors"/>) a cursor is decoded, its ids numbered like any other, and
+/// written again; a test that fixes its ids leaves it off, and its files keep the cursor as the runtime wrote it.
 /// </summary>
-public sealed partial class FixtureScrubber(string dataDir, string? home = null)
+public sealed partial class FixtureScrubber(string dataDir, string? home = null, bool cursors = false)
 {
     public const string FixedMoment = "2026-10-16T09:00:00.000Z";
 
@@ -560,7 +684,7 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
             case JsonArray array:
                 return new JsonArray([.. array.Select(child => Scrub(child))]);
             case JsonValue value when value.TryGetValue<string>(out var text):
-                return JsonValue.Create(Text(text, key));
+                return JsonValue.Create(cursors && key is "cursor" or "next_cursor" ? Cursor(text) : Text(text, key));
             case JsonValue value when key == "pid" && value.TryGetValue<int>(out _):
                 return JsonValue.Create(4242);
             case JsonValue value when key is "port" or "configured_port" && value.TryGetValue<int>(out _):
@@ -613,8 +737,27 @@ public sealed partial class FixtureScrubber(string dataDir, string? home = null)
             return text.Replace(dataDir, "<data>", StringComparison.Ordinal).Replace('\\', '/');
         }
 
+        // A program the test tree holds, such as the stand-in a provider's package resolves its executable to, is a
+        // program on this machine's disk: it is recorded by its name alone, with no folder and no platform's extension.
+        var tree = AppContext.BaseDirectory;
+        if (text.StartsWith(tree, StringComparison.OrdinalIgnoreCase))
+        {
+            return "<bin>/" + Path.GetFileNameWithoutExtension(text);
+        }
+
         // An id inside a longer text, such as a URL or a message, is mapped the same way.
         return Ulid().Replace(text, match => Id(match.Value));
+    }
+
+    private string Cursor(string cursor)
+    {
+        if (!System.Buffers.Text.Base64Url.IsValid(cursor))
+        {
+            throw new CursorNotScrubbableException(cursor);
+        }
+
+        var id = System.Text.Encoding.UTF8.GetString(System.Buffers.Text.Base64Url.DecodeFromChars(cursor));
+        return System.Buffers.Text.Base64Url.EncodeToString(System.Text.Encoding.UTF8.GetBytes(Text(id, null)));
     }
 
     private string Id(string id)

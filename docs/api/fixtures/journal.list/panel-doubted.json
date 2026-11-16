@@ -1,0 +1,41 @@
+{
+  "operation": "journal.list",
+  "case": "panel-doubted",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_1",
+        "ts": "2026-10-15T12:00:00.000Z",
+        "actor": {
+          "type": "attempt",
+          "id": "att_1"
+        },
+        "kind": "workitem_reviewed",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": "att_1",
+        "key": "sha256:recorded-1",
+        "old": null,
+        "new": {
+          "result": "doubts",
+          "code": "unsupported_claim",
+          "operation": "message.send",
+          "role": "critic"
+        },
+        "reason": null,
+        "contact_id": "cnt_1",
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "message.send",
+        "actor_role": "critic"
+      }
+    ],
+    "next_cursor": null
+  }
+}

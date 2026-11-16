@@ -384,6 +384,7 @@ describe('Work items: the panel', () => {
             .answer('workitem.get', 'workitem.get/awaiting', 'workitem.get/expired')
             .answer('journal.list', 'journal.list/by-awaiting-item', 'journal.list/by-expired-item')
             .answer('approval.list', 'approval.list/by-work-item')
+            .answer('approval.get', 'approval.get/by-work-item')
             .answer('approval.approve', 'approval.approve/approved')
             .answer('approval.reject', 'approval.reject/from-work-item');
         open(api, 'now', {}, awaiting.id);
@@ -392,7 +393,12 @@ describe('Work items: the panel', () => {
         expect(link.getAttribute('href')).toBe(`#/attention/approvals/${approval.id}`);
         expect(api.sent('approval.list')).toEqual(fixtures['approval.list/by-work-item'].request);
 
-        // The approval is decided right here, as on Attention: the item is read again and the lists reloaded.
+        // The approval is decided right here, as on Attention, once read whole: the item is read again and the lists
+        // reloaded. An enrolment is no message, so the press approves it without reading the item first.
+        await waitFor(() => expect(api.sent('approval.get')).toEqual(fixtures['approval.get/by-work-item'].request));
+        await waitFor(() =>
+            expect((screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement).disabled).toBe(false),
+        );
         const reads = api.calls.filter((c) => c.operation === 'workitem.get').length;
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(api.sent('approval.approve')).toEqual({ approval_id: approval.id }));

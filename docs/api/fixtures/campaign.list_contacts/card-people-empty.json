@@ -1,0 +1,14 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "card-people-empty",
+  "request": {
+    "campaign_id": "cmp_3",
+    "limit": 10,
+    "exclude_archived_contacts": true
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

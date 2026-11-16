@@ -1,0 +1,87 @@
+{
+  "operation": "campaign.list_contacts",
+  "case": "card-people-query",
+  "request": {
+    "campaign_id": "cmp_1",
+    "limit": 10,
+    "exclude_archived_contacts": true,
+    "query": "ines"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "contact": {
+          "id": "cnt_1",
+          "first_name": "Ines",
+          "last_name": "Duarte",
+          "company": "Kavali",
+          "title": null,
+          "time_zone": null,
+          "channels": [
+            {
+              "channel": "email",
+              "value": "ines@example.test",
+              "label": null,
+              "primary": true,
+              "data": null
+            }
+          ],
+          "custom": {},
+          "external_ids": [],
+          "created_at": "2026-10-16T09:00:00.000Z",
+          "updated_at": "2026-10-16T09:00:00.000Z",
+          "archived_at": null,
+          "campaigns": [
+            {
+              "campaign_id": "cmp_1",
+              "campaign_name": "Spring launch",
+              "state": "enrolled",
+              "added_at": "2026-10-16T09:00:00.000Z",
+              "updated_at": "2026-10-16T09:00:00.000Z",
+              "standing": [
+                "waiting"
+              ]
+            }
+          ],
+          "last_activity": {
+            "id": "jrn_1",
+            "ts": "2026-10-16T09:00:00.000Z",
+            "actor": {
+              "type": "system",
+              "id": "dispatcher"
+            },
+            "kind": "approval_requested",
+            "campaign_id": "cmp_1",
+            "work_item_id": "wi_1",
+            "attempt_id": null,
+            "key": "approval",
+            "old": null,
+            "new": {
+              "id": "apr_1",
+              "operation": "message.send",
+              "subject_hash": "sha256:recorded-1"
+            },
+            "reason": "approval_required",
+            "contact_id": "cnt_1",
+            "campaign_name": "Spring launch",
+            "contact_name": "Ines Duarte",
+            "work_item_kind": "provider_op",
+            "work_item_role": null,
+            "work_item_operation": "message.send",
+            "actor_role": null
+          }
+        },
+        "state": "enrolled",
+        "added_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "counted": [
+          {
+            "campaign_id": "cmp_1"
+          }
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}
