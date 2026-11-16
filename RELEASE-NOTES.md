@@ -37,12 +37,12 @@ window loses its second title bar.
     holds, is kept and concerns nobody. The line wakes no manager unless you list it under `Manager:Triggers`, and no
     reader of replies or of provider events sees it.
   - `Contacted` counts a person once when an act about them succeeded (enrolling them, sending a message, replying or
-    sending a social invitation) or a send was said for them in the period,
-    dated by the moment the provider gives, not the moment the span was read. A send to somebody who is not a member of
+    sending a social invitation) or a send was said for them in the period, dated by the moment the provider gives, not the moment the span was read. A send to somebody who is not a member of
     the campaign counts nobody, and no count of messages is offered. A person's latest touch, the reason the list gives,
     is the later of their latest act and their latest send.
   - A person's timeline shows each send under All as "Sent from the account" with a mark of its own, never the reply
-    mark, and the people list's Last activity says the same; a campaign's timeline shows none. Nothing says who sent the message, since the feed cannot tell.
+    mark, and the people list's Last activity says the same; a campaign's timeline shows none.
+    Nothing says who sent the message, since the feed cannot tell.
   - **Reply plugin 0.18.0** reports the account's own email sends through this kind.
   - **journal-forwarder 1.6.0** declares `provider_send_observed`, so a person can grant it.
 - **A list you give the chat is shown back and added by your press.** In an agent's own chat the AI can end a turn with
@@ -53,7 +53,8 @@ window loses its second title bar.
   request for every row, answered row by row in the runtime's words. A person you took out of the agent is not added
   back, and a repeated press adds nobody twice.
 - **Two cards that only lead somewhere.** Ask the chat which AI runs your agents, or how to connect Reply, and it can
-  end with a card whose one button, **Open Connect** or **Open Accounts**, opens that place. Neither card takes a key, a sign-in or any input.
+  end with a card whose one button, **Open Connect** or **Open Accounts**, opens that place.
+  Neither card takes a key, a sign-in or any input.
 - **Archiving an agent is your own act.** `jason campaign archive` is refused in the desktop's chat in every access
   mode. In the console, the agent's Settings tab ends with an **Archive** part whose confirmation names the agent, says an archive
   cannot be undone, and says what it cancels, read from the runtime as the dialog opens: the open work, the approvals
@@ -68,8 +69,7 @@ window loses its second title bar.
 - **An approval keeps covering its work when the only change is an added pin.** A provider identifier the runtime
   learned after you approved, one the approved work did not hold, no longer parks the work for a second approval: the
   provider addresses a record it already holds, and an added pin is either never shown to you or a value you already
-  read. A pin the approval held, an
-  argument, a field of the person, the address, the campaign, the plugin, the account or the operation's version still
+  read. A pin the approval held, an argument, a field of the person, the address, the campaign, the plugin, the account or the operation's version still
   park it.
 - **The dark theme is complete.** The browser shell and the console share one ground in the dark theme, and every
   screen and dialog was walked in both themes, wide and narrow: fields, cards, notes and accent buttons read on the
@@ -107,8 +107,8 @@ window loses its second title bar.
   before they write anything. Each installer also refuses, only where it writes the `PATH` entry itself, a name its own
   form cannot carry; use another folder or the option that leaves `PATH` alone.
 - In a browser tab that Jason Desktop opened, pressing the browser's Back after opening a page from the chat (a card's
-  Open, a link) showed a second chat whose controls did nothing and left the window's own controls dead. Back, and
-  Forward, now return to the chat as it was, with its draft, in the tab and in the window.
+  Open, a link) brought the chat back with controls that did nothing. Back and Forward now return to the chat as it was, with its
+  draft, and its controls work, in the tab and in the window.
 - On the Accounts page, the provider's card did not contain its box: the view inside it ran past the card's edge. It
   now stays inside.
 - A stray line ran down the right edge of People, Performance and Work items when no item was open beside the list. It
@@ -127,7 +127,7 @@ them for the questions already there by the rule above.
   console's changes.
 - **A custom UI build:** every file under `<data>/ui/` is now served only by its exact name, segment by segment, in the
   case and the spelling the directory holds. A request that relied on the system folding a name, as a case-blind disk
-  does, gets a 404, as it already did on Linux. The release's own UI is not affected. A build that wants a directory of
+  does, gets a 404, as it already did on a case-sensitive disk. The release's own UI is not affected. A build that wants a directory of
   untrusted pages places it as `sealed/`, with `.html` files alone.
 - **The packages:** update Jason before the Reply plugin. Reply 0.18.0 needs Jason 0.47.0 or newer: an older runtime
   refuses a whole page of events that holds a kind it does not know, so replies and bounces stop being read through
