@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { OwnListCard } from './cards';
-import type { Entry } from './chat-model';
+import { cardLayout, optionsOf, readCard, type OwnListCard } from './cards';
+import { choiceState, locksChoice, newChat, type Chat, type Entry } from './chat-model';
 import { addressesIn, fieldWord, listReason, listRequest, mappingLine, ownMessages, rowOutcome } from './own-list';
 
 // A list card's two pieces of logic of its own: the request a press sends, built from the card alone, and the comparison
@@ -188,7 +188,11 @@ describe('the person’s own messages', () => {
         question: 'Which one?',
         options: [{ label: 'ann@example.test' }, { label: 'Skip' }],
     };
-    const chat = (entries: Entry[]) => ({ entries, campaignId: 'cmp_1', main: false, running: false });
+    const chat = (entries: Entry[], fields: Partial<Chat> = {}): Chat => ({
+        ...newChat('chat_1', null, { id: 'cmp_1', name: 'Agent' }),
+        entries,
+        ...fields,
+    });
 
     it('are the person’s entries, but an answer a click on a choice sent, whose words the AI wrote', () => {
         expect(
@@ -224,5 +228,68 @@ describe('the person’s own messages', () => {
                 ]),
             ),
         ).toEqual(['ann@example.test']);
+    });
+
+    it('leave out exactly the answers the chat itself draws as chosen, so the two rules never part', () => {
+        const spaced = { ...choice, options: [{ label: ' Skip ' }, { label: 'ann@example.test' }] };
+        const cases: { entries: Entry[]; left: string[] }[] = [
+            // Chosen: a label as sent, a card's label with spaces round it, a gap between that locks nothing.
+            {
+                entries: [
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'user', text: ' Skip' },
+                ],
+                left: [' Skip'],
+            },
+            {
+                entries: [
+                    { kind: 'text', text: fenced(spaced) },
+                    { kind: 'user', text: 'Skip' },
+                ],
+                left: ['Skip'],
+            },
+            {
+                entries: [
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'gap' },
+                    { kind: 'user', text: 'ann@example.test' },
+                ],
+                left: ['ann@example.test'],
+            },
+            // Not chosen: another case of a label, an entry that locks the choice first.
+            {
+                entries: [
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'user', text: 'skip' },
+                ],
+                left: [],
+            },
+            {
+                entries: [
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'error', text: 'The turn failed.' },
+                    { kind: 'user', text: 'Skip' },
+                ],
+                left: [],
+            },
+        ];
+        for (const each of cases) {
+            const opened = chat(each.entries);
+            const kept = ownMessages(opened);
+            const users = opened.entries.flatMap((entry) => (entry.kind === 'user' ? [entry.text] : []));
+            const left = users.filter((text) => !kept.includes(text));
+            expect(left, JSON.stringify(each.entries)).toEqual(each.left);
+            // The chat's own rule, read the way the chat reads it, names the very same entries.
+            const chosen: string[] = [];
+            for (const [index, placed] of cardLayout(opened.entries).cards) {
+                const reading = readCard(placed, { place: 'agent', campaignId: 'cmp_1', ended: true });
+                if (reading.state !== 'card') continue;
+                const labels = optionsOf(reading.card).map((option) => option.label);
+                if (choiceState(opened, index, labels, null, false).state !== 'chosen') continue;
+                const next = opened.entries.find((entry, at) => at > index && locksChoice(entry.kind));
+                if (next?.kind === 'user') chosen.push(next.text);
+            }
+            expect(left, JSON.stringify(each.entries)).toEqual(chosen);
+        }
     });
 });

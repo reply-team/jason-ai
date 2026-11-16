@@ -4,7 +4,7 @@
 // read from those messages but whether an address stands in them.
 import type { AddContactsResult, ListAddRequest, ListContact } from '../api/types';
 import { cardLayout, optionsOf, placeOf, readCard, type OwnListCard } from './cards';
-import { locksChoice, type Chat } from './chat-model';
+import { choiceState, locksChoice, type Chat } from './chat-model';
 
 /** The reason a list's press gives, so what happened says where the people came from. */
 export const listReason = 'From a list given in the chat.';
@@ -64,10 +64,10 @@ export const listRequest = (card: OwnListCard, campaignId: string): ListAddReque
 
 /**
  * The person's own messages of a chat: every entry of theirs but an answer a click on a choice sent, whose words the AI
- * wrote. An answer is known as the chat knows one (`choiceState`): the first entry after a choice's card that locks it is
- * the person's, and its words are one of the choice's labels.
+ * wrote. Which entry that is, the chat's own rule decides (`choiceState` saying `chosen`), never a copy of it here: the
+ * entry it names is the first after the card that locks the choice.
  */
-export function ownMessages(chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running'>): string[] {
+export function ownMessages(chat: Chat): string[] {
     const clicked = new Set<number>();
     for (const [index, placed] of cardLayout(chat.entries).cards) {
         const reading = readCard(placed, {
@@ -76,10 +76,9 @@ export function ownMessages(chat: Pick<Chat, 'entries' | 'campaignId' | 'main' |
             ended: !placed.lastTurn || !chat.running,
         });
         if (reading.state !== 'card') continue;
-        const labels = optionsOf(reading.card).map((option) => option.label.trim());
-        const next = chat.entries.findIndex((entry, at) => at > index && locksChoice(entry.kind));
-        const entry = chat.entries[next];
-        if (entry?.kind === 'user' && labels.includes(entry.text.trim())) clicked.add(next);
+        const labels = optionsOf(reading.card).map((option) => option.label);
+        if (choiceState(chat, index, labels, null, false).state !== 'chosen') continue;
+        clicked.add(chat.entries.findIndex((entry, at) => at > index && locksChoice(entry.kind)));
     }
     return chat.entries.flatMap((entry, at) => (entry.kind === 'user' && !clicked.has(at) ? [entry.text] : []));
 }
