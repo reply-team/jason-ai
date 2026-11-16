@@ -1,6 +1,7 @@
 // Writes desktop/THIRD-PARTY-NOTICES: what the packaged desktop carries besides its own code. That is Electron, with
-// the Chromium it is built on, and the runtime dependencies the lockfile installs (electron-updater and its closure),
-// each with the licence text its own package ships.
+// the Chromium it is built on, the runtime dependencies the lockfile installs (electron-updater and its closure),
+// each with the licence text its own package ships, and what the demo page (demo/index.html, supplied as one static
+// file) carries inside it, each with the licence text demo/ keeps beside it.
 //
 //   node scripts/notices.mjs           writes the file
 //   node scripts/notices.mjs --check   exits 1 when the file is not what the lockfile and node_modules give
@@ -68,8 +69,14 @@ function section(name, version, licence, source, text) {
     return [title, '-'.repeat(title.length), ...(source ? [source, ''] : []), text, ''].join('\n');
 }
 
-/** The notices, as the lockfile and node_modules under `root` give them. */
-export function notices(root = desktop) {
+/**
+ * What the demo page carries inside it, as its supplier listed it: no lockfile names these, so they are named here, and
+ * a new drop of the page that carries something else changes this list (demo/README.md).
+ */
+const demoCarries = [{ name: '@fontsource-variable/inter', version: '5.3.0', licence: 'OFL-1.1', source: 'https://github.com/rsms/inter', file: 'LICENSE-Inter.txt' }];
+
+/** The notices, as the lockfile and node_modules under `root` give them, and the demo page's under `demo`. */
+export function notices(root = desktop, demo = join(desktop, 'demo')) {
     const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
     const carried = Object.entries(lock.packages)
         .filter(([path, entry]) => path.startsWith('node_modules/') && entry.dev !== true)
@@ -92,7 +99,9 @@ export function notices(root = desktop) {
         '',
         '  1. Electron, and the Chromium it is built on;',
         '  2. the packages it depends on at run time, from its lockfile, each with the',
-        '     licence text its own package ships.',
+        '     licence text its own package ships;',
+        '  3. what its demo page, a static page the desktop shows in Demo, carries inside',
+        '     it, each with its licence text.',
         '',
         'The jason executable the desktop carries is covered by the THIRD-PARTY-NOTICES',
         'at the root of the Jason repository, which every Jason release carries.',
@@ -111,6 +120,11 @@ export function notices(root = desktop) {
         '===============',
         '',
         ...carried.map((entry) => section(entry.name, entry.version, entry.licence, entry.source, entry.text)),
+        '',
+        '3. What the demo page carries',
+        '=============================',
+        '',
+        ...demoCarries.map((entry) => section(entry.name, entry.version, entry.licence, entry.source, readFileSync(join(demo, entry.file), 'utf8').replace(/\r\n/g, '\n').trim())),
     ];
     return `${lines.join('\n').trimEnd()}\n`;
 }

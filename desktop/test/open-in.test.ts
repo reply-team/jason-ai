@@ -318,11 +318,12 @@ test('on Linux the program started gets XDG_CURRENT_DESKTOP back from the origin
     assert.equal(env.XDG_CURRENT_DESKTOP, 'Unity', 'a copy is changed, never the run’s environment');
 });
 
-test('main.ts hands an editor the person’s environment, and the demo’s harness root is named in a demo run', () => {
+test('main.ts hands an editor the person’s environment and names the person’s harness root: Open in is the window’s onto the installation alone', () => {
     assert.equal(openInHarnessRoot('demo', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason-demo');
     assert.equal(openInHarnessRoot('live', '/home/ada/Jason-demo', () => '/home/ada/Jason'), '/home/ada/Jason');
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
-    assert.match(main, /harnessRoot: \(\) => openInHarnessRoot\(runOn\.mode, demoWhere\.harnessRoot, /);
+    assert.match(main, /harnessRoot: \(\) => harnessRoot\(process\.env, homedir\(\), dataLayout\(runOn\.person\)\.userSettingsFile\),/);
+    assert.equal(main.includes('openInHarnessRoot('), false);
     assert.match(main, /startDetached\(line, editorEnvironment\(env, personEnvironment, process\.platform\)\)/);
 });
 

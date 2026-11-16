@@ -252,8 +252,11 @@ test('the bundled jason keeps its own signature on macOS, and the application as
     }
 });
 
-test('app.asar carries the main process, the starting page, the tray icons, the chat’s lists and instruction text, and package.json', () => {
-    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
+test('app.asar carries the main process, the starting page, the tray icons, the demo page alone of its folder, the chat’s lists and instruction text, and package.json', () => {
+    assert.deepEqual(built.files, ['lib/**/*', 'shell/**/*', 'resources/**/*', 'demo/index.html', 'package.json', 'chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
+    // demo-window.ts reads the page at this path of the application, and nothing else of demo/ (its README) is packaged.
+    assert.ok(existsSync(join(root, 'demo', 'index.html')));
+    assert.ok(readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8').includes("join(deps.appPath, 'demo', 'index.html')"));
     assert.deepEqual(chatFiles, ['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
     for (const icon of ['resources/icon.png', 'resources/tray/tray.png', 'resources/tray/trayTemplate.png', 'resources/tray/trayTemplate@2x.png']) assert.ok(existsSync(join(root, icon)), icon);
     // buildResources is left out of app.asar by electron-builder, so it is never resources/.
