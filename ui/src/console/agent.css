@@ -1,0 +1,445 @@
+/* An agent's page in the console's look. The browser shell's Agents screen, drawn inside the console's area, is drawn
+   here as the console draws an agent: the agent alone in the area, its name with its state and type as pills in a bar,
+   its moves at the bar's right, the tabs under it, and its own Settings as cards of rows. The page's markup, words,
+   controls and reads are its own; the sheet reads the attributes the page carries for it (its own panel named, the
+   status on its pill, the move in its button's class). One rule takes something out of view: while an agent is open, the
+   list beside it, but for what the screen says there, which stands above the bar; Close gives the list back.
+   Every rule but the page's ground and that list reaches the agent's own panel alone, so what is drawn in its place (an
+   approval, a question, a person) and the dialogs its moves open keep their own look, as do the classic shell and every
+   other screen; the console's tokens carry its dark values. */
+
+/* The agent alone, on the console's white ground, out to the edges of the console's content, whose padding it takes back. */
+.jc-console .harness .main.campaigns:not(.single) {
+    grid-template-columns: minmax(0, 1fr);
+    /* The rows at the top, so that what is left of the list takes no more than its notices' height. */
+    align-content: start;
+    margin: -22px -28px -60px;
+    background: var(--panel);
+}
+/* The console's own list rule gives it a margin; what is left of it takes none. Drawn at every width: the shell's narrow
+   rule takes the whole list out, which would take its notices with it. */
+.jc-console .harness .main.campaigns:not(.single) > .list {
+    display: flex;
+    margin: 0;
+    border: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .list > :not(.notice) {
+    display: none;
+}
+/* What the screen says, in the list or in the agent's own panel, stands above the bar at the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .list > .notice,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .notice {
+    margin: 14px 28px 0;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 9px;
+    font-size: 13px;
+}
+
+/* The header as the console's bar: the panel a grid of three columns, the header's own box given up so that its name
+   sits in the first, its Close in the third, and the moves between them on the same row; everything else spans the row. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-auto-flow: row dense;
+    align-content: start;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > * {
+    grid-column: 1 / -1;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header {
+    display: contents;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header > .heading {
+    grid-column: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    min-width: 0;
+    padding: 14px 0 0 28px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 650;
+    line-height: 30px;
+    letter-spacing: 0;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header .sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-actions {
+    grid-column: 2;
+    align-self: start;
+    gap: 8px;
+    padding: 14px 0 0 12px;
+    border: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header > .close {
+    grid-column: 3;
+    align-self: start;
+    width: 28px;
+    height: 28px;
+    margin: 15px 22px 0 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header > .close:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+/* The state and the type as the console's pills: the state plain, active green, paused amber; Sequence blue, Adaptive
+   violet. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header .sub .badge {
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.45;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-header .badge[data-status] {
+    text-transform: capitalize;
+}
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-header
+    .badge[data-status='active'] {
+    color: var(--green);
+    background: var(--green-2);
+    border-color: transparent;
+}
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-header
+    .badge[data-status='paused'] {
+    color: var(--amber);
+    background: var(--amber-2);
+    border-color: transparent;
+}
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-header
+    .badge.kind[data-kind='sequence'] {
+    color: var(--blue);
+    background: var(--blue-2);
+    border-color: transparent;
+}
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-header
+    .badge.kind[data-kind='adaptive'] {
+    color: var(--violet);
+    background: var(--violet-2);
+    border-color: transparent;
+}
+
+/* The moves as the console's buttons: Start and Resume the primary one, Pause and Add people plain. The buttons of the
+   bar alone: a move's dialog, drawn inside the row, keeps its own. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-actions > .btn {
+    height: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-actions > .btn:hover {
+    border-color: var(--accent-line);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-actions > .btn.agent-move-start,
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-actions
+    > .btn.agent-move-resume {
+    background: var(--teal);
+    border-color: var(--teal);
+    color: #fff;
+}
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-actions
+    > .btn.agent-move-start:hover,
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-actions
+    > .btn.agent-move-resume:hover {
+    filter: brightness(1.07);
+}
+
+/* The agent's numbers, a quiet line under the bar. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .stats {
+    gap: 16px;
+    padding: 6px 28px 0;
+    border: 0;
+    font-size: 12.5px;
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .stats b {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+/* The tabs as the console's: one row with Chat, a teal underline under the one shown. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs {
+    gap: 22px;
+    padding: 0 28px;
+    margin-top: 10px;
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs .tabs {
+    gap: 22px;
+    padding: 0;
+    border: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs .tabs a,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs .campaign-tabs-chat {
+    height: auto;
+    margin: 0 0 -1px;
+    padding: 9px 0 10px;
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--mute);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs .tabs a:hover,
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .campaign-tabs
+    .campaign-tabs-chat:hover {
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs .tabs a.active {
+    color: var(--teal);
+    border-bottom-color: var(--teal);
+}
+
+/* A tab's body under the bar, at the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body {
+    padding: 22px 28px 28px;
+    gap: 16px;
+}
+/* The timeline's chips and rows carry 16px of their own; the page gives the rest of the bar's margin. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .timeline {
+    padding: 4px 12px 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .timeline > .chips {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs-inbox,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs-results {
+    padding: 22px 28px 28px;
+}
+
+/* The agent's own Settings: each part a card, a fact a row of its card, a send mode a setting row. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .facts,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .section {
+    box-sizing: border-box;
+    max-width: 1120px;
+    margin: 0;
+    padding: 16px 20px 18px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .facts {
+    padding: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .section h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 650;
+    color: var(--ink);
+}
+/* A fact as the console's Settings draws one: the rule across the card's width, the label 16px in. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts {
+    grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+    gap: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .section .facts {
+    margin: 0 -20px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dd {
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt:last-of-type,
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dd:last-of-type {
+    border-bottom: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt {
+    padding-left: 16px;
+    font-size: 13px;
+    color: var(--faint);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dd {
+    padding-left: 14px;
+    padding-right: 16px;
+    text-align: right;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .panel-body .hint {
+    font-size: 13px;
+    color: var(--mute);
+}
+/* The archive's card: its sentence, then its button a step below it. */
+.jc-console
+    .harness
+    .main.campaigns:not(.single)
+    > .panel[data-panel='agent']
+    > .panel-body
+    > .section.archive-agent
+    .btn-row {
+    margin-top: 12px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) 170px;
+    gap: 6px 14px;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line2);
+    font-size: 13.5px;
+    color: var(--ink);
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row:last-child {
+    border-bottom: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > p {
+    margin: 0;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > p:nth-of-type(n + 2) {
+    grid-column: 1 / -1;
+    font-size: 12.5px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > select {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row > .btn {
+    justify-self: end;
+    height: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 13px;
+}
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > details.fold {
+    max-width: 1120px;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+/* A narrow window, where the console's content is padded less: the page follows it, and a fact stacks. */
+@media (max-width: 820px) {
+    .jc-console .harness .main.campaigns:not(.single) {
+        margin: -16px -16px -40px;
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt {
+        padding-bottom: 0;
+        border-bottom: 0;
+    }
+    .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dd {
+        padding-left: 16px;
+        text-align: left;
+    }
+}
+
+/* Dark: a fact's label and the dividers take the next stronger token. */
+:root[data-theme='dark'] .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt {
+    color: var(--mute);
+}
+:root[data-theme='dark'] .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dt,
+:root[data-theme='dark'] .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .facts dd,
+:root[data-theme='dark'] .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] .send-mode-row {
+    border-bottom-color: var(--line);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light'])
+        .jc-console
+        .harness
+        .main.campaigns:not(.single)
+        > .panel[data-panel='agent']
+        .facts
+        dt {
+        color: var(--mute);
+    }
+    :root:not([data-theme='light'])
+        .jc-console
+        .harness
+        .main.campaigns:not(.single)
+        > .panel[data-panel='agent']
+        .facts
+        dt,
+    :root:not([data-theme='light'])
+        .jc-console
+        .harness
+        .main.campaigns:not(.single)
+        > .panel[data-panel='agent']
+        .facts
+        dd,
+    :root:not([data-theme='light'])
+        .jc-console
+        .harness
+        .main.campaigns:not(.single)
+        > .panel[data-panel='agent']
+        .send-mode-row {
+        border-bottom-color: var(--line);
+    }
+}

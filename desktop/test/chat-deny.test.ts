@@ -45,10 +45,21 @@ test('the file refuses starting a campaign as a command, as a host rule and as a
     const fence = readFence(desktop);
     assert.ok(!fence.allowed.includes('campaign start'));
     assert.ok(!allowRules(fence.allowed).includes('Bash(jason campaign start:*)'));
-    for (const verb of ['campaign pause', 'campaign archive', 'suppression add', 'reply record', 'workitem cancel']) {
+    for (const verb of ['campaign pause', 'suppression add', 'reply record', 'workitem cancel']) {
         assert.ok(fence.allowed.includes(verb), verb);
         assert.ok(!entries.includes(verb), verb);
     }
+});
+
+test('the file refuses archiving a campaign as a command, as a host rule and as an operation, and the allow list does not carry it', () => {
+    assert.ok(entries.includes('campaign archive'));
+    assert.ok(denyRules(entries).includes('Bash(jason campaign archive:*)'));
+    assert.ok(list.operations.includes('campaign.archive'));
+    const fence = readFence(desktop);
+    assert.ok(!fence.allowed.includes('campaign archive'));
+    assert.ok(!allowRules(fence.allowed).includes('Bash(jason campaign archive:*)'));
+    assert.ok(fence.allowed.includes('campaign pause'));
+    assert.ok(!entries.includes('campaign pause'));
 });
 
 test('the file\'s second section names the operations the denied verbs call, each once, system.shutdown among them', () => {

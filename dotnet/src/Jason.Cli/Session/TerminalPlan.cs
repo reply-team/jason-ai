@@ -1,4 +1,6 @@
+using System.Text;
 using Jason.Contracts.Discovery;
+using Jason.Contracts.Execution;
 
 namespace Jason.Cli.Session;
 
@@ -139,7 +141,7 @@ public static class TerminalPlan
             throw new ArgumentException("The host's program is missing.", nameof(host));
         }
 
-        if (own is not null && Uncarried(os, host) is { } uncarried)
+        if (own is not null && Uncarried(os, host, own) is { } uncarried)
         {
             throw new ArgumentException(uncarried, nameof(host));
         }
@@ -160,17 +162,150 @@ public static class TerminalPlan
     }
 
     /// <summary>
-    /// Why the host's program cannot be carried to the terminal with this installation's variables, worded to follow "did
-    /// not start", or null where it can: on Linux <see cref="EnvProgram"/> reads every word holding <c>=</c> as a variable
-    /// to set until the program it runs, so a program whose path holds one would be read as a variable and the next word
-    /// run in its place. Only the program is read so; its arguments are passed as they are.
+    /// Why the host's words cannot be carried to the terminal as they are, worded to follow "did not start", or null where
+    /// they can. On Linux <see cref="EnvProgram"/> reads every word holding <c>=</c> as a variable to set until the program
+    /// it runs, so a program whose path holds one would be read as a variable and the next word run in its place; only the
+    /// program is read so. On every system this jason's folder goes first on the window's PATH, and a folder whose name
+    /// holds that system's separator of PATH would be two entries there, neither of them the folder
+    /// (<see cref="SearchPathEntry"/>). On Windows the console host runs the system's expansion over the whole command line it hands
+    /// on, replacing every <c>%NAME%</c> of a variable in the environment it was started with, before the host reads a
+    /// word of it: where <paramref name="inherited"/> is given, the first word that expansion would change is refused,
+    /// since the host would be given something Jason did not write. The scan reads each word alone, while the console host reads the composed
+    /// line: they differ only where a name spans two words, which takes a variable whose name holds a space or a quote. Nothing is escaped instead.
     /// </summary>
-    public static string? Uncarried(TerminalPlatform os, IReadOnlyList<string> host)
+    /// <param name="own">The installation the launch carries, whose variables the console host is started with too.</param>
+    /// <param name="inherited">
+    /// The variables the console host inherits, this process's own outside a test (<see cref="Block"/>); null scans nothing.
+    /// </param>
+    public static string? Uncarried(TerminalPlatform os, IReadOnlyList<string> host, OwnJason? own = null, IReadOnlyDictionary<string, string>? inherited = null)
     {
         ArgumentNullException.ThrowIfNull(host);
-        return os == TerminalPlatform.Linux && host.Count > 0 && host[0].Contains('=', StringComparison.Ordinal)
-            ? $"the host's program {host[0]} holds '=', which {EnvProgram} reads as a variable to set rather than a program to run"
-            : null;
+        if (os == TerminalPlatform.Linux && host.Count > 0 && host[0].Contains('=', StringComparison.Ordinal))
+        {
+            return $"the host's program {host[0]} holds '=', which {EnvProgram} reads as a variable to set rather than a program to run";
+        }
+
+        if (own?.ExecutableFolder is { Length: > 0 } folder && Split(os, folder) is { } split)
+        {
+            return $"this jason's folder {split}, and the window's PATH could not put this jason first";
+        }
+
+        if (os != TerminalPlatform.Windows || inherited is null)
+        {
+            return null;
+        }
+
+        var block = Block(os, inherited, own);
+        foreach (var word in host)
+        {
+            if (Scan(word, block) is { Expanded: var expanded, Name: { } name, At: var at } && !string.Equals(expanded, word, StringComparison.Ordinal))
+            {
+                var (what, shown) = Shown(word, at);
+                return $"the {what} '{shown}' holds %{name}%, which the console host replaces with the value of the variable {name} before the program it starts reads it";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Why <paramref name="folder"/> can be no entry of <paramref name="os"/>'s PATH (<see cref="SearchPathEntry"/>), or
+    /// null. A drive's colon at the start is not read as macOS's or Linux's separator: the plan's rows for those systems run
+    /// on Windows too, where this jason's folder starts with a drive, and on those systems a folder starts with its root.
+    /// </summary>
+    internal static string? Split(TerminalPlatform os, string folder)
+    {
+        var separator = SearchPathEntry.Separator(os == TerminalPlatform.Windows);
+        var judged = os != TerminalPlatform.Windows && folder.Length >= 2 && char.IsAsciiLetter(folder[0]) && folder[1] == ':' ? folder[2..] : folder;
+        return SearchPathEntry.Problem(judged, separator) is null ? null : SearchPathEntry.Problem(folder, separator);
+    }
+
+    /// <summary>
+    /// The variables the console host is started with, as <see cref="TerminalStartInfo.For"/> gives them: the inherited
+    /// ones less <c>JASON_CONFINED</c>, then the launch's own (<see cref="TerminalLaunch.Variables"/>) over them, each name
+    /// whatever its case, as Windows compares names.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Block(TerminalPlatform os, IReadOnlyDictionary<string, string> inherited, OwnJason? own)
+    {
+        ArgumentNullException.ThrowIfNull(inherited);
+        var block = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in inherited)
+        {
+            block[name] = value;
+        }
+
+        block.Remove(Confinement.Variable);
+        if (own is not null)
+        {
+            foreach (var (name, value) in Variables(os, own))
+            {
+                block[name] = value;
+            }
+        }
+
+        return block;
+    }
+
+    /// <summary>
+    /// <paramref name="word"/> as the system's expansion call (<c>ExpandEnvironmentStringsW</c>) leaves it over
+    /// <paramref name="block"/>, by the rule measured on it: at a <c>%</c> the next <c>%</c> closes a name; a name the
+    /// block holds, whatever its case, is replaced by its value and the scan goes on after the closing <c>%</c>; any other
+    /// is kept as it is written and the scan goes on from the closing <c>%</c>, which may open the next name; a <c>%</c>
+    /// with none after it is kept. One pass: a value is never read again.
+    /// </summary>
+    public static string Expand(string word, IReadOnlyDictionary<string, string> block) => Scan(word, block).Expanded;
+
+    private static (string Expanded, string? Name, int At) Scan(string word, IReadOnlyDictionary<string, string> block)
+    {
+        ArgumentNullException.ThrowIfNull(word);
+        ArgumentNullException.ThrowIfNull(block);
+        var text = new StringBuilder(word.Length);
+        string? first = null;
+        var firstAt = -1;
+        var at = 0;
+        while (at < word.Length)
+        {
+            var open = word.IndexOf('%', at);
+            var close = open < 0 ? -1 : word.IndexOf('%', open + 1);
+            if (close < 0)
+            {
+                text.Append(word, at, word.Length - at);
+                break;
+            }
+
+            text.Append(word, at, open - at);
+            var name = word.Substring(open + 1, close - open - 1);
+            if (name.Length > 0 && block.TryGetValue(name, out var value))
+            {
+                text.Append(value);
+                if (first is null)
+                {
+                    (first, firstAt) = (name, open);
+                }
+
+                at = close + 1;
+            }
+            else
+            {
+                text.Append(word, open, close - open);
+                at = close;
+            }
+        }
+
+        return (text.ToString(), first, firstAt);
+    }
+
+    /// <summary>A word as a refusal shows it: whole where it is one line, else the line that holds <paramref name="at"/>.</summary>
+    private static (string What, string Shown) Shown(string word, int at)
+    {
+        if (!word.Contains('\n', StringComparison.Ordinal))
+        {
+            return ("word", word);
+        }
+
+        var start = word.LastIndexOf('\n', at) + 1;
+        var end = word.IndexOf('\n', at);
+        return ("line", word[start..(end < 0 ? word.Length : end)].TrimEnd('\r'));
     }
 
     /// <summary>

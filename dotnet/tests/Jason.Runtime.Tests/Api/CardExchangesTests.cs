@@ -23,7 +23,7 @@ namespace Jason.Runtime.Tests.Api;
 /// the runtime's own claim (the scan that parks a send for a person), so the ids in a list row are the ids its
 /// <c>get</c> answers and the item a patch answers is the item the list held. Nothing here writes a row by hand.
 /// </summary>
-public class CardExchangesTests
+public partial class CardExchangesTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
     private static readonly DateTimeOffset Nine = new(2026, 10, 16, 9, 0, 0, TimeSpan.Zero);
@@ -63,11 +63,13 @@ public class CardExchangesTests
         Assert.True(JsonNode.DeepEquals(parked.Context["input"], asked.Subject["input"]!["args"]), "the item holds the arguments its approval asked about");
 
         // The line under the message: the accounts the campaign's route lists for a send, read as the card reads them (the
-        // whole team's, the person's own among them), and the same read once the account the send names is gone. The
-        // account is the one the parked send names, so the card finds it by its identifier.
+        // whole team's, the person's own among them), the same read once the account the send names is gone, and once more
+        // while the provider holds no sending name for it. The account is the one the parked send names, so the card finds
+        // it by its identifier.
         reads.Answer(
-            FakeProviderReads.Result(Senders(listed: true)),
-            FakeProviderReads.Result(Senders(listed: false)));
+            FakeProviderReads.Result(Senders(SenderListed.Named)),
+            FakeProviderReads.Result(Senders(SenderListed.Gone)),
+            FakeProviderReads.Result(Senders(SenderListed.Unnamed)));
         var senderAsked = new { campaign_id = scene.Campaign, owners = "team", sender_channel = "email", limit = 100 };
         var sender = (string?)asked.Subject["input"]!["args"]!["sender"]!["external_id"];
         var accounts = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-message-sender", senderAsked, Ct);
@@ -76,6 +78,9 @@ public class CardExchangesTests
         Assert.Contains(accounts.Items, a => (string?)a!["owner"] == "teammate");
         var gone = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-sender-other", senderAsked, Ct);
         Assert.DoesNotContain(gone.Items, a => (string?)a!["external_id"] == sender);
+        var unnamed = await api.RecordAsync<SenderListResponse>(Operations.SenderList, "card-sender-unnamed", senderAsked, Ct);
+        var nameless = Assert.Single(unnamed.Items, a => (string?)a!["external_id"] == sender);
+        Assert.Null((string?)nameless!["name"]);
 
         // (b) The edit: the item's arguments as they were, with the text replaced, patched with the card's own reason.
         var edited = EmailArgs("Hi Ines, thanks for the talk at the meetup. Shall we talk next week?");
@@ -341,6 +346,7 @@ public class CardExchangesTests
             Assert.Empty((await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "card-people-empty", new { campaign_id = summer.Campaign, limit = 10, exclude_archived_contacts = true }, Ct)).Items);
             var unknown = PublicId.New("cmp");
             Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignSummary, "card-unknown-campaign", new { campaign_ids = new[] { unknown }, exclude_archived_contacts = true }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
+            Assert.Equal("campaign_not_found", (await api.RecordErrorAsync(Operations.CampaignGet, "card-unknown-campaign", new { campaign_id = unknown }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
 
             // The accounts: the plugin that sends and the route that names it, as the Accounts screen reads them.
             var plugins = await api.RecordAsync<JsonObject>(Operations.PluginList, "card-accounts", new { }, Ct);
@@ -354,6 +360,13 @@ public class CardExchangesTests
             Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-draft", new { campaign_ids = new[] { winter.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
             var route = await api.RecordAsync<JsonObject>(Operations.RouteResolve, "card-plan-message-send", new { campaign_id = winter.Campaign, operation = "message.send" }, Ct);
             Assert.Equal((true, "reply"), ((bool?)route["usable"], (string?)route["plugin_id"]));
+            // A send names its channel, and a channel may have a route of its own: the same read for each channel a plan
+            // names, which here falls to the global default.
+            foreach (var channel in new[] { "email", "linkedin" })
+            {
+                var sent = await api.RecordAsync<JsonObject>(Operations.RouteResolve, $"card-plan-{channel}", new { campaign_id = winter.Campaign, operation = "message.send", channel }, Ct);
+                Assert.Equal(("reply", channel), ((string?)sent["plugin_id"], (string?)sent["channel"]));
+            }
 
             // The campaigns a chip is chosen from: the page the panel lists and the counts it reads for them.
             var listed = await api.RecordAsync<Page<CampaignSummaryDto>>(Operations.CampaignList, "card-chips", new { limit = 100 }, Ct);
@@ -381,6 +394,25 @@ public class CardExchangesTests
             var choice = Assert.Single((await api.RecordAsync<Page<JournalEntryDto>>(Operations.JournalList, "card-choice-acts", new { campaign_id = spring.Campaign, kinds = acts, since, limit = 50 }, Ct)).Items);
             Assert.Equal("campaign_paused", choice.Kind);
             Assert.Equal("human", choice.Actor.Type.ToString().ToLowerInvariant());
+
+            // Last, a campaign archived by a person, read as a card reads one: its row, its counts, its people, what waits
+            // on it and its last thirty days. Recorded after every other file, so none of them sees the archive.
+            await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = winter.Campaign, actor = Ada }, Ct);
+            var archivedAt = clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "card-archived", new { campaign_id = winter.Campaign }, Ct)).Status);
+            Assert.Equal(2, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-archived", new { campaign_ids = new[] { winter.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
+            Assert.Equal(2, (await api.RecordAsync<Page<MembershipItemDto>>(Operations.CampaignListContacts, "card-archived", new { campaign_id = winter.Campaign, limit = 10, exclude_archived_contacts = true }, Ct)).Items.Count);
+            Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-archived", new { status = "pending", campaign_id = winter.Campaign, limit = 50 }, Ct)).Items);
+            Assert.Empty((await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "card-archived", new { status = "pending", campaign_id = winter.Campaign, limit = 50 }, Ct)).Items);
+            Assert.Equal(0, Assert.Single((await api.RecordAsync<CampaignActivityResponse>(Operations.CampaignActivity, "card-archived-30-days", new { campaign_ids = new[] { winter.Campaign }, since = "2026-09-17T00:00:00.000Z", until = archivedAt, exclude_archived_contacts = true }, Ct)).Campaigns).Contacted);
+
+            // Last of all, two of what waits read whole as Needs you opens them, and the approval again once a person
+            // has approved it since: what an Open on a card read before then lands on.
+            var inesApproval = Assert.Single(waiting.Items).Id;
+            Assert.Equal("pending", (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-needs-pending", new { approval_id = inesApproval }, Ct)).Status.ToString().ToLowerInvariant());
+            Assert.Equal(springQuestion.Id, (await api.RecordAsync<DecisionDto>(Operations.DecisionGet, "card-needs-question", new { decision_id = springQuestion.Id }, Ct)).Id);
+            await api.PostOkAsync<ApprovalDto>(Operations.ApprovalApprove, new { approval_id = inesApproval, actor = Ada }, Ct);
+            Assert.Equal("approved", (await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-needs-decided", new { approval_id = inesApproval }, Ct)).Status.ToString().ToLowerInvariant());
         }
         finally
         {
@@ -388,6 +420,80 @@ public class CardExchangesTests
             await springWork.Ended;
             await autumnWork.Ended;
         }
+    }
+
+    /// <summary>
+    /// A list a person gave in the chat, added to a campaign as the card sends it: each row matched by its email
+    /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
+    /// out of the campaign, an address that is no address, a row with no address, and a person whose record is archived; then
+    /// the same request again.
+    /// </summary>
+    [Fact]
+    public async Task A_list_given_in_the_chat_is_added_row_by_row_and_again_with_every_row_already_there()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var scene = await Scene.OpenAsync(api, "Spring launch");
+        var held = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ines", last_name = "Duarte", channels = new[] { new { channel = "email", value = "ines@example.test", primary = true } }, actor = Ada }, Ct);
+        var removed = await scene.PersonAsync("Omar", "Reyes", "email", "omar@example.test");
+        await api.PostOkAsync<RemoveContactsResult>(Operations.CampaignRemoveContacts, new { campaign_id = scene.Campaign, contact_ids = new[] { removed }, reason = "Not a fit.", actor = Ada }, Ct);
+        var archived = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Rafa", last_name = "Costa", channels = new[] { new { channel = "email", value = "rafa@example.test", primary = true } }, actor = Ada }, Ct);
+        await api.PostOkAsync<ContactDto>(Operations.ContactArchive, new { contact_id = archived.Id, actor = Ada }, Ct);
+        var heldBefore = await HeldRecordAsync(api, held.Id);
+
+        // An empty cell is left out, as the card leaves it out.
+        static object Row(string first, string last, string? email) => email is null
+            ? new { first_name = first, last_name = last }
+            : new { first_name = first, last_name = last, channels = new[] { new { channel = "email", value = email } } };
+        var request = new
+        {
+            campaign_id = scene.Campaign,
+            match_by = "email",
+            contacts = new[]
+            {
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Ines", "Duarte-Lopes", "ines@example.test"),
+                Row("Alma", "Novak", "alma@example.test"),
+                Row("Omar", "Reyes", "omar@example.test"),
+                Row("Bruno", "Silva", "bruno-at-example"),
+                Row("Chen", "Wu", null),
+                Row("Rafa", "Costa", "rafa@example.test"),
+            },
+            reason = "From a list given in the chat.",
+            actor = Ada,
+        };
+        var first = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list", request, Ct);
+        Assert.Equal(7, first.Items.Count);
+        Assert.Equal(
+            [AddContactsItemStatus.Added, AddContactsItemStatus.Added, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.Added],
+            first.Items.Select(i => i.Status));
+        Assert.Equal(held.Id, first.Items[1].ContactId);
+        Assert.False(first.Items[1].ContactCreated);
+        Assert.Equal(first.Items[0].ContactId, first.Items[2].ContactId);
+        Assert.Equal(removed, first.Items[3].ContactId);
+        Assert.Equal(MembershipState.Excluded, first.Items[3].State);
+        Assert.NotEqual(archived.Id, first.Items[6].ContactId);
+        Assert.True(first.Items[6].ContactCreated, "an archived person is made again, not matched");
+        Assert.NotNull((await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = archived.Id }, Ct)).ArchivedAt);
+        Assert.Equal(heldBefore, await HeldRecordAsync(api, held.Id));
+
+        var again = await api.RecordAsync<AddContactsResult>(Operations.CampaignAddContacts, "own-list-again", request, Ct);
+        Assert.Equal(
+            [AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.AlreadyMember, AddContactsItemStatus.Rejected, AddContactsItemStatus.Rejected, AddContactsItemStatus.AlreadyMember],
+            again.Items.Select(i => i.Status));
+        Assert.Equal(first.Items.Select(i => i.ContactId), again.Items.Select(i => i.ContactId));
+        Assert.Equal(
+            [MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Excluded, null, null, MembershipState.Enrolled],
+            again.Items.Select(i => i.State));
+        Assert.All(again.Items, i => Assert.False(i.ContactCreated));
+    }
+
+    /// <summary>A person's own record, without the campaigns and activity that adding them to one is meant to change.</summary>
+    private static async Task<string> HeldRecordAsync(RuntimeApiFixture api, string id)
+    {
+        var record = JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(await api.PostOkAsync<ContactDto>(Operations.ContactGet, new { contact_id = id }, Ct)))!.AsObject();
+        record.Remove("Campaigns");
+        record.Remove("LastActivity");
+        return record.ToJsonString();
     }
 
     /// <summary>A campaign no route sends for: what the plan says of it, and the refusal the sender line meets.</summary>
@@ -398,6 +504,10 @@ public class CardExchangesTests
         var scene = await Scene.OpenAsync(api, "Winter plan", routed: false);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route", new { campaign_id = scene.Campaign, operation = "message.send" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
         Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.SenderList, "card-sender-unread", new { campaign_id = scene.Campaign, owners = "team", sender_channel = "email", limit = 100 }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
+        // What a plan for it reads: the campaign, its people, and where its email would go, which is nowhere.
+        Assert.Equal(CampaignStatus.Draft, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "card-plan-unrouted", new { campaign_id = scene.Campaign }, Ct)).Status);
+        Assert.Equal(0, Assert.Single((await api.RecordAsync<CampaignSummaryResponse>(Operations.CampaignSummary, "card-plan-unrouted", new { campaign_ids = new[] { scene.Campaign }, exclude_archived_contacts = true }, Ct)).Campaigns).People);
+        Assert.Equal("no_route", (await api.RecordErrorAsync(Operations.RouteResolve, "card-plan-no-route-email", new { campaign_id = scene.Campaign, operation = "message.send", channel = "email" }, System.Net.HttpStatusCode.NotFound, Ct)).Code);
     }
 
     /// <summary>
@@ -417,14 +527,14 @@ public class CardExchangesTests
 
     /// <summary>
     /// What the provider lists for a team: the person's own mailbox, named, and a colleague's; without the first once the
-    /// account is gone from the provider's list.
+    /// account is gone from the provider's list; and the first with no sending name the provider holds.
     /// </summary>
-    private static JsonObject Senders(bool listed)
+    private static JsonObject Senders(SenderListed listed)
     {
         var items = new JsonArray();
-        if (listed)
+        if (listed != SenderListed.Gone)
         {
-            items.Add(Account("s_12", "Owner Example", "owner@example.test", "own"));
+            items.Add(Account("s_12", listed == SenderListed.Named ? "Owner Example" : null, "owner@example.test", "own"));
         }
 
         items.Add(Account("s_13", null, "colleague@example.test", "teammate"));
@@ -435,6 +545,14 @@ public class CardExchangesTests
             ["channels"] = new JsonObject { ["email"] = "listed", ["linkedin"] = "not_asked" },
             ["vendor"] = new JsonObject { ["ordering"] = "email_then_linkedin" },
         };
+    }
+
+    /// <summary>How the provider lists the person's own mailbox the send names.</summary>
+    private enum SenderListed
+    {
+        Named,
+        Gone,
+        Unnamed,
     }
 
     private static JsonObject Account(string id, string? name, string address, string owner) => new()
@@ -574,11 +692,11 @@ public class CardExchangesTests
 
         public string Campaign { get; private set; } = "";
 
-        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true)
+        public static async Task<Scene> OpenAsync(RuntimeApiFixture api, string name, bool routed = true, string[]? more = null)
         {
             if (routed)
             {
-                Route(api);
+                Route(api, more ?? []);
             }
 
             var scene = new Scene(api);
@@ -594,14 +712,15 @@ public class CardExchangesTests
             return scene;
         }
 
-        private static void Route(RuntimeApiFixture api)
+        /// <summary>The stand-in plugin routed for every campaign: the five operations the cards' stories use, and <paramref name="more"/>.</summary>
+        private static void Route(RuntimeApiFixture api, string[] more)
         {
             var routed = new JsonObject { ["workspace"] = "a" };
             var schema = JsonNode.Parse("""{ "type": "object", "properties": { "workspace": { "type": "string" } } }""")!.AsObject();
             var plugins = api.Resolve<PluginRegistry>();
             plugins.Replace(
                 new PluginSnapshot(PublicId.New(PluginProtocol.SnapshotIdPrefix), Nine.UtcDateTime, SnapshotSource.Startup,
-                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list"], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
+                    [TestPlugins.Loaded("reply", ["campaign.create", "conversation.list", "message.send", "social_invitation.send", "sender.list", .. more], binding: schema) with { Root = Path.Combine(api.Paths.PluginsDirectory, "reply") }]),
                 new ReloadReport(Nine.UtcDateTime, SnapshotSource.Startup, Activated: true, [], []));
             api.Resolve<RouteRegistry>().Replace(new RouteSnapshot(
                 PublicId.New(RouteSnapshot.IdPrefix),

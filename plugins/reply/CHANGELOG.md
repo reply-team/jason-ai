@@ -3,6 +3,25 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.18.0
+
+- `events.read` now reports a message the account itself sent, for example a step of a Reply sequence sent on its own
+  schedule, as a `message_sent` event; earlier versions did not report it. An item of Reply's change feed whose last
+  message was sent as the account, on a thread Reply does not flag as holding a reply, is now one `message_sent`: the
+  thread's contact, its sequence as the campaign (`null` for a thread outside every sequence, such as a direct send's),
+  the thread, Reply's identifier for the message (`null` where the feed gives none), the message's own moment and the
+  channel. A send read twice is one event by the message's own moment. A send the feed gives no date for, or one that is
+  not a date, is not reported: the thread's last activity moves when any other message lands, so a send keyed by it
+  could be said twice.
+- It says nothing of who sent the message, a sequence, Jason or a person in Reply's own screens, which the feed cannot
+  tell apart, and nothing anybody wrote is in it. A send on a thread Reply names no contact for is left out, and so is
+  one with no date; the package says so in one line each on stderr by the thread's and the sequence's identifiers and
+  the thread's last activity. Nothing else read from the feed changes: the other side's move, a move that names nobody,
+  a bounce, the cursor and the end of a span read as before. Update the package (`jason update apply`) to have it.
+- Needs Jason 0.47.0 or newer, the release whose `events.read` contract names `message_sent`: an older runtime refuses
+  the whole page that holds a kind it does not know, so replies and bounces stop being read through events until Jason
+  is updated. Update Jason before the package.
+
 ## 0.17.0
 
 - `campaign.get` names the mailboxes a sequence sends from, as `vendor.mailboxes`: a list of `{id}`, each id Reply's own number

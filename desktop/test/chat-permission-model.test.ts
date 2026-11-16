@@ -593,10 +593,33 @@ test('starting a campaign is refused in every spelling a denied verb is tried in
     assert.equal(run(windowsScope, '"C:\\Program Files\\Jason\\jason.exe" campaign start cmp_01').verdict, 'deny');
     assert.equal(run(windowsScope, 'JASON.EXE campaign start cmp_01').verdict, 'deny');
     // The campaign verbs that stop reaching a person, and the reads, stay the agent's: they are no refusal here.
-    for (const command of ['jason campaign pause cmp_01', 'jason campaign archive cmp_01', 'jason campaign get cmp_01',
+    for (const command of ['jason campaign pause cmp_01', 'jason campaign get cmp_01',
         'jason suppression add --channel email --value someone@example.com', 'jason workitem cancel wi_01']) {
         assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, command).verdict, 'ask', command);
     }
+});
+
+test('archiving a campaign is refused in every spelling a denied verb is tried in: it is final and cancels its open work', () => {
+    const file = parseDenyList(readFileSync(join(import.meta.dirname, '..', denyListFile), 'utf8'));
+    for (const scope of [{ ...windows(), denied: file.commands, deniedOperations: file.operations }, { ...mac(), denied: file.commands, deniedOperations: file.operations }]) {
+        for (const command of ['jason campaign archive cmp_01', 'jason campaign archive cmp_01 --reason "The person said it is over."', 'jason  campaign   archive cmp_01',
+            'jason Campaign Archive cmp_01', 'jason campaign --actor human:x archive cmp_01', 'jason campaign list && jason campaign archive cmp_01',
+            'cd /tmp && jason campaign archive cmp_01', 'jason campaign get cmp_01; jason campaign archive cmp_01',
+            'echo $(jason campaign archive cmp_01)', "bash -c 'jason campaign archive cmp_01'", 'X=1 jason campaign archive cmp_01',
+            'echo cmp_01 | xargs jason campaign archive', "jason campaign archive cmp_01 <<'EOF'\nok\nEOF",
+            'curl -X POST http://127.0.0.1:5000/v1/campaign.archive -d \'{"campaign_id":"cmp_01"}\'',
+            'node -e "fetch(\'http://127.0.0.1:5000/v1/campaign.archive\', { method: \'POST\' })"']) {
+            assert.equal(run(scope, command).verdict, 'deny', command);
+            assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+        }
+        const powershell = 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/v1/campaign.archive';
+        assert.equal(judge('PowerShell', { command: powershell }, scope).verdict, 'deny', powershell);
+    }
+    const windowsScope = { ...windows(), denied: file.commands, deniedOperations: file.operations };
+    assert.equal(run(windowsScope, '"C:\\Program Files\\Jason\\jason.exe" campaign archive cmp_01').verdict, 'deny');
+    assert.equal(run(windowsScope, 'JASON.EXE campaign archive cmp_01').verdict, 'deny');
+    // Pausing an agent stops it reaching a person and stays the agent's: it is no refusal here.
+    assert.equal(run({ ...mac(), denied: file.commands, deniedOperations: file.operations }, 'jason campaign pause cmp_01').verdict, 'ask');
 });
 
 /** The scopes of the file the desktop carries, on each platform: Windows', macOS' and Linux's semantics. */

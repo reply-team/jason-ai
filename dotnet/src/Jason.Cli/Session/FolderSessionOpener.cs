@@ -91,6 +91,9 @@ public static class FolderSessionOpener
 
         IReadOnlyList<string>? program = null;
         string? hostWord = null;
+
+        // The host's own command, typed by its name in a terminal of the person's own, for a refusal's way by hand.
+        string? typed = null;
         if (!request.Shell)
         {
             var (chosenExit, chosen) = await SessionOpener.ChooseHostAsync(
@@ -105,9 +108,11 @@ public static class FolderSessionOpener
             }
 
             hostWord = AgentHosts.Word(chosen.Host);
-            program = request.Resume is { } id
-                ? [.. chosen.Program, .. AgentHosts.ResumeArguments(chosen.Host, id) ?? throw new InvalidOperationException("A host with no words to resume by reached the launch; it is refused before its program is looked for.")]
-                : chosen.Program;
+            IReadOnlyList<string> resumed = request.Resume is { } id
+                ? AgentHosts.ResumeArguments(chosen.Host, id) ?? throw new InvalidOperationException("A host with no words to resume by reached the launch; it is refused before its program is looked for.")
+                : [];
+            program = [.. chosen.Program, .. resumed];
+            typed = string.Join(' ', [AgentHosts.Of(chosen.Host).CommandWord, .. resumed]);
         }
 
         if (!Directory.Exists(path))
@@ -134,9 +139,10 @@ public static class FolderSessionOpener
             }
         }
 
-        if (TerminalPlan.Uncarried(terminals.Platform, program!) is { } uncarried)
+        if (TerminalPlan.Uncarried(terminals.Platform, program!, SessionOpener.Own(env), SessionOpener.Inherited(env)) is { } uncarried)
         {
-            return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started.");
+            var byHand = typed is null ? $"open a terminal of your own at {path}" : $"run `{typed}` in a terminal of your own at {path}";
+            return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started; to do the same by hand, {byHand}.");
         }
 
         var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.Own(env));

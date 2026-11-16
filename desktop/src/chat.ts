@@ -78,7 +78,6 @@ import {
     feedAutoEdit,
     feedFullAccess,
     fullAccessConsent,
-    demoFullAccess,
     fullAccessNotYet,
     fullAccessOffered,
     fullAccessSentence,
@@ -96,8 +95,7 @@ import type { Cli } from './cli.ts';
 import { feedKinds, feedTitle, lineOf, linesWaiting, markGiven, succeededKind, take, trimmed, type LineEntry } from './feed.ts';
 import { codexFloorSentence, compareVersions, floorSentence, printedCodexVersion, printedVersion, versionLimitMs } from './host-version.ts';
 import { folderTakesFiles, oweTakeBack, readStanding, settleTakeBack, takeBackOwed, writeStanding, type Standing } from './full-access-standing.ts';
-import { desktopPaths, settingsFilesOf, type DesktopPaths } from './paths.ts';
-import type { PersonsOwn } from './mode.ts';
+import { settingsFilesOf, type DesktopPaths } from './paths.ts';
 import { programLaunch, type Programs, type RunResult } from './programs.ts';
 import {
     checkingSandbox,
@@ -120,10 +118,16 @@ import { lastChosenHost } from './roles-profile.ts';
 /** Why a turn starts a fresh session of a conversation that had one. */
 export type FreshReason = 'host_changed' | 'not_found';
 
+/** The kinds of card the page draws, and "unknown" for a block it could not read a kind from: what the log may name. */
+export const refusedCardKinds: ReadonlySet<string> = new Set(['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan', 'unknown']);
+/** Why a card the AI asked for did not draw, as the page says it: the log's closed list. */
+export const cardFailures: ReadonlySet<string> = new Set(['kind_unknown', 'too_long', 'malformed', 'schema']);
+
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
 export type ChatEvent =
     | ({ kind: 'step' } & Step)
-    | { kind: 'text'; text: string }
+    /** `at`: the moment the desktop kept the words, ISO-8601 UTC, as the record keeps it beside them. */
+    | { kind: 'text'; text: string; at: string }
     | BrokerEvent
     | { kind: 'attached'; campaignId: string; title: string }
     | { kind: 'fresh'; reason: FreshReason }
@@ -215,12 +219,6 @@ export interface ChatOptions {
     bundle: string;
     /** Whether the desktop runs with a data directory `JASON_DATA_DIR` names, which the host is then given too. */
     dataNamed: boolean;
-    /**
-     * In a demo run, the person's own installation: its data directory and its harness root, which a Claude Code turn
-     * neither reads nor writes, whole, in every mode (`ChatScope.personsOwn`, `dataRules`). Absent in the person's own
-     * installation, where the fence is the data directory alone.
-     */
-    personsOwn?: PersonsOwn | undefined;
     /** The bundle's version, from which a host's label for reply-cli is built (`hostEnvironment`); null when there is none. */
     bundleVersion: string | null;
     cli: Cli;
@@ -248,11 +246,6 @@ export interface ChatOptions {
     unchecked?(): void;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). Tests of its code turn it on. */
     fullAccessOffered?: boolean;
-    /**
-     * Whether this is a demo run: Full access is then not offered by any path, the menu, the standing choice, a chat
-     * reopened or a request (`demoFullAccess`), and the standing choice is neither read, written nor taken back.
-     */
-    demo?: boolean;
     /** Held by a start while it deploys skills into the chat folder: a send waits for it before it builds a turn. */
     skillsGate?: Pick<SkillsGate, 'held' | 'wait'>;
     /** The clock, in milliseconds; absent, the system's. A test gives its own to age a folder. */
@@ -313,6 +306,11 @@ export interface ChatOptions {
      * decided. Two closed words, never a path or what was read.
      */
     sandboxChecked?(answer: 'holds' | 'reads' | 'unproven', settings: 'read' | 'unread' | 'unknown'): void;
+    /**
+     * Said when the page says a card the AI asked for in a chat this desktop holds did not draw: its kind and why, each one
+     * of a closed list (`refusedCardKinds`, `cardFailures`), never what the block held.
+     */
+    cardRefused?(kind: string, failure: string): void;
     platform?: Platform;
 }
 
@@ -608,10 +606,10 @@ export class Chat {
         sweepTurnFiles(options.paths.turns);
         // A take-back the last run owed is done before any chat is made; one the file still will not take keeps the
         // choice taken back for this run too.
-        if (options.demo !== true && takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
+        if (takeBackOwed(options.paths.fullAccess)) this.#settleOwed();
         // A standing choice is in force only while its take-back could be recorded: where its folder takes no new file,
         // it is held as taken back for this run.
-        if (options.demo !== true && !this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
+        if (!this.#takenBack && existsSync(options.paths.fullAccess) && !folderTakesFiles(options.paths.fullAccess)) this.#takenBack = true;
         // The chat folder carries the instruction text from the start; a fence that cannot be read now is the first
         // turn's to refuse, and a file that cannot be written now is said and written again before that turn. The start
         // never stops for either.
@@ -869,7 +867,7 @@ export class Chat {
     }
 
     #fullAccessOffered(): boolean {
-        return this.#options.demo !== true && (this.#options.fullAccessOffered ?? fullAccessOffered);
+        return this.#options.fullAccessOffered ?? fullAccessOffered;
     }
 
     /**
@@ -910,7 +908,6 @@ export class Chat {
         // Always answered and its file not written: Full access is given this time, and the chat says so once it is.
         let unkept = false;
         if (mode === 'full_access') {
-            if (this.#options.demo === true) throw new ChatRefused(demoFullAccess);
             if (!this.#fullAccessOffered()) throw new ChatRefused(fullAccessNotYet);
             const program = programOf(host);
             if (program === 'codex') throw new ChatRefused(codexFullAccess);
@@ -1050,8 +1047,6 @@ export class Chat {
      */
     #standingFor(mode: ChatMode, program: string | undefined): Standing | null {
         if (mode !== 'full_access' || program !== 'claude') return null;
-        // A demo run offers no Full access, so no standing choice applies there.
-        if (this.#options.demo === true) return null;
         if (this.#takenBack || takeBackOwed(this.#options.paths.fullAccess)) return null;
         return readStanding(this.#options.paths.fullAccess, 'claude');
     }
@@ -1184,6 +1179,19 @@ export class Chat {
         this.#keep(conversation);
         this.#options.emit(conversation.id, { kind: 'renamed', title: name });
         return this.#summaryOf(conversation);
+    }
+
+    /**
+     * The page could not draw a card the AI asked for in a conversation this desktop holds: the log hears its kind and
+     * why, each held to its closed list, and nothing else of it. Anything outside those lists, and a conversation the
+     * desktop does not hold, is said nowhere; the call answers nothing either way, and refuses nothing.
+     */
+    cardRefused(chatId: unknown, kind: unknown, failure: unknown): null {
+        if (typeof kind !== 'string' || !refusedCardKinds.has(kind)) return null;
+        if (typeof failure !== 'string' || !cardFailures.has(failure)) return null;
+        if (typeof chatId !== 'string' || this.#conversationOf(chatId) === undefined) return null;
+        this.#options.cardRefused?.(kind, failure);
+        return null;
     }
 
     /** Resolves once no naming run of a set-up chat runs or waits, and the Feed's catch-up has put its lines in. */
@@ -1814,7 +1822,6 @@ export class Chat {
                 const id = newTurnId();
                 turnId = id;
                 running.turnId = id;
-                const persons = this.#options.personsOwn;
                 const scope: ChatScope = {
                     platform: this.#platform,
                     cwd: folder,
@@ -1825,9 +1832,8 @@ export class Chat {
                     // The host's environment is built from this one (`hostEnvironment`), so its shell's `~` is this HOME;
                     // a Full access turn names it to the host explicitly (`turnHome`), so the two cannot differ.
                     shellHome: turnHome,
-                    ...(persons === undefined ? {} : { personsOwn: [persons.data, persons.harnessRoot] }),
                     // Every layout's settings files and the run file, whatever the stamp says, by every route a path can take.
-                    protectedFiles: [...settingsFilesOf(paths.data), paths.runFile, ...(persons === undefined ? [] : [...settingsFilesOf(persons.data), desktopPaths(persons.data).runFile])],
+                    protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
                     denied: fence.commands,
                     deniedOperations: fence.operations,
                     real: realPathOf,
@@ -1850,7 +1856,7 @@ export class Chat {
                 // The host's data rules name the grants present at this turn's start; a grant opened later is refused by the
                 // permission model's data rule alone, since a deny wins over an allow and no rule says "all of chat-full but mine".
                 const rules = [
-                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }, persons === undefined ? [] : [persons.data, persons.harnessRoot]),
+                    ...dataRules(this.#platform, paths.data, entriesOf(paths.data), entriesOf(paths.desktop), grantId === undefined ? undefined : { id: grantId, present: entriesOf(paths.chatFull) }),
                     ...chatRules(this.#platform, folder),
                 ];
                 argsFor = (resumed) =>
@@ -2018,7 +2024,7 @@ export class Chat {
                         conversation.entries.push({ ...step });
                         this.#options.emit(replyTo, step);
                     } else {
-                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text) };
+                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text), at: new Date(this.#now()).toISOString() };
                         conversation.entries.push({ ...said });
                         this.#options.emit(replyTo, said);
                     }

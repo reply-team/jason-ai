@@ -27,6 +27,24 @@ export type Approval = ApprovalSummary & {
     preview: Record<string, unknown>;
     decision_reason: string | null;
 };
+/** One page of the provider's accounts a send can go from, read for a campaign (`sender.list`). */
+export type SenderListRequest = {
+    campaign_id: string;
+    owners: string;
+    sender_channel?: string;
+    limit?: number;
+    offset?: number;
+};
+export type SenderAccount = {
+    external_id: string;
+    channel: string;
+    /** The sending name the provider holds for the account now; null where it holds none. */
+    name: string | null;
+    address: string | null;
+    status: string;
+    owner: string;
+};
+export type SenderListResponse = { plugin_id: string; items: SenderAccount[]; has_more: boolean };
 export type ApprovalListRequest = {
     status?: string;
     statuses?: string[];
@@ -168,6 +186,8 @@ export type RouteResolution = {
     plugin_id: string | null;
     scope: string | null;
     usable: boolean;
+    /** What the claim would refuse the route for, in the claim's own codes; none when it is usable. */
+    problems: ErrorDetail[];
     /** The channel the answer was resolved for; null when none was named. */
     channel: string | null;
 };
@@ -276,6 +296,8 @@ export type JournalListRequest = {
     work_item_id?: string;
     contact_id?: string;
     kinds?: string[];
+    /** Keeps the lines at or after this moment, ISO-8601 UTC. */
+    since?: string;
     limit?: number;
     cursor?: string;
 };

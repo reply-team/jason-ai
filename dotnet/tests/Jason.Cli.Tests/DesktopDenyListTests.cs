@@ -30,10 +30,12 @@ public class DesktopDenyListTests
     /// <summary>
     /// The verbs the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
     /// command the dispatcher starts when work names the role, linking a project's folder, which then becomes a working
-    /// folder of every chat on the project's campaigns, and starting a campaign or resuming one, which is what lets its
-    /// queued work run.
+    /// folder of every chat on the project's campaigns, starting a campaign or resuming one, which is what lets its queued
+    /// work run, and archiving one, which no verb undoes: it cancels its open work but a search's stop, with each item's
+    /// approval whether still asked or already given, stops its running attempts once the archive is committed, and
+    /// cancels its pending questions.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start", "campaign archive"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
@@ -98,7 +100,7 @@ public class DesktopDenyListTests
     /// <summary>The allow list's verbs that change something: a chat in Plan only never runs them.</summary>
     private static readonly string[] ChangesTheAgentMakes =
     [
-        "campaign add-contacts", "campaign archive", "campaign create", "campaign pause", "campaign remove-contacts",
+        "campaign add-contacts", "campaign create", "campaign pause", "campaign remove-contacts",
         "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
         "decision raise", "events backfill", "events signal", "journal append", "project create", "project update",
         "reply record", "rolenote set", "suppression add", "workitem cancel", "workitem complete", "workitem create",
@@ -206,7 +208,9 @@ public class DesktopDenyListTests
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
             "# work names the role, linking a project's folder, which then becomes a working folder of every chat on the\n" +
-            "# project's campaigns, and starting a campaign or resuming one, which is what lets its queued work run.\n",
+            "# project's campaigns, starting a campaign or resuming one, which is what lets its queued work run, and archiving\n" +
+            "# one, which no verb undoes: it cancels its open work but a search's stop, with each item's approval whether still\n" +
+            "# asked or already given, stops its running attempts once the archive is committed, and cancels its pending questions.\n",
     };
 
     /// <summary>
@@ -354,10 +358,27 @@ public class DesktopDenyListTests
         Assert.Contains(Operations.CampaignStart, DeniedOperations());
         var allowed = AllowList();
         Assert.DoesNotContain("campaign start", allowed);
-        foreach (var verb in new[] { "campaign pause", "campaign archive", "suppression add", "reply record", "workitem cancel" })
+        foreach (var verb in new[] { "campaign pause", "suppression add", "reply record", "workitem cancel" })
         {
             Assert.Contains(verb, allowed);
         }
+    }
+
+    /// <summary>
+    /// Archiving a campaign is the person's own act in the chat: no verb undoes it, and it cancels the campaign's open work
+    /// but a search's stop, with each item's approval whether still asked or already given, stops its running attempts
+    /// once the archive is committed, and cancels its pending questions. The command is off the allow list and on the deny
+    /// list, and its operation is a line of the file, so a text that names <c>campaign.archive</c> is refused as the others
+    /// are; pausing stays the chat's.
+    /// </summary>
+    [Fact]
+    public void Archiving_a_campaign_is_denied_by_command_and_by_operation_and_pausing_stays_allowed()
+    {
+        Assert.Contains("campaign archive", DenyList());
+        Assert.Contains(Operations.CampaignArchive, DeniedOperations());
+        var allowed = AllowList();
+        Assert.DoesNotContain("campaign archive", allowed);
+        Assert.Contains("campaign pause", allowed);
     }
 
     [Fact]

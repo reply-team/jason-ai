@@ -35,6 +35,8 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
+name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
@@ -44,6 +46,46 @@ has no published UI to fetch.
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
 and digest. Delete `custom/` to go back to the default.
+
+### Files the UI does not trust
+
+A build of the UI, the release's or a custom one, may hold under `sealed/` content the UI does not trust, and the
+runtime serves it unable to act. This is a rule of the server about a directory of the layout, named exactly `sealed`,
+in lower case, as `assets/` is one about caching: it applies to every file under `/ui/sealed/` whatever the file is
+called, never to a file by its name, and a build with nothing under `sealed/` is served as it was. A directory named
+another way, `Sealed/` say, is no such directory: its files are served by that name under the policy above. Only pages
+live under `sealed/`, files whose names end in `.html`: a sealed page loads no file, and a script or a style there
+could serve only the UI itself, which would run it with its own rights, so `jason ui install` refuses any other file
+there and the runtime answers a 404 for one. Every answer to a GET under `/ui/sealed/`, a missing file's included,
+carries this policy instead of the one above:
+
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+
+with a `Permissions-Policy` that denies each feature it names to every origin, the file's own included:
+
+`Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), camera=(), clipboard-read=(), clipboard-write=(), display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), keyboard-map=(), local-fonts=(), magnetometer=(), microphone=(), midi=(), otp-credentials=(), payment=(), picture-in-picture=(), publickey-credentials-create=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), storage-access=(), usb=(), window-management=(), xr-spatial-tracking=()`
+
+and `X-Content-Type-Options: nosniff`, `X-DNS-Prefetch-Control: off`, `Referrer-Policy: no-referrer`,
+`Cross-Origin-Resource-Policy: same-origin` and `Cache-Control: no-store`. A request that is not a GET, or that names
+another origin, is answered before the files are looked at, with no file in it. The set sends no
+`Cross-Origin-Opener-Policy`: that header acts only on a window opened by itself, and how browsers take it together
+with a sandbox the policy sets is not established, so it is left out rather than relied on.
+
+What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
+It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
+in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
+included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads
+nothing and shows no dialog. A request of its that got past the policy to the Runtime API would name that origin,
+`null`, and the runtime refuses a request that names any origin but its own (`origin_refused`) before it reads a token.
+
+What the rule does not stop, in plain words: a browser may look up a host name the file mentions before any policy
+applies; the file can freeze its own tab, until the tab is reloaded or closed; and opened by itself rather than in a
+frame, it can move its own tab to another address. None of these reaches the installation.
+
+The build's own layout is trusted, and so is whoever can write under `<data>/ui/`, who could replace the UI itself: a
+link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
+asks for it.
 
 ## Paired browsers
 
@@ -155,7 +197,8 @@ it is loading, empty or failed, or by the toolbar's while the tab is open. Its *
 its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
 activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
 tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its
-context as the roles read it and what each provider calls it, and nothing else: the campaign's moves are in its header,
+context as the roles read it and what each provider calls it, and in the console, last, where it is archived (below):
+the campaign's moves are in its header,
 beside **Add people**, so they are within reach from every tab, each offered only where its status allows it and each
 opening a dialog with an optional reason. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
@@ -163,7 +206,24 @@ campaign's work while what is running finishes; the provider's own sequence keep
 `jason campaign start`, which resumes a paused one, with your reason). The Start and Resume dialogs first read the
 campaign again and say what starting lets go: how many people it holds, and how messages go for people who have not
 replied yet and for people who have replied, in the words of Settings and with where each mode comes from; Start waits
-until that is read, and a mode that cannot be read is said to be unreadable. An address naming a campaign's Details opens its Settings, and one naming
+until that is read, and a mode that cannot be read is said to be unreadable. In the console, the last part of an
+agent's Settings is where you archive it (`jason campaign archive`, with your reason): one sentence and **Archive**,
+which opens a confirmation that names the agent and says an archive cannot be undone. As it opens, it reads the agent
+again and what archiving cancels, every page of each (`jason workitem list` of its unfinished work, `jason approval
+list` of the approvals asked and given, `jason decision list` of its pending questions), and says how many open work
+items it cancels and how many of them are processing now and are stopped, how many approvals still asked of you, how
+many already given whose work then never runs, and how many questions; a search being stopped is not counted among them,
+and is said to still finish. Archive waits until that is read. A read that fails says what is open could not be read,
+with what the runtime said or that it did not answer, that the archive still cancels it and cannot be undone, and offers
+**Read again**. Where a provider's campaign is pinned to the agent, from the agent as read again or, where that read
+fails, as the page holds it, it says that campaign is left as it is, keeps sending if it is live there, and cannot be
+paused by Jason once the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or
+paused and its route lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by
+asking in the agent's chat, and always in the provider itself. One press sends one archive. The page then goes back to
+the list, read again without the agent, and says the agent is archived and what was cancelled, only what there was; an
+archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
+the agent says so. The browser
+shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
@@ -182,8 +242,11 @@ the AI host keeps its own transcript of it. What the desktop refuses is said in 
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
 text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
-in Needs you; a question's card has its options as buttons and a box for your own answer. A card leaves once the item is
-decided, there or anywhere else. In a browser the console is the same, and a campaign's Chat
+in Needs you; a question's card has its options as buttons and a box for your own answer. Under the mailbox an email goes
+from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
+not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
+wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
+anywhere else. In a browser the console is the same, and a campaign's Chat
 and the Start screen work only in a tab the desktop opened; any other tab says where the chat is
 ([below](#settings-and-chat-in-the-browser)).
 
@@ -271,6 +334,10 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
   then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
+  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
+  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+  names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
+  the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
@@ -297,7 +364,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   would not see the command's environment; a host's program whose path holds `=`, which `/usr/bin/env` would read as a
   variable, is refused with `terminal_start_failed`. On macOS the script exports them, the folder going before
   Terminal's own `PATH`. Nothing is added to the host's own words. A build run through `dotnet` rather than installed as
-  one file has no such folder, and leaves `PATH` as it is.
+  one file has no such folder, and leaves `PATH` as it is. A `jason` whose folder's name holds the character that
+  separates the entries of `PATH`, `;` on Windows and `:` elsewhere, starts nothing on any system, `--dry-run`
+  included: no entry of the window's `PATH` can name that folder, and `jason status` says the installation is not ready.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables

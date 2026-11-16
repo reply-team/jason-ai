@@ -99,7 +99,6 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
         mode: {
             get: seam.mode.get,
             set: async () => refused(),
-            startOver: async () => refused(),
             onPreparing: none,
         },
         openIn: {
@@ -124,6 +123,7 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             setMode: async () => refused(),
             openFolder: async () => refused(),
             feed: async () => refused(),
+            cardRefused: async () => refused(),
         },
         fullAccess: {
             standing: seam.fullAccess.standing,
@@ -170,7 +170,6 @@ export function noDesktop(): JasonDesktop {
         mode: {
             get: async () => ({ mode: 'live', unopened: null, preparing: false }),
             set: async () => needsRefusal(),
-            startOver: async () => needsRefusal(),
             onPreparing: none,
         },
         openIn: {
@@ -195,6 +194,7 @@ export function noDesktop(): JasonDesktop {
             setMode: async () => needsRefusal(),
             openFolder: async () => needsRefusal(),
             feed: async () => needsRefusal(),
+            cardRefused: async () => needsRefusal(),
         },
         fullAccess: { standing: async () => null, takeBack: async () => needsRefusal(), onChanged: none },
         links: { take: async () => null, onOpen: none },

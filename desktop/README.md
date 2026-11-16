@@ -17,15 +17,13 @@ that a person needs.
 | Start one when none is up | `jason runtime start` (never `jason runtime run` as a child of its own) |
 | Install the UI | `jason ui install`, only when the runtime is the version the desktop carries and the `ui_module` check of `jason status` is not ok; an install that fails stops the start only when no UI is served at all |
 | Deploy the skills | `jason skills install --roles-only`, `jason skills install --root <data>/desktop/chat/.claude/skills --host claude_code` and `jason skills install --root <data>/desktop/chat/.agents/skills --host codex`, all from the skills package the desktop carries |
-| Carry the demo provider | every build carries `plugins/demo` as `resources/bundle/plugins/demo`, the package's files exactly as the tree holds them (`scripts/prepare.mjs`; a pack refuses a bundle without it). The demo of 0.44 and earlier placed a copy of it in its own installation (`src/demo-plugin.ts`); since the demo became a page nothing places it, and it goes with that demo's code. The person's installation never receives it |
-| Carry the prepared demo's archive | a release's package still carries `bundle/demo/jason-demo.zip`, which the demo of 0.44 and earlier placed with `jason import` (`src/demo-archive.ts`); since the demo became a page nothing places it |
 | Show the demo | `demo/index.html`, the page the application carries ([`demo/README.md`](demo/README.md)), in a sealed view of the window with the desktop's own Demo \| Live switch in a second view over it (`src/demo-page.ts`, `src/demo-window.ts`); no `jason` is run, no runtime started, no folder of an installation made and no host name resolved |
 | Load the window | the link `jason ui open --no-open` prints |
 | Place a notification plugin | `jason plugin install <id>`, its settings written, then `jason plugin reload` and `jason plugin list` |
 | Wire Reply after a sign-in (`reply auth login`, or `--with-token` with the key on standard input) | `reply auth status --json` for the profile, `jason plugin install reply`, its settings written, then `jason plugin reload` |
 | Say whether Reply is wired | `jason plugin list` shows `reply` valid, and `jason route list` names it the global default |
-| Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and the settings file names no `Roles:DefaultExecutionProfile`, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), the id it answered added to the mark, then `Roles:DefaultExecutionProfile` written into the settings file; where it lists one profile alone with the mark's id, the write alone; a mark with no id or another is let go (`src/roles-moments.ts` wires the two moments) |
-| Say which host the roles run on | `jason profile get <the default's name>`, where the settings file names one: its host and whether it is enabled; said under Claude Code or Codex only where found and at its floor |
+| Put the agents' roles on the AI the chat runs on, in Live, at a start once the runtime is up and as each chat turn starts (`Setup.connectRoles`, `src/roles-profile.ts`) | `jason profile list --include-disabled --limit 2`; where it lists none and its `default_execution_profile` names none, the mark in the desktop's own settings, `jason profile create claude-code --host claude_code --program <found>` (or `codex --host codex`), the id it answered added to the mark, then `jason profile list --include-disabled --limit 1` and, where its `default_execution_profile` still names none, `jason profile set-default claude-code --reason <the desktop's fixed reason>`; a look or a naming the runtime does not answer is left to the next turn, a naming it refuses (or took and did not answer in time) to the next start, which lists first; where it lists one profile alone with the mark's id, the look and the naming alone; a mark with no id or another is let go (`src/roles-moments.ts` wires the two moments) |
+| Say which host the roles run on | `jason profile list --include-disabled --limit 1` for the default in force (`default_execution_profile`), then `jason profile get <that name>`: its host and whether it is enabled; said under Claude Code or Codex only where found and at its floor |
 | Act on a Reply account, on the card's ask | one verb of `reply account` each (`src/reply-cli-account.ts`): `connect` (a LinkedIn account by the typed name, a mailbox by its provider), `reconnect`, `pending` (also read with the accounts), `limits` (a mailbox's daily limit), `pause` and `resume` (LinkedIn), `unblock` (a mailbox) and `delete`, each with `--json` |
 
 When the runtime is another version, the UI it serves is loaded as it is and `setup.status()` says the versions differ
@@ -115,7 +113,7 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 
 - `<data>/desktop/settings.json`: the desktop's settings (`feed`, the version whose skills were last deployed, and
   `roles_profile_pending`, the name of the profile `connectRoles` is making and, once its create succeeded, its id, only
-  between its mark and the default's write).
+  between its mark and the runtime's naming of the default).
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.
@@ -156,10 +154,10 @@ The Reply card writes `Plugins:Grants:reply:Exec` (`["reply"]`, only where the g
 `reply`, so one you widened is kept) and, only where the file names no `Routes:Default` at
 all, `Routes:Default` with the profile signed in (`{"Plugin": "reply", "Binding": {"profile": "default"}}` unless
 `reply auth status` names another), as the golden path writes them by hand; a default you set is kept. No other
-`Routes` key is ever written, and every other key is kept as it was. Outside the cards, the desktop writes
-`Roles:DefaultExecutionProfile` into the same file through the same writer, only where the file names none, in any case
-of its keys, and only after the profile it names was made (see the table above). Disconnect, on the `slack`, `telegram` and `ntfy`
-cards once configured, removes `Plugins:Config:<id>` and the plugin's entry under `Notifications:Plugins:<id>` whole, so
+`Routes` key is ever written, and every other key is kept as it was. `Roles:DefaultExecutionProfile` is not the
+desktop's to write: it asks the runtime to name the default with `jason profile set-default`, which the runtime writes
+into this file itself, only where the runtime answers no default in force and only after the profile it names was made
+(see the table above). Disconnect, on the `slack`, `telegram` and `ntfy` cards once configured, removes `Plugins:Config:<id>` and the plugin's entry under `Notifications:Plugins:<id>` whole, so
 the plugin is no longer a channel that is on; an entry whose `Enabled` is `false` keeps it and loses only its `Binding`.
 The plugin's grant under `Plugins:Grants:<id>` stays, except the Http grant derived from a server of the plugin's own,
 which goes with the server: an `Http` that is exactly the one host Configure derived from it, so a later Configure

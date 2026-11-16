@@ -92,7 +92,7 @@ test('the host\'s argv carries every deny-list entry as a disallowed tool, and a
     assert.ok(disallowed.includes('Bash(jason -*)'));
 });
 
-test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 72 verbs are allowed', () => {
+test('a Claude turn is denied adding a role and linking a project\'s folder and is not allowed either: 71 verbs are allowed', () => {
     const args = claudeArguments(turn);
     const disallowed = valuesOf(args, '--disallowedTools');
     assert.ok(disallowed.includes('Bash(jason role add:*)'));
@@ -102,7 +102,7 @@ test('a Claude turn is denied adding a role and linking a project\'s folder and 
     assert.ok(!allowed.includes('Bash(jason project link:*)'));
     assert.ok(allowed.includes('Bash(jason role list:*)'));
     assert.ok(allowed.includes('Bash(jason project list:*)'));
-    assert.equal(allowed.length, 72);
+    assert.equal(allowed.length, 71);
 });
 
 test('a Claude turn is denied starting a campaign in every mode, and keeps the acts that stop reaching a person', () => {
@@ -112,9 +112,18 @@ test('a Claude turn is denied starting a campaign in every mode, and keeps the a
         assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign start:*)'), mode);
     }
     const allowed = valuesOf(claudeArguments(turn), '--allowedTools');
-    for (const verb of ['campaign pause', 'campaign archive', 'suppression add', 'reply record', 'workitem cancel']) {
+    for (const verb of ['campaign pause', 'suppression add', 'reply record', 'workitem cancel']) {
         assert.ok(allowed.includes(`Bash(jason ${verb}:*)`), verb);
     }
+});
+
+test('a Claude turn is denied archiving a campaign in every mode, and keeps pausing one', () => {
+    for (const mode of ['ask_first', 'auto_edit', 'plan_only', 'full_access'] as const) {
+        const args = claudeArguments({ ...turn, mode, settingsFile: '/data/desktop/turns/turn-0123456789abcdef01234567.settings.json' });
+        assert.ok(valuesOf(args, '--disallowedTools').includes('Bash(jason campaign archive:*)'), mode);
+        assert.ok(!valuesOf(args, '--allowedTools').includes('Bash(jason campaign archive:*)'), mode);
+    }
+    assert.ok(valuesOf(claudeArguments(turn), '--allowedTools').includes('Bash(jason campaign pause:*)'));
 });
 
 test('the PowerShell and Monitor tools are taken out of every turn by a bare rule, so the one shell is the fenced one', () => {

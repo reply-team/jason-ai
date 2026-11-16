@@ -38,6 +38,16 @@ internal static class CampaignWhy
           AND +j.kind = 'provider_event_observed' AND json_extract(j.new_json, '$.kind') = 'bounce'
         """;
 
+    // The page's people's sends the provider's events said in the campaigns ({0}), dated as the count dates them, through
+    // the person's own index as the bounces are.
+    internal const string Sends = """
+        SELECT j.contact_id AS ContactId, j.campaign_id AS CampaignId, julianday(json_extract(j.new_json, '$.occurred_at')) AS Day,
+               json_extract(j.new_json, '$.channel') AS Channel
+        FROM journal AS j
+        WHERE j.contact_id IN (SELECT value FROM json_each({1})) AND j.campaign_id IN (SELECT value FROM json_each({0}))
+          AND +j.kind = 'provider_send_observed'
+        """;
+
     // The page's people's finished work in the campaigns ({0} the campaigns, {1} the people), through each person's own
     // index: a person's work is a handful of rows, where the campaigns' is every one of theirs.
     internal const string FinishedWork = """
@@ -108,16 +118,21 @@ internal static class CampaignWhy
         {
             CampaignActivityFilter.Added => await AddedAsync(db, campaigns, page, since, until, ct).ConfigureAwait(false),
             CampaignActivityFilter.WorkedOn => await LatestWorkAsync(db, campaigns, Keys(page), since, until, actOnly: false, ct).ConfigureAwait(false),
-            CampaignActivityFilter.Contacted => await LatestWorkAsync(db, campaigns, Keys(page), since, until, actOnly: true, ct).ConfigureAwait(false),
+            // Their latest touch: the later of their latest act and the latest send the provider's events said.
+            CampaignActivityFilter.Contacted => Latest(
+                await LatestWorkAsync(db, campaigns, Keys(page), since, until, actOnly: true, ct).ConfigureAwait(false),
+                await LatestSendAsync(db, campaigns, Keys(page), since, until, ct).ConfigureAwait(false)),
             CampaignActivityFilter.Replied => Within(await FirstReplyAsync(db, campaigns, Keys(page), ct).ConfigureAwait(false), since, until),
             CampaignActivityFilter.Bounced => await LatestBounceAsync(db, campaigns, Keys(page), since, until, ct).ConfigureAwait(false),
             CampaignActivityFilter.Removed => await RemovedAsync(db, campaigns, page, since, until, ct).ConfigureAwait(false),
             CampaignActivityFilter.OptedOut => await OptedOutAsync(db, counted, page, since, until, ct).ConfigureAwait(false),
             // Several things may have happened to one person; their row says the latest, as a person's row does, and its text
-            // names the count, since a reply, a bounce and an opt-out each say a channel. Contacted is work, so the latest work says it.
+            // names the count, since a reply, a bounce and an opt-out each say a channel. An act of Jason's is work, so the
+            // latest work says it; a send the provider's events said is no work, and says contacted.
             _ => Latest(
                 Named("added", await AddedAsync(db, campaigns, page, since, until, ct).ConfigureAwait(false)),
                 Named("worked_on", await LatestWorkAsync(db, campaigns, Keys(page), since, until, actOnly: false, ct).ConfigureAwait(false)),
+                Named("contacted", await LatestSendAsync(db, campaigns, Keys(page), since, until, ct).ConfigureAwait(false)),
                 Named("replied", Within(await FirstReplyAsync(db, campaigns, Keys(page), ct).ConfigureAwait(false), since, until)),
                 Named("bounced", await LatestBounceAsync(db, campaigns, Keys(page), since, until, ct).ConfigureAwait(false)),
                 Named("removed", await RemovedAsync(db, campaigns, page, since, until, ct).ConfigureAwait(false)),
@@ -304,6 +319,24 @@ internal static class CampaignWhy
             .GroupBy(seen => (seen.bounce.ContactId, seen.bounce.CampaignId))
             .Select(seen => seen.MaxBy(each => each.At))
             .ToDictionary(latest => (latest.bounce.ContactId, latest.bounce.CampaignId), latest => new MembershipWhy("activity", null, latest.bounce.Channel, latest.At, null, null));
+    }
+
+    /// <summary>
+    /// The newest send of the period in each campaign, by the provider's moment, as the count dates it: <c>message_sent</c>,
+    /// whoever sent it, since the provider's events cannot say.
+    /// </summary>
+    private static async Task<Dictionary<(int, int), MembershipWhy>> LatestSendAsync(
+        JasonDbContext db, List<int> campaigns, List<int> people, DateTime since, DateTime until, CancellationToken ct)
+    {
+        var sends = await db.Database.SqlQueryRaw<Observed>(Sends, JsonSerializer.Serialize(campaigns), JsonSerializer.Serialize(people))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return sends
+            .Select(send => (send, At: FromJulianDay(send.Day)))
+            .Where(seen => seen.At >= Utc(since) && seen.At < Utc(until))
+            .GroupBy(seen => (seen.send.ContactId, seen.send.CampaignId))
+            .Select(seen => seen.MaxBy(each => each.At))
+            .ToDictionary(latest => (latest.send.ContactId, latest.send.CampaignId), latest => new MembershipWhy("activity", null, "message_sent", latest.At, null, null));
     }
 
     /// <summary>

@@ -28,6 +28,7 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
             setMode: async (...args) => (calls.push(['setMode', ...args]), { id: 'conv_1', campaignId: null, title: 'Mine', updatedAt: '', running: false, mode: 'plan_only' }),
             openEndedFolder: async (...args) => void calls.push(['openEndedFolder', ...args]),
             feed: (...args) => (calls.push(['feed', ...args]), { id: 'conv_2', campaignId: null, main: true, title: 'Feed', updatedAt: '', running: false, mode: 'ask_first' }),
+            cardRefused: (...args) => (calls.push(['cardRefused', ...args]), null),
             fullAccessStanding: (...args: unknown[]) => (calls.push(['fullAccessStanding', ...args]), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true }),
             takeBackFullAccess: (...args: unknown[]) => (calls.push(['takeBackFullAccess', ...args]), null),
         },
@@ -37,11 +38,12 @@ function registered(): { listeners: Map<string, Listener>; calls: unknown[][]; r
     return { listeners, calls, refusals };
 }
 
-test('the chat registers its fifteen calls, and each reaches the chat from the runtime\'s page', async () => {
+test('the chat registers its sixteen calls, and each reaches the chat from the runtime\'s page', async () => {
     const { listeners, calls } = registered();
     assert.deepEqual([...listeners.keys()].sort(), [
         'jason:chat.answer',
         'jason:chat.attach',
+        'jason:chat.cardRefused',
         'jason:chat.create',
         'jason:chat.feed',
         'jason:chat.list',
@@ -70,6 +72,7 @@ test('the chat registers its fifteen calls, and each reaches the chat from the r
     await listeners.get('jason:chat.setMode')?.(page, 'conv_1', 'plan_only', 'claude');
     await listeners.get('jason:chat.openFolder')?.(page, 'name-1');
     await listeners.get('jason:chat.feed')?.(page, [], { catchUp: true });
+    assert.equal(await listeners.get('jason:chat.cardRefused')?.(page, 'conv_1', 'choice', 'schema'), null);
     assert.deepEqual(listeners.get('jason:fullAccess.standing')?.(page, 'planted'), { givenAt: '2026-01-02T03:04:05.000Z', newChats: true });
     assert.equal(await listeners.get('jason:fullAccess.takeBack')?.(page, { always: true, newChats: true }), null);
     assert.deepEqual(calls, [
@@ -86,6 +89,7 @@ test('the chat registers its fifteen calls, and each reaches the chat from the r
         ['setMode', 'conv_1', 'plan_only', 'claude'],
         ['openEndedFolder', 'name-1'],
         ['feed', [], { catchUp: true }],
+        ['cardRefused', 'conv_1', 'choice', 'schema'],
         ['fullAccessStanding'],
         ['takeBackFullAccess'],
     ], 'the standing choice\'s two calls pass nothing the page sends');
@@ -103,7 +107,7 @@ test('a chat call from another origin or a subframe never reaches the chat', () 
         assert.throws(() => listeners.get(channel)?.({ senderFrame: { url: `${origin}/ui/`, parent: {} } }, 'c1', 'planted words'), RefusedSender);
     }
     assert.deepEqual(calls, []);
-    assert.equal(refusals.length, 30);
+    assert.equal(refusals.length, 32);
     assert.ok(refusals.every((line) => !line.includes('planted')));
 });
 

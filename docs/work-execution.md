@@ -313,11 +313,25 @@ the work item, the composed input the plugin would have received, the plugin tha
 the account's binding identity, together with the canonical `sha256:` of that document. Before a later
 claim runs the work it computes the subject again and compares the hash: an input edited after the
 decision no longer matches, so the item is parked again with the reason `input_changed` rather than
-run under a decision nobody made about it. A pin that the item's own earlier attempt learned is such a change
-too: the next claim composes the input with it, so a person decides once more on what the plugin now receives,
-and that costs one more decision, never a performance nobody approved. The plugin's version and the package's digest are
-deliberately not part of the subject — they are provenance, recorded on the attempt that runs, and
-including them would supersede every pending decision the moment an operator reloaded a package.
+run under a decision nobody made about it. One difference is not such a change: a pin added where the approved
+subject held none, for the person or for the campaign, whether this item's earlier attempt learned it or another
+item did. It does change what reaches the plugin — the provider addresses a record it already holds rather than
+making one — but it moves nothing the person read: an added pin is either not shown to them at all, or bound to a
+value they read. An operation that works by the person's pin alone (`preflight.provider_contact: pinned_only`) is
+refused before anybody is asked while that pin is missing, so it is approved with the pin, which is then held and never
+added; and an operation whose preview shows the campaign's pin takes either that pin or an argument naming the
+campaign, so a pin added since is the identifier the argument named, since a pin that contradicts an argument is
+refused before the gate. So the claim compares the subject composed now, less the pin kinds the approved
+subject does not hold, with the approved hash, and runs the work under the decision when they match. A
+kind the approved subject holds is held to its value: a pin that now holds another value, or is gone, parks the work
+again with `input_changed`, and so does every other difference, a pin added beside it or not — an argument, a field
+of the person, the address, the campaign's name, the plugin, the account. A divergence changes nothing composed,
+since the plugin keeps receiving the value Jason recorded ([routing.md](routing.md) §11). Nothing about the decision
+is rewritten: the approval keeps the subject the person approved and its hash, the attempt that runs records the
+approval and the digest of the input it sent, the pin included, and the pin's own `external_id_pinned` line names the
+attempt that learned it and when — so whoever audits a send tells an exact match from a match less added pins.
+The plugin's version and the package's digest are deliberately not part of the subject — they are provenance,
+recorded on the attempt that runs, and including them would supersede every pending decision the moment an operator reloaded a package.
 
 **Beside the subject is the preview**, assembled at the claim from the operation's own sentence about
 itself, the dangerous readings of what it reaches, undoes and costs, the campaign, the person it would
@@ -832,7 +846,16 @@ In a period, removed people included, so a past period does not change when some
 - `worked_on` — Work about them finished in the period, whether it succeeded or failed.
 - `contacted` — Something was sent to them, or they were put into the provider's sequence, in the period. That is a
   `campaign.enroll`, `message.send`, `conversation.reply` or `social_invitation.send` about them that succeeded, even
-  an enrollment into a provider campaign not live yet; research never counts.
+  an enrollment into a provider campaign not live yet, or the provider's events said the account sent them a message of
+  the campaign's provider campaign (`provider_send_observed`, [docs/events.md](events.md) §4), a step of the sequence
+  among them; research never counts. A send is dated by the moment the provider gives it, as a bounce is, and a person
+  reached both ways, or sent several messages, counts once; their why in the list is the latest of the two, a send's
+  code `message_sent`. A send to a person the campaign does not hold counts nobody. A send outside every provider
+  campaign, and one in a span the events left unread (`events_gap_observed`), is not counted. Only email sends are
+  claimed to be read. No count of messages is offered: the provider's events may report two sends on one thread as its
+  latest. A send the account's reads did not reach (older than the thirty days a first read goes back, or in a span
+  read before its plugin reported sends) is not read by itself; a person may ask for a span to be read again
+  (`jason events backfill`, [docs/events.md](events.md)).
 - `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
 - `bounced` — A provider's event said in the period that a message to them bounced, hard or soft: an event does not
@@ -1382,9 +1405,9 @@ claim's twenty-sixth check parks held work an open block already holds, before a
 ([docs/routing.md](routing.md) §7). Either way the item moves to `waiting` on the same wait row a role's wait uses,
 naming the block with no `mode`, `until` or `deadline`; the item's `due_at` bounds it, an item past its due date
 expires, and cancelling the item closes the wait. A person's approval stays as they gave it: approved work the block
-holds parks after its approval and runs under that decision when it is let through — unless what it would run
-changed meanwhile, a pin the refused attempt learned among such changes, and then the person decides once more
-(§Approvals).
+holds parks after its approval and runs under that decision when it is let through, a pin the refused attempt
+learned where the approved subject held none included — unless what it would run changed otherwise meanwhile, and
+then the person decides once more (§Approvals).
 
 **The trial.** A block is tried rather than waited out. Its next trial is due at the moment the provider said it
 clears by itself where that is ahead, a day at most — so a block that says it clears next month is still tried daily —
@@ -1397,8 +1420,9 @@ a decision, or in the queue where the claim could take it. A trial left in the q
 the claim would not take, holds nothing, and the next trial due is another item the block holds; the claim reads the
 same rule. A trial that waits for a person's decision holds the block's one trial until they decide: approved, it runs
 as the trial; refused, it ends, leaves the live set, and the next trial due is another item the block holds. Approved
-work let through as a trial asks the person again where the attempt the block refused learned a pin, since a learned
-pin is a change to the input the person approved (§Approvals, what is approved is a subject). A block that is due but
+work let through as a trial runs under the decision the person made where the attempt the block refused learned a pin
+the approved subject did not hold, since an added pin keeps an approval's cover (§Approvals, what is approved is a
+subject). A block that is due but
 holds nothing that could run now lets the next held item the claim meets through as its trial instead. The trial of a
 sender's block that names no channel is drawn among the items it holds whose channel has no open block of that
 sender, since that channel's block governs them. The trial of a sender's block on one channel is drawn from the items
