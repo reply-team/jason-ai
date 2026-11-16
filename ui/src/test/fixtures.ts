@@ -262,11 +262,14 @@ import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.js
 // A person's acts on campaign A since the moment a choice was asked in its chat: a pause, and none.
 import journalListCardChoiceActs from '../../../docs/api/fixtures/journal.list/card-choice-acts.json';
 import journalListCardChoiceActsNone from '../../../docs/api/fixtures/journal.list/card-choice-acts-none.json';
+// What the accounts card reads of the runtime: the official Reply package as it lists it, and the global route to it.
+import pluginListCardAccountsReply from '../../../docs/api/fixtures/plugin.list/card-accounts-reply.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
 import replyCountUntilBeforeSince from '../../../docs/api/fixtures/reply.count/until-before-since.json';
 import roleListAll from '../../../docs/api/fixtures/role.list/all.json';
+import routeListCardAccountsReply from '../../../docs/api/fixtures/route.list/card-accounts-reply.json';
 import routeListChannelRoutes from '../../../docs/api/fixtures/route.list/channel-routes.json';
 import routeListEmpty from '../../../docs/api/fixtures/route.list/empty.json';
 import routeResolveElsewhere from '../../../docs/api/fixtures/route.resolve/elsewhere.json';
@@ -965,11 +968,13 @@ export const fixtures = {
         JournalListRequest,
         Page<JournalEntry>
     >,
+    'plugin.list/card-accounts-reply': pluginListCardAccountsReply satisfies Exchange<object, object>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/until-before-since': replyCountUntilBeforeSince satisfies Exchange<ReplyCountRequest, ErrorEnvelope>,
     'role.list/all': roleListAll satisfies Exchange<object, Page<Role>>,
+    'route.list/card-accounts-reply': routeListCardAccountsReply satisfies Exchange<object, Routes>,
     'route.list/channel-routes': routeListChannelRoutes satisfies Exchange<object, Routes>,
     'route.list/empty': routeListEmpty satisfies Exchange<object, Routes>,
     'route.resolve/elsewhere': routeResolveElsewhere satisfies Exchange<RouteResolveRequest, RouteResolution>,

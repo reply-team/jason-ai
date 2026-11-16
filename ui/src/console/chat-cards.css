@@ -222,6 +222,53 @@
     margin-top: 9px;
 }
 
+/* The accounts card: its Refresh at the header's end, when it read under the header, then each reader's part under
+   its own label, Reply's accounts as a table of what Reply wrote, the runtime's facts as label and value. */
+.jc-console .card-accounts .card-refresh {
+    margin-left: auto;
+}
+.jc-console .card-accounts .card-asof {
+    font-size: 12px;
+    margin-top: 2px;
+}
+.jc-console .card-accounts .card-part {
+    margin-top: 12px;
+}
+.jc-console .card-accounts .card-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+.jc-console .card-accounts .card-tbl {
+    width: 100%;
+    margin-top: 8px;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.jc-console .card-accounts .card-tbl th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--faint);
+    padding: 4px 10px 4px 0;
+    border-bottom: 1px solid var(--line);
+}
+.jc-console .card-accounts .card-tbl td {
+    padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+.jc-console .card-accounts .card-tbl tr:last-child td {
+    border-bottom: 0;
+}
+.jc-console .card-accounts .card-fact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-top: 4px;
+}
+
 /* The dark theme, chosen by the system or by the person: the same values both ways. */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) .jc-console .btn.ok {

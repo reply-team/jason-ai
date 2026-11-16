@@ -5,6 +5,7 @@ import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
+import { accountsHeld, accountsView } from './card-accounts';
 import { acts, readActs } from './card-acts';
 import {
     cardLayout,
@@ -702,7 +703,7 @@ function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHo
 
 /**
  * The card a turn's last block draws, right after the text entry that held it, with no speaker's label over it: a
- * choice; the frame that says a data card is about another agent; one line in the desktop's words for a block that did
+ * choice; the accounts card (`card-accounts.ts`); the frame that says a data card is about another agent; one line in the desktop's words for a block that did
  * not read, said once to the desktop's log; nothing for a block still being written. The kinds this release does not
  * draw yet say so in a line.
  */
@@ -725,9 +726,9 @@ function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHo
                 <div class="ask-w">This chat shows only its own agent.</div>
             </div>`;
         case 'card':
-            return reading.card.kind === 'choice'
-                ? choiceView(chat, index, reading.card, host)
-                : noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+            if (reading.card.kind === 'choice') return choiceView(chat, index, reading.card, host);
+            if (reading.card.kind === 'accounts') return accountsView(chat.id, index, entry);
+            return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
     }
 }
 
@@ -902,6 +903,7 @@ function threadOf(chatId: string) {
         now: number;
         card: string;
         asked: unknown;
+        accounts: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -918,6 +920,8 @@ function threadOf(chatId: string) {
         // A choice the AI asked is live by the person's acts on the agent as read. A message waits only while a turn
         // runs, after the person's message, which has locked every choice already.
         const asked = acts.value[chatId];
+        // An accounts card of this chat draws again when its read is answered.
+        const accounts = accountsHeld.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
@@ -927,10 +931,11 @@ function threadOf(chatId: string) {
             last.chat.running === chat.running &&
             last.card === card &&
             last.asked === asked &&
+            last.accounts === accounts &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, asked, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, card, asked, accounts, view: threadView(chat, host) };
         return last!.view;
     });
 }
