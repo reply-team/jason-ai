@@ -228,6 +228,12 @@
     display: block;
     font-weight: 600;
 }
+.jc-console .cmenu-panel :is(.mi, .accmi):not(:has(small)) b {
+    font-weight: 400;
+}
+.jc-console .cmenu-panel :is(.mi, .accmi):not(:has(small)).on b {
+    font-weight: 500;
+}
 .jc-console .cmenu-panel :is(.mi, .accmi) small {
     display: block;
     margin-top: 2px;
@@ -279,12 +285,13 @@
     background: transparent;
     color: var(--mute);
     font-size: 12.5px;
+    font-weight: 400;
     cursor: pointer;
 }
 .jc-console .mdltabs button.on {
     background: var(--panel);
     color: var(--ink);
-    font-weight: 600;
+    font-weight: 500;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 .jc-console .mdlmenu .mdllist {
