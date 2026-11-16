@@ -23,7 +23,7 @@ import { cardRows, statusSentence } from './card-model';
 import type { OwnListCard } from './cards';
 import { locksChoice, type Chat } from './chat-model';
 import { html, type Html } from './html';
-import { addressesIn, fieldWord, listRequest, mappingLine, rowOutcome } from './own-list';
+import { addressesIn, fieldWord, listRequest, mappingLine, ownMessages, rowOutcome } from './own-list';
 import { here } from './state';
 
 // The list card the chat's AI writes, in an agent's own chat, from a list the person gave it: the AI's reading of the
@@ -146,7 +146,13 @@ const rowsWord = (count: number): string => (count === 1 ? '1 row' : `${count} r
  * address is not there, shown whatever else is folded; where none is there, one sentence, since the rows may have been
  * read from a file the page cannot see.
  */
-function compared(card: OwnListCard, found: ReturnType<typeof addressesIn>, table: (rows: number[]) => Html): Html {
+function compared(
+    card: OwnListCard,
+    found: ReturnType<typeof addressesIn>,
+    table: (rows: number[]) => Html,
+): Html | null {
+    // Only addresses are compared: a list matched by its LinkedIn profiles, with no address column, says nothing.
+    if (!card.columns.some((column) => column.field === 'email')) return null;
     if (found.total === 0)
         return html`<div class="ask-w card-compare">
             This list has no email address for Jason to compare with what you wrote in this chat.
@@ -170,8 +176,12 @@ function compared(card: OwnListCard, found: ReturnType<typeof addressesIn>, tabl
 
 /** One sentence above the button: what the runtime's status and send mode for these people say adding does now. */
 function runningSentence(campaign: Campaign): string {
-    if (campaign.status !== 'active') return statusSentence(campaign.status);
     const cold = campaign.send_modes_in_force?.cold.mode;
+    if (campaign.status !== 'active')
+        // A draft or a paused agent writes to nobody now; under automatic sending, what it will do once it runs.
+        return cold === 'automatic' && (campaign.status === 'draft' || campaign.status === 'paused')
+            ? `${statusSentence(campaign.status)} When it runs under this send mode, a message it writes to someone added here can be sent without asking you, once Jason’s own review of it passes.`
+            : statusSentence(campaign.status);
     switch (cold) {
         case undefined:
             return 'This agent is running.';
@@ -260,10 +270,8 @@ export function ownListCard(chat: Chat, index: number, card: OwnListCard, last: 
     const press = pressOf(chat, index);
     const answer = press?.state === 'answered' ? press.answer : null;
     const outcome = (row: number) => rowOutcome(answer?.items.find((item) => item.index === row));
-    const found = addressesIn(
-        card,
-        chat.entries.flatMap((entry) => (entry.kind === 'user' ? [entry.text] : [])),
-    );
+    // What the person wrote: their own messages, never an answer a click on a choice sent in the AI's words.
+    const found = addressesIn(card, ownMessages(chat));
     const all = listsOf(chat.id).opened.includes(index);
     const more = html`<button class="lk card-more" type="button" ${act('card.own_list.more', chat.id, index)}>
         Show more

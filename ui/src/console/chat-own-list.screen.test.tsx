@@ -134,9 +134,9 @@ const recordedRequest = (name: 'campaign.add_contacts/own-list') => {
     return { actor, rest };
 };
 
-beforeEach(() => {
+/** A page opened afresh: nothing the page held is left, as after a reload. */
+function freshPage(): void {
     cleanup();
-    agent = 'campaign.get/own-list';
     chats.value = {};
     conversations.value = [];
     acts.value = {};
@@ -150,6 +150,11 @@ beforeEach(() => {
     forgetWaiting();
     feedId.value = null;
     feedUnseen.value = false;
+}
+
+beforeEach(() => {
+    freshPage();
+    agent = 'campaign.get/own-list';
 });
 
 describe('the list card', () => {
@@ -238,7 +243,7 @@ describe('the list card', () => {
             'Added, as the person Jason already held',
             'Already in this agent',
             'Taken out of this agent before; not added back',
-            'Not added: Validation failed: contacts[4].channels[0].value: invalid.',
+            'Not added: an email value is a bare mailbox address with a dotted domain and no display name.',
             'Not added: the item carries no value for the requested match_by key; dedup was asked for, so it is not created blind.',
             'Added, as a new person',
         ]);
@@ -248,11 +253,23 @@ describe('the list card', () => {
     });
 
     it('offers the button again on a page opened afresh, and a second press adds nobody twice', async () => {
-        const fake = renderConsole(
+        const first = renderConsole(
+            [spring(turn(list()))],
+            new FakeApi().answer('campaign.add_contacts', 'campaign.add_contacts/own-list'),
+        );
+        const before = await readCard(await openChat('Spring'));
+        fireEvent.click(addButton(before())!);
+        await waitFor(() => expect(words(before())).toContain('Added 3 · Already in this agent 2 · Not added 2'));
+        expect(addButton(before())).toBeNull();
+        expect(adds(first)).toHaveLength(1);
+        // The page is opened again: nothing of the press was kept, so the button stands again.
+        freshPage();
+        const again = renderConsole(
             [spring(turn(list()))],
             new FakeApi().answer('campaign.add_contacts', 'campaign.add_contacts/own-list-again'),
         );
         const card = await readCard(await openChat('Spring'));
+        expect(words(card())).not.toContain('Added 3');
         fireEvent.click(addButton(card())!);
         await waitFor(() => expect(words(card())).toContain('Added 0 · Already in this agent 5 · Not added 2'));
         expect(rowsOf(card().querySelector('.card-answer .card-tbl')!).map((row) => row.at(-1))).toEqual([
@@ -260,11 +277,70 @@ describe('the list card', () => {
             'Already in this agent',
             'Already in this agent',
             'Taken out of this agent before; not added back',
-            'Not added: Validation failed: contacts[4].channels[0].value: invalid.',
+            'Not added: an email value is a bare mailbox address with a dotted domain and no display name.',
             'Not added: the item carries no value for the requested match_by key; dedup was asked for, so it is not created blind.',
             'Already in this agent',
         ]);
-        expect(adds(fake)).toHaveLength(1);
+        expect(adds(again)).toHaveLength(1);
+    });
+
+    it('offers the button on the conversation’s last list alone, never on an earlier one', async () => {
+        renderConsole([spring([...turn(list(recorded.slice(0, 2))), ...turn(list())])]);
+        const pane = await openChat('Spring');
+        const lists = () => within(pane).getAllByRole('group', { name: 'Your list' });
+        await waitFor(() => expect(within(lists()[1]!).queryByText('Reading...')).toBeNull());
+        expect(lists()).toHaveLength(2);
+        expect(addButton(lists()[1]!)?.hasAttribute('disabled')).toBe(false);
+        // The earlier list stands as a stub; read, it says it is not the one added, and has no button.
+        expect(addButton(lists()[0]!)).toBeNull();
+        fireEvent.click(within(lists()[0]!).getByRole('button', { name: 'Show now' }));
+        await waitFor(() =>
+            expect(words(lists()[0]!)).toContain('Only the conversation’s last list is added from the chat.'),
+        );
+        expect(addButton(lists()[0]!)).toBeNull();
+    });
+
+    it('in an agent’s chat, says a list for another agent is not its own, and offers nothing to press', async () => {
+        renderConsole([spring(turn(list(recorded, { campaign: 'cmp_2' })))]);
+        const pane = await openChat('Spring');
+        const card = await waitFor(() => within(pane).getByRole('group', { name: 'Your list' }));
+        expect(words(card)).toBe('Your list This chat shows only its own agent.');
+        expect(within(card).queryAllByRole('button')).toEqual([]);
+    });
+
+    it('leaves out an answer a click on a choice sent, whose words the AI wrote', async () => {
+        const choice = {
+            kind: 'choice',
+            question: 'Add the last one too?',
+            options: [{ label: 'rafa@example.test' }, { label: 'Skip it' }],
+        };
+        renderConsole([
+            spring([
+                { kind: 'user', text: `Add these people:\n${pasted}` },
+                { kind: 'text', text: fenced(choice), at },
+                { kind: 'user', text: 'rafa@example.test' },
+                { kind: 'text', text: fenced(list()), at },
+            ]),
+        ]);
+        const card = await readCard(await openChat('Spring'));
+        expect(words(card().querySelector('.card-compare')!)).toContain(
+            '5 of 6 addresses are in what you wrote in this chat',
+        );
+    });
+
+    it('draws no comparison for a list matched by LinkedIn profile with no address column', async () => {
+        const linkedin = {
+            kind: 'own_list',
+            match_by: 'linkedin',
+            columns: [{ field: 'first_name' }, { field: 'linkedin' }],
+            rows: [['Alma', 'linkedin.com/in/alma-novak']],
+        };
+        renderConsole([spring(turn(linkedin))]);
+        const card = await readCard(await openChat('Spring'));
+        expect(card().querySelector('.card-compare')).toBeNull();
+        expect(words(card())).toContain(
+            'Someone Jason already holds with this LinkedIn profile is added as they are; this list does not change their record.',
+        );
     });
 
     it('takes a double click as one press, and a press from the keyboard as a press', async () => {
@@ -356,6 +432,23 @@ describe('the list card', () => {
         );
         // The sentence stands right above the button.
         expect(sentence.nextElementSibling?.classList.contains('card-nav')).toBe(true);
+    });
+
+    it('says, in a paused agent whose messages to new people go automatically, what happens once it runs', async () => {
+        agent = 'campaign.get/own-list-paused';
+        renderConsole([spring(turn(list()))]);
+        const card = await readCard(await openChat('Spring'));
+        expect(words(card().querySelector('.card-status')!)).toBe(
+            'It is paused: none of its work starts but what stops it. When it runs under this send mode, a message it writes to someone added here can be sent without asking you, once Jason’s own review of it passes.',
+        );
+        // A draft whose every message waits says only that it is a draft.
+        agent = 'campaign.get/own-list';
+        fireEvent.click(within(card()).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() =>
+            expect(words(card().querySelector('.card-status')!)).toBe(
+                'It is a draft: none of its work starts until it is started.',
+            ),
+        );
     });
 
     it('says, in a running agent whose messages to new people go automatically, that they can go without asking', async () => {

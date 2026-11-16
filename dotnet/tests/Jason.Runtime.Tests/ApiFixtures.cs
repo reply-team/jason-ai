@@ -46,7 +46,8 @@ public static class ApiFixtures
     //                     sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //   own list:         campaign.get own-list (a draft), campaign.add_contacts own-list|-again, campaign.get
-    //                     own-list-running|-automatic|-archived, and campaign.add_contacts own-list-archived (refused whole).
+    //                     own-list-running|-automatic|-paused|-archived, and campaign.add_contacts own-list-archived
+    //                     (refused whole).
     //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
     //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
     //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
@@ -235,6 +236,7 @@ public static class ApiFixtures
         "campaign.get/own-list",
         "campaign.get/own-list-archived",
         "campaign.get/own-list-automatic",
+        "campaign.get/own-list-paused",
         "campaign.get/own-list-running",
         "campaign.get/send-mode-override",
         "campaign.get/started",

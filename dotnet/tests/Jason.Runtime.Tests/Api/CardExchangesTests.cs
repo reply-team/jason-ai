@@ -427,8 +427,8 @@ public partial class CardExchangesTests
     /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
     /// out of the campaign, an address that is no address, a row with no address, and a person whose record is archived; then
     /// the same request again. The campaign is read as the card reads it: a draft before the list, then started, then with
-    /// its send mode for people who have not replied set to automatic by a person, then archived, when the same request is
-    /// refused whole.
+    /// its send mode for people who have not replied set to automatic by a person, then paused, then archived, when the same
+    /// request is refused whole.
     /// </summary>
     [Fact]
     public async Task A_list_given_in_the_chat_is_added_row_by_row_and_again_with_every_row_already_there()
@@ -498,6 +498,10 @@ public partial class CardExchangesTests
         await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = scene.Campaign, cold = "automatic", actor = Ada }, Ct);
         var automatic = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-automatic", new { campaign_id = scene.Campaign }, Ct);
         Assert.Equal((CampaignStatus.Active, SendMode.Automatic, SendMode.EveryMessage), (automatic.Status, automatic.SendModesInForce!.Cold.Mode, automatic.SendModesInForce.Warm.Mode));
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignPause, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
+        var paused = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-paused", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal((CampaignStatus.Paused, SendMode.Automatic), (paused.Status, paused.SendModesInForce!.Cold.Mode));
 
         await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
         Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-archived", new { campaign_id = scene.Campaign }, Ct)).Status);

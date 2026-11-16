@@ -3,7 +3,8 @@
 // own comparison: each row's address looked for in the text of the person's own messages, with no parser and nothing
 // read from those messages but whether an address stands in them.
 import type { AddContactsResult, ListAddRequest, ListContact } from '../api/types';
-import type { OwnListCard } from './cards';
+import { cardLayout, optionsOf, placeOf, readCard, type OwnListCard } from './cards';
+import { locksChoice, type Chat } from './chat-model';
 
 /** The reason a list's press gives, so what happened says where the people came from. */
 export const listReason = 'From a list given in the chat.';
@@ -62,6 +63,49 @@ export const listRequest = (card: OwnListCard, campaignId: string): ListAddReque
 });
 
 /**
+ * The person's own messages of a chat: every entry of theirs but an answer a click on a choice sent, whose words the AI
+ * wrote. An answer is known as the chat knows one (`choiceState`): the first entry after a choice's card that locks it is
+ * the person's, and its words are one of the choice's labels.
+ */
+export function ownMessages(chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running'>): string[] {
+    const clicked = new Set<number>();
+    for (const [index, placed] of cardLayout(chat.entries).cards) {
+        const reading = readCard(placed, {
+            place: placeOf(chat),
+            campaignId: chat.campaignId,
+            ended: !placed.lastTurn || !chat.running,
+        });
+        if (reading.state !== 'card') continue;
+        const labels = optionsOf(reading.card).map((option) => option.label.trim());
+        const next = chat.entries.findIndex((entry, at) => at > index && locksChoice(entry.kind));
+        const entry = chat.entries[next];
+        if (entry?.kind === 'user' && labels.includes(entry.text.trim())) clicked.add(next);
+    }
+    return chat.entries.flatMap((entry, at) => (entry.kind === 'user' && !clicked.has(at) ? [entry.text] : []));
+}
+
+/** What may stand right before an address and still be part of a longer one. */
+const mailbox = /[a-z0-9._%+-]/;
+/** What may stand right after one and still be part of a longer one: a letter or digit, `_` or `-`, or `.` before one. */
+const domain = /[a-z0-9_-]/;
+
+/**
+ * Whether an address stands whole in a text, both lowercased: a hit counts only where the character before it could not
+ * begin a longer mailbox and the character after it could not go on with a longer domain.
+ */
+function standsIn(text: string, address: string): boolean {
+    for (let at = text.indexOf(address); at !== -1; at = text.indexOf(address, at + 1)) {
+        const end = at + address.length;
+        if (at > 0 && mailbox.test(text[at - 1]!)) continue;
+        const after = text[end] ?? '';
+        if (domain.test(after)) continue;
+        if (after === '.' && /[a-z0-9]/.test(text[end + 1] ?? '')) continue;
+        return true;
+    }
+    return false;
+}
+
+/**
  * The card's addresses against the person's own messages: how many rows carry an address, how many of those addresses
  * stand in one of the messages, trimmed and without regard to case, and the index of each row whose address does not.
  */
@@ -78,7 +122,7 @@ export function addressesIn(
         const address = (row[column] ?? '').trim().toLowerCase();
         if (address === '') return;
         total += 1;
-        if (!said.some((message) => message.includes(address))) missing.push(index);
+        if (!said.some((message) => standsIn(message, address))) missing.push(index);
     });
     return { total, found: total - missing.length, missing };
 }
@@ -106,7 +150,10 @@ export function rowOutcome(item: Item | undefined): { added: boolean; words: str
                         : 'Already in this agent',
             };
         case 'rejected':
-            return { added: false, words: `Not added: ${item.error?.message ?? 'the runtime gave no reason.'}` };
+            return {
+                added: false,
+                words: `Not added: ${item.error?.details?.[0]?.message ?? item.error?.message ?? 'the runtime gave no reason.'}`,
+            };
         default:
             return { added: false, words: item.status };
     }

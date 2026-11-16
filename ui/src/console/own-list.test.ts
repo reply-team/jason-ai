@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnListCard } from './cards';
-import { addressesIn, fieldWord, listReason, listRequest, mappingLine, rowOutcome } from './own-list';
+import type { Entry } from './chat-model';
+import { addressesIn, fieldWord, listReason, listRequest, mappingLine, ownMessages, rowOutcome } from './own-list';
 
 // A list card's two pieces of logic of its own: the request a press sends, built from the card alone, and the comparison
 // of its addresses with what the person wrote in the chat.
@@ -87,6 +88,28 @@ describe('what the person wrote, compared', () => {
         expect(addressesIn(card({ rows }), ['bo@exam', 'ple.com']).missing).toEqual([0, 1, 3]);
     });
 
+    it('finds an address only where it stands whole, never inside a longer address', () => {
+        const one = (address: string) => card({ rows: [['A', '', address, '', '', '', '', '']] });
+        // A domain cut short, and a mailbox that ends another one, are not what the person wrote.
+        expect(addressesIn(one('bo@example.co'), ['bo@example.com']).missing).toEqual([0]);
+        expect(addressesIn(one('ann@example.test'), ['joann@example.test']).missing).toEqual([0]);
+        expect(addressesIn(one('ann@example.test'), ['ann@example.test.uk']).missing).toEqual([0]);
+        expect(addressesIn(one('ann@example.test'), ['ann@example.test-mail.org']).missing).toEqual([0]);
+        expect(addressesIn(one('ann@example.test'), ['x.ann@example.test']).missing).toEqual([0]);
+        // Stops, brackets and commas around it are not part of it.
+        for (const said of [
+            'ann@example.test.',
+            '<ann@example.test>',
+            'ann@example.test,',
+            '(ann@example.test)',
+            'Ann: ann@example.test',
+            'ann@example.test',
+        ])
+            expect(addressesIn(one('ann@example.test'), [said]).missing, said).toEqual([]);
+        // A later whole one counts where an earlier hit stood inside another address.
+        expect(addressesIn(one('ann@example.test'), ['joann@example.test, ann@example.test']).missing).toEqual([]);
+    });
+
     it('counts no address for a row without one, and none for a list without an email column', () => {
         expect(addressesIn(card({ rows }), []).total).toBe(3);
         expect(
@@ -134,7 +157,72 @@ describe('what the runtime answered of a row', () => {
                 }),
             ),
         ).toEqual({ added: false, words: 'Not added: the item carries no value for the requested match_by key.' });
+        // A refusal of a value says it in the runtime's words for the value, not by the request's zero-based index.
+        expect(
+            rowOutcome(
+                item({
+                    status: 'rejected',
+                    error: {
+                        code: 'validation_failed',
+                        message: 'Validation failed: contacts[4].channels[0].value: invalid.',
+                        details: [
+                            {
+                                field: 'contacts[4].channels[0].value',
+                                code: 'invalid',
+                                message: 'an email value is a bare mailbox address with a dotted domain.',
+                            },
+                        ],
+                    },
+                }),
+            ),
+        ).toEqual({ added: false, words: 'Not added: an email value is a bare mailbox address with a dotted domain.' });
         expect(rowOutcome(item({ status: 'later' }))).toEqual({ added: false, words: 'later' });
         expect(rowOutcome(undefined)).toEqual({ added: false, words: 'The runtime said nothing of this row.' });
+    });
+});
+
+describe('the person’s own messages', () => {
+    const fenced = (value: unknown) => `\`\`\`card\n${JSON.stringify(value)}\n\`\`\``;
+    const choice = {
+        kind: 'choice',
+        question: 'Which one?',
+        options: [{ label: 'ann@example.test' }, { label: 'Skip' }],
+    };
+    const chat = (entries: Entry[]) => ({ entries, campaignId: 'cmp_1', main: false, running: false });
+
+    it('are the person’s entries, but an answer a click on a choice sent, whose words the AI wrote', () => {
+        expect(
+            ownMessages(
+                chat([
+                    { kind: 'user', text: 'My list: bo@example.test' },
+                    { kind: 'text', text: `Which one?\n\n${fenced(choice)}` },
+                    { kind: 'user', text: 'ann@example.test' },
+                    { kind: 'text', text: 'Noted.' },
+                    { kind: 'user', text: 'and cy@example.test' },
+                ]),
+            ),
+        ).toEqual(['My list: bo@example.test', 'and cy@example.test']);
+    });
+
+    it('keep words the person wrote after a choice that are none of its labels', () => {
+        expect(
+            ownMessages(
+                chat([
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'user', text: 'Neither: dee@example.test' },
+                ]),
+            ),
+        ).toEqual(['Neither: dee@example.test']);
+        // A label typed again later, with the choice no longer last, is the person's own words.
+        expect(
+            ownMessages(
+                chat([
+                    { kind: 'text', text: fenced(choice) },
+                    { kind: 'user', text: 'Skip' },
+                    { kind: 'text', text: 'Fine.' },
+                    { kind: 'user', text: 'ann@example.test' },
+                ]),
+            ),
+        ).toEqual(['ann@example.test']);
     });
 });

@@ -828,6 +828,28 @@ describe('a list card’s members', () => {
         expect(failure(read(over, agent))).toBe('unknown too_long');
     });
 
+    it('refuses a cell that turns the text around it, and __proto__ on the card or on a column', () => {
+        expect(failure(inAgent(list({ rows: [['Ann‮Lee', 'ann@example.com', '']] })))).toBe(schema('own_list'));
+        expect(failure(inAgent(list({ rows: [['‭', 'ann@example.com', '']] })))).toBe(schema('own_list'));
+        const text = JSON.stringify(list());
+        expect(
+            failure(read(text.replace('{"kind":"own_list",', '{"kind":"own_list","__proto__":{"x":1},'), agent)),
+        ).toBe(schema('own_list'));
+        expect(
+            failure(
+                read(
+                    text.replace(
+                        '{"from":"Name","field":"first_name"}',
+                        '{"from":"Name","field":"first_name","__proto__":{}}',
+                    ),
+                    agent,
+                ),
+            ),
+        ).toBe(schema('own_list'));
+        // The same text without them reads, so it is __proto__ that is refused.
+        expect(read(text, agent).state).toBe('card');
+    });
+
     it('nests three levels deep, and refuses a cell that is a list', () => {
         expect(depthOf(list())).toBe(3);
         expect(failure(inAgent(list({ rows: [[['Ann'], 'ann@example.com', '']] })))).toBe(schema('own_list'));

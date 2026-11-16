@@ -152,6 +152,7 @@ import campaignGetOwnList from '../../../docs/api/fixtures/campaign.get/own-list
 import campaignGetOwnListRunning from '../../../docs/api/fixtures/campaign.get/own-list-running.json';
 import campaignGetOwnListAutomatic from '../../../docs/api/fixtures/campaign.get/own-list-automatic.json';
 import campaignGetOwnListArchived from '../../../docs/api/fixtures/campaign.get/own-list-archived.json';
+import campaignGetOwnListPaused from '../../../docs/api/fixtures/campaign.get/own-list-paused.json';
 import campaignGetArchived from '../../../docs/api/fixtures/campaign.get/archived.json';
 import campaignGetDetails from '../../../docs/api/fixtures/campaign.get/details.json';
 import campaignGetGone from '../../../docs/api/fixtures/campaign.get/gone.json';
@@ -781,7 +782,7 @@ export const fixtures = {
         ErrorEnvelope
     >,
     // The list a person gave in an agent's chat, one story: the agent read as a draft, the list added and added again,
-    // the agent started, its send mode for people who have not replied set to automatic, then archived.
+    // the agent started, its send mode for people who have not replied set to automatic, paused, then archived.
     'campaign.add_contacts/own-list': campaignAddContactsOwnList satisfies Exchange<ListAddRequest, AddContactsResult>,
     'campaign.add_contacts/own-list-again': campaignAddContactsOwnListAgain satisfies Exchange<
         ListAddRequest,
@@ -798,6 +799,7 @@ export const fixtures = {
         Campaign
     >,
     'campaign.get/own-list-archived': campaignGetOwnListArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/own-list-paused': campaignGetOwnListPaused satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/archived': campaignGetArchived satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/details': campaignGetDetails satisfies Exchange<{ campaign_id: string }, Campaign>,
     'campaign.get/gone': campaignGetGone satisfies Exchange<{ campaign_id: string }, ErrorEnvelope>,

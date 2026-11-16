@@ -537,7 +537,7 @@ export type AddContactsResult = {
         /** Whether the runtime made the person, rather than finding one it held; absent from an earlier runtime. */
         contact_created?: boolean;
         state: string | null;
-        error: { code: string; message: string } | null;
+        error: { code: string; message: string; details?: { field: string; code: string; message: string }[] } | null;
     }[];
 };
 // The person panel: what it reads and what its acts send, as the runtime takes and answers them.

@@ -564,13 +564,16 @@ skip it; if a card is not shown, tell the agent, and it sends fewer rows. A list
 terminal with `jason campaign add-contacts --file`.
 
 The card compares the rows' email addresses with what you wrote in this chat, without regard to case, and says how many
-of them are there; each row whose address is not is shown, unfolded. When none is, it says so: rows the agent read
-from a file cannot be compared with it. The comparison holds nothing back.
+of them are there, each found only where it stands whole, not inside a longer address; each row whose address is not
+is shown, unfolded. An answer you sent by clicking one of the agent's choices is not counted, since its words are the
+agent's. When none is there, it says so: rows the agent read from a file cannot be compared with it. A list matched by
+LinkedIn profile with no address column is not compared. The comparison holds nothing back.
 
 Under **On record now** the card reads the agent from the runtime: whether it is a draft, paused or running, and for a
 running agent what its send mode for people who have not replied yet means for the people you add, in one sentence:
 under **Every message waits for you**, each message to them waits for your approval; under automatic sending, a message
-the agent writes to them can go without asking you once Jason's own review of it passes. The card adds nothing by
+the agent writes to them can go without asking you once Jason's own review of it passes. A draft or paused agent under
+automatic sending says the same of when it runs. The card adds nothing by
 itself. **Add to this agent** sends every row once, matched by email address (or by LinkedIn profile), with the reason
 "From a list given in the chat.", and the card then shows the runtime's answer row by row: added as a new person, added
 as the person Jason already held, already in this agent, taken out of this agent before and not added back, or not
