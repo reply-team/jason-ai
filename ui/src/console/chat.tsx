@@ -832,7 +832,8 @@ export function ChatNotes({ chat }: { chat: Chat }) {
  */
 function AgentInBar({ campaignId }: { campaignId: string }) {
     const campaign = campaigns.value.find((each) => each.id === campaignId);
-    if (!campaign) return null;
+    // An archived campaign is over: it has no move, and its chat says nothing of a state.
+    if (!campaign || campaign.status === 'archived') return null;
     const { state, tone } = toCampaignRow(campaign, undefined);
     return (
         <div className="chat-agent" role="group" aria-label="This agent">

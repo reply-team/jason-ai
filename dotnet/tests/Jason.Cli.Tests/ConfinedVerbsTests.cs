@@ -213,6 +213,8 @@ public class ConfinedVerbsTests
     [InlineData("--actor", "human:x", "Preference", "Unset", "send_mode.warm")]
     [InlineData("--actor", "human:x", "campaign", "Set-Send-Mode", "cmp_A", "--cold", "automatic")]
     [InlineData("--actor", "human:x", "Approval", "approve", "apr_A")]
+    [InlineData("Campaign", "Start", "cmp_A")]
+    [InlineData("campaign", "START", "cmp_A")]
     public async Task A_table_verb_in_another_letter_case_is_a_usage_error_and_nothing_is_sent(params string[] args)
     {
         foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string>() })

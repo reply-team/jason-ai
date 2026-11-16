@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { readFence } from '../src/chat-deny.ts';
 import { readLiteral, type HeldReason, type LiteralContext } from '../src/chat-literal.ts';
 import { powerShellRunsInFullAccess } from '../src/chat-modes.ts';
-import { fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
+import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatScope, type Platform } from '../src/chat-permission-model.ts';
 import { realPathOf } from '../src/chat-real-path.ts';
 
 const fence = readFence(join(import.meta.dirname, '..'));
@@ -253,6 +253,16 @@ test('starting a campaign is refused in Full access as in Ask first, in every fo
     assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign start cmp_1' }, scope).outcome, 'refused');
     for (const command of ['jason campaign pause cmp_1', 'jason campaign archive cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
         assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
+test('starting a campaign is refused in Ask first, Auto-edit and Full access in the forms that hide its verb', () => {
+    for (const command of ['jason --actor human:x campaign start cmp_1', 'jason campaign \\\n  start cmp_1', 'env X=1 jason campaign start cmp_1',
+        'python3 -c "import subprocess; subprocess.run([\'jason\', \'campaign\', \'start\', \'cmp_1\'])"',
+        'jason campaign start cmp_1 || true']) {
+        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+        assert.equal(autoEditJudgement('Bash', { command }, scope).verdict, 'deny', `Auto-edit: ${command}`);
+        assert.equal(fullAccessJudgement('Bash', { command }, scope).outcome, 'refused', `Full access: ${command}`);
     }
 });
 

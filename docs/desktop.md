@@ -616,7 +616,7 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   starting is what lets its queued work run, so you press Start or Resume at the top of the agent's chat or on its
   page. Pausing an agent,
   archiving one, adding someone to the do-not-contact register, cancelling work and recording a verdict on a reply
-  stay the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused
+  are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused
   too. Also refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
