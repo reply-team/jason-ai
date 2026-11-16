@@ -359,9 +359,14 @@ export async function loadResults(api: Api, id: string, period: Period, now: Dat
             ...archivedLeftOut,
         });
     let core: { now: CampaignSummaryRow; counts: CampaignActivityRow } | null = null;
-    let interested: Read<number> = { state: 'pending' };
-    let series: Read<{ contacted: ActivityBucket[]; replied: ActivityBucket[]; readAt: Date }> = { state: 'pending' };
-    let review: Read<Review> = { state: 'pending' };
+    // A refresh of what is drawn keeps it until the new answer lands: the optional reads start from the last ones of the
+    // same campaign and period, and are written over one by one. Another campaign or period starts from none.
+    const drawn = results.value && results.value.id === id && results.value.period === period ? results.value : null;
+    let interested: Read<number> = drawn?.interested ?? { state: 'pending' };
+    let series: Read<{ contacted: ActivityBucket[]; replied: ActivityBucket[]; readAt: Date }> = drawn?.series ?? {
+        state: 'pending',
+    };
+    let review: Read<Review> = drawn?.review ?? { state: 'pending' };
     const publish = () => {
         if (mine === resulting && core) results.value = { id, period, ...core, interested, series, review };
     };

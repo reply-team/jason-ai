@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import * as store from './store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -814,18 +815,28 @@ describe('The campaign panel in Live', () => {
             .answer('decision.list', 'decision.list/by-campaign-pending')
             .answer('journal.list', 'journal.list/by-campaign', 'journal.list/by-campaign-changes');
 
-    it('draws People, Inbox and Settings, and Sequence and Results only in the demo', async () => {
+    it('draws People, Inbox, Results and Settings, and Sequence only in the demo', async () => {
         consoleShell.loaded = true;
         open(api(), spring);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
     });
 
     it('still opens a tab it does not draw at the address that names it', async () => {
         consoleShell.loaded = true;
         open(api(), { ...table, id: 'cmp_1', tab: 'sequence' });
         expect(await screen.findByText('Waiting for you')).toBeTruthy();
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
     });
 
     it('draws every tab in the classic shell, which is not the console, and opens a bare agent address on Sequence', async () => {
@@ -1090,6 +1101,9 @@ describe('A campaign’s Inbox', () => {
 });
 
 describe('A campaign’s Results', () => {
+    // What the last test drew is not this test's: the tab starts from nothing, as a campaign just opened does.
+    beforeEach(() => store.close());
+
     /** The figures as the page shows them: each tile's name and its number. */
     async function figures(): Promise<string[]> {
         const group = await screen.findByRole('group', { name: 'The agent’s results' });
@@ -1304,6 +1318,31 @@ describe('A campaign’s Results', () => {
         expect(await screen.findByText('Jason last reviewed this agent 30 min ago')).toBeTruthy();
         expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
         expect(await screen.findByRole('group', { name: /^Contacted per day/ })).toBeTruthy();
+    });
+
+    it('a refresh of the same period keeps what is drawn until the new answers land', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+        await screen.findByText('Jason last reviewed this agent 30 min ago');
+        await screen.findByRole('group', { name: /^Contacted per day/ });
+
+        const releases = [
+            api.hold('reply.count'),
+            api.hold('campaign.activity_by_period'),
+            api.hold('workitem.list', (body) => (body as { role?: string }).role === 'manager'),
+        ];
+        await act(async () => {
+            await Promise.race([store.loadResults(api, 'cmp_1', '7d', new Date(), 'UTC'), Promise.resolve()]);
+        });
+
+        // The answers are on their way: the interested count, the review and the bars are still the last ones drawn.
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+        expect(screen.getByText('Jason last reviewed this agent 30 min ago')).toBeTruthy();
+        const contacted = screen.getByRole('group', { name: /^Contacted per day/ });
+        expect(within(contacted).getAllByRole('img')).toHaveLength(7);
+        for (const release of releases) release();
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
     });
 
     it('another period sends the period’s reads again with its own window and bars, and People stays now', async () => {

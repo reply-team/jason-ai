@@ -176,6 +176,7 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
                 ['Chat', 'true'],
                 ['People 22', 'false'],
                 ['Inbox', 'false'],
+                ['Results', 'false'],
                 ['Settings', 'false'],
             ]),
         );
@@ -772,7 +773,7 @@ describe('What the header says of the agent', () => {
         });
         await waitFor(() => expect(within(header).getByText('Archived')).toBeTruthy(), { timeout: 3000 });
         expect(within(header).queryByRole('button', { name: /Start|Pause|Resume/ })).toBeNull();
-        expect(tabsOf(header).map(([name]) => name)).toEqual(['Chat', 'People 22', 'Inbox', 'Settings']);
+        expect(tabsOf(header).map(([name]) => name)).toEqual(['Chat', 'People 22', 'Inbox', 'Results', 'Settings']);
     });
 
     it('says an archived agent is archived, offers no Start, and keeps its tabs readable', async () => {
@@ -785,6 +786,7 @@ describe('What the header says of the agent', () => {
                 ['Chat', 'false'],
                 ['People 0', 'false'],
                 ['Inbox', 'false'],
+                ['Results', 'false'],
                 ['Settings', 'true'],
             ]),
         );
@@ -802,7 +804,9 @@ describe('An agent in a tab with no desktop', () => {
         await renderAt('none', '#/campaigns/cmp_1');
         const header = await headOf('Spring');
         await pageShown();
-        await waitFor(() => expect(tabsOf(header).map(([name]) => name)).toEqual(['People 22', 'Inbox', 'Settings']));
+        await waitFor(() =>
+            expect(tabsOf(header).map(([name]) => name)).toEqual(['People 22', 'Inbox', 'Results', 'Settings']),
+        );
         expect(tab(/^People/).getAttribute('aria-selected')).toBe('true');
         expect(within(header).queryByRole('button', { name: "More for this agent's conversation" })).toBeNull();
         flush(() => {
