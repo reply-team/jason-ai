@@ -269,6 +269,12 @@
     padding: 22px 28px 28px;
 }
 
+/* An inbox with no reply: its one sentence in the top centre of the room, about 60 pixels under the tabs. */
+.jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .campaign-tabs-inbox > .inbox-none {
+    padding: 60px 24px 0;
+    text-align: center;
+}
+
 /* The agent's own Settings: each part a card, a fact a row of its card, a send mode a setting row. */
 .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .facts,
 .jc-console .harness .main.campaigns:not(.single) > .panel[data-panel='agent'] > .panel-body > .section {

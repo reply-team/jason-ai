@@ -81,6 +81,9 @@ describe('a composer’s menus, as a select was', () => {
         // Each item's line, what it does, is its description.
         const said = document.getElementById(items[1]!.getAttribute('aria-describedby')!);
         expect(said?.textContent).toBe('Reads and proposes, and changes nothing.');
+        // Each mode carries its own mark at the left, as the button does, and the marks differ.
+        const marks = items.map((each) => each.querySelector('.accmark svg')?.getAttribute('class'));
+        expect(marks).toEqual(['glyph-accAsk', 'glyph-accPlan', 'glyph-accEdit', 'glyph-accFull']);
     });
 
     it('opens from the keyboard on the item chosen, and the arrows, Home and End move through the items, round', async () => {

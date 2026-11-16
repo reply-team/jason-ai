@@ -200,7 +200,18 @@ describe('a plan the AI proposes', () => {
         ])
             expect(within(part).getByText(label)).toBeTruthy();
         expect(within(part).getByText('Email, LinkedIn')).toBeTruthy();
-        expect(words(part)).toContain('Three days after · LinkedIn');
+        expect(words(part)).toContain('Three days after LinkedIn');
+        // A step's channel is a tag of its own, one colour a channel, drawn from the AI's own channel code.
+        const tags = [...part.querySelectorAll('.proposal-chan')];
+        expect(tags.map((each) => [each.getAttribute('data-channel'), each.textContent])).toContainEqual([
+            'linkedin',
+            'LinkedIn',
+        ]);
+        // What the person does by hand is one box, its heading inside it.
+        const manual = part.querySelector('.proposal-manual');
+        expect(manual?.textContent).toContain('You do by hand');
+        expect(manual?.textContent).toContain('Call the 7 who open twice');
+        expect(manual?.textContent).not.toContain('How it adapts');
         expect(part.querySelector('strong, em, h1, h2, h3, code, a, pre, li > ul')).toBeNull();
         // The words before the block stay, with the speaker's name over them; the block's JSON is nowhere.
         expect(within(pane).getByText('Here is my proposal.')).toBeTruthy();

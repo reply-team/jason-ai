@@ -49,6 +49,8 @@ const icons = {
             cy="17"
             r="2"
         />`,
+    mail: html`<rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" />`,
+    linkedin: html`<path d="M6 10v9M6 6v.01M11 19v-9M11 14a4 4 0 018 0v5" />`,
     check: html`<path d="M5 12l5 5 9-10" />`,
     chev: html`<path d="M6 9l6 6 6-6" />`,
     more: html`<circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" />`,

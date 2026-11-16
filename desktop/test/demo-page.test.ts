@@ -89,8 +89,8 @@ test('the content policy allows the page’s inline script and style and its dat
         demoPolicy,
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox allow-scripts",
     );
-    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and storage is refused;
-    // no forms.
+    // The page's own frame: scripts, and nothing more. No same origin, so its origin is opaque and it sets no cookie;
+    // what it stores stays in the view's in-memory session. No forms.
     assert.ok(!/allow-same-origin|allow-forms/.test(demoPolicy));
     // No source names an address, a scheme to fetch from, 'self' or eval.
     assert.ok(!/https?:|wss?:|blob:|'self'|unsafe-eval|\*/.test(demoPolicy));
@@ -721,7 +721,20 @@ test('every request from the page’s view to an address the page holds, or to a
         const rest = entry.text.slice(entry.text.indexOf('://') + 3);
         for (const scheme of ['http', 'https', 'ws', 'wss']) urls.push(`${scheme}://${rest === '' ? 'localhost' : rest}/x`);
     }
-    urls.push('http://127.0.0.1:5000/v1/system.info', 'file:///C:/Users/someone/.jason/config/settings.json', 'ftp://example.com/', 'jason-switch://switch/live');
+    urls.push(
+        'http://127.0.0.1:5000/v1/system.info',
+        'file:///C:/Users/someone/.jason/config/settings.json',
+        'ftp://example.com/',
+        'jason-switch://switch/live',
+        // A blob of the page's own opaque origin, the page's own scheme at another file, with a query and at another
+        // host, a scheme of nobody's, and Chromium's own pages.
+        'blob:null/0f0e0d0c-0b0a-0908-0706-050403020100',
+        'jason-demo://page/other.html',
+        'jason-demo://page/index.html?x',
+        'jason-demo://other/index.html',
+        'x-custom://host/',
+        'chrome://gpu',
+    );
     for (const url of urls) {
         assert.equal(requestAllowed(demoPage, url), false, url);
         assert.equal(verdict(url), true, url);
@@ -753,6 +766,8 @@ test('the page’s strip, as the desktop’s sheet names it, is still in the pag
     assert.ok(page.includes('@media (width<=1100px){.jc-console .mb-long{display:none}.jc-console .mb-short{display:inline}}'));
     assert.ok(page.includes('<span class="mb-long">${long}</span><span class="mb-short">${short}</span>'));
     assert.ok(page.includes('.jc-console #mode-bar>span{text-overflow:ellipsis;overflow:hidden}'), 'a sentence that does not fit ends in an ellipsis of the page’s own');
+    // The two sentences whose ends the numbers are measured from, as the page states them.
+    assert.ok(page.includes("say('an example of what you can build on Jason. The data is samples, and nothing is sent.','an example of what you can build. Nothing is sent.')"));
 });
 
 test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
@@ -763,9 +778,12 @@ test('on Windows the sheets are the desktop’s: the strip inset by the caption 
     assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
     assert.ok(sheets.page.includes(`@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`));
     assert.ok(sheets.switch.includes('body { container: jason-switch / inline-size !important; }'));
+    // The switch's widths are measured in Segoe UI, so on Windows its words are drawn in that font by name, not by
+    // whatever the system's font is.
+    assert.ok(sheets.switch.startsWith('.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } '));
     assert.ok(sheets.switch.includes(`@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${demoStrip.ours.segment.tight}px !important; padding-right: ${demoStrip.ours.segment.tight}px !important; } }`));
     // Only the segments' inner padding changes: the words, the height and the rest of the switch stay.
-    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.replace('container', '')));
+    assert.ok(!/font|height|line-height|content:/.test(sheets.switch.slice(sheets.switch.indexOf('@container'))));
     assert.equal(demoStrip.ours.segment.normal, 12);
     assert.ok(/\.switch a, \.switch span \{[^}]*padding: 2px 12px;/.test(readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8').replace(/\s+/g, ' ')));
 });

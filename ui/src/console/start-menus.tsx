@@ -267,6 +267,7 @@ function Item({
     small,
     className = 'mi',
     command = false,
+    mark,
     onChoose,
 }: {
     label: string;
@@ -279,12 +280,14 @@ function Item({
     className?: string;
     /** A command, not one of the choices: a menu item with nothing to check. */
     command?: boolean;
+    /** A mark drawn at the item's left, as the access menu draws each mode's own. */
+    mark?: DesktopChatMode;
     onChoose: () => void;
 }) {
     const said = useId();
     return (
         <button
-            className={`${className}${checked ? ' on' : ''}`}
+            className={`${className}${checked ? ' on' : ''}${mark ? ' marked' : ''}`}
             type="button"
             role={command ? 'menuitem' : 'menuitemradio'}
             tabIndex={-1}
@@ -298,6 +301,11 @@ function Item({
                 if (!disabled) onChoose();
             }}
         >
+            {mark ? (
+                <span className="accmark">
+                    <ModeMark mode={mark} />
+                </span>
+            ) : null}
             <b>{label}</b>
             {small ? <small id={said}>{small}</small> : null}
             {checked ? (
@@ -358,6 +366,7 @@ export function AccessButton({
                             <Item
                                 key={each.mode}
                                 className="accmi"
+                                mark={each.mode}
                                 kind="mode"
                                 label={each.label}
                                 value={each.mode}

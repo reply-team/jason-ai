@@ -24,6 +24,36 @@ const names: Record<SettingsSection, () => string> = {
     runtime: () => 'Runtime',
 };
 
+// Each section's mark in the list at the left, on the console's 24-unit grid, stroked in the current colour.
+const marks: Record<SettingsSection, string[]> = {
+    appearance: ['M12 3a9 9 0 100 18 9 9 0 000-18z', 'M12 3a9 9 0 010 18z'],
+    voice: ['M4 5h16v11H9l-5 4z'],
+    modes: ['M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z'],
+    models: ['M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0zM12 18v4'],
+    runtime: ['M3 12h4l3-8 4 16 3-8h4'],
+};
+
+function SectionMark({ name }: { name: SettingsSection }) {
+    return (
+        <svg
+            className="settings-mark"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            {marks[name].map((each) => (
+                <path key={each} d={each} />
+            ))}
+        </svg>
+    );
+}
+
 type Held = { id: string; text: string };
 let alertIds = 0;
 
@@ -86,6 +116,7 @@ export function SettingsScreen() {
             <h1>{t('settings.title')}</h1>
             {essentials() && (
                 <nav className="settings-list" aria-label={t('settings.title')}>
+                    <p className="settings-group">{t('settings.group')}</p>
                     {listed.map((name) => (
                         <button
                             key={name}
@@ -98,6 +129,7 @@ export function SettingsScreen() {
                                 chosenSection.value = name;
                             }}
                         >
+                            <SectionMark name={name} />
                             {names[name]()}
                         </button>
                     ))}

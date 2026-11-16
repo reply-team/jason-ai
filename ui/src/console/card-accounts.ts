@@ -5,6 +5,7 @@ import { act, define } from './actions';
 import { cardAt, cardHead, drawn, frame, type Said, saidOf, saidView, startRead } from './card-frame';
 import type { Chat } from './chat-model';
 import { html, type Html } from './html';
+import { svg } from './icons';
 import { here, inTab } from './state';
 
 // The accounts card the chat's AI asks for. It holds no member, so nothing on it is the AI's: what it shows is read by
@@ -73,12 +74,24 @@ const channelOf = (channel: string): string =>
 
 const accountsWord = (n: number): string => (n === 0 ? 'No accounts' : n === 1 ? '1 account' : `${n} accounts`);
 
+/** The statuses Reply gives an account that mean it can be used; any other word is shown as given, with no tone. */
+const readyStatus: ReadonlySet<string> = new Set(['connected', 'enabled']);
+
 function accountRow(account: DesktopReplyAccount): Html {
+    const glyph = account.channel === 'email' ? 'mail' : account.channel === 'linkedin' ? 'linkedin' : null;
     return html`<tr>
-        <td>${account.address}</td>
-        <td>${account.name}</td>
-        <td>${channelOf(account.channel)}</td>
-        <td class="mono">${account.status === '' ? 'none given' : account.status}</td>
+        <td>
+            ${account.name === '' ? null : html`<div class="acct-name">${account.name}</div>`}
+            <div class="${account.name === '' ? 'acct-name' : 'acct-sub'}">${account.address}</div>
+        </td>
+        <td>
+            <span class="acct-chan">${glyph === null ? null : svg(glyph, 14)}${channelOf(account.channel)}</span>
+        </td>
+        <td>
+            <span class="acct-chip ${readyStatus.has(account.status) ? 'ready' : ''}"
+                >${account.status === '' ? 'none given' : account.status}</span
+            >
+        </td>
     </tr>`;
 }
 
@@ -115,8 +128,7 @@ function replyFacts(part: Part<DesktopReply>): Html {
                 : html`<table class="card-tbl">
                       <thead>
                           <tr>
-                              <th>Address</th>
-                              <th>Name at Reply</th>
+                              <th>Account at Reply</th>
                               <th>Channel</th>
                               <th>Status at Reply</th>
                           </tr>

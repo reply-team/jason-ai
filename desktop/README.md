@@ -583,9 +583,9 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   Demo start, before ready.
 - The switch's view lies over the page's top strip on the page's own numbers (`demoLayout`): right of its 284-pixel
   sidebar to the window's right edge, 38 high, the window's drag region but for the switch. The view and its page are
-  transparent, so the page's own dot and sentence show through, and the page draws the switch alone at the strip's right
-  end, which the page leaves free for one, on the strip's colour. It is laid out
-  again at each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
+  transparent, so the page's own dot and sentence show through, and our page (`shell/demo-switch.html`) draws the switch
+  alone at the strip's right end, which the page leaves free for one, on the strip's colour. It is laid out again at
+  each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
   Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
   pixels) and both views start below that band, which they leave to the window's own contents: our band
   (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
