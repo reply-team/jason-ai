@@ -137,6 +137,15 @@ describe('Settings in two panes', () => {
         ).toEqual(['appearance', 'voice', 'modes', 'models', 'runtime']);
     });
 
+    it('names the list with a group label and gives each entry its own mark', async () => {
+        await openConsoleSettings();
+        expect(document.querySelector('.settings-list > .settings-group')?.textContent).toBe('Jason');
+        const buttons = list().getAllByRole('button');
+        expect(buttons.map((each) => each.querySelectorAll('svg.settings-mark').length)).toEqual([1, 1, 1, 1, 1]);
+        const shapes = buttons.map((each) => each.querySelector('svg.settings-mark')!.innerHTML);
+        expect(new Set(shapes).size).toBe(5);
+    });
+
     it('chooses a section by its button, and the choice follows with aria-current', async () => {
         await openConsoleSettings();
         fireEvent.click(list().getByRole('button', { name: 'Models' }));

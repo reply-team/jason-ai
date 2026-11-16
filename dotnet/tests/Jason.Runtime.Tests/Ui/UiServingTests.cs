@@ -195,7 +195,7 @@ public class UiServingTests
     public const string SealedCsp =
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; "
         + "connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
-        + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms";
+        + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts";
 
     /// <summary>The headers the transport adds, beside those that say how the content may act.</summary>
     private static readonly string[] Transport = ["Date", "Server", "Content-Type", "Content-Length", "Last-Modified", "Accept-Ranges", "ETag", "Transfer-Encoding"];

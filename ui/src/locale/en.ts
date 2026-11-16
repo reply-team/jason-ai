@@ -22,6 +22,7 @@ export const en = {
     'attention.filter.noneDecided': 'No approval has been decided yet.',
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
+    'settings.group': 'Jason',
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
     'settings.theme.system': 'Same as the system',
@@ -95,6 +96,10 @@ export const en = {
     'mode.switch': 'Data',
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',
+    'demo.show': 'Shows the demo in this tab only. Your installation is unchanged.',
+    'demo.live':
+        'Back to your installation. The demo was shown in this tab only, and nothing of your installation changed.',
+    'demo.missing': 'This build of the UI carries no demo.',
     'place.elsewhere': "Done in Jason Desktop's own window.",
     'place.needs': 'This needs Jason Desktop.',
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',

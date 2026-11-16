@@ -1,0 +1,20 @@
+# The addresses index.html holds, each exact string with how many times it stands there, and why it is inert in the
+# page. Read by the desktop's tests (test/demo-page.test.ts) and the UI's guards alike; a scan of the page finds every
+# text the pattern below matches and holds the page to this list exactly: a string not listed, or a count that is not
+# the one written here, fails. A new build of the page that brings an address, or loses one, changes this file and
+# says why.
+#
+# What keeps an address inert is not this list but where the page is shown: a view or a frame whose every request to
+# any address is refused. The list says what the page holds; those refusals are tested where the page is shown.
+#
+# Lines: `pattern<TAB><regular expression>` once, then `<count><TAB><exact string><TAB><why>`. A line starting with `#`
+# is a comment.
+
+pattern	[A-Za-z][A-Za-z0-9+.-]*://[A-Za-z0-9.-]*
+2	http://www.w3.org	The SVG namespace of two inline images (an xmlns attribute): a name, never fetched.
+2	https://www.linkedin.com	A sample person's profile address, composed and shown as text; no link or button opens it.
+1	https://api.deepseek.com	A sample model provider's base address, shown as the value of a sample setting.
+1	https://api.telegram.org	Inside a sample plugin's source, shown as code text in the page.
+1	https://example.com	The placeholder of a server address field, at the reserved example domain.
+1	https://llm.example.com	The placeholder of a base address field, at the reserved example domain.
+1	https://	The placeholder of a documentation link field, `https://…`, with no host.

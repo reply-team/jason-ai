@@ -59,7 +59,7 @@ could serve only the UI itself, which would run it with its own rights, so `jaso
 there and the runtime answers a 404 for one. Every answer to a GET under `/ui/sealed/`, a missing file's included,
 carries this policy instead of the one above:
 
-`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts`
 
 with a `Permissions-Policy` that denies each feature it names to every origin, the file's own included:
 
@@ -72,7 +72,7 @@ another origin, is answered before the files are looked at, with no file in it. 
 with a sandbox the policy sets is not established, so it is left out rather than relied on.
 
 What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
-It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+It loads nothing from any address, connects to no address, submits no form and opens no frame, worker or plugin. Only
 a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
 in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
 included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads
@@ -86,6 +86,32 @@ frame, it can move its own tab to another address. None of these reaches the ins
 The build's own layout is trusted, and so is whoever can write under `<data>/ui/`, who could replace the UI itself: a
 link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
 asks for it.
+
+### The demo in a browser tab
+
+The release's build carries one page there, `sealed/demo.html`: the demo page Jason Desktop shows in Demo, the same file
+byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
+it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
+switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
+other address brings the console back, where it was. Nothing is kept and nothing is asked: the runtime is not told, the
+desktop is not asked and its mode is not changed, and your installation is as it was. A reload at `#/demo` shows the page
+again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
+the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
+
+The page is shown in a frame that keeps scripts alone, `sandbox="allow-scripts"`, with no feature delegated (`allow=""`)
+and no referrer: never the same origin, so it holds nothing of the runtime's address, the UI's token included; no form,
+pop-up, download, dialog or move of the tab. Its words in the strip are the page's own; its numbers and states are samples
+the page carries, never the runtime's. Narrower than the desktop's window ever shows the page, 900 pixels, the page keeps
+that width and scrolls sideways, and the switch stands in a strip of its own above it.
+
+The addresses the page holds are counted in [`desktop/demo/addresses.txt`](../desktop/demo/addresses.txt), each with why
+it is inert there; the UI's guards and the desktop's tests hold the page to that list exactly. What keeps them inert is
+the content policy the page is served under, which in a frame is the one thing between its script and the network: a
+hostile page put where the demo page stands aims every way out it can name (a fetch, an image, a WebSocket, a form, a
+pop-up, the tab's address, the frame's own move) at a server on the loopback that answers anything, and at a file the UI
+serves, and the server must hear nothing and the file must not be reached; it reads nothing of the console's storage or
+of the page above it either (the sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium,
+Firefox and WebKit, and nowhere else.
 
 ## Paired browsers
 
@@ -488,14 +514,15 @@ follows it.
 Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
 while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
 is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
-Demo | Live switch, the account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's
-own window."; the desktop's window stays the only place that approves
+account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
+Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
+only place that approves
 ([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, shows the same console
 with everything that reads the runtime, and where the chat would be it says that the chat with the AI is part of Jason
 Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, links to the releases page
 where the desktop is downloaded, and says that everything here also works from a session with your AI in a terminal, with
-the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop." The
-runtime starts no AI and no process for a screen, in either case.
+the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop.", and its
+Demo | Live switch shows the demo in that tab alone. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 

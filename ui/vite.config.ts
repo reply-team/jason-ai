@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import babel from '@rolldown/plugin-babel';
 // @ts-expect-error The package's "types" entry names a file it does not ship.
 import signalsTransform from '@preact/signals-react-transform';
-import { buildManifest, buildNotices } from './scripts/package-lib.mjs';
+import { buildManifest, buildNotices, buildSealedPage } from './scripts/package-lib.mjs';
 import { API_VERSION } from './src/api/version';
 import { scopePlugin } from './src/console/scope';
 
@@ -16,6 +16,8 @@ export default defineConfig({
         // that read `.value` themselves, so one that reads a signal through a helper re-renders as it did under Preact.
         babel({ plugins: [[signalsTransform, { mode: 'all' }]] }),
         buildManifest({ version: process.env.JASON_VERSION ?? '0.0.0-local', apiVersion: API_VERSION }),
+        // The demo page the desktop shows, carried as it is under sealed/, before the notices name what it carries.
+        buildSealedPage(),
         buildNotices(),
     ],
     // The screen tests import the two published prompt texts under docs/prompts as raw text (`?raw`). That folder is

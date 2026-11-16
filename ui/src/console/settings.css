@@ -310,6 +310,21 @@
     text-align: left;
     cursor: pointer;
 }
+.jc-console .harness .settings > .settings-list > .settings-group {
+    margin: 0;
+    padding: 4px 10px 6px;
+    color: var(--faint);
+    font-size: 12px;
+}
+.jc-console .harness .settings > .settings-list > button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.jc-console .harness .settings > .settings-list > button .settings-mark {
+    flex: none;
+    color: var(--mute);
+}
 .jc-console .harness .settings > .settings-list > button:hover {
     background: var(--hover);
 }

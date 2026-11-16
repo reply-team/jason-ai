@@ -1039,7 +1039,10 @@ describe('A campaign’s Inbox', () => {
             .answer('journal.list', 'journal.list/by-campaign-replies-none');
         open(api, { ...pilot, id: fixtures['campaign.get/inbox-quiet'].request.campaign_id });
 
-        expect(await screen.findByText('No reply to this agent has been observed yet.')).toBeTruthy();
+        const none = await screen.findByText('No reply to this agent has been observed yet.');
+        // Its one sentence is drawn as the centred empty state of the tab, and promises nothing about when.
+        expect(none.classList.contains('inbox-none')).toBe(true);
+        expect(none.textContent).not.toMatch(/minute|every/);
         expect(sent(api, 'journal.list')).toEqual([fixtures['journal.list/by-campaign-replies-none'].request]);
         expect(sent(api, 'route.resolve')).toEqual([]);
         expect(sent(api, 'contact.threads')).toEqual([]);

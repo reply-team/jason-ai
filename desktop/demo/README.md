@@ -1,42 +1,34 @@
 # The demo page
 
-`index.html` is the page the desktop shows in Demo: a mock of Jason at work on sample data, supplied as one static file,
-with its script, its styles and its fonts inline. It has nothing to do with the runtime: it reads no installation, asks
-no runtime anything and sends nothing, and the desktop shows it in a sealed view of its own, with our Demo | Live switch
-drawn over the place where the page draws one (`../src/demo-page.ts`, `../src/demo-window.ts`, and
-[the desktop's page](../../docs/desktop.md#the-demo)).
+`index.html` is the page the desktop shows in Demo: the console's Demo built for embedding, a mock of Jason at work on
+sample data, as one static file with its script, its styles and its font inline. It is a built page, received as it was
+built and committed as it is: nothing in it is edited by hand, and a new build replaces it whole. The file committed
+here has SHA-256 `9ed69bba8026d3d3a6a23bdf5b88428d9a91e51cb9b9512f687e580e8b0066c4`, which `../test/demo-page.test.ts`
+holds it to.
 
-## A new drop
+It has nothing to do with the runtime: it reads no installation, asks no runtime anything and sends nothing. It was
+built to be shown in a frame sandboxed to scripts alone, with no same origin: storage, the clipboard and downloads are
+optional to it, it opens no window and never navigates the window above it, and it keeps its own pages in memory. The
+desktop shows it in a sealed view of its own held to that same form by the desktop's own refusals, not by the page's
+promise, with our Demo | Live switch drawn over the right end of its top strip, which the page leaves free for one
+(`../src/demo-page.ts`, `../src/demo-window.ts`, and [the desktop's page](../../docs/desktop.md#the-demo)).
 
-A new version of the page replaces `index.html` whole. Nothing in it is edited by hand, with one exception: before it is
-committed, the repository's publication patterns are run over it (the patterns `RepositoryHygieneTests` and the
-`hygiene.yml` workflow hold every file to, and a reading for real people's names and handles, for real provider
-identifiers, and for links into private systems), and what they refuse is replaced by the smallest substitution that
-lets it pass. Every substitution is listed below; a new drop lists its own, replacing this list.
+## The addresses it holds
 
-The page as it is committed differs from the page as it was supplied by ten substitutions, each made wherever its text
-occurs: once each, but the last, which occurs twice. What was replaced is described here, not quoted, so this list does
-not publish it again:
-
-| Supplied | Committed | Why |
-| --- | --- | --- |
-| A real person's Telegram handle | `@your_handle` | No real person's account is published. |
-| The first of six campaign numbers in the provider's own form, `Reply #` and five digits | `Reply #demo-1` | A provider identifier that may be real is not published. |
-| The second | `Reply #demo-2` | The same. |
-| The third | `Reply #demo-3` | The same. |
-| The fourth | `Reply #demo-4` | The same. |
-| The fifth | `Reply #demo-5` | The same. |
-| The sixth | `Reply #demo-6` | The same. |
-| A link to the connector settings of an AI vendor's chat application | `https://example.com/settings/connectors` | The patterns refuse links into that vendor's application by its host. |
-| A LinkedIn profile path built from a common first and last name, the first of two | the same path with `-example` at its end | A path of a common name may well be a real person's account; the suffix makes it plainly invented. |
-| The second, which occurs twice | the same path with `-example` at its end | The same. |
-
-What the patterns met and left alone, being made up or public: the handles `@gtmtools`, `@dataops`, `@socialsell` and
-`@northwind_sales_bot`, addresses under `example.com`, the public names and hosts of the provider the page shows, and one campaign id in Jason's own form.
+The page holds a few texts in the shape of an address: sample values shown as text, placeholders of fields, a
+namespace. Each exact string, how many times it stands in the page and why it is inert there, is listed in
+[`addresses.txt`](addresses.txt), and the tests hold the page to that list exactly: an address not listed, or one more or
+one fewer of a listed one, fails. A new build of the page that brings or loses one updates the list and says why. What
+makes them inert is where the page is shown: every request from its view to any address is refused, which
+`../test/demo-page.test.ts` holds.
 
 ## What is packaged and what the page carries
 
-Only `index.html` goes into the application (`../electron-builder.config.mjs`, `files`); this README and the licence
-text stay in the repository. The page carries the Inter font (`@fontsource-variable/inter` 5.3.0, SIL Open Font
-License 1.1), whose licence text is `LICENSE-Inter.txt`; `../scripts/notices.mjs` names it in the desktop's
-`THIRD-PARTY-NOTICES`. A drop that carries anything more adds it to the list in that script and its licence text here.
+Only `index.html` goes into the application (`../electron-builder.config.mjs`, `files`); this README, the list and the
+licence text stay in the repository. The UI's build carries the same file, byte for byte, as `sealed/demo.html` in
+`jason-ui.zip`, where a browser tab shows it ([the UI's page](../../docs/ui.md#the-demo-in-a-browser-tab)); the UI's
+guards hold the copy to this file and the page to the list above. The page carries the Inter font
+(`@fontsource-variable/inter` 5.3.0, SIL Open Font License 1.1), whose licence text, as the page's build recorded it, is
+`LICENSE-Inter.txt`; `../scripts/notices.mjs` names it in the desktop's `THIRD-PARTY-NOTICES`, and the UI's build
+(`../../ui/scripts/package-lib.mjs`, `sealedCarries`) in its own. A build that carries anything more adds it to both
+lists, which a guard holds equal, and its licence text here.

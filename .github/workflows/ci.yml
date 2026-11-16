@@ -2050,13 +2050,14 @@ jobs:
           path: ui/artifacts/jason-ui.zip
           retention-days: 14
 
-      # The browser the smoke drives, kept between runs under the Playwright version the lockfile pins. Its system
-      # libraries are the runner's, not the cache's: they are installed either way.
+      # The browsers the smoke drives, kept between runs under the Playwright version the lockfile pins: Chromium for every
+      # spec, and Firefox and WebKit for the sealed probe alone. The key names the engines, so a cache holding fewer is
+      # never taken for this one. Their system libraries are the runner's, not the cache's: they are installed either way.
       - uses: actions/cache@v6
         id: browser
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+          key: playwright-chromium-firefox-webkit-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
 
       # The system packages the browser asks for come from the Ubuntu package servers, whose names the hosted runners
       # could not resolve for hours on 2026-11-11; what they install is fonts, the browser's own libraries being on the
@@ -2066,23 +2067,26 @@ jobs:
         if: steps.browser.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          if ! npx playwright install --with-deps chromium; then
+          if ! npx playwright install --with-deps chromium firefox webkit; then
             echo "::warning title=Browser's system packages::The system packages the browser asks for could not be installed; the browser smoke decides."
-            npx playwright install chromium
+            npx playwright install chromium firefox webkit
           fi
 
       - name: Browser's system libraries
         if: steps.browser.outputs.cache-hit == 'true'
         shell: bash
         run: |
-          if ! npx playwright install-deps chromium; then
+          if ! npx playwright install-deps chromium firefox webkit; then
             echo "::warning title=Browser's system packages::The system packages the browser asks for could not be installed; the browser smoke decides."
-            npx playwright install chromium
+            npx playwright install chromium firefox webkit
           fi
 
+      # With the sealed probe: a hostile page in the console's frame tries every way out, in each of the three engines
+      # (ui/playwright.config.ts). It runs here and nowhere else.
       - name: Browser smoke
         env:
           JASON_EXE: ${{ github.workspace }}/dotnet/src/Jason.App/bin/Release/net10.0/jason
+          JASON_SEALED_PROBE: '1'
         run: npm run e2e
 
   # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the

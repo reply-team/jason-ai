@@ -316,13 +316,14 @@ const row = (label: string, value: string | undefined): Html | null =>
           </div>`;
 
 /** A list of the AI's lines under the desktop's heading for it; nothing for none. */
-const lines = (heading: string, values: readonly string[] | undefined): Html | null =>
-    values === undefined || values.length === 0
-        ? null
-        : html`<div class="proposal-lab">${heading}</div>
-              <ul class="proposal-lines">
-                  ${values.map((value) => html`<li>${value}</li>`)}
-              </ul>`;
+const lines = (heading: string, values: readonly string[] | undefined, box?: string): Html | null => {
+    if (values === undefined || values.length === 0) return null;
+    const list = html`<div class="proposal-lab">${heading}</div>
+        <ul class="proposal-lines">
+            ${values.map((value) => html`<li>${value}</li>`)}
+        </ul>`;
+    return box === undefined ? list : html`<div class="${box}">${list}</div>`;
+};
 
 /** Part 1: the AI's proposal, every word of it its own, each draft one press from the screen and opened in place. */
 function proposalPart(chatId: string, index: number, card: PlanCard, open: readonly number[]): Html {
@@ -341,12 +342,16 @@ function proposalPart(chatId: string, index: number, card: PlanCard, open: reado
                       <ol class="proposal-steps">
                           ${steps.map((step, at) => {
                               const opened = open.includes(at);
-                              const head = [step.when, channelWords(step.channel)].filter(
-                                  (each): each is string => each !== undefined,
-                              );
                               return html`<li>
                                   <div class="proposal-step">
-                                      <span>${head.join(' · ')}</span>
+                                      ${step.when === undefined ? null : html`<span>${step.when}</span>`}
+                                      ${
+                                          step.channel === undefined
+                                              ? null
+                                              : html`<span class="proposal-chan" data-channel="${step.channel}"
+                                                    >${channelWords(step.channel)}</span
+                                                >`
+                                      }
                                       ${step.subject === undefined ? null : html`<span class="proposal-subject">${step.subject}</span>`}
                                   </div>
                                   ${
@@ -373,7 +378,7 @@ function proposalPart(chatId: string, index: number, card: PlanCard, open: reado
                           })}
                       </ol>`
         }
-        ${lines('How it adapts', card.rules)} ${lines('You do by hand', card.manual)}
+        ${lines('How it adapts', card.rules)} ${lines('You do by hand', card.manual, 'proposal-manual')}
     </div>`;
 }
 

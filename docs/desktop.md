@@ -283,8 +283,10 @@ chat in Ask first or Plan only; for a chat in any other mode its box is locked, 
 never answers a permission card or a plan card, which say they are answered in Jason Desktop, never changes a chat's mode
 and never chooses Full access, and a chat started from a tab starts in Ask first, whatever the standing choice of Full
 access says. The desktop's window stays the only place that approves. What a tab cannot do is drawn in its place, off,
-with one sentence, "Done in Jason Desktop's own window.": the Demo | Live switch, the account acts of Connect and of the
-Accounts page, the access modes other than the chat's own, and the take-back of the standing choice of Full access. A tab
+with one sentence, "Done in Jason Desktop's own window.": the account acts of Connect and of the Accounts page, the access
+modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
+shows the demo page in that tab alone and leaves the desktop's mode as it is
+([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
 draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it. The tab shows the
 Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
@@ -316,10 +318,12 @@ the desktop's own log), and no record of a mode writes the record as the demo an
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
 
-**The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
-colours, with the **Demo | Live** switch on its right, so you see one. On Windows the window has no title bar of its own:
+**The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
+for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows the window has no title bar of its own:
 the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
-moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
+window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
+a little tighter. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
@@ -327,7 +331,9 @@ meets; **Back to Your Own Installation**, in the tray and the Jason menu, does t
 carries the same switch, with **Demo** to come back.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
-a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The view loads the
+a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
+sandboxed to its script alone, the frame it was built for: its origin is opaque, so it shares nothing with any other
+page and sets no cookie, and what it keeps is held in memory only. The view loads the
 page's own file and nothing else: every other request the page makes, to the network, to a file or to this computer, is
 refused, and a link, a form, a pop-up, a download and any other way to leave the page are refused too; a move to a blank
 page, which nothing is asked about, is undone by loading the page again. No host name is resolved for it, or for anything
@@ -335,6 +341,10 @@ else of the desktop in Demo, so it cannot even ask your network's name server ab
 denied: the camera, the microphone, your location, notifications, reading the clipboard, the screen and any device. Its
 content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
 What you type into it stays in it. A file you drop onto it can be read by the page's script, which can send it nowhere.
+
+**In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
+with its own switch over the page's strip, while the desktop stays on your installation
+([ui.md](ui.md#the-demo-in-a-browser-tab)).
 
 **What is not in the demo.** The demo has no chat, no Connect, no Open in and no browser tab, and the Jason menu and the
 tray offer no update, no start of the runtime at logon, no `jason` command on the PATH and no Remove What Jason Placed:
