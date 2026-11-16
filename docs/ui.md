@@ -87,6 +87,28 @@ The build's own layout is trusted, and so is whoever can write under `<data>/ui/
 link a build places under the UI's folder is followed, and what it leads to is served under the set of the path that
 asks for it.
 
+### The demo in a browser tab
+
+The release's build carries one page there, `sealed/demo.html`: the demo page Jason Desktop shows in Demo, the same file
+byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
+it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
+switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
+other address brings the console back, where it was. Nothing is kept and nothing is asked: the runtime is not told, the
+desktop is not asked and its mode is not changed, and your installation is as it was. A reload at `#/demo` shows the page
+again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
+the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
+
+The page is shown in a frame that keeps scripts alone, `sandbox="allow-scripts"`, with no feature delegated (`allow=""`)
+and no referrer: never the same origin, so it holds nothing of the runtime's address, the UI's token included; no form,
+pop-up, download, dialog or move of the tab. Its words in the strip are the page's own; its numbers and states are samples
+the page carries, never the runtime's. Narrower than the desktop's window ever shows the page, 900 pixels, the page keeps
+that width and scrolls sideways, and the switch stands in a strip of its own above it.
+
+The addresses the page holds are counted in [`desktop/demo/addresses.txt`](../desktop/demo/addresses.txt), each with why
+it is inert there; the UI's guards and the desktop's tests hold the page to that list exactly. What keeps them inert is
+the frame: a hostile page put where the demo page stands tries every way out it can name, and each must be refused (the
+sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium, Firefox and WebKit, and nowhere else.
+
 ## Paired browsers
 
 ```
@@ -488,14 +510,15 @@ follows it.
 Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
 while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
 is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
-Demo | Live switch, the account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's
-own window."; the desktop's window stays the only place that approves
+account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
+Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
+only place that approves
 ([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, shows the same console
 with everything that reads the runtime, and where the chat would be it says that the chat with the AI is part of Jason
 Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, links to the releases page
 where the desktop is downloaded, and says that everything here also works from a session with your AI in a terminal, with
-the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop." The
-runtime starts no AI and no process for a screen, in either case.
+the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop.", and its
+Demo | Live switch shows the demo in that tab alone. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 
