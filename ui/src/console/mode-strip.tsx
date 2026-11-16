@@ -17,7 +17,14 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * While the demo's sample is still being made a quiet mark says so beside the sentence, and the switch is off, its
  * reason on each button, until the desktop says the sample is ready.
  */
-export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
+export function ModeStrip({
+    openIn,
+    nav,
+}: {
+    openIn?: ReactNode;
+    /** The sidebar's own button, drawn where the sidebar is off the screen: whether it is shown, and the toggle. */
+    nav?: { open: boolean; toggle: () => void };
+}) {
     const unopened = modeUnopened.value;
     const refusal = modeRefusal.value;
     const demo = mode.value === 'demo';
@@ -26,6 +33,19 @@ export function ModeStrip({ openIn }: { openIn?: ReactNode }) {
     const switchable = can('mode.set');
     return (
         <div className={`mode-strip ${demo ? 'mode-demo' : 'mode-live'}`} role="region" aria-label={t('mode.strip')}>
+            {nav !== undefined && (
+                <button
+                    type="button"
+                    className="mode-nav"
+                    aria-label={t('mode.nav')}
+                    aria-expanded={nav.open}
+                    onClick={nav.toggle}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <path d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+            )}
             {demo && (
                 <>
                     <span className="mode-dot" aria-hidden="true" />

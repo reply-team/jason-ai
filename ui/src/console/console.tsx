@@ -295,6 +295,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     // as the shell mounts, before the page is painted, and again whenever React mounts the shell once more (StrictMode
     // does, at once); the window opens on Start, holding nothing else.
     const [bound, setBound] = useState(false);
+    // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
+    const [sideOpen, setSideOpen] = useState(false);
     useLayoutEffect(() => {
         const unbound = bind({ api, desktop, dock });
         inArea.value = [];
@@ -454,12 +456,27 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 <>
                     {/* The sidebar runs the window's height; the strip heads the column right of it, over the area. */}
                     <div className="shell">
-                        <aside className="side">
+                        <aside
+                            className={sideOpen ? 'side open' : 'side'}
+                            onClick={(event) => {
+                                if ((event.target as HTMLElement).closest('[data-action], a, button')) setSideOpen(false);
+                            }}
+                        >
                             <Painted className="side-body" view={sideView} />
                             <SideFailure />
                         </aside>
+                        {sideOpen && (
+                            <button
+                                type="button"
+                                className="side-away"
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                onClick={() => setSideOpen(false)}
+                            />
+                        )}
                         <div className="mainc">
                             <ModeStrip
+                                nav={{ open: sideOpen, toggle: () => setSideOpen((was) => !was) }}
                                 openIn={
                                     can('openIn.targets') && earlier(desktop).openIn !== undefined ? (
                                         <OpenIn desktop={desktop} />

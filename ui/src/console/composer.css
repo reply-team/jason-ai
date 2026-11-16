@@ -173,6 +173,24 @@
     width: 380px;
     max-width: min(380px, calc(100vw - 16px));
 }
+/* Where the box is no wider than a menu, the menus take the box's width and its edges, not their button's: a menu
+   anchored to a button in the middle of a narrow row runs off one side of the screen. */
+@media (max-width: 820px) {
+    .jc-console .composer {
+        position: relative;
+    }
+    .jc-console .composer .cmenu {
+        position: static;
+    }
+    .jc-console .composer .menu.cmenu-panel,
+    .jc-console .composer .menu.cmenu-panel.accmenu,
+    .jc-console .composer .menu.cmenu-panel.mdlmenu {
+        left: 0;
+        right: 0;
+        width: auto;
+        max-width: none;
+    }
+}
 .jc-console .cmenu-panel .ml {
     padding: 6px 10px 2px;
     color: var(--faint);
