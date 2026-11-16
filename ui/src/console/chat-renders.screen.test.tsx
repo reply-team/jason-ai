@@ -7,6 +7,7 @@ import { route } from '../router';
 import { shown } from '../test/area';
 import { stubDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as chatModel from './chat-model';
 import { Console } from './console';
@@ -33,7 +34,7 @@ async function renderConsole(): Promise<void> {
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

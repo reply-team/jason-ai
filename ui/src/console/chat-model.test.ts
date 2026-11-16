@@ -32,6 +32,7 @@ import {
     shown,
     stopAsked,
     takenBack,
+    everyWordBack,
     typed,
     afresh,
     codexPlanLine,
@@ -327,6 +328,21 @@ describe('a message typed while a turn runs', () => {
         expect(takenBack(kept(busy('First')))).toMatchObject({ waiting: null, draft: 'First' });
         const second = typed(kept(busy('First')), 'Second');
         expect(takenBack(second)).toEqual(second);
+    });
+
+    it('is given back with every word not sent, in the order written, when nothing could take them', () => {
+        const second = typed(kept(busy('First')), 'Third');
+        expect(everyWordBack(second, 'Zeroth')).toMatchObject({
+            waiting: null,
+            held: false,
+            draft: ['Zeroth', 'First', 'Third'].join(String.fromCharCode(10, 10)),
+        });
+        expect(everyWordBack(typed(newChat('c1', 'claude'), '  '), 'Only')).toMatchObject({
+            draft: 'Only',
+            waiting: null,
+        });
+        const empty = newChat('c1', 'claude');
+        expect(everyWordBack(empty)).toEqual(empty);
     });
 
     it('is handed on once, at the end of a turn that succeeded, and two quick ends send it once', () => {

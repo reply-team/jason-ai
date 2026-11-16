@@ -13,6 +13,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -71,7 +72,7 @@ function renderConsole(
                     ? 'approval.list/pending'
                     : 'approval.list/empty';
         });
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -436,6 +437,41 @@ describe('what waits in an agent’s chat', () => {
         fireEvent.click(within(question).getByRole('button', { name: 'Something else…' }));
         within(question).getByRole('textbox', { name: 'Reason (optional)' });
         expect(cutting(pane)).toEqual([]);
+    });
+
+    it('keeps a card’s open Edit box and its words through the agent’s People tab and Back', async () => {
+        const { fake } = renderConsole();
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        // What the People tab reads, which this test is not about.
+        fake.answerAnyRequest('campaign.list_contacts', 'campaign.list_contacts/summary-waiting')
+            .answerAnyRequest('journal.list', 'journal.list/by-campaign')
+            .answerAnyRequest('contact.threads', 'contact.threads/two-threads');
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        fireEvent.click(within(email).getByRole('button', { name: 'Edit' }));
+        fireEvent.change(await waitFor(() => within(email).getByRole('textbox', { name: 'Body' })), {
+            target: { value: 'Hi Ines, half rewritten' },
+        });
+        const header = document.querySelector<HTMLElement>('.agent-head')!;
+        const tabNamed = (name: RegExp | string) => within(header).getByRole('tab', { name });
+        const stillOpen = () => {
+            const shownPane = document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
+            const body = within(card(shownPane, 'apr_1')!).getByRole('textbox', {
+                name: 'Body',
+            }) as HTMLTextAreaElement;
+            expect(body.value).toBe('Hi Ines, half rewritten');
+        };
+        fireEvent.click(tabNamed(/^People/));
+        await waitFor(() => expect(shown()).toBe('page'));
+        fireEvent.click(tabNamed('Chat'));
+        await waitFor(() => expect(shown()).toBe(`chat:${spring}`));
+        stillOpen();
+        fireEvent.click(tabNamed(/^People/));
+        await waitFor(() => expect(location.hash).toBe('#/campaigns/cmp_1/people'));
+        flush(() => history.back());
+        await waitFor(() => expect(shown()).toBe(`chat:${spring}`));
+        stillOpen();
+        expect(sent(fake, 'workitem.update')).toEqual([]);
     });
 
     // The message editor drawn in a card on Edit is Needs you's: the chat's sheet restyles the card's acts, not the

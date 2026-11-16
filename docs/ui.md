@@ -229,7 +229,7 @@ failed says so over that tab of that campaign alone, never as loading, and is go
 the judged conversations, the charts and the last review fail one at a time, each saying so where it would be drawn. Its **Settings** are its record, its
 context as the roles read it and what each provider calls it, and in the console, last, where it is archived (below):
 the campaign's moves are in its header,
-beside **Add people**, so they are within reach from every tab, each offered only where its status allows it and each
+beside **Add people** (in the console, in the agent's one header, with Add people at the top of its People tab), so they are within reach from every tab, each offered only where its status allows it and each
 opening a dialog with an optional reason. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
 **Resume** releases a paused campaign's work again, and **Start** a draft's for the first time (`jason campaign pause`,
@@ -254,9 +254,10 @@ the list, read again without the agent, and says the agent is archived and what 
 archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
 the agent says so. The browser
 shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
-opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
-nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
+any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox and Settings and no Sequence or Results, its Chat, or its People where no chat can be made; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
+and its Chat under one header ([below](#an-agent-in-the-console)). Its **Chat** opens the campaign's one conversation,
+kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents list's Chat opens the same one. An agent's
+conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
 to reach and what you sell; what you send there starts a set-up chat, about no campaign yet, and
 no chat is made before you send. The sidebar's **Feed** is the desktop's main chat, and under **Recent** the sidebar lists
 the other conversations the desktop keeps, newest first and the open one marked, a campaign's by its name and a set-up chat by its first words; a
@@ -266,9 +267,11 @@ started or paused, work that stopped, a provider block holding work), with the c
 conversation, and an approval or a question opening Needs you. A line carries no one's words and never starts a turn; the AI hears the lines that came with your
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
-another, offers what its last turn made to pick from. **Start afresh** begins the AI's next turn without its memory
-of the conversation and keeps what is shown; **Remove** asks first, then takes the conversation off this computer, and
-the AI host keeps its own transcript of it. What the desktop refuses is said in its own words. An agent's chat shows,
+another, offers what its last turn made to pick from. An agent's header holds its conversation's acts in **…**:
+**Rename conversation**, **Start conversation afresh**, which begins the AI's next turn without its memory of the
+conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
+where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
+transcript of it; a set-up chat has them in its own bar as **Rename**, **Start afresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
 text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
@@ -552,6 +555,33 @@ screen's facts are the Runtime API's, so anything the console shows is a verb yo
 desktop only through the object the desktop puts on the page and the runtime only through the API and the journal stream
 (`jason journal watch` is the same stream); what the desktop does besides, its chat, its tray, its update, is on
 [its own page](desktop.md).
+
+### An agent in the console
+
+An agent is one place: its Chat and its page's tabs, **Chat**, **People** with how many people it holds, **Inbox** and
+**Settings**, under one header that stays while you move between them. The header holds the agent's name, its state and
+kind as pills, its one move (Start, Pause or Resume, with its dialog) and **…** with its conversation's acts; it says no
+name or state it has not read from the runtime, follows the journal's lines without a reload, and for an archived agent
+shows its archived pill, no move, and its tabs to read. The People tab begins with the line the page's header used to
+carry, how many people the agent holds and the provider campaign it is linked to, and **Add people**. Each tab has an
+address of its own, `#/campaigns/<id>/chat`, `/people`, `/inbox` and `/settings`, so a reload, a deep link, Back and
+Forward land where the address says, and an address naming the agent alone opens its first tab: Chat where a chat can be
+made, and People in a tab no desktop opened, which draws no Chat and opens People at a Chat's address. Drawing the Chat
+tab makes nothing: the conversation is made at your first message or choice in it, a send, a chip, or opening one of the
+composer's menus, which show what the new conversation will take.
+
+What has no address of its own, Start, a set-up chat, the Feed and the sidebar's panels, stands at the chat's address,
+`#/chat`. Leaving an agent for one of them adds one entry to the browser's history, so Back comes back to the agent's
+tab, and Forward shows that place again. Its Chat comes back as you left it, the words typed and not sent included; a
+page tab is drawn again from its address, so what was typed there, a search say, is not kept. A second place without an
+address straight after the first adds no entry, so Back from it goes to the agent too.
+
+An address naming an agent the runtime does not know, an old link say, is closed as the page closes it, saying the agent
+no longer exists. When the desktop cannot open an agent's conversation, its Chat tab says why under the agent's own
+header, with **Try again**. An agent with no conversation shows its unmade Chat only until one exists: once its
+conversation is opened, or made in another window or tab, that conversation takes its place, carrying the words typed.
+An archived agent with no conversation has none made for it: its Chat tab says that the agent is archived, and nothing
+more; one with a conversation shows it.
 
 ## What the page may do
 

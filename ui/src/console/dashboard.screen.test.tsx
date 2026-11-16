@@ -7,6 +7,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { chatDesktop, journalLine, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -91,7 +92,7 @@ function renderConsole(options: Options = {}) {
             pick(lastReplies, beforeReplies, options.replies ?? 'reply.count/every-campaign'),
         );
     }
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

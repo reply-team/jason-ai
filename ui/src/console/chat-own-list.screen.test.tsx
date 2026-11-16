@@ -8,6 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
@@ -86,7 +87,7 @@ function renderConsole(
         .answer('campaign.summary', 'campaign.summary/all')
         .answerAnyRequest('campaign.get', () => agent)
         .answerAnyRequest('sender.list', 'sender.list/card-message-sender');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

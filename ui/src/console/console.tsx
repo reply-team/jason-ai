@@ -1,9 +1,10 @@
-import { effect, signal } from '@preact/signals-react';
+import { effect, signal, untracked } from '@preact/signals-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
+import { Notice } from '../layout/notice';
 import { DemoView } from '../platform/demo-frame';
 import { can, earlier, placeKind } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
@@ -12,15 +13,30 @@ import { consoleShell } from '../platform/console-shell';
 import { registry } from '../platform/slots';
 import { LiveSettingsSections } from './settings-sections';
 import { href, navigate, parseRoute, replace, route, type Route } from '../router';
-import { CampaignChat } from '../screens/campaigns/campaign-chat';
+import { AgentHeaded, CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
 import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
+import { agentFacts, goneAgents, readAgent } from './agent-facts';
+import { AgentHead } from './agent-head';
+import { agentChatOf, agentChatRoute, agentOfChat, namesPlace, shownAgent } from './agent-place';
 import { listen } from './actions';
-import { askFeed, catchUpFeed, ChatPanel, handLine, openConversation, reloadConversations, startChat } from './chat';
+import {
+    askFeed,
+    catchUpFeed,
+    ChatPanel,
+    handLine,
+    isUnmade,
+    onChatMade,
+    openConversation,
+    reloadConversations,
+    retireShadowed,
+    startChat,
+    unmadeChat,
+} from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -41,6 +57,7 @@ import {
     chatOf,
     chats,
     clock,
+    conversations,
     conversationsFailure,
     currentChat,
     feedId,
@@ -70,16 +87,50 @@ function chatAbout(campaign?: { id: string; name: string }): void {
 /** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */
 const providerAccounts = { view: connect.accountsReplyView, gone: connect.accountsReplyGone };
 
+/**
+ * What an agent's Chat tab says in place of a conversation: that the desktop could not open it, and why, until it opens;
+ * or that the agent is archived and has none, where nothing can be made.
+ */
+const chatNote = signal<{ agent: string; why: string } | { agent: string; archived: true } | null>(null);
+
+/** An agent's Chat tab whose conversation could not be opened: what the desktop said, and a way to try again. */
+function ChatUnopened({ agent, why }: { agent: string; why: string }) {
+    return (
+        <Notice danger>
+            This agent’s conversation could not be opened. {why}{' '}
+            <button type="button" className="btn sm" onClick={() => here().dock.page(agentChatRoute(agent))}>
+                Try again
+            </button>
+        </Notice>
+    );
+}
+
 function PagePanel() {
+    // An agent's Chat is the console's own pane: while the address names it, the page draws nothing behind it but the
+    // word that its conversation could not be opened, or that the agent is archived and has none.
+    const chatOf = can('chat.create') ? agentChatOf(route.value) : null;
+    const note = chatNote.value;
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
-                    <CampaignChat.Provider value={chatAbout}>
-                        <ProviderAccountsContext.Provider value={providerAccounts}>
-                            <CurrentPage />
-                        </ProviderAccountsContext.Provider>
-                    </CampaignChat.Provider>
+                    {chatOf === null ? (
+                        <CampaignChat.Provider value={chatAbout}>
+                            <AgentHeaded.Provider value={true}>
+                                <ProviderAccountsContext.Provider value={providerAccounts}>
+                                    <CurrentPage />
+                                </ProviderAccountsContext.Provider>
+                            </AgentHeaded.Provider>
+                        </CampaignChat.Provider>
+                    ) : (
+                        note !== null &&
+                        note.agent === chatOf &&
+                        ('why' in note ? (
+                            <ChatUnopened agent={note.agent} why={note.why} />
+                        ) : (
+                            <Notice status>This agent is archived.</Notice>
+                        ))
+                    )}
                 </div>
             </div>
         </div>
@@ -160,7 +211,7 @@ function Pane({ pane }: { pane: string }) {
             {chatId === null ? (
                 <PanelBody name={pane as PanelName} inSight={inSight} />
             ) : (
-                kept && <ChatPanel chatId={chatId} />
+                kept && <ChatPanel chatId={chatId} headed />
             )}
         </section>
     );
@@ -172,8 +223,11 @@ function PanelBody({ name, inSight }: { name: PanelName; inSight: boolean }) {
 
 /** The one area: every thing it holds is drawn, and all but the one shown are hidden. */
 function Area() {
+    const agent = shownAgent.value;
     return (
-        <main className="area">
+        <main className={agent === null ? 'area' : 'area agent-shown'}>
+            {/* One header for every place of the agent shown, kept while the person moves between its tabs. */}
+            {agent !== null && <AgentHead key={agent.id} id={agent.id} tab={agent.tab} />}
             {inArea.value.map((pane) => (
                 <Pane key={pane} pane={pane} />
             ))}
@@ -208,24 +262,128 @@ export function commandTarget(command: DesktopCommand): PanelName | Route | null
 export const reloadDelay = 400;
 
 /**
- * Where a page was left from: the area's pane and the address then in the bar. Back to that address restores the pane;
- * kept only while a page is shown, and set again by the next page opened from anywhere else.
+ * The last pane shown that has no address of its own (a set-up chat, the Feed, Start, a panel of the console's own): the
+ * chat's address shows it. An agent's chat and a page are addressed; everything else stands at the chat's address.
  */
-let leftFrom: { pane: string; address: string } | null = null;
-/** The address a page the dock opened put in the bar: the route's change that follows it is the dock's own. */
+let unaddressed = 'start';
+/** The address a move of the dock's own put in the bar: the route's change that follows it is the dock's own. */
 let ownAddress: string | null = null;
+/** Counts the moves: an agent's chat opened on its way is shown only if nothing moved the area meanwhile. */
+let moves = 0;
 
-/** Shows again what was shown before a page: the chat if it is still open, else what the window opens on. */
-function restore(): void {
-    const pane = leftFrom?.pane ?? 'start';
-    if (pane.startsWith('chat:') && chats.value[pane.slice('chat:'.length)]) reveal(pane);
-    else reveal(pane.startsWith('chat:') ? 'start' : pane);
+/** Puts `to` in the bar as the dock's own move, a history entry or, `replacing`, none; nothing when it is there. */
+function moveBar(to: Route, replacing = false): void {
+    const address = href(to);
+    if (address === href(route.value)) return;
+    ownAddress = address;
+    if (replacing) replace(to);
+    else navigate(to);
 }
 
 /**
- * The address changed by the browser's own history (Back, Forward): Back to where a page was opened from shows what was
- * shown there, and any other address, reached while a page is not shown, shows the page. A move the dock made itself
- * is skipped.
+ * Shows a pane with no address of its own. Leaving a place that has one puts the chat's address in the bar as a history
+ * entry, so Back comes back to that place; two such panes in a row are one entry.
+ */
+function showUnaddressed(pane: string): void {
+    unaddressed = pane;
+    if (namesPlace(route.value)) moveBar({ screen: 'chat' });
+    reveal(pane);
+}
+
+/** Shows again what the chat's address shows: the pane last shown that has no address, while it is still there. */
+function restore(): void {
+    if (unaddressed.startsWith('chat:')) {
+        const chat = chats.value[unaddressed.slice('chat:'.length)];
+        // A chat that went, or became an agent's and so has an address of its own, gives way to Start.
+        if (chat === undefined || agentOfChat(chat) !== null) unaddressed = 'start';
+    }
+    reveal(unaddressed);
+}
+
+/** What `chatOfAgent` answers for an agent the runtime does not know: it has no Chat to draw. */
+const agentGone = Symbol('gone');
+/** What `chatOfAgent` answers for an archived agent with no conversation: nothing can be made for it. */
+const agentArchived = Symbol('archived');
+
+/**
+ * The conversation of an agent: the one held open, else the one the desktop keeps, else its unmade chat. Null where the
+ * desktop could not open the one it keeps; `agentGone` where the runtime does not know the agent; `agentArchived` for an
+ * archived agent with no conversation.
+ */
+async function chatOfAgent(id: string): Promise<string | null | typeof agentGone | typeof agentArchived> {
+    // A conversation made for it wins over its unmade chat, which gives way to it.
+    const held = Object.values(chats.value).find((each) => !each.main && each.campaignId === id && !isUnmade(each.id));
+    if (held) return held.id;
+    const kept = conversations.value.find((each) => !each.main && each.campaignId === id);
+    if (kept) return openConversation(kept.id);
+    // The desktop's list read afresh, which may not have been read yet when an address opens the agent.
+    await reloadConversations();
+    const listed = conversations.value.find((each) => !each.main && each.campaignId === id);
+    if (listed) return openConversation(listed.id);
+    const meanwhile = Object.values(chats.value).find(
+        (each) => !each.main && each.campaignId === id && !isUnmade(each.id),
+    );
+    if (meanwhile) return meanwhile.id;
+    // None yet: its Chat is drawn, and its conversation made at the person's first act that needs one; an agent the
+    // console does not list is read first, and one the runtime does not know has no Chat at all.
+    if (!campaigns.campaigns.value.some((each) => each.id === id)) {
+        if (agentFacts.value[id] === undefined) await readAgent(here().api, id);
+        if (goneAgents.value.has(id)) return agentGone;
+    }
+    const status =
+        campaigns.campaigns.value.find((each) => each.id === id)?.status ?? agentFacts.value[id]?.campaign.status;
+    if (status === 'archived') return agentArchived;
+    const name =
+        campaigns.campaigns.value.find((each) => each.id === id)?.name ?? agentFacts.value[id]?.campaign.name ?? id;
+    return unmadeChat({ id, name });
+}
+
+/** An unmade chat became its conversation: the conversation takes its place in the area, shown if it was. */
+function chatMade(from: string, to: string): void {
+    const was = chatPane(from);
+    const now = chatPane(to);
+    lastChats = lastChats
+        .map((each) => (each === was ? now : each))
+        .filter((each, at, all) => all.indexOf(each) === at);
+    if (unaddressed === was) unaddressed = now;
+    const shown = activePanel.value === was;
+    inArea.value = inArea.value
+        .map((each) => (each === was ? now : each))
+        .filter((each, at, all) => all.indexOf(each) === at);
+    if (shown) reveal(now);
+}
+
+/** Shows an agent's Chat tab, at its own address, once its conversation is open; a move made meanwhile wins. */
+function showAgentChat(id: string): void {
+    const mine = ++moves;
+    void chatOfAgent(id).then((chatId) => {
+        if (mine !== moves) return;
+        if (chatId === agentGone) {
+            // The page's own way with an agent the runtime does not know: it says so, and the address leaves it.
+            moveBar({ ...agentChatRoute(id), tab: 'people' }, true);
+            reveal('page');
+            return;
+        }
+        moveBar(agentChatRoute(id));
+        if (chatId === null || chatId === agentArchived) {
+            // Under the agent's own header, never another's pane: its Chat tab says why the desktop could not open its
+            // conversation and offers to try again, or that it is archived, with nothing that could make one.
+            chatNote.value =
+                chatId === agentArchived
+                    ? { agent: id, archived: true }
+                    : { agent: id, why: conversationsFailure.value ?? 'The desktop did not say why.' };
+            reveal('page');
+            return;
+        }
+        if (chatNote.value?.agent === id) chatNote.value = null;
+        reveal(chatPane(chatId));
+    });
+}
+
+/**
+ * The address changed by the browser's own history (Back, Forward) or by a link: the area shows what it names. The
+ * chat's address shows the pane last shown that has no address; an agent's Chat tab its conversation; an approval's or a
+ * question's address Needs you at it; any other address the page. A move the dock made itself is skipped.
  */
 function followHistory(to: Route): void {
     const address = href(to);
@@ -233,18 +391,23 @@ function followHistory(to: Route): void {
         ownAddress = null;
         return;
     }
-    const onPage = activePanel.value === 'page';
-    if (to.screen === 'chat' || (leftFrom !== null && address === leftFrom.address)) {
-        if (onPage) restore();
-    } else if (!onPage) show_('page');
+    moves++;
+    if (!namesPlace(to)) return restore();
+    const agent = agentChatOf(to);
+    // Where no chat can be made the page draws the agent and gives its Chat's address up for its first tab.
+    if (agent !== null && can('chat.create')) return showAgentChat(agent);
+    if (to.screen === 'attention' && to.kind && to.id) {
+        reveal('needs');
+        void needs.attention.open(here().api, to.kind, to.id);
+        return;
+    }
+    if (activePanel.value !== 'page') reveal('page');
 }
 
-const show_ = (panel: PanelName) => reveal(panel);
-
-/** What an address names at the shell's start: a panel (with the item it opens), a page, or nothing (the chat's, or none). */
+/** What an address names at the shell's start: a panel (with the item it opens), an agent's chat, a page, or nothing. */
 function addressPlace(
     hash: string,
-): { panel: PanelName; open?: { kind: 'approvals' | 'questions'; id: string } } | null {
+): { panel: PanelName; open?: { kind: 'approvals' | 'questions'; id: string } } | { agent: string } | null {
     if (hash === '' || hash === '#') return null;
     const to = parseRoute(hash);
     if (to.screen === 'chat') return null;
@@ -254,13 +417,24 @@ function addressPlace(
     if (to.screen === 'attention')
         return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : null;
     if (to.screen === 'campaigns' && to.id === undefined) return { panel: 'campaigns' };
+    const agent = agentChatOf(to);
+    if (agent !== null && can('chat.create')) return { agent };
     return { panel: 'page' };
 }
 
 function makeDock(): Dock {
-    const show = (panel: PanelName) => reveal(panel);
+    const show = (panel: PanelName) => {
+        moves++;
+        showUnaddressed(panel);
+    };
     const showChat = (id: string) => {
-        if (chats.value[id]) reveal(chatPane(id));
+        const chat = chats.value[id];
+        if (!chat) return;
+        moves++;
+        const agent = agentOfChat(chat);
+        if (agent === null) return showUnaddressed(chatPane(id));
+        moveBar(agentChatRoute(agent));
+        reveal(chatPane(id));
     };
     return {
         show,
@@ -268,25 +442,34 @@ function makeDock(): Dock {
         chat: (campaign) => {
             // A place that cannot make a chat shows where the chat is, in the place the window opens on.
             if (!can('chat.create')) return show('start');
-            void startChat(campaign).then((id) => {
-                if (id !== null) showChat(id);
+            if (campaign) return showAgentChat(campaign.id);
+            const mine = ++moves;
+            void startChat().then((id) => {
+                if (id !== null && mine === moves) showChat(id);
             });
         },
         dropChat: (id) => {
             inArea.value = inArea.value.filter((each) => each !== chatPane(id));
             lastChats = lastChats.filter((each) => each !== chatPane(id));
-            // The chat shown was taken away: the area shows what the window opens on.
-            if (activePanel.value === chatPane(id)) reveal('start');
+            if (unaddressed === chatPane(id)) unaddressed = 'start';
+            // The chat shown was taken away: the area shows what the window opens on, at the chat's address.
+            if (activePanel.value === chatPane(id)) {
+                moves++;
+                unaddressed = 'start';
+                if (namesPlace(route.value)) moveBar({ screen: 'chat' }, true);
+                reveal('start');
+            }
         },
         page: (to) => {
-            if (activePanel.value !== 'page') {
-                // What is shown is not a page, so the bar must not name one: it names the chat, the console's neutral place.
-                if (route.value.screen !== 'chat') replace({ screen: 'chat' });
-                leftFrom = { pane: activePanel.value ?? 'start', address: href(route.value) };
-            }
-            ownAddress = href(to) === href(route.value) ? null : href(to);
-            navigate(to);
-            show('page');
+            const agent = agentChatOf(to);
+            if (agent !== null && can('chat.create')) return showAgentChat(agent);
+            moves++;
+            // The bar names what is shown: an agent's chat by its own address, anything else by the chat's. A panel a
+            // start's address named gives that address up for the chat's, so Back from the page shows the panel.
+            if (activePanel.value !== 'page' && shownAgent.value === null && route.value.screen !== 'chat')
+                moveBar({ screen: 'chat' }, true);
+            moveBar(to);
+            reveal('page');
         },
     };
 }
@@ -328,13 +511,19 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         const unbound = bind({ api, desktop, dock });
         inArea.value = [];
         lastChats = [];
-        leftFrom = null;
+        unaddressed = 'start';
         ownAddress = null;
+        moves = 0;
         reveal('start');
         // The address is the truth: one that names something draws it (the window opens with none, so on Start).
         const named = addressPlace(location.hash);
-        if (named !== null) {
-            leftFrom = { pane: 'start', address: href({ screen: 'chat' }) };
+        // An agent's address an older link gave, or one naming no tab, is written as the tab it opens, with no entry.
+        const at = route.value;
+        if (at.screen === 'campaigns' && at.id !== undefined && location.hash !== href(at))
+            history.replaceState(null, '', href(at));
+        if (named !== null && 'agent' in named) showAgentChat(named.agent);
+        else if (named !== null) {
+            if (named.panel !== 'page') unaddressed = named.panel;
             reveal(named.panel);
             if (named.open) void needs.attention.open(api, named.open.kind, named.open.id);
         }
@@ -348,7 +537,16 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             seen = href(to);
             followHistory(to);
         });
+        const made = onChatMade(chatMade);
+        // An unmade chat gives way to its agent's conversation as soon as one is held or listed.
+        const shadowed = effect(() => {
+            void chats.value;
+            void conversations.value;
+            untracked(retireShadowed);
+        });
         return () => {
+            shadowed();
+            made();
             followed();
             unbound();
         };
@@ -413,7 +611,14 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 if (event.kind === 'attached' || event.kind === 'renamed' || event.kind === 'done')
                     void reloadConversations();
                 // A hand-over makes a draft campaign the chat is about; the Reply card reads its status from the list.
-                if (event.kind === 'attached') void campaigns.reload();
+                if (event.kind === 'attached') {
+                    void campaigns.reload();
+                    // The chat shown is that agent's now: it stands under the agent's header, at the agent's address.
+                    if (activePanel.value === chatPane(id)) {
+                        if (unaddressed === chatPane(id)) unaddressed = 'start';
+                        moveBar(agentChatRoute(event.campaignId), true);
+                    }
+                }
             }),
             desktop.setup.onChanged(() => void connect.reload()),
             can('onCommand')
@@ -446,6 +651,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                     reloadWaiting(api);
                     void campaigns.reload();
                     dashboard.reloadIfOpen();
+                    // The agent shown follows the journal: started, paused or archived anywhere, its header says so.
+                    const agent = shownAgent.value;
+                    if (agent !== null) void readAgent(api, agent.id);
                 }, reloadDelay);
             }),
         ];

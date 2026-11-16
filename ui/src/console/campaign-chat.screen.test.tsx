@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
-import { route } from '../router';
+import { firstCampaignTab, route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
@@ -13,8 +13,9 @@ import { Console } from './console';
 import { chats, conversations } from './state';
 import { bringForward } from '../test/area';
 
-// A campaign's Chat tab, in the desktop's one area: it opens the campaign's one conversation the desktop keeps,
-// made on first use, as the Campaigns list's Chat does.
+// A campaign's Chat tab, in the desktop's one area: the first tab of the agent's header, it opens the campaign's one
+// conversation the desktop keeps, as the Campaigns list's Chat does; where there is none yet, it is made at the person's
+// first message, and drawing the tab makes nothing.
 
 function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): StubDesktop {
     watch(fake);
@@ -35,7 +36,7 @@ function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): Stu
 const creates = (desktop: StubDesktop, campaignId: string) =>
     desktop.calls.filter((each) => each.name === 'chat.create' && each.args[0] === campaignId).length;
 
-/** The console, and Spring opened in the area on its Sequence, as the Campaigns panel's Open does. */
+/** The console's reads, with Spring's page and the agent's header answered. */
 function springApi(): FakeApi {
     return nothingWaitsInChats(new FakeApi())
         .answer('approval.list', 'approval.list/pending', 'approval.list/by-campaign-pending')
@@ -45,7 +46,8 @@ function springApi(): FakeApi {
         .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
         .answer('campaign.get', 'campaign.get/details')
         .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
-        .answer('journal.list', 'journal.list/by-campaign');
+        .answer('journal.list', 'journal.list/by-campaign')
+        .answer('campaign.list_contacts', 'campaign.list_contacts/everyone');
 }
 
 const painted = (name: string) => screen.getByRole('heading', { name, level: 1 }).closest<HTMLElement>('.painted')!;
@@ -59,17 +61,23 @@ async function openSpring(): Promise<HTMLElement> {
     };
     fireEvent.click(within(await spring()).getByRole('button', { name: 'Open' }));
     return waitFor(() => {
-        const tabs = document.querySelector<HTMLElement>('.harness .campaign-tabs');
-        expect(tabs).not.toBeNull();
-        return tabs!;
+        const header = document.querySelector<HTMLElement>('.agent-head');
+        expect(header).not.toBeNull();
+        return header!;
     });
 }
+
+/** Chooses one of the agent's tabs in its header. */
+const choose = (header: HTMLElement, name: RegExp | string) =>
+    fireEvent.click(within(header).getByRole('tab', { name }));
 
 const about = (id: string) => Object.values(chats.value).filter((chat) => chat.campaignId === id);
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-16T09:00:00Z'));
+    // The window's Live opens an agent on its Chat, as the console's mount learns from the desktop (loadMode).
+    firstCampaignTab.value = 'chat';
     chats.value = {};
     conversations.value = [];
     consoleCampaigns.campaigns.value = [];
@@ -78,21 +86,30 @@ beforeEach(() => {
 });
 afterEach(() => {
     vi.useRealTimers();
+    firstCampaignTab.value = 'sequence';
 });
 
 describe('a campaign’s Chat tab in the desktop', () => {
-    it('opens the campaign’s one conversation, made on first use, and a second click brings that one forward', async () => {
+    it('makes the campaign’s one conversation at the first message, and choosing Chat again brings that one forward', async () => {
         const desktop = renderConsole(springApi());
-        const tabs = await openSpring();
-        expect(about('cmp_1')).toEqual([]);
-
-        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
-        await waitFor(() => expect(about('cmp_1')).toHaveLength(1));
+        // Open opens the agent on its first tab, its Chat, and makes nothing.
+        const header = await openSpring();
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        expect(within(header).getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+        expect(creates(desktop, 'cmp_1')).toBe(0);
+        // The first message makes it.
+        const box = screen.getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: 'Who replied this week?' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(1));
+        await waitFor(() => expect(about('cmp_1')).toHaveLength(1));
 
-        // The chat took the area; the campaign's page is chosen again, and its Chat brings that one conversation forward.
-        fireEvent.click(within(await openSpring()).getByRole('button', { name: 'Chat' }));
-        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(2));
+        // Another tab, then Chat again: the one conversation is brought forward, and nothing is made again.
+        choose(header, /^People/);
+        await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_1', tab: 'people' }));
+        choose(header, 'Chat');
+        await waitFor(() => expect(route.value).toMatchObject({ screen: 'campaigns', id: 'cmp_1', tab: 'chat' }));
+        expect(creates(desktop, 'cmp_1')).toBe(1);
         expect(about('cmp_1')).toHaveLength(1);
         expect(Object.keys(chats.value)).toHaveLength(2); // the set-up chat the window opened on, and Spring's
     });
@@ -113,10 +130,9 @@ describe('a campaign’s Chat tab in the desktop', () => {
         fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
         expect(await screen.findByText('The kept words about Spring')).toBeTruthy();
         expect(about('cmp_1').map((chat) => chat.id)).toEqual(['conv_01JDKEPT0000000000000000S1']);
-        const tabs = await openSpring();
-
-        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
-        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(2));
+        // Open shows the agent on its Chat tab: the same conversation, opened once and never made again.
+        const header = await openSpring();
+        expect(within(header).getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
         expect(about('cmp_1')).toHaveLength(1);
         expect(desktop.calls.filter((each) => each.name === 'chat.open')).toHaveLength(1);
     });

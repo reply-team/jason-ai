@@ -27,7 +27,7 @@ import { AddPeopleDialog } from './add-dialog';
 import type { WasOpen } from './archive';
 import { saidArchived } from './archive-model';
 import { views } from './labels';
-import { CampaignPanel } from './panel';
+import { CampaignPanel, sub } from './panel';
 import { CampaignInbox } from './inbox';
 import { CampaignPeople } from './people';
 import { CampaignResults } from './results';
@@ -37,7 +37,7 @@ import * as store from './store';
 import { CampaignTable } from './table';
 import { Notice } from '../../layout/notice';
 import { EmptyStart } from '../../layout/empty-start';
-import { useCampaignChat } from './campaign-chat';
+import { useAgentHeaded, useCampaignChat } from './campaign-chat';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -55,6 +55,14 @@ export function CampaignsScreen() {
     const key = href({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
     const countedUnder = store.numbersKey(table);
     const selected = at.id ?? null;
+    // Inside the console the agent's header is drawn above this page, and its Chat is the console's own.
+    const headed = useAgentHeaded();
+
+    // An agent's Chat drawn by the page is a place with no chat: the agent opens on its first tab here instead.
+    useEffect(() => {
+        if (!selected || at.tab !== 'chat') return;
+        replace({ ...at, tab: firstCampaignTab.value === 'chat' ? 'people' : firstCampaignTab.value });
+    }, [selected, at.tab]);
 
     // What the screen said on an earlier visit is not said again.
     useEffect(() => {
@@ -347,14 +355,16 @@ export function CampaignsScreen() {
                     {tabFailure && <Notice danger>{tabFailure}</Notice>}
                     {campaign && campaign.id === selected && (
                         <>
-                            <CampaignPanel
-                                campaign={campaign}
-                                at={at}
-                                counted={numbers}
-                                onAct={setActing}
-                                onMoved={reread}
-                                onClose={close}
-                            />
+                            {!headed && (
+                                <CampaignPanel
+                                    campaign={campaign}
+                                    at={at}
+                                    counted={numbers}
+                                    onAct={setActing}
+                                    onMoved={reread}
+                                    onClose={close}
+                                />
+                            )}
                             {acting === 'add' && (
                                 <AddPeopleDialog campaign={campaign} onAdded={reread} onClose={() => setActing(null)} />
                             )}
@@ -386,6 +396,18 @@ export function CampaignsScreen() {
                                     }}
                                     onPerson={(contactId) =>
                                         setPerson({ id: selected!, tab: at.tab, filter: at.filter, contactId })
+                                    }
+                                    head={
+                                        headed ? (
+                                            <div className="people-head">
+                                                <span className="people-said">
+                                                    {sub(campaign, peopleNow(numbers, at))}
+                                                </span>
+                                                <button className="btn" type="button" onClick={() => setActing('add')}>
+                                                    Add people
+                                                </button>
+                                            </div>
+                                        ) : undefined
                                     }
                                 />
                             )}
@@ -420,6 +442,12 @@ export function CampaignsScreen() {
             )}
         </div>
     );
+}
+
+/** How many people the agent holds now, from Summary's count; Activity's people are the period's, so none is said there. */
+function peopleNow(numbers: unknown, at: At): number | null {
+    const row = numbers as Record<string, unknown> | null;
+    return at.view === 'summary' && typeof row?.['people'] === 'number' ? row['people'] : null;
 }
 
 /** The filters with one key set, or gone when it is empty: one view, one address. */

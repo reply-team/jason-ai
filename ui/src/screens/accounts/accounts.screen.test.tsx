@@ -13,6 +13,7 @@ import { route } from '../../router';
 import type { DesktopSetup } from '../../platform/desktop';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../../test/desktop';
 import { FakeApi, watch } from '../../test/fake-api';
+import { agentHeads } from '../../test/agent-head';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import * as classicCampaigns from '../campaigns/store';
@@ -183,7 +184,7 @@ function inDesktop(info: NotificationsInfo | null, status: DesktopSetup = setupF
         .answer('plugin.list', 'plugin.list/none')
         .answer('route.list', 'route.list/empty')
         .answer('ui.tokens', 'ui.tokens/two');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -287,7 +288,14 @@ describe('Accounts inside the desktop', () => {
         // The other way round: an act asked on Connect shows its dialog there and not on Accounts.
         fireEvent.click(within(row(connect)).getByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(within(cardIn(connect)).queryByRole('dialog')).not.toBeNull());
-        expect(within(cardIn(page)).queryByRole('dialog')).toBeNull();
+        // Leaving Accounts for the panel put the chat's address after Accounts' own; Back draws Accounts again, without it.
+        history.back();
+        const again = await waitFor(() => {
+            const shown = screen.getByRole('heading', { name: 'Accounts', level: 1 }).closest<HTMLElement>('.main')!;
+            expect(shown.querySelector('.card .acct')).not.toBeNull();
+            return shown;
+        });
+        expect(within(cardIn(again)).queryByRole('dialog')).toBeNull();
         expect(desktop.calls.filter((call) => call.name.startsWith('setup.reply')).length).toBeGreaterThan(0);
     });
 

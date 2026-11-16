@@ -8,6 +8,8 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
+import { shownAgent } from './agent-place';
 import { fixtures } from '../test/fixtures';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
@@ -52,7 +54,7 @@ function renderConsole(
     // Needs you reads the sending name under an email's From (`needs-sender-line.screen.test.tsx`); here it is answered
     // with one recorded list of accounts, which draws one line and holds nothing.
     if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -88,10 +90,20 @@ const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, 
 const cardOps = ['campaign.get', 'campaign.summary', 'campaign.activity', 'campaign.list_contacts', 'contact.list'];
 const reads = (fake: FakeApi, ops: readonly string[] = cardOps) =>
     fake.calls.filter((each) => ops.includes(each.operation)).map((each) => ({ op: each.operation, body: each.body }));
-/** The reads the console makes at its start, which no card makes: its campaigns' counts. */
+/**
+ * The reads the console makes at its start, which no card makes: its campaigns' counts; and the agent's header over its
+ * chat, which reads the agent once as it is drawn, before anything the chat draws reads.
+ */
 const idsOf = (body: object): readonly string[] => (body as { campaign_ids?: string[] }).campaign_ids ?? [];
-const notStart = (fake: FakeApi) =>
-    reads(fake).filter((each) => !(each.op === 'campaign.summary' && idsOf(each.body).length > 1));
+const notStart = (fake: FakeApi) => {
+    let headed = shownAgent.value?.id ?? null;
+    return reads(fake).filter((each) => {
+        if (each.op === 'campaign.summary' && idsOf(each.body).length > 1) return false;
+        if (each.op !== 'campaign.get' || (each.body as { campaign_id?: string }).campaign_id !== headed) return true;
+        headed = null;
+        return false;
+    });
+};
 /** The numbers a card shows, in order, from its count tiles. */
 const tiles = (element: HTMLElement) =>
     [...element.querySelectorAll('.card-count')].map((tile) => [...tile.children].map(words).join(' '));

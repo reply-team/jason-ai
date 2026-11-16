@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { href, parseRoute } from './router';
+import { firstCampaignTab, href, parseRoute } from './router';
 
 describe('parseRoute', () => {
     it.each([
@@ -141,7 +141,7 @@ describe('parseRoute', () => {
         ],
         [
             '#/campaigns/cmp_1/chat',
-            { screen: 'campaigns', id: 'cmp_1', tab: 'sequence', view: 'summary', period: '7d', filters: {} },
+            { screen: 'campaigns', id: 'cmp_1', tab: 'chat', view: 'summary', period: '7d', filters: {} },
         ],
         [
             '#/campaigns/cmp_1/elsewhere',
@@ -341,6 +341,17 @@ describe('href', () => {
             '#/campaigns/cmp_1/results?view=activity&period=30d',
         ],
         [
+            {
+                screen: 'campaigns' as const,
+                id: 'cmp_1',
+                tab: 'chat' as const,
+                view: 'summary' as const,
+                period: '7d' as const,
+                filters: {},
+            },
+            '#/campaigns/cmp_1/chat',
+        ],
+        [
             { screen: 'performance' as const, tab: 'timeline' as const, period: '7d' as const, campaigns: [] },
             '#/performance',
         ],
@@ -359,5 +370,18 @@ describe('href', () => {
         ],
     ])('%o is %s', (route, hash) => {
         expect(href(route)).toBe(hash);
+    });
+});
+
+describe('an agent opened by its bare address', () => {
+    it.each(['chat', 'people', 'sequence'] as const)('opens on the first tab of the place, %s', (first) => {
+        const was = firstCampaignTab.value;
+        firstCampaignTab.value = first;
+        try {
+            expect(parseRoute('#/campaigns/cmp_1')).toMatchObject({ id: 'cmp_1', tab: first });
+            expect(parseRoute('#/campaigns/cmp_1/elsewhere')).toMatchObject({ id: 'cmp_1', tab: first });
+        } finally {
+            firstCampaignTab.value = was;
+        }
     });
 });
