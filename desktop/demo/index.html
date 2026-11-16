@@ -2794,9 +2794,9 @@ is not, this file is the whole of what you were taught.
     profile owner status stage source contact person note notes comment comments description region country city state
     province zip location timezone date created updated modified connected id tags segment gender revenue employees`.split(/\s+/)),P=new Set(`full given family middle prefix suffix salutation addresses phones cell number work home direct personal business
     primary secondary other job site domain twitter contacts people time zone code postal added tag list type score size
-    level url on at of the no by to and or in`.split(/\s+/)),F=e=>{let t=e.toLowerCase().split(/[^a-z-]+/).filter(Boolean);return t.some(e=>N.has(e))&&t.every(e=>N.has(e)||P.has(e))},I=e=>e?g(e)?`email`:/^https?:\/\/|linkedin\.com\/|^www\./i.test(e)?`link`:k(e)?`date`:/^[-+]?[\d,]*\.?\d+%?$/.test(e)?`number`:O.phone(e)?`phone`:`text`:null;function L(e){if(e.length<2)return!1;let t=e[0].map(e=>e.trim());if(t.some(oe))return!1;if(t.some(F))return!0;let n=e.slice(1,51);return t.some((e,t)=>{let r=n.map(e=>I(p(e[t]))).filter(e=>e!==null),i=[`email`,`link`,`phone`,`number`,`date`].find(e=>r.length>0&&r.filter(t=>t===e).length/r.length>=.6);return!!e&&i!==void 0&&I(e)!==i})}function R(e){if(Math.max(0,...e.slice(0,25).map(e=>e.filter(e=>e.trim()).length))<3)return[...e];let t=e.slice(0,10).findIndex(e=>e.filter(e=>e.trim()).length>=2);return t>0?e.slice(t):[...e]}function z(e){let t=R(E(e)),n=L(t),r=Math.max(0,...t.slice(0,M).map(e=>e.length)),i=n?t[0]:[],a=Array.from({length:r},(e,t)=>(i[t]??``).trim()),o=n?t.slice(1):t,s=ae(a,o);return{header:a.map((e,t)=>e||`Column ${t+1}`),rows:o,fields:s.map((e,t)=>e===`custom`&&!a[t]?`skip`:e)}}function B(e){if(e[0]===255&&e[1]===254)return new TextDecoder(`utf-16le`).decode(e);if(e[0]===254&&e[1]===255)return new TextDecoder(`utf-16be`).decode(e);try{return new TextDecoder(`utf-8`,{fatal:!0}).decode(e)}catch{return new TextDecoder(`windows-1252`).decode(e)}}function V(e,t,n,r=``){let i=[],a=new Map,o=new Map,s=0,c=0,l=0,u=e=>g(p(e.email))?p(e.email).toLowerCase():``,d=e=>h(p(e.linkedin),!1).toLowerCase();for(let f of e){let e={custom:{}};if(n.forEach((n,r)=>{let i=p(f[r]);if(i&&n!==`skip`){if(n===`custom`)e.custom[p(t[r])||`Column ${r+1}`]=i;else if(n===`phone`)(e.phones??=[]).push({value:i,label:x(t[r]??``)});else if(n===`company_phone`){l+=1;let n=`Company phone`in e.custom?p(t[r])||`Column ${r+1}`:`Company phone`;e.custom[n]=_(i)||i}else if(n===`city`||n===`industry`)e.custom[n]=i;else if(n===`tz`)e.tz??=i;else if(n===`name`){let t=/^([^,]+),\s*(.+)$/.exec(i),[n,...r]=t?[t[2],t[1]]:i.split(/\s+/);e.first??=n??``,e.last??=r.join(` `)}else e[n]=i}}),e.linkedin&&!h(e.linkedin,!1)&&(e.custom[`LinkedIn as written`]=e.linkedin,delete e.linkedin),!w(e)){s+=1;continue}let m=u(e),g=d(e),v=g?o.get(g):void 0,y=m&&a.get(m)||(v&&(!m||!u(v)||u(v)===m)?v:void 0);if(y){c+=1;for(let t of[`first`,`last`,`company`,`title`,`email`,`linkedin`,`tz`]){let n=p(e[t]);!p(y[t])&&n&&(y[t]=n)}let t=e=>_(e)||p(e),n=new Set((y.phones??[]).map(e=>t(e.value)));for(let r of e.phones??[])n.has(t(r.value))||((y.phones??=[]).push(r),n.add(t(r.value)));for(let[t,n]of Object.entries(e.custom??{}))t in y.custom||(y.custom[t]=n);u(y)&&!a.has(u(y))&&a.set(u(y),y),d(y)&&!o.has(d(y))&&o.set(d(y),y)}else r&&(e.custom.import_batch??=r),i.push(e),m&&!a.has(m)&&a.set(m,e),g&&!o.has(g)&&o.set(g,e)}let f=0,m=0,v=0,y=0,b=0;for(let e of i){let t=(e.phones??[]).map(e=>p(e.value)).filter(Boolean),n=t.map(_).filter(Boolean);f+=t.length-n.length,m+=n.length-new Set(n).size,p(e.email)&&!u(e)&&(v+=1),p(e.tz)&&!C(p(e.tz))&&(y+=1),w(e).channels.length||(b+=1)}return{people:i,empty:s,repeated:c,phonesKept:f,emailsKept:v,unreachable:b,companyPhones:l,phonesMerged:m,zonesKept:y}}function H(e){return/time_zone/i.test(e)?`its time zone is not one Jason knows`:/channels\[\d+\]\.value/i.test(e)?`an email, LinkedIn profile or phone number is not in a form Jason can use`:/custom/i.test(e)&&/invalid|too (long|large|many)/i.test(e)?`one of its extra columns is too long to keep`:/first_name|last_name|company|title/i.test(e)?`a name, company or title is too long`:/network|fetch|timed? ?out|unreachable|ECONN/i.test(e)?`Jason could not be reached; try again`:`could not be added`}function U(e){let t=p(e.email),n=p(e.linkedin),r=p(e.phone);return!p(e.first)&&!p(e.last)&&!t&&!n&&!r?`Give at least a name or an email.`:t&&!g(t)?`That email address does not look right.`:n&&!h(n)?`Give the link to their LinkedIn profile, like linkedin.com/in/dana-lee-example.`:r&&!_(r)?`Write the phone with its country code, like +1 555 010 0100.`:``}var W=[/[^\s@<>,;|"']+@[^\s@<>,;|"']+\.[a-z]{2,}/i,/linkedin\.com\/in\//i,/(?:\+|\b00)\d[\d\s().-]{8,}/];function G(e){if(!/[\r\n]/.test(e))return!1;let t=e.split(/\r\n|\r|\n/);return t.length>10||t.length>=3&&t.filter(e=>W.some(t=>t.test(e))).length>=2}function K(e,t){let n=e.rows.length,r=t.people.length,i=[],a=e.fields.some(e=>e===`email`||e===`linkedin`||e===`phone`),o=e.fields.some(e=>e===`first`||e===`last`||e===`name`);if(!n||!r)i.push({text:`No row could be read as a person.`,serious:!0});else{t.empty/n>.2&&t.empty>=3&&i.push({text:`${t.empty} of ${n} rows have no name and no contact: the file seems to have notes, headings or totals between its rows.`,serious:!0});let s=e.rows.filter(e=>e.some(G)).length;s&&i.push({text:`${s===1?`One row has a cell`:`${s} rows have cells`} that run over many lines: a quote seems to have opened and closed rows later, so the rows between were read as one value.`,serious:!0});let c=e.rows.slice(0,M),l=c.filter(t=>t.some((t,n)=>![`email`,`linkedin`,`phone`].includes(e.fields[n]??``)&&W.some(e=>e.test(t)))).length;!a&&l/c.length>=.3?i.push({text:`No column is an email, a LinkedIn profile or a phone number, but the cells hold some: several things seem to be packed into one column.`,serious:!0}):!a&&!o&&i.push({text:`No column was recognized as a name or as a way to reach anyone.`,serious:!0}),t.unreachable/r>.5&&l/c.length>=.3&&a&&i.push({text:`${t.unreachable} of ${r} people have no usable email, profile or phone, though the file holds some in other columns.`,serious:!0}),t.phonesKept/r>.1&&t.phonesKept>=3&&i.push({text:`${t.phonesKept} phone numbers have no country code.`,serious:t.phonesKept/r>.3}),t.emailsKept/r>.05&&t.emailsKept>=2&&i.push({text:`${t.emailsKept} cells in the email column are not one address (several addresses in a cell, or something else).`,serious:t.emailsKept/r>.2})}if(!i.length)return{report:``,said:``,serious:!1};let s=e.header.map((t,n)=>`${t} = ${e.fields[n]}`).join(`; `);return{report:`${i.map(e=>`- ${e.text}`).join(`
-`)}\nThe columns were read as: ${s.slice(0,1500)}.`,said:i[0].text,serious:i.some(e=>e.serious)}}var q=1500;function se(e=5,t=q){let n=0,r=-1/0;return i=>{n=i-r<=t?n+1:1,r=i;let a=e-n;return a<=0&&(n=0),Math.max(a,0)}}var J=[`low`,`medium`,`high`,`xhigh`,`max`],ce=[{id:``,label:`Default (recommended)`,note:`Opus 5.5 · Best for everyday, complex tasks`,efforts:J},{id:`opus`,label:`Opus 5.5`,note:`For complex work and everyday tasks`,efforts:J},{id:`fable`,label:`Fable 5.2`,note:`For your toughest challenges`,efforts:J},{id:`sonnet`,label:`Sonnet 5.5`,note:`Most efficient for simpler tasks`,efforts:J},{id:`haiku`,label:`Haiku 5.5`,note:`Fastest for quick answers`,efforts:J}],le=e=>{let t=e.auth!==`subscription`||e.configured;return{...e,host:e.program===`codex`?`codex`:`claude_code`,modelStyle:e.program===`codex`?`joined`:`separate`,installed:t,keySet:!1,ready:t&&e.auth!==`key`,refused:!1,removable:e.id!==`claude-subscription`,catalog:e.program===`claude`&&e.models.includes(`opus`)?ce:e.models.length?e.models.map((e,t)=>({id:e,label:e,note:t?``:`Default for this provider`,efforts:[]})):[{id:``,label:`Default`,note:`The provider’s own default model`,efforts:[]}]}},ue=()=>({providers:[{id:`claude-subscription`,label:`Claude Code`,program:`claude`,auth:`subscription`,models:[`opus`,`sonnet`,`haiku`],note:`Your Claude subscription, signed in with Claude Code.`,configured:!0},{id:`codex`,label:`Codex`,program:`codex`,auth:`subscription`,models:[],note:`Your ChatGPT plan, signed in with Codex.`,configured:!0},{id:`claude-api-key`,label:`Anthropic`,program:`claude`,auth:`key`,models:[`opus`,`sonnet`,`haiku`],note:`Bills your Anthropic API account instead of a subscription.`,configured:!1},{id:`codex-api-key`,label:`OpenAI`,program:`codex`,auth:`key`,models:[],note:`Bills your OpenAI API account.`,configured:!1},{id:`deepseek`,label:`DeepSeek`,program:`claude`,auth:`key`,models:[`deepseek-v4-pro`,`deepseek-v4-flash`],note:`Runs through Claude Code, on your API key.`,baseUrl:`https://api.deepseek.com/anthropic`,configured:!1},{id:`gemini`,label:`Gemini CLI`,program:`gemini`,auth:`subscription`,models:[],note:`A Code Assist Standard or Enterprise sign-in.`,configured:!1}].map(e=>le(e)),selection:{id:`claude-subscription`,model:``},roles:[],profiles:[]}),de=()=>{let e={providerId:`claude-subscription`,label:`Claude Code`,program:`claude`,installed:!0,canInstall:!1,canSignIn:!0,ready:!1,connected:!1};return{mode:`demo`,step:`ai`,ai:e,choices:[e,{...e,providerId:`codex`,label:`Codex`,program:`codex`}],reply:{wired:!1,cli:`ok`,signedIn:!1,user:``,accounts:[]},others:[],bundled:[]}},Y=e=>{let t=new Date(e-108e5-72e4).toISOString();return{info:{runtime_version:`0.0.0-demo`,api_version:`v1`,instance_id:`rt_demo`,pid:4242,started_at:t,data_dir:`~/.jason`,harness:{root:`~/Jason`},listening:{port:7311},database:{applied_migrations:[`20260913233702_InitialCreate`,`20261112075848_ProviderSendsSaidOnce`],backup_file:null},dispatcher:{state:`running`,tick_seconds:10,max_parallel:4,running_attempts:1,last_scan_at:new Date(e-4e3).toISOString(),scans:1106,summons:37},plugins:{active_count:1,loaded_at:t,last_reload_activated:!0},routes:{global_default_plugin:`reply`,global_override_count:0,campaign_route_count:3},update:null,ui:{version:`0.0.0-demo`,api_version_matches:!0,problem:null}},plugins:{plugins:[{id:`reply`,version:`0.0.0-demo`,kind:`provider`,status:`valid`}]}}};function fe(e){return Object.entries(e).map(([e,t])=>{let n=/roles\/([^/]+)\/SKILL\.md$/.exec(e)?.[1]??``,r=/^description:\s*(.+)$/m.exec(t)?.[1]??``,i=r.includes(` — `)?r.slice(r.indexOf(` — `)+3):r;return{name:n,description:i.charAt(0).toUpperCase()+i.slice(1),text:t}}).filter(e=>e.name).sort((e,t)=>e.name.localeCompare(t.name))}var pe=`This is the static demo: it has no AI and no runtime, so nothing connects or changes here. In the Jason app, this works for real.`,me=`The static demo has no AI: its chats answer from a script.`,X=fe(Object.assign({"../../../skills/runtime/roles/analyst/SKILL.md":i,"../../../skills/runtime/roles/copywriter/SKILL.md":a,"../../../skills/runtime/roles/critic/SKILL.md":o,"../../../skills/runtime/roles/deliverability-specialist/SKILL.md":s,"../../../skills/runtime/roles/manager/SKILL.md":c,"../../../skills/runtime/roles/personalizer/SKILL.md":l,"../../../skills/runtime/roles/planner/SKILL.md":u,"../../../skills/runtime/roles/researcher/SKILL.md":d,"../../../skills/runtime/roles/responder/SKILL.md":f})),Z=()=>Promise.reject(Error(pe));function he(e,t={}){switch(e){case`providers.list`:return Promise.resolve(ue());case`roles.list`:return Promise.resolve({runsOn:`Claude Code`,roles:X.map(({name:e,description:t})=>({name:e,description:t,hasInstructions:!0}))});case`roles.read`:{let e=X.find(e=>e.name===t.name);return e?Promise.resolve(e.text):Z()}case`list`:case`market.bundled`:case`mcp.list`:case`mcp.catalog`:case`secretNames`:return Promise.resolve([]);case`chat.connectors`:return Promise.resolve(!1);case`openIn.targets`:return Promise.resolve({targets:[]});case`openExternal`:return Promise.resolve(null);case`chat.title`:return Promise.resolve(String(t.text??``).slice(0,40));default:return Z()}}function ge(e){let t=se(),n={enabled:!1,showPeople:!1,showAgents:!1,showAccounts:!1},r=de();return{showHarness:(t,n=!1)=>e.showHarness(t,n),navItems:()=>[],slots:()=>[],mountSlot:()=>void 0,mountPreview:()=>void 0,runCommand:()=>void 0,hasChat:()=>!1,chat:(e,t,n,r)=>setTimeout(()=>r.done(me),0),stopChat:()=>void 0,mode:()=>`demo`,onCreatorEvent:()=>void 0,onModelsChanged:()=>void 0,runtime:()=>Promise.resolve(Y(e.now())),setMode:t=>{t===`live`&&e.toast(`Live needs the Jason app and its runtime. This static demo shows the samples only.`)},developer:{tap:()=>{if(n.enabled)return Promise.resolve(null);let r=t(e.now());return r===0&&(n={...n,enabled:!0}),Promise.resolve(r)},state:()=>n,set:e=>(n={...n,...e},Promise.resolve(n))},setup:{current:()=>r,status:()=>Promise.resolve(r),call:(t,n)=>{let r=n??{};return t===`openExternal`&&/^https:\/\//.test(String(r.url))&&e.open(String(r.url)),he(t,r)}},live:new Proxy({},{get:(e,t)=>t===`clock`?()=>``:t===`feedMerge`?e=>e:Z}),people:{list:Z,add:Z,matching:Z,remove:Z,addTo:Z,csv:e=>z(typeof e==`string`?e:B(e)),plan:(e,t,n,r)=>V(e,t,n,r),failure:H,check:U,trouble:e=>K(e,V(e.rows,e.header,e.fields)),fix:{start:Z,again:Z,stop:Z,dismiss:Z,on:()=>void 0}}}}var _e=`#harness-root .sd-harness{color:#1f2328;max-width:560px;margin:64px auto;padding:0 24px;font-family:Inter Variable,system-ui,sans-serif;font-size:14px;line-height:1.5}#harness-root{background:#fff}#harness-root .sd-harness h1{margin:0 0 12px;font-size:20px}.jc-console #mode-bar .sd-note{opacity:.8;white-space:nowrap;font-size:12px}`,Q=document.createElement(`style`);Q.textContent=[e,t,n,_e].join(`
-`),document.head.append(Q);var ve=document.getElementById(`app`);ve.innerHTML=`<div class="jc-console static-demo"><div id="title-drag"></div><div id="mode-bar"></div>${r}</div><div id="harness-root" hidden></div>`;var $=document.getElementById(`harness-root`);$.innerHTML=`<div class="sd-harness"><h1>Not in the static demo</h1><p>This page is one of the Jason app’s own screens. It reads a running Jason, and this demo is files in a browser with no runtime behind them.</p><p><a href="#home">Back to the Dashboard</a></p></div>`,window.JasonBridge=ge({toast:e=>{let t=window.toast;t&&t(e)},showHarness:(e,t)=>{$.hidden=!e;let n=document.getElementById(`main`);n&&(n.hidden=e&&!t)},now:()=>Date.now(),open:e=>void window.open(e,`_blank`,`noopener`)}),window.addEventListener(`unhandledrejection`,e=>{let t=e.reason;if(!(t instanceof Error)||t.message!==`This is the static demo: it has no AI and no runtime, so nothing connects or changes here. In the Jason app, this works for real.`)return;e.preventDefault();let n=window.toast;n&&n(t.message)})})();</script>
+    level url on at of the no by to and or in`.split(/\s+/)),F=e=>{let t=e.toLowerCase().split(/[^a-z-]+/).filter(Boolean);return t.some(e=>N.has(e))&&t.every(e=>N.has(e)||P.has(e))},I=e=>e?g(e)?`email`:/^https?:\/\/|linkedin\.com\/|^www\./i.test(e)?`link`:k(e)?`date`:/^[-+]?[\d,]*\.?\d+%?$/.test(e)?`number`:O.phone(e)?`phone`:`text`:null;function L(e){if(e.length<2)return!1;let t=e[0].map(e=>e.trim());if(t.some(oe))return!1;if(t.some(F))return!0;let n=e.slice(1,51);return t.some((e,t)=>{let r=n.map(e=>I(p(e[t]))).filter(e=>e!==null),i=[`email`,`link`,`phone`,`number`,`date`].find(e=>r.length>0&&r.filter(t=>t===e).length/r.length>=.6);return!!e&&i!==void 0&&I(e)!==i})}function R(e){if(Math.max(0,...e.slice(0,25).map(e=>e.filter(e=>e.trim()).length))<3)return[...e];let t=e.slice(0,10).findIndex(e=>e.filter(e=>e.trim()).length>=2);return t>0?e.slice(t):[...e]}function z(e){let t=R(E(e)),n=L(t),r=Math.max(0,...t.slice(0,M).map(e=>e.length)),i=n?t[0]:[],a=Array.from({length:r},(e,t)=>(i[t]??``).trim()),o=n?t.slice(1):t,s=ae(a,o);return{header:a.map((e,t)=>e||`Column ${t+1}`),rows:o,fields:s.map((e,t)=>e===`custom`&&!a[t]?`skip`:e)}}function B(e){if(e[0]===255&&e[1]===254)return new TextDecoder(`utf-16le`).decode(e);if(e[0]===254&&e[1]===255)return new TextDecoder(`utf-16be`).decode(e);try{return new TextDecoder(`utf-8`,{fatal:!0}).decode(e)}catch{return new TextDecoder(`windows-1252`).decode(e)}}function V(e,t,n,r=``){let i=[],a=new Map,o=new Map,s=0,c=0,l=0,u=e=>g(p(e.email))?p(e.email).toLowerCase():``,d=e=>h(p(e.linkedin),!1).toLowerCase();for(let f of e){let e={custom:{}};if(n.forEach((n,r)=>{let i=p(f[r]);if(i&&n!==`skip`){if(n===`custom`)e.custom[p(t[r])||`Column ${r+1}`]=i;else if(n===`phone`)(e.phones??=[]).push({value:i,label:x(t[r]??``)});else if(n===`company_phone`){l+=1;let n=`Company phone`in e.custom?p(t[r])||`Column ${r+1}`:`Company phone`;e.custom[n]=_(i)||i}else if(n===`city`||n===`industry`)e.custom[n]=i;else if(n===`tz`)e.tz??=i;else if(n===`name`){let t=/^([^,]+),\s*(.+)$/.exec(i),[n,...r]=t?[t[2],t[1]]:i.split(/\s+/);e.first??=n??``,e.last??=r.join(` `)}else e[n]=i}}),e.linkedin&&!h(e.linkedin,!1)&&(e.custom[`LinkedIn as written`]=e.linkedin,delete e.linkedin),!w(e)){s+=1;continue}let m=u(e),g=d(e),v=g?o.get(g):void 0,y=m&&a.get(m)||(v&&(!m||!u(v)||u(v)===m)?v:void 0);if(y){c+=1;for(let t of[`first`,`last`,`company`,`title`,`email`,`linkedin`,`tz`]){let n=p(e[t]);!p(y[t])&&n&&(y[t]=n)}let t=e=>_(e)||p(e),n=new Set((y.phones??[]).map(e=>t(e.value)));for(let r of e.phones??[])n.has(t(r.value))||((y.phones??=[]).push(r),n.add(t(r.value)));for(let[t,n]of Object.entries(e.custom??{}))t in y.custom||(y.custom[t]=n);u(y)&&!a.has(u(y))&&a.set(u(y),y),d(y)&&!o.has(d(y))&&o.set(d(y),y)}else r&&(e.custom.import_batch??=r),i.push(e),m&&!a.has(m)&&a.set(m,e),g&&!o.has(g)&&o.set(g,e)}let f=0,m=0,v=0,y=0,b=0;for(let e of i){let t=(e.phones??[]).map(e=>p(e.value)).filter(Boolean),n=t.map(_).filter(Boolean);f+=t.length-n.length,m+=n.length-new Set(n).size,p(e.email)&&!u(e)&&(v+=1),p(e.tz)&&!C(p(e.tz))&&(y+=1),w(e).channels.length||(b+=1)}return{people:i,empty:s,repeated:c,phonesKept:f,emailsKept:v,unreachable:b,companyPhones:l,phonesMerged:m,zonesKept:y}}function H(e){return/time_zone/i.test(e)?`its time zone is not one Jason knows`:/channels\[\d+\]\.value/i.test(e)?`an email, LinkedIn profile or phone number is not in a form Jason can use`:/custom/i.test(e)&&/invalid|too (long|large|many)/i.test(e)?`one of its extra columns is too long to keep`:/first_name|last_name|company|title/i.test(e)?`a name, company or title is too long`:/network|fetch|timed? ?out|unreachable|ECONN/i.test(e)?`Jason could not be reached; try again`:`could not be added`}function U(e){let t=p(e.email),n=p(e.linkedin),r=p(e.phone);return!p(e.first)&&!p(e.last)&&!t&&!n&&!r?`Give at least a name or an email.`:t&&!g(t)?`That email address does not look right.`:n&&!h(n)?`Give the link to their LinkedIn profile, like linkedin.com/in/dana-lee-nw-sample.`:r&&!_(r)?`Write the phone with its country code, like +1 555 010 0100.`:``}var W=[/[^\s@<>,;|"']+@[^\s@<>,;|"']+\.[a-z]{2,}/i,/linkedin\.com\/in\//i,/(?:\+|\b00)\d[\d\s().-]{8,}/];function G(e){if(!/[\r\n]/.test(e))return!1;let t=e.split(/\r\n|\r|\n/);return t.length>10||t.length>=3&&t.filter(e=>W.some(t=>t.test(e))).length>=2}function K(e,t){let n=e.rows.length,r=t.people.length,i=[],a=e.fields.some(e=>e===`email`||e===`linkedin`||e===`phone`),o=e.fields.some(e=>e===`first`||e===`last`||e===`name`);if(!n||!r)i.push({text:`No row could be read as a person.`,serious:!0});else{t.empty/n>.2&&t.empty>=3&&i.push({text:`${t.empty} of ${n} rows have no name and no contact: the file seems to have notes, headings or totals between its rows.`,serious:!0});let s=e.rows.filter(e=>e.some(G)).length;s&&i.push({text:`${s===1?`One row has a cell`:`${s} rows have cells`} that run over many lines: a quote seems to have opened and closed rows later, so the rows between were read as one value.`,serious:!0});let c=e.rows.slice(0,M),l=c.filter(t=>t.some((t,n)=>![`email`,`linkedin`,`phone`].includes(e.fields[n]??``)&&W.some(e=>e.test(t)))).length;!a&&l/c.length>=.3?i.push({text:`No column is an email, a LinkedIn profile or a phone number, but the cells hold some: several things seem to be packed into one column.`,serious:!0}):!a&&!o&&i.push({text:`No column was recognized as a name or as a way to reach anyone.`,serious:!0}),t.unreachable/r>.5&&l/c.length>=.3&&a&&i.push({text:`${t.unreachable} of ${r} people have no usable email, profile or phone, though the file holds some in other columns.`,serious:!0}),t.phonesKept/r>.1&&t.phonesKept>=3&&i.push({text:`${t.phonesKept} phone numbers have no country code.`,serious:t.phonesKept/r>.3}),t.emailsKept/r>.05&&t.emailsKept>=2&&i.push({text:`${t.emailsKept} cells in the email column are not one address (several addresses in a cell, or something else).`,serious:t.emailsKept/r>.2})}if(!i.length)return{report:``,said:``,serious:!1};let s=e.header.map((t,n)=>`${t} = ${e.fields[n]}`).join(`; `);return{report:`${i.map(e=>`- ${e.text}`).join(`
+`)}\nThe columns were read as: ${s.slice(0,1500)}.`,said:i[0].text,serious:i.some(e=>e.serious)}}var q=1500;function se(e=5,t=q){let n=0,r=-1/0;return i=>{n=i-r<=t?n+1:1,r=i;let a=e-n;return a<=0&&(n=0),Math.max(a,0)}}var J=[`low`,`medium`,`high`,`xhigh`,`max`],ce=[{id:``,label:`Default (recommended)`,note:`Opus 5.5 · Best for everyday, complex tasks`,efforts:J},{id:`opus`,label:`Opus 5.5`,note:`For complex work and everyday tasks`,efforts:J},{id:`fable`,label:`Fable 5.2`,note:`For your toughest challenges`,efforts:J},{id:`sonnet`,label:`Sonnet 5.5`,note:`Most efficient for simpler tasks`,efforts:J},{id:`haiku`,label:`Haiku 5.5`,note:`Fastest for quick answers`,efforts:J}],le=e=>{let t=e.auth!==`subscription`||e.configured;return{...e,host:e.program===`codex`?`codex`:`claude_code`,modelStyle:e.program===`codex`?`joined`:`separate`,installed:t,keySet:!1,ready:t&&e.auth!==`key`,refused:!1,removable:e.id!==`claude-subscription`,catalog:e.program===`claude`&&e.models.includes(`opus`)?ce:e.models.length?e.models.map((e,t)=>({id:e,label:e,note:t?``:`Default for this provider`,efforts:[]})):[{id:``,label:`Default`,note:`The provider’s own default model`,efforts:[]}]}},ue=()=>({providers:[{id:`claude-subscription`,label:`Claude Code`,program:`claude`,auth:`subscription`,models:[`opus`,`sonnet`,`haiku`],note:`Your Claude subscription, signed in with Claude Code.`,configured:!0},{id:`codex`,label:`Codex`,program:`codex`,auth:`subscription`,models:[],note:`Your ChatGPT plan, signed in with Codex.`,configured:!0},{id:`claude-api-key`,label:`Anthropic`,program:`claude`,auth:`key`,models:[`opus`,`sonnet`,`haiku`],note:`Bills your Anthropic API account instead of a subscription.`,configured:!1},{id:`codex-api-key`,label:`OpenAI`,program:`codex`,auth:`key`,models:[],note:`Bills your OpenAI API account.`,configured:!1},{id:`deepseek`,label:`DeepSeek`,program:`claude`,auth:`key`,models:[`deepseek-v4-pro`,`deepseek-v4-flash`],note:`Runs through Claude Code, on your API key.`,baseUrl:`https://api.deepseek.com/anthropic`,configured:!1},{id:`gemini`,label:`Gemini CLI`,program:`gemini`,auth:`subscription`,models:[],note:`A Code Assist Standard or Enterprise sign-in.`,configured:!1}].map(e=>le(e)),selection:{id:`claude-subscription`,model:``},roles:[],profiles:[]}),de=()=>{let e={providerId:`claude-subscription`,label:`Claude Code`,program:`claude`,installed:!0,canInstall:!1,canSignIn:!0,ready:!1,connected:!1};return{mode:`demo`,step:`ai`,ai:e,choices:[e,{...e,providerId:`codex`,label:`Codex`,program:`codex`}],reply:{wired:!1,cli:`ok`,signedIn:!1,user:``,accounts:[]},others:[],bundled:[]}},fe=e=>{let t=new Date(e-108e5-72e4).toISOString();return{info:{runtime_version:`0.0.0-demo`,api_version:`v1`,instance_id:`rt_demo`,pid:4242,started_at:t,data_dir:`~/.jason`,harness:{root:`~/Jason`},listening:{port:7311},database:{applied_migrations:[`20260913233702_InitialCreate`,`20261112075848_ProviderSendsSaidOnce`],backup_file:null},dispatcher:{state:`running`,tick_seconds:10,max_parallel:4,running_attempts:1,last_scan_at:new Date(e-4e3).toISOString(),scans:1106,summons:37},plugins:{active_count:1,loaded_at:t,last_reload_activated:!0},routes:{global_default_plugin:`reply`,global_override_count:0,campaign_route_count:3},update:null,ui:{version:`0.0.0-demo`,api_version_matches:!0,problem:null}},plugins:{plugins:[{id:`reply`,version:`0.0.0-demo`,kind:`provider`,status:`valid`}]}}};function pe(e){return Object.entries(e).map(([e,t])=>{let n=/roles\/([^/]+)\/SKILL\.md$/.exec(e)?.[1]??``,r=/^description:\s*(.+)$/m.exec(t)?.[1]??``,i=r.includes(` — `)?r.slice(r.indexOf(` — `)+3):r;return{name:n,description:i.charAt(0).toUpperCase()+i.slice(1),text:t}}).filter(e=>e.name).sort((e,t)=>e.name.localeCompare(t.name))}var me=`This is the static demo: it has no AI and no runtime, so nothing connects or changes here. In the Jason app, this works for real.`,he=`The static demo has no AI: its chats answer from a script.`,Y=pe(Object.assign({"../../../skills/runtime/roles/analyst/SKILL.md":i,"../../../skills/runtime/roles/copywriter/SKILL.md":a,"../../../skills/runtime/roles/critic/SKILL.md":o,"../../../skills/runtime/roles/deliverability-specialist/SKILL.md":s,"../../../skills/runtime/roles/manager/SKILL.md":c,"../../../skills/runtime/roles/personalizer/SKILL.md":l,"../../../skills/runtime/roles/planner/SKILL.md":u,"../../../skills/runtime/roles/researcher/SKILL.md":d,"../../../skills/runtime/roles/responder/SKILL.md":f})),X=()=>Promise.reject(Error(me));function ge(e,t={}){switch(e){case`providers.list`:return Promise.resolve(ue());case`roles.list`:return Promise.resolve({runsOn:`Claude Code`,roles:Y.map(({name:e,description:t})=>({name:e,description:t,hasInstructions:!0}))});case`roles.read`:{let e=Y.find(e=>e.name===t.name);return e?Promise.resolve(e.text):X()}case`list`:case`market.bundled`:case`mcp.list`:case`mcp.catalog`:case`secretNames`:return Promise.resolve([]);case`chat.connectors`:return Promise.resolve(!1);case`openIn.targets`:return Promise.resolve({targets:[]});case`openExternal`:return Promise.resolve(null);case`chat.title`:return Promise.resolve(String(t.text??``).slice(0,40));default:return X()}}function Z(e){let t=se(),n={enabled:!1,showPeople:!1,showAgents:!1,showAccounts:!1},r=de();return{showHarness:(t,n=!1)=>e.showHarness(t,n),navItems:()=>[],slots:()=>[],mountSlot:()=>void 0,mountPreview:()=>void 0,runCommand:()=>void 0,hasChat:()=>!1,chat:(e,t,n,r)=>setTimeout(()=>r.done(he),0),stopChat:()=>void 0,mode:()=>`demo`,onCreatorEvent:()=>void 0,onModelsChanged:()=>void 0,runtime:()=>Promise.resolve(fe(e.now())),setMode:t=>{t===`live`&&e.toast(`Live needs the Jason app and its runtime. This static demo shows the samples only.`)},developer:{tap:()=>{if(n.enabled)return Promise.resolve(null);let r=t(e.now());return r===0&&(n={...n,enabled:!0}),Promise.resolve(r)},state:()=>n,set:e=>(n={...n,...e},Promise.resolve(n))},setup:{current:()=>r,status:()=>Promise.resolve(r),call:(t,n)=>{let r=n??{};return t===`openExternal`&&/^https:\/\//.test(String(r.url))&&e.open(String(r.url)),ge(t,r)}},live:new Proxy({},{get:(e,t)=>t===`clock`?()=>``:t===`feedMerge`?e=>e:X}),people:{list:X,add:X,matching:X,remove:X,addTo:X,csv:e=>z(typeof e==`string`?e:B(e)),plan:(e,t,n,r)=>V(e,t,n,r),failure:H,check:U,trouble:e=>K(e,V(e.rows,e.header,e.fields)),fix:{start:X,again:X,stop:X,dismiss:X,on:()=>void 0}}}}var _e=`#harness-root .sd-harness{color:#1f2328;max-width:560px;margin:64px auto;padding:0 24px;font-family:Inter Variable,system-ui,sans-serif;font-size:14px;line-height:1.5}#harness-root{background:#fff}#harness-root .sd-harness h1{margin:0 0 12px;font-size:20px}.jc-console #mode-bar .sd-note{opacity:.8;white-space:nowrap;font-size:12px}`;function ve(){let e=new Map;return{get length(){return e.size},key:t=>[...e.keys()][t]??null,getItem:t=>e.get(String(t))??null,setItem:(t,n)=>void e.set(String(t),String(n)),removeItem:t=>void e.delete(String(t)),clear:()=>e.clear()}}{for(let e of[`localStorage`,`sessionStorage`])try{window[e].length}catch{try{Object.defineProperty(window,e,{value:ve(),configurable:!0})}catch{}}let e=(()=>{try{let e=document.featurePolicy;return!e||e.allowsFeature(`clipboard-write`)}catch{return!1}})(),t=navigator.clipboard,n=e&&t?.writeText?t.writeText.bind(t):null,r=e=>n?n(e).catch(()=>void 0):Promise.resolve();try{t?Object.defineProperty(t,"writeText",{value:r,configurable:!0}):Object.defineProperty(navigator,"clipboard",{value:{writeText:r},configurable:!0})}catch{}let i=``;try{i=location.hash}catch{}let a=e=>{let t=String(e??``),n=t.indexOf(`#`),r=n<0?``:t.slice(n);return r===`#`?``:r},o=e=>{if(e===i)return;let t=i;i=e,window.dispatchEvent(new HashChangeEvent(`hashchange`,{oldURL:t,newURL:e}))},s={get hash(){return i},set hash(e){let t=String(e);o(a(t.startsWith(`#`)?t:`#${t}`))},replace:e=>o(a(e)),reload:()=>window.dispatchEvent(new HashChangeEvent(`hashchange`,{oldURL:i,newURL:i})),replaceState:(e,t,n)=>{n!=null&&(i=a(n))}};window.JasonLocation=s,document.addEventListener(`click`,e=>{let t=e.target instanceof Element?e.target.closest(`a[href]`):null;if(!t)return;let n=!1,r=e.preventDefault.bind(e);e.preventDefault=()=>{n=!0,r()},r();let i=t.getAttribute(`href`)??``;i.startsWith(`#`)&&i.length>1&&setTimeout(()=>{n||(s.hash=i)},0)},!0)}var Q=document.createElement(`style`);Q.textContent=[e,t,n,_e].join(`
+`),document.head.append(Q);var ye=document.getElementById(`app`);ye.innerHTML=`<div class="jc-console static-demo"><div id="title-drag"></div><div id="mode-bar"></div>${r}</div><div id="harness-root" hidden></div>`;var $=document.getElementById(`harness-root`);$.innerHTML=`<div class="sd-harness"><h1>Not in the static demo</h1><p>This page is one of the Jason app’s own screens. It reads a running Jason, and this demo is files in a browser with no runtime behind them.</p><p><a href="#home">Back to the Dashboard</a></p></div>`,window.JasonBridge=Z({toast:e=>{let t=window.toast;t&&t(e)},showHarness:(e,t)=>{$.hidden=!e;let n=document.getElementById(`main`);n&&(n.hidden=e&&!t)},now:()=>Date.now(),open:()=>void 0}),window.addEventListener(`unhandledrejection`,e=>{let t=e.reason;if(!(t instanceof Error)||t.message!==`This is the static demo: it has no AI and no runtime, so nothing connects or changes here. In the Jason app, this works for real.`)return;e.preventDefault();let n=window.toast;n&&n(t.message)})})();</script>
 <script>// Generated by scripts/import-console.mjs from the console design. Change the design, not this file.
 
 /* =========================== MOCK DATA =========================== */
@@ -2823,13 +2823,13 @@ pulse:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',
 };
 const CAMPAIGNS=[
  {id:'c8',mode:'adaptive',autoApprove:false,name:'Demo · Key accounts · Adaptive',project:'Northwind Core',status:'active',goal:'Meeting with the CFO',channels:['LinkedIn','Email','Call'],members:8,researched:8,contacted:8,replied:3,interested:2,meetings:1,bounced:0,optout:0,waiting:3,provider:'Reply (messages only, no sequence)',review:'2 h',pilot:'No sequence · AI decides each touch',created:'Nov 01',sender:'Alex Morgan',owner:'Alex'},
- {id:'c1',mode:'sequence',autoApprove:false,name:'CFOs · Logistics · Chicago',project:'Northwind Core',status:'active',goal:'Demo with the finance lead',channels:['LinkedIn','Email'],members:120,researched:118,contacted:96,replied:21,interested:9,meetings:4,bounced:2,optout:1,waiting:6,provider:'Reply #demo-1 “NW – CFO Logistics”',review:'5 h',pilot:'Pilot done → scaled',created:'Oct 02',sender:'Alex Morgan',owner:'Alex'},
- {id:'c2',mode:'sequence',autoApprove:false,name:'RevOps leaders · SaaS · Austin',project:'Northwind Core',status:'active',goal:'Free 14-day trial',channels:['Email','LinkedIn'],members:240,researched:240,contacted:212,replied:34,interested:12,meetings:6,bounced:5,optout:3,waiting:3,provider:'Reply #demo-2 “NW – RevOps Austin”',review:'3 h',pilot:'Scaled (240)',created:'Oct 11',sender:'Alex Morgan',owner:'Alex'},
- {id:'c3',mode:'adaptive',autoApprove:true,name:'Closed-lost 2025 · Re-engage',project:'Northwind Core',status:'active',goal:'Reply “interested”',channels:['Email'],members:86,researched:86,contacted:61,replied:15,interested:5,meetings:2,bounced:1,optout:2,waiting:2,provider:'Reply #demo-3 “NW – Closed-lost”',review:'5 h',pilot:'Running',created:'Oct 20',sender:'Dana Miller',owner:'Dana'},
- {id:'c4',mode:'adaptive',autoApprove:false,name:'Ledgerly · Banks (compliance check)',project:'Agency · Ledgerly',status:'active',goal:'Meeting with Head of Payments',channels:['LinkedIn','Email','Call'],members:60,researched:42,contacted:18,replied:4,interested:2,meetings:1,bounced:0,optout:0,waiting:5,provider:'Reply #demo-4 (client account)',review:'1 h',pilot:'Pilot of 15',created:'Oct 28',sender:'Anna Ledger (client)',owner:'Alex'},
+ {id:'c1',mode:'sequence',autoApprove:false,name:'CFOs · Logistics · Chicago',project:'Northwind Core',status:'active',goal:'Demo with the finance lead',channels:['LinkedIn','Email'],members:120,researched:118,contacted:96,replied:21,interested:9,meetings:4,bounced:2,optout:1,waiting:6,provider:'Reply #DEMO-01 “NW – CFO Logistics”',review:'5 h',pilot:'Pilot done → scaled',created:'Oct 02',sender:'Alex Morgan',owner:'Alex'},
+ {id:'c2',mode:'sequence',autoApprove:false,name:'RevOps leaders · SaaS · Austin',project:'Northwind Core',status:'active',goal:'Free 14-day trial',channels:['Email','LinkedIn'],members:240,researched:240,contacted:212,replied:34,interested:12,meetings:6,bounced:5,optout:3,waiting:3,provider:'Reply #DEMO-02 “NW – RevOps Austin”',review:'3 h',pilot:'Scaled (240)',created:'Oct 11',sender:'Alex Morgan',owner:'Alex'},
+ {id:'c3',mode:'adaptive',autoApprove:true,name:'Closed-lost 2025 · Re-engage',project:'Northwind Core',status:'active',goal:'Reply “interested”',channels:['Email'],members:86,researched:86,contacted:61,replied:15,interested:5,meetings:2,bounced:1,optout:2,waiting:2,provider:'Reply #DEMO-03 “NW – Closed-lost”',review:'5 h',pilot:'Running',created:'Oct 20',sender:'Dana Miller',owner:'Dana'},
+ {id:'c4',mode:'adaptive',autoApprove:false,name:'Ledgerly · Banks (compliance check)',project:'Agency · Ledgerly',status:'active',goal:'Meeting with Head of Payments',channels:['LinkedIn','Email','Call'],members:60,researched:42,contacted:18,replied:4,interested:2,meetings:1,bounced:0,optout:0,waiting:5,provider:'Reply #DEMO-04 (client account)',review:'1 h',pilot:'Pilot of 15',created:'Oct 28',sender:'Anna Ledger (client)',owner:'Alex'},
  {id:'c5',mode:'adaptive',autoApprove:false,name:'Healthcare IT · Pilot',project:'Northwind Core',status:'draft',goal:'Demo (default)',channels:['Email'],members:10,researched:4,contacted:0,replied:0,interested:0,meetings:0,bounced:0,optout:0,waiting:2,provider:'not linked yet',review:'5 h',pilot:'Planning',created:'Nov 06',sender:'Alex Morgan',owner:'Alex'},
- {id:'c6',mode:'sequence',autoApprove:false,name:'Midwest Manufacturing · VPs of Ops',project:'Northwind Core',status:'paused',goal:'Demo with plant IT lead',channels:['Email'],members:150,researched:150,contacted:88,replied:6,interested:1,meetings:0,bounced:11,optout:4,waiting:1,provider:'Reply #demo-5 “NW – Midwest”',review:'5 h',pilot:'Paused by Deliverability',created:'Sep 14',sender:'Alex Morgan',owner:'Alex'},
- {id:'c7',mode:'sequence',autoApprove:false,name:'Q2 Webinar follow-up',project:'Northwind Core',status:'archived',goal:'Meeting',channels:['Email'],members:310,researched:310,contacted:310,replied:41,interested:14,meetings:9,bounced:7,optout:6,waiting:0,provider:'Reply #demo-6',review:'—',pilot:'Finished',created:'Jun 03',sender:'Alex Morgan',owner:'Alex'},
+ {id:'c6',mode:'sequence',autoApprove:false,name:'Midwest Manufacturing · VPs of Ops',project:'Northwind Core',status:'paused',goal:'Demo with plant IT lead',channels:['Email'],members:150,researched:150,contacted:88,replied:6,interested:1,meetings:0,bounced:11,optout:4,waiting:1,provider:'Reply #DEMO-06 “NW – Midwest”',review:'5 h',pilot:'Paused by Deliverability',created:'Sep 14',sender:'Alex Morgan',owner:'Alex'},
+ {id:'c7',mode:'sequence',autoApprove:false,name:'Q2 Webinar follow-up',project:'Northwind Core',status:'archived',goal:'Meeting',channels:['Email'],members:310,researched:310,contacted:310,replied:41,interested:14,meetings:9,bounced:7,optout:6,waiting:0,provider:'Reply #DEMO-05',review:'—',pilot:'Finished',created:'Jun 03',sender:'Alex Morgan',owner:'Alex'},
 ];
 const FN=['Maria','James','Sofia','Daniel','Elena','Marcus','Priya','Tom','Laura','Kenji','Hannah','Diego','Olivia','Ravi','Chloe','Ethan','Nadia','Lucas','Grace','Omar','Isabel','Noah','Mia','Felix','Ava','Jonas','Leah','Samir','Zoe','Victor','Emma','Arjun','Clara','Mateo','Ingrid','Ben','Yuki','Rosa','Henry','Lena'];
 const LN=['Alvarez','Whitaker','Romano','Kim','Petrova','Hale','Nair','Becker','Chen','Watanabe','Schulz','Moreno','Grant','Iyer','Dubois','Clarke','Haddad','Silva','Turner','Farouk','Costa','Bauer','Lind','Novak','Reyes','Weber','Shah','Mendes','Fischer','Ortiz'];
@@ -2850,7 +2850,7 @@ for(let i=0;i<64;i++){
     size:[85,140,320,610,1200,2400][i%6],tz:co[2].includes('TX')||co[2].includes('IL')?'CST (UTC−6)':'EST (UTC−5)',
     score:Math.round(55+R()*44)});
 }
-CONTACTS[0]=Object.assign(CONTACTS[0],{name:'Maria Alvarez',first:'Maria',title:'CFO',company:'FreightLane',state:'replied',stateLabel:'Replied',stateColor:'teal',email:'malvarez@freightlane.example.com',li:'linkedin.com/in/maria-alvarez-example',last:'2 min ago',score:94});
+CONTACTS[0]=Object.assign(CONTACTS[0],{name:'Maria Alvarez',first:'Maria',title:'CFO',company:'FreightLane',state:'replied',stateLabel:'Replied',stateColor:'teal',email:'malvarez@freightlane.example.com',li:'linkedin.com/in/maria-alvarez-nw-sample',last:'2 min ago',score:94});
 const cById=id=>id==='setup'?SETUP_C:CAMPAIGNS.find(c=>c.id===id);
 const C8=[
  ['Rebecca','Hollis','CFO','Atlas Freight Group','meeting','green','Meeting booked'],
@@ -3087,7 +3087,7 @@ function drawer(title,html){$('#dt').innerHTML=title;$('#db').innerHTML=html;$('
 function modal(html){$('#modal').innerHTML=html;$('#modal').classList.add('on');$('#ov').classList.add('on')}
 function closeAll(){$('#drawer').classList.remove('on');$('#modal').classList.remove('on');$('#ov').classList.remove('on')}
 function tog(on){return `<button class="tog ${on?'on':''}" onclick="this.classList.toggle('on');toast('Saved · applies at the next scan')"></button>`}
-function go(h){location.hash=h}
+function go(h){JasonLocation.hash=h}
 function chipsRow(list,cur,onclick){return `<div class="chips">${list.map(x=>`<span class="chip ${x===cur?'on':''}" onclick="${onclick}('${x}')">${x}</span>`).join('')}</div>`}
 
 /* charts */
@@ -3223,13 +3223,13 @@ let ACCOUNTS=[
 const MARKET=[
  {id:'whatsapp-channel',name:'WhatsApp Business',by:'Jason Labs',kind:'Channel',page:'generic',verified:true,stars:4.6,installs:'1.9k',desc:'Send approved WhatsApp messages and bring the replies back into Jason.',perms:['host: graph.facebook.com','secret: WHATSAPP_TOKEN'],c:'teal'},
  {id:'telegram-channel',name:'Telegram',by:'Jason Labs',kind:'Channel',page:'generic',verified:true,stars:4.4,installs:'1.2k',desc:'Reach people through your Telegram bot, with every message waiting for your approval.',perms:['host: api.telegram.org','secret: BOT_TOKEN'],c:'blue'},
- {id:'apollo-provider',name:'Apollo',by:'Community · @gtmtools',kind:'Provider',page:'generic',verified:false,stars:4.2,installs:'860',desc:'Run sequences and read replies through your Apollo account.',perms:['host: api.apollo.io','secret: APOLLO_API_KEY'],c:'amber'},
+ {id:'apollo-provider',name:'Apollo',by:'Community · @sample-gtmtools',kind:'Provider',page:'generic',verified:false,stars:4.2,installs:'860',desc:'Run sequences and read replies through your Apollo account.',perms:['host: api.apollo.io','secret: APOLLO_API_KEY'],c:'amber'},
  {id:'smtp-provider',name:'Your own SMTP',by:'Jason Labs',kind:'Provider',page:'generic',verified:true,stars:4.3,installs:'2.1k',desc:'Send from your own mail server and read replies over IMAP.',perms:['secret: SMTP_PASSWORD'],c:''},
  {id:'mini-crm',name:'Mini CRM',by:'Jason Labs',kind:'CRM',page:'crm',verified:true,stars:4.8,installs:'3.1k',desc:'A deal pipeline inside Jason. Replies and meetings move deals automatically.',perms:['journal: reply_classified, approval_*','ui: one page','storage: own table'],c:'violet'},
  {id:'hubspot-sync',name:'HubSpot two-way sync',by:'Jason Labs',kind:'CRM',page:'generic',verified:true,stars:4.7,installs:'5.2k',desc:'Push meetings and replies to HubSpot deals; pull owners and stages.',perms:['host: api.hubapi.com','journal: meeting_booked, reply_classified'],c:'amber'},
  {id:'calendly',name:'Meeting booker',by:'Jason Labs',kind:'Widget',page:'generic',verified:true,stars:4.5,installs:'2.7k',desc:'Offers real Calendly slots inside drafted replies; marks the goal reached on booking.',perms:['host: api.calendly.com','journal: reply_classified'],c:'teal'},
- {id:'enrich',name:'Email finder (Hunter)',by:'Community · @dataops',kind:'Data',page:'generic',verified:false,stars:4.1,installs:'1.1k',desc:'Find and verify emails for people without one before sending.',perms:['host: api.hunter.io'],c:''},
- {id:'li-posts',name:'LinkedIn post warm-up',by:'Community · @socialsell',kind:'Widget',page:'generic',verified:false,stars:3.9,installs:'540',desc:'Suggests likes/comments on prospects’ posts before the first touch.',perms:['ui: one page','journal: workitem_created'],c:'teal'},
+ {id:'enrich',name:'Email finder (Hunter)',by:'Community · @sample-dataops',kind:'Data',page:'generic',verified:false,stars:4.1,installs:'1.1k',desc:'Find and verify emails for people without one before sending.',perms:['host: api.hunter.io'],c:''},
+ {id:'li-posts',name:'LinkedIn post warm-up',by:'Community · @sample-socialsell',kind:'Widget',page:'generic',verified:false,stars:3.9,installs:'540',desc:'Suggests likes/comments on prospects’ posts before the first touch.',perms:['ui: one page','journal: workitem_created'],c:'teal'},
 ];
 const isInstalled=id=>APPS.some(a=>a.id===id);
 
@@ -3249,9 +3249,9 @@ const PLUGIN_PAGES={
  ├─ ui/page.js         this page
  └─ test/deals.test.js 12 tests ✓</div>`,'<button class="btn sm" onclick="go(\'plugins\')">Grants</button>')}</div>`},
  telegram(app){
-  return `<div class="crumb">Apps · plugin <code>${app.id}</code> · v${app.ver}</div><div class="ph"><div><h1>Telegram channel ${B('connected','green')}</h1><p>Bot <b>@northwind_sales_bot</b> · messages are a new channel for campaigns, approvals and the Responder.</p></div><div class="acts"><button class="btn" onclick="go('accounts')">Channels & accounts</button><button class="btn" onclick="crAsk('Telegram: also send voice notes and add a daily limit of 40 messages')">✨ Change with the Creator</button></div></div>
+  return `<div class="crumb">Apps · plugin <code>${app.id}</code> · v${app.ver}</div><div class="ph"><div><h1>Telegram channel ${B('connected','green')}</h1><p>Bot <b>@northwind_sample_bot</b> · messages are a new channel for campaigns, approvals and the Responder.</p></div><div class="acts"><button class="btn" onclick="go('accounts')">Channels & accounts</button><button class="btn" onclick="crAsk('Telegram: also send voice notes and add a daily limit of 40 messages')">✨ Change with the Creator</button></div></div>
   <div class="grid g21">${card('Chats',`<div class="list">${[['Jordan Hayes','Ironway Transport','Thanks, send me the deck','2 min'],['Megan Brooks','Keystone Fleet','Can we talk on Thursday?','1 h'],['Tyler Grant','Redline Express','👍','Yesterday']].map(c=>`<div class="it"><div class="ic blue">${initials(c[0])}</div><div class="grow"><b>${c[0]}</b> <span class="meta">${c[1]}</span><div class="meta">${c[2]}</div></div><span class="meta">${c[3]}</span></div>`).join('')}</div>`,'',true)}
-  <div class="grid" style="align-content:start">${card('Send a test message',`<div class="field"><label>To (Telegram username)</label><input class="inp" value="@your_handle"></div><div class="field"><label>Message</label><textarea class="inp">Test from Jason 👋</textarea></div><button class="btn p" onclick="toast('Test sent via @northwind_sales_bot')">Send test</button><div class="note" style="margin-top:10px">Real messages to prospects still go through Attention for approval.</div>`)}
+  <div class="grid" style="align-content:start">${card('Send a test message',`<div class="field"><label>To (Telegram username)</label><input class="inp" value="@sample_user_01"></div><div class="field"><label>Message</label><textarea class="inp">Test from Jason 👋</textarea></div><button class="btn p" onclick="toast('Test sent via @northwind_sample_bot')">Send test</button><div class="note" style="margin-top:10px">Real messages to prospects still go through Attention for approval.</div>`)}
   ${card('What this plugin adds',`<dl class="kv"><dt>Channel</dt><dd><code>telegram</code></dd><dt>Operations</dt><dd>message.send · conversation.list · conversation.get · conversation.reply</dd><dt>Approval</dt><dd>confirm each (same as email)</dd><dt>Network</dt><dd>api.telegram.org only</dd><dt>Secret</dt><dd>bot token in OS keychain, never in Jason</dd><dt>Limits</dt><dd>30 msgs/day per bot</dd></dl>`)}</div></div>`},
  generic(app){
   return `<div class="crumb">Apps · plugin <code>${app.id}</code> · v${app.ver}</div><div class="ph"><div><h1>${app.name}</h1><p>${app.desc||'Your plugin page.'}</p></div><div class="acts"><button class="btn" onclick="crAsk('Improve ${app.name}: ')">✨ Change with the Creator</button></div></div>
@@ -3266,9 +3266,9 @@ function installApp(item,fromBuild){
  APPS.push({id:item.id,name:item.name,page:item.page,desc:item.desc,ver:fromBuild?'0.1.0':'1.2.0',kind:item.kind});
  if(item.kind==='Channel'){const nm=item.channelName||item.name.replace(' channel','');
   if(!CHANNELS.some(c=>c.name===nm))CHANNELS.push({id:item.id,name:nm,via:'plugin · '+item.id,accounts:1,ops:'Send, read replies',c:'violet',custom:true});
-  ACCOUNTS.push({ch:nm,name:item.account||'@northwind_sales_bot',type:'Custom channel (plugin)',status:'ready',limit:'30/day'});}
+  ACCOUNTS.push({ch:nm,name:item.account||'@northwind_sample_bot',type:'Custom channel (plugin)',status:'ready',limit:'30/day'});}
  JOURNAL.unshift(['now','plugin_installed','—','Alex (person)',`${item.name} installed and granted: ${item.perms.join(', ')}`,'gr']);
- closeAll();renderNav();toast(`${item.name} installed · added to the sidebar`);if(location.hash.startsWith('#welcome')||location.hash.startsWith('#create')||location.hash.startsWith('#accounts'))render();else go('app/'+item.id)}
+ closeAll();renderNav();toast(`${item.name} installed · added to the sidebar`);if(JasonLocation.hash.startsWith('#welcome')||JasonLocation.hash.startsWith('#create')||JasonLocation.hash.startsWith('#accounts'))render();else go('app/'+item.id)}
 function permModal(id,fromBuild){const it=fromBuild?BUILD.result:MARKET.find(m=>m.id===id);modal(`<div class="dh">Install “${it.name}”?</div><div class="db"><p class="sub">${it.desc}</p><div class="field"><label>This plugin asks for</label>${it.perms.map(p=>`<label class="row"><input type="checkbox" checked> <code>${p}</code></label>`).join('')}</div><div class="note">Plugins run in their own process with only what you grant. Anything that reaches a real person still waits for your approval.</div>${it.verified===false?'<div class="note am" style="margin-top:8px">Community plugin, not verified. Read the code before granting network access.</div>':''}</div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" onclick='installApp(${JSON.stringify(it).replace(/'/g,"&#39;")},${!!fromBuild})'>Install & grant</button></div>`)}
 
 let MK_FILTER='All';
@@ -3282,8 +3282,8 @@ let BUILD={msgs:[],running:false,result:null};
 function prefill(t){const el=document.getElementById('bq');if(el){el.value=t;el.focus()}}
 function scriptFor(q){
  const l=q.toLowerCase();
- if(l.includes('telegram'))return {id:'telegram',name:'Telegram channel',kind:'Channel',page:'telegram',channelName:'Telegram',account:'@northwind_sales_bot',desc:'Send and read Telegram messages from your bot.',perms:['host: api.telegram.org','operations: message.send, conversation.list, conversation.get, conversation.reply','secret: TELEGRAM_BOT_TOKEN (keychain)','ui: one page'],
-  ask:'Which bot should send? I need its username; the token goes into your keychain, not into this chat.',answer:'@northwind_sales_bot',
+ if(l.includes('telegram'))return {id:'telegram',name:'Telegram channel',kind:'Channel',page:'telegram',channelName:'Telegram',account:'@northwind_sample_bot',desc:'Send and read Telegram messages from your bot.',perms:['host: api.telegram.org','operations: message.send, conversation.list, conversation.get, conversation.reply','secret: TELEGRAM_BOT_TOKEN (keychain)','ui: one page'],
+  ask:'Which bot should send? I need its username; the token goes into your keychain, not into this chat.',answer:'@northwind_sample_bot',
   files:[['plugins/telegram/manifest.json',`{
   "name": "telegram",
   "version": "0.1.0",
@@ -3646,7 +3646,7 @@ const SA={q:'',f:'All',search:false,limit:10};
 function saMatch(c){const q=SA.q.toLowerCase();return c.status!=='archived'&&!(FRESH&&liveAdopting(c))&&(!q||chatHay(c).includes(q))&&(SA.f==='All'||(SA.f==='Needs you'&&waitN(c.id)>0)||(SA.f==='Live'&&c.status==='active')||(SA.f==='Paused'&&c.status==='paused')||(SA.f==='Draft'&&c.status==='draft'))}
 function saRow(c,cur,badge){const n=c.isCreator?(crWait(c)?1:0):waitN(c.id);return `<div class="agent sa ${cur===c.id?'on':''}" oncontextmenu="event.preventDefault();${c.isCreator?`crMenu(event,'${c.id}')`:`agentMenu(event,'${c.id}')`}" onclick="${c.isCreator?`openCr('${c.id}')`:`go('campaigns/${c.id}')`}" title="${esc(c.goal)}">${sideDot(c)}<span class="nm">${esc(c.isCreator?crTitle(c):c.name)}</span>${badge&&n?`<span class="w">${n}</span>`:''}<span class="age">${esc(liveAge(c))}</span></div>`}
 function saList(){
- const [p,a]=location.hash.slice(1).split('/'),cur=p==='campaigns'||p==='create'?a:'',cq=SA.q.toLowerCase();
+ const [p,a]=JasonLocation.hash.slice(1).split('/'),cur=p==='campaigns'||p==='create'?a:'',cq=SA.q.toLowerCase();
  const vis=[...CAMPAIGNS.filter(saMatch),...CREATORS.filter(c=>(SA.f==='All'||(SA.f==='Needs you'&&crWait(c)))&&(!cq||chatHay(c).includes(cq)))].sort((x,y)=>(y.t||0)-(x.t||0)),filtering=SA.q||SA.f!=='All';
  let shown=filtering?vis:vis.slice(0,SA.limit);
  if(cur&&!shown.some(c=>c.id===cur)&&vis.some(c=>c.id===cur))shown=[...shown,vis.find(c=>c.id===cur)];
@@ -3658,9 +3658,9 @@ function saDraw(){const e=$('#sagents');if(e)e.innerHTML=saList()}
 function saSearch(){SA.search=!SA.search;if(!SA.search)SA.q='';renderSide();if(SA.search)$('#saq')?.focus()}
 function saFilter(ev){openMenu(ev,`<div class="ml">Show</div>${['All','Needs you','Live','Paused','Draft'].map(f=>`<button onclick="SA.f='${f}';renderSide()">${SA.f===f?'✓ ':''}${f}</button>`).join('')}`)}
 function renderSide(){
- const page=(location.hash.startsWith('#/')?location.hash.split('?')[0].split('/')[1]:location.hash.slice(1)||'home').split('/')[0];
- const nav=n=>{const c=n[0]==='attention'?needN():0,inMain=location.hash.startsWith('#campaigns/setup'),on=n[0]==='campaigns/setup'?inMain:n[3].includes(page)&&!(n[0]==='campaigns'&&(crHomeOn()||inMain));return `<a class="item ${on?'on':''}" href="#${n[0]}">${svg(n[2],17)}${n[1]}${c?`<span class="n">${c}</span>`:''}</a>`};
- const a=location.hash.slice(1).split('/')[1],inMore=MORE_NAV.some(n=>n[0]===page);
+ const page=(JasonLocation.hash.startsWith('#/')?JasonLocation.hash.split('?')[0].split('/')[1]:JasonLocation.hash.slice(1)||'home').split('/')[0];
+ const nav=n=>{const c=n[0]==='attention'?needN():0,inMain=JasonLocation.hash.startsWith('#campaigns/setup'),on=n[0]==='campaigns/setup'?inMain:n[3].includes(page)&&!(n[0]==='campaigns'&&(crHomeOn()||inMain));return `<a class="item ${on?'on':''}" href="#${n[0]}">${svg(n[2],17)}${n[1]}${c?`<span class="n">${c}</span>`:''}</a>`};
+ const a=JasonLocation.hash.slice(1).split('/')[1],inMore=MORE_NAV.some(n=>n[0]===page);
  $('#sscroll').innerHTML=[...(FRESH?[]:[['campaigns/setup','Feed','pulse',[]]]),...liveNav(MAIN_NAV),...JasonBridge.navItems()].map(nav).join('')+
   (APPS.length?`<div class="sect"><span>Apps</span></div>${APPS.map(x=>`<a class="item ${page==='app'&&a===x.id?'on':''}" href="#app/${x.id}">${svg('app',17)}${esc(x.name)}</a>`).join('')}`:'')+
   `<div class="sect"><span>Recent</span><span class="sect-t"><button class="ib ${SA.search?'act':''}" title="Search agents" onclick="saSearch()">${svg('search',15)}</button><button class="ib ${SA.f!=='All'?'act':''}" title="Filter" onclick="saFilter(event)">${svg('filter',15)}</button></span></div>`+
@@ -3672,19 +3672,19 @@ function newProject(){askText('New project','',v=>{PROJECTS.push(v);render();toa
 
 /* ---- router ---- */
 function render(){
- let [page='',a,b]=location.hash.slice(1).split('/');
+ let [page='',a,b]=JasonLocation.hash.slice(1).split('/');
  closeAll();closeMenu();$('#side').classList.remove('open');
  resetHarnessPlace();
  if(isSettingsFrame()){renderSettingsFrame();renderSide();return}
- if(location.hash.startsWith('#/')){JasonBridge.showHarness(true);renderSide();return}
+ if(JasonLocation.hash.startsWith('#/')){JasonBridge.showHarness(true);renderSide();return}
  JasonBridge.showHarness(false);
- if(page==='settings'||page==='deliverability'){location.replace('#models');return}
+ if(page==='settings'||page==='deliverability'){JasonLocation.replace('#models');return}
  if(FRESH){
-  if(!page){location.replace('#start');return}
-  if(page==='welcome'){location.replace(liveShows('accounts')?'#accounts':'#start');return}
-  if(LIVE_ROUTE[page]){location.replace('#'+LIVE_ROUTE[page]);return}
+  if(!page){JasonLocation.replace('#start');return}
+  if(page==='welcome'){JasonLocation.replace(liveShows('accounts')?'#accounts':'#start');return}
+  if(LIVE_ROUTE[page]){JasonLocation.replace('#'+LIVE_ROUTE[page]);return}
  }
- if(page==='builder'){location.replace('#create/plugin');return}
+ if(page==='builder'){JasonLocation.replace('#create/plugin');return}
  if(page==='inbox'){NF.f='Inbox';page='attention'}
  if(page==='create')crResolve(a);
  $('.shell').classList.toggle('bare',page==='welcome'||(page==='create'&&CR.back.startsWith('welcome')));
@@ -3716,7 +3716,7 @@ function wConnectReply(){connectReply(()=>go('welcome/plugins'))}
 function renderWelcome(step){
  let h='';
  if(step!=='plugins'){h=`${wHead(0)}<h2>How should Jason reach people?</h2><p class="lead">Pick one to start. You can add the others later in Accounts.</p>
- ${connectCards({reply:'wConnectReply()',back:'welcome'})}<p class="wsand">Just looking around? <a href="${location.pathname}#home" onclick="setTimeout(()=>location.reload(),30)">Use the test sandbox</a>: sample data and simulated mailboxes, nothing is sent to anyone.</p>`}
+ ${connectCards({reply:'wConnectReply()',back:'welcome'})}<p class="wsand">Just looking around? <a href="#home" onclick="setTimeout(()=>JasonLocation.reload(),30)">Use the test sandbox</a>: sample data and simulated mailboxes, nothing is sent to anyone.</p>`}
  if(step==='plugins'){const list=MARKET.filter(m=>['mini-crm','calendly','hubspot-sync'].includes(m.id));h=`${wHead(1)}<h2>You’re connected</h2><p class="lead">${REPLY.connected?`Reply workspace <b>${esc(REPLY.workspace)}</b>.`:'Your accounts are ready.'} Jason can send through these:</p><div class="wconn">${connectedLine()||'<span class="pillc warn">Nothing connected yet</span>'}</div>
  <h3 class="wsub">Add a few plugins? <span>Optional. Each one gets a place in your sidebar.</span></h3>
  <div class="wlist">${list.map(m=>`<div class="wrow"><div><b>${m.name}</b><div class="meta">${m.desc}</div></div>${isInstalled(m.id)?'<span class="pillc ok">Installed</span>':`<button class="btn" onclick="permModal('${m.id}')">Install</button>`}</div>`).join('')}</div>
@@ -3727,7 +3727,7 @@ function renderWelcome(step){
 /* ---- settings ---- */
 function setLinks(){
  if(SETTINGS_NAV.length>1)SETTINGS_NAV.splice(0,SETTINGS_NAV.length-1);
- const page=location.hash.startsWith('#/')?location.hash.slice(1).split('?')[0]:location.hash.slice(1).split('/')[0],at=page==='/system'?'runtime':page==='/p/settings'?'prefs':page;
+ const page=JasonLocation.hash.startsWith('#/')?JasonLocation.hash.slice(1).split('?')[0]:JasonLocation.hash.slice(1).split('/')[0],at=page==='/system'?'runtime':page==='/p/settings'?'prefs':page;
  return SETTINGS_NAV.map(([g,items])=>`<div class="setg">${g}</div>${items.filter(setShown).map(i=>`<a class="item ${at===i[0]?'on':''}" href="#${i[0]}">${svg(i[2],17)}${i[1]}</a>`).join('')}`).join('');
 }
 function renderSettings(page,a,b){
@@ -3846,7 +3846,7 @@ function needItems(){
  return [...QUESTIONS.map(q=>({k:'q',id:q.id,camp:q.camp,age:q.age,o:q,rank:0})),...APPROVALS.filter(a=>!linked.has(a.id)).map(a=>({k:'a',id:a.id,camp:a.camp,age:a.age,o:a,rank:0})),...THREADS.map(t=>({k:'t',id:t.id,camp:t.camp,age:t.time,o:t,act:liveDraft(t),rank:liveDraft(t)?0:t.unread?1:2}))].sort((x,y)=>x.rank-y.rank);
 }
 const inFilter=(i,f)=>f==='All'||(f==='Approvals'&&(i.k==='a'||i.act))||(f==='Questions'&&i.k==='q')||(f==='Chats'&&i.k==='c')||(f==='Inbox'&&i.k==='t');
-function setNF(k,v){NF[k]=v;if(k==='f')NF.cat='';if(location.hash==='#attention')render();else go('attention')}
+function setNF(k,v){NF[k]=v;if(k==='f')NF.cat='';if(JasonLocation.hash==='#attention')render();else go('attention')}
 function needRow(i,cur){
  const name=cById(i.camp)?.name||'';let ic,ttl,meta;
  if(i.k==='a'){ic=`<div class="ic amber">✓</div>`;ttl=esc(i.o.subject);meta=`${OP_LABEL[i.o.op]||i.o.op}${i.o.to?` · to ${esc(i.o.to)}`:''} · ${esc(name)}`}
@@ -3887,7 +3887,7 @@ P.attention=(id)=>{
 const PSTATE={'All':null,'Waiting for you':['awaiting'],'Replied':['replied'],'Meeting':['meeting'],'Contacted':['contacted','enrolled'],'Bounced':['bounced'],'Opted out':['opted_out'],'Do not contact':'dnc'};
 const PF={q:'',camp:'',st:'All'},AF={q:'',camp:'',st:'All'},PSEL=new Set();
 let DR={id:null,tab:'details'};
-const pplFixed=()=>{const [p,a,b]=location.hash.slice(1).split('/');return p==='campaigns'&&b==='people'?a:''};
+const pplFixed=()=>{const [p,a,b]=JasonLocation.hash.slice(1).split('/');return p==='campaigns'&&b==='people'?a:''};
 function pplMatch(p,f,fixed){const q=f.q.toLowerCase(),st=PSTATE[f.st];return (!fixed||p.camp===fixed)&&(fixed||!f.camp||p.camp===f.camp)&&(!st||(st==='dnc'?p.dnc:st.includes(p.state)))&&(!q||(p.name+' '+p.company+' '+p.title+' '+p.email).toLowerCase().includes(q))}
 const pplList=fixed=>CONTACTS.filter(p=>pplMatch(p,fixed?AF:PF,fixed));
 const REPLY_CHIPS={interested:['Interested','green'],not_now:['Not now',''],out_of_office:['Out of office','blue'],objection:['Objection','amber'],meeting_requested:['Wants a meeting','green'],referral:['Referral','violet']};
@@ -3992,7 +3992,7 @@ function savePerson(id){
 function toggleDnc(id){const p=pById(id);setDnc(p,!p.dnc);toast(p.dnc?'On do-not-contact':'Removed from do-not-contact');pplDraw();renderSide();drawPerson()}
 function excludePerson(id){const p=pById(id);p.state='excluded';p.stateLabel='Excluded';p.stateColor='gray';APPROVALS=APPROVALS.filter(a=>a.who!==id);toast('Excluded');pplDraw();renderSide();drawPerson()}
 const closeBase=closeAll;
-closeAll=function(){if($('#drawer').classList.contains('on')&&location.hash.startsWith('#people/'))history.replaceState(null,'','#people');closeBase();markOpenRow()};
+closeAll=function(){if($('#drawer').classList.contains('on')&&JasonLocation.hash.startsWith('#people/'))JasonLocation.replaceState(null,'','#people');closeBase();markOpenRow()};
 document.addEventListener('click',e=>{const a=e.target.closest?.('a[href^="#people/"]');if(!a)return;e.preventDefault();openPerson(a.getAttribute('href').split('/')[1])},true);
 
 function addPeople(id){
@@ -4065,7 +4065,7 @@ function deleteMany(ids){
  if(has.has(NF.camp))NF.camp='';if(has.has(PF.camp))PF.camp='';
 }
 function bulkDelete(){const ids=[...SEL],n=ids.length;confirmModal(`Delete ${agentsWord(n)}?`,`Their chats, people and history are removed. <b>This can’t be undone.</b> To keep the history, archive them instead.`,'Delete',()=>{deleteMany(ids);bulkDone(`Deleted ${agentsWord(n)}`)},'no')}
-function deleteAgent(id){const c=cById(id);confirmModal(`Delete “${c.name}”?`,'Its chat, people and history are removed. <b>This can’t be undone.</b> To keep the history, archive it instead.','Delete',()=>{deleteMany([id]);toast('Deleted');if(location.hash==='#campaigns')render();else go(agentsHome())},'no')}
+function deleteAgent(id){const c=cById(id);confirmModal(`Delete “${c.name}”?`,'Its chat, people and history are removed. <b>This can’t be undone.</b> To keep the history, archive it instead.','Delete',()=>{deleteMany([id]);toast('Deleted');if(JasonLocation.hash==='#campaigns')render();else go(agentsHome())},'no')}
 P.campaigns=()=>{if(FRESH&&!CAMPAIGNS.length)return liveAgentsEmpty();const cnt=f=>CAMPAIGNS.filter(c=>AG_FILTERS[f](c)).length,live=CAMPAIGNS.filter(c=>c.status!=='archived'),sum=k=>live.reduce((t,c)=>t+(c[k]||0),0),con=sum('contacted'),rep=sum('replied');setTimeout(agDraw,0);return `<div class="ph"><div><h1>Agents</h1><p>Your GTM agents.</p></div><div class="acts"><a class="btn p" href="#start">New GTM agent</a></div></div><div class="crhead"><div><h3>GTM agents</h3><span class="meta">They plan and run outreach.</span></div></div>${CAMPAIGNS.length?`<div class="filters"><input class="inp" style="width:260px" placeholder="Search agents" value="${esc(AG_Q)}" oninput="AG_Q=this.value;agDraw()"><div class="chips">${Object.keys(AG_FILTERS).map(f=>`<span class="chip ${AG_F===f?'on':''}" onclick="AG_F='${f}';render()">${f} <span class="chipn">${cnt(f)}</span></span>`).join('')}</div></div>`:''}<div class="card agcard"><div class="bulk" id="agbar">${agBar()}</div><div id="aglist">${agList()}</div></div>`};
 
 /* ---- the adaptive demo's replies, so its inbox matches its numbers ---- */
@@ -4145,9 +4145,9 @@ function ask(c,text){
  const r=replyFor(c,text);if(!r.card&&!ch.nudged){ch.nudged=1;r.t+='\n\nThis is a scripted answer. Connect an AI and the agent answers for real.';r.card={kind:'setup_ai'}}
  say(c,r);
 }
-function paint(id,full){if(isCr(id)){renderSide();if(location.hash==='#create/'+id&&CR.id===id)renderCreator();return}const [p,a,b]=location.hash.slice(1).split('/');if(p==='campaigns'&&a===id&&(!b||b==='chat')){if(full)renderAgent(id,b);else{renderThread(true);syncComposer()}}renderSide()}
+function paint(id,full){if(isCr(id)){renderSide();if(JasonLocation.hash==='#create/'+id&&CR.id===id)renderCreator();return}const [p,a,b]=JasonLocation.hash.slice(1).split('/');if(p==='campaigns'&&a===id&&(!b||b==='chat')){if(full)renderAgent(id,b);else{renderThread(true);syncComposer()}}renderSide()}
 function stopRun(){const c=cById(curId());chatOf(c).stopped=true;JasonBridge.stopChat(c.chatKey||c.id);clearTimeout(TIMER);TIMER=null;const ch=chatOf(c);ch.running=false;ch.msgs.push({r:'ev',t:'Stopped'});renderAgent(c.id,'chat')}
-const curId=()=>location.hash.slice(1).split('/')[1];
+const curId=()=>JasonLocation.hash.slice(1).split('/')[1];
 
 /* ---- creating an agent: the chat asks with cards ---- */
 function waitingApprovals(){return APPROVALS.filter(a=>a.camp===curId())}
@@ -4303,7 +4303,7 @@ function decide(id,ok){
  toast(ok?'Approved':'Rejected. The Manager will review it.');afterAct();
 }
 function answerQ(id,i){if(FRESH)return liveAnswer(id,i);const q=QUESTIONS.find(x=>x.id===id);QUESTIONS=QUESTIONS.filter(x=>x.id!==id);if(q&&CHATS[q.camp]&&i!=null)CHATS[q.camp].msgs.push({r:'user',t:q.opts[i]},{r:'ai',who:'Manager',t:'Got it. I’ll plan the next step from that.'});toast('Answered');afterAct()}
-function afterAct(){const open=$('#drawer').classList.contains('on');if(location.hash.startsWith('#attention/'))go('attention');else{render();if(open)drawPerson()}}
+function afterAct(){const open=$('#drawer').classList.contains('on');if(JasonLocation.hash.startsWith('#attention/'))go('attention');else{render();if(open)drawPerson()}}
 
 const SUG_LATER=['How is it going?','Who replied?','Make the emails shorter','Add people'];
 function threadHTML(ch,c,mid){
@@ -4415,12 +4415,12 @@ const CR_COPY={
 };
 function newCr(kind,back){const id='cr'+(++CR_ID);CHATS[id]={msgs:[],running:false};return {id,isCreator:true,kind,back,stage:'ask',name:'',brief:'',to:'',caps:'',draft:'',goal:'Creator agent',status:'draft'}}
 let CR=newCr('channel','accounts');
-function openCreator(kind,back){CR=newCr(kind,back);if(location.hash==='#create/'+kind)render();else go('create/'+kind)}
+function openCreator(kind,back){CR=newCr(kind,back);if(JasonLocation.hash==='#create/'+kind)render();else go('create/'+kind)}
 function openCr(id){const c=CREATORS.find(x=>x.id===id);if(!c)return;c.back='campaigns';go('create/'+id)}
 function crResolve(a){const found=CREATORS.find(c=>c.id===a);if(found){CR=found;return}if(CR.id===a)return;if(CR_COPY[a]&&(CR.kind!==a||CREATORS.includes(CR)))CR=newCr(a,'campaigns')}
 function crTitle(c){if(c.named)return c.name;const n=c.name||'New',w=c.kind==='tool'?'provider':c.kind==='plugin'?'plugin':'channel';return new RegExp(w+'$','i').test(n)?n:`${n} ${w}`}
 const crStatus=c=>c.stage==='done'?'<span class="pillc ok">Added</span>':c.stage==='ready'?`<span class="pillc ${c.removed?'':'vio'}">${c.removed?'Removed':c.addedOnce?'Update ready':'Ready to add'}</span>`:FRESH&&!(CHATS[c.id]&&CHATS[c.id].running)?`<span class="pillc ${c.stage==='stopped'?'':'warn'}">${c.stage==='stopped'?'Stopped':'Waiting for you'}</span>`:FRESH&&crWait(c)==='card'?'<span class="pillc warn">Waiting for you</span>':'<span class="pillc blue">Building</span>';
-function crDelete(id){const c=CREATORS.find(x=>x.id===id);confirmModal(`Delete “${crTitle(c)}”?`,'This removes the chat. Anything it already added stays connected.','Delete',()=>{CREATORS.splice(CREATORS.indexOf(c),1);delete CHATS[id];liveSave();toast('Deleted');if(location.hash==='#create/'+id)go(agentsHome());else render()},'no')}
+function crDelete(id){const c=CREATORS.find(x=>x.id===id);confirmModal(`Delete “${crTitle(c)}”?`,'This removes the chat. Anything it already added stays connected.','Delete',()=>{CREATORS.splice(CREATORS.indexOf(c),1);delete CHATS[id];liveSave();toast('Deleted');if(JasonLocation.hash==='#create/'+id)go(agentsHome());else render()},'no')}
 function crMenu(ev,id){openMenu(ev,`${FRESH?`<button onclick="closeMenu();crRename('${id}')">Rename</button>`:`<button onclick="openCr('${id}')">Open</button>`}<hr><button style="color:var(--red)" onclick="crDelete('${id}')">Delete</button>`)}
 function guessName(t){const stop=/^(Create|Build|Make|Add|Connect|We|Our|I|A|An|The|Me|My|Please|Send|Read|Створи|Зроби|Додай)$/;return t.replace(/[^\p{L}\p{N}\s-]/gu,' ').split(/\s+/).find(x=>/^\p{Lu}/u.test(x)&&!stop.test(x))||(CR.kind==='tool'?'My provider':'My channel')}
 const crCaps=()=>({kind:'choice',question:CR.kind==='tool'?'Which channels does it give you?':'What should it do?',hint:'Pick all that fit.',multi:true,other:true,options:CR.kind==='tool'?[{label:'Email',recommended:true},{label:'LinkedIn'},{label:'SMS'},{label:'Calls'}]:[{label:'Send messages',recommended:true},{label:'Read replies',recommended:true},{label:'Show delivery status'},{label:'Send files'}]});
@@ -4430,7 +4430,7 @@ UI_KINDS.crdone={init:()=>({}),html:u=>`<div class="ui-q">${esc(CR.name)}: what 
 function crSend(){
  if(FRESH)return liveCrSend();
  const b=$('#crbox'),text=b.value.trim(),ch=CHATS[CR.id];if(!text||ch.running)return;CR.draft='';ch.msgs.push({r:'user',t:text});
- if(CR.stage==='ask'){CR.brief=clean(text);CR.name=guessName(text);CR.stage='caps';CREATORS.unshift(CR);history.replaceState(null,'','#create/'+CR.id);return say(CR,{who:'Creator',steps:['Read what you asked for','Looked up its API'],t:`I can build **${CR.name}**. First, a couple of quick picks.\n\nThis chat is a scripted sample of how the Creator works: in the demo nothing is really built, tested or sent.`,card:crCaps()})}
+ if(CR.stage==='ask'){CR.brief=clean(text);CR.name=guessName(text);CR.stage='caps';CREATORS.unshift(CR);JasonLocation.replaceState(null,'','#create/'+CR.id);return say(CR,{who:'Creator',steps:['Read what you asked for','Looked up its API'],t:`I can build **${CR.name}**. First, a couple of quick picks.\n\nThis chat is a scripted sample of how the Creator works: in the demo nothing is really built, tested or sent.`,card:crCaps()})}
  if(CR.stage==='ready'||CR.stage==='done')return say(CR,{who:'Creator',t:'Noted. This is a scripted sample, so nothing was changed.',card:CR.stage==='ready'?{kind:'crdone'}:null});
  if(JasonBridge.hasChat())return llmSay(CR,text,{who:'Creator'});
  say(CR,{who:'Creator',t:'Noted, I’ll build that in. Use the card above to keep going.'});
@@ -4493,7 +4493,7 @@ function palDraw(){$('#palres').innerHTML=PAL_R.map((r,i)=>`<div class="${i===PA
 function palSearch(q){q=q.toLowerCase().trim();PAL_I=0;const all=palItems();PAL_R=(q?all.filter(r=>(r[0]+' '+(r[3]||'')+' '+(r[4]||'')).toLowerCase().includes(q)):all.filter(r=>r[3]!=='Person')).slice(0,12);palDraw()}
 function palOpen(){$('#pal').classList.add('on');$('#ov').classList.add('on');const i=$('#palq');i.value='';palSearch('');i.focus()}
 function palClose(){$('#pal').classList.remove('on');if(!$('#modal').classList.contains('on')&&!$('#drawer').classList.contains('on'))$('#ov').classList.remove('on')}
-function palGo(i){const r=PAL_R[i];if(!r)return;palClose();if(r[1].startsWith('cmd:'))return JasonBridge.runCommand(r[1].slice(4));if(FRESH&&!liveShows('people')&&r[1].startsWith('#people/'))return openPerson(r[1].split('/')[1]);if(location.hash===r[1])render();else location.hash=r[1]}
+function palGo(i){const r=PAL_R[i];if(!r)return;palClose();if(r[1].startsWith('cmd:'))return JasonBridge.runCommand(r[1].slice(4));if(FRESH&&!liveShows('people')&&r[1].startsWith('#people/'))return openPerson(r[1].split('/')[1]);if(JasonLocation.hash===r[1])render();else JasonLocation.hash=r[1]}
 function palKey(e){if(e.key==='ArrowDown'){e.preventDefault();PAL_I=Math.min(PAL_R.length-1,PAL_I+1);palDraw()}else if(e.key==='ArrowUp'){e.preventDefault();PAL_I=Math.max(0,PAL_I-1);palDraw()}else if(e.key==='Enter'){e.preventDefault();palGo(PAL_I)}}
 
 
@@ -4550,7 +4550,7 @@ function setMode(m){if((m==='live')===FRESH)return;liveSave();JasonBridge.setMod
 var OPEN_IN=null,OPEN_IN_KEY='jason.open-in.target';
 function oiLast(){try{return localStorage.getItem(OPEN_IN_KEY)||''}catch{return ''}}
 function oiKeep(id){try{localStorage.setItem(OPEN_IN_KEY,id)}catch{}}
-function oiChat(){const c=location.hash.startsWith('#campaigns/')&&cById(curId());return c?(c.chatKey||c.id):''}
+function oiChat(){const c=JasonLocation.hash.startsWith('#campaigns/')&&cById(curId());return c?(c.chatKey||c.id):''}
 function oiLoad(){if(!window.jasonDesktop)return Promise.resolve(null);const chat=oiChat();return JasonBridge.setup.call('openIn.targets',chat?{chat}:{}).then(r=>{OPEN_IN=r;OPEN_IN.chat=chat;oiDraw();return r}).catch(()=>null)}
 /* What the button opens: the last place used, else Claude Code, else another agent, an editor, the folder. */
 function oiPick(){const t=(OPEN_IN&&OPEN_IN.targets)||[];return t.find(x=>x.id===oiLast())||t.find(x=>x.kind==='agent')||t.find(x=>x.kind==='editor')||t.find(x=>x.kind==='files')||null}
@@ -4584,9 +4584,9 @@ let SETUP_RETRY=0;
 async function setupReload(){
  const was=aiReady(),first=!SETUP,wired=!!(SETUP&&SETUP.reply&&SETUP.reply.wired),before=SETUP;
  try{SETUP=await JasonBridge.setup.status()}catch{return}
- if(FRESH&&replyShift(before,SETUP)&&location.hash.startsWith('#accounts')&&!$('#modal').classList.contains('on')&&!$('#menu')&&!liveTyping())render();
+ if(FRESH&&replyShift(before,SETUP)&&JasonLocation.hash.startsWith('#accounts')&&!$('#modal').classList.contains('on')&&!$('#menu')&&!liveTyping())render();
  /* Reply's accounts could not be read: the last list stays on screen and a read is tried again shortly. */
- clearTimeout(SETUP_RETRY);if(FRESH&&SETUP.reply&&SETUP.reply.accountsUnread)SETUP_RETRY=setTimeout(()=>setupReload().then(()=>{if(location.hash.startsWith('#accounts'))render()}),12000);
+ clearTimeout(SETUP_RETRY);if(FRESH&&SETUP.reply&&SETUP.reply.accountsUnread)SETUP_RETRY=setTimeout(()=>setupReload().then(()=>{if(JasonLocation.hash.startsWith('#accounts'))render()}),12000);
  if(FRESH&&!first&&!wired&&SETUP.reply&&SETUP.reply.wired){toast('Reply connected. New agents send through Reply unless you choose otherwise.');setTimeout(()=>reachAdvance('Reply'),0)}
  /* The first status of a start only says which AI was already in use: a pick the person kept stays. */
  if(first&&!PICK_AI)PICK_AI=aiId();else await followAi();
@@ -4661,7 +4661,7 @@ UI_KINDS.setup_reach={init:()=>({}),html(u){
  return `<div class="ui-q">${head}</div><div class="ui-hint">${hint}</div>
  <div class="sb-row"><div class="grow"><b>Reply</b><span class="ui-rec">Recommended</span><div class="meta">${who}</div></div>${replyAct()}</div>
  ${!r.wired&&r.cli==='ok'&&!r.signedIn&&!SETUP_BUSY?replyKey():''}${mailRow()}${others}
- <div class="ui-opts rich" style="margin-top:10px"><button class="ui-opt" onclick="openCreator('tool',location.hash.slice(1))">Another provider<small>Tell the Creator which sending tool you use, and it builds the connection in a chat</small></button><button class="ui-opt" onclick="openCreator('channel',location.hash.slice(1))">Your own channel<small>Describe a new way to reach people, and the Creator builds it in a chat. Nothing is added until you say so</small></button></div>${setupError('reach')}`}};
+ <div class="ui-opts rich" style="margin-top:10px"><button class="ui-opt" onclick="openCreator('tool',JasonLocation.hash.slice(1))">Another provider<small>Tell the Creator which sending tool you use, and it builds the connection in a chat</small></button><button class="ui-opt" onclick="openCreator('channel',JasonLocation.hash.slice(1))">Your own channel<small>Describe a new way to reach people, and the Creator builds it in a chat. Nothing is added until you say so</small></button></div>${setupError('reach')}`}};
 
 /* Your own mailbox: the Gmail your AI already reaches through its connector, with no outreach service in between. */
 let MAIL=null,MAIL_ASK=null;
@@ -4673,7 +4673,7 @@ function mailRow(){if(!FRESH)return '';if(!MAIL&&!MAIL_ASK&&aiReady())setTimeout
 /* The person's own mailbox is a way to send as much as Reply is: connected once a mailbox is chosen. Until the
    mailboxes are read, the mailbox package being in says so, and they are read, so the Dashboard is drawn again. */
 function mailOn(){if(!FRESH)return false;if(MAIL&&!MAIL.error)return mailChosen().length>0;
- if(!MAIL&&!MAIL_ASK&&aiReady())mailLoad(false).then(()=>{if(/^(#home)?$/.test(location.hash)&&!$('#modal').classList.contains('on'))render()});
+ if(!MAIL&&!MAIL_ASK&&aiReady())mailLoad(false).then(()=>{if(/^(#home)?$/.test(JasonLocation.hash)&&!$('#modal').classList.contains('on'))render()});
  return !!(SETUP&&(SETUP.others||[]).some(o=>o.id==='mailbox'))}
 /* On Accounts, the mailbox is a provider of its own beside Reply: the addresses chosen, and Change. Never a plugin "added by you". */
 function mailCard(){if(!MAIL&&!MAIL_ASK&&aiReady())setTimeout(()=>mailLoad(false),0);const on=mailChosen();
@@ -4684,7 +4684,7 @@ function mailDraw(){const e=$('#mailmodal');if(!e)return;const m=MAIL,busy=!!MAI
  const head='<div class="dh">Send from your own mailbox</div>';
  if(!m||(busy&&!(m.mailboxes||[]).length))return e.innerHTML=`${head}<div class="db"><p><i class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></i>Looking for the mailboxes your AI can reach…</p><p class="sub">This takes up to half a minute the first time.</p></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button></div>`;
  const list=(m.mailboxes||[]).filter(x=>x.address||!x.connected);
- const help=`<p class="sub">For Gmail, Jason uses the Gmail connector of your Claude account. To add one, open <a href="#" onclick="event.preventDefault();JasonBridge.setup.call('openExternal',{url:'https://example.com/settings/connectors'})">Claude's connectors</a>, connect Gmail and sign in with Google, then come back and check again.</p>`;
+ const help=`<p class="sub">For Gmail, Jason uses the Gmail connector of your Claude account. To add one, open Claude's connectors at <b>claude.ai/settings/connectors</b>, connect Gmail and sign in with Google, then come back and check again.</p>`;
  if(m.error)return e.innerHTML=`${head}<div class="db"><div class="note am">${esc(m.error)}</div>${help}${mailOutlookHtml()}</div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn p" onclick="mailLoad(true);mailDraw()">Check again</button></div>`;
  if(!list.length)return e.innerHTML=`${head}<div class="db"><p>No mailbox is connected yet.</p>${help}${mailOutlookHtml()}</div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn p" ${busy?'disabled':''} onclick="mailLoad(true);mailDraw()">${busy?'Checking…':'Check again'}</button></div>`;
  e.innerHTML=`${head}<div class="db"><p class="sub" style="margin-top:0">Pick the mailboxes Jason may send from. Every email still waits for your approval, and goes from the mailbox you pick as a normal email.</p>${list.map(x=>`<label class="sb-row" style="cursor:${x.connected&&x.address?'pointer':'default'}"><input type="checkbox" class="mailpick" value="${esc(x.id)}" ${x.chosen?'checked':''} ${x.connected&&x.address?'':'disabled'} style="margin-right:10px"><div class="grow"><b>${esc(x.address||x.name)}</b><div class="meta">${x.provider==='outlook'?'Outlook':x.connected&&x.address?'Gmail':'Needs signing in again in Claude\'s connectors'}</div></div></label>`).join('')}<div class="note" style="margin-top:12px">Jason sends plain emails one at a time from here, and reads the replies to them. It does not run sequences or warm up a mailbox: for volume, connect Reply.</div>${help}${mailOutlookHtml()}<div class="note am" id="mail-err" hidden></div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" id="mail-save" onclick="mailSave()">Save</button></div>`}
@@ -4693,7 +4693,7 @@ let MAIL_MS=null;
 async function mailOutlook(tenant){MAIL_MS={tenant,state:'starting'};mailDraw();
  try{const r=await JasonBridge.setup.call('mail.outlook.signIn',{tenant});if(!MAIL_MS)return;
   if(r.mailboxes){MAIL={...(MAIL||{}),mailboxes:r.mailboxes};MAIL_MS=null;return mailDraw()}
-  MAIL_MS={tenant,state:'code',url:r.url,code:r.code,at:Date.now()};mailDraw();JasonBridge.setup.call('openExternal',{url:r.url}).catch(()=>{});mailOutlookWait()}
+  MAIL_MS={tenant,state:'code',url:r.url,code:r.code,at:Date.now()};mailDraw();mailOutlookWait()}
  catch(e){if(MAIL_MS){MAIL_MS={tenant,state:'failed',error:crFail(e)};mailDraw()}}}
 async function mailOutlookWait(){const x=MAIL_MS;if(!x||x.state!=='code')return;
  if(Date.now()-x.at>15*60e3){MAIL_MS={tenant:x.tenant,state:'failed',error:'The code ran out before the sign-in was finished. Start again.'};return mailDraw()}
@@ -4707,13 +4707,13 @@ function mailOutlookHtml(){const x=MAIL_MS;
  if(!x)return `${mailOutlookButtons()}<p class="meta" style="margin-top:6px">Outlook.com, Hotmail and Live are personal accounts; Microsoft 365 at work or school is the other. You sign in on Microsoft's own page; Jason never sees your password. The first time takes up to a minute while Jason gets Microsoft's connector.</p>`;
  if(x.state==='starting'||x.state==='saving')return `<div class="note" style="margin-top:14px"><i class="spin" style="display:inline-block;vertical-align:-2px;margin-right:8px"></i>${x.state==='saving'?'Signed in. Connecting the mailbox…':'Getting Microsoft\'s sign-in ready…'}</div>`;
  if(x.state==='failed')return `${mailOutlookButtons()}<div class="note am" style="margin-top:10px">${esc(mailOutlookError(x.error))} <a href="#" onclick="event.preventDefault();mailOutlook('${x.tenant}')">Try again</a></div>`;
- return `<div class="note" style="margin-top:14px"><b>Sign in on Microsoft's page.</b> It opened in your browser; type this code there:<div class="mscode"><b>${esc(x.code)}</b><button class="btn sm" onclick="navigator.clipboard.writeText('${esc(x.code)}');toast('Code copied')">Copy</button><button class="btn sm" onclick="JasonBridge.setup.call('openExternal',{url:'${esc(x.url)}'})">Open the page again</button></div><span class="meta"><i class="spin" style="display:inline-block;vertical-align:-2px;margin-right:6px"></i>Waiting for you to finish signing in… <a href="#" onclick="event.preventDefault();MAIL_MS=null;mailDraw()">Cancel</a></span></div>`}
+ return `<div class="note" style="margin-top:14px"><b>Sign in on Microsoft's page.</b> Open <b>${esc(x.url)}</b> and type this code there:<div class="mscode"><b>${esc(x.code)}</b><button class="btn sm" onclick="navigator.clipboard.writeText('${esc(x.code)}');toast('Code copied')">Copy</button></div><span class="meta"><i class="spin" style="display:inline-block;vertical-align:-2px;margin-right:6px"></i>Waiting for you to finish signing in… <a href="#" onclick="event.preventDefault();MAIL_MS=null;mailDraw()">Cancel</a></span></div>`}
 /* A mailbox the person just signed in to is one they mean to send from: it is connected beside the ones already chosen. */
 async function mailOutlookConnect(added){MAIL_MS={tenant:'',state:'saving'};mailDraw();
  try{const ids=[...new Set([...mailChosen().map(m=>m.id),...(added||[])])];await JasonBridge.setup.call('mail.connect',{ids});await mailLoad(false);MAIL_MS=null;toast('Outlook connected');mailDraw();await setupReload()}
  catch(e){MAIL_MS={tenant:'consumers',state:'failed',error:crFail(e)};mailDraw()}}
 async function mailSave(){const ids=[...document.querySelectorAll('.mailpick:checked')].map(i=>i.value),b=$('#mail-save');b.disabled=true;b.textContent=ids.length?'Connecting…':'Saving…';
- try{await JasonBridge.setup.call('mail.connect',{ids});await mailLoad(true);closeAll();toast(ids.length?(ids.length===1?'Mailbox connected':'Mailboxes connected'):'Mailboxes disconnected');await setupReload();if(location.hash.startsWith('#accounts'))render();if(ids.length)reachAdvance('Your mailbox')}
+ try{await JasonBridge.setup.call('mail.connect',{ids});await mailLoad(true);closeAll();toast(ids.length?(ids.length===1?'Mailbox connected':'Mailboxes connected'):'Mailboxes disconnected');await setupReload();if(JasonLocation.hash.startsWith('#accounts'))render();if(ids.length)reachAdvance('Your mailbox')}
  catch(err){b.disabled=false;b.textContent='Save';const x=$('#mail-err');if(x){x.hidden=false;x.textContent=crFail(err)}}}
 
 /* What the live chat's agent asks before it does something its allowed list does not cover, and what a person typed to connect a package. */
@@ -4795,8 +4795,8 @@ function liveApply(d){
 }
 var LIVE_OWED=false;
 function liveRepaint(){
- const [p,a]=location.hash.slice(1).split('/');renderSide();
- if(location.hash.startsWith('#/')||$('#modal').classList.contains('on'))return;
+ const [p,a]=JasonLocation.hash.slice(1).split('/');renderSide();
+ if(JasonLocation.hash.startsWith('#/')||$('#modal').classList.contains('on'))return;
  // A redraw closes the person panel, so one that comes while it is open waits until the person closes it.
  if($('#drawer').classList.contains('on')){LIVE_OWED=true;return}
  // An open menu is the person's too: a redraw would close it under the pointer, so it waits until the menu closes.
@@ -4856,7 +4856,7 @@ async function liveAfterTurn(c,known){
    else if(made.name!==c.name){AKA[key]=[...(AKA[key]||[]),c.name].slice(-6);CHATS[made.id].msgs.push({r:'ev',t:'This chat is now named “'+made.name+'”, after the campaign it created.'})}if(c===SETUP_C)CHATS.setup={msgs:[],step,running:false};
    Object.keys(UI).forEach(k=>{if(UI[k].camp===c.id)UI[k].camp=made.id});
    LIVE_DRAFTS=LIVE_DRAFTS.filter(x=>x.id!==c.id);const i=CAMPAIGNS.indexOf(c);if(i>=0)CAMPAIGNS.splice(i,1);
-   if(location.hash==='#campaigns/'+c.id)go('campaigns/'+made.id);else renderSide()}}
+   if(JasonLocation.hash==='#campaigns/'+c.id)go('campaigns/'+made.id);else renderSide()}}
  delete LIVE_TURN[c.id];liveSave();
 }
 /* A live campaign's tabs: the design's own, drawn from what the runtime answers about it. */
@@ -4958,12 +4958,12 @@ function peopleChannels(p){const l=p.channels||[];return l.length?l.slice(0,3).m
 function peopleDraw(){const e=$('#ptbl'),none=!CONTACTS.length&&!PPL.q&&!PPL.camp&&!!PPL.items&&!PPL.items.length;
  /* The first person, or the last one gone, changes the page itself: the empty card and the table take turns. A redraw
     closes what is open, so the import's dialog, which is what made the first people, is drawn again over the new page. */
- if(!e||!!$('#pempty')!==none){if(location.hash.startsWith('#people')&&(!!$('#pempty')!==none)){render();if(P_CSV)peopleCsvDraw();else if(P_FIX)peopleFixDraw()}return}
+ if(!e||!!$('#pempty')!==none){if(JasonLocation.hash.startsWith('#people')&&(!!$('#pempty')!==none)){render();if(P_CSV)peopleCsvDraw();else if(P_FIX)peopleFixDraw()}return}
  e.innerHTML=livePeopleTable(peopleRows());peopleBar()}
 function peopleActs(){return `<div class="acts"><button class="btn" onclick="peopleImportMenu(event)">${svg('up',15)} Import ${CHEVRON}</button><button class="btn p" onclick="peopleAddForm()">${svg('plus',15)} Add person</button></div>`}
 function livePeople(){
  const rows=peopleRows();
- if(!PPL.busy&&location.hash.startsWith('#people'))setTimeout(peopleLoad,0);
+ if(!PPL.busy&&JasonLocation.hash.startsWith('#people'))setTimeout(peopleLoad,0);
  if(!rows.length&&!PPL.q&&!PPL.camp&&!CONTACTS.length&&(PPL.items||!PPL.busy))return livePeopleEmpty();
  const camps=CAMPAIGNS.filter(c=>c.live);
  setTimeout(peopleBar,0);
@@ -4972,7 +4972,7 @@ function livePeople(){
 /* One person, typed. The same email is the same person, so they are found rather than made twice. */
 function peopleAddForm(){
  const camps=CAMPAIGNS.filter(c=>c.live),f=(id,label,ph,type='text')=>`<label class="pf"><span>${label}</span><input class="inp" id="pa-${id}" type="${type}" placeholder="${ph}" autocomplete="off"></label>`;
- modal(`<div class="dh">Add a person</div><div class="db"><div class="pfgrid">${f('first','First name','Dana')}${f('last','Last name','Lee')}</div>${f('email','Email','dana@example.com','email')}<div class="pfgrid">${f('company','Company','Acme')}${f('title','Title','VP of Sales')}</div>${f('linkedin','LinkedIn profile','linkedin.com/in/dana-lee-example')}${f('phone','Phone','+1 555 010 0100')}${camps.length?`<label class="pf"><span>Add to an agent (optional)</span><select class="sel" id="pa-camp"><option value="">Not now</option>${camps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>`:''}<div class="note" id="pa-err" hidden></div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" id="pa-save" onclick="peopleAddSave()">Add person</button></div>`);
+ modal(`<div class="dh">Add a person</div><div class="db"><div class="pfgrid">${f('first','First name','Dana')}${f('last','Last name','Lee')}</div>${f('email','Email','dana@example.com','email')}<div class="pfgrid">${f('company','Company','Acme')}${f('title','Title','VP of Sales')}</div>${f('linkedin','LinkedIn profile','linkedin.com/in/dana-lee-nw-sample')}${f('phone','Phone','+1 555 010 0100')}${camps.length?`<label class="pf"><span>Add to an agent (optional)</span><select class="sel" id="pa-camp"><option value="">Not now</option>${camps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label>`:''}<div class="note" id="pa-err" hidden></div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" id="pa-save" onclick="peopleAddSave()">Add person</button></div>`);
  setTimeout(()=>{const e=$('#pa-first');if(e)e.focus()},50);
 }
 async function peopleAddSave(){
@@ -4980,7 +4980,7 @@ async function peopleAddSave(){
  const input={first:v('first'),last:v('last'),email:v('email'),company:v('company'),title:v('title'),linkedin:v('linkedin'),phone:v('phone')};
  const wrong=JasonBridge.people.check(input);if(wrong)return err(wrong);
  const b=$('#pa-save');b.disabled=true;b.textContent='Adding…';
- try{const r=await JasonBridge.people.add(input,v('camp')||undefined);closeAll();toast(r.existed?(r.updated?'Already in People: details added':'Already in People'):'Person added');await liveRefresh();peopleReset();if(location.hash.startsWith('#people'))render()}
+ try{const r=await JasonBridge.people.add(input,v('camp')||undefined);closeAll();toast(r.existed?(r.updated?'Already in People: details added':'Already in People'):'Person added');await liveRefresh();peopleReset();if(JasonLocation.hash.startsWith('#people'))render()}
  catch(e){b.disabled=false;b.textContent='Add person';err(crFail(e))}
 }
 
@@ -5001,10 +5001,10 @@ function peopleCsvPick(){const i=document.createElement('input');i.type='file';i
 /* A file dropped on the People page is taken the same way as one that was picked. */
 /* While a file is held over the page, the page says what dropping it does. */
 function peopleDropHint(on){let d=$('#pdrop');if(!on){if(d)d.remove();return}if(d)return;const m=$('#main');if(!m)return;d=document.createElement('div');d.id='pdrop';d.className='pdrop';d.innerHTML='<div><b>Drop the file to import its people</b><span>Jason shows each column before anyone is added.</span></div>';m.appendChild(d)}
-document.addEventListener('dragover',e=>{if(FRESH&&location.hash.startsWith('#people')&&e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();peopleDropHint(true)}});
+document.addEventListener('dragover',e=>{if(FRESH&&JasonLocation.hash.startsWith('#people')&&e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();peopleDropHint(true)}});
 document.addEventListener('dragleave',e=>{if(!e.relatedTarget)peopleDropHint(false)});
 document.addEventListener('dragend',()=>peopleDropHint(false));
-document.addEventListener('drop',e=>{peopleDropHint(false);if(!FRESH||!location.hash.startsWith('#people')||!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();peopleTake(e.dataTransfer.files[0])});
+document.addEventListener('drop',e=>{peopleDropHint(false);if(!FRESH||!JasonLocation.hash.startsWith('#people')||!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();peopleTake(e.dataTransfer.files[0])});
 async function peopleTake(f){if(f.size>200e6)return toast('That file is over 200 MB. Split it and import the parts.');
   const bytes=new Uint8Array(await f.arrayBuffer());if(!bytes.length)return toast('That file is empty.');
   /* A spreadsheet's own format, a contacts card or JSON is not a table the page can read: the agent converts it. */
@@ -5096,16 +5096,16 @@ function provNote(id,status){const x=provCtl(id);if(!x||!x.text)return '';
  const t=status==='active'&&x.state==='paused'?x.text.replace(/^Paused in (.+) too$/,'Sequence still paused in $1'):x.text;
  return `<span class="pillc ${x.tone==='ok'?'ok':'warn'} prov-note${x.tone==='bad'?' prov-bad':''}" id="prov-${esc(id)}" title="${esc(t)}">${esc(t)}</span>`}
 function provDraw(){CAMPAIGNS.forEach(c=>{const e=document.getElementById('prov-'+c.id),n=provNote(c.id,c.status);if(e)e.outerHTML=n||'<span></span>'})}
-function provWatch(n=0){clearTimeout(PROV.timer);PROV.timer=setTimeout(async()=>{await provLoad();provDraw();if(/^#attention/.test(location.hash)&&!$('#modal').classList.contains('on'))render();
+function provWatch(n=0){clearTimeout(PROV.timer);PROV.timer=setTimeout(async()=>{await provLoad();provDraw();if(/^#attention/.test(JasonLocation.hash)&&!$('#modal').classList.contains('on'))render();
  if(n<45&&PROV.list.some(x=>x.state==='pausing'||x.state==='resuming'))provWatch(n+1)},4000)}
 async function provRetry(id){try{await JasonBridge.live.pauseAtProvider(id);toast('Asked again');await provLoad();render();provWatch()}catch(e){toast(crFail(e))}}
 /* A pause the provider did not carry out needs the person: it is said in Needs you, with what to do. */
 function provFailedNote(){const bad=PROV.list.filter(x=>x.state==='pause_failed'||x.state==='resume_failed');if(!FRESH||!bad.length)return '';
  return bad.map(x=>{const c=cById(x.campaign);return `<div class="note am prov-failed" style="margin:0 0 14px"><b>${c?esc(c.name):'An agent'}:</b> ${esc(x.text)}${x.state==='pause_failed'?` <a href="#" onclick="event.preventDefault();provRetry('${esc(x.campaign)}')">Try again</a>`:''}</div>`}).join('')}
 function liveTab(c,tab){
- const here='#campaigns/'+c.id+'/'+tab,draw=d=>{const e=$('#view');if(e&&location.hash===here)e.innerHTML=liveTabHtml(c,tab,d)};
+ const here='#campaigns/'+c.id+'/'+tab,draw=d=>{const e=$('#view');if(e&&JasonLocation.hash===here)e.innerHTML=liveTabHtml(c,tab,d)};
  const v=$('#view');if(LIVE_TABS[c.id])draw(LIVE_TABS[c.id]);else if(v)v.innerHTML='<div class="empty">Loading…</div>';
- JasonBridge.live.campaign(c.id).then(d=>{LIVE_TABS[c.id]=d;draw(d)}).catch(e=>{const el=$('#view');if(el&&location.hash===here)el.innerHTML=`<div class="empty">${esc(String(e.message||e))}</div>`});
+ JasonBridge.live.campaign(c.id).then(d=>{LIVE_TABS[c.id]=d;draw(d)}).catch(e=>{const el=$('#view');if(el&&JasonLocation.hash===here)el.innerHTML=`<div class="empty">${esc(String(e.message||e))}</div>`});
 }
 /* Approving is one click. Rejecting cannot be taken back, so it asks once and says what it means. */
 function liveDecide(id,ok){const a=APPROVALS.find(x=>x.id===id);if(ok||!a)return liveDecideGo(id,ok);
@@ -5140,7 +5140,7 @@ function liveFrom(a){if(a.from)return a.from;
  /* A start through Reply goes from the mailboxes set on the sequence there: the one Reply holds, when it holds one. */
  if(a.op==='campaign.activate'&&a.plugin==='reply'){const m=((SETUP&&SETUP.reply&&SETUP.reply.accounts)||[]).filter(x=>x.channel==='email');return m.length===1?m[0].address||m[0].name||'':m.length?'the mailbox set on the sequence in Reply':''}
  if(!a.mailbox)return '';
- if(!MAIL&&!MAIL_ASK&&aiReady())mailLoad(false).then(()=>{if(/^#(attention|campaigns|home)/.test(location.hash)&&!$('#modal').classList.contains('on'))render()});
+ if(!MAIL&&!MAIL_ASK&&aiReady())mailLoad(false).then(()=>{if(/^#(attention|campaigns|home)/.test(JasonLocation.hash)&&!$('#modal').classList.contains('on'))render()});
  const m=MAIL&&(MAIL.mailboxes||[]).find(x=>x.id===a.mailbox);return m&&m.address||''}
 /* What recipients see as the sender: the mailbox's sender name beside its address, when Reply holds one for it. */
 function senderName(addr){const a=((SETUP&&SETUP.reply&&SETUP.reply.accounts)||[]).find(x=>x.address&&String(x.address).toLowerCase()===String(addr||'').toLowerCase());const n=a&&a.name?String(a.name).trim():'';return n&&n!==a.address&&!/@/.test(n)?n:''}
@@ -5161,7 +5161,7 @@ const SEND_CHECKED=new Set();
 /* A card that sends through Reply, or starts a sequence there, says plainly when Reply cannot send. Before a start the
    mailboxes are read afresh, once per card, so the card never rests on what Reply said an hour ago. */
 function liveSendHealth(a){if(!a||a.plugin!=='reply'||!SEND_OPS.includes(a.op))return '';
- if(a.op==='campaign.activate'&&!SEND_CHECKED.has(a.id)){SEND_CHECKED.add(a.id);JasonBridge.setup.call('setup.refreshReplyAccounts').then(setupReload).then(()=>{if(location.hash.includes(a.id)&&!$('#modal').classList.contains('on'))render()}).catch(()=>{})}
+ if(a.op==='campaign.activate'&&!SEND_CHECKED.has(a.id)){SEND_CHECKED.add(a.id);JasonBridge.setup.call('setup.refreshReplyAccounts').then(setupReload).then(()=>{if(JasonLocation.hash.includes(a.id)&&!$('#modal').classList.contains('on'))render()}).catch(()=>{})}
  const h=replyMailHealth();if(!h)return '';const names=l=>l.map(x=>esc(x.address||x.name)).join(', ');
  if(h.broken.length)return `<div class="note am send-health" style="margin-top:12px"><b>Reply cannot send from ${names(h.broken)} right now:</b> it needs reconnecting in Reply. If this sends from ${h.broken.length===1?'that mailbox':'one of them'}, nothing goes out until you reconnect it. ${liveShows('accounts')?'<a href="#accounts">Open Accounts</a>':'Open Reply to reconnect it.'}</div>`;
  if(!h.ready.length&&h.unchecked.length)return `<div class="note send-health" style="margin-top:12px">Reply has not checked ${names(h.unchecked)} lately, so Jason cannot confirm ${h.unchecked.length===1?'it sends':'they send'}. If nothing goes out after you approve, ${liveShows('accounts')?'look in <a href="#accounts">Accounts</a>':'check it in Reply'}.</div>`;
@@ -5177,7 +5177,7 @@ function sendBlockedNote(){const h=FRESH&&replyMailHealth();if(!h||!h.broken.len
 {const at=P.attention;P.attention=function(...x){const h=at.apply(this,x),n=sendBlockedNote()+provFailedNote();if(!n)return h;const i=h.startsWith('<div class="ph">')?h.indexOf('</div></div>')+12:0;return i>=12?h.slice(0,i)+n+h.slice(i):n+h}}
 /* While an agent is live, Reply's mailboxes are read again now and then, so a sign-in that runs out shows without a reload. */
 function sendHealthCheck(){if(!FRESH||!SETUP||!SETUP.reply||!SETUP.reply.wired||!CAMPAIGNS.some(c=>c.status==='active'))return;
- JasonBridge.setup.call('setup.refreshReplyAccounts').then(setupReload).then(()=>{if(/^#(attention|home|accounts)/.test(location.hash)&&!$('#modal').classList.contains('on')&&!$('#menu'))render()}).catch(()=>{})}
+ JasonBridge.setup.call('setup.refreshReplyAccounts').then(setupReload).then(()=>{if(/^#(attention|home|accounts)/.test(JasonLocation.hash)&&!$('#modal').classList.contains('on')&&!$('#menu'))render()}).catch(()=>{})}
 function liveAprNotes(a){return `${liveSendHealth(a)}${a.again?`<div class="note am" style="margin-top:12px">${a.again}</div>`:''}${a.note?`<div class="note apr-note" style="margin-top:12px"><b>Agent's note:</b> ${a.note}</div>`:''}${a.signature?`<div class="note apr-sign" style="margin-top:12px">${esc(a.signature)}</div>`:''}`}
 /* A reply shows the message it answers, folded, when Jason has read it. */
 function liveOriginal(a){return a.original?`<details class="apr-orig"><summary>What ${esc(a.to||'they')} wrote</summary><div class="msg">${fill(a.original,null)}</div></details>`:''}
@@ -5230,7 +5230,7 @@ function liveAccounts(){
  const busy=SETUP_BUSY==='setup.signInReply'?setupWait('Finish signing in, in your browser…',true):SETUP_BUSY?setupWait('Connecting Reply…'):'';
  const unread=r.accountsUnread?'<div class="note am" style="margin:0 16px 12px">Couldn’t read your mailboxes from Reply just now. Retrying…</div>':'';
  const prov=r.wired?`<div class="card prov"><div class="provh"><div class="ic blue">Re</div><div class="grow"><b>Reply</b><div class="meta">${esc(r.user||'')} · ${esc(rows.length||!r.accountsUnread?what:'Reading your mailboxes…')}</div><div class="meta">New agents send through Reply unless you choose another way for them.</div></div>${busy||`<button class="btn sm p" onclick="acAddMenu(event)">+ Connect channel</button><button class="ib" title="Reply" aria-label="Reply" onclick="acReplyMenu(event)">${svg('dots',18)}</button>`}</div>${setupError('reach')}${unread}<div id="ac-rows">${acRows()}</div></div>${mailCard()}`:'';
- return `<div class="ph"><div><h1>Accounts</h1><p>Your real accounts. A <b>provider</b>, like <a href="#" onclick="event.preventDefault();JasonBridge.setup.call('openExternal',{url:'https://reply.io'})">Reply.io</a>, does the sending. Its <b>channels</b>, like email, LinkedIn or SMS, are how you reach people.</p></div></div>
+ return `<div class="ph"><div><h1>Accounts</h1><p>Your real accounts. A <b>provider</b>, like Reply.io, does the sending. Its <b>channels</b>, like email, LinkedIn or SMS, are how you reach people.</p></div></div>
  ${acAddBlock()}
  <div class="acsect"><span class="lab">Providers</span></div>${prov}${r.wired?'':`<div class="card"><div class="ui" id="ui-accts" style="margin:0;border:0">${UI_KINDS.setup_reach.html(UI.accts)}</div></div>`}<div id="ac-own">${acOwn()}</div>`;
 }
@@ -5306,7 +5306,7 @@ async function acAct(act,id,done){try{await JasonBridge.setup.call('setup.replyA
 const LI_LIMITS=[['dailySendConnectionRequestCount','Connection requests','connectionRequests'],['dailySendMessageCount','Messages','messages'],['dailyInMailCount','InMails','inMails'],['dailyViewProfileCount','Profile views','viewProfiles']];
 function acLinkedinPanel(a,d){
  const l=d.limits||{},cap=(l.limitsMode==='ranged'?l.rangeMax:l.fixedMax)||{},u=d.usage||{},on=d.status==='enabled';
- return `<div class="acsec"><div class="acline"><b>LinkedIn automation is ${on?'on':'off'}</b>${d.profileUrl?`<a class="meta" href="#" onclick="event.preventDefault();JasonBridge.setup.call('openExternal',{url:${esc(JSON.stringify(String(d.profileUrl)))}})">Profile ↗</a>`:''}<button class="btn sm" onclick="acAct('linkedin.toggle','${esc(String(a.id))}','${on?'Turned off':'Turned on'}')">${on?'Turn off':'Turn on'}</button></div><div class="meta">${on?'Reply sends this account’s steps on schedule.':'Reply sends nothing from this account until you turn it on.'}</div></div>
+ return `<div class="acsec"><div class="acline"><b>LinkedIn automation is ${on?'on':'off'}</b>${d.profileUrl?`<span class="meta">${esc(String(d.profileUrl))}</span>`:''}<button class="btn sm" onclick="acAct('linkedin.toggle','${esc(String(a.id))}','${on?'Turned off':'Turned on'}')">${on?'Turn off':'Turn on'}</button></div><div class="meta">${on?'Reply sends this account’s steps on schedule.':'Reply sends nothing from this account until you turn it on.'}</div></div>
  <div class="acsec"><b>Daily limits</b>${l.limitsMode==='ranged'?'<div class="meta">Reply now picks a number in a range each day. Saving sets these as fixed caps.</div>':''}<div class="acgrid">${LI_LIMITS.map(([k,label,uk])=>`<div class="field"><label for="acl-${k}">${label}</label>${acNum('acl-'+k,cap[k])}<div class="meta">${u[uk]??0} today</div></div>`).join('')}</div></div>
  <div class="acfoot"><button class="btn p" onclick="acSaveLinkedin('${esc(String(a.id))}')">Save in Reply</button><button class="btn" onclick="ACR.open='';acDraw()">Close</button></div>`;
 }
@@ -5326,11 +5326,11 @@ async function acConnect(kind){
  let url='';try{url=await JasonBridge.setup.call('setup.replyConnect',{kind})}catch(e){return toast(crFail(e))}
  const what={gmail:'a Gmail or Google Workspace mailbox',outlook:'an Outlook or Microsoft 365 mailbox',linkedin:'a LinkedIn account'}[kind]||'an account';
  ACR.link=url;
- modal(`<div class="dh">Connect ${what}</div><div class="db"><p>Reply’s page connects ${what} to your Reply account. Open it here, or send it to whoever owns the ${kind==='linkedin'?'account':'mailbox'}: it needs no Reply login.</p><div class="aclink"><input class="inp" id="ac-link" readonly value="${esc(url)}" onclick="this.select()"><button class="btn" onclick="acCopyLink()">Copy link</button></div><div class="note">Anyone with this link can connect ${kind==='linkedin'?'a LinkedIn account':'a mailbox'} to your Reply account. Share it only with people you trust.</div><p class="sub">The new account shows up here when Reply has it. Come back to this window, or choose Check now.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn" onclick="acCheck()">Check now</button><button class="btn p" onclick="JasonBridge.setup.call('openExternal',{url:ACR.link})">Open the page</button></div>`);
+ modal(`<div class="dh">Connect ${what}</div><div class="db"><p>Reply’s page connects ${what} to your Reply account. Open it here, or send it to whoever owns the ${kind==='linkedin'?'account':'mailbox'}: it needs no Reply login.</p><div class="aclink"><input class="inp" id="ac-link" readonly value="${esc(url)}" onclick="this.select()"><button class="btn" onclick="acCopyLink()">Copy link</button></div><div class="note">Anyone with this link can connect ${kind==='linkedin'?'a LinkedIn account':'a mailbox'} to your Reply account. Share it only with people you trust.</div><p class="sub">The new account shows up here when Reply has it. Come back to this window, or choose Check now.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn" onclick="acCheck()">Check now</button></div>`);
  window.addEventListener('focus',acCheck,{once:true});
 }
 async function acCopyLink(){const e=$('#ac-link');try{await navigator.clipboard.writeText(ACR.link)}catch{if(e){e.select();document.execCommand('copy')}}toast('Link copied')}
-async function acCheck(){const before=((SETUP&&SETUP.reply.accounts)||[]).length;try{await JasonBridge.setup.call('setup.refreshReplyAccounts');await setupReload()}catch{}const after=((SETUP&&SETUP.reply.accounts)||[]).length;if($('#modal').classList.contains('on')&&after>before)closeAll();if(location.hash.startsWith('#accounts'))render();if(after>before)toast('New account connected')}
+async function acCheck(){const before=((SETUP&&SETUP.reply.accounts)||[]).length;try{await JasonBridge.setup.call('setup.refreshReplyAccounts');await setupReload()}catch{}const after=((SETUP&&SETUP.reply.accounts)||[]).length;if($('#modal').classList.contains('on')&&after>before)closeAll();if(JasonLocation.hash.startsWith('#accounts'))render();if(after>before)toast('New account connected')}
 function acSmtp(){
  closeMenu();
  modal(`<div class="dh">Add a mailbox by its servers</div><div class="db"><p class="sub">For a mailbox that is not Gmail or Outlook. Your mail provider lists these settings; the passwords go to Reply and are not kept by Jason.</p>
@@ -5353,7 +5353,7 @@ async function acSmtpAdd(){
  const f=acSmtpForm(),daily=Number((($('#acs-daily')||{}).value)||0);if(!f.senderName)delete f.senderName;
  try{await JasonBridge.setup.call('setup.replyAccount',{act:'email.create',body:{connection:f,...(daily>0?{safety:{dailyLimit:daily}}:{})}});closeAll();toast('Mailbox added to Reply');await JasonBridge.setup.call('setup.refreshReplyAccounts');await setupReload();render()}catch(e){toast(crFail(e))}
 }
-function acPhone(){closeMenu();modal(`<div class="dh">Calls, SMS and WhatsApp</div><div class="db"><p>Reply’s API connects mailboxes and LinkedIn accounts, but not phone numbers or WhatsApp. Set them up in Reply under <b>Settings</b>. Once Reply has them, they show up here and Jason can use them.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn p" onclick="JasonBridge.setup.call('openExternal',{url:'https://run.reply.io/'});closeAll()">Open Reply</button></div>`)}
+function acPhone(){closeMenu();modal(`<div class="dh">Calls, SMS and WhatsApp</div><div class="db"><p>Reply’s API connects mailboxes and LinkedIn accounts, but not phone numbers or WhatsApp. Set them up in Reply under <b>Settings</b>. Once Reply has them, they show up here and Jason can use them.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><span class="meta">run.reply.io</span></div>`)}
 
 /* The person's other ways to reach people and to hear from Jason: plugins they added, and the ones this application carries. */
 var AC={plugins:null};
@@ -5375,8 +5375,8 @@ function acReplyKey(){modal(`<div class="dh">Sign in to Reply with an API key</d
 function acReplyKeyGo(){const e=$('#ac-key'),key=e&&e.value.trim();if(!key)return;closeAll();setupRun([['setup.signInReplyWithKey',{key}],['setup.connectReply']]).then(render)}
 async function acReconnect(channel,account){
  if(channel==='email'){let d=null;try{d=await JasonBridge.setup.call('setup.replyAccount',{act:'email.get',id:account})}catch{}const host=String(((d||{}).connection||{}).smtpHost||'');const kind=d&&(d.emailAccountType==='gmail'||/gmail\.com$/.test(host))?'gmail':d&&((d.emailAccountType==='outlook'||d.emailAccountType==='exchange')||/office365\.com$|outlook\.com$/.test(host))?'outlook':'';if(kind)return acConnect(kind)}
- if(channel!=='linkedin')return modal(`<div class="dh">Reconnect this mailbox</div><div class="db"><p>Gmail and Outlook ask you to sign in to them again, which happens in Reply: open <b>Settings → Email accounts</b> and choose <b>Reconnect</b> beside it. Jason sees it ready again within a minute.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><button class="btn p" onclick="JasonBridge.setup.call('openExternal',{url:'https://run.reply.io/'});closeAll()">Open Reply</button></div>`);
- try{const url=await JasonBridge.setup.call('setup.reconnectReplyAccount',{channel,account});if(url){await JasonBridge.setup.call('openExternal',{url});toast('Finish reconnecting in your browser')}}catch(e){toast(crFail(e))}
+ if(channel!=='linkedin')return modal(`<div class="dh">Reconnect this mailbox</div><div class="db"><p>Gmail and Outlook ask you to sign in to them again, which happens in Reply: open <b>Settings → Email accounts</b> and choose <b>Reconnect</b> beside it. Jason sees it ready again within a minute.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><span class="meta">run.reply.io</span></div>`);
+ try{const url=await JasonBridge.setup.call('setup.reconnectReplyAccount',{channel,account});if(url){toast('Finish reconnecting at '+url)}}catch(e){toast(crFail(e))}
 }
 function acRemove(channel,account){
  const a=((SETUP&&SETUP.reply.accounts)||[]).find(x=>String(x.id)===String(account)),name=a?(a.address||a.name):'this account';
@@ -5389,7 +5389,7 @@ async function acEdit(id){
  const p=(AC.plugins||[]).find(x=>x.id===id);if(!p)return;let set=[];try{set=await JasonBridge.setup.call('secretNames',{id})}catch{}await credLoad();
  modal(`<div class="dh">${esc(p.manifest.displayName||id)} settings</div><div class="db" id="ac-keys">${p.granted.secrets.map(n=>`<div class="field"><label>${esc(secretLabel(n))}</label>${credPick(n,set.includes(n))}<input class="inp" data-secret="${esc(n)}" type="${secretPlain(n)?'text':'password'}" autocomplete="off" spellcheck="false" placeholder="${set.includes(n)?'Saved. Leave blank to keep it.':'Not set'}"></div>`).join('')}<div class="note">Kept in this computer’s keychain. Pick a value you saved, or type a new one. Jason restarts its runtime to use a new value.</div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" onclick="acEditGo('${esc(id)}')">Save</button></div>`);
 }
-async function acEditGo(id){const root=$('#ac-keys'),box=document.createElement('div');box.innerHTML=root.innerHTML;[...root.querySelectorAll('input,select')].forEach((x,i)=>{box.querySelectorAll('input,select')[i].value=x.value});closeAll();try{toast(await credUse(id,box)?'Saved':'Nothing changed')}catch(e){toast(crFail(e))}acLoad();if(location.hash.startsWith('#marketplace'))mkLoad()}
+async function acEditGo(id){const root=$('#ac-keys'),box=document.createElement('div');box.innerHTML=root.innerHTML;[...root.querySelectorAll('input,select')].forEach((x,i)=>{box.querySelectorAll('input,select')[i].value=x.value});closeAll();try{toast(await credUse(id,box)?'Saved':'Nothing changed')}catch(e){toast(crFail(e))}acLoad();if(JasonLocation.hash.startsWith('#marketplace'))mkLoad()}
 async function acToggle(id,on){try{await JasonBridge.setup.call('setEnabled',{id,enabled:on});await setupReload();acLoad()}catch(e){toast(crFail(e))}}
 function acDrop(id){const p=(AC.plugins||[]).find(x=>x.id===id);confirmModal(`Remove ${p?p.manifest.displayName||id:id}?`,'It stops working at once, and the keys it held are deleted. A credential you saved for it is kept on this computer. If a campaign still sends through it, Jason keeps it and says so.','Remove',async()=>{try{await JasonBridge.setup.call('remove',{id});crRemoved(id);toast('Removed');await setupReload();acLoad()}catch(e){toast(crFail(e))}},'no')}
 /* A carried plugin's form, from a page: to connect it, or to read and change what was saved for it. */
@@ -5424,7 +5424,7 @@ async function liveBoot(){
  /* Once, when the set-up chat became the main chat: the talk it held is cleared. */
  if(!LIVE_GENERAL){LIVE_GENERAL=1;if(SETUP&&SETUP.step==='ready')CHATS.setup={msgs:[],step:'ready',running:false};liveSave()}
  /* The app opens on the start screen, where a new GTM agent begins; set-up comes in the chat the person starts. */
- if(['','#','#start','#home','#welcome'].includes(location.hash))location.replace('#start');
+ if(['','#','#start','#home','#welcome'].includes(JasonLocation.hash))JasonLocation.replace('#start');
  setInterval(liveRefresh,6000);
  setInterval(()=>{if(!$('#menu'))saDraw()},60000);
  setInterval(sendHealthCheck,5*60e3);
@@ -5450,7 +5450,7 @@ async function liveCrSend(){
   if(!c.ws){
    c.brief=clean(text);c.name=guessName(text);const ws=crSlug(c.name);
    await JasonBridge.setup.call('creator.create',{id:ws,name:c.name,template:CR_TEMPLATE[c.kind]||'channel'});
-   c.ws=ws;CREATORS.unshift(c);history.replaceState(null,'','#create/'+c.id);liveTitle(c,text,c.kind==='tool'?'provider':c.kind==='channel'?'channel':'plugin');
+   c.ws=ws;CREATORS.unshift(c);JasonLocation.replaceState(null,'','#create/'+c.id);liveTitle(c,text,c.kind==='tool'?'provider':c.kind==='channel'?'channel':'plugin');
    message=`The person wants ${CR_WHAT[c.kind]||'a plugin'}. Read AGENTS.md first. Their words:\n\n${text}`;
   }
   crBefore(c);c.stage='building';c.asking=false;paint(c.id,true);liveSave();
@@ -5667,7 +5667,7 @@ function chatNeedPane(x){const c=x.c,ch=CHATS[c.id],last=ch&&ch.msgs[lastSaid(ch
  const ask=last&&last.card&&last.card.spec&&(last.card.spec.kind==='choice'||last.card.spec.kind==='plan')?last.card.spec:null,opts=ask&&Array.isArray(ask.options)?ask.options.map(o=>o&&(o.label||o)).filter(o=>typeof o==='string'):[];
  return `<div class="row" style="margin-bottom:12px">${B('Waiting for you','amber')}<span class="meta">${chatNeedKind(c)} · ${esc(liveAge(c))}</span></div><h2 class="need-h">${esc(chatNeedName(c))}</h2><p class="sub">${WAIT_WHY[x.why]}</p>${said?`<div class="msg" style="margin:12px 0"><div class="h">Its last words</div>${md(said)}</div>`:''}${ask&&ask.question?`<div class="msg" style="margin:12px 0"><div class="h">Its question</div><b>${esc(ask.question)}</b>${opts.length?(ask.multi?`<ul class="kvlist" style="margin-top:6px">${opts.map(o=>`<li>${esc(o)}</li>`).join('')}</ul>`:`<div class="ui-opts need-opts">${opts.map((o,i)=>`<button class="ui-opt" onclick="needAnswer('${esc(c.id)}',${i})">${esc(o)}</button>`).join('')}</div>`):''}</div>`:''}<div class="row" style="margin-top:14px"><button class="btn p" onclick="${chatNeedGo(c)}">Open the chat</button>${x.why==='card'?'':`<button class="btn" title="Takes it off this list until its agent says something new" onclick="waitSkip('${c.id}')">Not now</button>`}</div>`}
 function chatNeedRows(){return chatNeeds().slice(0,4).map(x=>`<div class="it cl" onclick="${chatNeedGo(x.c)}"><div class="ic amber">!</div><div class="grow"><div class="ttl">${esc(WAIT_SAYS[x.why])}</div><div class="meta">${chatNeedKind(x.c)} · ${esc(chatNeedName(x.c))}</div></div><span class="meta">${esc(liveAge(x.c))}</span></div>`).join('')}
-function waitSkip(id){const ch=CHATS[id];if(!ch)return;ch.skip=lastSaid(ch);liveSave();toast('Off this list until its agent says something new');if(location.hash.startsWith('#attention/'))go('attention');else render()}
+function waitSkip(id){const ch=CHATS[id];if(!ch)return;ch.skip=lastSaid(ch);liveSave();toast('Off this list until its agent says something new');if(JasonLocation.hash.startsWith('#attention/'))go('attention');else render()}
 /* Text the runtime handed over is already escaped: it is cut between characters, never inside one. */
 function cutSafe(t,n){t=String(t);return t.length<=n?t:t.slice(0,n).replace(/&[#\w]*$/,'').trimEnd()+'…'}
 /* The Dashboard's table of agents, marked so its styles can give the name its room and drop the bar where it would be cut. */
@@ -5687,7 +5687,7 @@ function newReplies(){return THREADS.filter(t=>t.unread&&!liveDraft(t)).length}
 {const st=agStatus;agStatus=function(c){return c.setup&&chatWait(c.id)?'<span class="pillc warn">Waiting for you</span>':st(c)}}
 /* A page that lists what waits is drawn again when the list changes, unless the person is typing or has something open. */
 var WAIT_SIG='';
-function waitRepaint(){if(!FRESH)return;const sig=chatNeeds().map(x=>x.c.id+x.why).join(),h=location.hash.slice(1).split('/'),p=h[0];renderSide();if(sig===WAIT_SIG)return;
+function waitRepaint(){if(!FRESH)return;const sig=chatNeeds().map(x=>x.c.id+x.why).join(),h=JasonLocation.hash.slice(1).split('/'),p=h[0];renderSide();if(sig===WAIT_SIG)return;
  if($('#modal').classList.contains('on')||$('#drawer').classList.contains('on')||$('#menu'))return;WAIT_SIG=sig;
  const typing=document.activeElement&&/^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName);
  if(p==='home'||((p==='attention'||(p==='campaigns'&&!h[1]))&&!typing))render()}
@@ -5695,7 +5695,7 @@ function waitDrawn(id){if(id)paint(id,true);waitRepaint()}
 /* A chat that finished answering while the person was somewhere else: marked in the sidebar, and said in the Feed for
    what it is, a question, a card to answer, or an answer. */
 function liveAnswered(c){if(!FRESH)return;waitRepaint();if(c===SETUP_C)return;const key=c.chatKey||c.id,now=CAMPAIGNS.find(x=>(x.chatKey||x.id)===key)||c;
- if(curId()===now.id&&location.hash.startsWith('#campaigns/'))return;const ch=CHATS[now.id];if(!ch||ch.running)return;ch.unread=true;
+ if(curId()===now.id&&JasonLocation.hash.startsWith('#campaigns/'))return;const ch=CHATS[now.id];if(!ch||ch.running)return;ch.unread=true;
  chatOf(SETUP_C).msgs.push({r:'feed',t:WAIT_SAYS[chatWait(now.id)]||'Answered while you were away',c:now.name,h:'#campaigns/'+now.id});liveSave();renderSide();if(curId()==='setup')render()}
 function liveAgentMenu(ev,id){const c=cById(id);if(!c||c===SETUP_C)return;
  openMenu(ev,c.live?`<button onclick="go('campaigns/${id}/settings')">Settings</button><button onclick="closeMenu();liveRename('${id}')">Rename</button><hr><button style="color:var(--red)" onclick="closeMenu();liveArchive('${id}')">Archive</button>`:`<button onclick="closeMenu();liveRename('${id}')">Rename</button><hr><button style="color:var(--red)" onclick="closeMenu();liveDeleteChat('${id}')">Delete chat</button>`)}
@@ -5731,7 +5731,7 @@ function chatHay(c){const ch=FRESH&&CHATS[c.id],first=ch&&ch.msgs.find(m=>m.r===
 async function liveTitle(c,text,kind){
  if(!c||c.named==='user')return;let name=null;try{name=await JasonBridge.setup.call('chat.title',{text,kind})}catch{}
  if(!name||c.named==='user'||(c.isCreator&&c.plugin))return;const old=c.name;c.name=name;c.named='auto';akaNote(c,old);liveSave();renderSide();
- const h=document.querySelector('.bar h1');if(h&&(curId()===c.id||(CR&&CR.id===c.id&&location.hash.startsWith('#create'))))h.textContent=name;
+ const h=document.querySelector('.bar h1');if(h&&(curId()===c.id||(CR&&CR.id===c.id&&JasonLocation.hash.startsWith('#create'))))h.textContent=name;
 }
 /* A campaign's new name is the campaign's own: the runtime is told, so the activity list, the command line and every
    other place name it the same. If the runtime refuses, the name stays on this screen and the notice says so. */
@@ -5782,7 +5782,7 @@ function workTell(items){
  WORK_TOLD=[...(WORK_TOLD||[]).filter(k=>!all.some(x=>x.key===k)),...all.map(x=>x.key)].slice(-200);
  fresh.forEach(x=>{const c=cById(x.campaign_id);if(!c)return;const ch=chatOf(c),ok=x.kind==='workitem_succeeded';
   ch.msgs.push({r:'ev',t:unsent(x)?'✕ Not sent'+(notSentWhy(x.why)?': '+notSentWhy(x.why):'')+'. Ask here what to do about it.':ok?'✓ '+x.text+'. Ask here to see what it did.':'✕ '+x.text+(x.why?': '+x.why:'.')+' Ask here what to do about it.'});
-  if(!(curId()===c.id&&location.hash.startsWith('#campaigns/')))ch.unread=true;delete LIVE_TABS[c.id];paint(c.id)});
+  if(!(curId()===c.id&&JasonLocation.hash.startsWith('#campaigns/')))ch.unread=true;delete LIVE_TABS[c.id];paint(c.id)});
  if(first||fresh.length)liveSave();
 }
 function mainFeed(items){
@@ -5941,7 +5941,7 @@ function credRow(c){
 var CRED_HIDE={};
 function credHide(k){clearTimeout(CRED_HIDE[k]);delete CRED_HIDE[k];delete CRED_SHOWN[k]}
 function credHideAll(){Object.keys(CRED_HIDE).forEach(k=>clearTimeout(CRED_HIDE[k]));CRED_HIDE={};CRED_SHOWN={}}
-window.addEventListener('hashchange',()=>{if(location.hash!=='#credentials')credHideAll()});
+window.addEventListener('hashchange',()=>{if(JasonLocation.hash!=='#credentials')credHideAll()});
 async function credShow(id,name){const k=id+'|'+name;if(CRED_SHOWN[k]!==undefined)credHide(k);else{try{CRED_SHOWN[k]=await credCall('reveal',{id,name});CRED_HIDE[k]=setTimeout(()=>{credHide(k);credDraw()},30000)}catch(e){toast(crFail(e))}}credDraw()}
 async function credCopy(id,name){try{const v=await credCall('reveal',{id,name});await navigator.clipboard.writeText(v);toast('Copied')}catch(e){toast(crFail(e))}}
 function credRemove(id){const c=(CREDS||[]).find(x=>x.id===id);if(!c)return;modal(`<div class="dh">Remove ${esc(c.title)}?</div><div class="db"><p class="lead">Its values are deleted from this computer.${c.plugin?' A plugin that already has them keeps its own copy until you change it in Accounts.':''}</p></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p no" onclick="credRemoveGo('${id}')">Remove</button></div>`)}
@@ -6012,7 +6012,7 @@ async function devTap(){let left;try{left=await JasonBridge.developer.tap()}catc
  if(left===0&&FRESH){$('#toast').classList.remove('on');const sl=$('#setlinks');if(sl)sl.innerHTML=setLinks();return modal(`<div class="dh">Developer mode is on</div><div class="db"><p>Settings now has a <b>Developer</b> page, where you can show People, Agents and Accounts in the sidebar. It stays on when the app restarts, until you turn it off there.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><a class="btn p" href="#developer" onclick="closeAll()">Open Developer</a></div>`)}
  if(left===0){$('#toast').classList.remove('on');return modal(`<div class="dh">Developer mode is on</div><div class="db"><p>The <b>Interface</b> page now has a <b>Developer</b> section at the bottom. It stays on when the app restarts, until you turn it off there.</p></div><div class="df"><button class="btn" onclick="closeAll()">Close</button><a class="btn p" href="#/p/settings" onclick="closeAll()">Open Interface</a></div>`)}
  if(left<=3)toast(left===1?'One more click to developer mode':left+' more clicks to developer mode')}
-P.runtime=()=>{clearInterval(RT_TIMER);setTimeout(rtFill,0);RT_TIMER=setInterval(()=>{if(location.hash==='#runtime')rtFill();else clearInterval(RT_TIMER)},5000);return `<div class="ph"><div><h1>Runtime</h1><p>The Jason process on this Mac: its version, its state and what it has loaded.</p></div><div class="acts"><a class="btn" href="#/system">Full details</a></div></div><div id="rt-body"><div class="empty">Reading the runtime…</div></div>`};
+P.runtime=()=>{clearInterval(RT_TIMER);setTimeout(rtFill,0);RT_TIMER=setInterval(()=>{if(JasonLocation.hash==='#runtime')rtFill();else clearInterval(RT_TIMER)},5000);return `<div class="ph"><div><h1>Runtime</h1><p>The Jason process on this Mac: its version, its state and what it has loaded.</p></div><div class="acts"><a class="btn" href="#/system">Full details</a></div></div><div id="rt-body"><div class="empty">Reading the runtime…</div></div>`};
 async function rtFill(){
  const e=$('#rt-body');if(!e)return;let d;
  try{d=await JasonBridge.runtime()}catch(err){e.innerHTML=`<div class="note am">The runtime did not answer: ${esc(crFail(err))}</div>`;return}
@@ -6098,11 +6098,11 @@ function uiNoteClosed(){try{return localStorage.getItem(UI_NOTE_KEY)==='1'}catch
 function closeUiNote(){try{localStorage.setItem(UI_NOTE_KEY,'1')}catch{}const e=$('#ui-note');if(e)e.remove()}
 /* Three short paragraphs, the same in Demo and Live: the interface is optional, Demo is an example of what can be built, and
    where the source is. A link to the web opens in the system browser in the desktop app. */
-function uiNote(){return uiNoteClosed()?'':`<div class="uinote" id="ui-note"><div><p><b>This interface is optional.</b> It showcases the main things Jason Harness can do, but the harness works just as well without it, through Claude Code, Codex, or any other agent.</p><p>What you see in <b>Demo</b> is an example of what you can build, while <b>Live</b> includes the essentials.</p><p>Jason is open source: get the code at <a href="https://github.com/reply-team/jason-ai" target="_blank" rel="noopener">github.com/reply-team/jason-ai</a> and let your coding agent build the pages you need.</p></div><button title="Close" aria-label="Close" onclick="closeUiNote()">×</button></div>`}
+function uiNote(){return uiNoteClosed()?'':`<div class="uinote" id="ui-note"><div><p><b>This interface is optional.</b> It showcases the main things Jason Harness can do, but the harness works just as well without it, through Claude Code, Codex, or any other agent.</p><p>What you see in <b>Demo</b> is an example of what you can build, while <b>Live</b> includes the essentials.</p><p>Jason is open source: get the code at <b>github.com/reply-team/jason-ai</b> and let your coding agent build the pages you need.</p></div><button title="Close" aria-label="Close" onclick="closeUiNote()">×</button></div>`}
 function modeMenu(ev){openMenu(ev,[['standard','Standard mode','Plan and run outreach with your GTM agent'],['creator','Creator mode','Build a channel, a provider or a plugin in a chat']].map(m=>`<button class="mi" onclick="setChatMode('${m[0]}')"><span>${CHAT_MODE===m[0]?'✓ ':''}${m[1]}<small>${m[2]}</small></span></button>`).join(''),true)}
 function setChatMode(m){CHAT_MODE=m;renderStart()}
 function startCreatorChat(text){
- CR=newCr('plugin','start');history.replaceState(null,'','#create/plugin');render();
+ CR=newCr('plugin','start');JasonLocation.replaceState(null,'','#create/plugin');render();
  $('#crbox').value=text;crSend();
 }
 function attachChips(){return ATTACH.map((f,i)=>`<span class="fchip">${esc(f.name)}<button title="Remove" onclick="dropFile(${i})">×</button></span>`).join('')}
@@ -6178,20 +6178,20 @@ function placeModelMenu(){const m=$('#menu');if(!m||!MENU_AT)return;const r=MENU
 function drawModelMenu(){const m=$('#menu');if(!m||!m.classList.contains('mdlmenu'))return;const l=m.querySelector('.mdllist'),at=l?l.scrollTop:0;m.innerHTML=modelMenuHtml();const n=m.querySelector('.mdllist');if(n)n.scrollTop=at;placeModelMenu()}
 function modelMenu(ev){MENU_PROV=CHAT_PICK?CHAT_PICK.provider:null;MENU_AT=ev.currentTarget.getBoundingClientRect();openMenu(ev,modelMenuHtml(),true);const m=$('#menu');if(m){m.classList.add('mdlmenu');placeModelMenu()}}
 /* A turn already under way keeps the model it started with, so a pick made meanwhile says when it takes effect. */
-function savePick(){try{localStorage.setItem('jason.chat.model',JSON.stringify(CHAT_PICK))}catch{}refreshModelButtons();drawModelMenu();const ch=CHATS[curId()];if((ch&&ch.running)||(CR&&CR.busy&&location.hash.startsWith('#create/')))toast('From your next message')}
+function savePick(){try{localStorage.setItem('jason.chat.model',JSON.stringify(CHAT_PICK))}catch{}refreshModelButtons();drawModelMenu();const ch=CHATS[curId()];if((ch&&ch.running)||(CR&&CR.busy&&JasonLocation.hash.startsWith('#create/')))toast('From your next message')}
 function pickModel(provider,model){const keep=CHAT_PICK&&CHAT_PICK.effort||'';CHAT_PICK={provider,model,effort:keep};if(keep&&!pickEfforts().includes(keep))CHAT_PICK.effort='';savePick()}
 function pickEffort(l){if(!CHAT_PICK)return;CHAT_PICK.effort=l==='auto'?'':l;savePick()}
 function refreshModelButtons(){document.querySelectorAll('.cpick.mdl').forEach(b=>{const t=document.createElement('div');t.innerHTML=modelButton();b.replaceWith(t.firstChild)})}
 
 /* Settings: a harness screen sits beside the menu, as one more tab. */
 var SETTINGS_FRAMES=['/system','/p/settings','/workitems'];
-function isSettingsFrame(){const h=location.hash.slice(1).split('?')[0];return SETTINGS_FRAMES.some(f=>h===f||h.startsWith(f+'/'))}
+function isSettingsFrame(){const h=JasonLocation.hash.slice(1).split('?')[0];return SETTINGS_FRAMES.some(f=>h===f||h.startsWith(f+'/'))}
 function resetHarnessPlace(){const h=$('#harness-root');if(h){h.style.left='';h.style.top=''}}
 function placeHarness(){if(!isSettingsFrame())return;const v=$('#view'),h=$('#harness-root');if(!v||!h)return;const r=v.getBoundingClientRect();h.style.left=r.left+'px';h.style.top=r.top+'px'}
 /* Done in Settings goes back to where the person was when they opened it. */
 var SET_BACK='';
 function setBack(){return SET_BACK||(FRESH?'#start':'#home')}
-function setNote(){const h=location.hash,p=h.slice(1).split('/')[0];if(h.length>1&&!SET_KEYS[p]&&!isSettingsFrame()&&p!=='settings')SET_BACK=h}
+function setNote(){const h=JasonLocation.hash,p=h.slice(1).split('/')[0];if(h.length>1&&!SET_KEYS[p]&&!isSettingsFrame()&&p!=='settings')SET_BACK=h}
 window.addEventListener('hashchange',setNote);setNote();
 function renderSettingsFrame(){
  JasonBridge.showHarness(true,true);
@@ -6402,7 +6402,7 @@ function mcpMine(){
 function mcpField(id,label,value,opts={}){return `<div class="field"><label>${esc(label)}</label><input class="inp" id="${id}" type="${opts.secret?'password':'text'}" autocomplete="off" value="${esc(value||'')}" placeholder="${esc(opts.ph||'')}">${opts.hint?`<div class="meta" style="margin-top:4px">${esc(opts.hint)}</div>`:''}</div>`}
 function mcpConnect(from,id){
  const m=MCP.catalog.find(x=>x.id===from),s=id?MCP.servers.find(x=>x.id===id):null;if(!m)return;
- modal(`<div class="dh">${s?'':'Connect '}${esc(m.name)}${s?' settings':''}</div><div class="db"><p class="sub">${esc(m.description)} <a href="${esc(m.docs)}" target="_blank" rel="noopener">How to get the key ↗</a></p>${mcpField('mcp-name','Name',s?s.name:m.name)}${m.fields.map(f=>mcpField('mcp-v-'+f.name,f.label,'',{secret:true,hint:f.hint,ph:s?'Saved. Leave blank to keep it.':''})).join('')}<div class="note">The key is kept in this computer’s keychain and handed only to the agent’s chat. It never goes into a chat message.</div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" onclick="mcpSave('${esc(from)}','${s?esc(s.id):''}')">${s?'Save':'Connect and test'}</button></div>`);
+ modal(`<div class="dh">${s?'':'Connect '}${esc(m.name)}${s?' settings':''}</div><div class="db"><p class="sub">${esc(m.description)} How to get the key: <b>${esc(m.docs)}</b></p>${mcpField('mcp-name','Name',s?s.name:m.name)}${m.fields.map(f=>mcpField('mcp-v-'+f.name,f.label,'',{secret:true,hint:f.hint,ph:s?'Saved. Leave blank to keep it.':''})).join('')}<div class="note">The key is kept in this computer’s keychain and handed only to the agent’s chat. It never goes into a chat message.</div></div><div class="df"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn p" onclick="mcpSave('${esc(from)}','${s?esc(s.id):''}')">${s?'Save':'Connect and test'}</button></div>`);
 }
 function mcpPairs(text){const out={};String(text||'').split('\n').forEach(l=>{const i=l.search(/[=:]/);if(i>0)out[l.slice(0,i).trim()]=l.slice(i+1).trim()});return out}
 function mcpCustom(id){
@@ -6471,7 +6471,7 @@ function livePanelLine(p){
 function livePanelResearch(p){const c=p.camps[0];return `${p.research.length?table(['Fact','Found'],p.research.map(r=>[esc(r[0]),liveKvValue(r)])):`<div class="empty">${p.researching?'Research is under way. It shows up here when it’s done.':'No research about this person yet.'}</div>`}${c?`<div class="row" style="margin-top:12px"><button class="btn" ${p.researching?'disabled':''} onclick="liveResearch('${esc(c.id)}')">${p.research.length?'Research again':'Research this person'}</button></div>`:''}`}
 const LIVE_PANELS={details:livePanelDetails,activity:livePanelActivity,sequences:livePanelSequences,messages:livePanelMessages,line:livePanelLine,research:livePanelResearch};
 function livePersonDelete(){const id=LPD.id,name=(LPD.p&&LPD.p.name)||'this person';
- confirmModal(`Delete ${name}?`,'They are taken out of People and out of every agent, and nothing more is sent to them. What already happened stays in the history.','Delete',async()=>{const r=await JasonBridge.people.remove([id]);closeAll();toast(r.failed?'This person could not be deleted':'Person deleted');await liveRefresh();PPL.sel.delete(id);PPL.items=null;if(location.hash.startsWith('#people')){await peopleLoad();render()}else render()},'no')}
+ confirmModal(`Delete ${name}?`,'They are taken out of People and out of every agent, and nothing more is sent to them. What already happened stays in the history.','Delete',async()=>{const r=await JasonBridge.people.remove([id]);closeAll();toast(r.failed?'This person could not be deleted':'Person deleted');await liveRefresh();PPL.sel.delete(id);PPL.items=null;if(JasonLocation.hash.startsWith('#people')){await peopleLoad();render()}else render()},'no')}
 function liveDrawPerson(){
  const p=LPD.p;if(!p||!LPD.id)return;
  const n={sequences:p.camps.length,messages:p.messages.length};
@@ -6536,7 +6536,7 @@ function attentionEmpty(){
 }
 
 /* A Creator's start screen is not one of the agents, so Agents is not lit for it. */
-function crHomeOn(){const h=location.hash;return /^#create\/(plugin|channel|tool)$/.test(h)||h==='#builder'}
+function crHomeOn(){const h=JasonLocation.hash;return /^#create\/(plugin|channel|tool)$/.test(h)||h==='#builder'}
 const CR_LEAD_LIVE={plugin:'A plugin can add almost anything to Jason: a new way to reach people, a tool you already use, a page of your own. Describe it in plain words. The Creator agent builds it with the AI you already use and checks it, a page can be tried before you add it, and nothing is added until you say so.',channel:'Describe it in plain words. The Creator agent builds it with the AI you already use and checks it. Nothing is added until you say so.',tool:'Tell the Creator which one you use and link its API documentation. It builds a plugin for it and checks it, asks for your API key in a box when it needs one, and once you add it, it shows up in Accounts.'};
 /* In the demo the Creator's chat is scripted, and its start says so before a person describes anything. */
 function crLead(co){return FRESH?CR_LEAD_LIVE[CR.kind]||co.lead:co.lead+' In the demo this chat is a scripted sample: nothing is built.'}
@@ -6629,7 +6629,7 @@ function reclassify(id,cat){const t=THREADS.find(x=>x.id===id);if(!t||!cat)retur
  const done=v=>{q.opts[i]=v;if(c)c.sender=v;base(id,i)};
  return /^Add a new sender/.test(q.opts[i])?askText('Whose name signs these messages?','',done,'Add sender'):done(q.opts[i])}}
 /* A page of an installed sample plugin hands its change to the Creator, with the words already in the box. */
-function crAsk(t){openCreator('plugin',location.hash.slice(1));setTimeout(()=>{const b=$('#crbox');if(b){b.value=t;CR.draft=t;b.focus()}},80)}
+function crAsk(t){openCreator('plugin',JasonLocation.hash.slice(1));setTimeout(()=>{const b=$('#crbox');if(b){b.value=t;CR.draft=t;b.focus()}},80)}
 
 /* People the sample does not hold yet: a name no one has, at a company of the agent's kind. */
 const DEMO_PRE=['North','Lake','Prairie','Summit','Harbor','Iron','Blue','Red','Silver','Cedar','Granite','Union','Metro','Keystone','Pioneer','Sterling','Crescent','Beacon','Liberty','Frontier','Evergreen','Atlas','Compass','Sierra','Falcon','Anchor','Heartland','Ridgeline','Oakmont','Clearwater'];
@@ -6796,7 +6796,7 @@ function reachAdvance(what){if(!FRESH||!aiReady())return;
 /* A question's answers in Needs you are buttons that answer it, as they would in the chat. */
 function needAnswer(id,i){const c=cById(id),ch=CHATS[id];if(!c||!ch)return;const m=ch.msgs[lastSaid(ch)];if(!m||!m.card)return;
  const k=m.card,u=UI[k.key]||(UI[k.key]={key:k.key,spec:k.spec,v:{...UI_KINDS[k.spec.kind].init(k.spec),...(k.v||{})},camp:c.id});
- uiPick(k.key,i);toast('Answered. '+(c.name||'The agent')+' goes on in its chat.');setTimeout(()=>{if(location.hash.startsWith('#attention'))go('attention')},50)}
+ uiPick(k.key,i);toast('Answered. '+(c.name||'The agent')+' goes on in its chat.');setTimeout(()=>{if(JasonLocation.hash.startsWith('#attention'))go('attention')},50)}
 
 /* What to ask next, by where the agent stands: nothing about replies before anything was sent. */
 function liveSugs(c){const l=!c.members?['What happens next?','Add people','Show me the plan']:!c.contacted?['Show me the people','What needs my decision?','Show me the plan']:['How is it going?',c.replied?'Who replied?':'What needs my decision?','Show me the people'];
@@ -6826,7 +6826,7 @@ function md(src){let out='',para=[],stack=[];
 
 window.addEventListener('hashchange',render);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAll();palClose();closeMenu()}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();palOpen()}});
-if(!location.hash)history.replaceState(null,'','#start');
+if(!JasonLocation.hash)JasonLocation.replaceState(null,'','#start');
 liveBoot().then(render);
 
 
@@ -6855,6 +6855,21 @@ window.JasonConsole={render,renderSide,palOpen,setupReload};
       'In the Jason app, you connect Claude or ChatGPT here and your agents answer for real.</div>'
     );
   };
+})();
+</script>
+<script>/* global window, document, modeBar */
+// The embedded demo's last script, run after after-console.js: the application showing this page draws its own working
+// Demo and Live switch over the strip's right end, so the page draws none there and no "Open in" control either. The
+// strip's text stays.
+(function () {
+  const drawStrip = modeBar;
+  window.modeBar = function () {
+    drawStrip();
+    document.querySelectorAll('#mode-bar .mb-seg, #mode-bar .mb-oi, #mode-bar .sd-note').forEach(function (each) {
+      each.remove();
+    });
+  };
+  window.modeBar();
 })();
 </script>
 </body>
