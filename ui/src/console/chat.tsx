@@ -1188,7 +1188,14 @@ function AgentInBar({ campaignId }: { campaignId: string }) {
     );
 }
 
-export function ChatPanel({ chatId }: { chatId: string }) {
+/** The agent's header's "…", where the acts of an agent's conversation are: focus goes back to it once one is done. */
+const agentMore = (): HTMLElement | null => document.querySelector<HTMLElement>('.jc-console .agent-head .agent-more');
+
+/**
+ * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
+ * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
+ */
+export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?: boolean }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
     const panel = useRef<HTMLDivElement>(null);
@@ -1210,7 +1217,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
         if (renaming) {
             nameBox.current?.focus();
             nameBox.current?.select();
-        } else if (wasRenaming.current) renameButton.current?.focus();
+        } else if (wasRenaming.current) (renameButton.current ?? agentMore())?.focus();
         wasRenaming.current = renaming;
     }, [renaming]);
     // Remove's question is a dialog: focus goes to keeping the conversation, the rest of the panel takes nothing while it
@@ -1221,7 +1228,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
             else part.removeAttribute('inert');
         }
         if (removing) keepButton.current?.focus();
-        else if (wasRemoving.current) removeButton.current?.focus();
+        else if (wasRemoving.current) (removeButton.current ?? agentMore())?.focus();
         wasRemoving.current = removing;
     }, [removing]);
     const chat = record;
@@ -1291,24 +1298,27 @@ export function ChatPanel({ chatId }: { chatId: string }) {
             .desktop.chat.stop(chatId)
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
     };
+    const underHead = headed && chat.campaignId !== null && !chat.main;
     return (
         <div className="chat-panel" ref={panel}>
             <div className="chat-bar">
                 {chat.main ? null : chat.renaming === null ? (
-                    <button
-                        ref={renameButton}
-                        className="btn sm"
-                        type="button"
-                        disabled={!keptByDesktop || chat.removing}
-                        title={
-                            keptByDesktop
-                                ? 'Give this conversation a name of your own'
-                                : 'Send a message first; then the chat can be renamed'
-                        }
-                        onClick={() => changeChat(chatId, (each) => ({ ...each, renaming: each.title }))}
-                    >
-                        Rename
-                    </button>
+                    !underHead && (
+                        <button
+                            ref={renameButton}
+                            className="btn sm"
+                            type="button"
+                            disabled={!keptByDesktop || chat.removing}
+                            title={
+                                keptByDesktop
+                                    ? 'Give this conversation a name of your own'
+                                    : 'Send a message first; then the chat can be renamed'
+                            }
+                            onClick={() => changeChat(chatId, (each) => ({ ...each, renaming: each.title }))}
+                        >
+                            Rename
+                        </button>
+                    )
                 ) : (
                     <form
                         className="chat-rename"
@@ -1341,7 +1351,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         </button>
                     </form>
                 )}
-                {!inTab() && (
+                {!inTab() && !underHead && (
                     <button
                         className="btn sm"
                         type="button"
@@ -1352,7 +1362,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         Start afresh
                     </button>
                 )}
-                {chat.main || inTab() ? null : (
+                {chat.main || inTab() || underHead ? null : (
                     <button
                         ref={removeButton}
                         className="btn sm"
@@ -1363,7 +1373,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         Remove
                     </button>
                 )}
-                {chat.campaignId !== null && !chat.main && <AgentInBar campaignId={chat.campaignId} />}
+                {chat.campaignId !== null && !chat.main && !underHead && <AgentInBar campaignId={chat.campaignId} />}
             </div>
             {chat.removing && (
                 <div
@@ -1376,8 +1386,9 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                     }}
                 >
                     <div id={`remove-said-${chatId}`}>
-                        Remove this conversation? Its record goes from this computer; the AI host keeps its own
-                        transcript of it.
+                        {underHead
+                            ? 'Remove this conversation? Only the chat goes: its record leaves this computer, and the AI host keeps its own transcript of it. The agent stays as it is, and keeps working if it is running. Pausing it is in its header; archiving it is at the end of its Settings tab.'
+                            : 'Remove this conversation? Its record goes from this computer; the AI host keeps its own transcript of it.'}
                     </div>
                     <div className="crow">
                         <button ref={keepButton} className="btn sm" type="button" onClick={keep}>

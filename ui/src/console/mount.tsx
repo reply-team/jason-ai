@@ -12,6 +12,7 @@ import './harness.css';
 import './chat-cards.css';
 import './harness-palette.css';
 import './agent.css';
+import './agent-head.css';
 import './settings.css';
 
 /** The desktop's shell, mounted when the page finds the desktop's seam. */

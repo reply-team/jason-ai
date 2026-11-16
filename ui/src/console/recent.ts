@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals-react';
 import { act, argsOf, define } from './actions';
+import { shownAgent } from './agent-place';
 import { campaigns } from './campaigns';
 import { html, type Html } from './html';
 import { t } from '../platform/i18n';
@@ -86,6 +87,15 @@ function dotTitle(row: RecentRow): Html | null {
     return html`title="${dotTitles[row.dot]}"`;
 }
 
+/** Whether the row is the conversation of the agent the area shows, on whichever of its tabs. */
+function agentsRow(id: string): boolean {
+    const agent = shownAgent.value;
+    return (
+        agent !== null &&
+        conversations.value.some((each) => each.id === id && !each.main && each.campaignId === agent.id)
+    );
+}
+
 function rowView(row: RecentRow): Html {
     const said = [
         row.waiting > 0 ? t('recent.waiting', { count: row.waitingWords }) : null,
@@ -99,7 +109,7 @@ function rowView(row: RecentRow): Html {
         type="button"
         aria-label="${row.title}"
         aria-description="${said}"
-        ${row.id === currentChat.value ? html`aria-current="true"` : null}
+        ${row.id === currentChat.value || agentsRow(row.id) ? html`aria-current="true"` : null}
         ${act('side.chat', row.id)}
     >
         <span class="rdot ${row.dot}${row.running ? ' running' : ''}" ${dotTitle(row)} aria-hidden="true"></span>

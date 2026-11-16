@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals-react';
+import { shownAgent } from './agent-place';
 import { parseRoute, route } from '../router';
 import { registry } from '../platform/slots';
 import { t } from '../platform/i18n';
@@ -77,7 +78,8 @@ function shownRow(): Row | null {
         case 'connect':
             return 'more';
         case 'page':
-            return screenRows[route.value.screen] ?? null;
+            // An agent's page is marked in Recent, by its conversation's row, as its chat is.
+            return shownAgent.value !== null ? null : (screenRows[route.value.screen] ?? null);
         default:
             return null;
     }
