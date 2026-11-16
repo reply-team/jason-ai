@@ -98,6 +98,7 @@ public sealed class JournalKindInventoryTests
         JournalKinds.ProfileRevised,
         JournalKinds.ProfileDisabled,
         JournalKinds.ProfileEnabled,
+        JournalKinds.DefaultProfileUpdated,
         JournalKinds.PluginsReloaded,
         JournalKinds.ExternalIdOrigin,
         JournalKinds.DecisionRaised,

@@ -108,7 +108,7 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(opens(desktop)[0]!.args).toEqual(['claude', undefined]);
     });
 
-    it('lists the places under his headers, with his subtitles, and marks the default', async () => {
+    it('lists the places under their headers, with their subtitles, and marks the default', async () => {
         const desktop = await renderConsole(kept);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
@@ -138,7 +138,7 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(
             within(menu()).getAllByText('A new session in a terminal, with your own settings and tools'),
         ).toHaveLength(2);
-        // Copy path carries the folder as its subtitle; the arrow carries his title.
+        // Copy path carries the folder as its subtitle; the arrow carries its own title.
         expect(within(within(menu()).getByRole('menuitem', { name: /^Copy path/ })).getByText('Jason')).not.toBeNull();
         expect(arrow().getAttribute('title')).toBe('Open in…');
         expect(menu().getAttribute('aria-label')).toBe('Open in…');

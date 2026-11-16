@@ -27,8 +27,9 @@
  *    carried jason; and the folder itself only once that leaves it empty. A link or anything else there stays, and is
  *    named.
  *
- * 6. The demo's two folders, run from the person's installation: the demo's data directory (the person's with `-demo` after
- *    it) and the demo's harness root (the person's with `-demo` after it). The demo's runtime is stopped first, through the
+ * 6. The two folders the demo of a version of 0.44 or earlier made, run from the person's installation: its data
+ *    directory (the person's with `-demo` after it) and its harness root (the person's with `-demo` after it). The demo's
+ *    runtime is stopped first, through the
  *    demo's own run file (`demo-runtime.ts`), never the person's; one that does not stop keeps both folders. A folder that is
  *    a link or a file, or that is, holds or lies inside the person's own data directory, harness root or application, is
  *    left and named. A demo run offers no removal at all (`mode.ts`).

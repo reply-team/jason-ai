@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApi } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { Unpaired } from '../../api/client';
+import { repeated } from './store';
 import { TextMoved, hasSubject, heldArgs, saveEdit, sentence, wordsOf, type Words } from './message-edit';
 
 type Props = {
@@ -111,7 +112,15 @@ export function MessageEditor({ approval, item, busy, onSaved, onMoved, startOpe
                 </div>
             )}
             <div className="actions">
-                <button className="btn primary" type="button" disabled={saving || busy} onClick={() => void save()}>
+                <button
+                    className="btn primary"
+                    type="button"
+                    disabled={saving || busy}
+                    onClick={(event) => {
+                        // The second click of a double click is no second Save.
+                        if (!repeated(event.nativeEvent)) void save();
+                    }}
+                >
                     Save
                 </button>
                 <button

@@ -1,0 +1,35 @@
+{
+  "operation": "approval.list",
+  "case": "card-messages-next-page",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_1",
+    "limit": 50,
+    "cursor": "YXByXzUw"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_51",
+        "work_item_id": "wi_51",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "pending",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-51",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-16T09:00:00.000Z",
+        "decided_at": null,
+        "decided_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Pat Person51",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

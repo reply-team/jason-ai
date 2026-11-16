@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { DesktopConversationRecord, DesktopEffort, DesktopHost, DesktopLineEntry } from '../platform/desktop';
 import {
@@ -42,7 +44,11 @@ import {
     planLine,
     planModeMoved,
     told,
+    actKinds,
+    choiceState,
+    personActed,
     type Chat,
+    unseen,
 } from './chat-model';
 
 const asking = (chat: Chat): Chat =>
@@ -792,5 +798,210 @@ describe('Plan only’s plan card, as the page keeps it', () => {
         );
         expect(planApproved).toBe('Approved: the chat is in Ask first.');
         expect(planModeMoved).toBe("The chat's mode changed before the plan was approved, so nothing was sent.");
+    });
+});
+
+describe('a choice the AI asked', () => {
+    const at = '2026-10-16T09:05:00.000Z';
+    const labels = ['From me', 'From someone else on my team'];
+    const asked = (campaign?: { id: string; name: string }): Chat => {
+        const chat = received(said(newChat('c1', 'claude', campaign), 'Set it up'), {
+            kind: 'text',
+            text: 'Who should the emails come from?',
+            at,
+        });
+        return received(chat, { kind: 'done', error: null });
+    };
+    const clear = { at, read: 'clear' as const };
+    const state = (chat: Chat, acts: Parameters<typeof choiceState>[3] = null, maySend = true) =>
+        choiceState(chat, 1, labels, acts, maySend);
+    const after = (chat: Chat, entry: Chat['entries'][number]): Chat => ({
+        ...chat,
+        entries: [...chat.entries, entry],
+    });
+    const record = (entries: DesktopConversationRecord['entries']): DesktopConversationRecord => ({
+        id: 'conv_1',
+        campaignId: null,
+        title: 'Set up',
+        updatedAt: at,
+        running: false,
+        mode: 'ask_first',
+        dropped: 0,
+        entries,
+        chosen: null,
+    });
+    const line: DesktopLineEntry = {
+        kind: 'line',
+        journal_kind: 'campaign_paused',
+        journal_id: 'jrn_1',
+        at,
+        campaign_id: 'cmp_1',
+        count: 1,
+    };
+
+    it('keeps the moment the desktop kept its words, live and from a record', () => {
+        expect(asked().entries[1]).toEqual({ kind: 'text', text: 'Who should the emails come from?', at });
+        const chat = fromRecord(
+            record([
+                { kind: 'user', text: 'Set it up' },
+                { kind: 'text', text: 'Who?', at },
+                { kind: 'text', text: 'Earlier desktop' },
+            ]),
+            'claude',
+        );
+        expect(chat.entries[1]).toEqual({ kind: 'text', text: 'Who?', at });
+        expect(chat.entries[2]).toEqual({ kind: 'text', text: 'Earlier desktop' });
+        // A plan's mark put on and taken off leaves the moment as it was.
+        const marked = received(
+            { ...chat, entries: chat.entries.slice(0, 2), mode: 'plan_only' },
+            { kind: 'done', error: null, plan: true },
+        );
+        expect(marked.entries[1]).toEqual({ kind: 'text', text: 'Who?', at, plan: true });
+        expect(moded(marked, 'ask_first').entries[1]).toEqual({ kind: 'text', text: 'Who?', at });
+    });
+
+    it('is live while nothing follows it, no turn runs, no message waits and the chat may send', () => {
+        expect(state(asked())).toEqual({ state: 'live' });
+        expect(state({ ...asked(), running: true })).toEqual({ state: 'idle' });
+        expect(state({ ...asked(), waiting: 'Later' })).toEqual({ state: 'idle' });
+        expect(state(asked(), null, false)).toEqual({ state: 'idle' });
+    });
+
+    it('is answered by the next message: the label it equals once both are trimmed, else the person’s own words', () => {
+        expect(state(said(asked(), '  From me '))).toEqual({ state: 'chosen', label: 'From me' });
+        expect(state(said(asked(), 'from me'))).toEqual({ state: 'own_words' });
+        expect(state(said(asked(), 'Both of us, alternately'))).toEqual({ state: 'own_words' });
+    });
+
+    it.each<Chat['entries'][number]>([
+        { kind: 'text', text: 'One more thing.' },
+        { kind: 'step', step: { text: 'Ran a jason command' } },
+        { kind: 'permission', request: 'r', title: 'Run', detail: 'x', remember: null, answer: null },
+        { kind: 'error', text: 'It stopped.' },
+        { kind: 'notice', text: 'A folder was left out.', folder: null },
+        { kind: 'attached', title: 'Spring' },
+        { kind: 'fresh', reason: 'not_found' },
+        { kind: 'afresh' },
+    ])('is locked with no mark by a later $kind', (entry) => {
+        expect(state(after(asked(), entry))).toEqual({ state: 'locked' });
+        // The first locking entry decides: a message after it marks nothing.
+        expect(state(said(after(asked(), entry), 'From me'))).toEqual({ state: 'locked' });
+    });
+
+    it.each<Chat['entries'][number]>([
+        { kind: 'line', line },
+        { kind: 'gap' },
+        { kind: 'pick', campaignIds: ['cmp_1', 'cmp_2'] },
+    ])('is not locked by a later $kind', (entry) => {
+        expect(state(after(asked(), entry))).toEqual({ state: 'live' });
+        expect(state(said(after(asked(), entry), 'From me'))).toEqual({ state: 'chosen', label: 'From me' });
+    });
+
+    it('is drawn locked once the chat is opened again, as the desktop keeps fewer entries than lock it, and answered as it was', () => {
+        const asking: DesktopConversationRecord['entries'] = [
+            { kind: 'user', text: 'Set it up' },
+            { kind: 'text', text: 'Who?', at },
+        ];
+        // A notice, a campaign attached or a session started afresh locked it; the record keeps none of them.
+        expect(state(fromRecord(record(asking), 'claude'))).toEqual({ state: 'reopened' });
+        expect(state(fromRecord({ ...record(asking), campaignId: 'cmp_1' }, 'claude'), clear)).toEqual({
+            state: 'reopened',
+        });
+        expect(state(after(asked(), { kind: 'afresh' }))).toEqual({ state: 'locked' });
+        // A choice asked after the chat was opened again is live as any other.
+        const later = received(said(fromRecord(record(asking), 'claude'), 'And?'), { kind: 'text', text: 'Who?', at });
+        expect(choiceState(received(later, { kind: 'done', error: null }), 3, labels, null, true)).toEqual({
+            state: 'live',
+        });
+        expect(state(fromRecord(record([...asking, { kind: 'user', text: 'From me' }]), 'claude'))).toEqual({
+            state: 'chosen',
+            label: 'From me',
+        });
+        expect(state(fromRecord(record([...asking, { kind: 'error', text: 'Stopped.' }]), 'claude'))).toEqual({
+            state: 'locked',
+        });
+    });
+
+    describe('in an agent’s chat', () => {
+        const spring = { id: 'cmp_1', name: 'Spring' };
+
+        it('is live only once the person’s acts since its moment were read and there were none', () => {
+            expect(state(asked(spring), clear)).toEqual({ state: 'live' });
+            expect(state(asked(spring), { at, read: 'reading' })).toEqual({ state: 'idle' });
+            expect(state(asked(spring), null)).toEqual({ state: 'idle' });
+            // A read made for another moment says nothing of this one.
+            expect(state(asked(spring), { at: '2026-10-16T09:00:00.000Z', read: 'clear' })).toEqual({ state: 'idle' });
+        });
+
+        it('is locked by a person’s act, and drawn locked when the read failed or its words have no moment', () => {
+            expect(state(asked(spring), { at, read: 'acted' })).toEqual({ state: 'acted' });
+            expect(state(asked(spring), { at, read: 'unread' })).toEqual({ state: 'unread' });
+            const earlier = asked(spring);
+            const words: Chat['entries'][number] = { kind: 'text', text: 'Who should the emails come from?' };
+            expect(state({ ...earlier, entries: [earlier.entries[0]!, words] }, clear)).toEqual({ state: 'unread' });
+        });
+
+        it('takes a later entry first: an answer stays an answer whatever was acted after it', () => {
+            expect(state(said(asked(spring), 'From me'), { at, read: 'acted' })).toEqual({
+                state: 'chosen',
+                label: 'From me',
+            });
+        });
+
+        it('reads no act in a chat of no agent, where only later entries lock', () => {
+            expect(state(asked(), { at, read: 'acted' })).toEqual({ state: 'live' });
+            expect(state({ ...asked(spring), main: true }, null)).toEqual({ state: 'live' });
+        });
+    });
+});
+
+describe('a person’s act on an agent, as a journal line', () => {
+    const since = '2026-10-16T09:05:00.000Z';
+    const line = (
+        fields: Partial<{ kind: string; campaign_id: string | null; ts: string; actor: { type: string } }>,
+    ) => ({
+        kind: 'campaign_paused',
+        campaign_id: 'cmp_1',
+        ts: '2026-10-16T09:07:00.000Z',
+        actor: { type: 'human' },
+        ...fields,
+    });
+
+    it('is not a line with no actor, which is skipped and throws nothing', () => {
+        const bare: Record<string, unknown> = { ...line({}) };
+        delete bare.actor;
+        expect(personActed(bare as never, 'cmp_1', since)).toBe(false);
+        expect(personActed({ ...bare, actor: null } as never, 'cmp_1', since)).toBe(false);
+    });
+
+    it.each(actKinds)('is %s with a person as its actor', (kind) => {
+        expect(personActed(line({ kind }), 'cmp_1', since)).toBe(true);
+    });
+
+    it.each(['role', 'attempt', 'system'])('is not a line whose actor is a %s', (type) => {
+        expect(personActed(line({ actor: { type } }), 'cmp_1', since)).toBe(false);
+    });
+
+    it('is not another campaign’s, another kind, or a line before the moment; one at the moment is, as since keeps it', () => {
+        expect(personActed(line({ campaign_id: 'cmp_2' }), 'cmp_1', since)).toBe(false);
+        expect(personActed(line({ campaign_id: null }), 'cmp_1', since)).toBe(false);
+        expect(personActed(line({ kind: 'campaign_created' }), 'cmp_1', since)).toBe(false);
+        expect(personActed(line({ ts: '2026-10-16T09:04:59.999Z' }), 'cmp_1', since)).toBe(false);
+        expect(personActed(line({ ts: since }), 'cmp_1', since)).toBe(true);
+    });
+});
+
+describe('the unseen characters', () => {
+    const desktop = (file: string, declaration: RegExp) =>
+        readFileSync(join(import.meta.dirname, '..', '..', '..', 'desktop', 'src', file), 'utf8').match(
+            declaration,
+        )?.[1];
+
+    it('are the pattern the desktop drops from a title, in its header and in its naming', () => {
+        const header = desktop('chat-header.ts', /export const unseen = (\/.*\/gu);/);
+        const naming = desktop('chat-naming.ts', /const unseen = (\/.*\/gu);/);
+        expect(header).toBeDefined();
+        expect(unseen.toString()).toBe(header);
+        expect(unseen.toString()).toBe(naming);
     });
 });

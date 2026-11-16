@@ -43,6 +43,11 @@ describe('the Needs you subline', () => {
         expect(needsSubline(4, 0)).toBe('4 approvals');
         expect(needsSubline(0, 0)).toBeNull();
     });
+
+    it('carries the plus of a list the runtime holds more of, and is then plural', () => {
+        expect(needsSubline({ n: 100, more: true }, { n: 1, more: false })).toBe('100+ approvals · 1 question');
+        expect(needsSubline({ n: 1, more: true }, 0)).toBe('1+ approvals');
+    });
 });
 
 describe('the reply rate', () => {
@@ -132,6 +137,15 @@ describe('the categories', () => {
 
 describe('the tiles', () => {
     const read: ActivityRead = { contacted: 40, replied: 5, bounced: 2 };
+    it('shows on the Needs you tile the one count in words when it is given, a plus included', () => {
+        const [needs] = tilesOf({ approvals: 2, questions: 1, waitingKnown: true, waiting: '100+', activity: null });
+        expect(needs!.value).toBe('100+');
+        expect(needs!.sub).toBe('2 approvals · 1 question');
+        expect(
+            tilesOf({ approvals: 2, questions: 1, waitingKnown: false, waiting: '3', activity: null })[0]!.value,
+        ).toBeNull();
+    });
+
     it('gives six tiles in order, the two with no fact read holding no value', () => {
         const tiles = tilesOf({ approvals: 2, questions: 1, waitingKnown: true, activity: read });
         expect(tiles.map((each) => each.label)).toEqual([

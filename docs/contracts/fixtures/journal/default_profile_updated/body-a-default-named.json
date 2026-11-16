@@ -1,0 +1,7 @@
+{
+  "kind": "default_profile_updated",
+  "version": 1,
+  "case": "an installation that named no default names one",
+  "body": { "key": "Roles:DefaultExecutionProfile", "old": null, "new": "claude-code" },
+  "expect": "valid"
+}

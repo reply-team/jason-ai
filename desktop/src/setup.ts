@@ -15,7 +15,7 @@ import type { Cli, CliResult } from './cli.ts';
 import { feedArguments } from './installation.ts';
 import type { Logger } from './log.ts';
 import { floorSentence, printedVersion, versionLimitMs } from './host-version.ts';
-import { codexAutoEdit, codexFullAccess, demoFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
+import { codexAutoEdit, codexFullAccess, fullAccessNotYet, fullAccessOffered, fullAccessSentence } from './chat-modes.ts';
 import { dataLayout, layoutRefusal, type DataLayout, type DesktopPaths } from './paths.ts';
 import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
@@ -247,8 +247,6 @@ export interface SetupDeps {
     clock?: () => number;
     /** Whether Full access is offered; absent, this version's switch (`fullAccessOffered`). */
     fullAccessOffered?: boolean;
-    /** Whether this is a demo run, where Full access is not offered on any host (`demoFullAccess`). */
-    demo?: boolean;
     /** The pass that puts the chat folder's top right (`ownAgentFolder`); a test gives one that fails. */
     ownChatFolder?: (chat: string, records: string) => void;
     /**
@@ -274,13 +272,12 @@ const signInLimit = 5 * 60_000;
 const profileLimit = 60_000;
 
 /**
- * What one call of `connectRoles` came to: nothing to do in the demo, already settled in this run, a settings file it
+ * What one call of `connectRoles` came to: already settled in this run, a settings file it
  * cannot read, a default already named, profiles it could not read, profiles that are there, no connected host, no
  * mark it could write, a create refused, a default it could not write, a profile made and named, a profile made beside a
  * default a person named meanwhile, which is kept, or a profile made earlier named now.
  */
 export type RolesOutcome =
-    | 'demo'
     | 'settled'
     | 'settings_unread'
     | 'default_named'
@@ -469,9 +466,7 @@ export class Setup {
         const fullAccessOn = (program: string, drives: boolean) =>
             !drives
                 ? null
-                : this.#deps.demo === true
-                  ? demoFullAccess
-                  : !offeredHere
+                : !offeredHere
                     ? fullAccessNotYet
                     : program === 'codex'
                       ? codexFullAccess
@@ -969,12 +964,11 @@ export class Setup {
      * settings file the Connect cards edit, which the runtime reads without a restart; then the mark is taken away. The
      * mark holds the profile's name, and once the create succeeded the id it answered: a start that finds the one profile
      * there with that id and no default writes the default only. A mark that cannot show the profile there is the
-     * desktop's — no id, or another — is let go and nothing is written. Never in the demo; a profile or a default a person
+     * desktop's — no id, or another — is let go and nothing is written. A profile or a default a person
      * made is never touched, now or at any later start, a default named between the look and the write included. Each end
      * but a runtime that did not answer and no connected host settles it for this run.
      */
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
-        if (this.#deps.demo === true) return Promise.resolve('demo');
         return this.#serial(async () => {
             const outcome = await this.#connectRoles(chosen);
             if (outcome !== 'settled' && outcome !== 'profiles_unread' && outcome !== 'no_host') this.#rolesSettled = true;

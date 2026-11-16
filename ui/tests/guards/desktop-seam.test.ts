@@ -25,10 +25,7 @@ const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesk
 const dailyTrends = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['dailyTrends'], true>;
 // Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again; and
 // whether the demo's sample is still being made, said again when it is ready.
-const mode = { get: true, set: true, startOver: true, onPreparing: true } as const satisfies Record<
-    keyof JasonDesktop['mode'],
-    true
->;
+const mode = { get: true, set: true, onPreparing: true } as const satisfies Record<keyof JasonDesktop['mode'], true>;
 // Open in: the places this computer offers for a folder and the act of opening one; the page names a place, never a path.
 const openIn = { targets: true, open: true, continueChat: true, changeJason: true } as const satisfies Record<
     keyof JasonDesktop['openIn'],
@@ -49,6 +46,8 @@ const chat = {
     setMode: true,
     openFolder: true,
     feed: true,
+    // A card the AI asked for that did not draw: its kind and why, for the desktop's log, never what it held.
+    cardRefused: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
 // The window's pairing: the page reports its token's id, never the token.
@@ -134,7 +133,6 @@ describe('the desktop seam', () => {
             'dailyTrends.set',
             'mode.get',
             'mode.set',
-            'mode.startOver',
             'mode.onPreparing',
             'openIn.targets',
             'openIn.open',
@@ -155,6 +153,7 @@ describe('the desktop seam', () => {
             'chat.setMode',
             'chat.openFolder',
             'chat.feed',
+            'chat.cardRefused',
             'links.take',
             'links.onOpen',
             'setup.status',

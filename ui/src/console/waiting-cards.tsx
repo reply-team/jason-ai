@@ -3,9 +3,12 @@ import { Unpaired } from '../api/client';
 import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { MessageEditor } from '../screens/attention/message-editor';
+import { SenderLine } from '../screens/attention/sender-line';
+import { repeated } from '../screens/attention/store';
 import { editable, readItem, sentence } from '../screens/attention/message-edit';
 import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
+import { senderReads, type SenderReads } from './senders';
 import { clock, here } from './state';
 import { approvalGate, readingSentence, toApprovalCard, toQuestionCard, unreadSentence } from './waiting-model';
 import {
@@ -23,12 +26,14 @@ import {
 // An agent's chat, under its conversation: the campaign's approvals and questions that wait on a person, as cards.
 // Approve, Edit, Reject and an answer act through Needs you's holder; Details opens the item in Needs you.
 
-function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSummary }) {
+function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: ApprovalSummary; senders: SenderReads }) {
     const api = useApi();
     const whole = waiting.approvals.value[row.id];
     const gate = approvalGate(whole, waiting.unread.value[row.id]);
     const card = toApprovalCard(row, whole, clock.value);
-    const busy = waiting.store.busy.value;
+    // An act of this chat's, on any card, holds every card's acts from its press until the lists read after it have
+    // answered: a second click never lands on the card that moves up into the decided one's place.
+    const busy = waiting.store.busy.value || waiting.store.acting.value > 0;
     const [rejecting, setRejecting] = useState(false);
     const [reason, setReason] = useState('');
     const [editing, setEditing] = useState<WorkItem | null>(null);
@@ -106,6 +111,9 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                     {[card.channel, card.from !== null && `from ${card.from}`, card.age].filter(Boolean).join(' · ')}
                 </span>
             </div>
+            {/* The sending name the provider holds now for the mailbox named above: a fact read as the card is drawn, which
+                decides nothing. */}
+            <SenderLine approval={whole} reads={senders} />
             <div className="ask-w">{card.why}</div>
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
             {whole !== undefined && <Doubts preview={whole.preview} />}
@@ -180,14 +188,29 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
                         <button className="btn sm" type="button" onClick={() => setRejecting(false)}>
                             Cancel
                         </button>
-                        <button className="btn sm no" type="submit" disabled={busy}>
+                        <button
+                            className="btn sm no"
+                            type="submit"
+                            disabled={busy}
+                            onClick={(event) => {
+                                if (repeated(event.nativeEvent)) event.preventDefault();
+                            }}
+                        >
                             Reject
                         </button>
                     </div>
                 </form>
             ) : (
                 <div className="ask-a">
-                    <button className="btn sm ok" type="button" disabled={held} onClick={() => void approve()}>
+                    <button
+                        className="btn sm ok"
+                        type="button"
+                        disabled={held}
+                        onClick={(event) => {
+                            // The second click of a double click is no second Approve.
+                            if (!repeated(event.nativeEvent)) void approve();
+                        }}
+                    >
                         Approve
                     </button>
                     {whole !== undefined && editable(whole) && (
@@ -219,7 +242,7 @@ function ApprovalCardView({ waiting, row }: { waiting: Waiting; row: ApprovalSum
 function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSummary }) {
     const api = useApi();
     const card = toQuestionCard(row, waiting.questions.value[row.id], clock.value);
-    const busy = waiting.store.busy.value;
+    const busy = waiting.store.busy.value || waiting.store.acting.value > 0;
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
     // An answer of one's own and the reason sit behind one more pill, "Something else…", as the console's option card
@@ -253,15 +276,16 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
                             type="button"
                             title={option.detail ?? undefined}
                             disabled={busy}
-                            onClick={() =>
+                            onClick={(event) => {
+                                if (repeated(event.nativeEvent)) return;
                                 void answerWaiting(
                                     api,
                                     waiting,
                                     row.id,
                                     { option: option.label },
                                     own ? optional(reason) : undefined,
-                                )
-                            }
+                                );
+                            }}
                         >
                             {option.label}
                         </button>
@@ -290,7 +314,14 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
                         value={text}
                         onChange={(event) => setText(event.target.value)}
                     />
-                    <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
+                    <button
+                        className="btn sm p"
+                        type="submit"
+                        disabled={busy || !text.trim()}
+                        onClick={(event) => {
+                            if (repeated(event.nativeEvent)) event.preventDefault();
+                        }}
+                    >
                         Answer
                     </button>
                     <input
@@ -311,6 +342,8 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const api = useApi();
     const waiting = useMemo(() => waitingOf(campaignId), [campaignId]);
     useEffect(() => drawWaiting(api, campaignId), [api, campaignId]);
+    // The accounts the cards' sender lines read, one read per card, kept while this chat is drawn.
+    const senders = useMemo(() => senderReads(), [campaignId]);
     const store = waiting.store;
     const approvals = store.approvals.value;
     const questions = store.questions.value;
@@ -334,7 +367,7 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
                 <QuestionCardView key={row.id} waiting={waiting} row={row} />
             ))}
             {approvals.map((row) => (
-                <ApprovalCardView key={row.id} waiting={waiting} row={row} />
+                <ApprovalCardView key={row.id} waiting={waiting} row={row} senders={senders} />
             ))}
             {reasked.length > 0 && (
                 <div className="note chat-note" role="status">

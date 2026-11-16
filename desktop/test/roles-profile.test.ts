@@ -228,15 +228,6 @@ test('nothing is done where a person made a profile, a disabled one too, or name
     }
 });
 
-test('nothing is done in the demo: no question to the runtime, no file written', async (t) => {
-    const b = bench(t, { programs: ['claude', 'codex'] });
-    writeInstallationSettings(b, {});
-    assert.equal(await setupOn(b, { demo: true }).connectRoles('claude'), 'demo');
-    assert.equal(b.record().filter((entry) => entry.name === 'jason').length, 0);
-    assert.deepEqual(installationSettings(b), {});
-    assert.equal(existsSync(b.paths.settings), false);
-});
-
 test('a runtime that does not answer leaves it for the next turn, and a refused create for the next start, with the mark kept', async (t) => {
     const b = bench(t, { programs: ['claude'], env: { STUB_PROFILE_LIST_FAILS: 'yes' } });
     const setup = setupOn(b);

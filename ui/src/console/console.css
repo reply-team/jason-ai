@@ -1041,6 +1041,9 @@
         --count-bg: #c2410c;
         color-scheme: dark;
     }
+    :root:not([data-theme='light']) .jc-console .content {
+        background: var(--bg);
+    }
 }
 :root[data-theme='dark'] .jc-console .brand .wordmark.light {
     display: none;
@@ -1082,6 +1085,9 @@
     --demo-ink: var(--amber);
     --count-bg: #c2410c;
     color-scheme: dark;
+}
+:root[data-theme='dark'] .jc-console .content {
+    background: var(--bg);
 }
 html,
 body,
@@ -1148,10 +1154,26 @@ body,
 .jc-console .area > .pane[hidden] {
     display: none;
 }
-/* Needs you, Agents and Activity were drawn for a narrow column: in the wide area their cards and lists keep a measure. */
+/* Agents and Activity were drawn for a narrow column: in the wide area their cards and lists keep a measure. */
 .jc-console .pane.measure .panel-body {
     max-width: 880px;
     margin: 0 auto;
+}
+/* Needs you holds two panes side by side, so it takes the whole area; the words read in its pane keep the same measure. */
+.jc-console .pane.measure .panel-body.needs-panel {
+    max-width: none;
+}
+.jc-console .needs-pane .needs-words,
+.jc-console .needs-pane .needs-facts,
+.jc-console .needs-pane.q .needs-title,
+.jc-console .needs-pane .ui-opts,
+.jc-console .needs-pane .needs-said,
+.jc-console .needs-pane .needs-edit,
+.jc-console .needs-pane .send-doubts,
+.jc-console .needs-pane .ask-a,
+.jc-console .needs-pane .ask-w,
+.jc-console .needs-pane > .note {
+    max-width: 880px;
 }
 .jc-console .painted,
 .jc-console .chat-panel {
@@ -1307,15 +1329,232 @@ body,
     grid-template-columns: minmax(0, 1fr);
     min-height: 100%;
 }
-/* Needs you: the filter over what waits and the card that says nothing does. */
+/* Needs you: the filters with their counts and the agent picker over two panes, what waits on the left and the one
+   chosen, whole, on the right; the card that says nothing does. */
+.jc-console .needs-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 16px;
+}
 .jc-console .needs-filter {
     display: flex;
     gap: 6px;
-    margin: 0 0 12px;
+    flex-wrap: wrap;
+}
+.jc-console .needs-filter .btn {
+    height: 32px;
+    border-radius: 999px;
+    padding: 0 14px;
+    font-size: 13px;
+}
+.jc-console .needs-filter .needs-n {
+    margin-left: 4px;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
 }
 .jc-console .needs-filter .btn[aria-pressed='true'] {
     border-color: var(--teal);
-    color: var(--teal);
+    background: var(--teal);
+    color: #fff;
+}
+.jc-console .needs-filter .btn[aria-pressed='true'] .needs-n {
+    color: inherit;
+    opacity: 0.8;
+}
+.jc-console .needs-agent {
+    margin-left: auto;
+    width: auto;
+    min-width: 200px;
+    max-width: 320px;
+}
+.jc-console .needs-panes {
+    display: grid;
+    grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+.jc-console .needs-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    overflow: hidden;
+}
+.jc-console .needs-list > .needs-none {
+    padding: 18px;
+}
+.jc-console .needs-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--line2);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.jc-console .needs-row:last-child {
+    border-bottom: 0;
+}
+.jc-console .needs-row:hover {
+    background: var(--hover);
+}
+.jc-console .needs-row[aria-current='true'] {
+    background: var(--teal-2);
+}
+.jc-console .needs-row:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: -2px;
+}
+.jc-console .needs-ic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+}
+.jc-console .needs-ic.amber {
+    background: var(--amber-2);
+    color: var(--amber);
+}
+.jc-console .needs-ic.violet {
+    background: var(--violet-2);
+    color: var(--violet);
+}
+.jc-console .needs-ic.blue {
+    background: var(--blue-2);
+    color: var(--blue);
+}
+.jc-console .needs-row-b {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.jc-console .needs-row-t {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jc-console .needs-row-m,
+.jc-console .needs-row-a {
+    color: var(--mute);
+    font-size: 12.5px;
+}
+.jc-console .needs-row-a {
+    flex: none;
+    white-space: nowrap;
+}
+.jc-console .needs-row .needs-who {
+    font-weight: 400;
+    color: var(--mute);
+}
+.jc-console .needs-more {
+    margin: 10px 14px;
+    align-self: flex-start;
+}
+.jc-console .needs-pane .ask-h .meta {
+    margin-left: 0;
+}
+.jc-console .needs-save-says {
+    margin: 4px 0 0;
+}
+.jc-console .needs-left {
+    margin: 0 0 12px;
+}
+.jc-console .needs-panel .needs-pane {
+    margin: 0;
+    padding: 18px 22px 20px;
+}
+.jc-console .needs-pane .needs-title {
+    margin: 12px 0 0;
+    font-size: 18px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+.jc-console .needs-pane .needs-title .needs-who {
+    font-weight: 400;
+    color: var(--mute);
+}
+.jc-console .needs-words {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .needs-words .needs-body,
+.jc-console .needs-said .ask-s {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.jc-console .needs-facts {
+    margin-top: 8px;
+}
+.jc-console .needs-pane .ask-a > .inp {
+    flex: 1 1 200px;
+    width: auto;
+    min-width: 0;
+}
+.jc-console .needs-said {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .needs-said .lab {
+    margin: 0;
+}
+.jc-console .needs-pane .ui-opts {
+    margin-top: 12px;
+}
+.jc-console .needs-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+.jc-console .needs-edit .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12.5px;
+    color: var(--mute);
+}
+.jc-console .needs-edit .inp {
+    width: 100%;
+    color: var(--ink);
+}
+.jc-console .needs-edit textarea.inp {
+    min-height: 160px;
+    resize: vertical;
+    font: inherit;
+}
+.jc-console .needs-reject .inp {
+    width: 100%;
+    margin: 8px 0 0;
+}
+.jc-console .needs-reasked {
+    margin: 0 0 12px;
+}
+@media (max-width: 900px) {
+    .jc-console .needs-panes {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .jc-console .needs-agent {
+        margin-left: 0;
+    }
 }
 .jc-console .needs-empty {
     color: var(--faint);
@@ -1904,7 +2143,7 @@ body,
 .jc-console .waiting-card .waiting-intent {
     margin-top: 4px;
 }
-/* Who doubted a send and why, above the message's words: on a chat's card and on a row of Needs you. */
+/* Who doubted a send and why, above the message's words: on a chat's card and in Needs you's pane. */
 .jc-console .waiting-card .send-doubts,
 .jc-console .needs-panel .ask .send-doubts {
     margin-top: 8px;
@@ -1938,6 +2177,23 @@ body,
     width: 100%;
     margin: 8px 0;
 }
+/* The sending name the provider holds now, under the address a send goes from, and when it was read. */
+.jc-console .waiting-card .sender-line,
+.jc-console .needs-words .sender-line {
+    margin-top: 6px;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
+/* In Needs you the line sits under the From it speaks of, before the channel. */
+.jc-console .needs-words .sender-line {
+    margin: 2px 0 4px;
+}
+.jc-console .waiting-card .sender-when,
+.jc-console .needs-words .sender-when {
+    color: var(--mute);
+    font-size: 11.5px;
+    margin-top: 1px;
+}
 /* Needs you's message editor, drawn in a card of the chat. */
 .jc-console .waiting-edit .message-editor {
     display: flex;
@@ -1969,4 +2225,17 @@ body,
     background: var(--teal);
     border-color: var(--teal);
     color: #fff;
+}
+/* A campaign's chat carries the agent's state at the bar's start and its one move at the bar's end: the group is laid
+   out by the bar itself, the state first and the move last, the chat's own buttons between them. */
+.jc-console .chat-agent {
+    display: contents;
+}
+.jc-console .chat-agent-state {
+    order: -1;
+    margin-right: auto;
+    align-self: center;
+}
+.jc-console .chat-agent-move {
+    order: 1;
 }

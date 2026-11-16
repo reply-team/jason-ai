@@ -1,13 +1,33 @@
 import { computed, effect } from '@preact/signals-react';
 import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
+import { useApi } from '../api/context';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
+import { acts, readActs } from './card-acts';
+import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
+import { accountsCard } from './card-accounts';
+import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
+import { needsCard } from './card-needs';
+import { peopleCard } from './card-people';
+import { statusCard } from './card-status';
+import {
+    cardLayout,
+    openChoice,
+    optionsOf,
+    placeOf,
+    readCard,
+    type CardKind,
+    type CardOption,
+    type ChoiceCard,
+    type PlacedCard,
+} from './cards';
 import {
     afresh,
     answered,
     autoEditLine,
+    choiceState,
     codexConfigLine,
     codexHosts,
     codexReachLine,
@@ -43,12 +63,14 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns } from './campaigns';
+import { campaigns, reload as reloadCampaigns, summary } from './campaigns';
+import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
-import { chatHosts, isSignInFailure, signInSentence } from './live';
+import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
+import { CampaignMoves } from '../screens/campaigns/moves';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
@@ -79,13 +101,6 @@ import { fullAccessStanding, standingKnown, takeBackStanding } from '../platform
 // host, and the model and effort chosen in the box, nothing more. A line never starts a turn.
 // The menu beside the composer asks the desktop for the conversation's access mode; the desktop confirms Full access
 // with the person itself, and the page shows the mode the desktop answers with.
-
-// A chip shows the page's word for a campaign, "agent", and sends the runtime's, "campaign": the AI's own rules say campaign.
-const suggestions: readonly { shown: string; sent: string }[] = [
-    { shown: 'What is waiting for me?', sent: 'What is waiting for me?' },
-    { shown: 'How are my agents doing?', sent: 'How are my campaigns doing?' },
-    { shown: 'Help me start a new agent.', sent: 'Help me start a new campaign.' },
-];
 
 const answerWords: Readonly<Record<Answer, string>> = {
     allow: 'Allowed',
@@ -153,7 +168,13 @@ export async function reloadConversations(): Promise<void> {
 async function hold(id: string): Promise<string> {
     if (chats.value[id]) return id;
     const record = unless(await here().desktop.chat.open(id));
-    if (!chats.value[record.id]) chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    if (!chats.value[record.id]) {
+        // A conversation opened afresh reads its last card that reads again, draws the earlier ones as stubs, and its plan
+        // cards hold nothing they held before: none of it belongs to these entries.
+        forgetCards(record.id);
+        forgetProposals(record.id);
+        chats.value = { ...chats.value, [record.id]: fromRecord(record, null) };
+    }
     return record.id;
 }
 
@@ -509,8 +530,16 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
  * on the host the go would go to now; and, while the card is live (`livePlan`), its two buttons. A card of the past,
  * approved or put aside, keeps the words and drops the buttons; one another host made says to ask for the plan again.
  */
-function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: DesktopHost | null): Html {
-    const last = entry === chat.entries.at(-1);
+function planCard(
+    chat: Chat,
+    entry: Extract<Entry, { kind: 'text' }>,
+    host: DesktopHost | null,
+    words: string = entry.text,
+    drawn: Html | null = null,
+    drafts = false,
+): Html {
+    // Approve and run is offered over what a person can read: never over a plan of none.
+    const last = entry === chat.entries.at(-1) && (words.trim() !== '' || drawn !== null);
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -527,8 +556,9 @@ function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: Des
                 : null;
     return html`<div class="ask chat-plan">
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
-        <div class="said plan-text">${entry.text}</div>
+        ${words.trim() === '' ? null : html`<div class="said plan-text">${words}</div>`} ${drawn}
         ${line === null ? null : html`<div class="ask-w">${line}</div>`}
+        ${drafts && (live || approving) ? html`<div class="ask-w plan-drafts">${planDrafts}</div>` : null}
         ${
             (live || approving) && inTab()
                 ? html`<div class="perm-done">${answeredInDesktop}</div>`
@@ -555,6 +585,9 @@ function planCard(chat: Chat, entry: Extract<Entry, { kind: 'text' }>, host: Des
         }
     </div>`;
 }
+
+/** Said over Approve and run where the plan drawn in it has drafts: what it approves is the plan as written. */
+const planDrafts = 'Approve and run approves this plan as written, its drafts included, open or not.';
 
 /** A campaign a pick names: by the name the console read for it, else by its id. */
 const campaignName = (id: string): string => campaigns.value.find((each) => each.id === id)?.name ?? id;
@@ -587,6 +620,203 @@ function pick(chat: Chat, entry: Extract<Entry, { kind: 'pick' }>, last: boolean
 /** One line in the desktop's words for something the page alone says of the conversation. */
 const noteLine = (text: string): Html => html`<div class="note chat-note">${text}</div>`;
 
+/** A kind as the line of a card that did not hold what it needs names it. */
+const kindWords: Readonly<Record<CardKind, string>> = {
+    choice: 'a choice',
+    people_list: 'a people list',
+    agent_status: 'an agent status',
+    needs: 'a needs',
+    accounts: 'an accounts',
+    plan: 'a plan',
+};
+
+/** The line drawn in place of a card that did not draw, in the desktop's words; never anything the block held. */
+export const cardRefusedLine = (kind: CardKind | 'unknown', failure: string): string =>
+    failure === 'kind_unknown'
+        ? 'Jason asked for a card this app does not draw.'
+        : failure === 'too_long'
+          ? 'Jason’s card was too long to read, so it is not shown.'
+          : failure === 'schema' && kind !== 'unknown'
+            ? `Jason’s card did not hold what ${kindWords[kind]} card needs, so it is not shown.`
+            : 'Jason’s card could not be read, so it is not shown.';
+
+/** The header of each kind's card, in the desktop's words. */
+const cardHeaders: Readonly<Record<CardKind, string>> = {
+    choice: 'Jason asks',
+    people_list: 'People',
+    agent_status: 'Agent',
+    needs: 'Waiting for your decision',
+    accounts: 'Accounts',
+    plan: 'Jason’s proposal',
+};
+
+/** The words a choice says once it no longer stands, by why; none while it stands or when another entry locked it. */
+const choiceWords: Partial<Record<ReturnType<typeof choiceState>['state'], string>> = {
+    own_words: 'You answered in your own words.',
+    acted: 'You acted on this agent after this was asked; write your answer below if it still stands.',
+    unread: 'Whether this still stands could not be read; write your answer below.',
+    reopened: 'This was asked before the chat was opened again; write your answer below.',
+};
+
+/** The entries whose card that did not draw the desktop was told of, so a redraw does not tell it again. */
+const toldRefused = new WeakSet<object>();
+
+/**
+ * Tells the desktop's log, once per entry, that its card did not draw: the kind and the failure's class, nothing of the
+ * block. A tab has no log of the desktop's, and an earlier desktop no such call.
+ */
+function tellRefused(chatId: string, entry: object, kind: CardKind | 'unknown', failure: string): void {
+    if (toldRefused.has(entry)) return;
+    toldRefused.add(entry);
+    if (!can('chat.cardRefused')) return;
+    const desktop = here().desktop;
+    if (typeof desktop.chat.cardRefused !== 'function') return;
+    queueMicrotask(() => void desktop.chat.cardRefused(chatId, kind, failure).catch(() => undefined));
+}
+
+/**
+ * A choice the AI asked for: under its frame's label, the AI's question and its options, each a button that sends its
+ * label, exactly, as the person's next message, and does nothing else. Every word of it is the AI's, drawn as text. Live
+ * only while `choiceState` says so; once answered the chosen option is marked, and otherwise it says why it no longer
+ * stands. In a tab that may not send it is only shown, as the plan card is.
+ */
+function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHost | null): Html {
+    return asksView(chat, index, card.question, card.options, host, 'ask chat-card chat-choice');
+}
+
+/**
+ * A question the AI asked on a card, a choice's or a plan's, under the AI's name: its options, each a button that sends
+ * its label, live only while `choiceState` says so.
+ */
+function asksView(
+    chat: Chat,
+    index: number,
+    question: string,
+    options: readonly CardOption[],
+    host: DesktopHost | null,
+    kind: string,
+): Html {
+    const maySend = host !== null && (!inTab() || tabMaySend(chat.mode));
+    const state = choiceState(
+        chat,
+        index,
+        options.map((option) => option.label),
+        acts.value[chat.id] ?? null,
+        maySend,
+    );
+    const live = state.state === 'live';
+    const chosen = state.state === 'chosen' ? state.label : null;
+    const said =
+        choiceWords[state.state] ??
+        (state.state === 'idle' && inTab() && !tabMaySend(chat.mode) ? answeredInDesktop : null);
+    return html`<div class="${kind}${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
+        ${aiCaption(cardHeaders.choice)}
+        <div class="ask-s">${question}</div>
+        <div class="ui-opts">
+            ${options.map((option, at) => {
+                const mine = option.label === chosen;
+                return html`<button
+                    class="ui-opt${mine ? ' chosen' : chosen !== null ? ' faint' : ''}"
+                    type="button"
+                    ${live ? act('chat.choose', chat.id, index, at) : html`disabled`}
+                    ${mine ? html`aria-pressed="true"` : null}
+                >
+                    <span class="opt-l">${option.label}</span>
+                    ${option.detail === undefined ? null : html`<span class="opt-d">${option.detail}</span>`}
+                    ${mine ? html`<span class="opt-mark">${svg('check', 12)}You chose this</span>` : null}
+                </button>`;
+            })}
+        </div>
+        ${said === null ? null : html`<div class="ask-w choice-said">${said}</div>`}
+    </div>`;
+}
+
+/**
+ * The card a turn's last block draws, right after the text entry that held it, with no speaker's label over it: a
+ * choice; a data card or a plan, what it reads drawn as a stub unless it is the conversation's last card that reads
+ * (`last`); the frame that says a data card is about another agent; one line in the desktop's words for a block that did
+ * not read, said once to the desktop's log; nothing for a block still being written. Every kind is drawn.
+ */
+function cardView(
+    chat: Chat,
+    index: number,
+    placed: PlacedCard,
+    host: DesktopHost | null,
+    last: number | null,
+): Html | null {
+    const entry = chat.entries[index]!;
+    const reading = readCard(placed, {
+        place: placeOf(chat),
+        campaignId: chat.campaignId,
+        ended: !placed.lastTurn || !chat.running,
+    });
+    switch (reading.state) {
+        case 'pending':
+            return null;
+        case 'failed':
+            tellRefused(chat.id, entry, reading.kind, reading.failure);
+            return noteLine(cardRefusedLine(reading.kind, reading.failure));
+        case 'elsewhere': {
+            const head = cardHead(cardHeaders[reading.kind]);
+            return html`<div class="ask chat-card" role="group" aria-label="${head.words}">
+                <div class="ask-h">${head.view}</div>
+                <div class="ask-w">This chat shows only its own agent.</div>
+            </div>`;
+        }
+        case 'card':
+            // A data card reads when it is the conversation's last card that reads (`last`), else stands as a stub.
+            switch (reading.card.kind) {
+                case 'choice':
+                    return choiceView(chat, index, reading.card, host);
+                case 'people_list':
+                    return peopleCard(chat, index, reading.card, last);
+                case 'agent_status':
+                    return statusCard(chat, index, reading.card, last);
+                case 'needs':
+                    return needsCard(chat, index, reading.card, last);
+                case 'plan': {
+                    const { question, options } = reading.card;
+                    const asks =
+                        question === undefined || options === undefined
+                            ? null
+                            : asksView(chat, index, question, options, host, 'proposal-asks');
+                    return planView(chat, index, reading.card, last, asks);
+                }
+                case 'accounts':
+                    return accountsCard(chat, index, last, cardHeaders.accounts);
+            }
+    }
+}
+
+/**
+ * What an agent's chat reads of the person's acts: its campaign and the moment its open choice was kept; null for a
+ * chat of no agent, one with no open choice, and one whose choice has no moment, which draws locked without a read.
+ */
+function actsAsked(
+    chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
+): { campaignId: string; at: string } | null {
+    if (chat.campaignId === null || chat.main) return null;
+    const open = openChoice(chat);
+    const entry = open === null ? undefined : chat.entries[open.index];
+    return entry?.kind === 'text' && entry.at !== undefined ? { campaignId: chat.campaignId, at: entry.at } : null;
+}
+
+define('chat.choose', ([id, index, option]) => {
+    if (typeof id !== 'string' || typeof index !== 'number' || typeof option !== 'number') return;
+    const chat = chats.value[id];
+    if (!chat) return;
+    // The choice is read again from the kept entries: only the chat's open one, while it is live, sends its label.
+    const asked = openChoice(chat);
+    if (asked === null || asked.index !== index) return;
+    const labels = optionsOf(asked.card).map((each) => each.label);
+    const label = labels[option];
+    const host = hostOf(chat);
+    const maySend = host !== null && (!inTab() || tabMaySend(chat.mode));
+    if (label === undefined || choiceState(chat, index, labels, acts.value[id] ?? null, maySend).state !== 'live')
+        return;
+    sendTurn(id, label);
+});
+
 /** A line of the Feed, or nothing for a line the page does not know: the kind in words, how many it stands for, its campaign as a link, its age. */
 function feedLine(entry: Extract<Entry, { kind: 'line' }>): Html | null {
     const names = new Map(campaigns.value.map((each) => [each.id, each.name]));
@@ -617,12 +847,16 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
                 ${chat.mode === 'ask_first' || chat.mode === 'auto_edit' || chat.mode === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
             </div>
-            <div class="sugs">
-                ${suggestions.map((chip) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`)}
-            </div>`;
+            <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);
     const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
-    // The speaker is named over the agent's first words of each turn: after the person's message, or at the start.
+    // The cards the AI asked for: each text's words without its card blocks, and each turn's last block, by the index of
+    // the text entry that held it.
+    const layout = cardLayout(chat.entries);
+    const lastReads = lastReadingOrPlan(chat, layout.cards);
+    const indexOf = new Map<object, number>(chat.entries.map((entry, index) => [entry, index]));
+    // The speaker is named over the agent's first words of each turn: after the person's message, or at the start. A
+    // card has no speaker's label over it: a turn's words after one are named instead.
     let named = false;
     const parts = shown(chat).map((entry) => {
         if (entry.kind === 'user') named = false;
@@ -646,13 +880,36 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'user':
                 return html`<div class="m user"><div class="bub said">${entry.text}</div></div>`;
             case 'text': {
-                if (entry.plan === true && !chat.main) return planCard(chat, entry, host);
+                const index = indexOf.get(entry) ?? -1;
+                const cut = layout.words.get(index);
+                // A plan the desktop marked is drawn by the plan's card: its turn draws no card of its own (`cardLayout`),
+                // and a plan card its words end in is drawn inside it, its question as words; every other block stays.
+                if (entry.plan === true && !chat.main) {
+                    const marked = proposalOf(chat, index);
+                    if (marked === null) return planCard(chat, entry, host);
+                    const { question, options } = marked.card;
+                    const asks =
+                        question === undefined || options === undefined ? null : askedAsWords(question, options);
+                    return planCard(
+                        chat,
+                        entry,
+                        host,
+                        marked.words,
+                        planView(chat, index, marked.card, lastReads, asks),
+                        (marked.card.steps ?? []).some((step) => step.body !== undefined),
+                    );
+                }
+                const words = cut ?? entry.text;
+                const placed = layout.cards.get(index);
+                const card = placed === undefined ? null : cardView(chat, index, placed, host, lastReads);
+                if (cut !== undefined && words.trim() === '') return card;
                 const who = named ? null : html`<div class="who">Jason</div>`;
                 named = true;
                 return html`<div class="m ai">
-                    ${who}
-                    <div class="bub">${markdownView(entry.text)}</div>
-                </div>`;
+                        ${who}
+                        <div class="bub">${markdownView(words)}</div>
+                    </div>
+                    ${card}`;
             }
             case 'permission':
                 return permission(chat, entry);
@@ -694,7 +951,32 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         chat.dropped > 0
             ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
             : null;
-    return html`${dropped}${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+}
+
+/** The agent of a chat as the console last read it, its state and its counts; none for a chat of no agent. */
+function agentOf(campaignId: string | null): Agent | undefined {
+    const status = campaigns.value.find((each) => each.id === campaignId)?.status;
+    const row = campaignId === null ? undefined : summary.value[campaignId];
+    return status === undefined || row === undefined ? undefined : { status, row };
+}
+
+/** Chips: each shows its words and sends its own as the person's next message, as a word typed would be. */
+const chipButtons = (chat: Chat, chips: readonly Chip[]): Html[] =>
+    chips.map(
+        (chip) =>
+            html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`,
+    );
+
+/**
+ * The chips under the last answer (`chipsUnder`), where a message could be sent from here now: none without a host, in a
+ * tab that may not send, or while the send waits for a model's name. An agent the console did not list, an archived one
+ * among them, has none.
+ */
+function chipsNext(chat: Chat, host: DesktopHost | null): Html | null {
+    if (host === null || (inTab() && !tabMaySend(chat.mode)) || sendHeld(onHost(chat, host.id), host)) return null;
+    const chips = chipsUnder(chat, agentOf(chat.campaignId));
+    return chips.length === 0 ? null : html`<div class="sugs next">${chipButtons(chat, chips)}</div>`;
 }
 
 /** What the plan card shows beyond the entries and the host: whether it is live, on another host, approving or approved. */
@@ -709,31 +991,59 @@ function cardOf(chat: Chat, host: DesktopHost | null): string {
  * draw the thread afresh, closing what the person opened in it, nor read its Markdown again.
  */
 function threadOf(chatId: string) {
-    let last: { chat: Chat; host: DesktopHost | null; named: unknown; now: number; card: string; view: Html } | null =
-        null;
+    let last: {
+        chat: Chat;
+        host: DesktopHost | null;
+        named: unknown;
+        now: number;
+        counts: unknown;
+        held: string;
+        card: string;
+        asked: unknown;
+        read: unknown;
+        proposed: unknown;
+        view: Html;
+    } | null = null;
     return computed(() => {
         const chat = chats.value[chatId];
         if (!chat) return html``;
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
+        // The chips under an agent's last answer are chosen from its state, read with `named`, and its counts as the
+        // console last read them; none stand while the send waits for a model's name, which the model chosen and whether
+        // one is being typed decide (`sendHeld`, asked only when the thread is drawn: it counts as a draw).
+        const counts = chat.campaignId === null ? undefined : summary.value[chat.campaignId];
+        const held = `${chat.typing === true} ${chat.model ?? ''}`;
         // A line's age is counted from the console's clock, which moves on every half minute.
         const now = clock.value;
         // The plan card is the one part of the thread drawn from the chat's mode, its waiting words and the person's
         // answer to the card; only what the card shows of them redraws the thread, so a message queued or typed does not.
         const card = cardOf(chat, host);
+        // A choice the AI asked is live by the person's acts on the agent as read. A message waits only while a turn
+        // runs, after the person's message, which has locked every choice already.
+        const asked = acts.value[chatId];
+        // A card draws what it read, once its read is answered, and a plan card the drafts the person opened.
+        const read = cardReads.value[chatId];
+        const proposed = proposals.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
             last.host === host &&
             last.named === named &&
+            last.counts === counts &&
+            last.held === held &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.card === card &&
+            last.asked === asked &&
+            last.read === read &&
+            last.proposed === proposed &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, view: threadView(chat, host) };
+        if (!same)
+            last = { chat, host, named, now, counts, held, card, asked, read, proposed, view: threadView(chat, host) };
         return last!.view;
     });
 }
@@ -824,6 +1134,29 @@ export function ChatNotes({ chat }: { chat: Chat }) {
     );
 }
 
+/**
+ * The agent a campaign's chat is about, in the chat's bar: its state as the runtime lists the campaign, and its one move,
+ * the agent page's own control with its own confirmation. The dialog is the browser shell's, so it is drawn inside that
+ * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
+ */
+function AgentInBar({ campaignId }: { campaignId: string }) {
+    const campaign = campaigns.value.find((each) => each.id === campaignId);
+    // An archived campaign is over: it has no move, and its chat says nothing of a state.
+    if (!campaign || campaign.status === 'archived') return null;
+    const { state, tone } = toCampaignRow(campaign, undefined);
+    return (
+        <div className="chat-agent" role="group" aria-label="This agent">
+            <span className={`pillc chat-agent-state ${tone}`}>{state}</span>
+            <CampaignMoves
+                campaign={campaign}
+                buttonClass={(move) => (move === 'pause' ? 'btn sm chat-agent-move' : 'btn sm p chat-agent-move')}
+                frame={(dialog) => <div className="harness">{dialog}</div>}
+                onDone={() => void reloadCampaigns()}
+            />
+        </div>
+    );
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -874,6 +1207,22 @@ export function ChatPanel({ chatId }: { chatId: string }) {
         if (draftCampaignId !== null) void readEnrolRoute(draftCampaignId);
     }, [draftCampaignId]);
     useFit(messageBox, record?.draft ?? '');
+    // An agent's chat whose last choice may still be live reads, once while it is drawn, whether the person acted on the
+    // agent after it was asked; the journal's stream keeps that current (`heardLine`). A chat of no agent reads nothing.
+    const api = useApi();
+    const entries = record?.entries;
+    const campaignId = record?.campaignId ?? null;
+    const main = record?.main === true;
+    const running = record?.running === true;
+    const reopened = record?.reopened ?? 0;
+    const asked = useMemo(
+        () => (entries === undefined ? null : actsAsked({ entries, campaignId, main, running, reopened })),
+        [entries, campaignId, main, running, reopened],
+    );
+    useEffect(
+        () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),
+        [api, chatId, asked?.campaignId, asked?.at],
+    );
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
@@ -983,6 +1332,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         Remove
                     </button>
                 )}
+                {chat.campaignId !== null && !chat.main && <AgentInBar campaignId={chat.campaignId} />}
             </div>
             {chat.removing && (
                 <div

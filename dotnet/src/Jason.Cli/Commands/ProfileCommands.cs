@@ -33,6 +33,8 @@ public static class ProfileCommands
         profile.Subcommands.Add(List(env, actor));
         profile.Subcommands.Add(Toggle(env, actor, "disable", "Take a profile out of service. Its revisions stay exactly where they are.", Operations.ProfileDisable));
         profile.Subcommands.Add(Toggle(env, actor, "enable", "Put a disabled profile back into service.", Operations.ProfileEnable));
+        profile.Subcommands.Add(SetDefault(env, actor));
+        profile.Subcommands.Add(UnsetDefault(env, actor));
         return profile;
     }
 
@@ -170,6 +172,65 @@ public static class ProfileCommands
 
             return OperationRunner.RunAsync(
                 env, operation, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Profile), cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// <c>set-default</c>: the profile agent work falls back to when nothing more specific names one, written by the runtime
+    /// to <c>Roles:DefaultExecutionProfile</c> in the settings file and in force when it answers.
+    /// </summary>
+    private static Command SetDefault(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "set-default",
+            "Name the profile agent work runs on when nothing more specific names one: the work item, its campaign, its role and what it inherited come first. "
+            + "Written to the settings file as Roles:DefaultExecutionProfile and in force at once, with no restart; the profile must exist. "
+            + ActorOption.ChangesJasonInsideARun);
+        var name = new Argument<string>("name") { Description = "The profile, as profile list shows it — for example claude-code." };
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Arguments.Add(name);
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("name", parseResult.GetValue(name))
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+
+            return OperationRunner.RunAsync(
+                env, Operations.ProfileSetDefault, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Default), cancellationToken);
+        });
+
+        return command;
+    }
+
+    /// <summary><c>unset-default</c>: takes the configured default away, the same way.</summary>
+    private static Command UnsetDefault(CliEnvironment env, Option<string?> actor)
+    {
+        var command = new Command(
+            "unset-default",
+            "Take the default profile away, so agent work that nothing more specific names a profile for runs on its role's entry command, "
+            + "or on Roles:DefaultEntryCommand where the role has none, and is refused where there is neither. "
+            + "Taken out of the settings file and in force at once, with no restart. "
+            + ActorOption.ChangesJasonInsideARun);
+        var reason = VerbOptions.Reason();
+        var human = VerbOptions.Human();
+        command.Options.Add(reason);
+        command.Options.Add(human);
+
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            var body = RequestBody.Empty()
+                .Set("reason", parseResult.GetValue(reason))
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+
+            return OperationRunner.RunAsync(
+                env, Operations.ProfileUnsetDefault, body, new RunOptions(parseResult.GetValue(human), ProfileRenderers.Default), cancellationToken);
         });
 
         return command;

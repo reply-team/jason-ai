@@ -65,6 +65,8 @@ jason profile get local-claude --revision 1
 jason profile list --human
 jason profile disable local-claude --reason "host being upgraded"
 jason profile enable local-claude
+jason profile set-default local-claude --reason "the roles run on the local host"
+jason profile unset-default
 ```
 
 `profile.update` is a patch: a field the patch does not name is copied from the current revision, so
@@ -107,6 +109,36 @@ Settings are read before the database is open, so `Roles:DefaultExecutionProfile
 shape of a name and nothing more. A well-formed name that no profile answers is not a refusal to
 start — the profile may be created a minute later — it becomes a visible refusal on the work item
 that needed it.
+
+### Naming the default
+
+`jason profile set-default <name>` names the configured default through the runtime, and `jason profile unset-default`
+takes it away (`profile.set_default` and `profile.unset_default`). The runtime writes `Roles:DefaultExecutionProfile` into
+`~/.jason/config/settings.json` itself, keeping every other byte of the file as it was, and answers once the value is the
+one the next claim reads: no restart, no reload. Writing the line by hand is still the same setting, with the rules above.
+
+- **The name answers a profile when it is written.** Through the runtime the database is open, so a name no profile
+  answers is refused (`profile_not_found`) rather than left for the claim to find. A disabled profile is still a profile
+  and may be named; work that resolves to it meets that at its claim, as at every level. There is no rename and no delete,
+  so the name keeps answering the profile it named.
+- **The state already asked for writes nothing.** Naming the default in force, or taking away one nobody named, answers
+  success and leaves the file and the journal as they were.
+- **In force, or put back.** Where another setting of the `Roles` section does not validate — a value a person broke by
+  hand, which keeps the runtime on the last `Roles` settings that did — the value written would not be in force: the
+  runtime puts the file back and refuses with `setting_not_in_force`. A `JASON_` variable that sets the default is what is
+  in force whatever the file says, so both verbs refuse it as `setting_shadowed`.
+- **Nothing inside a run changes it.** A request from inside an attempt is refused `decided_inside_a_run`, and the
+  desktop's chat does not run the verbs.
+- **Each change is journaled** as `default_profile_updated`, naming the profile before and after, with the actor and
+  the reason: the change the runtime wrote, and the one a hand edit made that the runtime had not yet read, which the
+  verb reads and puts in force. The file is written first and the line saved after, as `route.set` orders them; a save
+  that fails puts back the file the verb wrote, so the file, the default in force and the journal are left as they were.
+  A claim made between the write and that failure may already have resolved to the new default, and its provenance says
+  so. Where the verb wrote nothing and read a hand edit, a save that fails leaves that edit in force with no line: the
+  file is the person's, as they left it, and its watch would have put it in force anyway.
+- **`jason profile list` says which one it is.** Every page of `profile.list` carries `default_execution_profile`, the
+  name in force or `null`, and `--human` prints it under the table. A name written by hand that no profile answers is said
+  as it stands, since it is what every claim that falls back to it refuses on.
 
 ## 4. Causal lineage
 
@@ -477,7 +509,7 @@ looking for.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `Roles:DefaultExecutionProfile` | none | the profile agent work falls back to when nothing more specific names one |
+| `Roles:DefaultExecutionProfile` | none | the profile agent work falls back to when nothing more specific names one; `jason profile set-default` writes it ([§3](#naming-the-default)) |
 | `Roles:DefaultEntryCommand` | `[]` | the command used for a role without one of its own, where no profile is configured anywhere |
 | `Roles:MaxStdoutBytes` | 1 MiB | how much of a child's transcript is kept before it is cut |
 | `Roles:MaxSkillBytes` | 1 MiB | how large a role's skill may be |

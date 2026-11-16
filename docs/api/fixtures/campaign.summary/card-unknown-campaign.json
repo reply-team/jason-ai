@@ -1,0 +1,18 @@
+{
+  "operation": "campaign.summary",
+  "case": "card-unknown-campaign",
+  "request": {
+    "campaign_ids": [
+      "cmp_4"
+    ],
+    "exclude_archived_contacts": true
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "campaign_not_found",
+      "message": "No campaign with id 'cmp_4'.",
+      "retryable": false
+    }
+  }
+}

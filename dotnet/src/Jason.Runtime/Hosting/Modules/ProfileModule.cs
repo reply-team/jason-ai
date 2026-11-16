@@ -9,7 +9,7 @@ namespace Jason.Runtime.Hosting.Modules;
 /// <summary>
 /// The registry of execution profiles: which agent hosts this installation can launch, and how. Six verbs, and
 /// no delete — an attempt names the revision it ran under for ever, so a profile is taken out of service rather
-/// than taken away.
+/// than taken away — and the two that name the configured default and take it away.
 /// </summary>
 public static class ProfileModule
 {
@@ -17,6 +17,7 @@ public static class ProfileModule
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddHostedService<ProfileRevisionCheck>();
+        services.AddScoped<DefaultProfileService>();
         return services.AddScoped<ProfileService>();
     }
 
@@ -30,11 +31,15 @@ public static class ProfileModule
             Operations.ProfileUpdate, (service, request, cancellationToken) => service.UpdateAsync(request, cancellationToken));
         app.MapOperation<ProfileService, ProfileGetRequest, ExecutionProfileDto>(
             Operations.ProfileGet, (service, request, cancellationToken) => service.GetAsync(request, cancellationToken));
-        app.MapOperation<ProfileService, ProfileListRequest, Page<ExecutionProfileDto>>(
+        app.MapOperation<ProfileService, ProfileListRequest, ProfilePageDto>(
             Operations.ProfileList, (service, request, cancellationToken) => service.ListAsync(request, cancellationToken));
         app.MapOperation<ProfileService, ProfileToggleRequest, ExecutionProfileDto>(
             Operations.ProfileDisable, (service, request, cancellationToken) => service.DisableAsync(request, cancellationToken));
         app.MapOperation<ProfileService, ProfileToggleRequest, ExecutionProfileDto>(
             Operations.ProfileEnable, (service, request, cancellationToken) => service.EnableAsync(request, cancellationToken));
+        app.MapOperation<DefaultProfileService, ProfileSetDefaultRequest, ProfileDefaultDto>(
+            Operations.ProfileSetDefault, (service, request, cancellationToken) => service.SetAsync(request, cancellationToken));
+        app.MapOperation<DefaultProfileService, ProfileUnsetDefaultRequest, ProfileDefaultDto>(
+            Operations.ProfileUnsetDefault, (service, request, cancellationToken) => service.UnsetAsync(request, cancellationToken));
     }
 }

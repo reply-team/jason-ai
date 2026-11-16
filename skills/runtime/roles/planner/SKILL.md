@@ -179,7 +179,8 @@ the person — or the second is refused with `idempotency_key_reused`.
 asks for work to be created, create it: work items are the only form a plan takes here, and a dispatcher claims
 them. When it asks for a plan, the plan is your result, in the shape `result_format` asks for. When the brief
 does not say, ask rather than guess — raise a decision, say what you would create and why, and answer with the
-plan.
+plan. What you write for a person — a question, its options, a `proposal`, an `--ask-person-note` — names people,
+messages and campaigns in words; an identifier goes in the member made for it, never in the text.
 
 ```
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"brief":"who signs the contract at the ten largest accounts"}' --result-format '{"type":"object"}' --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-research-signers

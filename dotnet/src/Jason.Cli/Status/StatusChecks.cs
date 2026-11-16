@@ -166,14 +166,13 @@ internal static partial class StatusChecks
 
         /// <summary>
         /// The repair where no role's work would find a profile by the default: one profile for Claude Code, by its command
-        /// word. It runs nothing until a level names it, so the fact gives <see cref="RolesDefaultLine"/> beside it, the one
-        /// line of settings that makes it the default. No verb names the default, so that half is a line a person writes,
-        /// never a repair.
+        /// word. It runs nothing until a level names it, so the fact gives <see cref="SetRolesDefault"/> beside it, the one
+        /// command that makes it the default, which a person runs after this one.
         /// </summary>
         public const string CreateRolesProfile = "jason profile create claude-code --host claude_code --program claude";
 
-        /// <summary>The line of settings, printed in a fact, that names a profile the default.</summary>
-        public static string RolesDefaultLine(string profile) => "\"Roles\": {\"DefaultExecutionProfile\": \"" + profile + "\"}";
+        /// <summary>The command, printed in a fact, that names a profile the default.</summary>
+        public static string SetRolesDefault(string profile) => $"jason profile set-default {profile}";
 
         /// <summary>
         /// <see cref="Install"/> for one pack, from the source a deployment came from wherever that is not this build's
@@ -1800,7 +1799,7 @@ internal static partial class StatusChecks
     /// claim compares a name. Otherwise absent, and the fact says what the claim would end the work with and names whichever
     /// of the repair's two halves is still missing — the command that makes <c>claude-code</c> (the fix) and the line of
     /// <paramref name="settingsFile"/> that names it, or the name of the person's own profile where they have one and name
-    /// none — with the fix null where only the line is missing, since a line is no command. It does not read a profile a work
+    /// none — with the fix null where only the set-default command is missing. It does not read a profile a work
     /// item, a campaign's policy or a role's policy names, nor an entry command, and says so. A value the runtime's options
     /// refuse — read as written, with nothing trimmed, and held to a profile name's shape, so a padded, capitalised or blank
     /// one — is absent too, and shown as written: a runtime does not start with it and a running one keeps the settings it
@@ -1875,19 +1874,19 @@ internal static partial class StatusChecks
         }
         else if (make)
         {
-            repair = $"`{Repair.CreateRolesProfile}`, then `{Repair.RolesDefaultLine(Ours)}` in {settingsFile}{instead}, which the runtime reads without a restart, run the roles on Claude Code.";
+            repair = $"`{Repair.CreateRolesProfile}`, then `{Repair.SetRolesDefault(Ours)}`{instead}, which the runtime applies without a restart, run the roles on Claude Code.";
         }
         else if (target is null)
         {
             var which = names ? $" ({string.Join(", ", enabled)})" : string.Empty;
-            repair = $"`{Repair.RolesDefaultLine("<name>")}` in {settingsFile}, with the name of one of them{which}, which the runtime reads without a restart, runs the roles on it.";
+            repair = $"`{Repair.SetRolesDefault("<name>")}`, with the name of one of them{which}, which the runtime applies without a restart, runs the roles on it.";
         }
         else
         {
-            repair = $"`{Repair.RolesDefaultLine(Shown(target))}` in {settingsFile}{instead}, which the runtime reads without a restart, runs the roles on {Shown(target)}.";
+            repair = $"`{Repair.SetRolesDefault(Shown(target))}`{instead}, which the runtime applies without a restart, runs the roles on {Shown(target)}.";
         }
 
-        // The fix is the command alone, and only where the command is the step missing: a line of settings is no command.
+        // The fix is the command alone, and only where the command is the step missing: the command that names the default follows it.
         var fact = $"{said} {repair} {NotRead}";
         return make
             ? new StatusCheck(Name, false, CheckState.Absent, fact, Repair.CreateRolesProfile)

@@ -14,9 +14,9 @@ import { gitBashWrapper, windowsShim } from '../src/command-line.ts';
 import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { claimDemoFolder, demoMarkerName } from '../src/demo-folders.ts';
+import { demoMarkerName } from '../src/demo-folders.ts';
 import { harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
-import { memoryLog } from './harness.ts';
+import { markedDemoFolder, memoryLog } from './harness.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 const application = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Jason';
@@ -508,7 +508,7 @@ function demoBench(t: { after(fn: () => void): void }, options: { stop?: StopOut
     }
     if (options.make !== false) {
         for (const folder of [demo.data, demo.root]) {
-            claimDemoFolder(folder);
+            markedDemoFolder(folder);
             mkdirSync(join(folder, 'inner'), { recursive: true });
             writeFileSync(join(folder, 'inner', 'file.txt'), 'sample');
         }
@@ -551,7 +551,7 @@ test('the removal also takes off the copies a start over left beside the demo’
     const alsoMarked = `${d.demo.root}.removing-2`;
     const stranger = `${d.demo.data}.removing-3`;
     for (const folder of [marked, alsoMarked]) {
-        claimDemoFolder(folder);
+        markedDemoFolder(folder);
         writeFileSync(join(folder, 'file.txt'), 'sample');
     }
     mkdirSync(stranger);
@@ -569,7 +569,7 @@ test('the removal also takes off the copies a start over left beside the demo’
 test('leftover copies are taken off even when the demo’s own folders are already gone', async (t) => {
     const d = demoBench(t, { make: false });
     const marked = `${d.demo.data}.removing-9`;
-    claimDemoFolder(marked);
+    markedDemoFolder(marked);
     const report = await uninstall(d.b.deps);
     assert.equal(existsSync(marked), false);
     assert.deepEqual(d.stops, [], 'nothing runs from a leftover copy, so nothing is stopped');

@@ -1,0 +1,68 @@
+{
+  "operation": "campaign.list",
+  "case": "card-chips",
+  "request": {
+    "limit": 100
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "cmp_1",
+        "name": "Spring launch",
+        "status": "active",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/spring-launch"
+      },
+      {
+        "id": "cmp_2",
+        "name": "Autumn outreach",
+        "status": "active",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/autumn-outreach"
+      },
+      {
+        "id": "cmp_3",
+        "name": "Summer reach",
+        "status": "draft",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/summer-reach"
+      },
+      {
+        "id": "cmp_5",
+        "name": "Winter plan",
+        "status": "draft",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/winter-plan"
+      },
+      {
+        "id": "cmp_6",
+        "name": "Autumn push",
+        "status": "active",
+        "project_id": "prj_1",
+        "project_slug": "default",
+        "created_at": "2026-10-16T09:00:00.000Z",
+        "updated_at": "2026-10-16T09:00:00.000Z",
+        "archived_at": null,
+        "folder_path": "~/Jason/projects/default/campaigns/autumn-push"
+      }
+    ],
+    "next_cursor": null
+  }
+}

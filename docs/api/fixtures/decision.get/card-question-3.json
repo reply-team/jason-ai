@@ -1,0 +1,39 @@
+{
+  "operation": "decision.get",
+  "case": "card-question-3",
+  "request": {
+    "decision_id": "dec_3"
+  },
+  "status": 200,
+  "response": {
+    "id": "dec_3",
+    "campaign_id": "cmp_1",
+    "work_item_id": "wi_1",
+    "attempt_id": "att_1",
+    "status": "pending",
+    "question": "Move Ines to the autumn campaign?",
+    "options": [
+      {
+        "label": "Move her",
+        "detail": "Her role changed in September."
+      },
+      {
+        "label": "Leave her here",
+        "detail": null
+      }
+    ],
+    "references": [
+      {
+        "kind": "work_item",
+        "id": "wi_1"
+      }
+    ],
+    "raised_at": "2026-10-16T09:00:00.000Z",
+    "answer": null,
+    "chosen_option": null,
+    "answered_at": null,
+    "answered_by": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Ines Duarte"
+  }
+}

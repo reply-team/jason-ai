@@ -36,6 +36,9 @@ async function renderConsole(
         .answer('campaign.summary', 'campaign.summary/all')
         // A link opens the first; Needs you reads each approval it lists whole, for its row's Approve.
         .answer('approval.get', 'approval.get/email-message', 'approval.get/other-pending');
+    // Needs you reads the sending name under an email's From (`needs-sender-line.screen.test.tsx`); here it is answered
+    // with one recorded list of accounts, which draws one line and holds nothing.
+    if (!fake.offers('sender.list')) fake.answerAnyRequest('sender.list', 'sender.list/card-message-sender');
     watch(fake);
     activatePlugins(browserPlugins);
     localStorage.clear();

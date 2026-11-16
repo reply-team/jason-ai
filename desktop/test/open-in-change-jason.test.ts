@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { handle, invokeChannels, RefusedSender } from '../src/ipc.ts';
-import { changeJasonNoHost, changeJasonNotInDemo, hostUnchosen, OpenIn, type OpenInAnswer, type OpenInDeps, type PlaceId } from '../src/open-in.ts';
+import { changeJasonNoHost, changeJasonUnoffered, hostUnchosen, OpenIn, type OpenInAnswer, type OpenInDeps, type PlaceId } from '../src/open-in.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from '../src/open-in-terminal.ts';
 
 // "Change Jason itself": the entry that opens the person's own AI on Jason, by `jason session open --setup`. The command
@@ -32,7 +32,7 @@ interface Bench {
  * An installation whose command line answers `session open` from the list, in order, `preference list` with the answer
  * given (by default a preference naming a host that is neither of the two), and every other verb with nothing.
  */
-function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: boolean; codex: boolean }; answers?: Answer[]; preference?: Answer } = {}): Bench {
+function bench(options: { offered?: boolean; hosts?: { claude: boolean; codex: boolean }; answers?: Answer[]; preference?: Answer } = {}): Bench {
     const calls: { args: string[]; cwd: string | undefined }[] = [];
     const kept: PlaceId[] = [];
     const logged: string[] = [];
@@ -57,7 +57,7 @@ function bench(options: { live?: boolean; offered?: boolean; hosts?: { claude: b
         continuable: () => null,
         chatFolder: () => 'C:\\data\\desktop\\chat',
         continueFlags,
-        ...(options.offered === false ? {} : { changeJason: { live: () => options.live ?? true, flags: changeJasonFlags, log: (event: string, fields: { Host: string; Exit: number; Code?: string }) => void logged.push([event, fields.Host, fields.Exit, ...(fields.Code === undefined ? [] : [fields.Code])].join(':')) } }),
+        ...(options.offered === false ? {} : { changeJason: { flags: changeJasonFlags, log: (event: string, fields: { Host: string; Exit: number; Code?: string }) => void logged.push([event, fields.Host, fields.Exit, ...(fields.Code === undefined ? [] : [fields.Code])].join(':')) } }),
     };
     return { openIn: new OpenIn(deps), calls, kept, logged };
 }
@@ -70,12 +70,11 @@ test('the flags of Change Jason itself are --setup alone, so the command line ch
     assert.deepEqual(changeJasonFlags('codex'), ['--setup', '--host', 'codex']);
 });
 
-test('Change Jason itself is offered in the person\'s own installation whatever hosts are found, naming none, and never in a demo run', async () => {
+test('Change Jason itself is offered in the person\'s own installation whatever hosts are found, naming none, and never where the run does not offer it', async () => {
     for (const hosts of [{ claude: true, codex: true }, { claude: false, codex: true }, { claude: false, codex: false }]) {
         const answer = (await bench({ hosts }).openIn.targets()) as OpenInAnswer;
         assert.equal(answer.changeJason, true, JSON.stringify(hosts));
     }
-    assert.equal('changeJason' in ((await bench({ live: false }).openIn.targets()) as OpenInAnswer), false, 'a demo run');
     assert.equal('changeJason' in ((await bench({ offered: false }).openIn.targets()) as OpenInAnswer), false, 'a run that does not offer it');
     // It is no place: the places, and so the default, are the same with it as without it.
     const answer = (await bench().openIn.targets()) as OpenInAnswer;
@@ -199,9 +198,9 @@ test('a runtime that cannot be reached is said so, and nothing is run again; a u
     assert.deepEqual(await silent.openIn.changeJason(), { refused: 'A terminal could not be opened.' });
 });
 
-test('in a demo run, or a run that does not offer it, Change Jason itself is refused and nothing is run', async () => {
-    for (const b of [bench({ live: false }), bench({ offered: false })]) {
-        assert.deepEqual(await b.openIn.changeJason(), { refused: changeJasonNotInDemo });
+test('in a run that does not offer it, Change Jason itself is refused and nothing is run', async () => {
+    for (const b of [bench({ offered: false })]) {
+        assert.deepEqual(await b.openIn.changeJason(), { refused: changeJasonUnoffered });
         assert.deepEqual(b.calls, []);
         assert.deepEqual(b.kept, []);
     }
@@ -220,7 +219,7 @@ test('the act answers only the runtime’s own page in its top frame, and the ma
     assert.equal(reached.length, 1);
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
     assert.match(main, /handle\(seam, 'openIn\.changeJason', origin, \(\) => openIn\.changeJason\(\), refused\);/);
-    assert.match(main, /changeJason: \{\s+live: \(\) => runOn\.mode === 'live',\s+flags: changeJasonFlags,/);
+    assert.match(main, /changeJason: \{\s+flags: changeJasonFlags,/);
     // Whatever a page sends with it is never read.
     const b = bench();
     const act = b.openIn.changeJason.bind(b.openIn) as (...args: unknown[]) => Promise<unknown>;

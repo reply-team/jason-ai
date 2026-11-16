@@ -1,0 +1,31 @@
+{
+  "kind": "default_profile_updated",
+  "version": 1,
+  "since": "0.46.0",
+  "summary": "The configured default execution profile, the one agent work runs on when nothing more specific names one, was named, replaced or taken away by profile.set_default or profile.unset_default.",
+  "subscribable": true,
+  "entities": {
+    "profile": { "at": ["/new", "/old"], "presence": "sometimes" }
+  },
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The setting the line is about, as the settings file spells its path: `Roles:DefaultExecutionProfile`."
+      },
+      "old": {
+        "type": ["string", "null"],
+        "description": "The name of the profile that was the default in force before, or null where none was."
+      },
+      "new": {
+        "type": ["string", "null"],
+        "description": "The name of the profile that is the default in force now, or null where it was taken away. A line is written only when it differs from the one before."
+      }
+    }
+  }
+}
