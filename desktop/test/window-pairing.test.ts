@@ -221,7 +221,7 @@ test('a write goes through a file no one can foretell, made only where nothing i
     assert.deepEqual(readdirSync(dirname(blocked)), ['window-pairing.json']);
 });
 
-test('every window or view the desktop makes for a page names the in-memory partition, so one added later cannot fall back to the default session', () => {
+test('every window or view the desktop makes for a page names an in-memory partition, so one added later cannot fall back to the default session', () => {
     const source = join(import.meta.dirname, '..', 'src');
     const made: string[] = [];
     for (const name of readdirSync(source).filter((each) => each.endsWith('.ts'))) {
@@ -235,11 +235,14 @@ test('every window or view the desktop makes for a page names the in-memory part
                 else if (text[end] === ')' && --depth === 0) break;
             }
             made.push(name);
-            assert.ok(text.slice(found.index, end).includes('partition: windowPartition'), `${name}: ${found[1]} at ${found.index} names the in-memory partition`);
+            // The window's own partition, or one of the Demo's two views', each of its own and in memory (demo-page.test.ts).
+            const options = text.slice(found.index, end);
+            const named = options.includes('partition: windowPartition') || (name === 'demo-window.ts' && /^new WebContentsView\(\{ webPreferences: demoViewPreferences\((demoPage|demoSwitch)\) \}$/.test(options));
+            assert.ok(named, `${name}: ${found[1]} at ${found.index} names an in-memory partition`);
         }
         // window-pairing.ts names the prefix only to refuse it.
         if (name !== 'window-pairing.ts') assert.equal(/fromPartition\s*\(|['"`]persist:/.test(text), false, `${name} makes no other session for a page`);
         assert.equal(/<webview/i.test(text), false, `${name} embeds no webview`);
     }
-    assert.deepEqual(made, ['main.ts'], 'the one window the desktop makes is read');
+    assert.deepEqual(made, ['demo-window.ts', 'demo-window.ts', 'main.ts', 'main.ts'], 'the Live window, the Demo window and the two views of the Demo are read');
 });

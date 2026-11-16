@@ -39,6 +39,18 @@ test('the notices name Electron, Chromium’s licences, and every package the ap
     assert.ok(!text.includes('\r'), 'written with LF only');
 });
 
+test('the notices name what the demo page carries inside it, the Inter font, with the licence text its folder keeps', () => {
+    const text = notices();
+    assert.ok(text.includes('\n3. What the demo page carries\n'));
+    assert.ok(text.includes('\n@fontsource-variable/inter 5.3.0: OFL-1.1\n'));
+    assert.ok(text.includes('https://github.com/rsms/inter'));
+    const licence = readFileSync(join(root, 'demo', 'LICENSE-Inter.txt'), 'utf8').trim();
+    assert.ok(licence.startsWith('Copyright 2016 The Inter Project Authors'));
+    assert.ok(licence.includes('SIL OPEN FONT LICENSE Version 1.1'));
+    assert.ok(text.includes(licence), 'the licence text whole');
+    assert.ok(text.indexOf('3. What the demo page carries') > text.indexOf('2. The packages'));
+});
+
 test('a carried package that ships no licence file is refused unless it declares MIT and names its author', (t) => {
     const fixture = mkdtempSync(join(tmpdir(), 'jason-notices-'));
     t.after(() => rmSync(fixture, { recursive: true, force: true }));

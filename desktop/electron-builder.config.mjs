@@ -179,10 +179,10 @@ export function configuration({ version, sign = null, linuxWaitMs: waitMs = linu
         // also in app.asar's package.json, which nothing of the desktop reads. Nothing on the Mac reads it.
         extraMetadata: { version, homepage: 'https://github.com/reply-team/jason-ai' },
         directories: { output: 'dist', buildResources: 'installer' },
-        // Inside app.asar: the compiled main process, the starting page, the tray icons desk.ts loads from the app,
-        // the chat's two lists and its instruction text, and package.json. node_modules holds the one runtime
-        // dependency, the updater.
-        files: ['lib/**/*', 'shell/**/*', 'resources/**/*', 'package.json', ...chatFiles],
+        // Inside app.asar: the compiled main process, the starting page, the tray icons desk.ts loads from the app, the
+        // demo page (its file alone, not the folder's README), the chat's two lists and its instruction text, and
+        // package.json. node_modules holds the one runtime dependency, the updater.
+        files: ['lib/**/*', 'shell/**/*', 'resources/**/*', 'demo/index.html', 'package.json', ...chatFiles],
         asar: true,
         // No rebuild of the production dependencies, which would run their install scripts: the one there is, the
         // updater, is plain JavaScript.

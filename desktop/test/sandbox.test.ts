@@ -93,7 +93,7 @@ test('the refusal is the first thing the main process decides, and nothing else 
     assert.ok(decided > 0, 'main.ts never asks whether the start carries --no-sandbox');
     // Everything of a start comes after it: the uninstall and stop-runtime starts, the single-instance lock, and run(),
     // which copies the bundle, calls jason and makes the window. Electron's own paths are set by both branches.
-    for (const later of ['uninstallStart(process.argv', 'linkIn(process.argv', 'app.requestSingleInstanceLock(', 'app.whenReady().then(() => releasedAfter(logHold, () => run(links, installationWasNew)))', 'new BrowserWindow(']) {
+    for (const later of ['uninstallStart(process.argv', 'linkIn(process.argv', 'app.requestSingleInstanceLock(', "app.whenReady().then(() => releasedAfter(logHold, () => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew))))", 'new BrowserWindow(']) {
         const at = main.indexOf(later);
         assert.ok(at > 0, later);
         if (later !== 'new BrowserWindow(') assert.ok(at > decided, `${later} comes before the refusal`);
@@ -103,6 +103,9 @@ test('the refusal is the first thing the main process decides, and nothing else 
     assert.ok(branch, 'the refusal is not one branch with the start as the other');
     assert.doesNotMatch(branch[1] ?? '', /run\(|cliAt|carriedBundle|BrowserWindow|requestSingleInstanceLock|uninstallStart|stopRuntimeStart/);
     assert.match(branch[1] ?? '', /^    keepElectronUnderData\(\);\n    void refuseStart\(unsandboxed, \{/);
-    // The window is made only inside run(), which only the start's branch reaches.
-    assert.ok(main.indexOf('new BrowserWindow(') > main.indexOf('async function run('));
+    // A window is made only inside run() or the Demo's runDemo(), which only the start's branch reaches.
+    const windows = [...main.matchAll(/new BrowserWindow\(/g)].map((found) => found.index);
+    assert.equal(windows.length, 2);
+    assert.ok(windows[0]! > main.indexOf('async function run(') && windows[0]! < main.indexOf('async function runDemo('));
+    assert.ok(windows[1]! > main.indexOf('async function runDemo(') && windows[1]! < main.indexOf('function keepElectronUnderData('));
 });

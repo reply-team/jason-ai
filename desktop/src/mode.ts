@@ -1,12 +1,14 @@
 /**
- * The mode is which installation the desktop runs on: Live, the person's own, or Demo, a second installation of sample
- * data beside it, whose data directory is the person's with `-demo` after it (`~/.jason` gives `~/.jason-demo`). The
- * record of it is one word in the PERSON'S installation, `<data>/desktop/mode`, also during a demo run, since the way
- * back writes it there. It is read once, at the top of the main module, before anything resolves a path; it is never
- * kept in the window's storage and never sent to a runtime. A record that is missing, cannot be read or holds anything
- * but one of the two words reads as the default. A switch writes the record and starts the desktop again. A new
- * installation's first start, with no record, writes the record as the demo first (`keepFirstStart`), so the person
- * meets the product on the sample and nothing of their own installation is made until they choose Live.
+ * The mode is what the desktop shows: Live, the person's own installation, or Demo, the page the application carries
+ * (`demo-window.ts`), which has nothing to do with any installation or runtime. The record of it is one word in the
+ * person's installation, `<data>/desktop/mode`. It is read once, at the top of the main module, before anything resolves
+ * a path; it is never kept in the window's storage and never sent to a runtime. A record that is missing, cannot be read
+ * or holds anything but one of the two words reads as the default. A switch writes the record and starts the desktop
+ * again. A new installation's first start, with no record, writes the record as the demo first (`keepFirstStart`), so
+ * the person meets the product on the page and nothing of their own installation is made until they choose Live.
+ *
+ * Until 0.45 Demo was a second installation of sample data beside the person's, `~/.jason-demo`; what made, opened and
+ * entered it (`runsOn`, `startOn`, `enterRun`, `demoDirectory`) stays here, unreached by any start, until it goes.
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -177,6 +179,17 @@ export function startOn(person: string, record: Mode, installerStart: boolean, d
     }
 }
 
+/**
+ * Pure: the installation a start runs on since the demo is a page the application carries: the person's own directory in
+ * both modes. A Demo run makes, opens and prepares no directory and starts no runtime; it keeps only the desktop's own
+ * records in the person's directory, the mode, Electron's profile and its log (`isNewInstallation` counts them as none
+ * of an installation's). The installer's and the uninstaller's starts ignore the record. `runsOn`, `startOn` and
+ * `enterRun` are the earlier demo's, which no start reaches.
+ */
+export function startRun(person: string, record: Mode, installerStart: boolean): StartRun {
+    return { person, data: person, mode: installerStart ? 'live' : record, unopened: null };
+}
+
 /** A process environment, as `process.env` is one. */
 export type Environment = Record<string, string | undefined>;
 
@@ -204,16 +217,25 @@ export function isSettingsVariable(name: string): boolean {
  * double underscore stay. A Live run changes nothing.
  */
 export function enterRun(env: Environment, run: RunsOn): PersonEnvironment {
-    const settings: Record<string, string> = {};
-    for (const [name, value] of Object.entries(env)) {
-        if (isSettingsVariable(name) && value !== undefined) settings[name] = value;
-    }
-    const person = { dataDirectory: env.JASON_DATA_DIR, settings };
+    const person = personEnvironmentOf(env);
+    const { settings } = person;
     if (run.mode === 'demo') {
         env.JASON_DATA_DIR = run.data;
         for (const name of Object.keys(settings)) delete env[name];
     }
     return person;
+}
+
+/**
+ * Pure: what the person's environment says, taken as it stands and changing nothing: `JASON_DATA_DIR` and every runtime
+ * settings variable, which `relaunchAsPerson` puts back before the desktop starts itself again.
+ */
+export function personEnvironmentOf(env: Environment): PersonEnvironment {
+    const settings: Record<string, string> = {};
+    for (const [name, value] of Object.entries(env)) {
+        if (isSettingsVariable(name) && value !== undefined) settings[name] = value;
+    }
+    return { dataDirectory: env.JASON_DATA_DIR, settings };
 }
 
 /**
@@ -258,9 +280,6 @@ export function offersOf(mode: Mode): Offers {
 /** The label of the way back, in the tray and the application's menu of a demo run. */
 export const backLabel = 'Back to Your Own Installation';
 
-/** The label of starting the demo over, beside the way back in the tray and the application's menu of a demo run. */
-export const startOverLabel = 'Start the Demo Over';
-
 /** A menu line as the desk draws it: a label, and whether it can be chosen. */
 export interface MenuLine {
     label: string;
@@ -268,36 +287,16 @@ export interface MenuLine {
 }
 
 /**
- * What the desk draws in place of each act a demo run does not offer, and the way back; null in Live, where the desk
- * draws the acts themselves. Remove What Jason Placed has a line only where the platform offers the act at all.
+ * What a demo run's menu holds of its own: the way back, which does what Live on the switch does; null in Live. A demo
+ * run offers none of the acts on an installation (the update, the start at logon, the PATH command, Remove What Jason
+ * Placed: `offersOf`), and its menu has no line where they would be, nor any other line of the demo's.
  */
 export interface DemoMenu {
-    updates: MenuLine;
-    autostart: MenuLine;
-    command: MenuLine;
-    removal: MenuLine | null;
     back: MenuLine;
-    startOver: MenuLine;
 }
 
-export function demoMenu(mode: Mode, removalOnPlatform: boolean, preparing = false): DemoMenu | null {
-    if (mode !== 'demo') return null;
-    const off = (item: 'updates' | 'autostart' | 'command' | 'removal'): MenuLine => ({ label: demoMenuLine(item), enabled: false });
-    // While the sample is made, the way back and Start the Demo Over wait for it, each saying so.
-    const waiting = (label: string): MenuLine => (preparing ? { label: `${label}: ${untilReady}`, enabled: false } : { label, enabled: true });
-    return { updates: off('updates'), autostart: off('autostart'), command: off('command'), removal: removalOnPlatform ? off('removal') : null, back: waiting(backLabel), startOver: waiting(startOverLabel) };
-}
-
-/** What a menu line says after its label while the demo's sample is made. */
-export const untilReady = 'available once the demo is ready';
-
-/**
- * What a demo run's menu says where the person's installation offers an update, the start at logon, the PATH command or
- * Remove What Jason Placed: none of them runs with the demo's directory in the process's environment.
- */
-export function demoMenuLine(item: 'updates' | 'autostart' | 'command' | 'removal'): string {
-    const what = { updates: 'Updates', autostart: 'Start the Runtime at Logon', command: 'The jason command', removal: 'Remove What Jason Placed' }[item];
-    return `${what}: not in the demo. Go back to your own installation for this.`;
+export function demoMenu(mode: Mode): DemoMenu | null {
+    return mode === 'demo' ? { back: { label: backLabel, enabled: true } } : null;
 }
 
 /**
