@@ -31,7 +31,7 @@ import {
     type DemoRefusal,
 } from '../src/demo-page.ts';
 import { persists } from '../src/window-pairing.ts';
-import { titleBand } from '../src/window-frame.ts';
+import { stripHeight, titleBand } from '../src/window-frame.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pageBytes = new TextEncoder().encode('<!doctype html><title>page</title>');
@@ -530,6 +530,17 @@ test('the host-resolver rule is set by a Demo start alone, before ready, and a L
 test('the page’s strip is fixed: right of its 284-pixel sidebar, 38 high; on macOS the window’s band of 26 lies above the page', () => {
     assert.deepEqual(demoGeometry, { sidebar: 284, strip: 38, macBand: 26 });
     assert.equal(demoGeometry.macBand, titleBand, 'the band is the window frame’s own');
+    assert.equal(demoGeometry.strip, stripHeight, 'the strip is as high as the caption buttons on Windows');
+});
+
+test('on Windows our switch stands left of the caption buttons over the strip’s right end, read from the overlay’s geometry', () => {
+    const page = readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8');
+    const css = page.replace(/\s+/g, ' ');
+    // The view is told the free title bar area in its own coordinates; where there is no overlay it is all of it.
+    assert.ok(
+        /body \{[^}]*padding: 0 12px 0 16px; padding-right: calc\(12px \+ 100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, 100vw\)\);/.test(css),
+        'the right padding leaves the buttons their width',
+    );
 });
 
 test('elsewhere than macOS the page fills the content and our switch covers the strip, at every width the window allows', () => {
@@ -574,7 +585,7 @@ test('our band on macOS holds no script and nothing to click, is the sidebar’s
 test('the Demo window takes the window’s own frame, loads our band under its views on macOS, and elsewhere keeps its frame', () => {
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
-    assert.ok(demo.includes('...frameOf(process.platform),'));
+    assert.ok(demo.includes('...frameOf(process.platform, nativeTheme.shouldUseDarkColors),'));
     assert.ok(!/demoMacFrame/.test(main));
     const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
     assert.ok(window.includes("if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);"));
