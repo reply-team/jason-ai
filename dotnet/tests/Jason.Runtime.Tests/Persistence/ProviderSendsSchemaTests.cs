@@ -9,9 +9,9 @@ namespace Jason.Runtime.Tests.Persistence;
 
 /// <summary>
 /// The index that says a send the provider reported once per campaign. The migration writes no row: it makes one filtered
-/// unique index on the journal, and a database that already holds lines of the store's other kinds keeps every one of
-/// them. A second send line under one key in one campaign is refused; the same key in another campaign, and a line of
-/// another kind under it, are not.
+/// unique index on the journal, through the start's ordinary path — a backup of the database first, then the migration —
+/// and a database that already holds lines of the store's other kinds keeps every one of them. A second send line under one
+/// key in one campaign is refused; the same key in another campaign, and a line of another kind under it, are not.
 /// </summary>
 public class ProviderSendsSchemaTests
 {
@@ -44,16 +44,13 @@ public class ProviderSendsSchemaTests
               ('jrn_3', '2026-11-01T00:00:02Z', 'system', 'dispatcher', 'message_sent_observed', 1, 'wi_send');
             """);
 
-        // To this migration by name and no further, so a later migration's own change is not read as this one's: what was
-        // applied is every migration up to this one, this one last.
-        SqliteConnection.ClearAllPools();
-        using (var db = new JasonDbContext(options))
-        {
-            db.GetInfrastructure().GetRequiredService<IMigrator>().Migrate(ThisMigration);
-            Assert.Equal(
-                [.. db.Database.GetMigrations().TakeWhile(name => name != ThisMigration), ThisMigration],
-                db.Database.GetAppliedMigrations());
-        }
+        var report = new DatabaseMigrator(dir.Paths).Migrate();
+
+        // The ordinary path: this migration was the first pending, and the database was copied before it ran.
+        Assert.Equal(AppliedFrom(dir, ThisMigration), report.NewlyApplied);
+        Assert.NotNull(report.BackupFile);
+        Assert.EndsWith($"-before-{ThisMigration}.db", report.BackupFile, StringComparison.Ordinal);
+        Assert.Equal(["0"], Rows(report.BackupFile!, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ix_journal_campaign_kind_key_provider_sends'"));
 
         // Every line the database held is there, as it was.
         Assert.Equal(
@@ -82,7 +79,19 @@ public class ProviderSendsSchemaTests
             var index = db.Model.FindEntityType(typeof(JournalEntry))!.GetIndexes().Single(i => i.GetDatabaseName() == "ix_journal_campaign_kind_key_provider_sends");
             Assert.True(index.IsUnique);
             Assert.Equal("kind = 'provider_send_observed'", index.GetFilter());
+            Assert.Empty(db.Database.GetPendingMigrations());
         }
+    }
+
+    /// <summary>
+    /// What a start from the migration before this one applies: this migration and every one the tree carries after it,
+    /// so the assertion holds on a branch where later migrations follow.
+    /// </summary>
+    private static List<string> AppliedFrom(TempDataDir dir, string migration)
+    {
+        using var db = new JasonDbContext(JasonDbContext.CreateOptions(dir.Paths.DatabaseFile));
+        Assert.Contains(migration, db.Database.GetMigrations());
+        return db.Database.GetMigrations().SkipWhile(name => name != migration).ToList();
     }
 
     /// <summary>Each row a query returns, its columns joined by a bar.</summary>
