@@ -146,7 +146,8 @@ function jasonSaid(jason: DesktopOpenInJason): string {
     const found = t(`openIn.jason.${jason.found}`);
     if (jason.found === 'this' || jason.way === undefined) return found;
     if (jason.way === 'type') return found + ' ' + t('openIn.jason.type');
-    const way = jason.way;
+    // Pointing jason-desktop back helps only where it is typed by that name, so the sentence says to type it.
+    const way = jason.act === 'point_jason_desktop' ? 'pointDesktop' : jason.way;
     return jason.act === undefined
         ? found
         : found + ' ' + t(`openIn.jason.${way}`, { act: t(`openIn.act.${jason.act}`) });

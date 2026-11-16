@@ -238,20 +238,24 @@ there yet is refused, with a sentence that it is made with the first agent.
 entries run `jason session open` on the folder, with the environment of the installation the desktop runs on; no first input is sent to the host, so the session is yours to begin. Typed by hand,
 the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). A successful open says "Opened {folder} in
 {place}.", with "Jason there works with the same data as this window." after a terminal, since `jason session open` puts
-this installation's `jason` first on that terminal's PATH. After an editor it says instead which `jason` your PATH finds by
-name, by the same look the Command Line item of the Jason menu makes ([below](#the-command-line-and-the-login-items)),
+this installation's `jason` first on that terminal's PATH. After an editor it says instead, where the desktop can tell,
+which `jason` your PATH finds by name, by the same look the Command Line item of the Jason menu makes ([below](#the-command-line-and-the-login-items)),
 and no more than that:
 
-- this window's Jason: "jason on your PATH is this window's Jason, so a terminal there works with the same data.";
+- this window's Jason, by its own path or a link to it: "jason on your PATH is this window's Jason, so a terminal there
+  works with the same data.";
 - another one: "jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
   whose data that other one works with is not something the desktop can tell;
 - none: "jason is not on your PATH, so a terminal there does not find Jason.".
 
 Where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
 on the PATH where there is none; where another `jason` is found, the one that gives this window's Jason the name
-`jason-desktop`, the other keeping `jason`; and where a `jason-desktop` of the desktop's is already there, it says to
-type that instead, with no act. An editor that was already running keeps the PATH it started with, so the sentences
-speak of your PATH, never of the editor. While `jason` on your PATH is another one or none, the menu carries one quiet
+`jason-desktop`, the other keeping `jason`; where a command of the desktop's points elsewhere, the one that points it
+back at this window's Jason, and to type `jason-desktop` afterwards where that is its name; and where a `jason-desktop`
+of the desktop's is already there, it says to type that instead, with no act. An editor that was already running keeps
+the PATH it started with, so the sentences speak of your PATH, never of the editor. The desktop looks the name up as
+Command Prompt does; a shell inside an editor may resolve it in its own order (PowerShell takes a `jason.ps1` first,
+Git Bash an extensionless `jason`), so what answers there can differ from what the desktop finds. While `jason` on your PATH is another one or none, the menu carries one quiet
 line under Editors that says so. The file manager runs nothing, so after it the open says nothing about data, and Copy
 path says "Copied the path of {folder}.".
 

@@ -16,7 +16,7 @@
  * named `jason-desktop`, every file of it (`planCommand`). Nothing here starts a process.
  */
 
-import { accessSync, chmodSync, constants, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, posix, win32 } from 'node:path';
 import { gitBashWrapper, planCommand, shimTarget, windowsShim, wrapperScript, wrapperTarget } from './command-line.ts';
 import type { Logger } from './log.ts';
@@ -72,6 +72,25 @@ export function sameFile(platform: NodeJS.Platform, a: string, b: string): boole
     const paths = platform === 'win32' ? win32 : posix;
     const shape = (file: string) => (platform === 'win32' ? paths.normalize(file).toLowerCase() : paths.normalize(file));
     return shape(a) === shape(b);
+}
+
+/**
+ * Whether a file the PATH names is the bundled executable itself: the same path, or, through any link on either side
+ * (a symbolic link, or on Windows a junction), the same final file. A path that cannot be resolved, a link that leads
+ * nowhere among them, is not the executable; nothing here throws.
+ */
+export function sameFinalFile(platform: NodeJS.Platform, a: string, b: string): boolean {
+    if (sameFile(platform, a, b)) return true;
+    const final = (file: string): string | null => {
+        try {
+            return realpathSync.native(file);
+        } catch {
+            return null;
+        }
+    };
+    const finalA = final(a);
+    const finalB = final(b);
+    return finalA !== null && finalB !== null && sameFile(platform, finalA, finalB);
 }
 
 /** Whether a file the PATH names is a program: a file and, off Windows, one that may be executed. */
@@ -234,7 +253,7 @@ export class PathCommand {
     }
 
     /**
-     * Which `jason` the PATH finds by name: this window's (the bundled executable, or a file of a command of ours that runs
+     * Which `jason` the PATH finds by name: this window's (the bundled executable, by its path or a link to it, or a file of a command of ours that runs
      * it with the data directory the desktop runs on), another, or none; with the way out the Command Line submenu really
      * offers, by its act's label, or `jason-desktop` to type where a command of ours by that name is what the PATH finds.
      * Undefined where it cannot be told (`unsupported`, `taken`). The PATH read is the one every program the desktop starts
@@ -246,7 +265,7 @@ export class PathCommand {
         const { platform } = this.deps;
         const lookup = (name: Name) => findOnPath(name, { platform, path: this.deps.path(), pathext: this.deps.pathext, isProgram: (file) => this.deps.isProgram(file) });
         const ours = (name: Name, file: string) =>
-            sameFile(platform, file, this.deps.executable) ||
+            sameFinalFile(platform, file, this.deps.executable) ||
             this.looksOf(name).some((look) => sameFile(platform, look.file, file) && look.target !== null && look.target.executable === look.runs && look.target.dataDirectory === this.deps.dataDirectory);
         // The act the menu carries for this very status, by its code; only one whose label is the menu's own.
         const label = commandMenuOf(status).acts.find((act) => act.act === 'place')?.label;

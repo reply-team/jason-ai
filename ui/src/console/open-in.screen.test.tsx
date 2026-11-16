@@ -419,6 +419,11 @@ describe('Which jason an editor finds on the PATH', () => {
             other + ' In the Jason menu, Command Line, choose "Point jason at This Jason…".',
         );
         cleanup();
+        expect(await openVsCode({ found: 'other', way: 'point', act: 'point_jason_desktop' })).toBe(
+            other +
+                ' In the Jason menu, Command Line, choose "Point jason-desktop at This Jason…", then type jason-desktop there.',
+        );
+        cleanup();
         expect(await openVsCode({ found: 'other' })).toBe(other);
     });
 

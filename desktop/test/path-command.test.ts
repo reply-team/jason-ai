@@ -3,12 +3,12 @@
 // the person's word, read back on every look, and never put in the place of a `jason` that is not ours.
 
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { fileLogger } from '../src/log.ts';
-import { actLabel, commandFolder, commandMenuOf, commandQuestion, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
+import { actLabel, commandFolder, commandMenuOf, commandQuestion, isProgramFile, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -440,6 +440,47 @@ test('which jason the PATH finds by name: this window’s, another or none, with
 
     // Where the command is not offered, nothing is told.
     assert.equal(new PathCommand({ platform: 'freebsd', folder: null, executable: macExe, dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() }).onPath(), undefined);
+});
+
+test('a jason on the PATH that is a link to the bundled executable is this window’s; a link that leads nowhere is not, and nothing throws', (t) => {
+    // On this host's own file system: the link is resolved as the system resolves it, so the row runs where it is.
+    const root = scratch(t);
+    const host = process.platform;
+    const exeName = host === 'win32' ? 'jason.exe' : 'jason';
+    const bundle = join(root, 'bundle');
+    mkdirSync(bundle);
+    const executable = join(bundle, exeName);
+    writeFileSync(executable, '');
+    if (host !== 'win32') chmodSync(executable, 0o755);
+    const folder = join(root, 'bin');
+    const command = (path: string, isProgram: (file: string) => boolean = (file) => isProgramFile(file, host)) =>
+        new PathCommand({ platform: host, folder, executable, dataDirectory: null, path: () => path, isProgram, log: memoryLog() });
+
+    // A folder on the PATH that is a link to the bundle's: a junction on Windows, which needs no privilege.
+    const linkedFolder = join(root, 'linked');
+    symlinkSync(bundle, linkedFolder, host === 'win32' ? 'junction' : 'dir');
+    assert.deepEqual(command(linkedFolder).onPath(), { found: 'this' });
+
+    // A file on the PATH that is a link to the executable; an account that may not make one skips this half.
+    const links = join(root, 'links');
+    mkdirSync(links);
+    let fileLink = true;
+    try {
+        symlinkSync(executable, join(links, exeName), 'file');
+    } catch {
+        fileLink = false;
+        t.diagnostic('this account cannot make a link to a file here; the folder link above stands for it');
+    }
+    if (fileLink) assert.deepEqual(command(links).onPath(), { found: 'this' });
+
+    // A link whose target is gone cannot be resolved: it is not this window's Jason, and the look does not throw.
+    const goneTarget = join(root, 'gone');
+    mkdirSync(goneTarget);
+    const dangling = join(root, 'dangling');
+    symlinkSync(goneTarget, dangling, host === 'win32' ? 'junction' : 'dir');
+    rmSync(goneTarget, { recursive: true, force: true });
+    const found = join(dangling, exeName);
+    assert.equal(command(dangling, (file) => file === found).onPath()?.found, 'other');
 });
 
 test('a way out travels as a code, and the page words each act letter for letter as the menu labels it', () => {

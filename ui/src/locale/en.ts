@@ -138,6 +138,7 @@ export const en = {
     'openIn.jason.name':
         'In the Jason menu, Command Line, "{act}" gives this window\'s Jason the name jason-desktop; the other keeps jason.',
     'openIn.jason.point': 'In the Jason menu, Command Line, choose "{act}".',
+    'openIn.jason.pointDesktop': 'In the Jason menu, Command Line, choose "{act}", then type jason-desktop there.',
     'openIn.jason.type': "Type jason-desktop there instead: it runs this window's Jason.",
     'openIn.jasonLine.other': "jason on your PATH is another Jason, not this window's.",
     'openIn.jasonLine.none': 'jason is not on your PATH.',
