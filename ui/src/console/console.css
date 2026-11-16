@@ -979,6 +979,14 @@
     z-index: 30;
     -webkit-app-region: drag;
 }
+/* The Windows desktop's window has no title bar: the system's caption buttons stand over the strip's right end, as high
+   as it, with the desktop's own 40 px drag band just left of them. The strip leaves both free, the buttons' width read
+   from the overlay's own geometry, the free title bar area ending where they begin, so Open in and the switch stand left
+   of them at any scale of the display; without an overlay the variables fall back and only the band is left. The 40px
+   is the desktop's `windowsBandWidth` (desktop/src/window-frame.ts); a test of the desktop holds the two equal. */
+.jc-console.desktop-win .mode-strip {
+    padding-right: calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
 .jc-console .menu,
 .jc-console .menu-away,
 .jc-console .palette-away,
@@ -1630,12 +1638,21 @@ body,
     align-items: center;
     gap: 10px;
 }
+/* In a narrow strip the sentence gives way, cut short with the whole of it on hover, so the buttons after it keep their
+   place: the slot and the control may shrink, the split button may not. */
+.jc-console .open-in {
+    min-width: 0;
+}
 .jc-console .open-in-problem {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--red);
     font-size: 13px;
 }
 .jc-console .open-in-split {
     display: flex;
+    flex: none;
 }
 /* Open in: a split button in the strip's quiet look, the segments' track with its parts plain until pointed at. */
 .jc-console .open-in-split {
@@ -1841,7 +1858,8 @@ body,
 }
 .jc-console .mode-open-in {
     display: flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
     align-items: center;
     margin-right: 4px;
 }

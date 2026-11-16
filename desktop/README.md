@@ -547,7 +547,19 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   desktop also adds a band of its own to every document the window loads: an empty element at the end of the document,
   drawn over those 284 by 26 pixels as a drag region by a stylesheet of the user's origin whose every declaration is
   important, which no stylesheet of a page outranks. The page shown while Jason starts has a drag band across its top.
-  Windows and Linux keep the native frame, and none of this is added there.
+- On Windows the window has no title bar either: the system's caption buttons are Electron's title bar overlay
+  (`titleBarStyle: 'hidden'` with `titleBarOverlay`), 38 pixels high, the console's top strip's height, standing over
+  the strip's right end. Their ground has no colour at all, so the strip shows through them in either mode and theme;
+  their symbols are the console's ink in the theme in force, set again at each `nativeTheme` `updated` while the window
+  is open (`followTheme`), the person's choice and the system's own change alike. The console leaves the buttons' width
+  free at the strip's right (its `desktop-win` class), read from the overlay's own geometry, the `env(titlebar-area-*)`
+  variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live switch stand left of
+  them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left of the buttons and as
+  high as they are, placed by the same variables, so a page that marks no drag region still moves the window; a double
+  click on a drag region maximizes it, as the system does for a title bar: a drag region answers the system's hit test
+  as the caption, the buttons as minimize, maximize and close. The window shows no menu bar on Windows, and About is not
+  reachable there (it was not before either: the bar was hidden and not auto-hide); the tray carries the Jason menu's
+  other acts. Linux keeps the native frame, and none of this is added there.
 - In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
   and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
@@ -575,7 +587,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   pixels) and both views start below that band, which they leave to the window's own contents: our band
   (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
   drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, is covered whole by
-  our switch's view. On Windows and Linux the frame is the system's and the views start at the top of the content.
+  our switch's view. On Windows and Linux the views start at the top of the content. On Windows the caption buttons
+  stand over the right end of our switch's view, which Electron tells the free title bar area in the view's own
+  coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
+  them and the rest of the view moves the window. On Linux the frame is the system's.
 
 ## Links
 

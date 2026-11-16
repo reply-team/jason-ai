@@ -8,6 +8,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { styleOf } from '../test/stylesheet';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -278,6 +279,44 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect((arrow() as HTMLButtonElement).disabled).toBe(false);
     });
 
+    it('lets its sentence give way in a narrow strip, cut short with the whole of it on hover, its buttons whole', async () => {
+        const desktop = chatDesktop();
+        const sentence = 'Jason’s folder is not there yet; it is made with the first agent.';
+        desktop.refuse.set('openIn.targets', sentence);
+        await renderConsole(kept, desktop);
+        const alert = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.open-in-problem');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(alert.title).toBe(sentence);
+        expect(styleOf(alert)).toMatchObject({ 'min-width': '0', overflow: 'hidden', 'text-overflow': 'ellipsis' });
+        // The slot and the control shrink before anything after them is pushed out of the strip; the buttons do not.
+        expect(styleOf(document.querySelector('.jc-console .mode-open-in')!)).toMatchObject({
+            flex: '0 1 auto',
+            'min-width': '0',
+        });
+        expect(styleOf(document.querySelector('.jc-console .open-in')!)['min-width']).toBe('0');
+        expect(styleOf(split())['flex']).toBe('none');
+    });
+
+    it('gives the whole of a cut sentence to the keyboard: each part describes itself by it, and its menu says it first', async () => {
+        const desktop = chatDesktop();
+        const sentence = 'Jason’s folder is not there yet; it is made with the first agent.';
+        desktop.refuse.set('openIn.targets', sentence);
+        await renderConsole(kept, desktop);
+        const alert = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.open-in-problem');
+            expect(found).not.toBeNull();
+            return found!;
+        });
+        expect(alert.id).not.toBe('');
+        for (const part of [mainPart(), arrow()]) expect(part.getAttribute('aria-describedby')).toBe(alert.id);
+        fireEvent.click(arrow());
+        const first = await waitFor(() => menu().firstElementChild as HTMLElement);
+        expect(first.textContent).toBe(sentence);
+    });
+
     it('reads the places again when the arrow is opened, and recovers after a refusal', async () => {
         const desktop = chatDesktop();
         desktop.refuse.set('openIn.targets', 'Jason’s folder is not there yet; it is made with the first agent.');
@@ -308,17 +347,21 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         );
     });
 
-    it('draws no menu and attaches no outside-click or Escape listener while the places are still refused', async () => {
+    it('while the places are still refused, draws a menu that says the sentence first and offers no place, which Escape closes', async () => {
         const desktop = chatDesktop();
-        desktop.refuse.set('openIn.targets', 'Jason’s folder is not there yet; it is made with the first agent.');
+        const sentence = 'Jason’s folder is not there yet; it is made with the first agent.';
+        desktop.refuse.set('openIn.targets', sentence);
         await renderConsole(kept, desktop);
         await waitFor(() => expect(document.querySelector('.open-in-problem')).not.toBeNull());
         const added = vi.spyOn(document, 'addEventListener');
         fireEvent.click(arrow());
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(1));
-        expect(screen.queryByRole('menu')).toBeNull();
-        expect(added.mock.calls.filter(([type]) => type === 'mousedown' || type === 'keydown')).toEqual([]);
+        expect((menu().firstElementChild as HTMLElement).textContent).toBe(sentence);
+        expect(within(menu()).queryAllByRole('menuitem')).toEqual([]);
+        expect(added.mock.calls.filter(([type]) => type === 'mousedown' || type === 'keydown').length).toBe(2);
         added.mockRestore();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('menu')).toBeNull();
     });
 
     it('reads the places again when the window regains focus', async () => {
