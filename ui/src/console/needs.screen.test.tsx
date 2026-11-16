@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
@@ -80,6 +81,67 @@ beforeEach(() => {
 afterEach(() => {
     vi.useRealTimers();
     delete (window as { hit?: number }).hit;
+});
+
+/** The console's sheet, its comments taken out: read from the file, since the test run hands a stylesheet import back empty. */
+const sheet = readFileSync('src/console/console.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
+const declared = (selector: string): string =>
+    Array.from(sheet.matchAll(/([^{}]+)[{]([^{}]*)[}]/g))
+        .filter((rule) =>
+            rule[1]!
+                .split(',')
+                .map((each) => each.trim())
+                .includes(selector),
+        )
+        .map((rule) => rule[2]!.replace(/\s+/g, ' ').trim())
+        .join(' ');
+
+describe('the sheet of Needs you', () => {
+    /** The measure the panels drawn for a narrow column keep. */
+    const measure = /max-width: (\d+px)/.exec(declared('.jc-console .pane.measure .panel-body'))![1]!;
+    /** The text a person reads in the pane, by the selector the sheet caps it with. */
+    const read = [
+        '.jc-console .needs-pane .needs-words',
+        '.jc-console .needs-pane .needs-facts',
+        '.jc-console .needs-pane.q .needs-title',
+        '.jc-console .needs-pane .ui-opts',
+        '.jc-console .needs-pane .needs-said',
+        '.jc-console .needs-pane .needs-edit',
+    ];
+
+    it('draws Needs you across the whole area, its list at one width beside a pane that takes the rest', () => {
+        expect(measure).toBe('880px');
+        expect(declared('.jc-console .pane.measure .panel-body.needs-panel')).toContain('max-width: none');
+        expect(declared('.jc-console .needs-panes')).toContain(
+            'grid-template-columns: minmax(260px, 420px) minmax(0, 1fr)',
+        );
+    });
+
+    it('holds the text a person reads in the pane to the measure the other panels keep, at the pane’s left', () => {
+        for (const selector of read) {
+            expect(declared(selector), selector).toContain(`max-width: ${measure}`);
+            expect(declared(selector), selector).not.toMatch(/margin[^;]*auto/);
+        }
+    });
+
+    it('caps the very elements the pane draws a message, a question and its options in', async () => {
+        await renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-inbox')
+                .answer('decision.list', 'decision.list/needs-questions')
+                .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply')
+                .answer('decision.get', 'decision.get/needs-question'),
+        );
+        const pane = () => document.querySelector<HTMLElement>('.needs-pane')!;
+        const capped = (element: Element) => read.some((selector) => element.matches(selector));
+        await waitFor(() => expect(pane().querySelector('.needs-words')).toBeTruthy());
+        expect(capped(pane().querySelector('.needs-words')!)).toBe(true);
+        expect(capped(pane().querySelector('.needs-facts')!)).toBe(true);
+        fireEvent.click(document.querySelector<HTMLElement>('[data-row="dec_1"]')!);
+        await waitFor(() => expect(pane().querySelector('.ui-opts')).toBeTruthy());
+        expect(capped(pane().querySelector('.needs-title')!)).toBe(true);
+        expect(capped(pane().querySelector('.ui-opts')!)).toBe(true);
+    });
 });
 
 describe('Needs you', () => {
