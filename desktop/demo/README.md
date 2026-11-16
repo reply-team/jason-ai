@@ -25,7 +25,10 @@ makes them inert is where the page is shown: every request from its view to any 
 ## What is packaged and what the page carries
 
 Only `index.html` goes into the application (`../electron-builder.config.mjs`, `files`); this README, the list and the
-licence text stay in the repository. The page carries the Inter font (`@fontsource-variable/inter` 5.3.0, SIL Open Font
-License 1.1), whose licence text, as the page's build recorded it, is `LICENSE-Inter.txt`; `../scripts/notices.mjs` names
-it in the desktop's `THIRD-PARTY-NOTICES`. A build that carries anything more adds it to the list in that script and its
-licence text here.
+licence text stay in the repository. The UI's build carries the same file, byte for byte, as `sealed/demo.html` in
+`jason-ui.zip`, where a browser tab shows it ([the UI's page](../../docs/ui.md#the-demo-in-a-browser-tab)); the UI's
+guards hold the copy to this file and the page to the list above. The page carries the Inter font
+(`@fontsource-variable/inter` 5.3.0, SIL Open Font License 1.1), whose licence text, as the page's build recorded it, is
+`LICENSE-Inter.txt`; `../scripts/notices.mjs` names it in the desktop's `THIRD-PARTY-NOTICES`, and the UI's build
+(`../../ui/scripts/package-lib.mjs`, `sealedCarries`) in its own. A build that carries anything more adds it to both
+lists, which a guard holds equal, and its licence text here.

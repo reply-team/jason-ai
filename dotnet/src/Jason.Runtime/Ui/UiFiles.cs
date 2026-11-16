@@ -17,14 +17,14 @@ public static class UiFiles
     /// images as <c>data:</c> addresses, and nothing else — no address to fetch or open a socket to, no frame, worker,
     /// plugin, form target or base. Only a page of the UI's own origin may frame it. Its <c>sandbox</c>, honoured from a
     /// header whether the file is framed or opened by itself, gives it an origin of its own that is no one's, so it holds
-    /// no storage of the runtime's origin and none of its own; it keeps scripts, and forms that raise their events for its
-    /// script, which <c>form-action</c> keeps from going anywhere. It never keeps the same origin, which with scripts would
-    /// let the file lift its own sandbox.
+    /// no storage of the runtime's origin and none of its own; it keeps scripts alone, the form a page under it is built and
+    /// accepted in, so it submits no form either. It never keeps the same origin, which with scripts would let the file
+    /// lift its own sandbox.
     /// </summary>
     public const string SealedContentSecurityPolicy =
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; "
         + "connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
-        + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms";
+        + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts";
 
     /// <summary>The browser features a file under <c>sealed/</c> may ask for, each allowed to no origin, its own included.</summary>
     public static readonly IReadOnlyList<string> SealedDeniedFeatures =

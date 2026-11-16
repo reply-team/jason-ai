@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { t } from '../platform/i18n';
-import { can, cannotHere } from '../platform/places';
+import { showDemo } from '../platform/demo-frame';
+import { can, cannotHere, placeKind } from '../platform/places';
 import { mode, modePreparing, modeRefusal, modeUnopened, switchMode, type Mode } from '../platform/mode';
 
 const modes: readonly Mode[] = ['demo', 'live'];
@@ -13,7 +14,8 @@ const modes: readonly Mode[] = ['demo', 'live'];
  * leaves the person in Live, and the desktop's sentence about it stands in the bar until closed; a refused switch
  * is said there too. On the right, in this order: `data-slot="open-in"`, the one place a control for opening the
  * work elsewhere goes, then the Demo | Live switch, one segmented control with the mode in force pressed, asking the
- * desktop through the seam.
+ * desktop through the seam. In a browser tab the switch asks nothing of anyone: Demo shows the demo page in this tab
+ * alone (`#/demo`), and the desktop, its mode and the person's installation stay as they are.
  * While the demo's sample is still being made a quiet mark says so beside the sentence, and the switch is off, its
  * reason on each button, until the desktop says the sample is ready.
  */
@@ -29,7 +31,9 @@ export function ModeStrip({
     const refusal = modeRefusal.value;
     const demo = mode.value === 'demo';
     const preparing = demo && modePreparing.value;
-    // A place that cannot ask the desktop to switch shows the switch, off, with its sentence.
+    // A browser tab chooses for itself, a view of its own; the window asks the desktop, and a window that cannot shows the
+    // switch off, with its sentence.
+    const inTab = placeKind() !== 'window';
     const switchable = can('mode.set');
     return (
         <div className={`mode-strip ${demo ? 'mode-demo' : 'mode-live'}`} role="region" aria-label={t('mode.strip')}>
@@ -93,9 +97,22 @@ export function ModeStrip({
                         type="button"
                         className={each === mode.value ? 'on' : undefined}
                         aria-pressed={each === mode.value}
-                        disabled={preparing || !switchable}
-                        title={!switchable ? cannotHere() : preparing ? t('mode.preparing.reason') : undefined}
-                        onClick={() => void switchMode(each)}
+                        disabled={inTab ? false : preparing || !switchable}
+                        title={
+                            inTab
+                                ? each === 'demo'
+                                    ? t('demo.show')
+                                    : undefined
+                                : !switchable
+                                  ? cannotHere()
+                                  : preparing
+                                    ? t('mode.preparing.reason')
+                                    : undefined
+                        }
+                        onClick={() => {
+                            if (!inTab) void switchMode(each);
+                            else if (each === 'demo') showDemo();
+                        }}
                     >
                         {t(each === 'demo' ? 'mode.switch.demo' : 'mode.switch.live')}
                     </button>

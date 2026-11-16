@@ -4,6 +4,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
+import { DemoView } from '../platform/demo-frame';
 import { can, earlier, placeKind } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
@@ -247,6 +248,8 @@ function addressPlace(
     if (hash === '' || hash === '#') return null;
     const to = parseRoute(hash);
     if (to.screen === 'chat') return null;
+    // The demo's address names nothing of the console: where it is drawn at all, it is drawn instead of the console.
+    if (to.screen === 'demo') return null;
     // The bare attention address is the default one (the window opens at it, and pairing leaves it): no address.
     if (to.screen === 'attention')
         return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : null;
@@ -552,6 +555,8 @@ export function Console({
         if (!bootstrapped) void session.bootstrap().finally(() => setReady(true));
     }, [bootstrapped]);
     if (!ready) return null;
+    // A browser tab shows the demo as a view of its own, the console put away; the window's demo is the desktop's.
+    if (route.value.screen === 'demo' && placeKind() !== 'window') return <DemoView />;
     if (!session.paired.value) return <PairAgain />;
     return (
         <ApiProvider api={client}>
