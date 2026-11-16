@@ -37,8 +37,8 @@ more like one style.
     is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn a
     little tighter.
 - **A browser tab can show the Demo.** In a tab, with or without Jason Desktop behind it, the console's **Demo | Live**
-  switch is on. **Demo** moves the address to `#/demo` and shows the same page over the whole tab, with the switch at the
-  right end of the page's own top strip; **Live**, the browser's Back or any other address brings the console back where
+  switch is on. **Demo** moves the address to `#/demo` and shows the same page over the whole tab, with the
+  switch at the right end of the page's own top strip; **Live**, the browser's Back or any other address brings the console back where
   it was, and a reload at `#/demo` shows the page again from its beginning.
   - The switch changes that tab only: nothing is kept, the runtime is not told, and the installation's mode and your
     installation stay as they were. In Jason Desktop's own window the switch is the desktop's, as before.
@@ -54,8 +54,8 @@ more like one style.
     shows the provider's own word; only `connected` and `enabled` are tinted green.
   - On an agent's status card the agent's state is a pill at the top, from the runtime's own status.
   - An agent's empty Inbox tab is centred in the tab.
-  - In Needs you, the state where nothing waits is a centred card with a check mark and a **New GTM agent** button beside
-    **Open your agents**, and the pane that reads an item is a white rounded card.
+  - In Needs you, the state where nothing waits is a centred card with a check mark and a **New GTM agent**
+    button beside **Open your agents**, and the pane that reads an item is a white rounded card.
   - In Settings the list of sections has a group label and a mark for each entry.
 
 ## Upgrading from 0.47.0
