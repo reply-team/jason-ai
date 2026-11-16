@@ -232,6 +232,88 @@ public class ProviderSendCountsTests
     }
 
     /// <summary>
+    /// Ivy's enrolment, the campaign's act, was on the 12th, before a period that begins on the 13th; the sequence's step
+    /// of the 14th is inside it. She is contacted once, in the count, the total and the list, by the send: its moment
+    /// is her moment and her why, and the enrolment is no happening of the period.
+    /// </summary>
+    [Fact]
+    public async Task An_act_before_the_period_and_a_send_inside_it_count_the_person_once_by_the_send()
+    {
+        var from = new DateTime(2026, 10, 13, 0, 0, 0, DateTimeKind.Utc);
+        using (var database = new TestDatabase())
+        {
+            using var db = database.Open();
+            var world = await CampaignWorld.WriteAsync(db, Ct);
+            int[] spring = [world.Spring.Id];
+            var ivy = world.People["Ivy"];
+            var before = (await CampaignPeople.ActivityCountsAsync(db, spring, from, CampaignWorld.Until, audience: null, withoutArchived: false, Ct))[world.Spring.Id].Contacted;
+            Assert.DoesNotContain("Ivy", await ListedAsync(db, world, spring, CampaignActivityFilter.Contacted, from, CampaignWorld.Until));
+            Send(db, world.Spring, ivy, "2026-10-14T08:00:00.000Z");
+            await db.SaveChangesAsync(Ct);
+
+            Assert.Equal(before + 1, (await CampaignPeople.ActivityCountsAsync(db, spring, from, CampaignWorld.Until, audience: null, withoutArchived: false, Ct))[world.Spring.Id].Contacted);
+            Assert.Equal(before + 1, (await CampaignPeople.ActivityTotalAsync(db, spring, from, CampaignWorld.Until, audience: null, withoutArchived: false, Ct)).Contacted);
+            Assert.Single(await ListedAsync(db, world, spring, CampaignActivityFilter.Contacted, from, CampaignWorld.Until), "Ivy");
+            var moments = await CampaignPeople.MomentsAsync(db, spring, CampaignActivityFilter.Contacted, from, CampaignWorld.Until, null, false, Ct);
+            Assert.Equal(Ms("2026-10-14T08:00:00Z"), Assert.Single(moments, moment => moment.ContactId == ivy.Id).Ms);
+        }
+
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var apiWorld = await CampaignWorld.WriteAsync(api, Ct);
+        await SendAsync(api, apiWorld.Spring, apiWorld.People["Ivy"], "2026-10-14T08:00:00.000Z");
+        var whys = await WhysAsync(api, apiWorld, CampaignActivityFilter.Contacted, from, CampaignWorld.Until);
+        Assert.Equal(new MembershipWhy("activity", null, "message_sent", At("2026-10-14T08:00:00Z"), null, null), whys["Ivy"]);
+    }
+
+    /// <summary>
+    /// The mirror: Ivy's enrolment of the 12th is inside the week and the sequence's step of the 8th before it. She is
+    /// one person contacted as she was, and her why is the enrolment.
+    /// </summary>
+    [Fact]
+    public async Task An_act_inside_the_period_and_a_send_before_it_count_the_person_once_by_the_act()
+    {
+        using (var database = new TestDatabase())
+        {
+            using var db = database.Open();
+            var world = await CampaignWorld.WriteAsync(db, Ct);
+            int[] spring = [world.Spring.Id];
+            var before = (await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, audience: null, withoutArchived: false, Ct))[world.Spring.Id].Contacted;
+            Send(db, world.Spring, world.People["Ivy"], "2026-10-08T08:00:00.000Z");
+            await db.SaveChangesAsync(Ct);
+
+            Assert.Equal(before, (await CampaignPeople.ActivityCountsAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, audience: null, withoutArchived: false, Ct))[world.Spring.Id].Contacted);
+            Assert.Equal(before, (await CampaignPeople.ActivityTotalAsync(db, spring, CampaignWorld.Since, CampaignWorld.Until, audience: null, withoutArchived: false, Ct)).Contacted);
+            Assert.Single(await ListedAsync(db, world, spring, CampaignActivityFilter.Contacted, CampaignWorld.Since, CampaignWorld.Until), "Ivy");
+        }
+
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var apiWorld = await CampaignWorld.WriteAsync(api, Ct);
+        await SendAsync(api, apiWorld.Spring, apiWorld.People["Ivy"], "2026-10-08T08:00:00.000Z");
+        var whys = await WhysAsync(api, apiWorld, CampaignActivityFilter.Contacted, CampaignWorld.Since, CampaignWorld.Until);
+        Assert.Equal("campaign.enroll", whys["Ivy"].Code);
+        Assert.Equal(At("2026-10-12T10:00:00Z"), whys["Ivy"].At);
+    }
+
+    /// <summary>
+    /// A past period, the 9th to the 14th, in which Ivy was sent a step on the 13th and another on the 15th, after it
+    /// ended: the why names the send inside the period, never the later one.
+    /// </summary>
+    [Fact]
+    public async Task The_why_of_a_past_period_never_names_a_send_after_it()
+    {
+        var end = new DateTime(2026, 10, 14, 0, 0, 0, DateTimeKind.Utc);
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(CampaignWorld.Now));
+        var world = await CampaignWorld.WriteAsync(api, Ct);
+        await SendAsync(api, world.Spring, world.People["Ivy"], "2026-10-13T08:00:00.000Z");
+        await SendAsync(api, world.Spring, world.People["Ivy"], "2026-10-15T08:00:00.000Z");
+        await SendAsync(api, world.Spring, world.People["Hal"], "2026-10-15T08:00:00.000Z");
+
+        var whys = await WhysAsync(api, world, CampaignActivityFilter.Contacted, CampaignWorld.Since, end);
+        Assert.Equal(new MembershipWhy("activity", null, "message_sent", At("2026-10-13T08:00:00Z"), null, null), whys["Ivy"]);
+        Assert.DoesNotContain("Hal", whys.Keys);
+    }
+
+    /// <summary>
     /// The exchange a consumer draws Contacted from, recorded: a campaign linked to its provider campaign, Ana put into
     /// the sequence by Jason on the 12th and Bo sent its first step on the 14th, that send read from the account's events
     /// and said by the runtime's own events store. Both are contacted; only Ana was worked on.
@@ -349,10 +431,12 @@ public class ProviderSendCountsTests
             Ct)).Buckets.ToDictionary(bucket => bucket.Start, bucket => bucket.Value);
 
     /// <summary>Each person one activity count lists in Spring for the week, by name, with why it counts them.</summary>
-    private static async Task<Dictionary<string, MembershipWhy>> WhysAsync(RuntimeApiFixture api, CampaignWorld world, CampaignActivityFilter count)
+    private static async Task<Dictionary<string, MembershipWhy>> WhysAsync(RuntimeApiFixture api, CampaignWorld world, CampaignActivityFilter count, DateTime? from = null, DateTime? to = null)
     {
+        var since = from is { } f ? new DateTimeOffset(f, TimeSpan.Zero) : Since;
+        var until = to is { } t ? new DateTimeOffset(t, TimeSpan.Zero) : Until;
         var page = await api.PostOkAsync<Page<MembershipItemDto>>(
-            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = count, Since, Until, Limit = 100 }, Ct);
+            Operations.CampaignListContacts, new { CampaignId = world.Spring.PublicId, Activity = count, Since = since, Until = until, Limit = 100 }, Ct);
         return page.Items.ToDictionary(item => item.Contact.FirstName!, item => item.Why!, StringComparer.Ordinal);
     }
 
