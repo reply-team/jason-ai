@@ -10,7 +10,7 @@ import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { consoleShell } from '../platform/console-shell';
 import { registry } from '../platform/slots';
 import { LiveSettingsSections } from './settings-sections';
-import { href, navigate, parseRoute, route, type Route } from '../router';
+import { href, navigate, parseRoute, replace, route, type Route } from '../router';
 import { CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
@@ -240,6 +240,19 @@ function followHistory(to: Route): void {
 
 const show_ = (panel: PanelName) => reveal(panel);
 
+/** What an address names at the shell's start: a panel (with the item it opens), a page, or nothing (the chat's, or none). */
+function addressPlace(
+    hash: string,
+): { panel: PanelName; open?: { kind: 'approvals' | 'questions'; id: string } } | null {
+    if (hash === '' || hash === '#') return null;
+    const to = parseRoute(hash);
+    if (to.screen === 'chat') return null;
+    if (to.screen === 'attention')
+        return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : { panel: 'needs' };
+    if (to.screen === 'campaigns' && to.id === undefined) return { panel: 'campaigns' };
+    return { panel: 'page' };
+}
+
 function makeDock(): Dock {
     const show = (panel: PanelName) => reveal(panel);
     const showChat = (id: string) => {
@@ -262,9 +275,12 @@ function makeDock(): Dock {
             if (activePanel.value === chatPane(id)) reveal('start');
         },
         page: (to) => {
-            if (activePanel.value !== 'page')
+            if (activePanel.value !== 'page') {
+                // What is shown is not a page, so the bar must not name one: it names the chat, the console's neutral place.
+                if (route.value.screen !== 'chat') replace({ screen: 'chat' });
                 leftFrom = { pane: activePanel.value ?? 'start', address: href(route.value) };
-            ownAddress = href(to);
+            }
+            ownAddress = href(to) === href(route.value) ? null : href(to);
             navigate(to);
             show('page');
         },
@@ -285,6 +301,13 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
         leftFrom = null;
         ownAddress = null;
         reveal('start');
+        // The address is the truth: one that names something draws it (the window opens with none, so on Start).
+        const named = addressPlace(location.hash);
+        if (named !== null) {
+            leftFrom = { pane: 'start', address: href({ screen: 'chat' }) };
+            reveal(named.panel);
+            if (named.open) void needs.attention.open(api, named.open.kind, named.open.id);
+        }
         setBound(true);
         // The browser's Back and Forward move the address; the area follows it .
         let seen = href(route.value);
