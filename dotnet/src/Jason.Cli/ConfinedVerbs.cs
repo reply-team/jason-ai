@@ -30,7 +30,10 @@ public static class ConfinedVerbs
         /// <summary>Verbs that change who is reached or what runs, and take no default actor.</summary>
         Acts,
 
-        /// <summary>Verbs the chat refuses beyond the CLI's no-default set.</summary>
+        /// <summary>
+        /// Verbs the chat refuses beyond the CLI's no-default set: adding a role, linking a project's folder, and starting a
+        /// campaign or resuming one, which is what lets its queued work run.
+        /// </summary>
         ChatsOwn,
     }
 
@@ -70,6 +73,7 @@ public static class ConfinedVerbs
         (Kind.Acts, "role set-profile"),
         (Kind.ChatsOwn, "role add"),
         (Kind.ChatsOwn, "project link"),
+        (Kind.ChatsOwn, "campaign start"),
     ];
 
     /// <summary>The one sentence a refused command is answered with, on standard error.</summary>
