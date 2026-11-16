@@ -1340,7 +1340,7 @@ test('the instruction text holds the fourteen rules in plain words, and says not
     // Starting and resuming a campaign are the person's own acts, at the top of the campaign's chat; the chat says once that the work is ready.
     assert.equal(
         rules[11],
-        "12. Starting a campaign, which the window calls an agent, and resuming one, is the person's own act. When the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of this chat, or Resume for a paused one. Never try to start or resume it, and never say it has started unless `jason campaign get` answers the status `active`.",
+        "12. Starting a campaign, which the window calls an agent, and resuming one, is the person's own act. When the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's chat, or Resume for a paused one. Never try to start or resume it, and never say it has started unless `jason campaign get` answers the status `active`.",
     );
     // Who writes and how it sounds are set in Settings; the chat reads them, never asks for them or sets them, and only a missing name holds work.
     assert.equal(

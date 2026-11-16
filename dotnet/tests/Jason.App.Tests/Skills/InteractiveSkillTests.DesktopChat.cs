@@ -17,9 +17,9 @@ public partial class InteractiveSkillTests
     public void The_quick_start_leaves_starting_the_campaign_to_the_person_in_the_desktop_chat()
     {
         var skill = Flattened("quick-start");
-        Assert.Contains("In the chat of Jason Desktop you cannot start the campaign: starting it is the person's own act. There, once the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of this chat, and never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on their go, as above.", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you cannot start the campaign: starting it is the person's own act. There, once the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's chat, and never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on their go, as above.", skill, StringComparison.Ordinal);
         Assert.Contains("Then you start the campaign:", skill, StringComparison.Ordinal);
-        Assert.Contains("In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named to write as, and that they set it in Settings under \"Your name and tone\".", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named to write as, and that they set it in Settings under \"Your name and tone\"; a missing tone is said once too, as theirs to add there.", skill, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -31,7 +31,7 @@ public partial class InteractiveSkillTests
     public void The_managed_path_leaves_starting_and_the_name_and_tone_to_the_person_in_the_desktop_chat()
     {
         var skill = Flattened("managed-campaign-work");
-        Assert.Contains("In the chat of Jason Desktop you cannot start a campaign or resume a paused one: either is the person's own act. There, once the plan is agreed and its work is created, say once that it is ready and that they press Start at the top of this chat, or Resume for a paused one, and never say it has started until `jason campaign get` answers the status `active`. In a person's own session you start it on their go, as above, and resume it the same way.", skill, StringComparison.Ordinal);
+        Assert.Contains("In the chat of Jason Desktop you cannot start a campaign or resume a paused one: either is the person's own act. There, once the plan is agreed and its work is created, say once that it is ready and that they press Start at the top of the campaign's chat, or Resume for a paused one, and never say it has started until `jason campaign get` answers the status `active`. In a person's own session you start it on their go, as above, and resume it the same way.", skill, StringComparison.Ordinal);
         Assert.Contains("In the chat of Jason Desktop you cannot ask for those two preferences or set them. Where the sender has no value, tell the person once that it is set in Settings under \"Your name and tone\", go on with what writes to nobody, and create nothing that writes to anybody until it has one; a missing tone is said once, as theirs to add there, and holds nothing. A person's own session asks for them and sets them as `planner-in-session` says.", skill, StringComparison.Ordinal);
 
         var printed = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File).ToList();

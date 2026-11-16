@@ -99,9 +99,9 @@ jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 In the chat of Jason Desktop you cannot start the campaign: starting it is the person's own act. There, once the plan
-is agreed and its work is queued, say once that it is ready and that they press Start at the top of this chat, and
-never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on their go,
-as above.
+is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's
+chat, and never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on
+their go, as above.
 
 Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it. The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
@@ -111,4 +111,5 @@ guided check of the wiring; say so if you want it."
 - Never ask for a preference. A preference is set only on the person's own word, never written from what you assume
   or already know of them; you may say "I take it you are ..., tell me if not". Do not remind them of preferences
   while sends are manual. In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named
-  to write as, and that they set it in Settings under "Your name and tone".
+  to write as, and that they set it in Settings under "Your name and tone"; a missing tone is said once too, as theirs
+  to add there.

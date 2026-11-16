@@ -69,8 +69,7 @@ the two agree.
 In the chat of Jason Desktop you cannot ask for those two preferences or set them. Where the sender has no value, tell
 the person once that it is set in Settings under "Your name and tone", go on with what writes to nobody, and create
 nothing that writes to anybody until it has one; a missing tone is said once, as theirs to add there, and holds
-nothing. A person's own session asks for them and sets them as
-`planner-in-session` says.
+nothing. A person's own session asks for them and sets them as `planner-in-session` says.
 
 A memory file is the `AGENTS.md` in a level's folder. The campaign's folder is the `folder_path` that
 `jason campaign get` answers with, the project's is the one `jason project get` answers with, and the client's is
@@ -106,8 +105,9 @@ jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
 In the chat of Jason Desktop you cannot start a campaign or resume a paused one: either is the person's own act. There,
-once the plan is agreed and its work is created, say once that it is ready and that they press Start at the top of this
-chat, or Resume for a paused one, and never say it has started until `jason campaign get` answers the status `active`. In a person's own session you start it on their go, as above, and resume it the same way.
+once the plan is agreed and its work is created, say once that it is ready and that they press Start at the top of the
+campaign's chat, or Resume for a paused one, and never say it has started until `jason campaign get` answers the
+status `active`. In a person's own session you start it on their go, as above, and resume it the same way.
 
 **What is sold is the project.** A project gathers the campaigns of one product, so it is named from what the person
 sells, in their words, and looked for before it is made: `jason project list --query` with a word of that name answers
