@@ -27,7 +27,37 @@ const editorIds: readonly DesktopOpenInPlace[] = ['vscode', 'cursor', 'antigravi
 const terminalPlaces: readonly DesktopOpenInPlace[] = ['claude', 'codex', 'terminal'];
 
 /** The glyph drawn before the main place's name: a prompt for a command line, a pair of brackets for an editor. */
-const glyphs = { prompt: 'M4 7l5 5-5 5M12 18h8', editor: 'M8 6l-6 6 6 6M16 6l6 6-6 6' } as const;
+const glyphs = {
+    prompt: 'M4 7l5 5-5 5M12 18h8',
+    editor: 'M8 6l-6 6 6 6M16 6l6 6-6 6',
+    // The menu's own kinds, on the same 24-unit grid and stroke: a terminal window, a folder, a browser's globe, two
+    // sheets for a copy, a pair of sliders for changing Jason itself and a bent arrow for continuing a chat.
+    terminal: 'M3 5h18v14H3zM7 10l3 2-3 2M12 15h4',
+    folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+    browser: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
+    copy: 'M9 9h10v10H9zM5 15V5h10',
+    change: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+    again: 'M4 12h12M11 6l6 6-6 6M20 5v14',
+} as const;
+
+/** The glyph a menu item draws for its place: one of ours for its kind, never a product's mark. */
+function kindOf(place: DesktopOpenInPlace): keyof typeof glyphs {
+    switch (place) {
+        case 'claude':
+        case 'codex':
+            return 'prompt';
+        case 'terminal':
+            return 'terminal';
+        case 'files':
+            return 'folder';
+        case 'browser':
+            return 'browser';
+        case 'copy':
+            return 'copy';
+        default:
+            return 'editor';
+    }
+}
 
 function glyphOf(place: DesktopOpenInPlace): keyof typeof glyphs | undefined {
     if (terminalPlaces.includes(place)) return 'prompt';
@@ -35,13 +65,13 @@ function glyphOf(place: DesktopOpenInPlace): keyof typeof glyphs | undefined {
 }
 
 /** A place's glyph, before its name in the main part. */
-function PlaceGlyph({ glyph }: { glyph: keyof typeof glyphs }) {
+function PlaceGlyph({ glyph, size = 16 }: { glyph: keyof typeof glyphs; size?: number }) {
     return (
         <svg
             className="oi-glyph"
             data-glyph={glyph}
-            width="16"
-            height="16"
+            width={size}
+            height={size}
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -260,6 +290,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     // A sentence cut short in a narrow strip is still whole for the keyboard: each part is described by it, and the
     // menu says it first.
     const problemId = useId();
+    const menuId = useId();
     const described = problem !== null ? problemId : undefined;
     const places = answer?.places ?? [];
     const main = places.find((each) => each.id === answer?.default);
@@ -268,18 +299,47 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     const rest = places.filter((each) => !agents.includes(each) && !editors.includes(each));
     // The main part's words; a narrow window draws its glyph alone, and the words stay its name.
     const mainWords = t('openIn.main', { place: main === undefined ? '' : nameOf(main) });
-    const item = (place: { id: DesktopOpenInPlace; label: string }, subtitle?: string, text?: string) => (
-        <button
-            key={place.id}
-            type="button"
-            role="menuitem"
-            className={place.id === answer?.default ? 'on' : undefined}
-            onClick={() => void open(place.id)}
-        >
-            <span>{text ?? nameOf(place)}</span>
-            {subtitle !== undefined && <small>{subtitle}</small>}
-        </button>
-    );
+    // Each item is an icon, then its words. The icon is one element of its own, so an image the desktop reads for a place
+    // can take a glyph's place without moving anything. An agent's full sentence is the item's description; the line drawn
+    // under its name is the short form of it.
+    const item = (
+        place: { id: DesktopOpenInPlace; label: string },
+        subtitle?: string,
+        text?: string,
+        description?: string,
+    ) => {
+        // The name can be cut by its ellipsis, so every item carries it whole as its title; an agent's title adds its
+        // full sentence after the name.
+        const words = text ?? nameOf(place);
+        return (
+            <button
+                key={place.id}
+                type="button"
+                role="menuitem"
+                className={place.id === answer?.default ? 'on' : undefined}
+                aria-labelledby={description === undefined ? undefined : `${menuId}-${place.id}-name`}
+                aria-describedby={description === undefined ? undefined : `${menuId}-${place.id}-about`}
+                title={description === undefined ? words : `${words}: ${description}`}
+                onClick={() => void open(place.id)}
+            >
+                <span className="oi-icon">
+                    <PlaceGlyph glyph={kindOf(place.id)} />
+                </span>
+                <span className="oi-text">
+                    <span className="oi-name" id={`${menuId}-${place.id}-name`}>
+                        {words}
+                    </span>
+                    {subtitle !== undefined && <small>{subtitle}</small>}
+                    {description !== undefined && (
+                        <span className="oi-about" id={`${menuId}-${place.id}-about`}>
+                            {description}
+                        </span>
+                    )}
+                </span>
+            </button>
+        );
+    };
+    const rule = <div className="open-in-rule" role="separator" />;
     return (
         <div className="open-in" ref={root}>
             {problem !== null && (
@@ -329,9 +389,11 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                 <div className="open-in-menu" role="menu" aria-label={t('openIn.title')}>
                     {problem !== null && <div className="open-in-note open-in-said">{problem}</div>}
                     {agents.length > 0 && <div className="open-in-header">{t('openIn.agents')}</div>}
-                    {agents.map((place) => item(place, t('openIn.session')))}
+                    {agents.map((place) => item(place, t('openIn.session'), undefined, t('openIn.sessionFull')))}
+                    {agents.length > 0 && editors.length > 0 && rule}
                     {editors.length > 0 && <div className="open-in-header">{t('openIn.editors')}</div>}
                     {editors.map((place) => item(place))}
+                    {agents.length + editors.length > 0 && rest.length > 0 && rule}
                     {rest.map((place) =>
                         item(
                             place,
@@ -370,8 +432,13 @@ function ChangeJasonEntry({ onChoose }: { onChoose: () => void }) {
     return (
         <div className="open-in-change" role="group" aria-label={t('openIn.changeJason')}>
             <button type="button" role="menuitem" onClick={onChoose}>
-                <span>{t('openIn.changeJason')}</span>
-                <small>{t('openIn.changeJasonNote')}</small>
+                <span className="oi-icon">
+                    <PlaceGlyph glyph="change" />
+                </span>
+                <span className="oi-text">
+                    <span className="oi-name">{t('openIn.changeJason')}</span>
+                    <small>{t('openIn.changeJasonNote')}</small>
+                </span>
             </button>
         </div>
     );
@@ -393,10 +460,15 @@ function ContinueEntry({
     return (
         <div className="open-in-continue" role="group" aria-label={t('openIn.continue', { place: offered.label })}>
             <button type="button" role="menuitem" disabled={running} onClick={() => onChoose(offered)}>
-                <span>{t('openIn.continue', { place: offered.label })}</span>
-                <small>
-                    {running ? t('openIn.continueRunning') : t('openIn.continueNote', { place: offered.label })}
-                </small>
+                <span className="oi-icon">
+                    <PlaceGlyph glyph="again" />
+                </span>
+                <span className="oi-text">
+                    <span className="oi-name">{t('openIn.continue', { place: offered.label })}</span>
+                    <small>
+                        {running ? t('openIn.continueRunning') : t('openIn.continueNote', { place: offered.label })}
+                    </small>
+                </span>
             </button>
         </div>
     );
