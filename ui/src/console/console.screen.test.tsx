@@ -11,6 +11,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, setupFound, chatDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { readdirSync, readFileSync } from 'node:fs';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { choicesOf, chooseIn, currentOf, menuButton, openMenu, waitForMenus } from '../test/menus';
 import { fixtures } from '../test/fixtures';
@@ -22,7 +23,7 @@ import { chats, clock, conversations, currentChat, here, lines, setup, setupBusy
 const hostile = '<img src=x onerror="window.hit=1">';
 
 function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop(), journal: StubStream = stubStream()) {
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

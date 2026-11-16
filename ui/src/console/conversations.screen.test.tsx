@@ -8,6 +8,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { setupFound, chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront, shownPane, bringForward } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -27,7 +28,7 @@ function renderConsole(desktop: StubDesktop = chatDesktop()): { desktop: StubDes
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -311,7 +312,8 @@ describe('the desktop’s conversations', () => {
         bringForward('Agents');
         const autumn = await waitFor(() => screen.getByText('Autumn', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(autumn).getByRole('button', { name: 'Chat' }));
-        await waitFor(() => expect(calls(desktop, 'chat.create').at(-1)!.args).toEqual(['cmp_2']));
+        await waitFor(() => expect(inFront()).toBe('Autumn'));
+        expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_2')).toEqual([]);
         expect(Object.keys(chats.value)).toHaveLength(1);
     });
 
@@ -458,7 +460,12 @@ describe('the desktop’s conversations', () => {
         const panel = screen.getByText('How is it doing?').closest<HTMLElement>('.chat-panel')!;
         expect(within(panel).getByRole('button', { name: 'Stop' })).toBeTruthy();
         expect(within(panel).getByText('Thinking…')).toBeTruthy();
-        expect(within(panel).getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', true);
+        // Its acts are in the "…" of the agent's header over it, Remove held while the turn runs.
+        const header = document.querySelector<HTMLElement>('.agent-head')!;
+        fireEvent.click(within(header).getByRole('button', { name: "More for this agent's conversation" }));
+        const remove = within(header).getByRole('menuitem', { name: 'Remove conversation' });
+        expect(remove).toHaveProperty('disabled', true);
+        fireEvent.keyDown(remove, { key: 'Escape' });
         fireEvent.click(within(panel).getByRole('button', { name: 'Stop' }));
         expect(calls(desktop, 'chat.stop').map((each) => each.args)).toEqual([['conv_01JDKEPT0000000000000000R1']]);
         flush(() => {
@@ -524,17 +531,15 @@ describe('the desktop’s conversations', () => {
         expect(document.querySelector('.chat-error')?.textContent).not.toMatch(/Error invoking|remote method/);
     });
 
-    it('opens one conversation for two quick clicks on a campaign’s Chat', async () => {
+    it('draws one chat for two quick clicks on a campaign’s Chat, and makes no conversation', async () => {
         const { desktop } = renderConsole();
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         bringForward('Agents');
         const spring = await waitFor(() => screen.getByText('Spring', { selector: 'b' }).closest('tr')!);
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
         fireEvent.click(within(spring).getByRole('button', { name: 'Chat' }));
-        await waitFor(() =>
-            expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toHaveLength(2),
-        );
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
         expect(Object.values(chats.value).filter((chat) => chat.campaignId === 'cmp_1')).toHaveLength(1);
         expect(inFront()).toBe('Spring');
     });
@@ -630,10 +635,10 @@ describe('the desktop’s conversations', () => {
         renderConsole(desktop);
         await waitFor(() => expect(names()).toEqual(['Summer', 'Autumn', 'Spring']));
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
-        const hero = await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
-        fireEvent.click(
-            within(hero.closest<HTMLElement>('.chat-panel')!).getByRole('button', { name: 'Start afresh' }),
-        );
+        await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        const header = document.querySelector<HTMLElement>('.agent-head')!;
+        fireEvent.click(within(header).getByRole('button', { name: "More for this agent's conversation" }));
+        fireEvent.click(within(header).getByRole('menuitem', { name: 'Start conversation afresh' }));
         await waitFor(() => expect(names()).toEqual(['Spring', 'Summer', 'Autumn']));
     });
 

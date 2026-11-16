@@ -12,6 +12,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
 import { journalLine, setupFound, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { clock } from '../time/format';
 import { acts } from './card-acts';
@@ -74,7 +75,7 @@ function renderConsole(
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
         .answer('system.info', 'system.info/with-ui');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -538,7 +539,7 @@ describe('the accounts card in a browser tab', () => {
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all')
             .answer('system.info', 'system.info/with-ui');
-        watch(fake);
+        watch(agentHeads(fake));
         activatePlugins(browserPlugins);
         localStorage.clear();
         location.hash = '';

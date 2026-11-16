@@ -12,6 +12,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { standInBridge, standInSecret } from '../test/bridge';
 import { setupFound, stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import { acts } from './card-acts';
 import { cardReads } from './card-frame';
@@ -49,7 +50,7 @@ function answering(fake: FakeApi): FakeApi {
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
         .answer('system.info', 'system.info/with-ui');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

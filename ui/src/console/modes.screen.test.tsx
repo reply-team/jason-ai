@@ -7,6 +7,7 @@ import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, setupFound, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import * as consoleCampaigns from './campaigns';
 import { cardReads } from './card-frame';
 import { proposals } from './card-plan';
@@ -26,7 +27,7 @@ function renderConsole(desktop: StubDesktop = chatDesktop(), more?: (fake: FakeA
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
     more?.(fake);
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

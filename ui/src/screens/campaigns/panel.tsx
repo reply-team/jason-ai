@@ -25,7 +25,7 @@ type Props = {
     onClose: () => void;
 };
 
-const tabNames: Record<CampaignTab, string> = {
+const tabNames: Record<Exclude<CampaignTab, 'chat'>, string> = {
     sequence: 'Sequence', // drawn by firstTabName: Sequence where the label says Sequence, Paths otherwise
     people: 'People',
     inbox: 'Inbox',
@@ -34,12 +34,12 @@ const tabNames: Record<CampaignTab, string> = {
 };
 
 /** The tabs only the demo draws, and the classic shell; the console's Live leaves them out, and their addresses open them all the same. */
-const demoOnly: readonly CampaignTab[] = ['sequence', 'results'];
+const demoOnly: readonly CampaignTab[] = ['sequence'];
 
 const number = new Intl.NumberFormat('en-US');
 
-/** "active · 22 people · reply campaign 4711": where it stands, how many it holds, and the provider campaign it is linked to. */
-function sub(campaign: Campaign, people: number | null): string {
+/** "22 people · reply campaign 4711": how many it holds, and the provider campaign it is linked to. */
+export function sub(campaign: Campaign, people: number | null): string {
     const pin = campaign.external_ids.find((p) => p.kind === 'campaign');
     const linked = pin ? `${pin.plugin_id} campaign ${pin.value}` : 'no sequence linked yet';
     const many = people === null ? null : `${number.format(people)} ${people === 1 ? 'person' : 'people'}`;

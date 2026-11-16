@@ -13,3 +13,14 @@ export const CampaignChat = createContext<ChatAbout | null>(null);
 export function useCampaignChat(): ChatAbout | null {
     return useContext(CampaignChat);
 }
+
+/**
+ * Set by a shell that draws an agent's header itself, above the page, and keeps it while the person moves between the
+ * agent's tabs: the page then draws no header of its own, and what the header held that is about the agent's people
+ * (how many it holds, the provider campaign it is linked to, Add people) is drawn in its People tab.
+ */
+export const AgentHeaded = createContext(false);
+
+export function useAgentHeaded(): boolean {
+    return useContext(AgentHeaded);
+}

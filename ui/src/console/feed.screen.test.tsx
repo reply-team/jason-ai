@@ -10,6 +10,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { shownPane } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -28,7 +29,7 @@ function renderConsole(desktop: StubDesktop = stubDesktop()): { desktop: StubDes
         .answer('decision.list', 'decision.list/pending')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -158,8 +159,9 @@ describe('the Feed', () => {
         expect(within(reply).queryByRole('button', { name: 'Needs you' })).toBeNull();
         // The row's campaign opens that campaign's own conversation.
         fireEvent.click(within(reply).getByRole('button', { name: 'Spring' }));
-        await waitFor(() => expect(calls(desktop, 'chat.create').map((each) => each.args)).toContainEqual(['cmp_1']));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
+        // Drawn, and not made until the person writes in it.
+        expect(calls(desktop, 'chat.create').filter((each) => each.args[0] === 'cmp_1')).toEqual([]);
     });
 
     it('draws a row of a send that was taken and a row of role work that finished, in their words, neither leading to Needs you', async () => {

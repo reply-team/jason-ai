@@ -10,6 +10,7 @@ import { attentionStore } from '../screens/attention/store';
 import { whyWords } from '../screens/send-modes/doubts';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { fixtures } from '../test/fixtures';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -21,7 +22,7 @@ import { READ_LIMIT_MS, fillApprovals, forgetWaiting, wholeReads } from './waiti
 const hostile = '<img src=x onerror="window.hit=1">';
 
 async function renderConsole(fake: FakeApi, journal: StubStream = stubStream()): Promise<StubDesktop> {
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';
@@ -496,11 +497,9 @@ describe('Needs you', () => {
         await waitFor(() => expect(Object.keys(reads.approvals.value).length).toBeGreaterThan(0));
         await settle();
         fireEvent.click(within(pane()).getByRole('button', { name: 'Open the chat' }));
-        await waitFor(() =>
-            expect(desktop.calls.filter((each) => each.name === 'chat.create').map((each) => each.args[0])).toEqual([
-                'cmp_1',
-            ]),
-        );
+        // The agent's Chat is drawn, under its header; its conversation is made at the person's first act in it.
+        await waitFor(() => expect(document.querySelector('.agent-head h2')?.textContent).toBe('Spring'));
+        expect(desktop.calls.filter((each) => each.name === 'chat.create')).toEqual([]);
         expect(
             fake.calls.filter((each) => /^(approval\.(approve|reject)|decision\.answer)$/.test(each.operation)),
         ).toEqual([]);

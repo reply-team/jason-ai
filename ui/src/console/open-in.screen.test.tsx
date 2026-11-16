@@ -373,20 +373,23 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
     });
 });
 
-describe('Open in with a campaign’s chat in front', () => {
+describe('Open in with an agent in front', () => {
     it('sends the campaign’s id with the act and asks for its folder, and never a path', async () => {
         const desktop = await renderConsole('live');
         await waitFor(() => expect(consoleCampaigns.read.value).toBe(true));
         bringForward('Agents');
         const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
-        const tabs = await waitFor(() => {
-            const found = document.querySelector<HTMLElement>('.harness .campaign-tabs');
+        const header = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.agent-head');
             expect(found).not.toBeNull();
             return found!;
         });
-        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
+        // On a tab of the agent's page Open in already names the agent; on its Chat it still does.
         await waitFor(() => expect(targets(desktop).some((each) => each.args[0] === 'cmp_1')).toBe(true));
+        fireEvent.click(within(header).getByRole('tab', { name: 'Chat' }));
+        await waitFor(() => expect(activePanel.value?.startsWith('chat:')).toBe(true));
+        expect(targets(desktop).at(-1)!.args[0]).toBe('cmp_1');
         fireEvent.click(mainPart());
         await waitFor(() => expect(opens(desktop)).toHaveLength(1));
         expect(opens(desktop)[0]!.args).toEqual(['claude', 'cmp_1']);
@@ -402,12 +405,12 @@ describe('Open in with a campaign’s chat in front', () => {
         bringForward('Agents');
         const row = (await waitFor(() => screen.getByText('Spring'))).closest('tr')!;
         fireEvent.click(within(row).getByRole('button', { name: 'Open' }));
-        const tabs = await waitFor(() => {
-            const found = document.querySelector<HTMLElement>('.harness .campaign-tabs');
+        const header = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>('.agent-head');
             expect(found).not.toBeNull();
             return found!;
         });
-        fireEvent.click(within(tabs).getByRole('button', { name: 'Chat' }));
+        fireEvent.click(within(header).getByRole('tab', { name: 'Chat' }));
         await waitFor(() => expect(targets(desktop).some((each) => each.args[0] === 'cmp_1')).toBe(true));
         bringForward('Agents');
         await waitFor(() => expect(targets(desktop).at(-1)!.args[0]).toBeUndefined());

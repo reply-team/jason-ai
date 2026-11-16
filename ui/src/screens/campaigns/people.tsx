@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { CampaignActivityRow, CampaignSummaryRow, MembershipItem } from '../../api/types';
 import { More } from '../../lists/more';
 import { Search } from '../../lists/search';
@@ -28,6 +29,8 @@ type Props = {
     onWaiting: (person: MembershipItem) => void;
     /** Opens anybody not waiting for you in the person panel, from this campaign. */
     onPerson: (contactId: string) => void;
+    /** Where the agent's header is drawn above the page: what it held about the agent's people, drawn above the search. */
+    head?: ReactNode;
 };
 
 /** A person taken out of the campaign, in the Removed count's own word. */
@@ -76,6 +79,7 @@ export function CampaignPeople({
     onSearch,
     onWaiting,
     onPerson,
+    head,
 }: Props) {
     const columns =
         at.view === 'summary'
@@ -97,6 +101,7 @@ export function CampaignPeople({
     const chosen = at.filter ?? '';
     return (
         <div className="panel-body people-tab">
+            {head}
             <Search
                 value={query}
                 label="Search this agent's people"

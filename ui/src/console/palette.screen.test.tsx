@@ -9,6 +9,7 @@ import * as classicCampaigns from '../screens/campaigns/store';
 import { stubDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { inFront } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
+import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
@@ -47,7 +48,7 @@ function renderConsole(options: { platform?: 'darwin' | 'win32'; desktop?: StubD
         .answer('campaign.get', 'campaign.get/details')
         .answer('workitem.list', 'workitem.list/by-campaign-planned', 'workitem.list/by-campaign-running')
         .answer('journal.list', 'journal.list/by-campaign');
-    watch(fake);
+    watch(agentHeads(fake));
     activatePlugins(browserPlugins);
     localStorage.clear();
     location.hash = '';

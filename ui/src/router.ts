@@ -25,14 +25,16 @@ export type PeopleFilters = {
     archived?: boolean;
 };
 
-/** A campaign's tabs, in the order they are drawn; the first is where a campaign opens. */
+/** A campaign's tabs on its page, in the order they are drawn; the first is where the browser shell opens one. */
 export const campaignTabs = ['sequence', 'people', 'inbox', 'results', 'settings'] as const;
-export type CampaignTab = (typeof campaignTabs)[number];
+/** Every tab an agent's address can name: its page's, and its Chat, which is the console's and never the page's. */
+export const agentTabs = ['chat', ...campaignTabs] as const;
+export type CampaignTab = (typeof agentTabs)[number];
 
 /**
  * The ONE place of the first-tab rule: the tab an agent opens on, whether its address names none, an older one, or it
- * is opened from the table, a link or a close. Sequence, and in the console's Live, which draws People first and no
- * Sequence, People (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
+ * is opened from the table, a link or a close. Sequence; in the console's Live, Chat where the place can make a chat and
+ * People where it cannot (`loadMode` sets it as the page loads). An address that names a tab opens it in either mode.
  */
 export const firstCampaignTab: { value: CampaignTab } = { value: 'sequence' };
 export type CampaignView = 'summary' | 'activity';
@@ -158,16 +160,25 @@ function campaigns(segments: string[], query: string): Route {
     const id = segments[0] ? decode(segments[0]) : null;
     const params = new URLSearchParams(query);
     const view: CampaignView = params.get('view') === 'activity' ? 'activity' : 'summary';
-    const asked = params.get('period');
-    const period: Period = view === 'activity' && (asked === 'today' || asked === '30d') ? asked : '7d';
     const filters: CampaignFilters = {};
     const q = params.get('q');
     if (q) filters.q = q;
     if (params.get('archived') === '1') filters.archived = true;
-    if (id === null) return { screen: 'campaigns', tab: firstCampaignTab.value, view, period, filters };
+    const asked = params.get('period');
+    const periodAsked: Period = asked === 'today' || asked === '30d' ? asked : '7d';
+    if (id === null)
+        return {
+            screen: 'campaigns',
+            tab: firstCampaignTab.value,
+            view,
+            period: view === 'activity' ? periodAsked : '7d',
+            filters,
+        };
     // An older address's Details opens Settings; its Timeline, any other tab or none opens the first.
     const named = segments[1] === 'details' ? 'settings' : segments[1];
-    const tab: CampaignTab = campaignTabs.find((each) => each === named) ?? firstCampaignTab.value;
+    const tab: CampaignTab = agentTabs.find((each) => each === named) ?? firstCampaignTab.value;
+    // The period belongs to the table's Activity view and to an agent's Results; anywhere else it is the default.
+    const period: Period = view === 'activity' || tab === 'results' ? periodAsked : '7d';
     const at = { screen: 'campaigns' as const, id, tab, view, period, filters };
     if (tab !== 'people') return at;
     const filter = params.get('filter');
@@ -224,7 +235,8 @@ function performanceQuery(route: Extract<Route, { screen: 'performance' }>): str
 function campaignQuery(route: Extract<Route, { screen: 'campaigns' }>): string {
     const parts: string[] = [];
     if (route.view === 'activity') parts.push('view=activity');
-    if (route.view === 'activity' && route.period !== '7d') parts.push(`period=${route.period}`);
+    if ((route.view === 'activity' || (route.id !== undefined && route.tab === 'results')) && route.period !== '7d')
+        parts.push(`period=${route.period}`);
     if (route.filters.q) parts.push(`q=${encodeURIComponent(route.filters.q)}`);
     if (route.filters.archived) parts.push('archived=1');
     if (route.filter) parts.push(`filter=${route.filter}`);

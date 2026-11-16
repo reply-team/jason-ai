@@ -47,6 +47,7 @@ export class FakeApi implements Api {
     private readonly held = new Map<string, { when: (body: object) => boolean; until: Promise<void> }>();
     private readonly gone = new Map<string, (body: object) => boolean>();
     private readonly recorded = new Map<string, FixtureName | ((body: object) => FixtureName | undefined)>();
+    private readonly fallbacks = new Map<string, (body: object) => FixtureName | undefined>();
 
     /** The paired person the client puts on every write, as the recordings were made with. */
     constructor(private readonly actorId = 'ada') {}
@@ -67,6 +68,15 @@ export class FakeApi implements Api {
      */
     answerAnyRequest(operation: string, name: FixtureName | ((body: object) => FixtureName | undefined)): this {
         this.recorded.set(operation, name);
+        return this;
+    }
+
+    /**
+     * Answers a request to an operation that nothing else the test said answers: no recorded exchange named for every
+     * request, and no case offered that fits it. For reads a screen makes beside the ones a test is about.
+     */
+    otherwise(operation: string, name: (body: object) => FixtureName | undefined): this {
+        this.fallbacks.set(operation, name);
         return this;
     }
 
@@ -107,7 +117,10 @@ export class FakeApi implements Api {
         if (held?.when(given)) await held.until;
         const queue = this.answers.get(operation) ?? [];
         const chosen = this.recorded.get(operation);
-        const name = (typeof chosen === 'function' ? chosen(given) : chosen) ?? this.take(queue, body);
+        const name =
+            (typeof chosen === 'function' ? chosen(given) : chosen) ??
+            this.take(queue, body) ??
+            this.fallbacks.get(operation)?.(given);
         if (!name) {
             this.unanswered.push(call);
             throw new Error(

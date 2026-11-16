@@ -45,6 +45,13 @@ const noReply: DesktopSetup = {
 /** Enrolment goes where the global default sends it, which is Reply: the route a draft campaign's chat reads. */
 const toReply: FixtureName = 'route.resolve/global-default';
 
+/** The agents as the header reads them: Spring runs, Autumn is a draft, Summer is paused. */
+const agentRead: Record<string, FixtureName> = {
+    cmp_1: 'campaign.get/details',
+    cmp_2: 'campaign.get/unlinked',
+    cmp_3: 'campaign.get/summer',
+};
+
 function renderConsole(
     desktop: StubDesktop,
     routed: FixtureName | null = toReply,
@@ -58,7 +65,9 @@ function renderConsole(
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
         // A person who stated their preferences is never shown the note about them; a test that wants it says otherwise.
-        .answer('preference.list', 'preference.list/set');
+        .answer('preference.list', 'preference.list/set')
+        // An agent's chat stands under its header, which reads the agent from the runtime.
+        .answerAnyRequest('campaign.get', (body) => agentRead[(body as { campaign_id?: string }).campaign_id ?? '']);
     if (routed) fake.answer('route.resolve', routed);
     prepare(fake);
     watch(fake);
@@ -616,7 +625,10 @@ describe('Reply in a chat', () => {
     });
 
     it('is not asked for in the chat of a campaign that runs or is paused', async () => {
-        const desktop = renderConsole(stubDesktop(noReply));
+        // The header asks whether a provider campaign is being made for the paused agent, which has none pinned.
+        const desktop = renderConsole(stubDesktop(noReply), toReply, (fake) =>
+            fake.answerAnyRequest('workitem.list', 'workitem.list/creating-none'),
+        );
         await waitFor(() => startForm());
         await ready();
         await openCampaignChat(desktop, 'Spring');
