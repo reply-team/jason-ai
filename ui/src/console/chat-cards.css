@@ -222,10 +222,18 @@
     margin-top: 9px;
 }
 
-/* The accounts card: its Refresh at the header's end, when it read under the header, then each reader's part under
-   its own label, Reply's accounts as a table of what Reply wrote, the runtime's facts as label and value. */
+/* The accounts card: its captions at plain weight, its Refresh at the header's end, when it read under the header,
+   then each reader's part under its own label, Reply's accounts as a table of what Reply wrote, the runtime's facts as label and value. */
 .jc-console .card-accounts .card-refresh {
     margin-left: auto;
+}
+.jc-console .card-accounts .card-cap {
+    font-weight: 400;
+}
+.jc-console .card-accounts .card-part > .card-cap {
+    color: var(--faint);
+    font-size: 12px;
+    margin-bottom: 4px;
 }
 .jc-console .card-accounts .card-asof {
     font-size: 12px;

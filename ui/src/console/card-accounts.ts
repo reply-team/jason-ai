@@ -212,7 +212,7 @@ function frame(chatId: string, index: number, held: AccountsHeld | undefined, bo
     const reading = held === undefined || held.reading;
     return html`<div class="ask chat-card card-accounts" role="group" aria-label="Accounts">
         <div class="ask-h">
-            <b>Accounts</b>
+            <span class="card-cap">Accounts</span>
             <button
                 class="btn sm card-refresh"
                 type="button"
@@ -243,14 +243,14 @@ export function accountsView(chatId: string, index: number, entry: object): Html
                   browser cannot do them.
               </p>`
             : html`<section class="card-part" role="region" aria-label="Read from Reply now">
-                  <div class="card-who">Read from Reply now</div>
+                  <div class="card-cap">Read from Reply now</div>
                   ${replyPart(held.reply)}
               </section>`;
     const record =
         held.routes === null || held.plugins === null
             ? null
             : html`<section class="card-part" role="region" aria-label="On record now">
-                  <div class="card-who">On record now</div>
+                  <div class="card-cap">On record now</div>
                   ${runtimePart(held.routes, held.plugins)}
               </section>`;
     return frame(chatId, index, held, html`${provider}${record}`);

@@ -175,6 +175,19 @@ describe('the accounts card', () => {
         expect(words(provider)).not.toContain('Its state');
     });
 
+    it('draws its captions at plain weight: its header and the label of each part', async () => {
+        renderConsole([setUp(turn())]);
+        const pane = await openChat('Sending');
+        const shown = await read(pane);
+        const captions = [...shown.querySelectorAll('.card-cap')];
+        expect(captions.map((each) => words(each))).toEqual(['Accounts', 'Read from Reply now', 'On record now']);
+        for (const caption of captions) {
+            expect(caption.closest('b, strong')).toBeNull();
+            expect(caption.querySelector('b, strong')).toBeNull();
+            expect(caption.classList.contains('card-who')).toBe(false);
+        }
+    });
+
     it('says when Reply is not signed in, and has no table of accounts', async () => {
         const out: DesktopSetup = {
             ...setupFound,
