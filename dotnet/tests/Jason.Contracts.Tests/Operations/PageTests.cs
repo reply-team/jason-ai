@@ -110,7 +110,7 @@ public class PageTests
     /// <summary>
     /// The events read pages by its own cursor rather than by an offset, and its page is held to the same two bounds: it
     /// never holds more events than the caller may ask for, and the largest page the schema allows with one event on it
-    /// fits under the budget, whichever of the four kinds that event is.
+    /// fits under the budget, whichever of the five kinds that event is.
     /// </summary>
     [Fact]
     public void One_event_of_an_events_page_always_fits_under_the_budget_a_page_is_cut_at()

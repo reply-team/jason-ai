@@ -1,0 +1,11 @@
+{
+  "kind": "provider_send_observed",
+  "version": 1,
+  "case": "a send carrying its subject: nothing anybody wrote is a line's",
+  "body": {
+    "key": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "old": null,
+    "new": { "plugin": "example-mail", "event_id": "evt_01JC0000000000000000000004", "occurred_at": "2026-10-28T10:01:00.000Z", "channel": "email", "contact_id": null, "attributed_by": "campaign_pin", "thread": "thr-20931", "message": "msg-88121", "subject": "Following up on our call" }
+  },
+  "expect": { "invalid": [{ "pointer": "/new/subject", "reason": "additional_properties" }] }
+}
