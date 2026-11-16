@@ -27,8 +27,11 @@ export interface Step {
 
 export type Entry =
     | { kind: 'user'; text: string }
-    /** `plan`, when present: the desktop marked these words a Plan only turn's plan (`livePlan`). */
-    | { kind: 'text'; text: string; plan?: true }
+    /**
+     * `plan`, when present: the desktop marked these words a Plan only turn's plan (`livePlan`). `at`, when present: the
+     * moment the desktop kept them, ISO-8601 UTC, a card's moment (`choiceState`); an earlier desktop says none.
+     */
+    | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; step: Step }
     | {
           kind: 'permission';
@@ -176,9 +179,12 @@ function entryOf(entry: DesktopKeptEntry): Entry {
         case 'gap':
             return { kind: 'gap' };
         case 'text':
-            return entry.plan === true
-                ? { kind: 'text', text: entry.text, plan: true }
-                : { kind: 'text', text: entry.text };
+            return {
+                kind: 'text',
+                text: entry.text,
+                ...(entry.plan === true ? { plan: true as const } : {}),
+                ...(typeof entry.at === 'string' ? { at: entry.at } : {}),
+            };
         default:
             return { kind: entry.kind, text: entry.text };
     }
@@ -228,9 +234,12 @@ export const planModeMoved = "The chat's mode changed before the plan was approv
 /** The words with every plan's mark taken off; the same entries when none had one. */
 function unplanned(entries: Entry[]): Entry[] {
     if (!entries.some((each) => each.kind === 'text' && each.plan === true)) return entries;
-    return entries.map((each) =>
-        each.kind === 'text' && each.plan === true ? { kind: 'text', text: each.text } : each,
-    );
+    return entries.map((each) => {
+        if (each.kind !== 'text' || each.plan !== true) return each;
+        const words = { ...each };
+        delete words.plan;
+        return words;
+    });
 }
 
 /**
@@ -495,8 +504,13 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                 event.detail === undefined ? { text: event.text } : { text: event.text, detail: event.detail };
             return { ...chat, entries: [...chat.entries, { kind: 'step', step }] };
         }
-        case 'text':
-            return { ...chat, entries: [...chat.entries, { kind: 'text', text: event.text }] };
+        case 'text': {
+            const entry: Entry =
+                typeof event.at === 'string'
+                    ? { kind: 'text', text: event.text, at: event.at }
+                    : { kind: 'text', text: event.text };
+            return { ...chat, entries: [...chat.entries, entry] };
+        }
         case 'permission':
             return {
                 ...chat,
@@ -551,7 +565,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
             const last = words.at(-1);
             const entries =
                 event.plan === true && !chat.main && last?.kind === 'text'
-                    ? [...words.slice(0, -1), { kind: 'text' as const, text: last.text, plan: true as const }]
+                    ? [...words.slice(0, -1), { ...last, plan: true as const }]
                     : words;
             const over = ended({ ...chat, entries, plan: null });
             if (event.error === null)
@@ -698,4 +712,106 @@ export function shown(chat: Chat): Shown[] {
     }
     flush(chat.running);
     return out;
+}
+
+/**
+ * Whether an entry that follows a choice locks it: anything of the person's or the AI's, and anything the desktop says
+ * of the conversation's own turns and session. The journal's own entries in the Feed and a pick do not: a choice in the
+ * Feed would die within seconds of a line, and one that ends a set-up turn would never be live.
+ */
+const locks: Readonly<Record<Entry['kind'], boolean>> = {
+    user: true,
+    text: true,
+    step: true,
+    permission: true,
+    error: true,
+    notice: true,
+    attached: true,
+    fresh: true,
+    afresh: true,
+    pick: false,
+    line: false,
+    gap: false,
+};
+
+/** Whether an entry of this kind, following a choice, locks it. */
+export const locksChoice = (kind: Entry['kind']): boolean => locks[kind];
+
+/** The journal's kinds of a person's acts on an agent that lock the agent's choice asked before them. */
+export const actKinds = [
+    'campaign_started',
+    'campaign_paused',
+    'approval_approved',
+    'approval_rejected',
+    'decision_answered',
+] as const;
+
+/**
+ * Whether a journal line is an act of a person on the campaign at or after a moment, as `journal.list`'s `since` keeps
+ * it: one of the five kinds, with a person as its actor. A role's, an attempt's and the runtime's own lines are not, and
+ * neither is a person named from inside a run, which the runtime records as that run's.
+ */
+export function personActed(
+    line: { kind: string; campaign_id: string | null; ts: string; actor: { type: string } },
+    campaignId: string,
+    since: string,
+): boolean {
+    return (
+        line.campaign_id === campaignId &&
+        line.actor.type === 'human' &&
+        (actKinds as readonly string[]).includes(line.kind) &&
+        Date.parse(line.ts) >= Date.parse(since)
+    );
+}
+
+/** What is known of a person's acts on the agent since a card's moment: being read, none, one, or not known. */
+export type ActsRead = 'reading' | 'clear' | 'acted' | 'unread';
+
+/**
+ * A choice as it stands: live; standing but not to be pressed now (a turn runs, a message waits, no host drives the
+ * chat, it is in a tab that may not send, or the person's acts are still being read); answered by one of its labels or
+ * in the person's own words; locked by another entry; locked by an act of the person's on the agent; or locked because
+ * whether it still stands could not be read.
+ */
+export type ChoiceState =
+    | { state: 'live' }
+    | { state: 'idle' }
+    | { state: 'chosen'; label: string }
+    | { state: 'own_words' }
+    | { state: 'locked' }
+    | { state: 'acted' }
+    | { state: 'unread' };
+
+/**
+ * The state of the choice held by the text entry at `index`, with `labels` its options. The first locking entry after it
+ * decides: a message of the person's marks the label it equals, both trimmed, or says they answered in their own words;
+ * any other locks it with no mark. Nothing after it, in an agent's chat it is locked by a person's act on that agent at
+ * or after the entry's moment (`acts`, read for that moment), and drawn locked when the entry has no moment or the read
+ * failed: an unknown state never leaves a live button. `maySend` says a host drives the chat and this place may send.
+ * Everything is read from the kept entries, which nobody edits, so a reload derives the same state.
+ */
+export function choiceState(
+    chat: Chat,
+    index: number,
+    labels: readonly string[],
+    acts: { at: string; read: ActsRead } | null,
+    maySend: boolean,
+): ChoiceState {
+    const entry = chat.entries[index];
+    const next = chat.entries.slice(index + 1).find((each) => locks[each.kind]);
+    if (next?.kind === 'user') {
+        const said = next.text.trim();
+        const label = labels.find((each) => each.trim() === said);
+        return label === undefined ? { state: 'own_words' } : { state: 'chosen', label };
+    }
+    if (next !== undefined) return { state: 'locked' };
+    if (chat.campaignId !== null && !chat.main) {
+        const at = entry?.kind === 'text' ? entry.at : undefined;
+        if (at === undefined) return { state: 'unread' };
+        if (acts?.at === at && acts.read === 'acted') return { state: 'acted' };
+        if (acts?.at === at && acts.read === 'unread') return { state: 'unread' };
+        if (acts?.at !== at || acts.read !== 'clear') return { state: 'idle' };
+    }
+    if (chat.running || chat.waiting !== null || !maySend) return { state: 'idle' };
+    return { state: 'live' };
 }

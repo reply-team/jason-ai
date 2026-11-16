@@ -49,6 +49,8 @@ const chat = {
     setMode: true,
     openFolder: true,
     feed: true,
+    // A card the AI asked for that did not draw: its kind and why, for the desktop's log, never what it held.
+    cardRefused: true,
 } as const satisfies Record<keyof JasonDesktop['chat'], true>;
 const links = { take: true, onOpen: true } as const satisfies Record<keyof JasonDesktop['links'], true>;
 // The window's pairing: the page reports its token's id, never the token.
@@ -155,6 +157,7 @@ describe('the desktop seam', () => {
             'chat.setMode',
             'chat.openFolder',
             'chat.feed',
+            'chat.cardRefused',
             'links.take',
             'links.onOpen',
             'setup.status',

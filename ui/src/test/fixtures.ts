@@ -259,6 +259,9 @@ import journalListBySucceededItem from '../../../docs/api/fixtures/journal.list/
 import journalListByWorkItem from '../../../docs/api/fixtures/journal.list/by-work-item.json';
 import journalListOli from '../../../docs/api/fixtures/journal.list/oli.json';
 import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.json';
+// A person's acts on campaign A since the moment a choice was asked in its chat: a pause, and none.
+import journalListCardChoiceActs from '../../../docs/api/fixtures/journal.list/card-choice-acts.json';
+import journalListCardChoiceActsNone from '../../../docs/api/fixtures/journal.list/card-choice-acts-none.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
@@ -954,6 +957,14 @@ export const fixtures = {
     'journal.list/by-work-item': journalListByWorkItem satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/oli': journalListOli satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
     'journal.list/summer': journalListSummer satisfies Exchange<JournalListRequest, Page<JournalEntry>>,
+    'journal.list/card-choice-acts': journalListCardChoiceActs satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
+    'journal.list/card-choice-acts-none': journalListCardChoiceActsNone satisfies Exchange<
+        JournalListRequest,
+        Page<JournalEntry>
+    >,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,

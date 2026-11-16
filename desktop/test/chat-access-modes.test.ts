@@ -771,7 +771,9 @@ test('a Plan only turn that ends well with its words last marks those words its 
         const said = await r.turn(id, 'plan the follow-ups', { host });
         assert.deepEqual(done(said), { kind: 'done', error: null, plan: true }, host);
         const entries = r.chat.open(id).entries;
-        assert.deepEqual(entries.at(-1), { kind: 'text', text: 'Read the replies, then draft three answers.', plan: true }, host);
+        // The words keep the moment they were kept, beside the mark (chat.test.ts holds the moment).
+        const { at: _moment, ...words } = entries.at(-1) as { at?: string };
+        assert.deepEqual(words, { kind: 'text', text: 'Read the replies, then draft three answers.', plan: true }, host);
         assert.deepEqual(marked(entries), [entries.length - 1], 'only the last words are the plan');
         assert.equal(recordOf(r, id).entries.at(-1).plan, true);
         const later = r.again().open(id);

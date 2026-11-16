@@ -23,8 +23,12 @@ export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
  */
 export type KeptEntry =
     | { kind: 'user'; text: string }
-    /** `plan` present, and true, on the last words of a Plan only turn that ended well while they are its live plan. */
-    | { kind: 'text'; text: string; plan?: true }
+    /**
+     * `plan` present, and true, on the last words of a Plan only turn that ended well while they are its live plan. `at`
+     * the moment the desktop kept the words, ISO-8601 UTC: the moment a card they hold was asked, after which a person's
+     * act on the campaign makes it a question of the past. A record an earlier desktop wrote has none.
+     */
+    | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; text: string; detail?: string }
     | { kind: 'permission'; title: string; detail: string; answer: KeptAnswer | null }
     | { kind: 'error'; text: string }
@@ -114,6 +118,9 @@ export function newConversationId(now = Date.now(), random: Buffer = randomBytes
 }
 
 const isText = (value: unknown): value is string => typeof value === 'string';
+/** A moment as the desktop writes one, `Date.toISOString`'s: UTC to the millisecond. */
+const isMoment = (value: unknown): value is string =>
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value));
 const knownKinds: ReadonlySet<string> = new Set<KeptEntry['kind']>(['user', 'text', 'step', 'permission', 'error', 'pick', 'line', 'gap']);
 
 function entryOf(value: unknown): KeptEntry | null {
@@ -123,10 +130,16 @@ function entryOf(value: unknown): KeptEntry | null {
         case 'user':
         case 'error':
             return isText(entry.text) ? { kind: entry.kind, text: entry.text } : null;
-        // A plan's mark is read only as true; any other value is no mark, and the words stand.
+        // A plan's mark is read only as true, and the moment only as one of the desktop's own; any other value is none, and
+        // the words stand.
         case 'text':
             if (!isText(entry.text)) return null;
-            return entry.plan === true ? { kind: 'text', text: entry.text, plan: true } : { kind: 'text', text: entry.text };
+            return {
+                kind: 'text',
+                text: entry.text,
+                ...(entry.plan === true ? { plan: true as const } : {}),
+                ...(isMoment(entry.at) ? { at: entry.at } : {}),
+            };
         case 'step':
             if (!isText(entry.text)) return null;
             if (entry.detail === undefined) return { kind: 'step', text: entry.text };
@@ -298,9 +311,11 @@ function fittedEntry(entry: KeptEntry): KeptEntry {
             return text === entry.text ? entry : { kind: entry.kind, text };
         }
         case 'text': {
-            // A plan cut to fit is no plan: the person would approve words they cannot read whole.
+            // A plan cut to fit is no plan: the person would approve words they cannot read whole. The words keep their
+            // moment: a card at their end, which a cut keeps, was asked then all the same.
             const text = fitted(entry.text);
-            return text === entry.text ? entry : { kind: 'text', text };
+            if (text === entry.text) return entry;
+            return entry.at === undefined ? { kind: 'text', text } : { kind: 'text', text, at: entry.at };
         }
         case 'step': {
             const text = fitted(entry.text);

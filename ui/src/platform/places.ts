@@ -124,6 +124,7 @@ export function tabDesktop(bridge: Bridge): JasonDesktop {
             setMode: async () => refused(),
             openFolder: async () => refused(),
             feed: async () => refused(),
+            cardRefused: async () => null,
         },
         fullAccess: {
             standing: seam.fullAccess.standing,
@@ -195,6 +196,7 @@ export function noDesktop(): JasonDesktop {
             setMode: async () => needsRefusal(),
             openFolder: async () => needsRefusal(),
             feed: async () => needsRefusal(),
+            cardRefused: async () => null,
         },
         fullAccess: { standing: async () => null, takeBack: async () => needsRefusal(), onChanged: none },
         links: { take: async () => null, onOpen: none },

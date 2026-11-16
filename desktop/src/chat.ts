@@ -120,10 +120,16 @@ import { lastChosenHost } from './roles-profile.ts';
 /** Why a turn starts a fresh session of a conversation that had one. */
 export type FreshReason = 'host_changed' | 'not_found';
 
+/** The kinds of card the page draws, and "unknown" for a block it could not read a kind from: what the log may name. */
+export const refusedCardKinds: ReadonlySet<string> = new Set(['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan', 'unknown']);
+/** Why a card the AI asked for did not draw, as the page says it: the log's closed list. */
+export const cardFailures: ReadonlySet<string> = new Set(['kind_unknown', 'too_long', 'malformed', 'schema']);
+
 /** What the page is told, by the chat it belongs to: U2's `DesktopChatEvent`. */
 export type ChatEvent =
     | ({ kind: 'step' } & Step)
-    | { kind: 'text'; text: string }
+    /** `at`: the moment the desktop kept the words, ISO-8601 UTC, as the record keeps it beside them. */
+    | { kind: 'text'; text: string; at: string }
     | BrokerEvent
     | { kind: 'attached'; campaignId: string; title: string }
     | { kind: 'fresh'; reason: FreshReason }
@@ -313,6 +319,11 @@ export interface ChatOptions {
      * decided. Two closed words, never a path or what was read.
      */
     sandboxChecked?(answer: 'holds' | 'reads' | 'unproven', settings: 'read' | 'unread' | 'unknown'): void;
+    /**
+     * Said when the page says a card the AI asked for in a chat this desktop holds did not draw: its kind and why, each one
+     * of a closed list (`refusedCardKinds`, `cardFailures`), never what the block held.
+     */
+    cardRefused?(kind: string, failure: string): void;
     platform?: Platform;
 }
 
@@ -1186,6 +1197,19 @@ export class Chat {
         return this.#summaryOf(conversation);
     }
 
+    /**
+     * The page could not draw a card the AI asked for in a conversation this desktop holds: the log hears its kind and
+     * why, each held to its closed list, and nothing else of it. Anything outside those lists, and a conversation the
+     * desktop does not hold, is said nowhere; the call answers nothing either way, and refuses nothing.
+     */
+    cardRefused(chatId: unknown, kind: unknown, failure: unknown): null {
+        if (typeof kind !== 'string' || !refusedCardKinds.has(kind)) return null;
+        if (typeof failure !== 'string' || !cardFailures.has(failure)) return null;
+        if (typeof chatId !== 'string' || this.#conversationOf(chatId) === undefined) return null;
+        this.#options.cardRefused?.(kind, failure);
+        return null;
+    }
+
     /** Resolves once no naming run of a set-up chat runs or waits, and the Feed's catch-up has put its lines in. */
     idle(): Promise<void> {
         return Promise.all([this.#naming, this.#feedRead]).then(() => undefined);
@@ -2018,7 +2042,7 @@ export class Chat {
                         conversation.entries.push({ ...step });
                         this.#options.emit(replyTo, step);
                     } else {
-                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text) };
+                        const said: Extract<ChatEvent, { kind: 'text' }> = { kind: 'text', text: clean(line.text), at: new Date(this.#now()).toISOString() };
                         conversation.entries.push({ ...said });
                         this.#options.emit(replyTo, said);
                     }

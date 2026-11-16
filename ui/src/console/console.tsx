@@ -27,6 +27,7 @@ import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
 import { reloadWaiting } from './waiting';
+import { heardLine } from './card-acts';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
 import { Palette } from './palette';
@@ -329,6 +330,8 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             journal.onLine((line) => {
                 keepLine(line);
                 handLine(line);
+                // A person's act on an agent locks its chat's open choice at once, before any list is read again.
+                heardLine(line);
                 if (pending !== null) return;
                 pending = setTimeout(() => {
                     pending = null;
