@@ -151,19 +151,13 @@ public static class CampaignPinRule
 /// else about the person counts: a contact pinned at another plugin, a value kept as a divergence, an identifier two
 /// contacts are pinned with, an excluded membership and an archived contact all find nobody.
 /// </summary>
-/// <remarks>
-/// A message the account sent is never found by the person: the rule is there for what no provider campaign places, a
-/// direct email's reply, and for a send that audience is wrong. A direct send of one campaign to a person who is also in
-/// another would count as the other's, so a send that names no provider campaign, or one no sole campaign holds, reaches
-/// no campaign.
-/// </remarks>
 public sealed class ContactPinAttribution : IEventAttribution
 {
     public IReadOnlyList<Attributed> Attribute(ReadEvent read, PinFacts pins)
     {
         ArgumentNullException.ThrowIfNull(read);
         ArgumentNullException.ThrowIfNull(pins);
-        if (read.Kind == ReadEvent.MessageSent || pins.ContactOf(read) is not { } contact)
+        if (pins.ContactOf(read) is not { } contact)
         {
             return [];
         }
@@ -182,8 +176,18 @@ public sealed class ContactPinAttribution : IEventAttribution
 /// Rules asked in their order, the first that finds any campaign deciding alone: a later rule is asked only where every
 /// rule before it found nobody, so it is never a second audience beside a campaign already found.
 /// </summary>
+/// <remarks>
+/// A message the account sent is found by the campaign rule alone, decided here once for every rule the sequence holds,
+/// so that no rule after it can place a send by anything else. The person's rule is there for what no provider campaign
+/// places, a direct email's reply, and for a send that audience is wrong: a direct send of one campaign to a person who is
+/// also in another would read as the other's. A send that names no provider campaign, or one no sole campaign holds,
+/// reaches no campaign.
+/// </remarks>
 public sealed class EventAttributionSequence(params IEventAttribution[] rules) : IEventAttribution
 {
+    /// <summary>The rules a send is asked by: the campaign rule, wherever the sequence holds it, and nothing else.</summary>
+    private readonly IEventAttribution[] _forSends = [.. rules.OfType<CampaignPinAttribution>()];
+
     /// <summary>
     /// The rules of this version: the campaign rule, then the contact rule. A sequence's event is the campaign's that runs
     /// the sequence, as the inbound read, which lists a campaign's own threads, holds it; the person's campaigns are reached
@@ -193,7 +197,8 @@ public sealed class EventAttributionSequence(params IEventAttribution[] rules) :
 
     public IReadOnlyList<Attributed> Attribute(ReadEvent read, PinFacts pins)
     {
-        foreach (var rule in rules)
+        ArgumentNullException.ThrowIfNull(read);
+        foreach (var rule in read.Kind == ReadEvent.MessageSent ? _forSends : rules)
         {
             var found = rule.Attribute(read, pins);
             if (found.Count > 0)
