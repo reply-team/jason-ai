@@ -141,7 +141,7 @@ function ConversationMenu({ agent }: { agent: string }) {
                             title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
                             onClick={() => choose(() => restartChat(id!))}
                         >
-                            Start conversation afresh
+                            Start conversation fresh
                         </button>
                     )}
                     {!inTab() && can('chat.remove') && (

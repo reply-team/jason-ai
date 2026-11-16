@@ -18,7 +18,7 @@ export const accessMarks = {
 
 /**
  * The marks of the chat bar's three icon buttons, as path data, so the bar (drawn in JSX) and this table draw the same
- * lines: Rename a pencil, Start afresh a circular arrow, Remove a bin.
+ * lines: Rename a pencil, Start fresh a circular arrow, Remove a bin.
  */
 export const barMarks = {
     rename: ['M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z', 'M14.5 6.5l3 3'],

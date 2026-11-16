@@ -316,10 +316,10 @@ describe('A chat in a tab', () => {
         if (locked) expect(calls(stand, 'chat.send')).toEqual([]);
     });
 
-    it('draws no Start afresh, Remove, Open folder, Connect or Not now, and keeps Rename', async () => {
+    it('draws no Start fresh, Remove, Open folder, Connect or Not now, and keeps Rename', async () => {
         await shown({ entries: [{ kind: 'notice', text: 'Made a folder', folder: 'spring' }] as never });
         expect(screen.getByText('Made a folder')).toBeTruthy();
-        for (const name of ['Start afresh', 'Remove', 'Open folder', 'Not now'])
+        for (const name of ['Start fresh', 'Remove', 'Open folder', 'Not now'])
             expect(screen.queryByRole('button', { name })).toBeNull();
         expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
     });

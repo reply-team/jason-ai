@@ -426,7 +426,7 @@ export async function openConversation(id: string): Promise<string | null> {
     }
 }
 
-/** "Start afresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
+/** "Start fresh": the desktop drops the hosts' sessions and keeps the conversation; a refusal is said in the chat. */
 export function restartChat(id: string): void {
     if (!can('chat.restart')) return;
     here()
@@ -1202,7 +1202,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                           </button>
                       </div>`;
             case 'afresh':
-                return noteLine("Started afresh: the AI's next turn begins without its memory of this conversation.");
+                return noteLine("Started fresh: the AI's next turn begins without its memory of this conversation.");
             case 'line':
                 return feedLine(entry);
             case 'gap':
@@ -1654,7 +1654,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     <button
                         className="btn sm ib"
                         type="button"
-                        aria-label="Start afresh"
+                        aria-label="Start fresh"
                         disabled={chat.running || chat.removing}
                         title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
                         onClick={() => restartChat(chatId)}

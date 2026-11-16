@@ -513,7 +513,7 @@ test('a Codex turn in Plan only leaves the person\'s config.toml unread as every
     assert.equal(args.includes(codexWindowsSandbox), process.platform === 'win32');
 });
 
-test('Start afresh returns a chat in Full access to Ask first', async (t) => {
+test('Start fresh returns a chat in Full access to Ask first', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'full_access', 'claude');
@@ -708,7 +708,7 @@ test('Auto-edit is never on a record: a restart opens the chat in Ask first, and
     writeFileSync(join(r.b.paths.conversations, `${id}.json`), JSON.stringify({ ...record, mode: 'auto_edit' }));
     assert.equal(r.again().open(id).mode, 'ask_first', 'a record written by hand to say Auto-edit is read as Ask first');
     r.chat.restart(id);
-    assert.equal(r.chat.open(id).mode, 'auto_edit', 'Start afresh leaves it');
+    assert.equal(r.chat.open(id).mode, 'auto_edit', 'Start fresh leaves it');
     r.chat.closeAll();
     assert.equal(r.chat.open(id).mode, 'ask_first');
 });
@@ -815,7 +815,7 @@ test('no plan is marked for an Ask first turn, a stopped one, one that failed, o
     assert.deepEqual(marked(r.chat.open(feed.id).entries), [], 'the Feed has no plan card');
 });
 
-test('an earlier plan is no plan once a later turn ended, nor after Start afresh, nor once the chat left Plan only, through a restart', async (t) => {
+test('an earlier plan is no plan once a later turn ended, nor after Start fresh, nor once the chat left Plan only, through a restart', async (t) => {
     const r = rig(t);
     const { id } = await r.chat.create();
     await r.chat.setMode(id, 'plan_only');
@@ -832,7 +832,7 @@ test('an earlier plan is no plan once a later turn ended, nor after Start afresh
     plan(r, [{ say: 'Plan four' }]);
     await r.turn(id, 'plan', claude);
     r.chat.restart(id);
-    assert.deepEqual(marked(r.chat.open(id).entries), [], 'Start afresh: the host no longer remembers it');
+    assert.deepEqual(marked(r.chat.open(id).entries), [], 'Start fresh: the host no longer remembers it');
     assert.deepEqual(marked(recordOf(r, id).entries), []);
 
     await r.turn(id, 'plan', claude);

@@ -77,7 +77,7 @@ export const controlWords: readonly string[] = [
     'Remove',
     'Remove it',
     'Rename',
-    'Start afresh',
+    'Start fresh',
     'Take back',
     'Connect',
     'Reconnect',

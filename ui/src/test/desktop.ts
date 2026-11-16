@@ -547,7 +547,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             restart: answering('chat.restart', (id) => {
                 const record = own(id);
                 if (!record) return notKept;
-                if (record.running) return answeringStill('start it afresh');
+                if (record.running) return answeringStill('start it fresh');
                 if (listed.has(record.id)) record.updatedAt = now();
                 return null;
             }),
