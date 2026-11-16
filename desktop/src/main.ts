@@ -31,7 +31,7 @@ import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, Updater } from './updates.ts';
+import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -369,6 +369,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
+    // The update item's key, where the item can act: the page and the versions-differ sentence name it only then.
+    const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);
     const commandDeps: PathCommandDeps = {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
@@ -456,6 +458,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'updates.key', origin, updateKey, refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -483,6 +486,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundleVersion: version ?? 'unprepared',
         runtimeVersion: () => runtimeVersion,
         runtimeIsOurs: () => runtimeIsOurs,
+        updateKey,
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
         saveSettings: (next) => {

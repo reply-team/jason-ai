@@ -253,9 +253,18 @@ test('the update item and the way back from the Demo have keys of their own, whi
     const method = (name: string) => desk.slice(desk.indexOf(`private ${name}(`), desk.indexOf('\n    }\n', desk.indexOf(`private ${name}(`)));
     assert.match(method('updateItems'), /accelerator: itemKeys\.update,/);
     assert.match(method('backItems'), /accelerator: itemKeys\.back,/);
-    // The System screen spells the update's key itself, Cmd or Ctrl by the desktop's platform; held to the same key here.
-    const system = readFileSync(join(root, '..', 'ui', 'src', 'screens', 'system', 'screen.tsx'), 'utf8');
-    assert.ok(system.includes(`'Ctrl'}+${itemKeys.update.replace(/^CmdOrCtrl\+/, '')}.`), 'the System screen names the update key');
+    // A press of the update item goes through `pressItem`, which asks first when the key brought the install and installs
+    // only on yes, asked in the desk's own box. The tray's menu has no key, and on Linux it reports a click with no mouse
+    // button, which Electron counts as a key's (`triggeredByAccelerator`): a press there is always a click.
+    assert.match(method('updateItems'), /void pressItem\(updates, item\.act, !inTray && event\.triggeredByAccelerator === true, \(question\) => this\.box\(question\)\);/);
+    assert.ok(desk.includes('...this.updateItems(false),'), 'the window’s menu: its key asks');
+    assert.match(method('renderTray'), /\.\.\.this\.updateItems\(true\),/);
+    // The page and the versions-differ sentence take the update key's words from the desktop, and only where the item can
+    // act (`updateKeyWords`): the seam's `updates.key` and the setup's sentence answer from the same function.
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);'), 'the key where the item can act');
+    assert.ok(main.includes("handle(seam, 'updates.key', origin, updateKey, refused);"), 'updates.key answers it');
+    assert.match(main, /\n {8}updateKey,\n/, 'the setup names it');
 });
 
 test('a packaged build offers no developer tools', () => {

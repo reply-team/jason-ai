@@ -25,7 +25,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installRefusal, keepRefusal, menuItemOf, previousRelease, runtimeRefusal, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -509,6 +509,63 @@ test('the menu offers one step at a time, and in a build that is not installed n
     assert.deepEqual(menuItemOf({ step: 'downloaded', version: '0.35.0' }, true, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
     assert.deepEqual(menuItemOf({ step: 'installing', version: '0.35.0' }, true, true), { label: 'Installing Jason 0.35.0…', enabled: false, act: null });
     assert.deepEqual(menuItemOf({ step: 'idle' }, false, true), { label: 'Updates Come to an Installed Build', enabled: false, act: null });
+});
+
+test('the item’s key asks before it installs, which stops the runtime, and installs only on yes; a click on the item, and every other step, act at once', async (t) => {
+    const asked: ReturnType<typeof installQuestion>[] = [];
+    const answer = (button: number) => async (question: ReturnType<typeof installQuestion>) => {
+        asked.push(question);
+        return button;
+    };
+    const installs = (updater: { calls: string[] }) => updater.calls.filter((call) => call === 'quitAndInstall').length;
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates, timers } = updaterOn(scratch(t), updater);
+    updates.start();
+    await timers.fire();
+    // Checking and downloading act at once, by the key or by a click.
+    await pressItem(updates, 'check', true, answer(0));
+    await pressItem(updates, 'download', true, answer(0));
+    assert.deepEqual(updater.calls, ['check', 'check', 'download']);
+    assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    await pressItem(updates, null, true, answer(0));
+    assert.equal(asked.length, 0, 'nothing but the install asks');
+    // The key at the install asks, naming the version and what installing it stops; its default does nothing.
+    await pressItem(updates, 'install', true, answer(1));
+    const [question] = asked;
+    assert.equal(asked.length, 1);
+    assert.ok(question !== undefined);
+    assert.match(question.message, /Jason 0\.35\.0/);
+    assert.match(question.detail, /runtime stops/);
+    assert.deepEqual(question.buttons, ['Restart and Install', 'Not Now']);
+    assert.equal(question.defaultId, 1);
+    assert.equal(question.cancelId, 1);
+    assert.equal(installs(updater), 0, 'Not Now installs nothing');
+    assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    await pressItem(updates, 'install', true, answer(0));
+    assert.equal(asked.length, 2);
+    assert.equal(installs(updater), 1, 'yes installs');
+    // A press the menu showed before the step moved on asks nothing.
+    await pressItem(updates, 'install', true, answer(0));
+    assert.equal(asked.length, 2);
+    assert.equal(installs(updater), 1);
+
+    // A click on the item, whose label says so, installs at once.
+    const clicked = fakeUpdater({ latest: '0.35.0' });
+    const other = updaterOn(scratch(t), clicked);
+    other.updates.start();
+    await other.timers.fire();
+    await pressItem(other.updates, 'download', false, answer(1));
+    await pressItem(other.updates, 'install', false, answer(1));
+    assert.equal(asked.length, 2, 'a click asks nothing');
+    assert.equal(installs(clicked), 1);
+});
+
+test('the update item’s key is named only where the item can act', () => {
+    assert.equal(updateKeyWords(true, true, 'linux'), 'Ctrl+Shift+D');
+    assert.equal(updateKeyWords(true, true, 'darwin'), 'Cmd+Shift+D');
+    // Updates Come to an Installed Build, and Updates Come Through the Package.
+    assert.equal(updateKeyWords(false, true, 'linux'), null);
+    assert.equal(updateKeyWords(true, false, 'linux'), null);
 });
 
 test('an updater electron-updater says is not active looks for nothing, and its item says updates come through the package', async (t) => {

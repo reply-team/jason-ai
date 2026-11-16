@@ -735,15 +735,19 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
 
 - The window shows no menu bar, as on Windows (above): the menu's keys act, and the tray carries the Jason menu's acts
   but About. The update item and Back to Your Own Installation have keys of their own (`itemKeys` in
-  `src/keybindings.ts`: Ctrl+Shift+D and Ctrl+Shift+L, Cmd on a Mac), named in the versions-differ sentence, the
-  System screen's notice of an update and the page shown when the Demo could not be shown, so a session that shows no
-  tray icon (GNOME without an extension for one) still reaches them. The update key acts on the item's current step
-  (check, download, restart to install), which shows only in the item's label: on such a session, nowhere. That is
-  accepted, since a Linux desktop without a tray is not where Jason is expected; no dialog or notification is added
-  for it; `jason update`'s refusal of a runtime the desktop
-  carries still names the menu and the tray alone. Such a session has no way from the window to the items without a
-  key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the window quits the application; the runtime keeps running. A
-  start at sign-in opens the window minimized.
+  `src/keybindings.ts`: Ctrl+Shift+D and Ctrl+Shift+L, Cmd on a Mac), so a session that shows no tray icon (GNOME
+  without an extension for one) still reaches them. The update key acts on the item's current step (check, download,
+  restart to install), which shows only in the item's label: on such a session, nowhere. At the install it asks first,
+  naming the version (`pressItem`, `installQuestion`), on every platform, since the install stops the runtime, which
+  ends a running turn and the work in progress, and restarts the desktop; a click on the item, whose label says so,
+  installs at once. The tray's item takes every press as a click: a Linux tray reports a click with no mouse button,
+  which Electron's `triggeredByAccelerator` counts as a key's. The page shown when the Demo could not be shown names the
+  back key; the versions-differ sentence and the System screen's notice of an update name the update key where the item
+  can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
+  Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
+  desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
+  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the
+  window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path

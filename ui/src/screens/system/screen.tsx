@@ -74,8 +74,33 @@ function FullAccessCard() {
 
 import { ScrollBox } from '../../layout/scroll-box';
 
+/**
+ * The key of the desktop's update item as the desktop spells it, where the item can act; null where it cannot (a build
+ * that is not installed, or one whose updates come through the package), in a tab, and from a desktop of an earlier
+ * version, which has no such key.
+ */
+function useUpdateKey(): string | null {
+    const [key, setKey] = useState<string | null>(null);
+    useEffect(() => {
+        const desktop = currentDesktop();
+        if (desktop === undefined || !can('updates.key') || !earlier(desktop).updates) return;
+        let live = true;
+        desktop.updates
+            .key()
+            .then((words) => {
+                if (live) setKey(words);
+            })
+            .catch(() => undefined);
+        return () => {
+            live = false;
+        };
+    }, []);
+    return key;
+}
+
 export function SystemScreen() {
     const api = useApi();
+    const updateKey = useUpdateKey();
     useEffect(() => {
         void store.load(api);
     }, [api]);
@@ -96,8 +121,8 @@ export function SystemScreen() {
                         {placeKind() === 'window' && currentDesktop() ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
-                                desktop&apos;s Jason menu, or in the menu of its icon in the tray, or press{' '}
-                                {currentDesktop()?.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+Shift+D.
+                                desktop&apos;s Jason menu, or in the menu of its icon in the tray
+                                {updateKey === null ? '.' : `, or press ${updateKey}.`}
                             </>
                         ) : (
                             <>

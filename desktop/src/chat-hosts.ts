@@ -468,9 +468,14 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
  * Set on every Claude Code turn on macOS and Windows: the host strips credentials from the environment of the commands,
  * hooks and stdio servers it starts (a key provider's key among them), so the key reaches the host's own process and not
  * a read-only `echo` that runs without a card. Never set on Linux, nor passed on there when the desktop inherited it:
- * there the host runs each Bash command in a PID namespace of its own, which needs `socat` (stock Ubuntu has none, and
- * every command the chat runs then fails) and hides the processes outside it from the command. On Linux a key and the
- * credentials the turn carries reach the commands the agent runs.
+ * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
+ * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the
+ * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn sets
+ * (`claudeTurnSettings`), it denies reads of the home directory (the settings reference, "Sandboxed commands under the
+ * block"), so Jason's data directory and the runtime's descriptor in it are hidden; and "a sandboxed command's
+ * `localhost` is private to that command", so the runtime's loopback address is out of reach too. `socat` is only the
+ * sandbox's network relay, which stock Ubuntu lacks, and the PID namespace the variable also brings on Linux is a
+ * separate effect. On Linux a key and the credentials the turn carries reach the commands the agent runs.
  */
 const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
 

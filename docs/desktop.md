@@ -136,8 +136,11 @@ The View menu carries the keys (New Chat, What Needs You, Performance, Agents, W
 Beside Quit Jason, two more items of the Jason menu have keys of their own: the update item, Ctrl+Shift+D, and Back to
 Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
 Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
-the tray's menu or the Mac's menu bar, and a desktop that shows neither shows it nowhere. On Windows and Linux the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's
-acts, all but About, which neither the window nor the tray reaches.
+the tray's menu or the Mac's menu bar, and a desktop that shows neither shows it nowhere. At the install the key asks
+first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
+names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
+without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
+reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -790,9 +793,13 @@ Under the chat, these things differ from a terminal:
   every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
   by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
 - **On Linux it does.** No Claude Code turn sets that variable there, and one the desktop inherited is not passed on: on
-  Linux it makes the host run each command in a process namespace of its own, which needs `socat` and hides the
-  processes outside it from the command. So on Linux a key connected on a Connect card, and the credentials the turn
-  carries from the desktop's own environment, reach the commands the agent runs, as they would in a terminal.
+  Linux the variable runs every command the agent runs inside Claude Code's sandbox, and the sandbox shuts `jason` off
+  from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn of the chat sets, it denies reads
+  of the home directory, so Jason's data directory and the runtime's descriptor in it are hidden; and a sandboxed
+  command's `localhost` is its own, so the runtime's loopback address is out of reach as well. (`socat` is the sandbox's
+  network relay, and the process namespace the variable also brings is a separate effect.) So on Linux a key connected
+  on a Connect card, and the credentials the turn carries from the desktop's own environment, reach the commands the
+  agent runs, as they would in a terminal.
 - **A folder the chat works in is trusted** the way a folder you open your agent in is trusted: the agent definitions and
   skills it carries run with what they declare, and the cards stand in front of what the agent itself asks for.
 - **Limits that are said.** Claude Code's documentation leaves one case open, a read-only command that names no path after
@@ -851,9 +858,9 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 - The window shows no menu bar: the keys work without it, and the tray carries the Jason menu's acts; About is not
   reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), the
   update item and Back to Your Own Installation are reached by their keys (Ctrl+Shift+D, Ctrl+Shift+L; the update key
-  acts on the item's current step, which shows nowhere there), and Open Jason at Login, Start the Runtime at Logon,
-  Command Line and Remove What Jason Placed cannot be reached from the window.
-  Closing the window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
+  acts on the item's current step, which shows nowhere there, and asks before it installs), and Open Jason at Login,
+  Start the Runtime at Logon, Command Line and Remove What Jason Placed cannot be reached from the window. Closing the
+  window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.
 - An AppImage update that installs under a new file name moves an entry that is on to it, and re-points a logon

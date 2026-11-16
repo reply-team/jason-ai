@@ -15,7 +15,7 @@ import { bringForward, type LoginItem, type RuntimeAutostart } from './login-ite
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -178,8 +178,12 @@ export class Desk {
         ];
     }
 
-    /** The update item, and under it, unclickable, where the previous version is kept while it is. */
-    private updateItems(): MenuItemConstructorOptions[] {
+    /**
+     * The update item, and under it, unclickable, where the previous version is kept while it is. A press in the tray's
+     * menu is always a click: the tray has no key, and on Linux its menu reports a click with no mouse button, which
+     * Electron counts as a key's (`triggeredByAccelerator`).
+     */
+    private updateItems(inTray: boolean): MenuItemConstructorOptions[] {
         if (this.demo !== null) return [];
         const { updates } = this.deps;
         const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
@@ -194,12 +198,11 @@ export class Desk {
                 label: item.label,
                 accelerator: itemKeys.update,
                 enabled: item.enabled && !this.removing(),
-                click: () => {
+                click: (_menuItem, _window, event) => {
                     // The item is disabled while Remove What Jason Placed runs; its key does nothing then either.
                     if (this.removing()) return;
-                    if (item.act === 'check') void updates?.check();
-                    else if (item.act === 'download') void updates?.download();
-                    else if (item.act === 'install') void updates?.install();
+                    if (updates === null) return;
+                    void pressItem(updates, item.act, !inTray && event.triggeredByAccelerator === true, (question) => this.box(question));
                 },
             },
             ...(kept === null ? [] : [{ label: kept, enabled: false }]),
@@ -312,7 +315,7 @@ export class Desk {
             { role: 'about' },
             ...this.loginItems(),
             { type: 'separator' },
-            ...this.updateItems(),
+            ...this.updateItems(false),
             ...this.commandItems(),
             ...this.removalItems(),
             ...this.backItems(),
@@ -346,7 +349,7 @@ export class Desk {
                 { label: 'What Needs You', click: () => this.send('navigate.attention') },
                 ...this.loginItems(),
                 { type: 'separator' },
-                ...this.updateItems(),
+                ...this.updateItems(true),
                 ...this.commandItems(),
                 ...this.removalItems(),
                 ...this.backItems(),
