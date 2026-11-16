@@ -5,8 +5,9 @@
 // moved it, from the thread's last message and Reply's flag that the thread holds a reply — the other side's, the
 // account's, and nobody this package can name where the account's message tops a thread that holds a reply or where
 // Reply gave no last message. A thread moves in this feed only when a message lands on it, so no move is Reply's own. A
-// move by the account is read and not kept: it is left out of the page's events, after it has been held to the end of a
-// span, and the cursor still moves past it. One item is a `bounce` instead: a bounce notice lands on the thread of the
+// move by the account is read as a `message_sent`, the account's own send: the person it went to, the sequence it belongs
+// to, the thread, the message and its moment, and the channel, and nothing anybody wrote. One item is a `bounce` instead:
+// a bounce notice lands on the thread of the
 // send it answers as an inbound message, with nothing in the message saying it is one, so where Reply flags the thread
 // as holding a bounce and no reply and its last message is inbound, that message is the notice and no move of the other
 // side. An item is a bounce only where the bounce is the one of Reply's four reply flags that is set: with a reply, an
@@ -55,6 +56,9 @@ const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 const CHANNEL = { email: "email", linkedIn: "linkedin" };
 
+const UNNAMED_BOUNCE = "Reply flags a bounce on a thread it names no contact for, so no event was read from it.";
+const UNNAMED_SEND = "Reply reports a message the account sent on a thread it names no contact for, so no event was read from it.";
+
 export function eventsRead(input, context) {
   const from = startOf(input);
   const floor = Date.now() - WINDOW_MS + MARGIN_MS;
@@ -88,7 +92,7 @@ export function eventsRead(input, context) {
     if (read.event !== null) {
       events.push(read.event);
     } else if (read.unnamed !== undefined) {
-      host.log("info", "Reply flags a bounce on a thread it names no contact for, so no event was read from it.", read.unnamed);
+      host.log("info", read.unnamed.send ? UNNAMED_SEND : UNNAMED_BOUNCE, read.unnamed.data);
     }
   }
 
@@ -141,9 +145,9 @@ function isMoment(text) {
 
 // One item as what it says, beside its place in the feed: the thread's last activity, which a span ends by whatever the
 // item is. An item with no thread or no moment of its own cannot be passed over: the cursor would move past it, and the
-// move would never be read again. The event is null for an item that is left out of the page: the account's move, and a
-// bounce Reply names no person for, which has nobody to say it of. That bounce is said in one line, once it is inside the
-// span, by the thread's and the sequence's identifiers and its moment alone, since the runtime keeps the line and its
+// move would never be read again. The event is null for an item that is left out of the page: a bounce or a send of the
+// account's that Reply names no person for, which has nobody to say it of. That one is said in one line, once it is inside
+// the span, by the thread's and the sequence's identifiers and its moment alone, since the runtime keeps the line and its
 // logs hold no person.
 function readOf(item) {
   const thread = item !== null && typeof item === "object" && !Array.isArray(item) ? identifier(item.threadId) : null;
@@ -155,12 +159,40 @@ function readOf(item) {
   if (isBounce(item)) {
     const contact = identifier(item.contactId);
     return contact === null
-      ? { at: moment, event: null, unnamed: { thread: thread, campaign: identifier(item.sequenceId), at: moment } }
+      ? { at: moment, event: null, unnamed: { send: false, data: unnamedOf(item, thread, moment) } }
       : { at: moment, event: bounceOf(item, contact, moment) };
   }
 
   const moved = movedOf(item, thread, moment);
-  return { at: moment, event: moved.moved_by === "account" ? null : moved };
+  if (moved.moved_by !== "account") {
+    return { at: moment, event: moved };
+  }
+
+  return moved.contact === null
+    ? { at: moment, event: null, unnamed: { send: true, data: unnamedOf(item, thread, moment) } }
+    : { at: moment, event: sendOf(item, moved, moment) };
+}
+
+// What a line about an item with no contact says: the thread's and the sequence's identifiers and its moment alone.
+function unnamedOf(item, thread, moment) {
+  return { thread: thread, campaign: identifier(item.sequenceId), at: moment };
+}
+
+// The send an item says: the account's own message, whoever sent it. Its moment is the message's own, which stays the same
+// however often the thread comes back into the feed, so the same send read twice is one event by the runtime's key; where
+// Reply gave the message no moment this package can read, the thread's last activity, which is the message's. The message
+// is null where Reply gave it no identifier. The channel is the one the move was read on.
+function sendOf(item, moved, moment) {
+  return {
+    kind: "message_sent",
+    id: null,
+    occurred_at: utc(item.lastMessage.date) ?? moment,
+    contact: moved.contact,
+    campaign: moved.campaign,
+    thread: moved.thread,
+    message: identifier(item.lastMessage.messageId),
+    channel: moved.channel,
+  };
 }
 
 // Whether the item is a bounce: Reply flags the thread as holding a bounce and none of a reply, an automatic reply or an
