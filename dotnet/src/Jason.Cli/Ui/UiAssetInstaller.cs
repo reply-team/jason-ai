@@ -115,9 +115,9 @@ public static class UiAssetInstaller
                 throw new UiAssetRefusedException($"'{name}' is not a file of a UI build: it is a link, or a name some system cannot hold, a device name such as CON or NUL among them.");
             }
 
-            if (segments.Length > 1 && segments[0] != UiAssetLayout.AssetsDirectory)
+            if (segments.Length > 1 && segments[0] is not (UiAssetLayout.AssetsDirectory or UiAssetLayout.SealedDirectory))
             {
-                throw new UiAssetRefusedException($"'{name}' is not at the archive's root: a build holds its files at the root and under {UiAssetLayout.AssetsDirectory}/ only.");
+                throw new UiAssetRefusedException($"'{name}' is not at the archive's root: a build holds its files at the root, under {UiAssetLayout.AssetsDirectory}/ and under {UiAssetLayout.SealedDirectory}/ only.");
             }
 
             if (!names.Add(name))

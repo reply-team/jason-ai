@@ -29,7 +29,10 @@ public sealed class UiModule(JasonPaths paths)
 
     /// <summary>
     /// The file a request for <paramref name="relative"/> is answered with, or null: nothing outside the directory, no
-    /// hidden file, no directory, no index fallback. An empty path is the index.
+    /// hidden file, no directory, no index fallback. An empty path is the index. A file is found only by the names its
+    /// directories hold, segment by segment and ordinal, never by another spelling the disk takes for the same file
+    /// (another case, a trailing dot or space, a stream of a directory), so the path the headers were chosen by is the
+    /// path of the file served.
     /// </summary>
     public string? Resolve(string relative)
     {
@@ -53,8 +56,41 @@ public sealed class UiModule(JasonPaths paths)
 
         var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-        return full.StartsWith(root, StringComparison.Ordinal) && File.Exists(full) ? full : null;
+        return full.StartsWith(root, StringComparison.Ordinal) && File.Exists(full) && NamedAsHeld(root, relative.Split('/'), Names) ? full : null;
     }
+
+    /// <summary>
+    /// Whether each segment is, ordinal, the name of an entry its directory holds, as <paramref name="names"/> lists a
+    /// directory's entries. A name the disk would take for another (a case, a short name, a stream, a normalization of
+    /// it) is no entry's name, so it is not held.
+    /// </summary>
+    internal static bool NamedAsHeld(string root, IEnumerable<string> segments, Func<string, IEnumerable<string>> names)
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        ArgumentNullException.ThrowIfNull(names);
+        var directory = root;
+        try
+        {
+            foreach (var segment in segments)
+            {
+                if (!names(directory).Any(name => string.Equals(name, segment, StringComparison.Ordinal)))
+                {
+                    return false;
+                }
+
+                directory = Path.Combine(directory, segment);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static IEnumerable<string> Names(string directory) =>
+        Directory.EnumerateFileSystemEntries(directory).Select(entry => Path.GetFileName(entry));
 
     /// <summary>
     /// Why nothing is served: where a build goes, and what is wrong with the custom directory when it holds something

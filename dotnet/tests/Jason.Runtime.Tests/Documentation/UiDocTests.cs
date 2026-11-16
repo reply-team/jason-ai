@@ -37,4 +37,33 @@ public class UiDocTests
         Assert.Contains(UiFiles.ContentSecurityPolicy, page, StringComparison.Ordinal);
         Assert.Contains("ui_not_installed", page, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The sealed set is printed as the server sends it and stated as a rule for any build, with what it does not stop in
+    /// plain words; the section names no page, since the rule knows none.
+    /// </summary>
+    [Fact]
+    public void The_page_states_the_sealed_rule_as_the_server_has_it()
+    {
+        var page = Page();
+        Assert.Contains($"`Content-Security-Policy: {UiFiles.SealedContentSecurityPolicy}`", page, StringComparison.Ordinal);
+        foreach (var (name, value) in UiFiles.HeadersFor(UiAssetLayout.SealedDirectory + "/page.html").Where(header => header.Key is not ("Content-Security-Policy" or "Permissions-Policy")))
+        {
+            Assert.Contains($"`{name}: {value}`", page, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("A build of the UI, the release's or a custom one, may hold under `sealed/` content the UI does not trust", page, StringComparison.Ordinal);
+        Assert.Contains("a browser may look up a host name the file mentions before any policy applies", page, StringComparison.Ordinal);
+        Assert.Contains("the file can freeze its own tab", page, StringComparison.Ordinal);
+        Assert.Contains("it can move its own tab to another address", page, StringComparison.Ordinal);
+        Assert.Contains("None of these reaches the installation.", page, StringComparison.Ordinal);
+        Assert.Contains("It sends no `Cross-Origin-Opener-Policy`", page, StringComparison.Ordinal);
+        Assert.Contains("Every file is served by the exact name its directory holds", page, StringComparison.Ordinal);
+
+        var start = page.IndexOf("### Files the UI does not trust", StringComparison.Ordinal);
+        Assert.True(start >= 0, "docs/ui.md has no section on files the UI does not trust");
+        var end = page.IndexOf("## ", start + 4, StringComparison.Ordinal);
+        var section = page[start..(end < 0 ? page.Length : end)];
+        Assert.DoesNotContain("demo", section, StringComparison.OrdinalIgnoreCase);
+    }
 }

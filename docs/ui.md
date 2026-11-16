@@ -35,6 +35,8 @@ If nothing is installed, `jason ui open` says so with the code `ui_not_installed
 The runtime serves `<data>/ui/custom/` when it holds a build (an `index.html` and a `manifest.json`), else
 `<data>/ui/default/` when that holds a build. It serves those files and nothing else, under
 `Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`. The page may open connections to its own origin and to any port on the loopback address `127.0.0.1`, and to no other host.
+Every file is served by the exact name its directory holds: a request in another case or another spelling of the same
+name serves nothing.
 
 The default build is the release's: `jason ui install` downloads the release's `jason-ui.zip`, checks it against the
 release's `checksums.txt`, and swaps it in as `ui/default/`. The install guide runs it, `jason update apply` runs it at
@@ -44,6 +46,34 @@ has no published UI to fetch.
 To try a build that is not the installed one — a CI run's `jason-ui.zip`, or your own — unzip it into `~/.jason/ui/custom/`
 and run `jason ui open`; `jason status` and `jason runtime status --human` say which build is served, with its version
 and digest. Delete `custom/` to go back to the default.
+
+### Files the UI does not trust
+
+A build of the UI, the release's or a custom one, may hold under `sealed/` content the UI does not trust, and the
+runtime serves it unable to act. This is a rule of the server about a directory of the layout, as `assets/` is one
+about caching: it applies to every file under `/ui/sealed/` whatever the file is called, never to a file by its name,
+and a build with nothing under `sealed/` is served as it was. Every answer under `/ui/sealed/`, a missing file's
+included, carries this policy instead of the one above:
+
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+
+with a `Permissions-Policy` that allows none of the browser's features to any origin (`camera=()`, `microphone=()`,
+`geolocation=()`, `clipboard-read=()` and the rest), `X-Content-Type-Options: nosniff`, `X-DNS-Prefetch-Control: off`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-origin` and `Cache-Control: no-store`. It sends no
+`Cross-Origin-Opener-Policy`: that header acts only on a window opened by itself, and how browsers take it together
+with a sandbox the policy sets is not established, so it is left out rather than relied on.
+
+What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
+It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
+in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
+included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads
+nothing and shows no dialog. A request of its that got past the policy to the Runtime API would name that origin,
+`null`, and the runtime refuses a request that names any origin but its own (`origin_refused`) before it reads a token.
+
+What the rule does not stop, in plain words: a browser may look up a host name the file mentions before any policy
+applies; the file can freeze its own tab, until the tab is reloaded or closed; and opened by itself rather than in a
+frame, it can move its own tab to another address. None of these reaches the installation.
 
 ## Paired browsers
 

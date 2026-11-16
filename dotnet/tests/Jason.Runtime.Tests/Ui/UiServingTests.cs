@@ -191,6 +191,179 @@ public class UiServingTests
         Assert.DoesNotContain("Dispatcher", body, StringComparison.Ordinal);
     }
 
+    /// <summary>The policy of a file under <c>sealed/</c>, spelt out here so a change to the runtime's shows as this test going red.</summary>
+    public const string SealedCsp =
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; "
+        + "connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
+        + "manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms";
+
+    /// <summary>The headers the transport adds, beside those that say how the content may act.</summary>
+    private static readonly string[] Transport = ["Date", "Server", "Content-Type", "Content-Length", "Last-Modified", "Accept-Ranges", "ETag", "Transfer-Encoding"];
+
+    /// <summary>
+    /// A file under <c>sealed/</c>, at any depth and of any kind, is answered with the sealed set and nothing of the
+    /// console's: opened by itself (a document request) or framed, the same headers, since the server cannot tell and
+    /// does not ask. A file at the root or under <c>assets/</c> keeps the console's set and no feature policy.
+    /// </summary>
+    [Theory]
+    [InlineData("document")]
+    [InlineData("iframe")]
+    public async Task A_file_under_sealed_is_served_unable_to_act_and_every_other_file_keeps_the_consoles_headers(string destination)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+            UiBuild.WriteSealed(paths.UiDefaultDirectory);
+        });
+
+        foreach (var path in (string[])["/ui/sealed/page.html", "/ui/sealed/nested/part.js"])
+        {
+            var (status, body, headers) = await GetAsync(api, path, destination);
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Contains("sealed content", body, StringComparison.Ordinal);
+            AssertSealed(headers, path);
+        }
+
+        foreach (var path in (string[])["/ui/", "/ui/favicon.svg", "/ui/assets/app-abc123.js"])
+        {
+            var (status, _, headers) = await GetAsync(api, path, destination);
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Equal(Csp, headers["Content-Security-Policy"]);
+            Assert.False(headers.ContainsKey("Permissions-Policy"), path);
+            Assert.False(headers.ContainsKey("Cross-Origin-Resource-Policy"), path);
+            Assert.False(headers.ContainsKey("X-DNS-Prefetch-Control"), path);
+        }
+
+        // A name under sealed/ that holds no file is sealed too: the set is chosen before the file is looked for.
+        var (missing, _, missingHeaders) = await GetAsync(api, "/ui/sealed/missing.html", destination);
+        Assert.Equal(HttpStatusCode.NotFound, missing);
+        AssertSealed(missingHeaders, "/ui/sealed/missing.html");
+    }
+
+    /// <summary>
+    /// What a request can reach under <c>sealed/</c>: only a file named exactly as its directory holds it, under the sealed
+    /// set. Another spelling the disk may take for the same name serves nothing: another case, a trailing dot or space,
+    /// which Windows drops, a short name, a stream suffix, a name equal only after Unicode normalization or case folding,
+    /// an encoded separator, a doubled one, a backslash. Dot segments are taken off by the server before the route reads
+    /// the path, so they reach the exact file and answer it under the sealed set. No row is ever the console's set over
+    /// sealed content. A short name exists only where the volume makes them, and a case or a normalization is the same
+    /// name only on a disk that folds it: those rows hold on every system (a 404), and say most where the disk aliases;
+    /// <see cref="A_segment_counts_only_when_its_directory_holds_that_very_name"/> holds them against a stand-in listing.
+    /// </summary>
+    [Theory]
+    [InlineData("/ui/Sealed/page.html", "404")]
+    [InlineData("/ui/SEALED/page.HTML", "404")]
+    [InlineData("/ui/sealed/PAGE.HTML", "404")]
+    [InlineData("/ui/Sealed/nested/part.js", "404")]
+    [InlineData("/ui/sealed/Nested/part.js", "404")]
+    [InlineData("/ui/sealed./page.html", "404")]
+    [InlineData("/ui/sealed/page.html.", "404")]
+    [InlineData("/ui/sealed%20/page.html", "404")]
+    [InlineData("/ui/sealed/page.html%20", "404")]
+    [InlineData("/ui/sealed/A-LONG~1.HTM", "404")]
+    [InlineData("/ui/SEALED~1/page.html", "404")]
+    [InlineData("/ui/sealed/page.html::$DATA", "404")]
+    [InlineData("/ui/sealed::$INDEX_ALLOCATION/page.html", "404")]
+    [InlineData("/ui/sealed/cafe%CC%81.html", "404")]
+    [InlineData("/ui/%C5%BFealed/page.html", "404")]
+    [InlineData("/ui/sealed%2Fpage.html", "404")]
+    [InlineData("/ui/Sealed%2Fpage.html", "404")]
+    [InlineData("/ui/sealed//page.html", "404")]
+    [InlineData("/ui//sealed/page.html", "404")]
+    [InlineData("/ui/sealed%5Cpage.html", "404")]
+    [InlineData("/ui/Sealed%5Cpage.html", "404")]
+    [InlineData("/ui/sealed/%2e/page.html", "sealed")]
+    [InlineData("/ui/assets/%2e%2e/sealed/page.html", "sealed")]
+    [InlineData("/ui/sealed/page.html", "sealed")]
+    [InlineData("/ui/sealed/a-long-page-name.html", "sealed")]
+    [InlineData("/ui/sealed/caf%C3%A9.html", "sealed")]
+    public async Task Only_the_exact_name_reaches_a_sealed_file_and_only_under_the_sealed_set(string path, string answer)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+            UiBuild.WriteSealed(paths.UiDefaultDirectory);
+        });
+
+        var (status, body, headers) = await GetAsync(api, path);
+        if (answer == "sealed")
+        {
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Contains("sealed content", body, StringComparison.Ordinal);
+            AssertSealed(headers, path);
+            return;
+        }
+
+        Assert.True(status == HttpStatusCode.NotFound, $"{path} answered {(int)status} under {headers.GetValueOrDefault("Content-Security-Policy")}");
+        Assert.DoesNotContain("sealed content", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The resolver's test of a name, against a stand-in listing, so the aliases a disk may make hold on every system: a
+    /// directory lists <c>sealed</c>, and <c>sealed</c> lists a page, a long name and a name with an accent, composed.
+    /// Each alias below is what some disk takes for one of them (a case on Windows and macOS, a short name on a Windows
+    /// volume that makes them, a stream suffix on NTFS, the decomposed accent on macOS), and none is held.
+    /// </summary>
+    [Theory]
+    [InlineData("sealed/page.html", true)]
+    [InlineData("sealed/a-long-page-name.html", true)]
+    [InlineData("sealed/caf\u00e9.html", true)]
+    [InlineData("Sealed/page.html", false)]
+    [InlineData("sealed/PAGE.HTML", false)]
+    [InlineData("sealed/A-LONG~1.HTM", false)]
+    [InlineData("SEALED~1/page.html", false)]
+    [InlineData("sealed/page.html::$DATA", false)]
+    [InlineData("sealed::$INDEX_ALLOCATION/page.html", false)]
+    [InlineData("sealed/cafe\u0301.html", false)]
+    [InlineData("\u017fealed/page.html", false)]
+    [InlineData("sealed./page.html", false)]
+    [InlineData("sealed /page.html", false)]
+    public void A_segment_counts_only_when_its_directory_holds_that_very_name(string relative, bool held)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "stand-in-ui");
+        var listing = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            [root] = ["index.html", "manifest.json", "sealed"],
+            [Path.Combine(root, "sealed")] = ["page.html", "a-long-page-name.html", "caf\u00e9.html"],
+        };
+
+        Assert.Equal(held, Jason.Runtime.Ui.UiModule.NamedAsHeld(root, relative.Split('/'), directory => listing.GetValueOrDefault(directory, [])));
+    }
+
+    /// <summary>A file of the console in another spelling is not served either: a file is served by the name its directory holds.</summary>
+    [Fact]
+    public async Task A_file_is_served_only_by_the_name_its_directory_holds()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+        });
+
+        Assert.Equal(HttpStatusCode.OK, (await GetAsync(api, "/ui/favicon.svg")).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(api, "/ui/FAVICON.SVG")).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(api, "/ui/Assets/app-abc123.js")).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await GetAsync(api, "/ui/favicon.svg.")).Status);
+    }
+
+    private static void AssertSealed(Dictionary<string, string> headers, string path)
+    {
+        Assert.Equal(SealedCsp, headers["Content-Security-Policy"]);
+        Assert.DoesNotContain("allow-same-origin", headers["Content-Security-Policy"], StringComparison.Ordinal);
+        Assert.Equal(string.Join(", ", Jason.Runtime.Ui.UiFiles.SealedDeniedFeatures.Select(feature => feature + "=()")), headers["Permissions-Policy"]);
+        Assert.Contains("camera=()", headers["Permissions-Policy"], StringComparison.Ordinal);
+        Assert.Equal("nosniff", headers["X-Content-Type-Options"]);
+        Assert.Equal("off", headers["X-DNS-Prefetch-Control"]);
+        Assert.Equal("no-referrer", headers["Referrer-Policy"]);
+        Assert.Equal("same-origin", headers["Cross-Origin-Resource-Policy"]);
+        Assert.Equal("no-store", headers["Cache-Control"]);
+        string[] named = ["Content-Security-Policy", "Permissions-Policy", "X-Content-Type-Options", "X-DNS-Prefetch-Control", "Referrer-Policy", "Cross-Origin-Resource-Policy", "Cache-Control"];
+        var other = headers.Keys.Except(named, StringComparer.OrdinalIgnoreCase).Except(Transport, StringComparer.OrdinalIgnoreCase).ToList();
+        Assert.True(other.Count == 0, $"{path} carries headers the sealed set does not name: {string.Join(", ", other)}");
+    }
+
     [Fact]
     public async Task The_bare_prefix_redirects_to_the_page_and_the_files_need_no_bearer()
     {
@@ -205,11 +378,16 @@ public class UiServingTests
         Assert.Equal("/ui/", headers["Location"]);
     }
 
-    internal static async Task<(HttpStatusCode Status, string Body, Dictionary<string, string> Headers)> GetAsync(RuntimeApiFixture api, string path)
+    internal static async Task<(HttpStatusCode Status, string Body, Dictionary<string, string> Headers)> GetAsync(RuntimeApiFixture api, string path, string? destination = null)
     {
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var http = new HttpClient(handler) { BaseAddress = api.Runtime.BaseUrl };
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        if (destination is not null)
+        {
+            request.Headers.Add("Sec-Fetch-Dest", destination);
+        }
+
         using var response = await http.SendAsync(request, Ct);
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, values) in response.Headers.Concat(response.Content.Headers))

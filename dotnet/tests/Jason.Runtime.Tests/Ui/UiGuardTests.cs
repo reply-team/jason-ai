@@ -1,15 +1,18 @@
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using Jason.Contracts.Api;
+using Jason.Runtime.Hosting.Modules;
 using Jason.Runtime.Ui;
 
 namespace Jason.Runtime.Tests.Ui;
 
 /// <summary>
 /// The rules that keep the runtime command-line first with a UI beside it, held here rather than in review: the
-/// door is the only POST that needs no bearer, the runtime starts with no UI directory, and a runtime with no module
-/// is a runtime with one 404 more and nothing else.
+/// door is the only POST that needs no bearer, the runtime starts with no UI directory, a runtime with no module
+/// is a runtime with one 404 more and nothing else, and the headers a file is served with are chosen by the layout, never
+/// by a file's name.
 /// </summary>
 public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiGuardTests.SharedRuntime>
 {
@@ -59,6 +62,50 @@ public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiG
         var (status, body, _) = await UiServingTests.GetAsync(shared.Api, "/ui/");
         Assert.Equal(HttpStatusCode.NotFound, status);
         Assert.Contains("\"ui_not_installed\"", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>With no UI directory a path under <c>sealed/</c> is answered as any other: the same refusal, and nothing made on disk.</summary>
+    [Fact]
+    public async Task With_no_ui_directory_a_path_under_sealed_answers_as_any_other_path()
+    {
+        var (status, body, _) = await UiServingTests.GetAsync(shared.Api, "/ui/sealed/page.html");
+        var (_, other, _) = await UiServingTests.GetAsync(shared.Api, "/ui/page.html");
+
+        Assert.Equal(HttpStatusCode.NotFound, status);
+        Assert.Equal(other, body);
+        Assert.Contains("\"ui_not_installed\"", body, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(shared.Api.Paths.UiDirectory), "the runtime made a ui directory nobody asked for");
+    }
+
+    /// <summary>
+    /// No header rule of the server names a file. The set an answer carries is a function of the directory of the layout the
+    /// path is in, and of nothing else: every name gets the set of its directory, at the root the console's, the names a
+    /// build of the UI or a page of it could have included; and no literal the rules or the route load is a file's name.
+    /// </summary>
+    [Fact]
+    public void No_header_rule_of_the_server_names_a_file()
+    {
+        var console = UiFiles.HeadersFor("index.html");
+        var @sealed = UiFiles.HeadersFor("sealed/page.html");
+        Assert.NotEqual(console, @sealed);
+
+        string[] names = ["index.html", "demo.html", "sealed.html", "sealed", "manifest.json", "favicon.svg", "app-abc123.js", "THIRD-PARTY-NOTICES", "page"];
+        foreach (var name in names)
+        {
+            Assert.Equal(console, UiFiles.HeadersFor(name));
+            Assert.Equal(console, UiFiles.HeadersFor("assets/" + name));
+            Assert.Equal(console, UiFiles.HeadersFor("other/" + name));
+            Assert.Equal(@sealed, UiFiles.HeadersFor("sealed/" + name));
+            Assert.Equal(@sealed, UiFiles.HeadersFor("sealed/deeper/" + name));
+        }
+
+        Assert.Equal(console, UiFiles.HeadersFor(string.Empty));
+
+        var fileName = new Regex(@"(?<![\w.-])[\w-]+\.(?:html?|m?js|css|json|map|svg|png|ico|woff2?|txt)\b", RegexOptions.IgnoreCase);
+        var literals = IlStrings.Of(typeof(UiFiles)).Concat(IlStrings.Of(typeof(UiModuleEndpoints))).ToList();
+        Assert.Contains(UiFiles.SealedContentSecurityPolicy, literals);
+        var named = literals.Where(literal => fileName.IsMatch(literal) || literal.Contains("demo", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.True(named.Count == 0, $"a header rule names a file: {string.Join(", ", named)}");
     }
 
     [Fact]

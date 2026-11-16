@@ -16,4 +16,10 @@ public static class UiAssetLayout
     public const string NoticesFile = "THIRD-PARTY-NOTICES";
 
     public const string AssetsDirectory = "assets";
+
+    /// <summary>
+    /// The directory for content the UI does not trust: the runtime serves everything under it unable to act, whatever
+    /// build holds it and whatever the file is called.
+    /// </summary>
+    public const string SealedDirectory = "sealed";
 }

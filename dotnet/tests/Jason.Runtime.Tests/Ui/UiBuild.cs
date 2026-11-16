@@ -13,4 +13,17 @@ internal static class UiBuild
         File.WriteAllText(Path.Combine(directory, "favicon.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
         File.WriteAllText(Path.Combine(directory, "assets", "app-abc123.js"), $"console.log(\"{marker}\");");
     }
+
+    /// <summary>
+    /// Files under <c>sealed/</c>, each saying what it is: a page, a script a directory down, a name too long to be a short
+    /// one, and a name with an accent, composed.
+    /// </summary>
+    public static void WriteSealed(string directory)
+    {
+        Directory.CreateDirectory(Path.Combine(directory, "sealed", "nested"));
+        File.WriteAllText(Path.Combine(directory, "sealed", "page.html"), "<!doctype html><title>sealed content</title><script>document.title = 'sealed content';</script>");
+        File.WriteAllText(Path.Combine(directory, "sealed", "nested", "part.js"), "// sealed content");
+        File.WriteAllText(Path.Combine(directory, "sealed", "a-long-page-name.html"), "<!doctype html><title>sealed content</title>");
+        File.WriteAllText(Path.Combine(directory, "sealed", "caf\u00e9.html"), "<!doctype html><title>sealed content</title>");
+    }
 }
