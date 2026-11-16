@@ -306,6 +306,141 @@ describe.each<Place>(['window', 'tab'])('An agent in the %s', (place) => {
     });
 });
 
+describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in the %s', (place) => {
+    // Drawing an agent's Chat tab makes nothing: no conversation, no child process, no folder. Its conversation is made
+    // at the person's first act that needs one: a send, a chip, or opening one of the composer's menus.
+    const creates = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.create');
+    const sends = (desktop: StubDesktop) => desktop.calls.filter((each) => each.name === 'chat.send');
+    const shown = () => document.querySelector<HTMLElement>(`[data-pane="${activePanel.value}"]`)!;
+    const shownBox = () => within(shown()).getByRole('textbox', { name: 'Your message' }) as HTMLTextAreaElement;
+    const autumnChatShown = () =>
+        waitFor(() => {
+            expect(activePanel.value?.startsWith('chat:')).toBe(true);
+            expect(within(shown()).getByRole('heading', { name: 'What should Jason do in Autumn?' })).toBeTruthy();
+        });
+    const autumnApi = () => api().answerAnyRequest('route.resolve', 'route.resolve/no-route');
+    const noAutumnRow = () => expect(within(recent()).queryByRole('button', { name: 'Autumn' })).toBeNull();
+
+    it.each(['#/campaigns/cmp_2', '#/campaigns/cmp_2/chat'])(
+        'at %s, by a reload or a deep link, draws its Chat with an empty thread and the composer, and makes nothing',
+        async (address) => {
+            const { desktop } = await renderAt(place, address, autumnApi());
+            await headOf('Autumn');
+            await autumnChatShown();
+            expect(location.hash).toBe('#/campaigns/cmp_2/chat');
+            expect(shownBox().value).toBe('');
+            expect(creates(desktop)).toEqual([]);
+            noAutumnRow();
+        },
+    );
+
+    it('by its tab, Back and Forward, and the Agents list’s Chat, makes nothing', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/people', autumnApi());
+        await headOf('Autumn');
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await autumnChatShown();
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        await back('#/campaigns/cmp_2/chat');
+        await autumnChatShown();
+        await forward('#/campaigns/cmp_2/people');
+        await pageShown();
+        flush(() => here().dock.show('campaigns'));
+        const row = await waitFor(() => {
+            const found = [...document.querySelectorAll<HTMLElement>('[data-pane="campaigns"] tr')].find((each) =>
+                each.textContent?.includes('Autumn'),
+            );
+            expect(found).toBeTruthy();
+            return found!;
+        });
+        fireEvent.click(within(row).getByRole('button', { name: 'Chat' }));
+        await autumnChatShown();
+        expect(creates(desktop)).toEqual([]);
+        noAutumnRow();
+    });
+
+    it('a keystroke makes nothing, and the words stay through the tabs', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'not yet' } });
+        fireEvent.click(tab(/^People/));
+        await pageShown();
+        fireEvent.click(tab('Chat'));
+        await autumnChatShown();
+        expect(shownBox().value).toBe('not yet');
+        expect(creates(desktop)).toEqual([]);
+    });
+
+    it('a send makes exactly one conversation and sends to it, which Recent lists from then on', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        // The desktop names a conversation it makes after the agent, as the runtime answers it.
+        desktop.names.set('cmp_2', 'Autumn');
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'Find me ten founders' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        expect(creates(desktop).map((each) => each.args[0])).toEqual(['cmp_2']);
+        expect(sends(desktop)[0]!.args[1]).toBe('Find me ten founders');
+        await waitFor(() => expect(within(recent()).getByRole('button', { name: 'Autumn' })).toBeTruthy());
+        // Still the agent's Chat, under its header, at its address.
+        expect(location.hash).toBe('#/campaigns/cmp_2/chat');
+        expect(head()?.querySelector('h2')?.textContent).toBe('Autumn');
+    });
+
+    it('two quick sends make one conversation, the second waiting for the first turn', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'first' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        fireEvent.change(shownBox(), { target: { value: 'second' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        expect(creates(desktop)).toHaveLength(1);
+        expect(sends(desktop)[0]!.args[1]).toBe('first');
+        await waitFor(() => expect(within(shown()).getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        expect(within(shown()).getByText('second')).toBeTruthy();
+    });
+
+    it('a chip makes exactly one conversation and sends its words', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        const chip = shown().querySelector<HTMLButtonElement>('.sugs .sug')!;
+        fireEvent.click(chip);
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        expect(creates(desktop)).toHaveLength(1);
+        expect(sends(desktop)[0]!.args[1]).toBeTruthy();
+    });
+
+    it('opening the model menu makes exactly one conversation, then opens the menu in it', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        await waitFor(() => expect(within(shown()).getByRole('button', { name: /^Model: / })).toBeTruthy());
+        fireEvent.click(within(shown()).getByRole('button', { name: /^Model: / }));
+        await waitFor(() =>
+            expect(
+                within(shown())
+                    .getByRole('button', { name: /^Model: / })
+                    .getAttribute('aria-expanded'),
+            ).toBe('true'),
+        );
+        expect(creates(desktop)).toHaveLength(1);
+        expect(sends(desktop)).toEqual([]);
+        expect(location.hash).toBe('#/campaigns/cmp_2/chat');
+    });
+
+    it('a create refused leaves the words in the box and says why in the chat', async () => {
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'keep these words' } });
+        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        await waitFor(() => expect(within(shown()).getByText(/could not make the conversation/)).toBeTruthy());
+        expect(shownBox().value).toBe('keep these words');
+        expect(sends(desktop)).toEqual([]);
+    });
+});
+
 describe('The conversation’s acts in the agent’s “…”', () => {
     const more = () => within(head()!).getByRole('button', { name: "More for this agent's conversation" });
 

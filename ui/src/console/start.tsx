@@ -2,10 +2,10 @@ import { effect, signal } from '@preact/signals-react';
 import { can, cannotHere, releasesPage } from '../platform/places';
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { DesktopChatMode } from '../platform/desktop';
-import { fullAccessStanding, takeBackStanding } from '../platform/full-access';
+import { takeBackStanding } from '../platform/full-access';
 import { t } from '../platform/i18n';
 import { mode, type Mode } from '../platform/mode';
-import { ChatNotes, hostOf, isRefusal, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
+import { ChatNotes, hostOf, isRefusal, newChatMode, sendTurn, startChat, tabLockedSentence, tabMaySend } from './chat';
 import { moded, newChat, told, type Chat } from './chat-model';
 import * as connect from './connect';
 import { chatHosts } from './live';
@@ -46,9 +46,7 @@ export const startMode = signal<DesktopChatMode | null>(null);
  * chats start in it and the host that chat would run on can take it, Ask first otherwise.
  */
 function defaultMode(): DesktopChatMode {
-    // A tab never makes a chat in Full access: it could send nothing to it, so the standing choice is not its default.
-    if (inTab() || fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
-    return hostOf(startPick.value)?.fullAccess === null ? 'full_access' : 'ask_first';
+    return newChatMode(startPick.value);
 }
 
 /** The mode the start screen shows and the chat it makes ends up in. */

@@ -1,5 +1,14 @@
 import { computed, effect } from '@preact/signals-react';
-import { useCallback, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    type FormEvent,
+    type KeyboardEvent,
+    type MouseEvent,
+    type RefObject,
+} from 'react';
 import { useApi } from '../api/context';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
@@ -229,6 +238,103 @@ async function newChatHost(): Promise<string | undefined> {
     return hostOf(newChat('', null))?.id;
 }
 
+/** What marks the id an agent's chat is drawn under before its conversation is made: never one the desktop gives. */
+const unmadeMark = 'unmade:';
+
+/** Whether a chat is an agent's drawn before its conversation was made (`unmadeChat`). */
+export const isUnmade = (id: string): boolean => id.startsWith(unmadeMark);
+
+/** An unmade chat as it is drawn: named as the console's list names its agent, in the mode its conversation will take. */
+function unmadeAsDrawn(chat: Chat): Chat {
+    const title = campaigns.value.find((each) => each.id === chat.campaignId)?.name ?? chat.title;
+    const mode = newChatMode(chat);
+    return title === chat.title && mode === chat.mode ? chat : { ...chat, title, mode };
+}
+
+/**
+ * An agent's Chat with no conversation yet: drawn with the agent's header, an empty thread and the composer, and nothing
+ * asked of the desktop for it, so drawing it starts no process and writes nothing. Its conversation is made at the
+ * person's first act that needs one: a send, a chip, or opening one of the composer's menus (`makeUnmade`). Typing alone
+ * makes nothing; the words stay in its record, as a draft does.
+ */
+export function unmadeChat(campaign: { id: string; name: string }): string {
+    const id = unmadeMark + campaign.id;
+    if (!chats.value[id]) chats.value = { ...chats.value, [id]: newChat(id, null, campaign) };
+    return id;
+}
+
+/**
+ * The mode a chat made now would start in, by the standing choices: Full access when the standing choice says new chats
+ * start in it and the host it would run on can take it, Ask first otherwise. A tab never makes a chat in Full access: it
+ * could send nothing to it, so the standing choice is not its default.
+ */
+export function newChatMode(pick: Chat): DesktopChatMode {
+    if (inTab() || fullAccessStanding.value?.newChats !== true || setup.value === null) return 'ask_first';
+    return hostOf(pick)?.fullAccess === null ? 'full_access' : 'ask_first';
+}
+
+/** The conversations being made for unmade chats, by the unmade chat's id: one at a time, whatever asks for it. */
+const making = new Map<string, Promise<string | null>>();
+
+/** Whether an unmade chat's conversation is being made now: the person's acts meanwhile wait for it. */
+export const makingNow = (id: string): boolean => making.has(id);
+
+/** Who is told that an unmade chat became a conversation: the area, which shows the conversation in its place. */
+const madeHooks = new Set<(from: string, to: string) => void>();
+
+export function onChatMade(hook: (from: string, to: string) => void): () => void {
+    madeHooks.add(hook);
+    return () => madeHooks.delete(hook);
+}
+
+/**
+ * Makes an unmade chat's conversation, the one the desktop gives for its agent, which two places on one agent share; a
+ * second ask while it is made gets the same answer. The words typed and a message waiting go with it; the unmade chat
+ * goes, and the area shows the conversation in its place. Refused, the unmade chat stays and says why. Resolves with the
+ * conversation's id, or null.
+ */
+export function makeUnmade(id: string): Promise<string | null> {
+    const pending = making.get(id);
+    if (pending) return pending;
+    const chat = chats.value[id];
+    if (!chat || chat.campaignId === null) return Promise.resolve(null);
+    const campaign = { id: chat.campaignId, name: unmadeAsDrawn(chat).title };
+    const made = (async () => {
+        const real = await startChat(campaign);
+        const now = chats.value[id];
+        if (real === null) {
+            const why = conversationsFailure.value ?? 'The conversation could not be made.';
+            if (now)
+                changeChat(id, (each) =>
+                    told(each.waiting !== null && !each.draft.trim() ? takenBack(each) : each, why),
+                );
+            return null;
+        }
+        if (now)
+            changeChat(real, (each) => ({
+                ...each,
+                draft: each.draft.trim() ? each.draft : now.draft,
+                waiting: each.waiting ?? now.waiting,
+                held: each.waiting === null ? now.held : each.held,
+            }));
+        const rest = { ...chats.value };
+        delete rest[id];
+        chats.value = rest;
+        for (const hook of madeHooks) hook(id, real);
+        return real;
+    })();
+    making.set(id, made);
+    void made.finally(() => making.delete(id));
+    return made;
+}
+
+/** Runs `then` with a chat's panel once the area has drawn it, or gives up after a few frames. */
+function whenDrawn(id: string, then: (panel: HTMLElement) => void, tries = 20): void {
+    const panel = document.querySelector<HTMLElement>(`.chat-panel[data-chat="${id}"]`);
+    if (panel && !panel.closest('[hidden]')) return then(panel);
+    if (tries > 0) setTimeout(() => whenDrawn(id, then, tries - 1), 0);
+}
+
 /** The take-back in the mode menu: the desktop forgets the standing choice; the chat stays in the mode it is in. */
 export function takeBackChoice(id: string): void {
     if (!can('fullAccess.takeBack')) return;
@@ -372,6 +478,14 @@ export function heldHostOf(chat: Chat): DesktopHost | null {
  * turn of those the page cannot start ends with its error, and the words are given back as a failed turn gives them.
  */
 export function sendTurn(id: string, text: string, resent = false, mode?: DesktopChatMode): void {
+    if (isUnmade(id)) {
+        void makeUnmade(id).then((real) => {
+            if (real !== null) return sendTurn(real, text, resent, mode);
+            // Refused: the words go back to the box, unless the person typed others meanwhile.
+            changeChat(id, (each) => (each.draft.trim() ? each : typed(each, text)));
+        });
+        return;
+    }
     // A chat a tab may not send to takes no message from it, whichever way the message came.
     if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) return;
     const chat = chats.value[id];
@@ -1020,8 +1134,11 @@ function threadOf(chatId: string) {
         view: Html;
     } | null = null;
     return computed(() => {
-        const chat = chats.value[chatId];
-        if (!chat) return html``;
+        const record = chats.value[chatId];
+        if (!record) return html``;
+        // An unmade chat is drawn with its agent's name as the console reads it, which may come after it is drawn, and
+        // in the mode its conversation will take.
+        const chat = isUnmade(chatId) ? unmadeAsDrawn(record) : record;
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
@@ -1195,6 +1312,35 @@ const agentMore = (): HTMLElement | null => document.querySelector<HTMLElement>(
  * One chat. `headed` where the console draws the agent's header above an agent's chat: its "…" holds the conversation's
  * acts and the header the agent's state and move, so the chat's bar holds only the box that renames the conversation.
  */
+/**
+ * Opening one of an unmade chat's menus is a choice about the conversation, so it is made first: the press is held, the
+ * conversation made, and the same menu opened in its panel. A key that does not open a menu passes.
+ */
+function openMade(event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>, chatId: string): void {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[aria-haspopup="menu"]');
+    if (!button) return;
+    if (
+        'key' in event &&
+        event.key !== 'ArrowDown' &&
+        event.key !== 'ArrowUp' &&
+        event.key !== 'Enter' &&
+        event.key !== ' '
+    )
+        return;
+    event.preventDefault();
+    event.stopPropagation();
+    const menus = [...event.currentTarget.querySelectorAll('button[aria-haspopup="menu"]')];
+    const which = menus.indexOf(button);
+    void makeUnmade(chatId).then((real) => {
+        if (real === null) return;
+        whenDrawn(real, (panel) => {
+            const again = panel.querySelectorAll<HTMLButtonElement>('.crow button[aria-haspopup="menu"]')[which];
+            again?.focus();
+            again?.click();
+        });
+    });
+}
+
 export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?: boolean }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -1231,7 +1377,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         else if (wasRemoving.current) (removeButton.current ?? agentMore())?.focus();
         wasRemoving.current = removing;
     }, [removing]);
-    const chat = record;
+    const unmade = isUnmade(chatId);
+    // An unmade chat shows the mode the conversation will take by the standing choices, as a create would give it.
+    const chat = record && unmade ? unmadeAsDrawn(record) : record;
     // Reply is offered unless the campaign's enrolment is routed to another plugin: read when the chat is of a draft campaign
     // while Reply is not connected, and read again if the campaign or what is connected changes.
     const draftCampaignId =
@@ -1281,8 +1429,15 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         event?.preventDefault();
         const current = chats.value[chatId];
         if (tabLocked || !current || !host || sendHeld(onHost(current, host.id), host)) return;
+        // A message while the turn runs, or while the unmade chat's conversation is made, waits for it.
         if (current.running) {
             changeChat(chatId, kept);
+            return;
+        }
+        if (makingNow(chatId)) {
+            changeChat(chatId, (each) =>
+                each.waiting !== null || !each.draft.trim() ? each : { ...each, waiting: each.draft.trim(), draft: '' },
+            );
             return;
         }
         if (!current.draft.trim()) return;
@@ -1300,7 +1455,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     };
     const underHead = headed && chat.campaignId !== null && !chat.main;
     return (
-        <div className="chat-panel" ref={panel}>
+        <div className="chat-panel" ref={panel} data-chat={chatId}>
             <div className="chat-bar">
                 {chat.main ? null : chat.renaming === null ? (
                     !underHead && (
@@ -1496,7 +1651,11 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                         onChange={(event) => changeChat(chatId, (each) => typed(each, event.target.value))}
                         onKeyDown={enter}
                     />
-                    <div className="crow">
+                    <div
+                        className="crow"
+                        onClickCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                        onKeyDownCapture={unmade ? (event) => openMade(event, chatId) : undefined}
+                    >
                         <ChatControls
                             chat={chat}
                             change={(next) => changeChat(chatId, next)}

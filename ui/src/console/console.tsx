@@ -19,11 +19,21 @@ import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
-import { readAgent } from './agent-facts';
+import { agentFacts, readAgent } from './agent-facts';
 import { AgentHead } from './agent-head';
 import { agentChatOf, agentChatRoute, agentOfChat, namesPlace, shownAgent } from './agent-place';
 import { listen } from './actions';
-import { askFeed, catchUpFeed, ChatPanel, handLine, openConversation, reloadConversations, startChat } from './chat';
+import {
+    askFeed,
+    catchUpFeed,
+    ChatPanel,
+    handLine,
+    onChatMade,
+    openConversation,
+    reloadConversations,
+    startChat,
+    unmadeChat,
+} from './chat';
 import { received } from './chat-model';
 import * as campaigns from './campaigns';
 import * as connect from './connect';
@@ -263,8 +273,31 @@ async function chatOfAgent(id: string): Promise<string | null> {
     if (held) return held.id;
     const kept = conversations.value.find((each) => !each.main && each.campaignId === id);
     if (kept) return openConversation(kept.id);
-    const name = campaigns.campaigns.value.find((each) => each.id === id)?.name ?? '';
-    return startChat({ id, name });
+    // The desktop's list read afresh, which may not have been read yet when an address opens the agent.
+    await reloadConversations();
+    const listed = conversations.value.find((each) => !each.main && each.campaignId === id);
+    if (listed) return openConversation(listed.id);
+    const meanwhile = Object.values(chats.value).find((each) => !each.main && each.campaignId === id);
+    if (meanwhile) return meanwhile.id;
+    // None yet: its Chat is drawn, and its conversation made at the person's first act that needs one.
+    const name =
+        campaigns.campaigns.value.find((each) => each.id === id)?.name ?? agentFacts.value[id]?.campaign.name ?? id;
+    return unmadeChat({ id, name });
+}
+
+/** An unmade chat became its conversation: the conversation takes its place in the area, shown if it was. */
+function chatMade(from: string, to: string): void {
+    const was = chatPane(from);
+    const now = chatPane(to);
+    lastChats = lastChats
+        .map((each) => (each === was ? now : each))
+        .filter((each, at, all) => all.indexOf(each) === at);
+    if (unaddressed === was) unaddressed = now;
+    const shown = activePanel.value === was;
+    inArea.value = inArea.value
+        .map((each) => (each === was ? now : each))
+        .filter((each, at, all) => all.indexOf(each) === at);
+    if (shown) reveal(now);
 }
 
 /** Shows an agent's Chat tab, at its own address, once its conversation is open; a move made meanwhile wins. */
@@ -434,7 +467,9 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
             seen = href(to);
             followHistory(to);
         });
+        const made = onChatMade(chatMade);
         return () => {
+            made();
             followed();
             unbound();
         };

@@ -14,7 +14,8 @@ import { chats, conversations } from './state';
 import { bringForward } from '../test/area';
 
 // A campaign's Chat tab, in the desktop's one area: the first tab of the agent's header, it opens the campaign's one
-// conversation the desktop keeps, made on first use, as the Campaigns list's Chat does.
+// conversation the desktop keeps, as the Campaigns list's Chat does; where there is none yet, it is made at the person's
+// first message, and drawing the tab makes nothing.
 
 function renderConsole(fake: FakeApi, desktop: StubDesktop = chatDesktop()): StubDesktop {
     watch(fake);
@@ -89,13 +90,19 @@ afterEach(() => {
 });
 
 describe('a campaign’s Chat tab in the desktop', () => {
-    it('opens the campaign’s one conversation, made on first use, and choosing Chat again brings that one forward', async () => {
+    it('makes the campaign’s one conversation at the first message, and choosing Chat again brings that one forward', async () => {
         const desktop = renderConsole(springApi());
-        // Open opens the agent on its first tab, its Chat: the conversation is made then.
+        // Open opens the agent on its first tab, its Chat, and makes nothing.
         const header = await openSpring();
-        await waitFor(() => expect(about('cmp_1')).toHaveLength(1));
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         expect(within(header).getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+        expect(creates(desktop, 'cmp_1')).toBe(0);
+        // The first message makes it.
+        const box = screen.getByRole('textbox', { name: 'Your message' });
+        fireEvent.change(box, { target: { value: 'Who replied this week?' } });
+        fireEvent.keyDown(box, { key: 'Enter' });
+        await waitFor(() => expect(creates(desktop, 'cmp_1')).toBe(1));
+        await waitFor(() => expect(about('cmp_1')).toHaveLength(1));
 
         // Another tab, then Chat again: the one conversation is brought forward, and nothing is made again.
         choose(header, /^People/);
