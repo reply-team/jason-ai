@@ -19,4 +19,11 @@ export const demoFrame = {
  * (`desktop/src/window-frame.ts`, `stripHeight`, through `demoGeometry` in `desktop/src/demo-page.ts`); a guard holds
  * the two equal.
  */
-export const demoStrip = { height: 38 } as const;
+export const demoStrip = {
+    height: 38,
+    /**
+     * The narrowest the page is shown at, the desktop's window's own least width (`desktop/src/main.ts`, `minWidth`):
+     * below it the page's narrow layout is not one it was built and walked in, so it keeps this width and scrolls.
+     */
+    narrowest: 900,
+} as const;

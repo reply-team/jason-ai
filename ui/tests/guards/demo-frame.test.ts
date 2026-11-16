@@ -36,6 +36,15 @@ describe('the demo’s switch over the page', () => {
         expect(page).toMatch(/export const demoGeometry = \{[^}]*\bstrip: stripHeight\b[^}]*\}/);
         expect(demoStrip.height).toBe(Number(stripHeight));
     });
+
+    it('keeps the page no narrower than the desktop’s window ever shows it, and stands above it where the tab is', () => {
+        const main = readFileSync(join(repo, 'desktop', 'src', 'main.ts'), 'utf8');
+        const widths = [...main.matchAll(/\bminWidth: (\d+),/g)].map((match) => Number(match[1]));
+        expect(widths.length).toBeGreaterThan(0);
+        expect(new Set(widths)).toEqual(new Set([demoStrip.narrowest]));
+        const css = readFileSync(join(src, 'console', 'console.css'), 'utf8');
+        expect(css).toContain(`@media (max-width: ${demoStrip.narrowest - 1}px) {\n    .jc-console.demo-view {`);
+    });
 });
 
 describe('the frame', () => {

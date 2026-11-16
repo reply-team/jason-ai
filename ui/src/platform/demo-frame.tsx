@@ -43,10 +43,14 @@ export function leaveDemo(): void {
     navigate({ screen: 'attention' } satisfies Route);
 }
 
-/** The demo's view of the tab: the frame, filling it, and the switch over the right end of the page's strip. */
+/**
+ * The demo's view of the tab: the frame, filling it, and the switch over the right end of the page's strip. Narrower than
+ * the page is ever shown in the desktop's window, the page keeps that width and scrolls sideways, and the switch stands
+ * in a strip of its own above it, where it is always in reach.
+ */
 export function DemoView() {
     const [present, setPresent] = useState<boolean | null>(null);
-    const over = useRef<HTMLDivElement>(null);
+    const view = useRef<HTMLDivElement>(null);
     useEffect(() => {
         let live = true;
         void demoPage.present().then((found) => {
@@ -57,28 +61,13 @@ export function DemoView() {
         };
     }, []);
     useEffect(() => {
-        // A value of the page's geometry, set through the CSSOM: never a style attribute in markup.
-        over.current?.style.setProperty('--demo-strip', `${demoStrip.height}px`);
+        // The page's geometry, set through the CSSOM: never a style attribute in markup.
+        view.current?.style.setProperty('--demo-strip', `${demoStrip.height}px`);
+        view.current?.style.setProperty('--demo-narrowest', `${demoStrip.narrowest}px`);
     }, []);
     return (
-        <div className="jc-console demo-view">
-            {present === true && (
-                <iframe
-                    className="demo-frame"
-                    src={demoFrame.src}
-                    sandbox={demoFrame.sandbox}
-                    allow={demoFrame.allow}
-                    referrerPolicy={demoFrame.referrerPolicy}
-                    loading={demoFrame.loading}
-                    title={demoFrame.title}
-                />
-            )}
-            {present === false && (
-                <p className="demo-missing" role="status">
-                    {t('demo.missing')}
-                </p>
-            )}
-            <div ref={over} className="demo-over">
+        <div ref={view} className="jc-console demo-view">
+            <div className="demo-over">
                 <div className="mode-switch" role="group" aria-label={t('mode.switch')}>
                     <button type="button" className="on" aria-pressed="true">
                         {t('mode.switch.demo')}
@@ -87,6 +76,24 @@ export function DemoView() {
                         {t('mode.switch.live')}
                     </button>
                 </div>
+            </div>
+            <div className="demo-stage">
+                {present === true && (
+                    <iframe
+                        className="demo-frame"
+                        src={demoFrame.src}
+                        sandbox={demoFrame.sandbox}
+                        allow={demoFrame.allow}
+                        referrerPolicy={demoFrame.referrerPolicy}
+                        loading={demoFrame.loading}
+                        title={demoFrame.title}
+                    />
+                )}
+                {present === false && (
+                    <p className="demo-missing" role="status">
+                        {t('demo.missing')}
+                    </p>
+                )}
             </div>
         </div>
     );

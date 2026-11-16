@@ -138,7 +138,10 @@ describe.each(['tab', 'none'] as const)('the demo in a browser tab (%s)', (kind)
                 .map((each) => each.textContent),
         ).toEqual(['Demo', 'Live']);
         expect(over.textContent).toBe('DemoLive');
-        expect(over.style.getPropertyValue('--demo-strip')).toBe('38px');
+        const view = document.querySelector<HTMLElement>('.demo-view')!;
+        expect(view.style.getPropertyValue('--demo-strip')).toBe('38px');
+        expect(view.style.getPropertyValue('--demo-narrowest')).toBe('900px');
+        expect(view.firstElementChild).toBe(over);
     });
 
     it('goes back to where the console was on Live, and the frame is gone', async () => {

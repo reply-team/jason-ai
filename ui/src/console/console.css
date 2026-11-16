@@ -2438,11 +2438,15 @@ body,
     }
 }
 /* The demo in a browser tab: the page in a frame that fills the tab, and the Demo | Live switch over the right end of
-   the page's own top strip, where the page leaves the place for it; the page's dot and sentence show through. */
+   the page's own top strip, where the page leaves the place for it; the page's dot and sentence show through. The page
+   is drawn light whatever the theme, so the switch over it keeps the page's light look, as the desktop's does. */
 .jc-console.demo-view {
     position: fixed;
     inset: 0;
     overflow: hidden;
+}
+.jc-console .demo-stage {
+    height: 100%;
 }
 .jc-console .demo-frame {
     display: block;
@@ -2451,18 +2455,57 @@ body,
     border: 0;
 }
 .jc-console .demo-over {
+    --demo-bg: #fff4d6;
+    --demo-line: #f2dc9c;
+    --demo-ink: #6b4e00;
+    --seg-track: rgba(20, 33, 43, 0.08);
+    --seg-on: #fff;
+    --seg-on-ink: #14212b;
+    color-scheme: light;
     position: absolute;
+    z-index: 1;
     top: 0;
     right: 0;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     height: var(--demo-strip);
     padding: 0 12px;
     color: var(--demo-ink);
     font-size: 13px;
 }
+/* The switch stands on the strip's own ground, a little wider than itself, so the page's words never show under it. */
+.jc-console .demo-over .mode-switch {
+    background: linear-gradient(var(--seg-track), var(--seg-track)), var(--demo-bg);
+    box-shadow: 0 0 0 5px var(--demo-bg);
+}
 .jc-console .demo-missing {
     margin: 0;
-    padding: calc(var(--demo-strip, 38px) + 24px) 24px 24px;
+    padding: calc(var(--demo-strip) + 24px) 24px 24px;
     color: var(--mute);
+}
+/* Narrower than the page is shown in the desktop's window: the switch in a strip of its own, the page below it at that
+   width, scrolling sideways. */
+@media (max-width: 899px) {
+    .jc-console.demo-view {
+        display: flex;
+        flex-direction: column;
+    }
+    .jc-console .demo-over {
+        position: static;
+        flex: none;
+        background: var(--demo-bg);
+        border-bottom: 1px solid var(--demo-line);
+    }
+    .jc-console .demo-stage {
+        flex: 1;
+        min-height: 0;
+        overflow-x: auto;
+    }
+    .jc-console .demo-frame {
+        min-width: var(--demo-narrowest);
+    }
+    .jc-console .demo-missing {
+        padding-top: 24px;
+    }
 }
