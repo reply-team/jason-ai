@@ -30,6 +30,7 @@ import {
     type TrendReads,
 } from './dashboard-model';
 import { toFeedLine, toFeedRow, type FeedRow } from './feed';
+import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
 import { offUnless } from './off';
 import { svg } from './icons';
@@ -469,7 +470,7 @@ function liveAgents(): Html {
             ${
                 running.length === 0
                     ? html`<div class="empty dash-no-agents">${t('dash.agents.none')}</div>`
-                    : html`<div class="tscroll" role="region" tabindex="0" aria-label="${t('dash.agents')}">
+                    : html`<div class="tscroll" ${scrollAttrs(t('dash.agents'))}>
                           <table class="t">
                               <thead>
                                   <tr>
@@ -544,7 +545,7 @@ function categories(): Html {
                           : null
                     : read.total.categories.length === 0
                       ? html`<div class="empty dash-cats-none">${t('dash.cats.none')}</div>`
-                      : html`<div class="tscroll" role="region" tabindex="0" aria-label="${t('dash.cats')}">
+                      : html`<div class="tscroll" ${scrollAttrs(t('dash.cats'))}>
                             <table class="t">
                                 <thead>
                                     <tr>

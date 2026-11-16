@@ -1,4 +1,4 @@
-import { act as flushNow, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act as flushNow, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { mode } from '../platform/mode';
@@ -336,15 +336,36 @@ describe('the categories card', () => {
         expect(words(card.querySelector('.hd .dash-period')!)).toBe('the last 30 days');
     });
 
-    it('keeps the table a table, in a named box a keyboard can reach, which scrolls where the room is narrow', async () => {
-        renderConsole();
-        await open();
-        await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
-        const box = within(dash()).getByRole('region', { name: 'Replies by category' });
-        expect(box.getAttribute('tabindex')).toBe('0');
-        expect(box.classList.contains('tscroll')).toBe(true);
-        expect(within(box).getByRole('table')).toBeTruthy();
-        expect(box.querySelectorAll('tbody tr').length).toBe(2);
+    it('keeps the table a table, in a box that is a named region in the keyboard order where the room is narrow', async () => {
+        const original = window.matchMedia;
+        const narrow = (matches: boolean) =>
+            (window.matchMedia = (() => ({
+                matches,
+                addEventListener: () => undefined,
+                removeEventListener: () => undefined,
+            })) as unknown as typeof window.matchMedia);
+        try {
+            narrow(false);
+            renderConsole();
+            await open();
+            await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
+            const wide = dash().querySelector<HTMLElement>('.dash-categories .tscroll')!;
+            expect(wide.getAttribute('tabindex')).toBeNull();
+            expect(wide.getAttribute('role')).toBeNull();
+            expect(within(wide).getByRole('table')).toBeTruthy();
+            cleanup();
+            narrow(true);
+            renderConsole();
+            await open();
+            await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
+            const box = within(dash()).getByRole('region', { name: 'Replies by category' });
+            expect(box.getAttribute('tabindex')).toBe('0');
+            expect(box.classList.contains('tscroll')).toBe(true);
+            expect(within(box).getByRole('table')).toBeTruthy();
+            expect(box.querySelectorAll('tbody tr').length).toBe(2);
+        } finally {
+            window.matchMedia = original;
+        }
     });
 
     it('says it is reading while the first answer is awaited, and carries no failure sentence', async () => {

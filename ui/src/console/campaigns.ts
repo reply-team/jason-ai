@@ -4,6 +4,7 @@ import { parseRoute } from '../router';
 import * as store from '../screens/campaigns/store';
 import { act, define } from './actions';
 import { offUnless } from './off';
+import { scrollAttrs } from './scroll-box';
 import { html, type Html } from './html';
 import { toCampaignRow } from './live';
 import { here } from './state';
@@ -80,7 +81,7 @@ export function campaignsView(): Html {
                             New chat
                         </button>
                     </div>`
-                  : html`<div class="tscroll" role="region" tabindex="0" aria-label="Agents">
+                  : html`<div class="tscroll" ${scrollAttrs('Agents')}>
                         <table class="t">
                             <thead>
                                 <tr>

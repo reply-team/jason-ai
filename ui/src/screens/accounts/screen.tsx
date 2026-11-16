@@ -8,6 +8,8 @@ import { useProviderAccounts } from './provider-card';
 import { channelName, outcomeTone, outcomeWords } from './words';
 import { relative } from '../../time/format';
 
+import { ScrollBox } from '../../layout/scroll-box';
+
 export function AccountsScreen() {
     const api = useApi();
     const provider = useProviderAccounts();
@@ -55,7 +57,7 @@ export function AccountsScreen() {
                         ) : notifications.channels.length === 0 ? (
                             <p className="empty">No channel is set up, so Jason sends you no notifications.</p>
                         ) : (
-                            <div className="tablewrap" role="region" tabIndex={0} aria-label="Notification channels">
+                            <ScrollBox label="Notification channels">
                                 <table className="tbl">
                                     <thead>
                                         <tr>
@@ -80,7 +82,7 @@ export function AccountsScreen() {
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
+                            </ScrollBox>
                         )}
                         {notifications?.last_at && (
                             <p className="hint">

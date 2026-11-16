@@ -72,6 +72,8 @@ function FullAccessCard() {
     );
 }
 
+import { ScrollBox } from '../../layout/scroll-box';
+
 export function SystemScreen() {
     const api = useApi();
     useEffect(() => {
@@ -148,7 +150,7 @@ export function SystemScreen() {
                                 Plugins <span className="badge">{info.plugins.active_count} active</span>
                             </h2>
                             {store.plugins.value.length > 0 ? (
-                                <div className="tablewrap" role="region" tabIndex={0} aria-label="Plugins">
+                                <ScrollBox label="Plugins">
                                     <table className="tbl">
                                         <thead>
                                             <tr>
@@ -173,7 +175,7 @@ export function SystemScreen() {
                                             ))}
                                         </tbody>
                                     </table>
-                                </div>
+                                </ScrollBox>
                             ) : (
                                 <p className="empty">
                                     No plugin is installed; nothing reaches a provider until one is, and a route names
@@ -257,7 +259,7 @@ export function SystemScreen() {
                                     <code>jason ui open</code>
                                 </span>
                             </h2>
-                            <div className="tablewrap" role="region" tabIndex={0} aria-label="Paired browsers">
+                            <ScrollBox label="Paired browsers">
                                 <table className="tbl">
                                     <thead>
                                         <tr>
@@ -299,7 +301,7 @@ export function SystemScreen() {
                                         })}
                                     </tbody>
                                 </table>
-                            </div>
+                            </ScrollBox>
                             {(store.tokens.value?.items ?? []).some((t) => t.id !== session.tokenId.value) && (
                                 <div className="btn-row">
                                     <button
