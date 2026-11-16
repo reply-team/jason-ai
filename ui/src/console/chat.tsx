@@ -11,6 +11,7 @@ import { accountsCard } from './card-accounts';
 import { placeCard } from './card-places';
 import { aiCaption, cardHead, cardReads, forgetCards } from './card-frame';
 import { needsCard } from './card-needs';
+import { lists, ownListCard } from './card-own-list';
 import { peopleCard } from './card-people';
 import { statusCard } from './card-status';
 import {
@@ -631,6 +632,7 @@ const kindWords: Readonly<Record<CardKind, string>> = {
     ai_setup: 'the card that opens Connect',
     reply_setup: 'the card that opens Accounts',
     plan: 'a plan card',
+    own_list: 'a list card',
 };
 
 /** The line drawn in place of a card that did not draw, in the desktop's words; never anything the block held. */
@@ -653,6 +655,7 @@ const cardHeaders: Readonly<Record<CardKind, string>> = {
     ai_setup: 'AI',
     reply_setup: 'Reply',
     plan: 'Jason’s proposal',
+    own_list: 'Your list',
 };
 
 /** The words a choice says once it no longer stands, by why; none while it stands or when another entry locked it. */
@@ -793,6 +796,8 @@ function cardView(
                 case 'reply_setup':
                     // It only leads to a place, and reads nothing.
                     return placeCard(reading.card.kind, cardHeaders[reading.card.kind]);
+                case 'own_list':
+                    return ownListCard(chat, index, reading.card, last);
             }
     }
 }
@@ -1011,6 +1016,7 @@ function threadOf(chatId: string) {
         asked: unknown;
         read: unknown;
         proposed: unknown;
+        listed: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -1035,6 +1041,8 @@ function threadOf(chatId: string) {
         // A card draws what it read, once its read is answered, and a plan card the drafts the person opened.
         const read = cardReads.value[chatId];
         const proposed = proposals.value[chatId];
+        // A list card draws what its press did, and its rows shown whole.
+        const listed = lists.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
@@ -1048,11 +1056,25 @@ function threadOf(chatId: string) {
             last.asked === asked &&
             last.read === read &&
             last.proposed === proposed &&
+            last.listed === listed &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
         if (!same)
-            last = { chat, host, named, now, counts, held, card, asked, read, proposed, view: threadView(chat, host) };
+            last = {
+                chat,
+                host,
+                named,
+                now,
+                counts,
+                held,
+                card,
+                asked,
+                read,
+                proposed,
+                listed,
+                view: threadView(chat, host),
+            };
         return last!.view;
     });
 }
