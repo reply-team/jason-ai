@@ -11,44 +11,57 @@ import {
 } from './senders-model';
 
 // The reads behind an approval card's sender line (`senders-model.ts` says what the line says): `sender.list` of the
-// approval's campaign on the send's channel, once per campaign and channel while a chat or Needs you is drawn.
+// approval's campaign on the send's channel. Cards drawn together share one read of a campaign's accounts; a card drawn
+// after a read began (a new approval, the next item, a re-ask) reads again, so no line is older than its card.
 
-/** One drawing's reads of the accounts, by campaign and channel: each read at most once while the drawing lasts. */
+/** The reads of a chat's cards or of a panel, by campaign and channel: the newest of each. */
 export interface SenderReads {
     readonly lookups: Signal<Readonly<Record<string, SenderLookup>>>;
 }
 
 export const senderReads = (): SenderReads => ({ lookups: signal({}) });
 
-/** The reads of one drawing under way, by campaign and channel: one waits for the one before it. */
+/** The order of drawings and reads: a card takes a mark when it is drawn, a read when it begins. */
+let marks = 0;
+export const senderMark = (): number => ++marks;
+
+/** The lookup a card drawn at `drawn` may show: one begun after it was drawn, never an older one. */
+export function lookupFor(reads: SenderReads, asked: SenderAsked, drawn: number): SenderLookup | undefined {
+    const lookup = reads.lookups.value[senderKey(asked)];
+    return lookup !== undefined && lookup.started > drawn ? lookup : undefined;
+}
+
+/** The reads under way, by holder and by campaign and channel: one waits for the one before it. */
 const under = new WeakMap<SenderReads, Map<string, Promise<void>>>();
 
 /**
- * Reads the campaign's accounts on the send's channel, the whole team's, page after page while the account is not found
- * and the provider has more, at most `SENDER_PAGES` pages; a drawing reads each page once, whichever card asks. A failed
- * page is kept with what the runtime said; a pairing that has ended keeps nothing, and the session answers for it.
+ * Reads the campaign's accounts on the send's channel for a card drawn at `drawn`, the whole team's, page after page
+ * while the account is not found and the provider has more, at most `SENDER_PAGES` pages. A read begun after the card
+ * was drawn is shared; an older one is read again. A failed page is kept with what the runtime said; a pairing that
+ * has ended keeps nothing, and the session answers for it.
  */
-export function readSender(api: Api, reads: SenderReads, asked: SenderAsked): Promise<void> {
+export function readSender(api: Api, reads: SenderReads, asked: SenderAsked, drawn: number): Promise<void> {
     let chains = under.get(reads);
     if (chains === undefined) {
         chains = new Map();
         under.set(reads, chains);
     }
     const key = senderKey(asked);
-    const next = (chains.get(key) ?? Promise.resolve()).then(() => pageUntilFound(api, reads, asked));
+    const next = (chains.get(key) ?? Promise.resolve()).then(() => pageUntilFound(api, reads, asked, drawn));
     chains.set(key, next);
     return next;
 }
 
-async function pageUntilFound(api: Api, reads: SenderReads, asked: SenderAsked): Promise<void> {
+async function pageUntilFound(api: Api, reads: SenderReads, asked: SenderAsked, drawn: number): Promise<void> {
     const key = senderKey(asked);
     for (;;) {
-        const lookup = reads.lookups.value[key];
+        const lookup = lookupFor(reads, asked, drawn);
         const body = nextSenderRequest(lookup, asked);
         if (body === null) return;
+        const started = lookup?.started ?? senderMark();
         let kept: SenderLookup;
         try {
-            kept = withPage(lookup, await api.call<SenderListResponse>('sender.list', body));
+            kept = withPage(lookup, await api.call<SenderListResponse>('sender.list', body), started);
         } catch (error) {
             if (error instanceof Unpaired) return;
             kept = withFailure(
@@ -56,6 +69,7 @@ async function pageUntilFound(api: Api, reads: SenderReads, asked: SenderAsked):
                 error instanceof ApiError
                     ? { code: error.code, message: error.message }
                     : { code: null, message: String(error) },
+                started,
             );
         }
         reads.lookups.value = { ...reads.lookups.value, [key]: kept };

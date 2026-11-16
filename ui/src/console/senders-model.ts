@@ -7,31 +7,32 @@ import type { Said } from './waiting-model';
 // fact of the moment it was read, not a promise of what a recipient sees; and it holds no act: an approval is approved
 // by its whole read alone (`approvalGate`).
 
-/** The read a card's line needs: the approval's campaign, the channel its send consumes and the account it names. */
+/**
+ * The read a card's line needs: the approval's campaign, the channel its send consumes, the account it names, and the
+ * plugin that sends it, whose accounts alone the line may speak of.
+ */
 export interface SenderAsked {
     campaignId: string;
     channel: string;
     externalId: string;
+    pluginId: string;
 }
-
-/** The channels `sender.list` reads one at a time. */
-const channels = new Set(['email', 'linkedin']);
 
 const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /**
- * What an approval's line reads: only an approval whose input names a sender, an account by its identifier, on a channel
- * of its own. A reply, a start and an enrolment name none, so they draw no line.
+ * What an approval's line reads: only an approval whose input names a sender, an account by its identifier, on email.
+ * What a sending name means is known for a mailbox, so a LinkedIn message or an invitation draws no line, and neither
+ * does a reply, a start or an enrolment, which name no account.
  */
 export function senderAsked(approval: Approval | undefined): SenderAsked | null {
     if (approval === undefined) return null;
     const args = record(record(approval.subject['input'])?.['args']);
-    const channel = args?.['channel'];
     const externalId = record(args?.['sender'])?.['external_id'];
-    if (typeof channel !== 'string' || !channels.has(channel)) return null;
+    if (args?.['channel'] !== 'email') return null;
     if (typeof externalId !== 'string' || externalId === '') return null;
-    return { campaignId: approval.campaign_id, channel, externalId };
+    return { campaignId: approval.campaign_id, channel: 'email', externalId, pluginId: approval.plugin_id };
 }
 
 /** How many accounts one page asks for, and how many pages a line reads before it stops looking. */
@@ -40,6 +41,8 @@ export const SENDER_PAGES = 5;
 
 /** What the reads of one campaign's accounts on one channel found, page by page. */
 export interface SenderLookup {
+    /** When the read began, in the order of drawings and reads: a card drawn after it reads again. */
+    started: number;
     /** The plugin that answered: the provider the line names. */
     provider: string;
     accounts: readonly SenderAccount[];
@@ -53,7 +56,9 @@ export type SenderLine =
     | { kind: 'named'; provider: string; name: string }
     | { kind: 'unnamed'; provider: string }
     | { kind: 'unlisted'; provider: string }
-    | { kind: 'unread'; said: Said | null };
+    | { kind: 'unread'; said: Said | null }
+    /** The accounts were listed by another plugin than the one that sends: they say nothing of this mailbox. */
+    | { kind: 'elsewhere' };
 
 /** The provider by its plugin's id, in the words a person knows it by where Jason ships it; else the id as it is. */
 const providers: Readonly<Record<string, string>> = { reply: 'Reply' };
@@ -61,13 +66,15 @@ export const providerName = (pluginId: string): string => providers[pluginId] ??
 
 /**
  * Pure: what the line says of one account from what the reads found. Nothing while the account is still being looked for.
- * An account found says its name, or that the provider holds none; one the provider's whole list leaves out is not
- * listed now; a page that failed, or a list longer than the pages read, says the name could not be read.
+ * Accounts another plugin listed than the one that sends say nothing of it. An account found says its name, or that the
+ * provider holds none; one the provider's whole list leaves out is not listed now; a page that failed, or a list longer
+ * than the pages read, says the name could not be read.
  */
-export function senderLine(lookup: SenderLookup | undefined, externalId: string): SenderLine | null {
+export function senderLine(lookup: SenderLookup | undefined, asked: SenderAsked): SenderLine | null {
     if (lookup === undefined) return null;
+    if (lookup.pages > 0 && lookup.provider !== asked.pluginId) return { kind: 'elsewhere' };
     const provider = providerName(lookup.provider);
-    const found = lookup.accounts.find((account) => account.external_id === externalId);
+    const found = lookup.accounts.find((account) => account.external_id === asked.externalId);
     if (found !== undefined)
         return found.name !== null && found.name.trim() !== ''
             ? { kind: 'named', provider, name: found.name }
@@ -77,17 +84,42 @@ export function senderLine(lookup: SenderLookup | undefined, externalId: string)
     return { kind: 'unlisted', provider };
 }
 
-/** The line in the desktop's words, and whether the sentence that says when it was read stands under it. */
-export function senderWords(line: SenderLine): { text: string; code: string | null; when: boolean } {
+/** A line's words: the sentence, the runtime's code and words where it refused, and whether when it was read follows. */
+export interface SenderWords {
+    text: string;
+    code: string | null;
+    message: string | null;
+    when: boolean;
+}
+
+const said = (text: string, when: boolean): SenderWords => ({ text, code: null, message: null, when });
+
+/**
+ * The line in the desktop's words, or null for a line that says nothing. Why a name could not be read is said as it is
+ * known: the runtime's code and words, or the pages that ran out.
+ */
+export function senderWords(line: SenderLine): SenderWords | null {
     switch (line.kind) {
         case 'named':
-            return { text: `Sending name at ${line.provider} now: ${line.name}`, code: null, when: true };
+            return said(`Sending name at ${line.provider} now: ${line.name}`, true);
         case 'unnamed':
-            return { text: `${line.provider} holds no sending name for this mailbox.`, code: null, when: true };
+            return said(`${line.provider} holds no sending name for this mailbox.`, true);
         case 'unlisted':
-            return { text: `${line.provider} does not list this mailbox now.`, code: null, when: true };
+            return said(`${line.provider} does not list this mailbox now.`, true);
         case 'unread':
-            return { text: 'The sending name could not be read now.', code: line.said?.code ?? null, when: false };
+            return line.said === null
+                ? said(
+                      `The sending name could not be read: the provider lists more accounts than the ${SENDER_PAGES} pages read.`,
+                      false,
+                  )
+                : {
+                      text: 'The sending name could not be read. The runtime said:',
+                      code: line.said.code,
+                      message: line.said.message,
+                      when: false,
+                  };
+        case 'elsewhere':
+            return null;
     }
 }
 
@@ -98,22 +130,27 @@ export const senderKey = (asked: SenderAsked): string => `${asked.campaignId}/${
 
 /**
  * The next page to read for an account, or null once the line is decided: the first page with no offset, each next one
- * at the offset of the pages read, the whole team's accounts on the send's channel.
+ * at the count of accounts the pages before it returned, since a page may come back short with more to follow; the whole
+ * team's accounts on the send's channel.
  */
 export function nextSenderRequest(lookup: SenderLookup | undefined, asked: SenderAsked): SenderListRequest | null {
-    if (senderLine(lookup, asked.externalId) !== null) return null;
-    const pages = lookup?.pages ?? 0;
+    if (senderLine(lookup, asked) !== null) return null;
     return {
         campaign_id: asked.campaignId,
         owners: 'team',
         sender_channel: asked.channel,
         limit: SENDER_PAGE,
-        ...(pages > 0 ? { offset: pages * SENDER_PAGE } : {}),
+        ...(lookup !== undefined && lookup.pages > 0 ? { offset: lookup.accounts.length } : {}),
     };
 }
 
-/** What the reads found once one more page has been read. */
-export const withPage = (lookup: SenderLookup | undefined, page: SenderListResponse): SenderLookup => ({
+/** What the reads found once one more page has been read; a first page begins a read marked `started`. */
+export const withPage = (
+    lookup: SenderLookup | undefined,
+    page: SenderListResponse,
+    started: number,
+): SenderLookup => ({
+    started: lookup?.started ?? started,
     provider: page.plugin_id,
     accounts: [...(lookup?.accounts ?? []), ...page.items],
     pages: (lookup?.pages ?? 0) + 1,
@@ -122,7 +159,8 @@ export const withPage = (lookup: SenderLookup | undefined, page: SenderListRespo
 });
 
 /** What the reads found once a page could not be read: what they found before, and what the runtime said. */
-export const withFailure = (lookup: SenderLookup | undefined, said: Said): SenderLookup => ({
+export const withFailure = (lookup: SenderLookup | undefined, said: Said, started: number): SenderLookup => ({
+    started: lookup?.started ?? started,
     provider: lookup?.provider ?? '',
     accounts: lookup?.accounts ?? [],
     pages: lookup?.pages ?? 0,

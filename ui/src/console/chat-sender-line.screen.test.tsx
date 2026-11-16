@@ -6,6 +6,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { chatDesktop, journalLine, stubStream, type StubStream } from '../test/desktop';
 import { shown } from '../test/area';
+import { Unpaired } from '../api/client';
 import { FakeApi, watch } from '../test/fake-api';
 import type { FixtureName } from '../test/fixtures';
 import { SENDER_ASKED, SENDER_WHEN_WORDS, senderWordings } from '../test/senders';
@@ -31,7 +32,7 @@ function renderChat(fake: FakeApi, journal: StubStream = stubStream()): FakeApi 
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
         .answer('campaign.summary', 'campaign.summary/all')
-        .answer('approval.get', 'approval.get/card-message')
+        .answer('approval.get', 'approval.get/card-message', 'approval.get/card-message-reasked')
         .answerAnyRequest('approval.list', (body) => ('campaign_id' in body ? listed : 'approval.list/empty'))
         .answerAnyRequest('decision.list', (body) =>
             'campaign_id' in body ? 'decision.list/summer-pending' : 'decision.list/empty',
@@ -57,7 +58,7 @@ function renderChat(fake: FakeApi, journal: StubStream = stubStream()): FakeApi 
     return fake;
 }
 
-async function openCard(): Promise<HTMLElement> {
+async function openCard(id = 'apr_1'): Promise<HTMLElement> {
     const side = () =>
         within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', { name: 'Conversations' });
     await waitFor(() => {
@@ -66,7 +67,7 @@ async function openCard(): Promise<HTMLElement> {
     });
     const pane = document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
     return waitFor(() => {
-        const card = pane.querySelector<HTMLElement>('.waiting-card[data-id="apr_1"]');
+        const card = pane.querySelector<HTMLElement>(`.waiting-card[data-id="${id}"]`);
         expect(card).not.toBeNull();
         expect(within(card!).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
         return card!;
@@ -99,7 +100,7 @@ describe('the sender line on an agent’s chat’s card', () => {
                 return found!;
             });
             expect(words(line.querySelector('.sender-now')!)).toBe(
-                wording.code === undefined ? wording.line : `${wording.line} ${wording.code}`,
+                [wording.line, wording.code, wording.message].filter(Boolean).join(' '),
             );
             expect(line.querySelector('code')?.textContent ?? null).toBe(wording.code ?? null);
             expect(line.querySelector('.sender-when')?.textContent ?? null).toBe(
@@ -191,5 +192,87 @@ describe('the sender line on an agent’s chat’s card', () => {
         await waitFor(() => expect(document.querySelector('.waiting-card[data-id="apr_1"]')).toBeNull());
         expect(document.querySelector('.sender-line')).toBeNull();
         expect(asks(fake, 'sender.list')).toBe(1);
+    });
+
+    /** Waits for a card that comes after the chat was drawn, with its buttons on. */
+    async function laterCard(id: string): Promise<HTMLElement> {
+        return waitFor(
+            () => {
+                const card = document.querySelector<HTMLElement>(
+                    `.area > .pane:not([hidden]) .waiting-card[data-id="${id}"]`,
+                );
+                expect(card).not.toBeNull();
+                expect(within(card!).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
+                return card!;
+            },
+            { timeout: 3000 },
+        );
+    }
+
+    it('reads the accounts again for a card that comes after the chat was drawn, as a message asked again does', async () => {
+        const journal = stubStream();
+        const fake = renderChat(
+            new FakeApi().answer('sender.list', 'sender.list/card-message-sender', 'sender.list/card-sender-other'),
+            journal,
+        );
+        const card = await openCard();
+        await waitFor(() => expect(words(lineOf(card)!)).toBe('Sending name at Reply now: Owner Example'));
+        listed = 'approval.list/card-message-reasked';
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_303', kind: 'approval_requested' }));
+        });
+        const later = await laterCard('apr_2');
+        await waitFor(() => expect(words(lineOf(later)!)).toBe('Reply does not list this mailbox now.'));
+        expect(asks(fake, 'sender.list')).toBe(2);
+    });
+
+    it('reads the accounts again for a later card after a read that failed, and says what they are then', async () => {
+        const journal = stubStream();
+        const fake = renderChat(
+            new FakeApi().answer('sender.list', 'sender.list/card-sender-unread', 'sender.list/card-message-sender'),
+            journal,
+        );
+        const card = await openCard();
+        await waitFor(() => expect(words(lineOf(card)!)).toContain('The sending name could not be read.'));
+        listed = 'approval.list/card-message-reasked';
+        flush(() => {
+            journal.open();
+            journal.send(journalLine({ id: 'jrn_304', kind: 'approval_requested' }));
+        });
+        const later = await laterCard('apr_2');
+        await waitFor(() => expect(words(lineOf(later)!)).toBe('Sending name at Reply now: Owner Example'));
+        expect(asks(fake, 'sender.list')).toBe(2);
+    });
+
+    it('draws no line for an invitation, and asks for no accounts', async () => {
+        listed = 'approval.list/card-invitation-pending';
+        const fake = new FakeApi().answer('approval.get', 'approval.get/card-invitation');
+        renderChat(fake);
+        fake.answer('approval.get', 'approval.get/card-invitation');
+        const card = await openCard();
+        expect(words(card.querySelector('.ask-h')!)).toContain('from https://www.linkedin.com/in/owner-example');
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(card.querySelector('.sender-line')).toBeNull();
+        expect(asks(fake, 'sender.list')).toBe(0);
+    });
+
+    it('draws nothing when the pairing ends while the accounts are read, and leaves Approve as it was', async () => {
+        const fake = new FakeApi();
+        const call = fake.call.bind(fake);
+        // The runtime says the pairing has ended: the session answers for that, and the line keeps nothing.
+        fake.call = async (operation, body, kind) => {
+            if (operation === 'sender.list') {
+                fake.calls.push({ operation, body: body ?? {}, kind: kind ?? 'read' });
+                throw new Unpaired();
+            }
+            return call(operation, body, kind);
+        };
+        renderChat(fake);
+        const card = await openCard();
+        await waitFor(() => expect(asks(fake, 'sender.list')).toBe(1));
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(card.querySelector('.sender-line')).toBeNull();
+        expect(within(card).getByRole('button', { name: 'Approve' }).hasAttribute('disabled')).toBe(false);
     });
 });

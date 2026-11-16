@@ -12,11 +12,11 @@ import { ApprovalPanel } from './approval-panel';
 // Reject.
 
 /** Needs you's panel over the approval the runtime recorded, its message checked against its parked work item. */
-function renderPanel(fake: FakeApi): void {
-    fake.answer('workitem.get', 'workitem.get/card-message-parked').answer('preference.list', 'preference.list/set');
-    watch(fake);
-    const approval = fixtures['approval.get/card-message'].response as unknown as Approval;
-    render(
+const recorded = (name: 'approval.get/card-message' | 'approval.get/card-message-reasked') =>
+    fixtures[name].response as unknown as Approval;
+
+function panel(fake: FakeApi, approval: Approval) {
+    return (
         <ApiProvider api={fake}>
             <ApprovalPanel
                 approval={approval}
@@ -29,8 +29,14 @@ function renderPanel(fake: FakeApi): void {
                 onSkip={() => undefined}
                 onClose={() => undefined}
             />
-        </ApiProvider>,
+        </ApiProvider>
     );
+}
+
+function renderPanel(fake: FakeApi) {
+    fake.answer('workitem.get', 'workitem.get/card-message-parked').answer('preference.list', 'preference.list/set');
+    watch(fake);
+    return render(panel(fake, recorded('approval.get/card-message')));
 }
 
 describe('the sender line on Needs you’s panel', () => {
@@ -54,4 +60,18 @@ describe('the sender line on Needs you’s panel', () => {
             );
             expect(screen.getByRole('button', { name: 'Reject' }).hasAttribute('disabled')).toBe(false);
         });
+
+    it('reads the accounts again when the panel goes on to another item, and says what they are then', async () => {
+        const fake = new FakeApi().answer(
+            'sender.list',
+            'sender.list/card-message-sender',
+            'sender.list/card-sender-other',
+        );
+        const { rerender } = renderPanel(fake);
+        await screen.findByText('Sending name at Reply now: Owner Example', { selector: '.sender-now' });
+        rerender(panel(fake, recorded('approval.get/card-message-reasked')));
+        await screen.findByText('Reply does not list this mailbox now.', { selector: '.sender-now' });
+        expect(screen.queryByText('Sending name at Reply now: Owner Example')).toBeNull();
+        expect(fake.calls.filter((each) => each.operation === 'sender.list')).toHaveLength(2);
+    });
 });

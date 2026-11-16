@@ -70,7 +70,9 @@ import approvalApproveAlreadyDecided from '../../../docs/api/fixtures/approval.a
 import approvalApproveApproved from '../../../docs/api/fixtures/approval.approve/approved.json';
 import approvalApproveFromCampaignRow from '../../../docs/api/fixtures/approval.approve/from-campaign-row.json';
 import approvalApproveFromCampaignRowAgain from '../../../docs/api/fixtures/approval.approve/from-campaign-row-again.json';
+import approvalGetCardInvitation from '../../../docs/api/fixtures/approval.get/card-invitation.json';
 import approvalGetCardMessage from '../../../docs/api/fixtures/approval.get/card-message.json';
+import approvalGetCardMessageReasked from '../../../docs/api/fixtures/approval.get/card-message-reasked.json';
 import approvalGetEmailMessage from '../../../docs/api/fixtures/approval.get/email-message.json';
 import approvalGetForCampaignRow from '../../../docs/api/fixtures/approval.get/for-campaign-row.json';
 import approvalGetLinkedinMessage from '../../../docs/api/fixtures/approval.get/linkedin-message.json';
@@ -89,6 +91,8 @@ import approvalGetReleasedAutomatically from '../../../docs/api/fixtures/approva
 import approvalGetWithDoubts from '../../../docs/api/fixtures/approval.get/with-doubts.json';
 import approvalGetOtherPending from '../../../docs/api/fixtures/approval.get/other-pending.json';
 import approvalGetPendingWithPreview from '../../../docs/api/fixtures/approval.get/pending-with-preview.json';
+import approvalListCardInvitationPending from '../../../docs/api/fixtures/approval.list/card-invitation-pending.json';
+import approvalListCardMessageReasked from '../../../docs/api/fixtures/approval.list/card-message-reasked.json';
 import approvalListCardMessageAfterEdit from '../../../docs/api/fixtures/approval.list/card-message-after-edit.json';
 import approvalListCardMessagePending from '../../../docs/api/fixtures/approval.list/card-message-pending.json';
 import approvalListByCampaignPending from '../../../docs/api/fixtures/approval.list/by-campaign-pending.json';
@@ -463,7 +467,12 @@ export const fixtures = {
         ApprovalDecisionRequest,
         ErrorEnvelope
     >,
+    'approval.get/card-invitation': approvalGetCardInvitation satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/card-message': approvalGetCardMessage satisfies Exchange<{ approval_id: string }, Approval>,
+    'approval.get/card-message-reasked': approvalGetCardMessageReasked satisfies Exchange<
+        { approval_id: string },
+        Approval
+    >,
     'approval.get/email-message': approvalGetEmailMessage satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/for-campaign-row': approvalGetForCampaignRow satisfies Exchange<{ approval_id: string }, Approval>,
     'approval.get/linkedin-message': approvalGetLinkedinMessage satisfies Exchange<{ approval_id: string }, Approval>,
@@ -508,6 +517,14 @@ export const fixtures = {
     'approval.get/pending-with-preview': approvalGetPendingWithPreview satisfies Exchange<
         { approval_id: string },
         Approval
+    >,
+    'approval.list/card-invitation-pending': approvalListCardInvitationPending satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-reasked': approvalListCardMessageReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
     >,
     'approval.list/card-message-after-edit': approvalListCardMessageAfterEdit satisfies Exchange<
         ApprovalListRequest,
