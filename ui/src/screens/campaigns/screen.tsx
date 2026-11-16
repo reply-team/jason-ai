@@ -96,6 +96,16 @@ export function CampaignsScreen() {
 
     const close = () => navigate({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
 
+    /**
+     * After an archive the runtime answered: what happened, said over the list the page goes back to, which is read again
+     * so the agent leaves it. The answer is the agent as it is, also when another window archived it first.
+     */
+    const archived = (agent: { name: string }) => {
+        store.notice.value = `${agent.name} is archived. Its open work, the approvals on that work and its questions are cancelled.`;
+        void store.load(api, table, new Date(), zone);
+        close();
+    };
+
     // The dialog open, with the campaign it belongs to: it never shows over another one.
     const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
     // The person opened from this campaign's People, shown in place of the panel. They are let go when closed, and when
@@ -392,7 +402,12 @@ export function CampaignsScreen() {
                                 />
                             )}
                             {at.tab === 'settings' && (
-                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} />
+                                <CampaignSettings
+                                    campaign={campaign}
+                                    now={new Date()}
+                                    zone={zone}
+                                    onArchived={archived}
+                                />
                             )}
                         </>
                     )}

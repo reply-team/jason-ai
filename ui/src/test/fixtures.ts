@@ -434,6 +434,20 @@ import workitemCountPanelMovedEditedNow from '../../../docs/api/fixtures/workite
 import workitemCountPanelMovedEditedPlanned from '../../../docs/api/fixtures/workitem.count/panel-moved-edited-planned.json';
 import workitemListPanelMovedEditedNow from '../../../docs/api/fixtures/workitem.list/panel-moved-edited-now.json';
 import approvalGetByWorkItem from '../../../docs/api/fixtures/approval.get/by-work-item.json';
+import approvalListArchiveAskedAndGiven from '../../../docs/api/fixtures/approval.list/archive-asked-and-given.json';
+import campaignArchiveArchiveSpring from '../../../docs/api/fixtures/campaign.archive/archive-spring.json';
+import campaignArchiveArchiveSpringAgain from '../../../docs/api/fixtures/campaign.archive/archive-spring-again.json';
+import campaignGetArchiveSpring from '../../../docs/api/fixtures/campaign.get/archive-spring.json';
+import campaignGetArchiveSpringArchived from '../../../docs/api/fixtures/campaign.get/archive-spring-archived.json';
+import campaignListArchiveAfter from '../../../docs/api/fixtures/campaign.list/archive-after.json';
+import campaignListArchiveBefore from '../../../docs/api/fixtures/campaign.list/archive-before.json';
+import campaignSummaryArchiveAfter from '../../../docs/api/fixtures/campaign.summary/archive-after.json';
+import campaignSummaryArchiveBefore from '../../../docs/api/fixtures/campaign.summary/archive-before.json';
+import campaignSummaryArchiveSpring from '../../../docs/api/fixtures/campaign.summary/archive-spring.json';
+import campaignSummaryArchiveSpringArchived from '../../../docs/api/fixtures/campaign.summary/archive-spring-archived.json';
+import decisionListArchivePending from '../../../docs/api/fixtures/decision.list/archive-pending.json';
+import routeResolveArchivePause from '../../../docs/api/fixtures/route.resolve/archive-pause.json';
+import workitemListArchiveOpen from '../../../docs/api/fixtures/workitem.list/archive-open.json';
 
 import type { PreferenceItem, PreferenceSetRequest, PreferenceUnsetRequest } from '../screens/settings/voice-model';
 
@@ -1092,6 +1106,56 @@ export const fixtures = {
         Page<WorkItemSummary>
     >,
     'workitem.list/by-contact-open-none': workitemListByContactOpenNone satisfies Exchange<
+        WorkItemListRequest,
+        Page<WorkItemSummary>
+    >,
+    'approval.list/archive-asked-and-given': approvalListArchiveAskedAndGiven satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'campaign.archive/archive-spring': campaignArchiveArchiveSpring satisfies Exchange<
+        CampaignTransitionRequest,
+        Campaign
+    >,
+    'campaign.archive/archive-spring-again': campaignArchiveArchiveSpringAgain satisfies Exchange<
+        CampaignTransitionRequest,
+        Campaign
+    >,
+    'campaign.get/archive-spring': campaignGetArchiveSpring satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.get/archive-spring-archived': campaignGetArchiveSpringArchived satisfies Exchange<
+        { campaign_id: string },
+        Campaign
+    >,
+    'campaign.list/archive-after': campaignListArchiveAfter satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.list/archive-before': campaignListArchiveBefore satisfies Exchange<
+        CampaignListRequest,
+        Page<CampaignSummary>
+    >,
+    'campaign.summary/archive-after': campaignSummaryArchiveAfter satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-before': campaignSummaryArchiveBefore satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-spring': campaignSummaryArchiveSpring satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'campaign.summary/archive-spring-archived': campaignSummaryArchiveSpringArchived satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'decision.list/archive-pending': decisionListArchivePending satisfies Exchange<
+        DecisionListRequest,
+        Page<DecisionSummary>
+    >,
+    'route.resolve/archive-pause': routeResolveArchivePause satisfies Exchange<RouteResolveRequest, RouteResolution>,
+    'workitem.list/archive-open': workitemListArchiveOpen satisfies Exchange<
         WorkItemListRequest,
         Page<WorkItemSummary>
     >,

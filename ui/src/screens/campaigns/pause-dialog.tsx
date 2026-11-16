@@ -37,7 +37,7 @@ export function transitions(campaign: Pick<CampaignSummary, 'status'>): Transiti
 }
 
 /** The provider campaign's own name for itself: the plugin that holds its pin, as a person would write it. */
-function provider(campaign: Movable): string | null {
+export function provider(campaign: Movable): string | null {
     const pin = (campaign.external_ids ?? []).find((p) => p.kind === 'campaign');
     return pin ? pin.plugin_id.charAt(0).toUpperCase() + pin.plugin_id.slice(1) : null;
 }

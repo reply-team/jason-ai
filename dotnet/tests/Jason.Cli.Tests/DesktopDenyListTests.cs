@@ -367,9 +367,9 @@ public class DesktopDenyListTests
     /// <summary>
     /// Archiving a campaign is the person's own act in the chat: no verb undoes it, and it cancels the campaign's open work
     /// but a search's stop, with each item's approval whether still asked or already given, stops its running attempts
-    /// once the archive is committed, and cancels its pending questions. The command is off the allow list and on the deny list, and its
-    /// operation is a line of the file, so a text that names <c>campaign.archive</c> is refused as the others are; pausing
-    /// stays the chat's.
+    /// once the archive is committed, and cancels its pending questions. The command is off the allow list and on the deny
+    /// list, and its operation is a line of the file, so a text that names <c>campaign.archive</c> is refused as the others
+    /// are; pausing stays the chat's.
     /// </summary>
     [Fact]
     public void Archiving_a_campaign_is_denied_by_command_and_by_operation_and_pausing_stays_allowed()

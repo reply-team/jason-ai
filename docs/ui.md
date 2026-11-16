@@ -197,7 +197,8 @@ it is loading, empty or failed, or by the toolbar's while the tab is open. Its *
 its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
 activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
 tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its
-context as the roles read it and what each provider calls it, and nothing else: the campaign's moves are in its header,
+context as the roles read it and what each provider calls it, and in the console, last, where it is archived (below):
+the campaign's moves are in its header,
 beside **Add people**, so they are within reach from every tab, each offered only where its status allows it and each
 opening a dialog with an optional reason. **Pause** stops Jason releasing an active
 campaign's work while what is running finishes; the provider's own sequence keeps sending until a role pauses it there.
@@ -205,7 +206,21 @@ campaign's work while what is running finishes; the provider's own sequence keep
 `jason campaign start`, which resumes a paused one, with your reason). The Start and Resume dialogs first read the
 campaign again and say what starting lets go: how many people it holds, and how messages go for people who have not
 replied yet and for people who have replied, in the words of Settings and with where each mode comes from; Start waits
-until that is read, and a mode that cannot be read is said to be unreadable. An address naming a campaign's Details opens its Settings, and one naming
+until that is read, and a mode that cannot be read is said to be unreadable. In the console, the last part of an
+agent's Settings is where you archive it (`jason campaign archive`, with your reason): one sentence and **Archive**,
+which opens a confirmation that names the agent and says an archive cannot be undone. As it opens, it reads the agent
+again and what archiving cancels, every page of each (`jason workitem list` of its unfinished work, `jason approval
+list` of the approvals asked and given, `jason decision list` of its pending questions), and says how many open work
+items it cancels and how many of them run now and are stopped, how many approvals still asked of you, how many already
+given whose work then never runs, and how many questions; a search being stopped still finishes. Archive waits until
+that is read, and a read that fails says what is open could not be read. Where a provider's campaign is pinned to the
+agent, it says that campaign is left as it is, keeps sending if it is live there, and cannot be paused by Jason once
+the agent is archived, and how to stop it first: inside Jason Desktop, where the agent is live or paused and its route
+lets Jason pause the provider's campaign (`jason route resolve --operation campaign.pause`), by asking in the agent's
+chat, and always in the provider itself. One press sends one archive. The page then goes back to the list, read again
+without the agent, and says the agent is archived and what was cancelled; an archived agent's Settings say it is
+archived and offer nothing, and a confirmation opened after another window archived the agent says so. The browser
+shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
 any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs People, Inbox and Settings and no Sequence or Results, its People; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). Shown inside Jason Desktop, a campaign's tabs begin with **Chat**, which
 opens the campaign's one conversation, made the first time and kept by the desktop with what it showed ([desktop.md](desktop.md)), and moves
 nowhere; the Agents list's Chat opens the same one. The desktop's window opens on **Start**, which asks who you want
