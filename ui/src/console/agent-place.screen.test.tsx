@@ -486,6 +486,26 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
+describe('An agent the runtime no longer knows', () => {
+    it.each(['#/campaigns/cmp_gone', '#/campaigns/cmp_gone/chat'])(
+        'at %s, says the agent no longer exists, draws no composer and makes nothing',
+        async (address) => {
+            const { desktop } = await renderAt('window', address, api({ ...agents, cmp_gone: 'campaign.get/gone' }));
+            await waitFor(() =>
+                expect(document.querySelector('[data-pane="page"]')?.textContent).toContain(
+                    'The agent in this address no longer exists; it was closed.',
+                ),
+            );
+            expect(activePanel.value).toBe('page');
+            expect(location.hash.startsWith('#/campaigns')).toBe(true);
+            expect(location.hash).not.toContain('cmp_gone');
+            expect(document.querySelector('[data-pane^="chat:"]')).toBeNull();
+            expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]);
+            expect(desktop.calls.filter((each) => each.name === 'chat.create')).toEqual([]);
+        },
+    );
+});
+
 describe('The conversation’s acts in the agent’s “…”', () => {
     const more = () => within(head()!).getByRole('button', { name: "More for this agent's conversation" });
 

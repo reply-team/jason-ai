@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals-react';
-import type { Api } from '../api/client';
+import { ApiError, type Api } from '../api/client';
 import type { Campaign, CampaignSummaryResponse, Page, WorkItemSummary } from '../api/types';
 import { asksForCreate, createBody, unfinishedCreate } from '../screens/campaigns/kind';
 import { archivedLeftOut } from '../screens/campaigns/store';
@@ -22,6 +22,17 @@ export interface AgentFacts {
 
 /** By agent id, what was read last. */
 export const agentFacts = signal<Readonly<Record<string, AgentFacts>>>({});
+
+/** The agents the runtime answered it does not know, as read last: an old link, or one deleted since. */
+export const goneAgents = signal<ReadonlySet<string>>(new Set());
+
+function markGone(id: string, gone: boolean): void {
+    if (goneAgents.value.has(id) === gone) return;
+    const next = new Set(goneAgents.value);
+    if (gone) next.add(id);
+    else next.delete(id);
+    goneAgents.value = next;
+}
 
 const generations = new Map<string, number>();
 
@@ -62,11 +73,13 @@ export async function readAgent(api: Api, id: string): Promise<void> {
             }
         }
         if (generations.get(id) !== mine) return;
+        markGone(id, false);
         agentFacts.value = {
             ...agentFacts.value,
             [id]: { campaign, creating, ...(people === undefined ? {} : { people }) },
         };
-    } catch {
-        // What was read before stays; what was never read stays unsaid.
+    } catch (error) {
+        // What was read before stays; what was never read stays unsaid. An agent the runtime does not know is said gone.
+        if (generations.get(id) === mine && error instanceof ApiError && error.status === 404) markGone(id, true);
     }
 }

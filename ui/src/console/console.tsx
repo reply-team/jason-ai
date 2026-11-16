@@ -19,7 +19,7 @@ import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
 import { activityView } from './activity';
-import { agentFacts, readAgent } from './agent-facts';
+import { agentFacts, goneAgents, readAgent } from './agent-facts';
 import { AgentHead } from './agent-head';
 import { agentChatOf, agentChatRoute, agentOfChat, namesPlace, shownAgent } from './agent-place';
 import { listen } from './actions';
@@ -269,8 +269,14 @@ function restore(): void {
     reveal(unaddressed);
 }
 
-/** The conversation of an agent: the one held open, else the one the desktop keeps, else one made now. */
-async function chatOfAgent(id: string): Promise<string | null> {
+/** What `chatOfAgent` answers for an agent the runtime does not know: it has no Chat to draw. */
+const agentGone = Symbol('gone');
+
+/**
+ * The conversation of an agent: the one held open, else the one the desktop keeps, else its unmade chat. Null where the
+ * desktop could not open the one it keeps; `agentGone` where the runtime does not know the agent.
+ */
+async function chatOfAgent(id: string): Promise<string | null | typeof agentGone> {
     // A conversation made for it wins over its unmade chat, which gives way to it.
     const held = Object.values(chats.value).find((each) => !each.main && each.campaignId === id && !isUnmade(each.id));
     if (held) return held.id;
@@ -284,7 +290,12 @@ async function chatOfAgent(id: string): Promise<string | null> {
         (each) => !each.main && each.campaignId === id && !isUnmade(each.id),
     );
     if (meanwhile) return meanwhile.id;
-    // None yet: its Chat is drawn, and its conversation made at the person's first act that needs one.
+    // None yet: its Chat is drawn, and its conversation made at the person's first act that needs one; an agent the
+    // console does not list is read first, and one the runtime does not know has no Chat at all.
+    if (!campaigns.campaigns.value.some((each) => each.id === id)) {
+        if (agentFacts.value[id] === undefined) await readAgent(here().api, id);
+        if (goneAgents.value.has(id)) return agentGone;
+    }
     const name =
         campaigns.campaigns.value.find((each) => each.id === id)?.name ?? agentFacts.value[id]?.campaign.name ?? id;
     return unmadeChat({ id, name });
@@ -309,7 +320,14 @@ function chatMade(from: string, to: string): void {
 function showAgentChat(id: string): void {
     const mine = ++moves;
     void chatOfAgent(id).then((chatId) => {
-        if (chatId === null || mine !== moves) return;
+        if (mine !== moves) return;
+        if (chatId === agentGone) {
+            // The page's own way with an agent the runtime does not know: it says so, and the address leaves it.
+            moveBar({ ...agentChatRoute(id), tab: 'people' }, true);
+            reveal('page');
+            return;
+        }
+        if (chatId === null) return;
         moveBar(agentChatRoute(id));
         reveal(chatPane(chatId));
     });
