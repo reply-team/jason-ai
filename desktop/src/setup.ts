@@ -21,7 +21,7 @@ import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import { OwnServers, type UnreadKind } from './own-servers.ts';
-import { hostWords, profileProgram, readProfile, readProfilePage, roleHostOf, roleProfiles, rolesNext, type RoleHost } from './roles-profile.ts';
+import { hostWords, profileProgram, readDefaultAnswer, readProfile, readProfilePage, roleHostOf, roleProfiles, rolesNext, type RoleHost } from './roles-profile.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
@@ -61,7 +61,6 @@ import type { DesktopSettings, RolesMark } from './settings.ts';
 import {
     bundledPlugin,
     bundledPlugins,
-    defaultProfileOf,
     defaultRoutePlugin,
     hasBinding,
     isConfigured,
@@ -79,7 +78,6 @@ import {
     versionIn,
     withPluginConfigured,
     withPluginDisconnected,
-    withDefaultProfile,
     withReplyWired,
     type PluginRuntime,
     type PluginValues,
@@ -272,14 +270,13 @@ const signInLimit = 5 * 60_000;
 const profileLimit = 60_000;
 
 /**
- * What one call of `connectRoles` came to: already settled in this run, a settings file it
- * cannot read, a default already named, profiles it could not read, profiles that are there, no connected host, no
- * mark it could write, a create refused, a default it could not write, a profile made and named, a profile made beside a
- * default a person named meanwhile, which is kept, or a profile made earlier named now.
+ * What one call of `connectRoles` came to: already settled in this run, a default already in force, profiles or the
+ * default in force it could not read, profiles that are there, no connected host, no mark it could write, a create
+ * refused, a default the runtime did not name, a profile made and named, a profile made beside a default a person named
+ * meanwhile, which is kept, or a profile made earlier named now.
  */
 export type RolesOutcome =
     | 'settled'
-    | 'settings_unread'
     | 'default_named'
     | 'profiles_unread'
     | 'profiles_exist'
@@ -485,7 +482,7 @@ export class Setup {
             settings = {};
             settingsRefused = (error as Error).message;
         }
-        const roles = await this.#rolesDefault(settings);
+        const roles = await this.#rolesDefault();
 
         const programHosts: HostState[] = [];
         for (const host of hosts) {
@@ -557,13 +554,13 @@ export class Setup {
     }
 
     /**
-     * The profile `Roles:DefaultExecutionProfile` names, by its name and its host word, where the runtime answers it as an
-     * enabled one; null where none is named or none answers.
+     * The default profile in force as the runtime answers it, by its name and its host word, where the runtime answers it
+     * as an enabled one; null where none is named or none answers.
      */
-    async #rolesDefault(settings: unknown): Promise<{ name: string; host: string } | null> {
-        const { name } = defaultProfileOf(settings);
+    async #rolesDefault(): Promise<{ name: string; host: string } | null> {
+        const name = await this.#defaultInForce();
         // Only a name the runtime takes reaches the command line, so none is read as an option.
-        if (name === null || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) return null;
+        if (name === null || name === undefined || !/^[a-z][a-z0-9-]{0,63}$/.test(name)) return null;
         const got = await this.#deps.cli.run(['profile', 'get', name]);
         const profile = got.exit === 0 ? readProfile(got.stdout) : null;
         return profile !== null && profile.name === name && !profile.disabled && profile.host !== null ? { name, host: profile.host } : null;
@@ -957,16 +954,17 @@ export class Setup {
 
     /**
      * The agents' roles put on the AI the chat runs on, called at a Live start once the runtime is up, with the host the
-     * chat is set to run on, and at each chat turn's start, with the turn's host. Only where the installation's settings
-     * name no `Roles:DefaultExecutionProfile` and the runtime holds no execution profile at all, a disabled one included:
-     * the desktop's mark is written, one profile is made with `jason profile create` for the host `roleHostOf` picks (its
-     * name, its host word and its program, the verb's own defaults for the rest), and the default is written into the
-     * settings file the Connect cards edit, which the runtime reads without a restart; then the mark is taken away. The
-     * mark holds the profile's name, and once the create succeeded the id it answered: a start that finds the one profile
-     * there with that id and no default writes the default only. A mark that cannot show the profile there is the
-     * desktop's — no id, or another — is let go and nothing is written. A profile or a default a person
-     * made is never touched, now or at any later start, a default named between the look and the write included. Each end
-     * but a runtime that did not answer and no connected host settles it for this run.
+     * chat is set to run on, and at each chat turn's start, with the turn's host. Only where the runtime answers no default
+     * profile in force and holds no execution profile at all, a disabled one included: the desktop's mark is written, one
+     * profile is made with `jason profile create` for the host `roleHostOf` picks (its name, its host word and its
+     * program, the verb's own defaults for the rest), and the runtime is asked to name it the default with
+     * `jason profile set-default`, which it writes into its settings file and puts in force without a restart; then the
+     * mark is taken away. The desktop writes no part of the default itself. The mark holds the profile's name, and once
+     * the create succeeded the id it answered: a start that finds the one profile there with that id and no default names
+     * the default only. A mark that cannot show the profile there is the desktop's — no id, or another — is let go and
+     * nothing is named. A profile or a default a person made is never touched, now or at any later start, a default in
+     * force by the look just before the naming included. Each end but a runtime that did not answer and no connected host
+     * settles it for this run.
      */
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
         return this.#serial(async () => {
@@ -979,27 +977,21 @@ export class Setup {
 
     async #connectRoles(chosen: string | null): Promise<RolesOutcome> {
         if (this.#rolesSettled) return 'settled';
-        let settings: Record<string, unknown>;
-        try {
-            ({ settings } = this.#readForEdit());
-        } catch {
-            return 'settings_unread';
-        }
         const pending = this.#deps.settings().rolesProfilePending ?? null;
-        if (defaultProfileOf(settings).named) {
-            this.#mark(null);
-            return 'default_named';
-        }
         const listed = await this.#deps.cli.run(['profile', 'list', '--include-disabled', '--limit', '2']);
         const page = listed.exit === 0 ? readProfilePage(listed.stdout) : null;
         if (page === null) return 'profiles_unread';
+        if (page.defaultInForce !== null) {
+            this.#mark(null);
+            return 'default_named';
+        }
         const next = rolesNext(page.profiles, page.more, pending, page.profiles.length === 0 ? roleHostOf(chosen, await this.#rolesConnected()) : null);
         if (next.kind === 'leave') {
             if (next.why === 'profiles_exist') this.#mark(null);
             return next.why;
         }
         if (next.kind === 'name') {
-            const named = this.#nameDefault(next.name);
+            const named = await this.#nameDefault(next.name);
             return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : 'default_unwritten';
         }
 
@@ -1013,7 +1005,7 @@ export class Setup {
         // Then the id it answered, the one proof a later start has that the profile there is the desktop's own.
         const id = readProfile(made.stdout)?.id ?? null;
         if (id !== null) this.#mark({ name, id });
-        const named = this.#nameDefault(name);
+        const named = await this.#nameDefault(name);
         return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : 'default_unwritten';
     }
 
@@ -1024,22 +1016,30 @@ export class Setup {
     }
 
     /**
-     * Writes `Roles:DefaultExecutionProfile` into the settings file as it is just before the write, where it names none,
-     * then takes the mark away and has the cards read again: `written`, or `theirs` where the file names one by then, which
-     * is kept; `unwritten` where the file could not be read or written, the mark kept.
+     * Asks the runtime to name the profile the default, `jason profile set-default`, where the default in force just
+     * before names none, then takes the mark away and has the cards read again: `written` where the runtime answered that
+     * name in force, or `theirs` where a default was in force by then, which is kept and never named over; `unwritten`,
+     * the mark kept, where the runtime did not answer the look or refused the naming. The runtime's naming has no
+     * precondition, so a default a person names between the look and the naming is the one it replaces, and journals as
+     * it does every change of the default; no second request undoes it.
      */
-    #nameDefault(name: string): 'written' | 'theirs' | 'unwritten' {
-        let written: boolean;
-        try {
-            const { file, settings } = this.#readForEdit();
-            written = !defaultProfileOf(settings).named;
-            if (written) writeAtomically(file, `${JSON.stringify(withDefaultProfile(settings, name), null, 2)}\n`);
-        } catch {
-            return 'unwritten';
+    async #nameDefault(name: string): Promise<'written' | 'theirs' | 'unwritten'> {
+        const inForce = await this.#defaultInForce();
+        if (inForce === undefined) return 'unwritten';
+        if (inForce === null) {
+            const named = await this.#deps.cli.run(['profile', 'set-default', name]);
+            if (named.exit !== 0 || readDefaultAnswer(named.stdout) !== name) return 'unwritten';
         }
         this.#mark(null);
         this.#changed();
-        return written ? 'written' : 'theirs';
+        return inForce === null ? 'written' : 'theirs';
+    }
+
+    /** The default profile in force as the runtime answers it: its name, null where none is named, undefined unread. */
+    async #defaultInForce(): Promise<string | null | undefined> {
+        const listed = await this.#deps.cli.run(['profile', 'list', '--include-disabled', '--limit', '1']);
+        const page = listed.exit === 0 ? readProfilePage(listed.stdout) : null;
+        return page === null ? undefined : page.defaultInForce;
     }
 
     /** Writes the mark, or takes it away; false where it could not be written. */

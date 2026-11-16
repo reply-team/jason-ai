@@ -57,21 +57,24 @@ is the one the application carries, and `jason update` otherwise.
 
 **The agents' roles run on the AI the chat runs on.** An installation starts with no execution profile, and with none no
 AI role can run. In Live, once the runtime is up at a start, and as each chat turn starts until one look has settled it
-for that run, the desktop looks: when the installation holds no profile at all, a disabled one included, and its settings name no
-`Roles:DefaultExecutionProfile`, it makes one profile with `jason profile create` for the host the chat runs on, then
-names it that default in `<data>/config/settings.json`, which the runtime reads without a restart. The host is the one
-the chat is set to run on (its newest conversation's last turn at a start, the turn's own host as a turn starts) when that
-is Claude Code or Codex and it is connected, found and at its version floor; when the chat is on a model key, or on
-nothing yet, Claude Code if it is connected, else Codex. A model key never gets a profile, since a profile holds no
-credential. The profile is `claude-code` (`--host claude_code`) or `codex` (`--host codex`), its program the path the
+for that run, the desktop looks: when the installation holds no profile at all, a disabled one included, and the runtime
+answers no default profile in force, it makes one profile with `jason profile create` for the host the chat runs on,
+then asks the runtime to name it the default with `jason profile set-default`, which the runtime writes as
+`Roles:DefaultExecutionProfile` into `<data>/config/settings.json` and puts in force without a restart. The host is the
+one the chat is set to run on (its newest conversation's last turn at a start, the turn's own host as a turn starts)
+when that is Claude Code or Codex and it is connected, found and at its version floor; when the chat is on a model key,
+or on nothing yet, Claude Code if it is connected, else Codex. A model key never gets a profile, since a profile holds
+no credential. The profile is `claude-code` (`--host claude_code`) or `codex` (`--host codex`), its program the path the
 desktop found the host at, or the bare name where that is npm's `.cmd`, and the verb's own defaults for the rest. Before
-the profile is made, the desktop writes its name into its own settings as a mark, adds the id the create answered once it
-succeeded, and takes the mark away once the default is written. A later start that finds the one profile there with that
-id and no default writes the default and never makes a second. A mark that cannot show the profile there is the
+the profile is made, the desktop writes its name into its own settings as a mark, adds the id the create answered once
+it succeeded, and takes the mark away once the default is named. A later start that finds the one profile there with
+that id and no default names the default and never makes a second. A mark that cannot show the profile there is the
 desktop's own, because it has no id (the create was refused, or its answer was lost) or another, is let go and nothing
-is written; `jason status` then says what is missing. A profile or a default a person made is never touched, at that
-start or any later one, nor a default named between the desktop's look and its write, and nothing of this happens or is
-read in the demo. Connect says which host the roles run on.
+is named; `jason status` then says what is missing. A profile or a default a person made is never touched, at that start
+or any later one, nor a default in force when the desktop looks again just before it asks for the naming, and nothing of
+this happens or is read in the demo. The naming itself has no condition, so a default a person names in the moment
+between that look and the naming is replaced, and the runtime journals the change as it journals every one. Connect says
+which host the roles run on.
 
 The desktop starts every program with a file and arguments, never through a shell, and only from the modules that are
 named for it; a test holds that, and holds the page to a window that reaches the desktop through one object,
@@ -190,8 +193,8 @@ directory.
 A Connect card writes, into `<data>/config/settings.json`, the keys of the plugin it configures and no other, as a person
 would write them (`Plugins:Config:<id>`, `Plugins:Grants:<id>:Http`, `Notifications:Plugins:<id>:Binding`), and then runs
 `jason plugin reload`. A file it cannot parse is refused and left as it is. [desktop/README.md](../desktop/README.md)
-lists each key and each card's grant. The one key the desktop writes there of its own is `Roles:DefaultExecutionProfile`,
-only where the file names none ([What it does at a start](#what-it-does-at-a-start)).
+lists each key and each card's grant. The desktop writes no key there of its own: `Roles:DefaultExecutionProfile` is
+written by the runtime, which the desktop asks to name the default ([What it does at a start](#what-it-does-at-a-start)).
 
 ## Open in
 
@@ -345,9 +348,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
   plugin, and claude.ai connectors or ChatGPT apps are not listed here and work there all the same.
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
-  roles run on Claude Code, by the execution profile claude-code." It is said where `Roles:DefaultExecutionProfile` names
-  an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its version floor, whoever
-  made the profile, and nowhere else.
+  roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
+  answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
+  version floor, whoever made the profile, and nowhere else.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's

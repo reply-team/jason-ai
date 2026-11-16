@@ -59,14 +59,29 @@ function profileOf(value: unknown): ListedProfile | null {
     return { id: typeof id === 'string' ? id : null, name, disabled: disabled === true, host: typeof revision?.host === 'string' ? revision.host : null };
 }
 
-/** One page of `jason profile list`, and whether more follow; null where it is not one. */
-export function readProfilePage(stdout: string): { profiles: ListedProfile[]; more: boolean } | null {
+/**
+ * One page of `jason profile list`, whether more follow, and the default in force the page says, by name, or null where
+ * none is named; null where it is not one, a page that does not say the default included.
+ */
+export function readProfilePage(stdout: string): { profiles: ListedProfile[]; more: boolean; defaultInForce: string | null } | null {
     try {
-        const raw = JSON.parse(stdout) as { items?: unknown; next_cursor?: unknown };
+        const raw = JSON.parse(stdout) as { items?: unknown; next_cursor?: unknown; default_execution_profile?: unknown };
         if (!Array.isArray(raw.items)) return null;
         const profiles = raw.items.map(profileOf);
         if (profiles.some((each) => each === null)) return null;
-        return { profiles: profiles as ListedProfile[], more: typeof raw.next_cursor === 'string' };
+        const named = raw.default_execution_profile;
+        if (named !== null && typeof named !== 'string') return null;
+        return { profiles: profiles as ListedProfile[], more: typeof raw.next_cursor === 'string', defaultInForce: named };
+    } catch {
+        return null;
+    }
+}
+
+/** The default in force `jason profile set-default` answers, by name; null where the answer names none or is not one. */
+export function readDefaultAnswer(stdout: string): string | null {
+    try {
+        const named = (JSON.parse(stdout) as { execution_profile?: unknown } | null)?.execution_profile;
+        return typeof named === 'string' ? named : null;
     } catch {
         return null;
     }
