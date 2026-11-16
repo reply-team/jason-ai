@@ -154,7 +154,7 @@ public class InsideARunTests
         Assert.True(unread == HttpStatusCode.Forbidden, $"{operation} answered {(int)unread}: {unreadText}");
         Assert.Equal(before, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Equal(
-            [Operations.PluginGrant, Operations.PluginRevoke],
+            [Operations.PluginGrant, Operations.PluginRevoke, Operations.ProfileSetDefault, Operations.ProfileUnsetDefault],
             Jason.Runtime.Api.InsideARun.ChangesJason.Order(StringComparer.Ordinal));
     }
 

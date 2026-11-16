@@ -380,6 +380,8 @@ public class DefaultActorTests
         ["profile", "list"],
         ["profile", "disable", "local-codex"],
         ["profile", "enable", "local-codex"],
+        ["profile", "set-default", "local-codex"],
+        ["profile", "unset-default"],
         ["approval", "list"],
         ["approval", "get", "apr_A"],
         ["approval", "list-standing", "cmp_A"],

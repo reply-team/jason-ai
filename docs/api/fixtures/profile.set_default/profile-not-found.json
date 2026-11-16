@@ -1,0 +1,15 @@
+{
+  "operation": "profile.set_default",
+  "case": "profile-not-found",
+  "request": {
+    "name": "never-registered"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "profile_not_found",
+      "message": "No execution profile named 'never-registered'.",
+      "retryable": false
+    }
+  }
+}

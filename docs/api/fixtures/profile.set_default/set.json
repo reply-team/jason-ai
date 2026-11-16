@@ -1,0 +1,12 @@
+{
+  "operation": "profile.set_default",
+  "case": "set",
+  "request": {
+    "name": "house",
+    "reason": "the roles run on the house host"
+  },
+  "status": 200,
+  "response": {
+    "execution_profile": "house"
+  }
+}

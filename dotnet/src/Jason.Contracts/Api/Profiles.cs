@@ -91,5 +91,27 @@ public sealed record ProfileGetRequest(string? Name, int? Revision);
 /// <summary>Disabled profiles are out of service, so a listing leaves them out unless they are asked for.</summary>
 public sealed record ProfileListRequest(bool? IncludeDisabled, int? Limit, string? Cursor);
 
+/// <summary>
+/// One page of <c>profile.list</c>: the profiles, the cursor that continues the listing, and the configured default execution
+/// profile in force, <c>Roles:DefaultExecutionProfile</c>, by name or null. The default is said on every page whatever the
+/// page holds, and a name that answers no profile is said too: it is what every claim that falls back to it refuses on.
+/// </summary>
+public sealed record ProfilePageDto(IReadOnlyList<ExecutionProfileDto> Items, string? NextCursor, string? DefaultExecutionProfile);
+
 /// <summary>The body of <c>profile.disable</c> and <c>profile.enable</c>.</summary>
 public sealed record ProfileToggleRequest(string? Name, ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// <c>profile.set_default</c>: names the profile agent work falls back to when nothing more specific names one, the setting
+/// <c>Roles:DefaultExecutionProfile</c>. The profile must exist; it may be disabled, which work meets at its claim.
+/// </summary>
+public sealed record ProfileSetDefaultRequest(string? Name, ActorRef? Actor, string? Reason);
+
+/// <summary><c>profile.unset_default</c>: takes the configured default away, so agent work that nothing else names a profile for has none.</summary>
+public sealed record ProfileUnsetDefaultRequest(ActorRef? Actor, string? Reason);
+
+/// <summary>
+/// The configured default execution profile in force when the request answered: the name, or null where none is named.
+/// A name, never the profile: it is resolved when work is claimed.
+/// </summary>
+public sealed record ProfileDefaultDto(string? ExecutionProfile);

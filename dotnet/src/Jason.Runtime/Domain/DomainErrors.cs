@@ -413,6 +413,27 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and what a plugin may use is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
+    /// The configured default execution profile named or taken away from inside a run, refused by the run's header with the
+    /// code the run gate gives, before the body is read: it is Jason's own setting, and nothing inside a run changes Jason itself.
+    /// </summary>
+    public static ForbiddenException DefaultProfileInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and which profile agent work runs on by default is part of it: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
+    /// The configured default execution profile could not be put in force: the Roles section of the settings file does not
+    /// validate (another of its settings a person broke by hand), so the runtime keeps working from the last Roles settings
+    /// that did, which the log names (<see cref="Configuration.LiveSettings{TOptions}"/>). Not retryable: the file is mended first.
+    /// </summary>
+    public static DomainException SettingNotInForce(string setting, string section) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "setting_not_in_force",
+            $"{setting} cannot be put in force: the {section} settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the {section} section, then run the command again.",
+            retryable: false);
+
+    /// <summary>
     /// A route for every campaign asked for from inside a run: the global scope of <c>route.set</c> and <c>route.unset</c>,
     /// refused by the run's header with the code the run gate gives, since nothing inside a run changes Jason itself.
     /// </summary>

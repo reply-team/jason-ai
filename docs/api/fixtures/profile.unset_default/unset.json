@@ -1,0 +1,11 @@
+{
+  "operation": "profile.unset_default",
+  "case": "unset",
+  "request": {
+    "reason": "no default any more"
+  },
+  "status": 200,
+  "response": {
+    "execution_profile": null
+  }
+}

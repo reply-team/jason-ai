@@ -109,6 +109,8 @@ public static class Operations
     public const string ProfileList = "profile.list";
     public const string ProfileDisable = "profile.disable";
     public const string ProfileEnable = "profile.enable";
+    public const string ProfileSetDefault = "profile.set_default";
+    public const string ProfileUnsetDefault = "profile.unset_default";
 
     public const string JournalAppend = "journal.append";
     public const string JournalList = "journal.list";

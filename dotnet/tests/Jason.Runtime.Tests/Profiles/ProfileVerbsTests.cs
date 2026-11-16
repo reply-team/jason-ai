@@ -28,7 +28,7 @@ public class ProfileVerbsTests
             .ToList();
 
         Assert.Equal(
-            ["profile.create", "profile.disable", "profile.enable", "profile.get", "profile.list", "profile.update"],
+            ["profile.create", "profile.disable", "profile.enable", "profile.get", "profile.list", "profile.set_default", "profile.unset_default", "profile.update"],
             published);
 
         await using var api = await RuntimeApiFixture.StartAsync(Ct);
