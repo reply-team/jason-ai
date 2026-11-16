@@ -28,9 +28,9 @@ built to be shown inside another application, a browser tab can show it too, and
 more like one style.
 
 - **The Demo in Jason Desktop is the console's Demo.** The window shows the same mock of Jason at work on sample data as
-  before, now as the console's Demo built for embedding, received as built. It runs on scripts alone, with an opaque
-  origin, so it shares nothing with any other page and sets no cookie; what you type or keep in it stays in the window's
-  in-memory session, and no request reaches any address.
+  before, now as the console's Demo built for embedding. It runs on scripts alone, with an opaque origin, so it shares
+  nothing with any other page and sets no cookie; what you type or keep in it stays in the window's in-memory session,
+  and no request reaches any address.
   - The page's top strip carries the page's own words, and the desktop's **Demo | Live** switch stands alone at its
     right end. The Demo has no installation, so it offers no **Open in**.
   - On Windows the strip's sentence stays clear of the switch and the caption buttons at every width: where the window
@@ -45,7 +45,8 @@ more like one style.
   - The page is sealed in the same way as in the desktop: scripts alone, never the console's origin, so it holds nothing
     of the runtime's, the console's token included. Narrower than 900 pixels the page keeps that width and scrolls
     sideways under a strip that holds the switch. A custom UI build without the page says so in its place.
-- **The console looks more like one style.** Nothing here changes what a screen says or does.
+- **The console looks more like one style.** Each screen says and does what it did, with one button
+  added in Needs you.
   - The sidebar's rows sit a little further apart. The row you are on has its own darker fill and a medium weight, so it
     no longer looks like a row under the pointer.
   - In the access menu each mode carries its own mark at the left, the same mark the button shows.
