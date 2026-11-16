@@ -30,9 +30,8 @@ public sealed record TerminalLaunch(string Terminal, IReadOnlyList<string> Argv,
 public sealed record OwnJason(string DataDirectory, string? ExecutableFolder, string? SearchPath);
 
 /// <summary>
-/// The terminal per operating system, as pure strings. Windows starts the console host from the system directory, which
-/// hands the console to the person's default terminal (Windows Terminal where it is the default), and gives it the host
-/// after <c>--</c>; macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
+/// The terminal per operating system, as pure strings. Windows starts the console host from the system directory and gives
+/// it the host after <c>--</c> (which window a person then sees is not yet measured on a machine); macOS opens a <c>.command</c> script in Terminal through <c>/usr/bin/open</c>, since
 /// <c>open -a Terminal</c> takes no command; Linux starts the program the <c>TERMINAL</c> variable names, else
 /// <c>x-terminal-emulator</c>, with the host as several arguments in the form that program takes, chosen by its file name
 /// (<see cref="LinuxForm"/>). A terminal the

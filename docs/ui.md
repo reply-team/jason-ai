@@ -265,9 +265,8 @@ may run is your host's own permission settings' to decide. An item that no longe
 is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
 why: run it in a terminal and it prints the refusal and how to do the same by hand.
 
-- **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
-  where that is your default terminal; where your default terminal is the console host itself, you get a plain console
-  window. The console host's window and its hand-off to Windows Terminal are not yet measured on a machine.
+- **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
+  then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
@@ -284,9 +283,10 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   `x-terminal-emulator` is used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not
   found falls back to `x-terminal-emulator`, and the answer names the terminal that was used.
 - **This installation's own `jason`.** The window runs the `jason` of the installation the command was given, on its
-  data, whatever else is on your `PATH`: it is given the data directory the command runs on as `JASON_DATA_DIR`, whether
+  data: it is given the data directory the command runs on as `JASON_DATA_DIR`, whether
   or not that variable was set where you typed it, and the folder of this `jason`'s executable first on `PATH`, so a
-  `jason` of another installation earlier on `PATH` does not answer there. On Windows the two are set in the environment
+  `jason` of another installation earlier on `PATH` does not answer there as the window starts; a host's own shell that reads
+  a profile can put another folder first again. On Windows the two are set in the environment
   the console host is started with, `PATH` being that folder and then the command's own search path. On Linux they travel
   on the terminal's command line through `/usr/bin/env`, which sets them and replaces itself with the host, after the
   terminal's own form and before the host, since an emulator may hand its command to a server already running, which

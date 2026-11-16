@@ -349,6 +349,29 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal(_root, launch.WorkingDirectory);
     }
 
+    /// <summary>On Linux a host whose path holds <c>=</c> cannot follow <c>/usr/bin/env</c>: nothing is started, and the refusal is the answer.</summary>
+    [Fact]
+    public async Task A_host_on_linux_whose_path_holds_an_equals_sign_starts_nothing()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, "a=b")).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder + Path.PathSeparator + _run.Programs.Root;
+
+        var exit = await _run.Cli("session", "open", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", Code());
+    }
+
     /// <summary>A SHELL that is unset, relative or names no program is not trusted: /bin/sh.</summary>
     [Theory]
     [InlineData(null)]

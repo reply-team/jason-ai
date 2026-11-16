@@ -266,6 +266,30 @@ public sealed class SetupSessionTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    /// <summary>On Linux a host whose path holds <c>=</c> cannot follow <c>/usr/bin/env</c>: nothing is started, and the refusal is the answer.</summary>
+    [Fact]
+    public async Task Setup_on_linux_with_a_host_whose_path_holds_an_equals_sign_starts_nothing()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, "a=b")).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder + Path.PathSeparator + _run.Programs.Root;
+        DeploySkill(AgentHostKind.ClaudeCode);
+
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", (string?)Answer()["error"]!["code"]);
+    }
+
     [Fact]
     public async Task Setup_refuses_a_host_that_is_not_installed()
     {
