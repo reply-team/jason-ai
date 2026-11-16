@@ -26,7 +26,6 @@ export const invokeChannels = {
     'dailyTrends.set': 'jason:dailyTrends.set',
     'mode.get': 'jason:mode.get',
     'mode.set': 'jason:mode.set',
-    'mode.startOver': 'jason:mode.startOver',
     'chat.send': 'jason:chat.send',
     'chat.stop': 'jason:chat.stop',
     'chat.answer': 'jason:chat.answer',

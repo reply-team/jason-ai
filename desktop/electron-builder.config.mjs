@@ -46,15 +46,9 @@ export function electronChecksums() {
 /** The chat's three lists and its instruction text, packaged inside the application beside package.json. */
 export const chatFiles = Object.freeze(['chat-deny-list.txt', 'chat-allow-list.txt', 'chat-plan-list.txt', 'chat-instructions.md']);
 
-/**
- * Where a release's bundle carries the archive of the demo's sample (`prepare.mjs --demo`), relative to the bundle: the
- * desktop places it at a demo's first start. Only a release's package carries one, so it is not among `bundleFiles`.
- */
-export const demoArchive = 'demo/jason-demo.zip';
-
-/** What a pack of one architecture finds in its bundle folder: the executable, its two notices, the skills and the demo provider's package. */
+/** What a pack of one architecture finds in its bundle folder: the executable, its two notices, version.json and the skills. */
 export function bundleFiles(platform) {
-    return [platform === 'win32' ? 'jason.exe' : 'jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills', 'plugins'];
+    return [platform === 'win32' ? 'jason.exe' : 'jason', 'LICENSE', 'THIRD-PARTY-NOTICES', 'version.json', 'skills'];
 }
 
 const semver = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;

@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { demoArchive, fuses, signer } from '../electron-builder.config.mjs';
+import { fuses, signer } from '../electron-builder.config.mjs';
 import { checkPackage, fuseFile, iconRoot, linuxIconSizes, updateFile, wireOrder, type Form, type Platform } from '../scripts/check-package.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -238,6 +238,16 @@ test('linux: an AppImage carrying package-type is refused, since electron-update
     assert.throws(() => check(app, 'linux-appimage'), /The AppImage carries resources\/package-type saying deb, so electron-updater would update it as a deb/);
 });
 
+test('a package carrying bundle/demo is refused, on each platform, so the removed sample cannot come back unseen', async (t) => {
+    for (const kind of ['win32', 'darwin', 'linux-deb', 'linux-appimage'] as const) {
+        const app = await made(t, kind);
+        assert.ok(check(app, kind).includes('bundle/demo: none'), kind);
+        const resources = kind === 'darwin' ? join(app, 'Contents', 'Resources') : join(app, 'resources');
+        mkdirSync(join(resources, 'bundle', 'demo'), { recursive: true });
+        assert.throws(() => check(app, kind), /carries bundle\/demo/, kind);
+    }
+});
+
 test('linux: each form is what it says: an AppImage has AppRun at its root, and a deb\'s folder has none', async (t) => {
     const flat = await made(t, 'linux-appimage', { appRun: false });
     assert.throws(() => check(flat, 'linux-appimage'), /holds no AppRun; it is not an AppImage's contents/);
@@ -351,49 +361,4 @@ test('an AppImage whose menu entry declares the jason scheme is refused: the App
         const app = await made(t, 'linux-appimage', { appImageEntry: [menuEntry('AppRun %U'), `MimeType=x-scheme-handler/${scheme};`, ''].join('\n') });
         assert.throws(() => check(app, 'linux-appimage'), /declares a jason scheme, and the AppImage takes no link/, scheme);
     }
-});
-
-/** Where a package carries the demo's sample archive: in the bundle of its resources folder. */
-const carriedArchive = (app: string, kind: Kind) => join(kind === 'darwin' ? join(app, 'Contents', 'Resources') : join(app, 'resources'), 'bundle', ...demoArchive.split('/'));
-
-for (const kind of ['win32', 'darwin', 'linux-deb', 'linux-appimage'] as const) {
-    test(`${kind}: a release’s package carries the demo’s sample archive the release made, byte for byte`, async (t) => {
-        const app = await made(t, kind);
-        // Bytes standing for the archive the release's demo job made: what is held is that the package carries that file.
-        const given = join(temporary(t), 'jason-demo.zip');
-        writeFileSync(given, 'bytes standing for the release archive');
-        assert.throws(() => checkPackage(app, platformOf(kind), formOf(kind), given), /carries no archive of the demo’s sample/);
-        mkdirSync(dirname(carriedArchive(app, kind)), { recursive: true });
-        copyFileSync(given, carriedArchive(app, kind));
-        const said = checkPackage(app, platformOf(kind), formOf(kind), given);
-        assert.ok(said.some((line) => line.startsWith('bundle/demo/jason-demo.zip: the release’s sample, 38 bytes, sha256 ')), said.join('\n'));
-        writeFileSync(carriedArchive(app, kind), 'bytes of another archive');
-        assert.throws(() => checkPackage(app, platformOf(kind), formOf(kind), given), /is not the archive the release made/);
-    });
-
-    test(`${kind}: a package built outside a release carries no archive of the demo’s sample, so the desktop makes it live`, async (t) => {
-        const app = await made(t, kind);
-        const said = checkPackage(app, platformOf(kind), formOf(kind));
-        assert.ok(said.includes('bundle/demo/jason-demo.zip: none, so the desktop makes the sample live'), said.join('\n'));
-        mkdirSync(dirname(carriedArchive(app, kind)), { recursive: true });
-        writeFileSync(carriedArchive(app, kind), 'bytes no release made');
-        assert.throws(() => checkPackage(app, platformOf(kind), formOf(kind)), /carries an archive of the demo’s sample at bundle\/demo\/jason-demo\.zip, and no release’s was named with --demo/);
-    });
-}
-
-test('run as a program: --demo names the release’s archive, and --demo with nothing after it is a usage error', async (t) => {
-    const script = join(root, 'scripts', 'check-package.mjs');
-    const app = await made(t, 'win32');
-    const given = join(temporary(t), 'jason-demo.zip');
-    writeFileSync(given, 'bytes standing for the release archive');
-    mkdirSync(dirname(carriedArchive(app, 'win32')), { recursive: true });
-    copyFileSync(given, carriedArchive(app, 'win32'));
-    const read = spawnSync(process.execPath, [script, '--app', app, '--platform', 'win32', '--demo', given], { encoding: 'utf8' });
-    assert.equal(read.status, 0, read.stderr);
-    assert.match(read.stdout, /bundle\/demo\/jason-demo\.zip: the release’s sample/);
-    const refused = spawnSync(process.execPath, [script, '--app', app, '--platform', 'win32'], { encoding: 'utf8' });
-    assert.equal(refused.status, 1);
-    const usage = spawnSync(process.execPath, [script, '--app', app, '--platform', 'win32', '--demo'], { encoding: 'utf8' });
-    assert.equal(usage.status, 2);
-    assert.match(usage.stderr, /\[--demo <archive>\]/);
 });

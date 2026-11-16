@@ -13,7 +13,7 @@
  * And one entry opens the person's own AI on Jason itself, "Change Jason itself": the bundled `jason session open --setup`,
  * with the host its own rule chooses (the preference `agent.interactive_host`, else Claude Code). Only where that rule
  * cannot choose, by the codes in `hostUnchosen`, is it run once more with a host this desktop found that the command line
- * did not try, Claude Code, else Codex. It is offered in the person's own installation only, never in a demo run, and it is never the default.
+ * did not try, Claude Code, else Codex. It is offered in the person's own installation only, and it is never the default.
  */
 
 import { posix, win32 } from 'node:path';
@@ -232,10 +232,8 @@ export type ChangeJasonHost = 'preference' | 'desktop_claude' | 'desktop_codex';
  */
 export const changeJasonLoggedCodes: readonly string[] = ['host_unknown', 'preference_unreadable', 'host_not_found', 'folder_missing', 'terminal_not_found', 'terminal_start_failed'];
 
-/** What "Change Jason itself" needs from the run. Absent, the entry is not offered, as in a demo run. */
+/** What "Change Jason itself" needs from the run. Absent, the entry is not offered. */
 export interface ChangeJasonDeps {
-    /** True in the person's own installation, false in a demo run. */
-    live(): boolean;
     flags: ChangeJasonFlags;
     log?(event: 'open_in_change_jason', fields: { Host: ChangeJasonHost; Exit: number }): void;
     log?(event: 'open_in_change_jason_refused', fields: { Host: ChangeJasonHost; Exit: number; Code: string }): void;
@@ -247,7 +245,7 @@ export interface OpenInDeps {
     hosts(): { claude: boolean; codex: boolean };
     /** The bundled `jason`. */
     cli: { run(args: readonly string[], options?: { cwd?: string }): Promise<{ exit: number; stdout: string; stderr: string }> };
-    /** The harness root of this run's installation: the demo's in a demo run. */
+    /** The harness root of this run's installation. */
     harnessRoot(): string;
     isDirectory(path: string): boolean;
     remembered(): PlaceId | null;
@@ -281,7 +279,7 @@ export const continueRunning = 'A turn of this chat is running. Stop it or wait 
 
 /** The refusals of "Change Jason itself", in the desktop's own words. */
 export const changeJasonNoHost = 'Change Jason itself needs Claude Code or Codex on this computer.';
-export const changeJasonNotInDemo = 'Not in the demo: Change Jason itself is for your own installation.';
+export const changeJasonUnoffered = 'Change Jason itself is not offered here.';
 
 /**
  * The codes with which `jason session open --setup` says its own rule could not choose a host, nothing started: the
@@ -386,7 +384,7 @@ export class OpenIn {
         const answer: OpenInAnswer = { places, default: defaultPlace(places, this.#deps.remembered()), folder: name };
         const found = chatId === undefined || chatId === null ? null : this.#deps.continuable(chatId);
         if (found !== null) answer.continue = { host: found.host, label: labels[found.host], running: found.running };
-        if (this.#deps.changeJason?.live() === true) answer.changeJason = true;
+        if (this.#deps.changeJason !== undefined) answer.changeJason = true;
         return answer;
     }
 
@@ -415,13 +413,13 @@ export class OpenIn {
      * hand. Where the command line says it could not choose (`hostUnchosen`), it is run once more, and only once, with a
      * host this desktop found that the command line did not try, Claude Code, else Codex (`#secondHost`). A host not
      * installed where the desktop finds no other is said as the two the entry needs; every other refusal, the second
-     * run's included, in the command line's own sentence. Nothing the page sends is read, and nothing is run in a demo
-     * run. Never kept as the next default.
+     * run's included, in the command line's own sentence. Nothing the page sends is read, and nothing is run where the
+     * entry is not offered. Never kept as the next default.
      */
     async changeJason(): Promise<OpenInRefusal | null> {
         const deps = this.#deps;
         const own = deps.changeJason;
-        if (own === undefined || !own.live()) return { refused: changeJasonNotInDemo };
+        if (own === undefined) return { refused: changeJasonUnoffered };
         let host: ChangeJasonHost = 'preference';
         let answer = await deps.cli.run(['session', 'open', ...own.flags(null)]);
         let code = answer.exit === 0 ? null : cliCode(answer.stdout);

@@ -51,7 +51,6 @@ const desktop = {
     mode: {
         get: () => ipcRenderer.invoke('jason:mode.get'),
         set: (mode: 'live' | 'demo') => ipcRenderer.invoke('jason:mode.set', mode),
-        startOver: () => ipcRenderer.invoke('jason:mode.startOver'),
         onPreparing: (handler: Handler) => subscribe('jason:mode.preparing', handler),
     },
     openIn: {
