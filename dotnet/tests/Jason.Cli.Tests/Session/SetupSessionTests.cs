@@ -68,6 +68,7 @@ public sealed class SetupSessionTests : IDisposable
         var launch = Assert.Single(_run.Terminals.Launches);
         Assert.Equal([_run.ConsoleHost, "--", claude, SetupBrief.For("claude_code", deployed: true), "--add-dir", _setup.PluginsDirectory], launch.Argv);
         Assert.Equal(_setup.RoleSkillsDirectory, launch.WorkingDirectory);
+        Assert.Equal(_run.WindowsVariables, launch.Variables);
         var answer = Answer();
         Assert.Equal(["kind", "folder", "plugins_folder", "host", "skill", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
         Assert.Equal("setup", (string?)answer["kind"]);
@@ -257,6 +258,8 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal(["/usr/bin/open", "-a", "Terminal", "jason-setup.command"], answer["argv"]!.AsArray().Select(word => word!.GetValue<string>()));
         var script = answer["script"]!.GetValue<string>().Split('\n');
         Assert.Contains("cd -- " + TerminalPlan.ShellQuote(_setup.RoleSkillsDirectory) + " || exit 1", script);
+        Assert.Contains("export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), script);
+        Assert.Contains("export PATH=" + TerminalPlan.ShellQuote(_run.InstalledFolder) + "\"${PATH:+:$PATH}\"", script);
         Assert.Contains(
             "exec " + string.Join(' ', new[] { claude, SetupBrief.For("claude_code", deployed: false), "--add-dir", _setup.PluginsDirectory }.Select(TerminalPlan.ShellQuote)),
             answer["script"]!.GetValue<string>(),

@@ -53,6 +53,7 @@ public sealed class FolderSessionTests : IDisposable
         var launch = Assert.Single(_run.Terminals.Launches);
         Assert.Equal([_run.ConsoleHost, "--", claude], launch.Argv);
         Assert.Equal(_root, launch.WorkingDirectory);
+        Assert.Equal(_run.WindowsVariables, launch.Variables);
         var answer = JsonNode.Parse(_run.Output.ToString())!.AsObject();
         Assert.Equal(["kind", "folder", "host", "shell", "program", "terminal", "started"], answer.Select(field => field.Key).ToArray());
         Assert.Equal("folder", (string?)answer["kind"]);
@@ -309,6 +310,7 @@ public sealed class FolderSessionTests : IDisposable
         var script = answer["script"]!.GetValue<string>().Split('\n');
         Assert.Contains("cd -- " + TerminalPlan.ShellQuote(_root) + " || exit 1", script);
         Assert.Contains("export JASON_DATA_DIR=" + TerminalPlan.ShellQuote(_run.DataDirectory), script);
+        Assert.Contains("export PATH=" + TerminalPlan.ShellQuote(_run.InstalledFolder) + "\"${PATH:+:$PATH}\"", script);
         Assert.Equal("exec '/bin/sh' '-c' 'exec \"${SHELL:-/bin/sh}\" -l'", script.Last(line => line.Length > 0));
     }
 
@@ -343,7 +345,7 @@ public sealed class FolderSessionTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, exit);
         var launch = Assert.Single(_run.Terminals.Launches);
-        Assert.Equal([emulator, "-e", bash], launch.Argv);
+        Assert.Equal([emulator, "-e", .. _run.LinuxEnv, bash], launch.Argv);
         Assert.Equal(_root, launch.WorkingDirectory);
     }
 
@@ -373,7 +375,7 @@ public sealed class FolderSessionTests : IDisposable
         var exit = await _run.Cli("session", "open", "--shell");
 
         Assert.Equal(ExitCodes.Success, exit);
-        Assert.Equal([emulator, "-e", "/bin/sh"], Assert.Single(_run.Terminals.Launches).Argv);
+        Assert.Equal([emulator, "-e", .. _run.LinuxEnv, "/bin/sh"], Assert.Single(_run.Terminals.Launches).Argv);
     }
 
     [Fact]

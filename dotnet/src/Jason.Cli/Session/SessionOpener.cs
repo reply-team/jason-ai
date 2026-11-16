@@ -121,10 +121,17 @@ public static class SessionOpener
             return ExitCodes.ApiError;
         }
 
+        IReadOnlyList<string> started = [.. program, .. AgentHosts.InteractiveArguments(host, prompt)];
+        if (TerminalPlan.Uncarried(terminals.Platform, started) is { } uncarried)
+        {
+            env.Error.WriteLine($"The terminal {terminal.Name} did not start ({uncarried}). {byHand}");
+            return ExitCodes.ApiError;
+        }
+
         TerminalLaunch launch;
         try
         {
-            launch = TerminalPlan.Compose(terminals.Platform, terminal, where, [.. program, .. AgentHosts.InteractiveArguments(host, prompt)], item.Id, DataDirectory(env));
+            launch = TerminalPlan.Compose(terminals.Platform, terminal, where, started, item.Id, Own(env));
         }
         catch (ArgumentException)
         {
@@ -316,12 +323,35 @@ public static class SessionOpener
         env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
 
     /// <summary>
-    /// The data directory this CLI runs on when <c>JASON_DATA_DIR</c> names one, else null: an empty or blank value names
-    /// none, as it does where the data directory is resolved. The directory is the one the CLI uses, made absolute, since
-    /// the terminal starts in another folder than the CLI.
+    /// The installation the opened terminal's <c>jason</c> is to be: the data directory this CLI runs on, the one it
+    /// resolved and made absolute whether or not <c>JASON_DATA_DIR</c> names it, since the terminal starts in another
+    /// folder than the CLI and may not carry the CLI's environment; the folder of the file this jason is installed as,
+    /// found as <c>jason update apply</c> and <c>jason uninstall</c> find it, never the process path, which under
+    /// <c>dotnet</c> is the muxer (null where there is no such file); and the CLI's own search path.
     /// </summary>
-    internal static string? DataDirectory(CliEnvironment env) =>
-        string.IsNullOrWhiteSpace(Variable(env, JasonPaths.DataDirectoryVariable)) ? null : env.Paths.Root;
+    internal static OwnJason Own(CliEnvironment env) =>
+        new(
+            env.Paths.Root,
+            Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty) is { Length: > 0 } folder ? folder : null,
+            SearchPath(env));
+
+    /// <summary>
+    /// The variables a launch is started with, for a dry run's answer: only where they are not already on the command
+    /// line or in the script, which is Windows'.
+    /// </summary>
+    internal static void PrintVariables(JsonObject printed, TerminalLaunch launch)
+    {
+        if (launch.Variables is { Count: > 0 } variables)
+        {
+            var environment = new JsonObject();
+            foreach (var (name, value) in variables)
+            {
+                environment[name] = value;
+            }
+
+            printed["environment"] = environment;
+        }
+    }
 
     /// <summary>The person's home folder, where a host starts when no folder is recorded: never the folder the CLI runs in.</summary>
     private static string Home(CliEnvironment env) => env.Identity?.Home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -346,6 +376,8 @@ public static class SessionOpener
             {
                 printed["script"] = script;
             }
+
+            PrintVariables(printed, launch);
         }
 
         return printed.ToJsonString(JasonJson.Options);

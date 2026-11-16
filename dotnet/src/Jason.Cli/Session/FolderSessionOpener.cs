@@ -30,8 +30,8 @@ namespace Jason.Cli.Session;
 /// <c>--resume</c> puts the host's own words and the conversation's id after its program
 /// (<see cref="AgentHosts.ResumeArguments"/>); a host with no such words is refused as soon as the host is known, before
 /// its program or a terminal is looked for.
-/// The terminal is the one the item form starts, through the same seam, so the data directory reaches it as it reaches
-/// the item form's: inherited on Windows and Linux, exported by the script on macOS.
+/// The terminal is the one the item form starts, through the same seam, so it runs this installation's own <c>jason</c> as
+/// the item form's does: the data directory by name and this jason's folder first on PATH (<see cref="OwnJason"/>).
 /// </para>
 /// <para>
 /// Exit codes are the CLI's: 0 the terminal started (or, for a dry run, would be), 1 refused — by the runtime, printed as
@@ -134,7 +134,12 @@ public static class FolderSessionOpener
             }
         }
 
-        var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.DataDirectory(env));
+        if (TerminalPlan.Uncarried(terminals.Platform, program!) is { } uncarried)
+        {
+            return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started.");
+        }
+
+        var launch = TerminalPlan.Compose(terminals.Platform, terminal, path, program!, scriptName, SessionOpener.Own(env));
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
             return Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
@@ -299,6 +304,8 @@ public static class FolderSessionOpener
             {
                 printed["script"] = script;
             }
+
+            SessionOpener.PrintVariables(printed, launch);
         }
 
         return printed.ToJsonString(JasonJson.Options);
