@@ -469,57 +469,59 @@ function liveAgents(): Html {
             ${
                 running.length === 0
                     ? html`<div class="empty dash-no-agents">${t('dash.agents.none')}</div>`
-                    : html`<table class="t">
-                          <thead>
-                              <tr>
-                                  <th>${t('dash.col.agent')}</th>
-                                  <th>${t('dash.col.status')}</th>
-                                  <th>${t('dash.col.people')}</th>
-                                  <th>${t('dash.col.contacted')}</th>
-                                  <th>${t('dash.col.replied')}</th>
-                                  <th>${t('dash.col.meetings')}</th>
-                                  <th>${t('dash.col.progress')}</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              ${running.map((campaign) => {
-                                  const counts = campaigns.summary.value[campaign.id];
-                                  const row = toCampaignRow(campaign, counts);
-                                  const mine = read?.byCampaign[campaign.id];
-                                  const progress = mine ? progressOf(mine.contacted, row.people) : null;
-                                  return html`<tr data-id="${row.id}">
-                                      <td>
-                                          <button class="dash-link" type="button" ${act('campaigns.open', row.id)}>
-                                              <b>${row.name}</b>
-                                          </button>
-                                          ${
-                                              counts?.sequence_linked && counts.sequence > 0
-                                                  ? html`<div class="meta">
-                                                        ${t('dash.agents.sequence', { n: String(counts.sequence) })}
-                                                    </div>`
-                                                  : null
-                                          }
-                                      </td>
-                                      <td><span class="pillc ${row.tone}">${row.state}</span></td>
-                                      <td>${row.people}</td>
-                                      <td>${mine ? mine.contacted : dash}</td>
-                                      <td>${mine ? mine.replied : dash}</td>
-                                      <td>${dash}</td>
-                                      <td>
-                                          ${
-                                              progress === null
-                                                  ? dash
-                                                  : html`<progress
-                                                        value="${progress}"
-                                                        max="1"
-                                                        aria-label="${t('dash.progress', { period: periodWords(period.value), agent: row.name })}"
-                                                    ></progress>`
-                                          }
-                                      </td>
-                                  </tr>`;
-                              })}
-                          </tbody>
-                      </table>`
+                    : html`<div class="tscroll" role="region" tabindex="0" aria-label="${t('dash.agents')}">
+                          <table class="t">
+                              <thead>
+                                  <tr>
+                                      <th>${t('dash.col.agent')}</th>
+                                      <th>${t('dash.col.status')}</th>
+                                      <th>${t('dash.col.people')}</th>
+                                      <th>${t('dash.col.contacted')}</th>
+                                      <th>${t('dash.col.replied')}</th>
+                                      <th>${t('dash.col.meetings')}</th>
+                                      <th>${t('dash.col.progress')}</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                                  ${running.map((campaign) => {
+                                      const counts = campaigns.summary.value[campaign.id];
+                                      const row = toCampaignRow(campaign, counts);
+                                      const mine = read?.byCampaign[campaign.id];
+                                      const progress = mine ? progressOf(mine.contacted, row.people) : null;
+                                      return html`<tr data-id="${row.id}">
+                                          <td>
+                                              <button class="dash-link" type="button" ${act('campaigns.open', row.id)}>
+                                                  <b>${row.name}</b>
+                                              </button>
+                                              ${
+                                                  counts?.sequence_linked && counts.sequence > 0
+                                                      ? html`<div class="meta">
+                                                            ${t('dash.agents.sequence', { n: String(counts.sequence) })}
+                                                        </div>`
+                                                      : null
+                                              }
+                                          </td>
+                                          <td><span class="pillc ${row.tone}">${row.state}</span></td>
+                                          <td>${row.people}</td>
+                                          <td>${mine ? mine.contacted : dash}</td>
+                                          <td>${mine ? mine.replied : dash}</td>
+                                          <td>${dash}</td>
+                                          <td>
+                                              ${
+                                                  progress === null
+                                                      ? dash
+                                                      : html`<progress
+                                                            value="${progress}"
+                                                            max="1"
+                                                            aria-label="${t('dash.progress', { period: periodWords(period.value), agent: row.name })}"
+                                                        ></progress>`
+                                              }
+                                          </td>
+                                      </tr>`;
+                                  })}
+                              </tbody>
+                          </table>
+                      </div>`
             }
         </div>
     </section>`;
@@ -542,28 +544,30 @@ function categories(): Html {
                           : null
                     : read.total.categories.length === 0
                       ? html`<div class="empty dash-cats-none">${t('dash.cats.none')}</div>`
-                      : html`<table class="t">
-                            <thead>
-                                <tr>
-                                    <th>${t('dash.cats.col.category')}</th>
-                                    <th>${t('dash.cats.col.threads')}</th>
-                                    <th>${t('dash.cats.col.replies')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${read.total.categories.map(
-                                    (each) =>
-                                        html`<tr data-category="${each.category}">
-                                            <td>${categoryLabel(each.category)}</td>
-                                            <td>
-                                                ${each.threads}
-                                                ${trendView(trendsOn.value ? categoryTrend(trendReads.value, each.category) : null)}
-                                            </td>
-                                            <td>${each.replies}</td>
-                                        </tr>`,
-                                )}
-                            </tbody>
-                        </table>`
+                      : html`<div class="tscroll" role="region" tabindex="0" aria-label="${t('dash.cats')}">
+                            <table class="t">
+                                <thead>
+                                    <tr>
+                                        <th>${t('dash.cats.col.category')}</th>
+                                        <th>${t('dash.cats.col.threads')}</th>
+                                        <th>${t('dash.cats.col.replies')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${read.total.categories.map(
+                                        (each) =>
+                                            html`<tr data-category="${each.category}">
+                                                <td>${categoryLabel(each.category)}</td>
+                                                <td>
+                                                    ${each.threads}
+                                                    ${trendView(trendsOn.value ? categoryTrend(trendReads.value, each.category) : null)}
+                                                </td>
+                                                <td>${each.replies}</td>
+                                            </tr>`,
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>`
             }
         </div>
     </section>`;

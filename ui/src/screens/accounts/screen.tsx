@@ -55,30 +55,32 @@ export function AccountsScreen() {
                         ) : notifications.channels.length === 0 ? (
                             <p className="empty">No channel is set up, so Jason sends you no notifications.</p>
                         ) : (
-                            <table className="tbl">
-                                <thead>
-                                    <tr>
-                                        <th>Channel</th>
-                                        <th>State</th>
-                                        <th>Last notification</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {notifications.channels.map((channel) => (
-                                        <tr key={channel.channel}>
-                                            <td>
-                                                <strong>{channelName(channel)}</strong>
-                                            </td>
-                                            <td>
-                                                <span className={`badge ${outcomeTone(channel)}`}>
-                                                    {channel.on ? 'on' : 'off'}
-                                                </span>
-                                            </td>
-                                            <td>{outcomeWords(channel, now)}</td>
+                            <div className="tablewrap" role="region" tabIndex={0} aria-label="Notification channels">
+                                <table className="tbl">
+                                    <thead>
+                                        <tr>
+                                            <th>Channel</th>
+                                            <th>State</th>
+                                            <th>Last notification</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {notifications.channels.map((channel) => (
+                                            <tr key={channel.channel}>
+                                                <td>
+                                                    <strong>{channelName(channel)}</strong>
+                                                </td>
+                                                <td>
+                                                    <span className={`badge ${outcomeTone(channel)}`}>
+                                                        {channel.on ? 'on' : 'off'}
+                                                    </span>
+                                                </td>
+                                                <td>{outcomeWords(channel, now)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                         {notifications?.last_at && (
                             <p className="hint">

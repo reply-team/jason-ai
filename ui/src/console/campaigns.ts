@@ -80,43 +80,45 @@ export function campaignsView(): Html {
                             New chat
                         </button>
                     </div>`
-                  : html`<table class="t">
-                        <thead>
-                            <tr>
-                                <th>Agent</th>
-                                <th>State</th>
-                                <th>People</th>
-                                <th>Waiting</th>
-                                <th>Failed</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${rows.map(
-                                (row) =>
-                                    html`<tr>
-                                        <td><b>${row.name}</b></td>
-                                        <td><span class="pillc ${row.tone}">${row.state}</span></td>
-                                        <td>${row.people}</td>
-                                        <td>${row.waiting}</td>
-                                        <td>${row.failed}</td>
-                                        <td class="acts">
-                                            <button class="btn sm" type="button" ${act('campaigns.open', row.id)}>
-                                                Open
-                                            </button>
-                                            <button
-                                                class="btn sm"
-                                                type="button"
-                                                ${act('campaigns.chat', row.id)}
-                                                ${offUnless('chat.create')}
-                                            >
-                                                Chat
-                                            </button>
-                                        </td>
-                                    </tr>`,
-                            )}
-                        </tbody>
-                    </table>`
+                  : html`<div class="tscroll" role="region" tabindex="0" aria-label="Agents">
+                        <table class="t">
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>State</th>
+                                    <th>People</th>
+                                    <th>Waiting</th>
+                                    <th>Failed</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows.map(
+                                    (row) =>
+                                        html`<tr>
+                                            <td><b>${row.name}</b></td>
+                                            <td><span class="pillc ${row.tone}">${row.state}</span></td>
+                                            <td>${row.people}</td>
+                                            <td>${row.waiting}</td>
+                                            <td>${row.failed}</td>
+                                            <td class="acts">
+                                                <button class="btn sm" type="button" ${act('campaigns.open', row.id)}>
+                                                    Open
+                                                </button>
+                                                <button
+                                                    class="btn sm"
+                                                    type="button"
+                                                    ${act('campaigns.chat', row.id)}
+                                                    ${offUnless('chat.create')}
+                                                >
+                                                    Chat
+                                                </button>
+                                            </td>
+                                        </tr>`,
+                                )}
+                            </tbody>
+                        </table>
+                    </div>`
         }
     </div>`;
 }

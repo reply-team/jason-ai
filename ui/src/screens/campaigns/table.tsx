@@ -34,7 +34,7 @@ type Props = {
 export function CampaignTable({ campaigns, view, period, filters, summary, activity, selected, opens, more }: Props) {
     const columns = (view === 'summary' ? summaryColumns : activityColumns).filter((column) => column.column !== false);
     return (
-        <div className="tablewrap">
+        <div className="tablewrap" role="region" tabIndex={0} aria-label="Agents">
             <table className="grid">
                 <thead>
                     <tr>

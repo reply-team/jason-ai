@@ -903,10 +903,15 @@
         top: 0;
         bottom: 0;
         transform: translateX(-100%);
-        transition: transform 0.18s;
+        visibility: hidden;
+        transition:
+            transform 0.18s,
+            visibility 0s 0.18s;
     }
     .jc-console .side.open {
         transform: none;
+        visibility: visible;
+        transition: transform 0.18s;
         box-shadow: 0 0 40px rgba(2, 6, 23, 0.25);
     }
     .jc-console .content {
@@ -1855,6 +1860,23 @@ body,
         overflow: visible;
         text-overflow: clip;
     }
+    /* A row of a person's history says what it is about in as many lines as it needs. */
+    .jc-console .harness .row .what {
+        flex-wrap: wrap;
+    }
+    .jc-console .harness .row .what .in {
+        flex: 1 1 100%;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+    /* The period switch is as wide as the room, or less, and its labels shrink with it. */
+    .jc-console .harness .segmented {
+        max-width: 100%;
+    }
+    .jc-console .harness .segmented button {
+        padding: 0 8px;
+    }
 }
 .jc-console .mode-open-in {
     display: flex;
@@ -2392,12 +2414,8 @@ body,
     white-space: nowrap;
 }
 @media (max-width: 820px) {
-    /* A table wider than the room scrolls inside its own box, not the whole page. */
-    .jc-console table.t,
-    .jc-console .harness table.tbl,
-    .jc-console .harness table.grid,
-    .jc-console .harness table.ptable {
-        display: block;
+    /* A table wider than the room scrolls inside a box of its own, around it, which a keyboard reaches and a reader names. */
+    .jc-console .tscroll {
         max-width: 100%;
         overflow-x: auto;
     }

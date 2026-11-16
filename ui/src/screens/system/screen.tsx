@@ -148,30 +148,32 @@ export function SystemScreen() {
                                 Plugins <span className="badge">{info.plugins.active_count} active</span>
                             </h2>
                             {store.plugins.value.length > 0 ? (
-                                <table className="tbl">
-                                    <thead>
-                                        <tr>
-                                            <th>Plugin</th>
-                                            <th>Kind</th>
-                                            <th>Operations</th>
-                                            <th>Status</th>
-                                            <th className="r">Digest</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {store.plugins.value.map((p) => (
-                                            <tr key={p.id}>
-                                                <td>
-                                                    <strong>{p.id}</strong> {p.version}
-                                                </td>
-                                                <td>{p.kind}</td>
-                                                <td>{p.operations.join(', ')}</td>
-                                                <td>{p.status}</td>
-                                                <td className="r mono">{p.digest.slice(7, 19)}</td>
+                                <div className="tablewrap" role="region" tabIndex={0} aria-label="Plugins">
+                                    <table className="tbl">
+                                        <thead>
+                                            <tr>
+                                                <th>Plugin</th>
+                                                <th>Kind</th>
+                                                <th>Operations</th>
+                                                <th>Status</th>
+                                                <th className="r">Digest</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            {store.plugins.value.map((p) => (
+                                                <tr key={p.id}>
+                                                    <td>
+                                                        <strong>{p.id}</strong> {p.version}
+                                                    </td>
+                                                    <td>{p.kind}</td>
+                                                    <td>{p.operations.join(', ')}</td>
+                                                    <td>{p.status}</td>
+                                                    <td className="r mono">{p.digest.slice(7, 19)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
                                 <p className="empty">
                                     No plugin is installed; nothing reaches a provider until one is, and a route names
@@ -255,45 +257,49 @@ export function SystemScreen() {
                                     <code>jason ui open</code>
                                 </span>
                             </h2>
-                            <table className="tbl">
-                                <thead>
-                                    <tr>
-                                        <th>Paired</th>
-                                        <th>By</th>
-                                        <th>Last used</th>
-                                        <th />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {byLastUse(store.tokens.value?.items ?? []).map((t) => {
-                                        const mine = t.id === session.tokenId.value;
-                                        const stale = now.getTime() - lastSeen(t) > staleAfterMs;
-                                        return (
-                                            <tr key={t.id} className={stale ? 'stale' : ''}>
-                                                <td>
-                                                    {relative(new Date(t.issued_at), now)}
-                                                    {mine && ' · this browser'}
-                                                </td>
-                                                <td>{t.issued_to}</td>
-                                                <td>
-                                                    {t.last_used_at ? relative(new Date(t.last_used_at), now) : 'never'}
-                                                    {stale && ' · not used for a month'}
-                                                </td>
-                                                <td className="r">
-                                                    <button
-                                                        className="btn"
-                                                        type="button"
-                                                        disabled={mine}
-                                                        onClick={() => void store.revoke(api, t.id)}
-                                                    >
-                                                        Revoke
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                            <div className="tablewrap" role="region" tabIndex={0} aria-label="Paired browsers">
+                                <table className="tbl">
+                                    <thead>
+                                        <tr>
+                                            <th>Paired</th>
+                                            <th>By</th>
+                                            <th>Last used</th>
+                                            <th />
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {byLastUse(store.tokens.value?.items ?? []).map((t) => {
+                                            const mine = t.id === session.tokenId.value;
+                                            const stale = now.getTime() - lastSeen(t) > staleAfterMs;
+                                            return (
+                                                <tr key={t.id} className={stale ? 'stale' : ''}>
+                                                    <td>
+                                                        {relative(new Date(t.issued_at), now)}
+                                                        {mine && ' · this browser'}
+                                                    </td>
+                                                    <td>{t.issued_to}</td>
+                                                    <td>
+                                                        {t.last_used_at
+                                                            ? relative(new Date(t.last_used_at), now)
+                                                            : 'never'}
+                                                        {stale && ' · not used for a month'}
+                                                    </td>
+                                                    <td className="r">
+                                                        <button
+                                                            className="btn"
+                                                            type="button"
+                                                            disabled={mine}
+                                                            onClick={() => void store.revoke(api, t.id)}
+                                                        >
+                                                            Revoke
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                             {(store.tokens.value?.items ?? []).some((t) => t.id !== session.tokenId.value) && (
                                 <div className="btn-row">
                                     <button

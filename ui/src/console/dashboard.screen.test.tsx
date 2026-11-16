@@ -336,6 +336,17 @@ describe('the categories card', () => {
         expect(words(card.querySelector('.hd .dash-period')!)).toBe('the last 30 days');
     });
 
+    it('keeps the table a table, in a named box a keyboard can reach, which scrolls where the room is narrow', async () => {
+        renderConsole();
+        await open();
+        await waitFor(() => expect(dash().querySelector('.dash-categories tbody tr')).toBeTruthy());
+        const box = within(dash()).getByRole('region', { name: 'Replies by category' });
+        expect(box.getAttribute('tabindex')).toBe('0');
+        expect(box.classList.contains('tscroll')).toBe(true);
+        expect(within(box).getByRole('table')).toBeTruthy();
+        expect(box.querySelectorAll('tbody tr').length).toBe(2);
+    });
+
     it('says it is reading while the first answer is awaited, and carries no failure sentence', async () => {
         const { fake } = renderConsole();
         const release = fake.hold('reply.count');

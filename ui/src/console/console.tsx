@@ -297,6 +297,30 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     const [bound, setBound] = useState(false);
     // Where the window is narrow the sidebar is off the screen; the strip's button brings it over the area, and a choice in it (or a tap beside it) puts it away.
     const [sideOpen, setSideOpen] = useState(false);
+    // While it is over the area the page behind is out of reach, the sidebar takes the focus, Escape puts it away and gives
+    // the focus back to its button, and a window that grows past the narrow edge leaves nothing of it standing.
+    useEffect(() => {
+        if (!sideOpen) return;
+        const area = document.querySelector('.jc-console .mainc > .area');
+        area?.setAttribute('inert', '');
+        document.querySelector<HTMLElement>('.jc-console .side button, .jc-console .side a')?.focus();
+        const away = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setSideOpen(false);
+            document.querySelector<HTMLElement>('.jc-console .mode-nav')?.focus();
+        };
+        window.addEventListener('keydown', away);
+        const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 821px)') : null;
+        const grown = () => {
+            if (wide?.matches) setSideOpen(false);
+        };
+        wide?.addEventListener('change', grown);
+        return () => {
+            area?.removeAttribute('inert');
+            window.removeEventListener('keydown', away);
+            wide?.removeEventListener('change', grown);
+        };
+    }, [sideOpen]);
     useLayoutEffect(() => {
         const unbound = bind({ api, desktop, dock });
         inArea.value = [];

@@ -34,7 +34,7 @@ function channelsOf(person: Contact): { names: string; values: string } {
 export function PeopleList({ people, filters, drawn, tab, selected, more, me, now, zone }: Props) {
     const open = (id: string) => navigate({ screen: 'people', id, tab, filters });
     return (
-        <div className="tablewrap">
+        <div className="tablewrap" role="region" tabIndex={0} aria-label="People">
             <table className="ptable">
                 <thead>
                     <tr>
