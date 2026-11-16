@@ -182,8 +182,11 @@ the AI host keeps its own transcript of it. What the desktop refuses is said in 
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
 text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
-in Needs you; a question's card has its options as buttons and a box for your own answer. A card leaves once the item is
-decided, there or anywhere else. In a browser the console is the same, and a campaign's Chat
+in Needs you; a question's card has its options as buttons and a box for your own answer. Under the mailbox an email goes
+from, the card says the sending name the provider holds for that mailbox now, that it holds none, that the provider does
+not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
+wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
+anywhere else. In a browser the console is the same, and a campaign's Chat
 and the Start screen work only in a tab the desktop opened; any other tab says where the chat is
 ([below](#settings-and-chat-in-the-browser)).
 

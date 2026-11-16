@@ -7,6 +7,7 @@ import {
     controlWords,
     depthOf,
     foldLabel,
+    lastCardOf,
     nameWords,
     passiveWords,
     readCard,
@@ -221,6 +222,22 @@ describe('which fenced block is a card', () => {
         const split = splitCards(`Thinking.\n\`\`\`card\n{"kind":"cho`);
         expect(split.blocks).toEqual([{ body: '{"kind":"cho', closed: false }]);
         expect(split.words.trim()).toBe('Thinking.');
+    });
+
+    it('takes out a text’s last block alone, every earlier block staying in its words as written', () => {
+        const needs = fence('{"kind":"needs"}');
+        const last = lastCardOf(`First.\n${needs}\nBetween.\r\n${fence(choice())}\r\nAfter.`);
+        expect(last).toEqual({
+            words: `First.\n${needs}\nBetween.\n\nAfter.`,
+            block: { body: choice(), closed: true },
+        });
+        expect(lastCardOf(`Open.\n\`\`\`card\n{"kind"`)).toEqual({
+            words: 'Open.\n',
+            block: { body: '{"kind"', closed: false },
+        });
+        // A fence that is no card is the words', and a text with no card has none to take out.
+        expect(lastCardOf(`Code.\n${fence(choice(), 'json')}`)).toBeNull();
+        expect(lastCardOf('Just words.')).toBeNull();
     });
 });
 
@@ -538,6 +555,7 @@ describe('a choice’s members', () => {
     it('classes every word the buttons of the files it reads draw as one that acts, one that does not, or a name', () => {
         const drawn = [
             ...buttonWords(source('chat.tsx')),
+            ...buttonWords(source('card-plan.ts')),
             ...buttonWords(source('waiting-cards.tsx')),
             ...buttonWords(source('start-menus.tsx')),
             ...buttonWords(source('connect.ts')),
@@ -718,7 +736,7 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('teaches only the kinds this window draws, a choice and four cards of data, and each example reads as one', () => {
+    it('teaches only the kinds this window draws, a choice, four cards of data and a plan, and each example reads as one', () => {
         const shown = examples(instructions);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
             'choice',
@@ -726,6 +744,7 @@ describe('the chat’s instructions', () => {
             'agent_status',
             'needs',
             'accounts',
+            'plan',
         ]);
         for (const example of shown) expect(read(example).state, example).toBe('card');
     });

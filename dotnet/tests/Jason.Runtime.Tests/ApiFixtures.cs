@@ -25,7 +25,7 @@ public static class ApiFixtures
     //
     //   message waiting:  approval.list card-message-pending|-after-edit|-reasked, approval.get card-message|
     //                     -withdrawn|-reasked, workitem.get card-message-parked, workitem.update card-message-edited,
-    //                     sender.list card-message-sender|card-sender-other.
+    //                     sender.list card-message-sender|card-sender-other|card-sender-unnamed.
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
     //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
@@ -37,12 +37,13 @@ public static class ApiFixtures
     //                     approval.list|decision.list card-status-waiting|card-needs-all, campaign.list_contacts
     //                     card-people-first|-query|-waiting|-empty, contact.list card-people-everyone|-query|-nobody,
     //                     campaign.get|summary card-status-draft|card-plan-draft, campaign.get|summary
-    //                     card-unknown-campaign, route.resolve card-plan-message-send, campaign.list|summary
+    //                     card-unknown-campaign, route.resolve card-plan-message-send|-email|-linkedin, campaign.list|summary
     //                     card-chips, plugin.list|route.list card-accounts, and last an archived campaign:
     //                     campaign.get|summary|list_contacts, approval.list|decision.list card-archived, campaign.activity
     //                     card-archived-30-days; then approval.get card-needs-pending, decision.get card-needs-question, and
     //                     after a person approves that approval, approval.get card-needs-decided.
-    //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
+    //   no route:         route.resolve card-plan-no-route|-no-route-email, campaign.get|summary card-plan-unrouted,
+    //                     sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //
     // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
@@ -63,8 +64,8 @@ public static class ApiFixtures
     // binding {workspace: a}), so plugin.list/card-accounts and the binding in route.list/card-accounts and
     // route.resolve/card-plan-message-send show a stand-in's content, not a real package's; (2) the provider's own
     // answers are a stand-in's: the external id c_7714 in campaign.get/card-status, and every account (name, address,
-    // vendor block) in sender.list/card-message-sender and card-sender-other. The accounts (Reply) story is the
-    // exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
+    // vendor block) in sender.list/card-message-sender, card-sender-other and card-sender-unnamed. The accounts (Reply)
+    // story is the exception: the package is the real plugins/reply one (its manifest in plugin.list, its route, its own code run in
     // the plugin host), and only the vendor's command-line tool is the test harness's fake, holding invented accounts, so
     // plugin.list|route.list|sender.list card-accounts-reply are what an installation with that package would answer
     // (the executable's path is recorded as <bin>/reply). A card that shows plugins or accounts is drawn from the -reply files.
@@ -201,7 +202,9 @@ public static class ApiFixtures
         "campaign.audience/unknown-campaign",
         "campaign.get/archived",
         "campaign.get/card-archived",
+        "campaign.get/card-plan-channels",
         "campaign.get/card-plan-draft",
+        "campaign.get/card-plan-unrouted",
         "campaign.get/card-status",
         "campaign.get/card-status-draft",
         "campaign.get/card-unknown-campaign",
@@ -280,7 +283,9 @@ public static class ApiFixtures
         "campaign.summary/audience-without-archived",
         "campaign.summary/card-archived",
         "campaign.summary/card-chips",
+        "campaign.summary/card-plan-channels",
         "campaign.summary/card-plan-draft",
+        "campaign.summary/card-plan-unrouted",
         "campaign.summary/card-status",
         "campaign.summary/card-status-draft",
         "campaign.summary/card-status-later",
@@ -466,10 +471,14 @@ public static class ApiFixtures
         "rolenote.set/two-levels",
         "route.list/card-accounts",
         "route.list/card-accounts-reply",
+        "route.list/card-plan-global-channels",
         "route.list/channel-routes",
         "route.list/empty",
+        "route.resolve/card-plan-email",
+        "route.resolve/card-plan-linkedin",
         "route.resolve/card-plan-message-send",
         "route.resolve/card-plan-no-route",
+        "route.resolve/card-plan-no-route-email",
         "route.resolve/elsewhere",
         "route.resolve/elsewhere-first",
         "route.resolve/global-default",
@@ -482,6 +491,7 @@ public static class ApiFixtures
         "sender.list/card-accounts-reply",
         "sender.list/card-message-sender",
         "sender.list/card-sender-other",
+        "sender.list/card-sender-unnamed",
         "sender.list/card-sender-unread",
         "subscription.list/one-kind",
         "subscription.rewind/not-human",
