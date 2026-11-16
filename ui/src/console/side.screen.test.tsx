@@ -318,7 +318,7 @@ describe('the sidebar’s look', () => {
         await waitFor(() => expect(inFront()).toBe('Needs you'));
         const needs = within(menu()).getByRole('button', { name: /^Needs you/ });
         expect(needs.getAttribute('aria-current')).toBe('true');
-        expect(styleOf(needs)).toMatchObject({ background: 'var(--hover)', 'font-weight': '600' });
+        expect(styleOf(needs)).toMatchObject({ background: 'var(--sel)', 'font-weight': '500' });
         expect(styleOf(within(menu()).getByRole('button', { name: /^Search/ }))['font-weight']).toBeUndefined();
     });
 

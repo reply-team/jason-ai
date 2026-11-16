@@ -22,6 +22,7 @@ export const en = {
     'attention.filter.noneDecided': 'No approval has been decided yet.',
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
+    'settings.group': 'Jason',
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
     'settings.theme.system': 'Same as the system',

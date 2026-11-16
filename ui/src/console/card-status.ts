@@ -14,6 +14,7 @@ import type { AgentStatusCard } from './cards';
 import { act, define } from './actions';
 import type { Chat } from './chat-model';
 import { html, type Html } from './html';
+import { toCampaignRow } from './live';
 import { here } from './state';
 
 // An agent's status, as the chat's AI asks for it by the agent's id alone: its status in a sentence chosen from the
@@ -86,7 +87,14 @@ function statusFacts(chat: Chat, campaignId: string, read: StatusRead): Html {
     const waiting = read.now.ok && read.now.row.waiting > 0;
     const page = (tab: string, label: string) =>
         html`<button class="btn sm" type="button" ${act('card.page', `#/campaigns/${id}/${tab}`)}>${label}</button>`;
-    return html`<div class="card-status">${statusSentence(read.campaign.status)}</div>
+    // The state as the agent list says it, a pill at the top of the card: the runtime's own status, no other state.
+    // A status this page has no word for is shown as the runtime gave it, never as another state.
+    const known = ['active', 'paused', 'archived', 'draft'].includes(read.campaign.status);
+    const { state, tone } = known
+        ? toCampaignRow(read.campaign, undefined)
+        : { state: read.campaign.status, tone: 'gray' };
+    return html`<div class="card-pills"><span class="pillc card-state ${tone}">${state}</span></div>
+        <div class="card-status">${statusSentence(read.campaign.status)}</div>
         ${
             read.now.ok
                 ? counts('Now', nowCounts(read.now.row))

@@ -112,7 +112,7 @@ export function CampaignInbox({ shown, failed, zone, onRefresh }: Props) {
             </div>
             {shown === null && !failed && <div className="end loading">loading…</div>}
             {shown !== null && entries.length === 0 && (
-                <div className="empty">No reply to this agent has been observed yet.</div>
+                <div className="empty inbox-none">No reply to this agent has been observed yet.</div>
             )}
             {entries.map((entry, i) =>
                 entry.kind === 'untied' ? (

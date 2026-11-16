@@ -275,6 +275,7 @@
     --panel-2: #f8fafc;
     --side-bg: #f3f5f9;
     --hover: #e9edf4;
+    --sel: #e3e7ef;
     --ink: #0f172a;
     --mute: #64748b;
     --faint: #94a3b8;
@@ -540,9 +541,10 @@
     font-size: 12px;
     color: var(--faint);
 }
-.jc-console .item[aria-current='true'] {
-    background: var(--hover);
-    font-weight: 600;
+.jc-console .item[aria-current='true'],
+.jc-console .item[aria-current='true']:hover {
+    background: var(--sel);
+    font-weight: 500;
 }
 .jc-console .item .count {
     margin-left: auto;
@@ -566,7 +568,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 7px 10px;
+    padding: 7.6px 10px;
+    margin-bottom: 0.5px;
     border-radius: 9px;
     cursor: pointer;
     color: var(--ink);
@@ -1036,6 +1039,7 @@
         --panel-2: #1a1a1e;
         --side-bg: #111114;
         --hover: #1f1f24;
+        --sel: #28282f;
         --ink: #ececf1;
         --mute: #a1a1aa;
         --faint: #71717a;
@@ -1092,6 +1096,7 @@
     --panel-2: #1a1a1e;
     --side-bg: #111114;
     --hover: #1f1f24;
+    --sel: #28282f;
     --ink: #ececf1;
     --mute: #a1a1aa;
     --faint: #71717a;
@@ -1528,6 +1533,9 @@ body,
 .jc-console .needs-panel .needs-pane {
     margin: 0;
     padding: 18px 22px 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
 }
 .jc-console .needs-pane .needs-title {
     margin: 12px 0 0;
@@ -1608,12 +1616,39 @@ body,
     }
 }
 .jc-console .needs-empty {
-    color: var(--faint);
+    box-sizing: border-box;
+    width: min(640px, 100%);
+    margin: 8vh auto 0;
+    padding: 32px 28px 26px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    color: var(--mute);
     text-align: center;
+}
+.jc-console .needs-empty .needs-disc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 14px;
+    border-radius: 50%;
+    background: var(--green-2);
+    color: var(--green);
+}
+.jc-console .needs-empty .bd {
+    color: var(--ink);
+    font-size: 22px;
+    font-weight: 700;
+}
+.jc-console .needs-empty .needs-none-says {
+    margin: 6px 0 16px;
+    font-size: 13.5px;
 }
 .jc-console .needs-empty > .ask-a {
     justify-content: center;
-    margin: 0 0 16px;
+    margin: 0;
 }
 
 .jc-console .chat-panel .chat-reply {

@@ -194,6 +194,12 @@ describe('Needs you', () => {
         );
         await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
         expect(words(needs().querySelector('.card.needs-empty .bd')!)).toBe("You're all caught up");
+        // The state is a centred card with a check disc, and says only what is true of the runtime's answer.
+        expect(needs().querySelector('.card.needs-empty .needs-disc svg')).toBeTruthy();
+        expect(words(needs().querySelector('.card.needs-empty .needs-none-says')!)).toBe(
+            'Nothing is waiting for your decision.',
+        );
+        expect(needs().textContent).not.toMatch(/minute|every/);
         expect(needs().querySelector('.needs-pane')).toBeNull();
         expect(needs().querySelector('.needs-filter')).toBeNull();
     });
@@ -208,11 +214,24 @@ describe('Needs you', () => {
             within(card)
                 .getAllByRole('button')
                 .map((each) => words(each)),
-        ).toEqual(['Open your agents']);
+        ).toEqual(['New GTM agent', 'Open your agents']);
         expect(screen.queryByRole('heading', { name: 'Agents', level: 1 })).toBeNull();
 
         fireEvent.click(within(card).getByRole('button', { name: 'Open your agents' }));
         await waitFor(() => expect(screen.getByRole('heading', { name: 'Agents', level: 1 })).toBeTruthy());
+    });
+
+    it('starts a new agent from the card, as the sidebar’s New GTM agent does', async () => {
+        await renderConsole(
+            new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty'),
+        );
+        await waitFor(() => expect(needs().querySelector('.needs-empty')).toBeTruthy());
+        fireEvent.click(
+            within(needs().querySelector<HTMLElement>('.card.needs-empty')!).getByRole('button', {
+                name: 'New GTM agent',
+            }),
+        );
+        await waitFor(() => expect(screen.getByRole('form', { name: 'Start' })).toBeTruthy());
     });
 
     it('lists what waits on the left and shows the first, whole, on the right; choosing a line shows that one', async () => {
