@@ -28,7 +28,7 @@ under one header, in Jason Desktop's window and in a browser tab alike.
 
 - **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox** and **Settings**
   stand under one header that stays while you move between the tabs. The header holds the agent's name, its state and
-  kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **...** menu. It shows only
+  kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **…** menu. It shows only
   what it has read from the runtime, and it follows the journal's lines without a reload. The page under it no longer
   draws a header, a Close or a row of numbers of its own.
   - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox` and `/settings`, so a reload, a deep
@@ -37,7 +37,7 @@ under one header, in Jason Desktop's window and in a browser tab alike.
     desktop draws no Chat and opens on People.
   - **What moved into People:** the line the page's header used to carry, how many people the agent holds and the
     provider campaign it is linked to, and **Add people**, now sit at the top of the People tab.
-  - **What moved into the ...:** the conversation's acts, **Rename conversation**, **Start conversation afresh** and
+  - **What moved into the …:** the conversation's acts, **Rename conversation**, **Start conversation afresh** and
     **Remove conversation**. They act on the conversation and the agent stays as it is, which Remove's question says.
   - **Places with no address,** Start, a set-up chat, the Feed and the sidebar's panels, stand at `#/chat`. Leaving an
     agent for one of them adds one entry to the browser's history, so Back returns to the agent's tab with the words you
