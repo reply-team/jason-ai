@@ -247,8 +247,9 @@ function addressPlace(
     if (hash === '' || hash === '#') return null;
     const to = parseRoute(hash);
     if (to.screen === 'chat') return null;
+    // The bare attention address is the default one (the window opens at it, and pairing leaves it): no address.
     if (to.screen === 'attention')
-        return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : { panel: 'needs' };
+        return to.kind && to.id ? { panel: 'needs', open: { kind: to.kind, id: to.id } } : null;
     if (to.screen === 'campaigns' && to.id === undefined) return { panel: 'campaigns' };
     return { panel: 'page' };
 }

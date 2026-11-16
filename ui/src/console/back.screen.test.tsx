@@ -37,6 +37,8 @@ async function renderIn(place: Place, address = '#/chat') {
     } else setPlace('window');
     const fake = new FakeApi()
         .answer('approval.list', 'approval.list/pending')
+        .answer('sender.list', 'sender.list/card-message-sender')
+        .answer('approval.get', 'approval.get/email-message', 'approval.get/other-pending')
         .answer('decision.list', 'decision.list/pending')
         .answer('preference.list', 'preference.list/set')
         .answer('campaign.list', 'campaign.list/screen')
@@ -157,6 +159,8 @@ describe('A reload draws what the address names', () => {
         ['#/campaigns', 'campaigns'],
         ['#/chat', 'start'],
         ['', 'start'],
+        ['#/attention', 'start'],
+        ['#/attention/approvals/apr_1', 'needs'],
     ])('the address %j is drawn as %s', async (address, pane) => {
         await renderIn('tab', address);
         expect(activePanel.value).toBe(pane);
