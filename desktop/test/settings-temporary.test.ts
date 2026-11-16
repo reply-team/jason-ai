@@ -42,8 +42,8 @@ test('the name a write of the settings goes through is of the desktop’s shape,
     assert.equal(settingsTemporary(file), settingsTemporary(file, process.pid));
 });
 
-/** The four writers of the runtime's settings: the Connect cards, the demo's route, its fixed settings and its seed. */
-const settingsWriters = ['setup.ts', 'demo-start.ts', 'demo-settings.ts', 'demo-seed.ts'];
+/** The one writer of the runtime's settings: the Connect cards. */
+const settingsWriters = ['setup.ts'];
 
 /** Whether a source names the runtime's settings file or the secrets file, by the layout's members or the demo's helper. */
 const namesTheSettings = (text: string): boolean => /\b(userSettingsFile|secretsFile|settingsFileOf)\b/.test(text);

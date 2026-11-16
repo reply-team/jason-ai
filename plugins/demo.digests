@@ -1,7 +1,7 @@
 # The digest of each version of the demo provider's package, plugins/demo: one line per version, the version, a space,
 # and the sha256 of the whole package as the runtime computes it — the number `jason plugin list` shows for an installed
-# copy. The package is carried by the desktop, which places it in the demo installation; no release publishes it as an
-# archive of its own.
+# copy. The desktop of 0.44 and earlier carried the package and placed it in its demo installation, and nothing carries
+# it now; no release publishes it as an archive of its own.
 # The list starts with the package's first version and holds every version the package has had, because every bump
 # appends a line.
 # A version is its content: any change to a file of the package is a new version, and a new version appends its line at

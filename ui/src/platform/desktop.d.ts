@@ -592,16 +592,8 @@ export interface JasonDesktop {
          */
         set(mode: 'live' | 'demo'): Promise<DesktopRefusal | null>;
         /**
-         * In the demo only: asks the person once, then stops the demo installation's runtime and starts the desktop again;
-         * the next start removes the demo's two folders and makes the sample again. Answers null once it has begun, and also
-         * when the person said no; the desktop's refusal, with the demo left as it was, when the runtime could not be stopped,
-         * a folder of the demo's name is not one the demo made, or the request could not be written. Refused in Live, where
-         * there is no demo to start over.
-         */
-        startOver(): Promise<DesktopRefusal | null>;
-        /**
          * Whether the demo's sample is being made, said by the desktop when that changes: true as the making begins, false
-         * once the sample is ready or its making failed. Until then the desktop refuses a switch and a start over. Answers
+         * once the sample is ready or its making failed. Until then the desktop refuses a switch. Answers
          * the way to stop listening.
          */
         onPreparing(handler: (preparing: boolean) => void): () => void;
