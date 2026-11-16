@@ -89,7 +89,12 @@ public static class SetupSessionOpener
         }
 
         IReadOnlyList<string> program = [.. chosen.Program, .. AgentHosts.InteractiveArguments(host, SetupBrief.For(hostWord, skill.Deployed == true), notAdded is null ? plugins : null)];
-        var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder, program, "setup", SessionOpener.DataDirectory(env));
+        if (TerminalPlan.Uncarried(terminals.Platform, program) is { } uncarried)
+        {
+            return SessionOpener.Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {terminal.Name} did not start ({uncarried}), so nothing was started.");
+        }
+
+        var launch = TerminalPlan.Compose(terminals.Platform, terminal, folder, program, "setup", SessionOpener.Own(env));
         if (!dryRun && !terminals.Start(launch, out var problem))
         {
             return SessionOpener.Refuse(env, CliErrors.TerminalStartFailed, $"The terminal {launch.Terminal} did not start ({problem}), so nothing was started.");
@@ -184,6 +189,8 @@ public static class SetupSessionOpener
             {
                 printed["script"] = script;
             }
+
+            SessionOpener.PrintVariables(printed, launch);
         }
 
         return printed.ToJsonString(JasonJson.Options);

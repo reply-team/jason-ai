@@ -268,16 +268,15 @@ may run is your host's own permission settings' to decide. An item that no longe
 is not on the search path is named, never replaced by another. When a click opens nothing, the command beside it says
 why: run it in a terminal and it prints the refusal and how to do the same by hand.
 
-- **Windows** starts the console host, `conhost.exe` from the system folder, which hands the window to Windows Terminal
-  where that is your default terminal; where your default terminal is the console host itself, you get a plain console
-  window. The console host's window and its hand-off to Windows Terminal are not yet measured on a machine.
+- **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
+  then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
   folder, readable by your account alone, which removes itself and its folder when it runs. Terminal's shell starts
-  without the CLI's environment, so where `jason` runs with `JASON_DATA_DIR` set the script exports that variable, and
-  nothing else, for the host's own `jason` commands to reach the same installation. This is composed and checked
-  by tests here; it has not been watched on a Mac.
+  without the CLI's environment, so the script exports `JASON_DATA_DIR` and puts the folder of this `jason` first on
+  Terminal's own `PATH` (see "This installation's own `jason`" below), and names no other variable. This is composed and
+  checked by tests here; it has not been watched on a Mac.
 - **Linux** starts the terminal the `TERMINAL` variable names, else `x-terminal-emulator`, and gives it the host in the
   form that program documents, decided by its file name: `kitty` and `foot` take the host's words after the program,
   `gnome-terminal` after `--`, `xfce4-terminal` and `mate-terminal` after `-x`, `wezterm` after
@@ -286,9 +285,22 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   that offers no other form, `tilix` among them, cannot take the host that way: leave `TERMINAL` unset so
   `x-terminal-emulator` is used. A `TERMINAL` that holds whitespace, is a relative path, or names a program that is not
   found falls back to `x-terminal-emulator`, and the answer names the terminal that was used.
+- **This installation's own `jason`.** The window runs the `jason` of the installation the command was given, on its
+  data: it is given the data directory the command runs on as `JASON_DATA_DIR`, whether
+  or not that variable was set where you typed it, and the folder of this `jason`'s executable first on `PATH`, so a
+  `jason` of another installation earlier on `PATH` does not answer there as the window starts; a host's own shell that reads
+  a profile can put another folder first again. On Windows the two are set in the environment
+  the console host is started with, `PATH` being that folder and then the command's own search path. On Linux they travel
+  on the terminal's command line through `/usr/bin/env`, which sets them and replaces itself with the host, after the
+  terminal's own form and before the host, since an emulator may hand its command to a server already running, which
+  would not see the command's environment; a host's program whose path holds `=`, which `/usr/bin/env` would read as a
+  variable, is refused with `terminal_start_failed`. On macOS the script exports them, the folder going before
+  Terminal's own `PATH`. Nothing is added to the host's own words. A build run through `dotnet` rather than installed as
+  one file has no such folder, and leaves `PATH` as it is.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
-and prints the whole command, the brief included, and on macOS the script. Each host's own form for a first message is in
+and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables
+the console host would be started with. Each host's own form for a first message is in
 [execution-profiles.md](execution-profiles.md), §12.
 
 ### At a folder, with no item
@@ -328,9 +340,9 @@ jason session open --here --host claude_code --resume <conversation-id>
   `host_cannot_resume` as soon as the host is known, before its program or a terminal is looked for. What the session
   then may do is that host's own permission settings' to decide; Jason copies nothing of the conversation and writes no
   file for it.
-- **The terminal** is the one an item's session uses, on each system as above, and the data directory reaches it the
-  same way: on Windows and Linux the terminal inherits the CLI's environment, `JASON_DATA_DIR` included, and on macOS the
-  script exports `JASON_DATA_DIR` alone. So `jason` in that window works with the installation the command was given.
+- **The terminal** is the one an item's session uses, on each system as above, and it runs this installation's own
+  `jason` the same way: the data directory by name and this `jason`'s folder first on `PATH`. So `jason` in that window
+  works with the installation the command was given.
   On macOS this form, like an item's, is composed and checked by tests here and has not been watched on a Mac; `--shell`
   there also rests on Terminal giving the script `SHELL`, your login shell, in its environment, with `/bin/sh` where it
   does not.
@@ -338,7 +350,7 @@ jason session open --here --host claude_code --resume <conversation-id>
   `here`, and `path`), `host` (the host word, or null for a shell), `shell` (true when the plain shell was started),
   `program` (the path of the program started, as in an item's answer: the host's, or the shell's, `/bin/sh` on macOS),
   with `--resume` also `resume` (the id), then `terminal` and `started`; with `--dry-run` also `argv`, the host's words
-  and the id among it, and on macOS `script`, where they are quoted as every word of it is. A refusal of its own is the API's error envelope on
+  and the id among it, on macOS `script`, where they are quoted as every word of it is, and on Windows `environment`. A refusal of its own is the API's error envelope on
   stdout, said again on stderr, with exit 1: `folder_not_recorded` (nothing in the chain has a folder, and the harness
   root is not a folder with its marker; the line says what stands there), `folder_missing` (the recorded folder, or with
   `--here` the folder the command runs in, is not on this machine), `preference_unreadable`, `host_unknown` (the
@@ -383,8 +395,8 @@ jason session open --setup --host codex
   (`path`, `added`, and where it was not added `reason`: `host_takes_no_folder` or `folder_missing`), `host`, `skill`
   (`name`, `customising-jason`; `deployed`, decided by Jason's receipt, the record `jason skills install` keeps in the
   host's skills folder: true, false, or null where that record could not be read; and `root`, the host's skills folder
-  that was read), `program`, `terminal` and `started`; with `--dry-run` also `argv`, the brief among it, and on macOS
-  `script`. A skill placed there some other way, without the receipt, counts as not deployed. With `--human`, where the
+  that was read), `program`, `terminal` and `started`; with `--dry-run` also `argv`, the brief among it, on macOS
+  `script`, and on Windows `environment`. A skill placed there some other way, without the receipt, counts as not deployed. With `--human`, where the
   skill is not deployed, a second line says "jason skills install has not deployed the skill customising-jason for
   <host>: `jason skills install --host <host>` deploys it."; where the receipt could not be read, it says that whether
   the skill is deployed could not be read, and names the same command. A refusal of its own is the API's error envelope on stdout, said again on

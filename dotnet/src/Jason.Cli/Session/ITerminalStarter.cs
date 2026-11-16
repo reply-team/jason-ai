@@ -63,7 +63,7 @@ public sealed class PlatformTerminalStarter : ITerminalStarter
                 argv[^1] = path;
             }
 
-            var start = TerminalStartInfo.For(Platform, argv, launch.WorkingDirectory);
+            var start = TerminalStartInfo.For(Platform, argv, launch.WorkingDirectory, launch.Variables);
             using var process = ChildProcess.Start(start);
             if (process is null)
             {
@@ -171,11 +171,12 @@ public static class MacOpener
 /// with all three streams redirected, so the terminal holds none of the CLI's own: a caller that captures the CLI's
 /// output (an agent's shell tool, a script) reads its end of file when the CLI exits, not when the window closes. On
 /// every system the terminal is a person's own, so it never carries <c>JASON_CONFINED</c>, which confines only the CLI
-/// call it is set on.
+/// call it is set on. The launch's variables (<see cref="TerminalLaunch.Variables"/>) are set on it last, each replacing
+/// the variable of that name whatever its spelling where the system's names ignore case.
 /// </summary>
 public static class TerminalStartInfo
 {
-    public static System.Diagnostics.ProcessStartInfo For(TerminalPlatform platform, IReadOnlyList<string> argv, string workingDirectory)
+    public static System.Diagnostics.ProcessStartInfo For(TerminalPlatform platform, IReadOnlyList<string> argv, string workingDirectory, IReadOnlyDictionary<string, string>? variables = null)
     {
         ArgumentNullException.ThrowIfNull(argv);
         ArgumentException.ThrowIfNullOrEmpty(workingDirectory);
@@ -194,6 +195,11 @@ public static class TerminalStartInfo
 
         start.WorkingDirectory = workingDirectory;
         start.Environment.Remove(Confinement.Variable);
+        foreach (var (name, value) in variables ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
         return start;
     }
 }
