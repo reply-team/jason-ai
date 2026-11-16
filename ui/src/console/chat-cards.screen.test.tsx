@@ -282,6 +282,26 @@ describe('a choice the AI asked for', () => {
         expect(own(reopened)).toBeNull();
     });
 
+    it('keeps the words typed in its field, and the field’s focus, when the chat is painted again', async () => {
+        const { desktop } = renderConsole([setUp(opened)]);
+        const pane = await openChat('Sending');
+        ask(desktop, setupChat);
+        await live(pane);
+        fireEvent.change(box(), { target: { value: 'A draft of my own' } });
+        const field = own(pane)!;
+        field.focus();
+        fireEvent.input(field, { target: { value: 'Both of us' } });
+        expect(document.activeElement).toBe(field);
+        // An event for the conversation that adds nothing to its thread: the thread is painted again, its field anew.
+        flush(() => desktop.emit(setupChat, { kind: 'renamed', title: 'Sending, renamed' }));
+        await waitFor(() => expect(field.isConnected).toBe(false));
+        const again = own(pane)!;
+        expect(again.value).toBe('Both of us');
+        expect(document.activeElement).toBe(again);
+        expect(box().value).toBe('A draft of my own');
+        expect(sends(desktop)).toHaveLength(0);
+    });
+
     it('is drawn answered as it was when the conversation is opened again, and locked, saying why, when it was not', async () => {
         const fake = new FakeApi();
         renderConsole(
