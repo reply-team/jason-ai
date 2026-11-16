@@ -8,7 +8,8 @@ import { html, type Html } from './html';
 import { offUnless } from './off';
 import { svg, type IconName } from './icons';
 import { openConversation } from './chat';
-import { attention } from './needs';
+import { needsInput } from './needs';
+import { countWords, needsCount, type Count } from './needs-model';
 import { openPalette, paletteHint, paletteShortcut } from './palette';
 import { closeFilterMenu, recentView } from './recent';
 import { activePanel, currentChat, feedId, feedUnseen, here, type PanelName } from './state';
@@ -84,9 +85,9 @@ function shownRow(): Row | null {
 
 const marked = (row: Row): Html | null => (shownRow() === row ? html`aria-current="true"` : null);
 
-/** How many approvals and questions wait on a person: the number the Needs you panel shows. */
-export function waitingCount(): number {
-    return attention.approvals.value.length + attention.questions.value.length;
+/** What waits on a person, by the one count: the number Needs you's All shows. */
+export function waitingCount(): Count {
+    return needsCount(needsInput());
 }
 
 define('side.menu', ([which]) => {
@@ -252,7 +253,7 @@ export function sideView(): Html {
                 }
                 <button class="item" type="button" ${marked('needs')} ${act('side.show', 'needs')}>
                     ${svg('needs', 15)}<span>Needs you</span>
-                    ${count > 0 ? html`<span class="count" aria-label="${count} waiting">${count}</span>` : null}
+                    ${count.n > 0 ? html`<span class="count" aria-label="${countWords(count)} waiting">${countWords(count)}</span>` : null}
                 </button>
                 ${full ? pageRow('people', 'People', 'people') : null}
                 ${

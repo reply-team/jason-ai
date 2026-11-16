@@ -103,6 +103,7 @@ export const templates = {
     chat_full_folder_failed: 'A Full access folder failed at {Step} ({Code})',
     chat_full_access_standing: 'The standing choice of Full access changed ({Cause}): standing {Standing}, new chats {NewChats}',
     chat_full_access_standing_unwritten: 'The standing choice of Full access could not be written or removed ({Code})',
+    chat_card_refused: 'A card the chat AI asked for was not drawn: kind {Kind}, failure {Failure}',
     chat_sandbox_checked: 'Codex\'s sandbox on Windows was checked: {Answer}; the desktop\'s settings file inside it: {Settings}',
     page_storage_cleared: 'What an earlier version\'s page kept on disk was cleared, after {Revoked} UI tokens were revoked',
     page_storage_clear_failed: 'What an earlier version\'s page kept on disk was not cleared, at {Step} ({Code})',

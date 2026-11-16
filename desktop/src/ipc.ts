@@ -39,6 +39,7 @@ export const invokeChannels = {
     'chat.setMode': 'jason:chat.setMode',
     'chat.openFolder': 'jason:chat.openFolder',
     'chat.feed': 'jason:chat.feed',
+    'chat.cardRefused': 'jason:chat.cardRefused',
     'fullAccess.standing': 'jason:fullAccess.standing',
     'fullAccess.takeBack': 'jason:fullAccess.takeBack',
     'openIn.targets': 'jason:openIn.targets',

@@ -34,6 +34,7 @@ const desktop = {
         setMode: (chatId: string, mode: string, host: string) => ipcRenderer.invoke('jason:chat.setMode', chatId, mode, host),
         openFolder: (name: string) => ipcRenderer.invoke('jason:chat.openFolder', name),
         feed: (lines: unknown, options?: unknown) => ipcRenderer.invoke('jason:chat.feed', lines, options),
+        cardRefused: (chatId: string, kind: string, failure: string) => ipcRenderer.invoke('jason:chat.cardRefused', chatId, kind, failure),
     },
     fullAccess: {
         standing: () => ipcRenderer.invoke('jason:fullAccess.standing'),
