@@ -31,8 +31,9 @@ public static class ConfinedVerbs
         Acts,
 
         /// <summary>
-        /// Verbs the chat refuses beyond the CLI's no-default set: adding a role, linking a project's folder, and starting a
-        /// campaign or resuming one, which is what lets its queued work run.
+        /// Verbs the chat refuses beyond the CLI's no-default set: adding a role, linking a project's folder, starting a
+        /// campaign or resuming one, which is what lets its queued work run, and archiving one, which no verb undoes and
+        /// which cancels its open work and its pending questions.
         /// </summary>
         ChatsOwn,
     }
@@ -74,6 +75,7 @@ public static class ConfinedVerbs
         (Kind.ChatsOwn, "role add"),
         (Kind.ChatsOwn, "project link"),
         (Kind.ChatsOwn, "campaign start"),
+        (Kind.ChatsOwn, "campaign archive"),
     ];
 
     /// <summary>The one sentence a refused command is answered with, on standard error.</summary>
