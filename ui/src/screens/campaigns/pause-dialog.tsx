@@ -45,11 +45,13 @@ function provider(campaign: Movable): string | null {
 /** What pausing or starting does, said before it is done: Jason's own release of work, and nothing at the provider. */
 function says(campaign: Movable, kind: Transition): string {
     const name = provider(campaign);
-    // A provider's sequence sends on its own schedule: starting or resuming Jason's work starts nothing there.
+    // Starting or resuming releases the work queued for the provider; a sequence already live there sends regardless.
     const own = (verb: string) =>
-        name ? ` ${name}'s sequence sends on its own schedule: ${verb} this agent starts nothing there.` : '';
-    if (kind === 'resume') return `Jason releases this agent's work again.${own('resuming')}`;
-    if (kind === 'start') return `Jason starts releasing this agent's work.${own('starting')}`;
+        name
+            ? ` Work waiting here for ${name}, such as starting its sequence or adding people to it, runs once you ${verb} this agent. ${name}'s sequence, once live, sends on its own schedule whether this agent runs or not.`
+            : '';
+    if (kind === 'resume') return `Jason releases this agent's work again.${own('resume')}`;
+    if (kind === 'start') return `Jason starts releasing this agent's work.${own('start')}`;
     const sequence = name ? ` ${name}'s sequence keeps sending until a role pauses it there.` : '';
     return `Jason stops releasing this agent's work. Work already running finishes.${sequence} Your reason is recorded.`;
 }

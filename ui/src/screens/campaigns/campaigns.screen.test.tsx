@@ -1297,7 +1297,7 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Resume' }));
         const start = await screen.findByRole('dialog', { name: 'Resume Spring' });
         expect(start.textContent).toContain(
-            "Jason releases this agent's work again. Reply's sequence sends on its own schedule: resuming this agent starts nothing there.",
+            "Jason releases this agent's work again. Work waiting here for Reply, such as starting its sequence or adding people to it, runs once you resume this agent. Reply's sequence, once live, sends on its own schedule whether this agent runs or not.",
         );
         // Resuming lets the queued work go as starting does, so it says the same.
         const rule = await within(start).findByRole('region', { name: 'What starting releases' });
