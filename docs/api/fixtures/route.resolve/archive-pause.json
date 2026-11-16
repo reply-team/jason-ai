@@ -1,0 +1,28 @@
+{
+  "operation": "route.resolve",
+  "case": "archive-pause",
+  "request": {
+    "campaign_id": "cmp_1",
+    "operation": "campaign.pause"
+  },
+  "status": 200,
+  "response": {
+    "operation": "campaign.pause",
+    "campaign_id": "cmp_1",
+    "plugin_id": "reply",
+    "plugin_version": "1.0.0",
+    "digest": "sha256:0",
+    "plugin_status": "valid",
+    "scope": "global_default",
+    "binding": {
+      "workspace": "a"
+    },
+    "binding_identity": "sha256:recorded-4",
+    "routing_snapshot_id": "rts_1",
+    "plugin_snapshot_id": "snp_1",
+    "operation_version": 1,
+    "usable": true,
+    "problems": [],
+    "channel": null
+  }
+}

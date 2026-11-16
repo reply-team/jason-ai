@@ -24,6 +24,8 @@ import {
     firstCampaignTab,
 } from '../../router';
 import { AddPeopleDialog } from './add-dialog';
+import type { WasOpen } from './archive';
+import { saidArchived } from './archive-model';
 import { views } from './labels';
 import { CampaignPanel } from './panel';
 import { CampaignInbox } from './inbox';
@@ -95,6 +97,17 @@ export function CampaignsScreen() {
     }, [countedUnder]);
 
     const close = () => navigate({ screen: 'campaigns', tab: firstCampaignTab.value, ...table });
+
+    /**
+     * After an archive the runtime answered: what happened, said over the list the page goes back to, which is read again
+     * so the agent leaves it. The answer is the agent as it is, also when another window archived it first; what was
+     * cancelled is said as the confirmation counted it.
+     */
+    const archived = (agent: { name: string }, cancelled: WasOpen) => {
+        store.notice.value = saidArchived(agent.name, cancelled);
+        void store.load(api, table, new Date(), zone);
+        close();
+    };
 
     // The dialog open, with the campaign it belongs to: it never shows over another one.
     const [act, setAct] = useState<{ id: string | null; what: Act } | null>(null);
@@ -392,7 +405,12 @@ export function CampaignsScreen() {
                                 />
                             )}
                             {at.tab === 'settings' && (
-                                <CampaignSettings campaign={campaign} now={new Date()} zone={zone} />
+                                <CampaignSettings
+                                    campaign={campaign}
+                                    now={new Date()}
+                                    zone={zone}
+                                    onArchived={archived}
+                                />
                             )}
                         </>
                     )}

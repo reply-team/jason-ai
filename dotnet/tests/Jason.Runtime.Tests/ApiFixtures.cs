@@ -44,6 +44,10 @@ public static class ApiFixtures
     //                     after a person approves that approval, approval.get card-needs-decided.
     //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
+    //   archive:          campaign.list|summary archive-before|-after, campaign.summary|get archive-spring|-spring-archived,
+    //                     campaign.summary archive-spring, workitem.list archive-open, approval.list
+    //                     archive-asked-and-given, decision.list archive-pending, route.resolve archive-pause,
+    //                     campaign.archive archive-spring|-spring-again (the agent page's archive, its own story).
     //
     // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
     // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
@@ -111,6 +115,7 @@ public static class ApiFixtures
         "approval.get/pending-with-preview",
         "approval.get/released-automatically",
         "approval.get/with-doubts",
+        "approval.list/archive-asked-and-given",
         "approval.list/by-campaign-pending",
         "approval.list/by-work-item",
         "approval.list/card-archived",
@@ -193,12 +198,16 @@ public static class ApiFixtures
         "campaign.add_contacts/re-enrol-excluded",
         "campaign.add_contacts/several",
         "campaign.add_contacts/to-archived",
+        "campaign.archive/archive-spring",
+        "campaign.archive/archive-spring-again",
         "campaign.audience/first-page",
         "campaign.audience/latest-search",
         "campaign.audience/next-page",
         "campaign.audience/none",
         "campaign.audience/three-audiences",
         "campaign.audience/unknown-campaign",
+        "campaign.get/archive-spring",
+        "campaign.get/archive-spring-archived",
         "campaign.get/archived",
         "campaign.get/card-archived",
         "campaign.get/card-plan-draft",
@@ -219,6 +228,8 @@ public static class ApiFixtures
         "campaign.get/summer",
         "campaign.get/unknown",
         "campaign.get/unlinked",
+        "campaign.list/archive-after",
+        "campaign.list/archive-before",
         "campaign.list/by-project",
         "campaign.list/campaigns-for-picker",
         "campaign.list/card-chips",
@@ -272,6 +283,10 @@ public static class ApiFixtures
         "campaign.start/after-pause",
         "campaign.summary/all",
         "campaign.summary/all-after",
+        "campaign.summary/archive-after",
+        "campaign.summary/archive-before",
+        "campaign.summary/archive-spring",
+        "campaign.summary/archive-spring-archived",
         "campaign.summary/archived",
         "campaign.summary/audience",
         "campaign.summary/audience-nobody-landed",
@@ -367,6 +382,7 @@ public static class ApiFixtures
         "decision.get/for-campaign-row",
         "decision.get/needs-question",
         "decision.get/pending-with-options",
+        "decision.list/archive-pending",
         "decision.list/by-campaign-pending",
         "decision.list/card-archived",
         "decision.list/card-needs-all",
@@ -468,6 +484,8 @@ public static class ApiFixtures
         "route.list/card-accounts-reply",
         "route.list/channel-routes",
         "route.list/empty",
+        "route.resolve/archive-pause",
+        "route.resolve/archive-pause-unusable",
         "route.resolve/card-plan-message-send",
         "route.resolve/card-plan-no-route",
         "route.resolve/elsewhere",
@@ -586,6 +604,7 @@ public static class ApiFixtures
         "workitem.get/researcher-finding-second",
         "workitem.get/succeeded",
         "workitem.list/ada-now",
+        "workitem.list/archive-open",
         "workitem.list/by-block",
         "workitem.list/by-campaign-planned",
         "workitem.list/by-campaign-running",

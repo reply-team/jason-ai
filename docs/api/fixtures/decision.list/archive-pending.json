@@ -1,0 +1,27 @@
+{
+  "operation": "decision.list",
+  "case": "archive-pending",
+  "request": {
+    "campaign_id": "cmp_1",
+    "status": "pending",
+    "limit": 200
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "dec_1",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_3",
+        "status": "pending",
+        "question": "Should Tomas hear about the autumn pricing first?",
+        "raised_at": "2026-10-16T09:00:00.000Z",
+        "answered_at": null,
+        "answered_by": null,
+        "campaign_name": "Spring launch",
+        "contact_name": "Tomas Berg"
+      }
+    ],
+    "next_cursor": null
+  }
+}

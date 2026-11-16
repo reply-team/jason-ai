@@ -603,6 +603,18 @@ export async function transition(
     if (campaign.value?.id === id) campaign.value = answered;
 }
 
+/**
+ * Archives a campaign as the paired person, with the reason they typed: the runtime's answer is the campaign as it is now,
+ * archived, also when another window archived it first.
+ */
+export async function archive(api: Api, id: string, reason?: string): Promise<Campaign> {
+    const body: Record<string, unknown> = { campaign_id: id };
+    if (reason) body['reason'] = reason;
+    const answered = await api.call<Campaign>('campaign.archive', body, 'write');
+    if (campaign.value?.id === id) campaign.value = answered;
+    return answered;
+}
+
 /** Adds people to the open campaign as the paired person: the runtime says, for each, whether it added them. */
 export function addPeople(api: Api, id: string, people: string[], reason?: string): Promise<AddContactsResult> {
     const body: Record<string, unknown> = { campaign_id: id, contacts: people.map((contact_id) => ({ contact_id })) };
