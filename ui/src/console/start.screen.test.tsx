@@ -1,5 +1,5 @@
 import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 import { session } from '../api/session';
 import type { DesktopSetup } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
@@ -844,6 +844,9 @@ describe('the note about name and tone', () => {
 
     it('opens Settings on the card for name and tone, whichever section was chosen before', async () => {
         chosenSection.value = 'models';
+        onTestFinished(() => {
+            chosenSection.value = 'appearance';
+        });
         open();
         await ready();
         sent();
@@ -854,6 +857,5 @@ describe('the note about name and tone', () => {
             'true',
         );
         expect(document.querySelector('.settings')!.getAttribute('data-chosen')).toBe('voice');
-        chosenSection.value = 'appearance';
     });
 });

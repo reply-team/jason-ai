@@ -317,6 +317,16 @@
     background: var(--hover);
     font-weight: 600;
 }
+.jc-console .harness .settings > .settings-list > .settings-announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
 /* A section other than the one shown holds an error: its name carries a dot, and the error is its description. */
 .jc-console .harness .settings > .settings-list > button[data-flagged] {
     background-image: radial-gradient(circle at calc(100% - 12px) 50%, var(--red) 4px, transparent 5px);
@@ -337,6 +347,13 @@
 .jc-console .harness .settings[data-chosen='models'] > [data-section]:not([data-section='models']),
 .jc-console .harness .settings[data-chosen='runtime'] > [data-section]:not([data-section='runtime']) {
     display: none;
+}
+
+/* A window too short for the list to wait at its place: it scrolls with the page, so no entry is out of reach. */
+@media (max-height: 420px) {
+    .jc-console .harness .settings > .settings-list {
+        position: static;
+    }
 }
 
 /* A narrow window, where the console's content is padded less: the bar follows it, and a setting row and a fact stack. */

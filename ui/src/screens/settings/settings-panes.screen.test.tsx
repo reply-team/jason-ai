@@ -52,15 +52,18 @@ async function openConsoleSettings() {
         'jason.ui.session',
         JSON.stringify({ token: 'tok', token_id: 'uit_1', actor_id: 'ada', instance_id: 'rt_1' }),
     );
-    render(<Console api={api()} desktop={stubDesktop()} stream={stubStream().stream} />);
+    const fake = api();
+    render(<Console api={fake} desktop={stubDesktop()} stream={stubStream().stream} />);
     await screen.findByRole('heading', { name: 'Who do you want to reach?' });
     fireEvent.click(within(document.querySelector<HTMLElement>('.side')!).getByRole('button', { name: 'Settings' }));
     await screen.findByRole('heading', { name: 'Settings', level: 1 });
     await waitFor(() => expect(document.querySelector('[data-section="runtime"] .card')).not.toBeNull());
     await waitFor(() => expect(document.querySelector('.send-mode-choice')).not.toBeNull());
+    return fake;
 }
 
 const list = () => within(screen.getByRole('navigation', { name: 'Settings' }));
+const region = () => document.querySelector('.settings-announce')!;
 const chosen = () => document.querySelector('.settings')!.getAttribute('data-chosen');
 
 describe('the sheet of the two panes', () => {
@@ -189,11 +192,35 @@ describe('Settings in two panes', () => {
         const entry = list().getByRole('button', { name: 'Your name and tone' });
         await waitFor(() => expect(entry.hasAttribute('data-flagged')).toBe(true));
         expect(document.getElementById(entry.getAttribute('aria-describedby')!)).toBe(alert);
+        expect(entry.getAttribute('title')).toBe('The save did not go through.');
+        expect(region().textContent).toBe('The save did not go through.');
         expect(chosen()).toBe('appearance');
         expect(list().getByRole('button', { name: 'Appearance' }).hasAttribute('data-flagged')).toBe(false);
         // Chosen, the card shows the alert itself, so the mark goes.
         fireEvent.click(entry);
         await waitFor(() => expect(entry.hasAttribute('data-flagged')).toBe(false));
+        expect(region().textContent).toBe('');
+    });
+
+    it('says a real refused save of name and tone in the region of the list, though its card is hidden', async () => {
+        const fake = await openConsoleSettings();
+        fireEvent.click(list().getByRole('button', { name: 'Your name and tone' }));
+        fake.answerAnyRequest('preference.set', 'preference.set/invalid-value');
+        const release = fake.hold('preference.set');
+        fireEvent.click(
+            within(document.querySelector<HTMLElement>('[data-section="voice"]')!).getAllByRole('button', {
+                name: 'Save',
+            })[0]!,
+        );
+        fireEvent.click(list().getByRole('button', { name: 'Appearance' }));
+        act(() => release());
+        await waitFor(() => expect(region().textContent).not.toBe(''));
+        const entry = list().getByRole('button', { name: 'Your name and tone' });
+        expect(entry.getAttribute('title')).toBe(region().textContent);
+        expect(entry.hasAttribute('data-flagged')).toBe(true);
+        expect(region().getAttribute('role')).toBe('alert');
+        // The card is hidden by the sheet alone, and the view did not move.
+        expect(chosen()).toBe('appearance');
     });
 
     const alone = () =>

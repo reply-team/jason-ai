@@ -24,34 +24,48 @@ const names: Record<SettingsSection, () => string> = {
     runtime: () => 'Runtime',
 };
 
+type Held = { id: string; text: string };
+let alertIds = 0;
+
 /**
  * The sections, other than the one shown, that hold an alert: a save that failed after another section was chosen says
- * so in a card the sheet hides. The list's button for that section is marked and described by the alert, which a
- * hidden element still gives as a description.
+ * so in a card the sheet hides, which is outside the accessibility tree. The list's button for that section is marked
+ * and titled by the alert, and the newest such alert's text is given again in one region of the list that is always
+ * there, emptied once its card is chosen.
  */
 function useHiddenAlerts(root: React.RefObject<HTMLDivElement | null>, chosen: SettingsSection) {
-    const [flags, setFlags] = useState<Partial<Record<SettingsSection, string>>>({});
+    const [held, setHeld] = useState<Partial<Record<SettingsSection, Held>>>({});
+    const [said, setSaid] = useState<{ name: SettingsSection; text: string } | null>(null);
+    const before = useRef<Partial<Record<SettingsSection, Held>>>({});
     useEffect(() => {
         const element = root.current;
         if (!element) return;
-        let next = 0;
         const read = () => {
-            const found: Partial<Record<SettingsSection, string>> = {};
+            const found: Partial<Record<SettingsSection, Held>> = {};
             for (const card of element.querySelectorAll<HTMLElement>(':scope > [data-section]')) {
                 const name = card.dataset.section as SettingsSection;
                 const alert = name === chosen ? null : card.querySelector<HTMLElement>('[role="alert"]');
                 if (!alert) continue;
-                alert.id ||= `settings-alert-${(next += 1)}`;
-                found[name] = alert.id;
+                alert.id ||= `settings-alert-${(alertIds += 1)}`;
+                found[name] = { id: alert.id, text: alert.textContent?.trim() ?? '' };
             }
-            setFlags((was) => (JSON.stringify(was) === JSON.stringify(found) ? was : found));
+            const was = before.current;
+            before.current = found;
+            if (JSON.stringify(was) === JSON.stringify(found)) return;
+            setHeld(found);
+            const newest = (Object.keys(found) as SettingsSection[])
+                .filter((name) => JSON.stringify(was[name]) !== JSON.stringify(found[name]))
+                .at(-1);
+            setSaid((kept) =>
+                newest ? { name: newest, text: found[newest]!.text } : kept && found[kept.name] ? kept : null,
+            );
         };
         read();
         const watch = new MutationObserver(read);
         watch.observe(element, { childList: true, subtree: true, characterData: true });
         return () => watch.disconnect();
     }, [root, chosen]);
-    return flags;
+    return { held, said };
 }
 
 /** What this browser keeps for itself: the theme. The runtime never hears of it. */
@@ -66,7 +80,7 @@ export function SettingsScreen() {
     if (Added && shell.info.value !== null) listed.push('runtime');
     const chosen = listed.includes(chosenSection.value) ? chosenSection.value : listed[0]!;
     const root = useRef<HTMLDivElement>(null);
-    const alerts = useHiddenAlerts(root, chosen);
+    const { held, said } = useHiddenAlerts(root, chosen);
     return (
         <div className="settings" ref={root} data-chosen={essentials() ? chosen : undefined}>
             <h1>{t('settings.title')}</h1>
@@ -77,8 +91,9 @@ export function SettingsScreen() {
                             key={name}
                             type="button"
                             aria-current={name === chosen ? 'true' : undefined}
-                            data-flagged={alerts[name] ? '' : undefined}
-                            aria-describedby={alerts[name]}
+                            data-flagged={held[name] ? '' : undefined}
+                            aria-describedby={held[name]?.id}
+                            title={held[name]?.text}
                             onClick={() => {
                                 chosenSection.value = name;
                             }}
@@ -86,6 +101,9 @@ export function SettingsScreen() {
                             {names[name]()}
                         </button>
                     ))}
+                    <p className="settings-announce" role="alert">
+                        {said?.text}
+                    </p>
                 </nav>
             )}
             <section data-section="appearance">
