@@ -226,6 +226,8 @@ export interface SealDeps {
     read(): Uint8Array;
     /** Told what was refused, each kind at most once (`onceEach`). */
     refused(kind: DemoRefusal): void;
+    /** A sheet of the desktop's own, of the user's origin, put into every document of the view (`demoStripSheets`). */
+    sheet?: string | undefined;
     /**
      * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
      * answers true when it was one, which is then not told as a refusal.
@@ -340,10 +342,11 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
         refuse('navigation');
         if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
     });
-    if (!view.drags) {
+    const sheets = [...(view.drags ? [] : [noDragSheet]), ...(deps.sheet === undefined ? [] : [deps.sheet])];
+    if (sheets.length > 0) {
         contents.on('dom-ready', () => {
-            // A document gone before the sheet lands refuses it; the next document gets its own.
-            contents.insertCSS(noDragSheet, { cssOrigin: 'user' }).catch(() => undefined);
+            // A document gone before a sheet lands refuses it; the next document gets its own.
+            for (const sheet of sheets) contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined);
         });
     }
     contents.setWindowOpenHandler(() => {
@@ -411,5 +414,94 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
         page: { x: 0, y: top, width, height: Math.max(0, height - top) },
         switch: { x: demoGeometry.sidebar, y: top, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
         band: top === 0 ? null : { x: 0, y: 0, width, height: top },
+    };
+}
+
+/**
+ * The page's strip on Windows. The caption buttons stand over the strip's right end, and the page cannot know they are
+ * there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a sentence
+ * that does not fit end in an ellipsis of its own. So on Windows the desktop puts two sheets of its own into the views,
+ * each of the user's origin and important, which no rule of a page outranks: into the page's view, one that insets the
+ * strip by the caption buttons' width, read from the overlay's geometry (`env(titlebar-area-*)`), and our switch beside
+ * them, and has the page show its own short sentence wherever the strip so inset is too narrow for its long one; into our
+ * switch's view, one that, where even the short sentence would reach the switch, makes the switch tighter: less padding
+ * inside its two segments, the same words and the same height. Nothing of the page is edited, and no word of ours is
+ * drawn over it.
+ *
+ * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium
+ * with the system's Segoe UI, from the strip's left edge (its 16 pixels of padding included); `test/demo-page.test.ts`
+ * holds the page's rules they rest on. `margin` is the room kept beyond them before the switch takes its normal form or
+ * the page its long sentence.
+ */
+const sentence = { short: 390.16, long: 604.5 } as const;
+const page = { padStart: 16, gap: 8, shortUpTo: 1100 } as const;
+const segment = { normal: 12, tight: 3 } as const;
+/** Our switch, measured at its normal form: four segment paddings, its two words and its own padding of 2 each side. */
+const normal = 106.16;
+const ours = { padStart: 16, padEnd: 12, shadow: 5, normal, tight: normal - 4 * (segment.normal - segment.tight), segment } as const;
+const margin = 8;
+export const demoStrip = {
+    sentence,
+    page,
+    ours,
+    margin,
+    /** The page's strip's right padding beyond the caption buttons: our tight switch, its shadow and padding, less the page's own gap. */
+    inset: Math.floor(ours.padEnd + ours.tight + ours.shadow - page.gap),
+    /** The page's strip's content width, so inset, from which its long sentence stands clear of our normal switch. */
+    longFrom: Math.ceil(sentence.long + ours.padEnd + ours.normal + ours.shadow + margin - page.padStart - Math.floor(ours.padEnd + ours.tight + ours.shadow - page.gap)),
+    /** Our switch's content width below which the switch takes its tight form: where the short sentence would reach its normal one. */
+    tightBelow: Math.ceil(sentence.short + ours.padEnd + ours.normal + ours.shadow + margin - ours.padStart - ours.padEnd),
+} as const;
+
+/** The two sheets on `platform`: on Windows alone, where the caption buttons stand over the strip. */
+export function demoStripSheets(platform: NodeJS.Platform): { page: string; switch: string } | null {
+    if (platform !== 'win32') return null;
+    const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
+    const tight = demoStrip.ours.segment.tight;
+    return {
+        page:
+            `.jc-console #mode-bar { container: jason-strip / inline-size !important; padding-right: calc(${demoStrip.inset}px + ${caption}) !important; } ` +
+            `@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`,
+        switch:
+            'body { container: jason-switch / inline-size !important; } ' +
+            `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
+    };
+}
+
+/** What the strip shows at a window width: which sentence and switch, where the sentence ends and where the switch begins. */
+export interface DemoStripAt {
+    form: 'long' | 'short';
+    switchForm: 'normal' | 'tight';
+    /** Whether the sentence stands whole, with no ellipsis. */
+    whole: boolean;
+    /** Where the sentence ends, from the strip's left edge. */
+    textEnd: number;
+    /** Where our switch, its shadow of the strip's colour included, begins. */
+    coveredFrom: number;
+}
+
+/**
+ * Pure: the strip at a window's content width on `platform` with caption buttons this wide (0 where there are none), as
+ * the page's rules and the sheets above lay it out. The tests hold every width from the window's least up to it.
+ */
+export function demoStripAt(platform: NodeJS.Platform, width: number, caption: number): DemoStripAt {
+    const strip = width - demoGeometry.sidebar;
+    const sheets = demoStripSheets(platform) !== null;
+    const room = strip - caption;
+    const pagePadEnd = sheets ? caption + demoStrip.inset : 12;
+    const longByPage = width > demoStrip.page.shortUpTo;
+    const longBySheet = !sheets || room - demoStrip.page.padStart - demoStrip.inset >= demoStrip.longFrom;
+    const form = longByPage && longBySheet ? 'long' : 'short';
+    const switchContent = strip - demoStrip.ours.padStart - demoStrip.ours.padEnd - caption;
+    const switchForm = sheets && switchContent < demoStrip.tightBelow ? 'tight' : 'normal';
+    const switchWidth = switchForm === 'tight' ? demoStrip.ours.tight : demoStrip.ours.normal;
+    const limit = strip - pagePadEnd - demoStrip.page.gap;
+    const end = demoStrip.sentence[form];
+    return {
+        form,
+        switchForm,
+        whole: end <= limit,
+        textEnd: Math.min(end, limit),
+        coveredFrom: strip - demoStrip.ours.padEnd - caption - switchWidth - demoStrip.ours.shadow,
     };
 }

@@ -321,7 +321,9 @@ updated from an earlier version open where they did.
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
 for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows the window has no title bar of its own:
 the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
-moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
+window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
+a little tighter. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
