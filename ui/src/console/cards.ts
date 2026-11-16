@@ -12,6 +12,12 @@
 import { fences } from './markdown';
 import { locksChoice, unseen, type Chat } from './chat-model';
 
+/**
+ * What a card's text may not hold: what the chat's titles leave out (`unseen`), and also a character that draws as
+ * nothing or as no character: the blank Braille pattern, half a surrogate pair, a private-use character.
+ */
+const cardUnseen = new RegExp(`${unseen.source.slice(0, -1)}\\p{Cs}\\p{Co}\\u2800]`, 'u');
+
 /** The kinds a card may be, in the order the chat's instructions list them. */
 export const cardKinds = ['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan'] as const;
 export type CardKind = (typeof cardKinds)[number];
@@ -31,58 +37,94 @@ export const depthLimit = 4;
 const campaignShape = /^cmp_[0-9A-Za-z]{1,64}$/;
 
 /**
- * The words of the chat's own controls: every word a button of the chat draws (the thread's cards, the waiting cards,
- * the header, the composer and its menus), and the verbs of a person's acts on an agent. A choice's label that is one of
- * them, folded as `foldLabel` folds, is refused: a button with a word of the window's own would look like that control.
- * A test reads the chat's buttons and fails while a word of theirs is missing here. Names a control draws from a value
- * (a host's, a model's, a campaign's) are not words of the window's and are not held.
+ * The words of the chat's controls that act: a button that approves, rejects, allows or refuses a permission, starts,
+ * resumes, pauses, stops, sends, saves, removes, renames, answers, connects, sets or changes the chat's mode or what it
+ * runs on, or approves and runs a plan. A choice's label that is one of them, folded as `foldLabel` folds, is refused: a
+ * click on it could be taken for that act. The chat's instructions name every one of them. A test reads the chat's
+ * buttons and fails while a word of theirs is in none of this list, `passiveWords` and `nameWords`, so a new button is
+ * classed by a person. Names a control draws from a value (a host's, a model's, a campaign's) are not held.
  */
 export const controlWords: readonly string[] = [
-    // A person's acts, wherever the window offers them.
-    'approve',
-    'reject',
-    'edit',
-    'answer',
-    'start',
-    'resume',
-    'pause',
-    'send',
-    'stop',
-    // The waiting cards.
-    'details',
-    'something else',
-    'show more',
-    'show the whole message',
-    'cancel',
-    // The thread's cards: a permission, a plan, a choice.
-    'allow',
-    'allow for this chat',
-    "don't allow",
-    'approve and run',
-    'approving',
-    'keep planning',
-    'you chose this',
-    'needs you',
-    'open folder',
-    'check again',
-    'not now',
-    'connect',
-    // The header and the composer.
-    'rename',
-    'save',
-    'start afresh',
-    'remove',
-    'keep it',
-    'remove it',
-    'take back',
-    'replace',
-    'send when the turn ends',
-    'ask first',
-    'plan only',
-    'auto-edit',
-    'full access',
-    'default effort',
+    'Approve',
+    'Reject',
+    'Approve and run',
+    'Approving',
+    'Keep planning',
+    'Allow',
+    'Allow for this chat',
+    "Don't allow",
+    'Answer',
+    'Start',
+    'Resume',
+    'Pause',
+    'Stop',
+    'Send',
+    'Send when the turn ends',
+    'Replace',
+    'Save',
+    'Save name',
+    'Remove',
+    'Remove it',
+    'Rename',
+    'Start afresh',
+    'Take back',
+    'Connect',
+    'Reconnect',
+    'Disconnect',
+    'Sign in',
+    'Add account',
+    'Make the link',
+    'Set',
+    'Keep',
+    'Install',
+    'Update',
+    'Remove the key',
+    'Use the public server',
+    'Configure',
+    'Reload',
+    'Unblock',
+    'Delete',
+    'Delete anyway',
+    'Ask first',
+    'Plan only',
+    'Auto-edit',
+    'Full access',
+    'Default effort',
 ];
+
+/**
+ * The words of the chat's controls that only close, open, show or move, and act on nothing: a choice may use them as
+ * labels. Held beside `controlWords` so that every word a button of the chat draws is in exactly one of the three lists.
+ */
+export const passiveWords: readonly string[] = [
+    'Cancel',
+    'Not now',
+    'Close',
+    'Details',
+    'Edit',
+    'Edit message',
+    'Something else',
+    'Show more',
+    'Show the whole message',
+    'Keep it',
+    'Check again',
+    'Check now',
+    'Limits',
+    'Open folder',
+    'Open the shared mailbox page',
+    'Needs you',
+    'You chose this',
+    'Show the draft',
+    'Hide the draft',
+    'Refresh',
+    'Show now',
+];
+
+/**
+ * The words of the chat's buttons that are only a name: of a channel, a provider, a plugin or an AI. Under the AI's own
+ * question a bare name reads as an answer, never as the window's act, so a choice may use it as a label.
+ */
+export const nameWords: readonly string[] = ['Gmail', 'Outlook', 'LinkedIn'];
 
 /**
  * A label as a person reads it, for comparing two: its compatible forms made one (a full-width letter is the letter),
@@ -90,7 +132,9 @@ export const controlWords: readonly string[] = [
  * Letters of another alphabet that look the same are not made one.
  */
 export const foldLabel = (label: string): string =>
+    // The apostrophes first: the compatible form of U+00B4 is a space and a combining mark.
     label
+        .replace(/[\u2018\u2019\u201b\u2032\u02bc\u02b9\u0060\u00b4]/gu, "'")
         .normalize('NFKC')
         .replace(/[\u2018\u2019\u201b\u2032\u02bc\u02b9\u0060\u00b4]/gu, "'")
         .replace(/\s+/gu, ' ')
@@ -324,7 +368,7 @@ function trimmedText(value: unknown, max: number, lines = false): string {
     if (typeof value !== 'string') return refuse();
     const trimmed = value.trim();
     if (trimmed === '' || characters(trimmed) > max) refuse();
-    if ((lines ? trimmed.replace(/\n/g, '') : trimmed).search(unseen) !== -1) refuse();
+    if ((lines ? trimmed.replace(/\n/g, '') : trimmed).search(cardUnseen) !== -1) refuse();
     return trimmed;
 }
 

@@ -368,10 +368,6 @@
     padding-top: 10px;
     border-top: 1px solid var(--line2);
 }
-.jc-console .chat-proposal .proposal-asks .ask-w {
-    margin-top: 6px;
-}
-
 /* The dark theme, chosen by the system or by the person: the same values both ways. */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) .jc-console .btn.ok {

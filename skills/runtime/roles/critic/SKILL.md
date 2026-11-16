@@ -60,7 +60,8 @@ jason workitem review wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --review-hash sha256:3f9a0c 
   `workitem_reviewed` publishes (`jason journal kinds`): `unsupported_claim`, `not_in_memory`, `off_brief`,
   `sensitive_topic`, `instruction_in_text`, `new_kind_of_person`, `wrong_recipient` and `other`. Choose the nearest one,
   and `other` only where none is near; the sentence, one line of at most 280 characters, says what is wrong. It is
-  shown to the person on the approval and kept out of every record that lasts, so write it for them.
+  shown to the person on the approval and kept out of every record that lasts, so write it for them: it names people,
+  messages and campaigns in words, never by an identifier.
 - **Type no actor**, as "How this runtime launched you" says below: the review speaks as your run. The runtime refuses
   it where the work item you run for is one of the send's authors: the one that created the send, or one that wrote its
   text since. A review sent with a hash the text has moved

@@ -58,12 +58,13 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns } from './campaigns';
+import { campaigns, reload as reloadCampaigns } from './campaigns';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
 import { svg } from './icons';
-import { chatHosts, isSignInFailure, signInSentence } from './live';
+import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
+import { CampaignMoves } from '../screens/campaigns/moves';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
@@ -1088,6 +1089,29 @@ export function ChatNotes({ chat }: { chat: Chat }) {
     );
 }
 
+/**
+ * The agent a campaign's chat is about, in the chat's bar: its state as the runtime lists the campaign, and its one move,
+ * the agent page's own control with its own confirmation. The dialog is the browser shell's, so it is drawn inside that
+ * shell's stylesheet scope. Nothing is drawn until the campaign is listed.
+ */
+function AgentInBar({ campaignId }: { campaignId: string }) {
+    const campaign = campaigns.value.find((each) => each.id === campaignId);
+    // An archived campaign is over: it has no move, and its chat says nothing of a state.
+    if (!campaign || campaign.status === 'archived') return null;
+    const { state, tone } = toCampaignRow(campaign, undefined);
+    return (
+        <div className="chat-agent" role="group" aria-label="This agent">
+            <span className={`pillc chat-agent-state ${tone}`}>{state}</span>
+            <CampaignMoves
+                campaign={campaign}
+                buttonClass={(move) => (move === 'pause' ? 'btn sm chat-agent-move' : 'btn sm p chat-agent-move')}
+                frame={(dialog) => <div className="harness">{dialog}</div>}
+                onDone={() => void reloadCampaigns()}
+            />
+        </div>
+    );
+}
+
 export function ChatPanel({ chatId }: { chatId: string }) {
     const thread = useMemo(() => threadOf(chatId), [chatId]);
     const view = useCallback(() => thread.value, [thread]);
@@ -1263,6 +1287,7 @@ export function ChatPanel({ chatId }: { chatId: string }) {
                         Remove
                     </button>
                 )}
+                {chat.campaignId !== null && !chat.main && <AgentInBar campaignId={chat.campaignId} />}
             </div>
             {chat.removing && (
                 <div

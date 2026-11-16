@@ -3,6 +3,14 @@
 This package versions independently of the Jason runtime, under SemVer. A change at Reply's end is
 absorbed by a release of this package alone.
 
+## 0.17.0
+
+- `campaign.get` names the mailboxes a sequence sends from, as `vendor.mailboxes`: a list of `{id}`, each id Reply's own number
+  for the mailbox as text, read from the `emailAccounts` member of the sequence `reply sequence get` prints. An address is not
+  in it: `sender.list` says which address a number is. A sequence that sends from none says an empty list; an answer
+  that does not carry the member, or carries it as anything but a list of whole numbers, gives no `mailboxes` member at all,
+  never an empty one, and the read still succeeds. Update the package (`jason update apply`) to have it.
+
 ## 0.16.0
 
 - `events.read` reads a bounce notice as a `bounce` event rather than as the other side's move. When an email the

@@ -513,6 +513,8 @@ A call cut off sooner is one the package hears about, and it answers from the tw
 
 This operation is one read and nothing else, so the ambiguous ending above cannot arise for it.
 
+`vendor.mailboxes` is the list of `{id}` the sequence sends from, each id Reply's own number for the mailbox as text, read from the sequence's `emailAccounts`: it carries no address (`sender.list` says which address a number is), and it is absent, never `[]`, where Reply's answer does not carry the member as a list of whole numbers.
+
 ### `campaign.create`
 
 | When | Code | Class | What to do about it |

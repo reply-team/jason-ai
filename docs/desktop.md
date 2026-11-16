@@ -483,7 +483,10 @@ no campaign yet. The window opens on Start, and a set-up chat is made when you s
 campaign's conversation; one that made more, or ran beside another turn, offers what it made to pick from. A
 conversation is kept from its first turn, one never sent to leaves nothing, and **Start afresh** begins the agent's next
 turn without its memory of the conversation and keeps what is shown. **Remove** deletes the conversation's record from
-this computer after one question; the host keeps its own transcript.
+this computer after one question; the host keeps its own transcript. A campaign's conversation carries the agent's
+state at the top, and its one move beside **Remove**: **Start** for a draft, **Pause** for an agent that runs,
+**Resume** for a paused one. It is the agent page's own control, with the same confirmation, which says before a start
+how many people the agent holds and how its messages go; it shows from the moment a set-up chat becomes a campaign's.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
@@ -609,7 +612,12 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   `route set`, `route unset`, `plugin grant`, `plugin revoke`, `role set-profile`). **`role add` and `project link` are
   typed in a terminal**: a role's
   entry command is started by the dispatcher, and a project's linked folder becomes a working folder of every chat on
-  its campaigns. A command that names an operation these verbs call is refused too. Also refused: any `reply` command
+  its campaigns. **Starting an agent is yours too** (`campaign start`, which starts a campaign or resumes a paused one):
+  starting is what lets its queued work run, so you press Start or Resume at the top of the agent's chat or on its
+  page. Pausing an agent,
+  archiving one, adding someone to the do-not-contact register, cancelling work and recording a verdict on a reply
+  are the AI's, since each stops reaching a person. A command that names an operation these verbs call is refused
+  too. Also refused: any `reply` command
   but the two above, any read or write under the data directory outside the chat folder (the settings file, the run
   file and the folder `setup/` first among them, `setup/` and `layout.json` refused before they exist), a command that
   names that directory, a command that names `JASON_CONFINED`, a command that names `JASON_ATTEMPT_ID` (a chat is never
@@ -657,7 +665,7 @@ Under the chat, these things differ from a terminal:
   never see.
 - **The person's own words and the installation's changes are refused.** The same `JASON_CONFINED=1` makes `jason` refuse, locally
   before any request, exit 1 and one sentence, every command of the deny list's command half: approving, rejecting,
-  answering and the rest of a person's own word, and the commands that change the installation. Inside the desktop's
+  answering and the rest of a person's own word, starting an agent, and the commands that change the installation. Inside the desktop's
   chat a decision is given in the page, or in a terminal, where the variable is not set. No attempt id in the
   environment lifts the refusal: a role's own work never carries the variable, because the runtime drops it from what it
   launches. A higher bar, not a boundary: the runtime cannot tell a person from a program that holds the token, and an
