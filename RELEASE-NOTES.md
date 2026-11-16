@@ -23,18 +23,18 @@ replaces the title and the body together.
 
 ## What is new since 0.47.1
 
-This patch release is about one thing in the console: an agent is now one place. Its chat and its page's tabs stand
-under one header, in Jason Desktop's window and in a browser tab alike.
+This patch release is about what an agent's page shows in the console: an agent is now one place, with its chat and its
+tabs under one header, in Jason Desktop's window and in a browser tab alike, and it has a Results tab.
 
-- **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox** and **Settings**
-  stand under one header that stays while you move between the tabs. The header holds the agent's name, its state and
-  kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **…** menu. It shows only
-  what it has read from the runtime, and it follows the journal's lines without a reload. The page under it no longer
-  draws a header, a Close or a row of numbers of its own.
-  - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox` and `/settings`, so a reload, a deep
-    link, Back and Forward land on the tab the address names. An old link still lands: an agent's bare address and an
-    old tab's address open its first tab. The first tab is Chat wherever a chat can be made; a browser tab with no
-    desktop draws no Chat and opens on People.
+- **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox**, **Results** and
+  **Settings** stand under one header that stays while you move between the tabs. The header holds the agent's name,
+  its state and kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **…** menu.
+  It shows only what it has read from the runtime, and it follows the journal's lines without a reload. The page under
+  it no longer draws a header, a Close or a row of numbers of its own.
+  - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox`, `/results` and
+    `/settings`, so a reload, a deep link, Back and Forward land on the tab the address names. An old link still lands:
+    an agent's bare address and an old tab's address open its first tab. The first tab is Chat wherever a chat can be
+    made; a browser tab with no desktop draws no Chat and opens on People.
   - **What moved into People:** the line the page's header used to carry, how many people the agent holds and the
     provider campaign it is linked to, and **Add people**, now sit at the top of the People tab.
   - **What moved into the …:** the conversation's acts, **Rename conversation**, **Start conversation afresh** and
@@ -50,6 +50,19 @@ under one header, in Jason Desktop's window and in a browser tab alike.
     Chat tab that it is archived, and nothing is made there; one with a conversation shows it.
   - **An address naming an agent the runtime does not know** is closed with a notice, as the page closes it. When the
     desktop cannot open an agent's conversation, its Chat tab says why under that agent's header, with **Try again**.
+
+- **A Results tab shows what an agent has done.** For that one agent, over the period you choose on it (today, the last
+  7 days or the last 30 days), which the address keeps, so a reload or a link lands on the same period:
+  - how many people it holds now, and how many were contacted, replied, bounced and opted out in the period;
+  - **Interested**, the conversations a role judged interested in the period, named and explained as the Dashboard
+    names and explains them;
+  - contacted and replied by the hour, day or week, drawn as bars as Performance draws them;
+  - when Jason last finished reviewing the agent.
+
+  Every figure is a count the runtime answered; nothing is divided, so no rate or percentage is drawn. The people and
+  activity counts appear first and the rest fill in as they arrive; each one that cannot be read says so where it would
+  be drawn. Until an agent has contacted anyone, it reads zero and one line says the results fill in as people get
+  their first messages.
 
 ## Upgrading from 0.47.1
 
