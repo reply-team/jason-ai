@@ -28,9 +28,9 @@ tabs under one header, in Jason Desktop's window and in a browser tab alike, and
 
 - **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox**, **Results** and
   **Settings** stand under one header that stays while you move between the tabs. The header holds the agent's name,
-  its state and kind as pills, its one move (Start, Pause or Resume, with the same dialog as before) and a **…** menu.
-  It shows only what it has read from the runtime, and it follows the journal's lines without a reload. The page under
-  it no longer draws a header, a Close or a row of numbers of its own.
+  its state as a pill, and its kind where the runtime knows it, its Start, Pause or Resume button, with the same dialog
+  as before, and a **…** menu. It shows only what it has read from the runtime, and it follows the journal's lines
+  without a reload. The page under it no longer draws a header, a Close or a row of numbers of its own.
   - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox`, `/results` and
     `/settings`, so a reload, a deep link, Back and Forward land on the tab the address names. An old link still lands:
     an agent's bare address and an old tab's address open its first tab. The first tab is Chat wherever a chat can be
@@ -56,7 +56,7 @@ tabs under one header, in Jason Desktop's window and in a browser tab alike, and
   - how many people it holds now, and how many were contacted, replied, bounced and opted out in the period;
   - **Interested**, the conversations a role judged interested in the period, named and explained as the Dashboard
     names and explains them;
-  - contacted and replied by the hour, day or week, drawn as bars as Performance draws them;
+  - contacted and replied by the hour or the day, drawn as bars as Performance draws them;
   - when Jason last finished reviewing the agent.
 
   Every figure is a count the runtime answered; nothing is divided, so no rate or percentage is drawn. The people and
