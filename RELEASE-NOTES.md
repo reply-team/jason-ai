@@ -38,8 +38,8 @@ more like one style.
     little tighter.
 - **A browser tab can show the Demo.** In a tab, with or without Jason Desktop behind it, the console's **Demo | Live**
   switch is on. **Demo** moves the address to `#/demo` and shows the same page over the whole tab, with the
-  switch at the right end of the page's own top strip; **Live**, the browser's Back or any other address brings the console back where
-  it was, and a reload at `#/demo` shows the page again from its beginning.
+  switch at the right end of the page's own top strip; **Live**, the browser's Back or any other address
+  brings the console back where it was, and a reload at `#/demo` shows the page again from its beginning.
   - The switch changes that tab only: nothing is kept, the runtime is not told, and the installation's mode and your
     installation stay as they were. In Jason Desktop's own window the switch is the desktop's, as before.
   - The page is sealed in the same way as in the desktop: scripts alone, never the console's origin, so it holds nothing
