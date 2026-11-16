@@ -19,58 +19,91 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.47.2
+# Jason 0.48.0
 
-## What is new since 0.47.1
+## What is new since 0.47.2
 
-This patch release is about what an agent's page shows in the console: an agent is now one place, with its chat and its
-tabs under one header, in Jason Desktop's window and in a browser tab alike, and it has a Results tab.
+This release changes what a browser tab with no desktop shows, and how the Models and Connect card, the Open in menu,
+the chat's bar and its choice card look. It also corrects the Demo's clicks on macOS and the words the window says after
+an editor is opened.
 
-- **An agent is one place.** Its **Chat**, **People** (with how many people the agent holds), **Inbox**, **Results** and
-  **Settings** stand under one header that stays while you move between the tabs. The header holds the agent's name,
-  its state as a pill, and its kind where the runtime knows it, its Start, Pause or Resume button, with the same dialog
-  as before, and a **…** menu. It shows only what it has read from the runtime, and it follows the journal's lines
-  without a reload. The page under it no longer draws a header, a Close or a row of numbers of its own.
-  - **Every tab has its own address:** `#/campaigns/<id>/chat`, `/people`, `/inbox`, `/results` and
-    `/settings`, so a reload, a deep link, Back and Forward land on the tab the address names. An old link still lands:
-    an agent's bare address and an old tab's address open its first tab. The first tab is Chat wherever a chat can be
-    made; a browser tab with no desktop draws no Chat and opens on People.
-  - **What moved into People:** the line the page's header used to carry, how many people the agent holds and the
-    provider campaign it is linked to, and **Add people**, now sit at the top of the People tab.
-  - **What moved into the …:** the conversation's acts, **Rename conversation**, **Start conversation afresh** and
-    **Remove conversation**. They act on the conversation and the agent stays as it is, which Remove's question says.
-  - **Places with no address,** Start, a set-up chat, the Feed and the sidebar's panels, stand at `#/chat`. Leaving an
-    agent for one of them adds one entry to the browser's history, so Back returns to the agent's tab with the words you
-    had typed there.
-  - **An agent's conversation is made at your first message or choice in it,** a send, a chip, or opening one of the
-    composer's menus, which show what the new conversation will take. Opening the Chat, by a link, a reload, Back or the
-    Agents list, makes nothing, and typing alone makes nothing. If making the conversation is refused, the messages not
-    sent go back to the box in the order you wrote them and the reason shows in the chat.
-  - **An archived agent** shows its archived pill, no move, and its tabs to read. One with no conversation says on its
-    Chat tab that it is archived, and nothing is made there; one with a conversation shows it.
-  - **An address naming an agent the runtime does not know** is closed with a notice, as the page closes it. When the
-    desktop cannot open an agent's conversation, its Chat tab says why under that agent's header, with **Try again**.
+- **A browser tab with no desktop shows one page, never the console.** A tab that no desktop opened, as `jason ui open`
+  opens it, draws one centred page: "Live Mode is only available in Jason Desktop.", then "To access Live Mode, download
+  Jason Desktop. The desktop app starts an AI session locally on your computer." with a link to the releases page, then
+  that you can build your own web interface or work directly with Jason from a terminal session with your AI using the
+  installed Jason skills. The console's **Demo | Live** switch stands at the top right: **Demo** opens the demo in that
+  tab, and **Live** brings the page back.
+  - **While approvals or questions wait,** a quiet line under the words counts them and says where to decide: in Jason
+    Desktop, or ask your agent what Jason is waiting for, or run `jason approval list` and `jason decision list`. With
+    nothing waiting, or when the read fails, there is no line.
+  - **The console is drawn in two places:** Jason Desktop's window, and a tab the desktop opens. An unpaired tab still
+    shows the pair-again page, and the address in the tab is left as it is.
+  - **`jason ui open`** still opens and pairs whatever UI is installed, a build of your own included, and `jason ui`
+    and `jason ui open --help` say where this release's console is drawn.
 
-- **A Results tab shows what an agent has done.** For that one agent, over the period you choose on it (today, the last
-  7 days or the last 30 days), which the address keeps, so a reload or a link lands on the same period:
-  - how many people it holds now, and how many were contacted, replied, bounced and opted out in the period;
-  - **Interested**, the conversations a role judged interested in the period, named and explained as the Dashboard
-    names and explains them;
-  - contacted and replied by the hour or the day, drawn as bars as Performance draws them;
-  - when Jason last finished reviewing the agent.
+- **Models and Connect tell what is on this computer apart from what is not.** The card is one drawing, on Connect and
+  in Settings' Models, and it draws two groups.
+  - **On this computer:** each program found is a card of its own, with its name, its version as a pill and **In use** on
+    the program the agents' roles run on by default; what the program does is set apart from the how-to lines under it.
+    One row, **Model keys**, shows each provider whose key is set; with no key saved the row is absent.
+  - **Add or change,** a tinted panel under it: the programs not found are named on one quiet line, those that can be
+    installed first, each with its own **Install**. The model keys are one panel: a **Provider** select that says
+    "key set" in the option of a provider that has one, an API key field with **Save key** for the provider shown, and,
+    for a provider that has a key, "Key set" with **Remove the key** at once. The panel opens on the first provider with
+    no key, and a key typed and not saved is forgotten when another provider is chosen.
+  - **The button that saves a typed key says Save key,** where it said Keep.
+  - In Settings, the card's own "AI" heading is left out under the section's "Models" heading.
 
-  Every figure is a count the runtime answered; nothing is divided, so no rate or percentage is drawn. The people and
-  activity counts appear first and the rest fill in as they arrive; each one that cannot be read says so where it would
-  be drawn. Until an agent has contacted anyone, it reads zero and one line says the results fill in as people get
-  their first messages.
+- **The Open in menu has an icon column, one-line hints and dividers, and stays inside the window.** Every item starts
+  with a glyph for its kind. The hint under Claude Code and Codex is the one line "A new session in a terminal"; the
+  whole sentence is still the item's description and its tooltip. A divider follows the Agents group and another the
+  Editors group, beside the one before Change Jason itself. The menu is 300 pixels wide, so names and one-line hints no
+  longer wrap, and a menu taller than what is left below the strip scrolls inside itself instead of running past the
+  window's bottom edge.
 
-## Upgrading from 0.47.1
+- **After an editor is opened from Open in, the window says which Jason a terminal there finds.** It reads the PATH the
+  desktop gives the editor, and says one of three things: "jason on your PATH is this window's Jason, so a terminal
+  there works with the same data."; "jason on your PATH is another Jason, not this window's: what you run there may work
+  with other data."; or "jason is not on your PATH, so a terminal there does not find Jason." Each is followed by the
+  way out that the Jason menu's Command Line item offers, named by its label (**Put jason on the PATH…**, **Put
+  jason-desktop on the PATH…**, **Point jason at This Jason…** or **Point jason-desktop at This Jason…**), or says to
+  type `jason-desktop` there; where no act would help, none is named. While `jason` on your PATH is another one or none,
+  the Open in menu carries one quiet line under Editors that says so. After the file manager the window says nothing
+  about data. The message opens under the split button, as wide as the menu.
+
+- **The chat bar's Rename, Start afresh and Remove are icon buttons:** a pencil, a circular arrow and a bin, quiet in
+  the muted colour. Each keeps its name and has a tooltip saying what it does; Remove's reads "Remove this
+  conversation". What each does and when it is off are as before.
+
+- **The chat's choice card is compact.** The question is the card's title; options without a detail are chips in a
+  wrapping row, and options with one are a grid of equal cells, two across and one where the card is narrow. An answered
+  card is quieter, with the chosen option outlined and checked. An open card, the last one in the chat, draws a field,
+  **Something else…**, with an arrow: what you type is sent as your next message, as a send from the composer is.
+
+- **The New GTM agent button and its drop-down are two controls.** **New GTM agent** is a light button across the
+  sidebar's row; the drop-down is a small square button of its own beside it, which opens the Create menu.
+
+- **The composer's menus are lighter.** In the model menu an item with no description is drawn at a regular weight and
+  the chosen one a little heavier; the host tabs follow. The access menu, whose items carry a description, keeps its
+  weight.
+
+## Fixed since 0.47.2
+
+- **In the Demo on macOS, clicks reach the page again.** The sidebar, the prompt box and the buttons took no click,
+  because the band above the Demo's page was marked as a drag region over the whole window. It now drags over its own
+  26 pixels alone. The Demo on Windows and on Linux was not affected.
+- **The person panel's tabs, where they are buttons, look like the link tabs.** An agent's People tab keeps its tab
+  itself, and its tabs showed as the browser's grey boxed buttons; they now have the height, font, colour, hover and
+  underline of the link tabs.
+
+## Upgrading from 0.47.2
 
 Nothing stops, no setting is renamed and no migration runs.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
   console's changes.
-- **Links:** an old `#/campaigns/<id>` link now opens the agent's first tab.
+- **A bookmark or a link into the browser UI** now opens the one page described above, in a tab no desktop opened; the
+  console is in Jason Desktop. A build of your own in `ui/custom` draws whatever it draws.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
-- **From 0.47.0 or earlier,** the notes of each release in between apply as well.
+- **From 0.47.1 or earlier,** the notes of each release in between apply as well.
