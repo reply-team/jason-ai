@@ -565,7 +565,8 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
   in-memory partition of its own, and `src/demo-page.ts` seals it: its session answers its own `jason-demo:` or
   `jason-switch:` address alone through a protocol handler that sends the content policy as a header (inline script
-  and style, `data:` fonts and images, nothing else); `http`, `https` and `file` answer 403 there, every request but
+  and style, `data:` fonts and images, nothing else, and a `sandbox` of scripts alone, the page's own frame, so its
+  origin is opaque and its storage refused); `http`, `https` and `file` answer 403 there, every request but
   the page's own address or a `data:` one is cancelled, and a proxy that leads nowhere stands behind them; WebRTC keeps
   to the proxy. Pop-ups, navigation, redirects, frames' navigation, webviews, downloads, devtools, a login, a
   certificate error and an unload prompt are refused or cancelled, a main frame that ends anywhere but its own address
@@ -580,13 +581,15 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   application's own files. A Live start is a start of its own, relaunched with its own arguments, and never has the switch.
   `test/demo-page.test.ts` holds each seal on stand-ins for the contents and the session, and holds the switch to the
   Demo start, before ready.
-- The switch's view covers the page's top strip on the page's own numbers (`demoLayout`): right of its 284-pixel sidebar
-  to the window's right edge, 38 high, the strip's colours, the window's drag region but for the switch. It is laid out
+- The switch's view lies over the page's top strip on the page's own numbers (`demoLayout`): right of its 284-pixel
+  sidebar to the window's right edge, 38 high, the window's drag region but for the switch. The view and its page are
+  transparent, so the page's own dot and sentence show through, and the page draws the switch alone at the strip's right
+  end, which the page leaves free for one, on the strip's colour. It is laid out
   again at each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
   Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
   pixels) and both views start below that band, which they leave to the window's own contents: our band
   (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
-  drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, is covered whole by
+  drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, lies under
   our switch's view. On Windows and Linux the views start at the top of the content. On Windows the caption buttons
   stand over the right end of our switch's view, which Electron tells the free title bar area in the view's own
   coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of

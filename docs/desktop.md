@@ -316,8 +316,8 @@ the desktop's own log), and no record of a mode writes the record as the demo an
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
 
-**The switch.** The page's top strip, right of its sidebar, is drawn by the desktop over the page's own, in the page's
-colours, with the **Demo | Live** switch on its right, so you see one. On Windows the window has no title bar of its own:
+**The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
+for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows the window has no title bar of its own:
 the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
 moves the window. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
@@ -327,7 +327,9 @@ meets; **Back to Your Own Installation**, in the tray and the Jason menu, does t
 carries the same switch, with **Demo** to come back.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
-a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The view loads the
+a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
+sandboxed to its script alone, the frame it was built for: its origin is opaque, so it can keep nothing in storage, and
+what it keeps it keeps in memory while it is shown. The view loads the
 page's own file and nothing else: every other request the page makes, to the network, to a file or to this computer, is
 refused, and a link, a form, a pop-up, a download and any other way to leave the page are refused too; a move to a blank
 page, which nothing is asked about, is undone by loading the page again. No host name is resolved for it, or for anything
