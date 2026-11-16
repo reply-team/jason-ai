@@ -132,6 +132,15 @@ describe('the categories', () => {
 
 describe('the tiles', () => {
     const read: ActivityRead = { contacted: 40, replied: 5, bounced: 2 };
+    it('shows on the Needs you tile the one count in words when it is given, a plus included', () => {
+        const [needs] = tilesOf({ approvals: 2, questions: 1, waitingKnown: true, waiting: '100+', activity: null });
+        expect(needs!.value).toBe('100+');
+        expect(needs!.sub).toBe('2 approvals · 1 question');
+        expect(
+            tilesOf({ approvals: 2, questions: 1, waitingKnown: false, waiting: '3', activity: null })[0]!.value,
+        ).toBeNull();
+    });
+
     it('gives six tiles in order, the two with no fact read holding no value', () => {
         const tiles = tilesOf({ approvals: 2, questions: 1, waitingKnown: true, activity: read });
         expect(tiles.map((each) => each.label)).toEqual([

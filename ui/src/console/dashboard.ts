@@ -35,6 +35,7 @@ import { offUnless } from './off';
 import { svg } from './icons';
 import { toActivity, toApprovalRow, toCampaignRow, toQuestionRow } from './live';
 import * as needs from './needs';
+import { countWords, needsCount, type Count } from './needs-model';
 import { clock, here, lines } from './state';
 
 // The Dashboard: where things stand, drawn only from reads the console already makes. Needs you and the Agents panel
@@ -328,7 +329,7 @@ function rangeHint(): Html | null {
         : html`<p class="dash-range-hint" id="dash-range-hint" role="status">${t(`dash.range.${problem}`)}</p>`;
 }
 
-function header(waiting: number): Html {
+function header(waiting: Count): Html {
     // The installation knows no person's name, so the greeting has none and no comma.
     const hour = new Date(clock.value).getHours();
     return html`<div class="ph dash-head">
@@ -343,13 +344,18 @@ function header(waiting: number): Html {
                 ${t('dash.trends')}
             </label>
             ${
-                waiting > 0
+                waiting.n > 0
                     ? html`<button class="btn p" type="button" ${act('dash.needs')}>
-                          ${t('dash.review', { n: String(waiting) })}
+                          ${t('dash.review', { n: countWords(waiting) })}
                       </button>`
                     : null
             }
-            <button class="btn ${waiting > 0 ? '' : 'p'}" type="button" ${act('dash.new')} ${offUnless('chat.create')}>
+            <button
+                class="btn ${waiting.n > 0 ? '' : 'p'}"
+                type="button"
+                ${act('dash.new')}
+                ${offUnless('chat.create')}
+            >
                 ${svg('plus', 14)}${t('dash.new')}
             </button>
         </div>
@@ -369,6 +375,7 @@ function tiles(): Html {
         approvals: needs.attention.approvals.value.length,
         questions: needs.attention.questions.value.length,
         waitingKnown: needs.attention.loaded.value,
+        waiting: countWords(needsCount(needs.needsInput())),
         activity: read === null ? null : read.total,
         replies: replies.value,
         trends: trendsOn.value ? tileTrendsOf(trendReads.value) : null,
@@ -398,11 +405,12 @@ function tiles(): Html {
 function decide(now: number): Html {
     const approvals = needs.attention.approvals.value;
     const questions = needs.attention.questions.value;
-    const all = approvals.length + questions.length;
+    const count = needsCount(needs.needsInput());
+    const all = count.n;
     return html`<section class="card dash-card dash-decide">
         <div class="hd">
             <h3>${t('dash.decide')}</h3>
-            ${all > 0 ? html`<button class="btn sm" type="button" ${act('dash.needs')}>${t('dash.decide.all', { n: String(all) })}</button>` : null}
+            ${all > 0 ? html`<button class="btn sm" type="button" ${act('dash.needs')}>${t('dash.decide.all', { n: countWords(count) })}</button>` : null}
         </div>
         <div class="bd">
             ${
@@ -588,7 +596,7 @@ function recentActivity(now: number): Html {
 
 export function dashboardView(): Html {
     const now = clock.value;
-    const waiting = needs.attention.approvals.value.length + needs.attention.questions.value.length;
+    const waiting = needsCount(needs.needsInput());
     if (!campaigns.read.value)
         return html`<div class="panel-body dash">
             <div class="ph">

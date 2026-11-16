@@ -42,6 +42,11 @@ public static class ApiFixtures
     //   no route:         route.resolve card-plan-no-route, sender.list card-sender-unread.
     //   accounts (Reply): plugin.list|route.list|sender.list card-accounts-reply.
     //
+    // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
+    // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
+    // needs-message-parked, workitem.update needs-message-edited, approval.list needs-after-edit (the person's edit of
+    // the message), approval.list needs-first-page|-next-page (one more than the default page, read by its cursor).
+    //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
     // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
     // its content is invented: (1) the test plugin of the message, invitation, status and no-route stories is a bare
@@ -72,6 +77,8 @@ public static class ApiFixtures
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
         "approval.get/modes-chosen",
+        "approval.get/needs-message",
+        "approval.get/needs-reply",
         "approval.get/other-pending",
         "approval.get/panel-doubted",
         "approval.get/panel-moved",
@@ -101,6 +108,10 @@ public static class ApiFixtures
         "approval.list/decided",
         "approval.list/empty",
         "approval.list/messages-pending",
+        "approval.list/needs-after-edit",
+        "approval.list/needs-first-page",
+        "approval.list/needs-inbox",
+        "approval.list/needs-next-page",
         "approval.list/one-mode-unset",
         "approval.list/panel-doubted",
         "approval.list/panel-moved",
@@ -532,6 +543,7 @@ public static class ApiFixtures
         "workitem.get/card-message-parked",
         "workitem.get/expired",
         "workitem.get/failed",
+        "workitem.get/needs-message-parked",
         "workitem.get/open",
         "workitem.get/panel-doubted",
         "workitem.get/panel-doubted-approved",
@@ -579,6 +591,7 @@ public static class ApiFixtures
         "workitem.update/card-message-edited",
         "workitem.update/dates",
         "workitem.update/finished-meanwhile",
+        "workitem.update/needs-message-edited",
     ];
 
     public static string Root => Path.Combine(RepositoryTree.Root(), "docs", "api", "fixtures");

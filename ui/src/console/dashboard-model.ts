@@ -236,6 +236,8 @@ export function tilesOf(input: {
     questions: number;
     /** Whether the approvals and questions were read. */
     waitingKnown: boolean;
+    /** Needs you's one count in words, which the tile shows when given: the number the sidebar and All show. */
+    waiting?: string;
     activity: ActivityRead | null;
     replies?: ReplyCountRead | null;
     trends?: TileTrends | null;
@@ -245,7 +247,7 @@ export function tilesOf(input: {
     return [
         {
             label: t('dash.tile.needs'),
-            value: input.waitingKnown ? input.approvals + input.questions : null,
+            value: input.waitingKnown ? (input.waiting ?? input.approvals + input.questions) : null,
             sub: input.waitingKnown ? needsSubline(input.approvals, input.questions) : null,
         },
         {

@@ -5,6 +5,7 @@ import { html, type Html } from './html';
 import { t } from '../platform/i18n';
 import { svg } from './icons';
 import { attention } from './needs';
+import { chatWaits } from './needs-chats';
 import { pageSize, recentFilters, recentRows, shownRows, type RecentFilter, type RecentRow } from './recent-rows';
 import { chats, clock, conversations, currentChat } from './state';
 
@@ -139,6 +140,7 @@ export function recentView(): Html {
         campaigns: campaigns.value,
         approvals: attention.approvals.value,
         questions: attention.questions.value,
+        chats: chatWaits.value,
         now: clock.value,
     });
     const { rows: shown, more } = shownRows(rows, filter.value, text.value, limit.value);

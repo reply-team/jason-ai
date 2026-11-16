@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ApprovalSummary, CampaignSummary, DecisionSummary } from '../api/types';
 import type { DesktopConversation } from '../platform/desktop';
 import { ageOf } from './live';
+import type { ChatWait } from './needs-model';
 import { inFilter, matches, pageSize, recentRows, shownRows, type RecentRow } from './recent-rows';
 
 const now = Date.parse('2026-10-16T09:00:00.000Z');
@@ -70,6 +71,34 @@ describe('the rows under Recent', () => {
     it('leaves the Feed out and counts approvals plus questions per agent', () => {
         expect(rows.map((each) => each.id)).toEqual(['conv_a', 'conv_p', 'conv_d', 'conv_x', 'conv_n']);
         expect(rows.map((each) => each.waiting)).toEqual([3, 0, 1, 0, 0]);
+    });
+
+    it('counts a chat that waits on a choice with its agent’s, and a chat of no agent by its own, once read', () => {
+        const wait = (conversationId: string, campaignId: string | null): ChatWait => ({
+            conversationId,
+            campaignId,
+            agent: null,
+            title: 'A chat',
+            question: 'Shall I go on?',
+            options: ['Yes'],
+            at: before(0),
+        });
+        const read = recentRows({
+            conversations: [
+                conversation({ id: 'conv_a', campaignId: 'cmp_a', title: 'Alpha' }),
+                conversation({ id: 'conv_p', campaignId: 'cmp_p', title: 'Pending' }),
+                conversation({ id: 'conv_n', title: 'Set-up chat' }),
+                conversation({ id: 'conv_m', title: 'Another set-up chat' }),
+            ],
+            titles: () => undefined,
+            campaigns: agents,
+            approvals: [approval('cmp_a')],
+            questions: [],
+            chats: [wait('conv_a', 'cmp_a'), wait('conv_n', null)],
+            now,
+        });
+        expect(read.map((each) => each.waiting)).toEqual([2, 0, 1, 0]);
+        expect(read.map((each) => each.dot)).toEqual(['waiting', 'paused', 'waiting', 'none']);
     });
 
     it('draws amber when something waits, else the agent’s state, else nothing', () => {
