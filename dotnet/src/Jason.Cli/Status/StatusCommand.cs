@@ -91,10 +91,10 @@ public static class StatusCommand
         has no entry command, profile_not_found or profile_disabled where the profile named is not there or
         is out of service. It does not read a profile a work item, a campaign's policy or a role's policy
         names, nor an entry command. Absent, it names what is missing of the repair: jason profile create
-        claude-code --host claude_code --program claude, then "Roles": {"DefaultExecutionProfile":
-        "claude-code"} in the settings file, which the runtime reads without a restart; only the line where
+        claude-code --host claude_code --program claude, then jason profile
+        set-default claude-code, which the runtime applies without a restart; only the second where
         the profile is there, and the name of your own profile where you have one and name none. Its fix is
-        the command alone, never the line. It never decides readiness.
+        the create command alone, never set-default. It never decides readiness.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

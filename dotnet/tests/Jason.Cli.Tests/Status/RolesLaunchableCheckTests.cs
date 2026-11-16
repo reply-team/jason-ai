@@ -38,8 +38,8 @@ public sealed class RolesLaunchableCheckTests
             + "else names a profile for fails at its claim with role_not_launchable, unless the role has an entry command of its "
             + "own or Roles:DefaultEntryCommand names one. "
             + "`jason profile create claude-code --host claude_code --program claude`, then "
-            + "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json, which the runtime "
-            + "reads without a restart, run the roles on Claude Code. " + NotRead,
+            + "`jason profile set-default claude-code`, which the runtime "
+            + "applies without a restart, run the roles on Claude Code. " + NotRead,
             check.Fact);
         Assert.Equal(Create, check.Fix);
     }
@@ -58,8 +58,8 @@ public sealed class RolesLaunchableCheckTests
             "2 enabled execution profiles exist and Roles:DefaultExecutionProfile names none, so a role's work that nothing else "
             + "names a profile for fails at its claim with role_not_launchable, unless the role has an entry command of its own "
             + "or Roles:DefaultEntryCommand names one. "
-            + "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json, which the runtime "
-            + "reads without a restart, runs the roles on claude-code. " + NotRead,
+            + "`jason profile set-default claude-code`, which the runtime "
+            + "applies without a restart, runs the roles on claude-code. " + NotRead,
             check.Fact);
         Assert.Null(check.Fix);
     }
@@ -71,15 +71,15 @@ public sealed class RolesLaunchableCheckTests
         Assert.Equal(CheckState.Absent, one.State);
         Assert.StartsWith("1 enabled execution profile exists and Roles:DefaultExecutionProfile names none, so ", one.Fact, StringComparison.Ordinal);
         Assert.Contains(
-            "`\"Roles\": {\"DefaultExecutionProfile\": \"local-cursor\"}` in /data/config/settings.json, which the runtime reads without a restart, runs the roles on local-cursor.",
+            "`jason profile set-default local-cursor`, which the runtime applies without a restart, runs the roles on local-cursor.",
             one.Fact,
             StringComparison.Ordinal);
         Assert.Null(one.Fix);
 
         var two = StatusChecks.RolesLaunchableCheck([new("local-cursor", "cursor_cli"), new("night-run", "codex")], unread: null, SettingsFile, None);
         Assert.Contains(
-            "`\"Roles\": {\"DefaultExecutionProfile\": \"<name>\"}` in /data/config/settings.json, with the name of one of them "
-            + "(local-cursor, night-run), which the runtime reads without a restart, runs the roles on it.",
+            "`jason profile set-default <name>`, with the name of one of them "
+            + "(local-cursor, night-run), which the runtime applies without a restart, runs the roles on it.",
             two.Fact,
             StringComparison.Ordinal);
         Assert.Null(two.Fix);
@@ -123,16 +123,16 @@ public sealed class RolesLaunchableCheckTests
             "Roles:DefaultExecutionProfile names house, which is not an enabled execution profile here, so a role's work that "
             + "nothing else names a profile for fails at its claim with profile_not_found or profile_disabled. "
             + "`jason profile create claude-code --host claude_code --program claude`, then "
-            + "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json in place of the name it "
-            + "gives, which the runtime reads without a restart, run the roles on Claude Code. " + NotRead,
+            + "`jason profile set-default claude-code` in place of the name it "
+            + "gives, which the runtime applies without a restart, run the roles on Claude Code. " + NotRead,
             both.Fact);
         Assert.Equal(Create, both.Fix);
 
         var line = StatusChecks.RolesLaunchableCheck([new("claude-code", "claude_code")], unread: null, SettingsFile, Named("house"));
         Assert.Equal(CheckState.Absent, line.State);
         Assert.Contains(
-            "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json in place of the name it "
-            + "gives, which the runtime reads without a restart, runs the roles on claude-code.",
+            "`jason profile set-default claude-code` in place of the name it "
+            + "gives, which the runtime applies without a restart, runs the roles on claude-code.",
             line.Fact,
             StringComparison.Ordinal);
         Assert.Null(line.Fix);
@@ -156,8 +156,8 @@ public sealed class RolesLaunchableCheckTests
         Assert.Equal(CheckState.Absent, padded.State);
         Assert.Equal(
             "Roles:DefaultExecutionProfile gives \" claude-code\", " + Refused
-            + "`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}` in /data/config/settings.json in place of the name it "
-            + "gives, which the runtime reads without a restart, runs the roles on claude-code. " + NotRead,
+            + "`jason profile set-default claude-code` in place of the name it "
+            + "gives, which the runtime applies without a restart, runs the roles on claude-code. " + NotRead,
             padded.Fact);
         Assert.Null(padded.Fix);
 
@@ -277,7 +277,7 @@ public sealed class RolesLaunchableCheckTests
         var at = checks.FindIndex(check => check.Name == "roles_launchable");
         Assert.Equal("agent_hosts", checks[at - 1].Name);
         Assert.Equal(CheckState.Absent, checks[at].State);
-        Assert.Contains($"in {dir.Paths.UserSettingsFile}, which", checks[at].Fact, StringComparison.Ordinal);
+        Assert.Contains("`jason profile set-default claude-code`, which the runtime applies without a restart", checks[at].Fact, StringComparison.Ordinal);
         Assert.Equal(Create, checks[at].Fix);
         Assert.Equal(report.Checks.Where(check => check.Required).All(check => check.State == CheckState.Ok), report.Ready);
 
@@ -288,7 +288,7 @@ public sealed class RolesLaunchableCheckTests
         var unnamed = Assert.Single(half.Checks, check => check.Name == "roles_launchable");
         Assert.Equal(CheckState.Absent, unnamed.State);
         Assert.Null(unnamed.Fix);
-        Assert.Contains("`\"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"}`", unnamed.Fact, StringComparison.Ordinal);
+        Assert.Contains("`jason profile set-default claude-code`", unnamed.Fact, StringComparison.Ordinal);
         Assert.Equal(report.Ready, half.Ready);
 
         Directory.CreateDirectory(Path.GetDirectoryName(made.Paths.UserSettingsFile)!);
@@ -322,7 +322,7 @@ public sealed class RolesLaunchableCheckTests
         Assert.True(optional > 0, help);
         Assert.True(help.IndexOf("a default execution profile is named for the AI roles to run on, and is enabled", StringComparison.Ordinal) > optional, help);
         Assert.Contains(
-            "jason profile create claude-code --host claude_code --program claude, then \"Roles\": {\"DefaultExecutionProfile\": \"claude-code\"} in the settings file",
+            "jason profile create claude-code --host claude_code --program claude, then jason profile set-default claude-code, which the runtime applies without a restart",
             help,
             StringComparison.Ordinal);
         Assert.Contains("JASON_Roles__DefaultExecutionProfile", help, StringComparison.Ordinal);
