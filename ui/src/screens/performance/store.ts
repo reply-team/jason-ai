@@ -2,7 +2,6 @@ import { signal } from '@preact/signals-react';
 import { ApiError, type Api } from '../../api/client';
 import type {
     ActivityBucket,
-    ActivityPeriod,
     Campaign,
     CampaignActivityByPeriodResponse,
     CampaignActivityResponse,
@@ -11,8 +10,8 @@ import type {
     Page,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
-import type { Period, Route } from '../../router';
-import { periodWindow } from '../../time/periods';
+import type { Route } from '../../router';
+import { bucketOf, periodWindow } from '../../time/periods';
 import { archivedLeftOut } from '../campaigns/store';
 import { fail } from '../people/store';
 
@@ -40,10 +39,7 @@ export const peopleShown = signal<string | null>(null);
 export const campaigns = signal<Chosen[]>([]);
 export const notice = signal<string | null>(null);
 
-/** What each bar of a period is: today by the hour, a week or a month by the day, a quarter by the week. */
-export function bucketOf(period: Period): ActivityPeriod {
-    return period === 'today' ? 'hour' : period === '90d' ? 'week' : 'day';
-}
+export { bucketOf };
 
 export function numbersKey(at: At): string {
     return JSON.stringify([at.period, at.campaigns]);

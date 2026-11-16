@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import * as store from './store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
@@ -814,18 +815,28 @@ describe('The campaign panel in Live', () => {
             .answer('decision.list', 'decision.list/by-campaign-pending')
             .answer('journal.list', 'journal.list/by-campaign', 'journal.list/by-campaign-changes');
 
-    it('draws People, Inbox and Settings, and Sequence and Results only in the demo', async () => {
+    it('draws People, Inbox, Results and Settings, and Sequence only in the demo', async () => {
         consoleShell.loaded = true;
         open(api(), spring);
         await screen.findByRole('heading', { level: 2, name: 'Spring' });
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
     });
 
     it('still opens a tab it does not draw at the address that names it', async () => {
         consoleShell.loaded = true;
         open(api(), { ...table, id: 'cmp_1', tab: 'sequence' });
         expect(await screen.findByText('Waiting for you')).toBeTruthy();
-        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['People', 'Inbox', 'Settings']);
+        expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+            'People',
+            'Inbox',
+            'Results',
+            'Settings',
+        ]);
     });
 
     it('draws every tab in the classic shell, which is not the console, and opens a bare agent address on Sequence', async () => {
@@ -1090,6 +1101,9 @@ describe('A campaign’s Inbox', () => {
 });
 
 describe('A campaign’s Results', () => {
+    // What the last test drew is not this test's: the tab starts from nothing, as a campaign just opened does.
+    beforeEach(() => store.close());
+
     /** The figures as the page shows them: each tile's name and its number. */
     async function figures(): Promise<string[]> {
         const group = await screen.findByRole('group', { name: 'The agent’s results' });
@@ -1099,40 +1113,61 @@ describe('A campaign’s Results', () => {
             .map((tile) => tile.getAttribute('aria-label') ?? '');
     }
 
-    it('shows four figures as the runtime counts them: its people now, and the period’s contacted, replied and opted out', async () => {
-        const api = startedAgents()
+    const reviewing =
+        (review: 'workitem.list/review-latest' | 'workitem.list/review-none') =>
+        (body: object): 'workitem.list/creating-none' | 'workitem.list/review-latest' | 'workitem.list/review-none' =>
+            (body as { role?: string }).role === 'manager' ? review : 'workitem.list/creating-none';
+
+    /** What the tab reads: both counts, the judged replies, the two series and the last finished review. */
+    function resultsApi(
+        review: 'workitem.list/review-latest' | 'workitem.list/review-none' = 'workitem.list/review-latest',
+    ) {
+        return startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
             .answer('campaign.get', 'campaign.get/details')
-            .answer('campaign.activity', 'campaign.activity/one');
+            .answer('campaign.activity', 'campaign.activity/one')
+            .answer('reply.count', 'reply.count/period-spring')
+            .answer(
+                'campaign.activity_by_period',
+                'campaign.activity_by_period/contacted-one',
+                'campaign.activity_by_period/replied-one',
+            )
+            .answerAnyRequest('workitem.list', reviewing(review));
+    }
+
+    it('shows the runtime’s counts: its people now, and the period’s contacted, replied, bounced, opted out and conversations judged interested', async () => {
+        const api = resultsApi();
         open(api, { ...table, id: 'cmp_1', tab: 'results' });
 
-        // Each figure says what it measures over: the people now, the other three in the period, so none reads as one measure.
+        // Each figure says what it measures over: the people now, the others in the period, so none reads as one measure.
         expect(await figures()).toEqual([
             'People now, 22',
             'Contacted in the last 7 days, 4',
             'Replied in the last 7 days, 2',
+            'Bounced in the last 7 days, 2',
             'Opted out in the last 7 days, 2',
+            'Interested conversations in the last 7 days, 2',
         ]);
         expect(screen.getByRole('tab', { name: 'Results' }).getAttribute('aria-selected')).toBe('true');
-        expect(screen.getAllByText('in the last 7 days')).toHaveLength(3);
+        expect(screen.getAllByText('in the last 7 days')).toHaveLength(4);
+        expect(screen.getAllByText('conversations in the last 7 days')).toHaveLength(1);
         expect(screen.getAllByText('now')).toHaveLength(1);
-        // Two reads, each the runtime's answer: nothing on the page divides one figure by another.
+        // The Dashboard's own hint says what an interested conversation is.
+        expect(screen.getByTitle('Conversations the reply-reading role judged interested.')).toBeTruthy();
         expect(sent(api, 'campaign.summary')).toContainEqual(fixtures['campaign.summary/some'].request);
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/one'].request]);
+        expect(sent(api, 'reply.count')).toEqual([fixtures['reply.count/period-spring'].request]);
+        // Counts only: nothing on the page divides one figure by another, and nothing says meetings or a funnel.
         expect(screen.queryByText(/%/)).toBeNull();
+        expect(screen.queryByText(/meeting|funnel|goal/i)).toBeNull();
     });
 
-    it('asks both of its reads with archived people left out, as the table beside it does', async () => {
-        const api = startedAgents()
-            .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
-            .answer('campaign.get', 'campaign.get/details')
-            .answer('campaign.activity', 'campaign.activity/one');
+    it('asks its reads with archived people left out, as the table beside it does', async () => {
+        const api = resultsApi();
         open(api, { ...table, id: 'cmp_1', tab: 'results' });
         await figures();
 
-        // Every number of the screen counts the people its lists show: none of these reads counts an archived person.
         expect(sent(api, 'campaign.summary')).toContainEqual({
             campaign_ids: ['cmp_1'],
             exclude_archived_contacts: true,
@@ -1145,35 +1180,96 @@ describe('A campaign’s Results', () => {
                 exclude_archived_contacts: true,
             },
         ]);
-        for (const body of sent(api, 'campaign.summary')) expect(body['exclude_archived_contacts']).toBe(true);
+        expect(sent(api, 'campaign.activity_by_period')).toEqual([
+            fixtures['campaign.activity_by_period/contacted-one'].request,
+            fixtures['campaign.activity_by_period/replied-one'].request,
+        ]);
+        for (const body of [...sent(api, 'campaign.summary'), ...sent(api, 'campaign.activity_by_period')])
+            expect(body['exclude_archived_contacts']).toBe(true);
     });
 
-    it('a campaign nothing has happened in yet shows its zeros, not blanks', async () => {
+    it('draws contacted and replied by the day, as bars that only show their figures', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        const contacted = await screen.findByRole('group', { name: /^Contacted per day/ });
+        expect(within(contacted).getAllByRole('img')).toHaveLength(7);
+        expect(within(contacted).queryAllByRole('button')).toEqual([]);
+        expect(await screen.findByRole('group', { name: /^Replied per day/ })).toBeTruthy();
+    });
+
+    it('says when Jason last reviewed the agent, from the newest finished review of its manager role', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        expect(await screen.findByText('Jason last reviewed this agent 30 min ago')).toBeTruthy();
+        expect(sent(api, 'workitem.list').filter((body) => body['role'] === 'manager')).toEqual([
+            fixtures['workitem.list/review-latest'].request,
+        ]);
+    });
+
+    it('says no review has finished yet when the runtime lists none', async () => {
+        const api = resultsApi('workitem.list/review-none');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        expect(await screen.findByText('Jason has not reviewed this agent yet')).toBeTruthy();
+    });
+
+    it('a campaign nothing has happened in yet shows its zeros, an empty chart and the one line, not blanks', async () => {
         const api = startedAgents()
             .answer('campaign.list', 'campaign.list/screen')
             .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/summer')
             .answer('campaign.get', 'campaign.get/summer')
-            .answer('campaign.activity', 'campaign.activity/summer');
+            .answer('campaign.activity', 'campaign.activity/summer')
+            .answerAnyRequest('reply.count', 'reply.count/period-none')
+            .answerAnyRequest('campaign.activity_by_period', 'campaign.activity_by_period/contacted-today')
+            .answerAnyRequest('workitem.list', reviewing('workitem.list/review-none'));
         open(api, { ...table, id: fixtures['campaign.get/summer'].request.campaign_id, tab: 'results' });
 
         expect(await figures()).toEqual([
             'People now, 2',
             'Contacted in the last 7 days, 0',
             'Replied in the last 7 days, 0',
+            'Bounced in the last 7 days, 0',
             'Opted out in the last 7 days, 0',
+            'Interested conversations in the last 7 days, 0',
         ]);
+        expect(await screen.findAllByText('Nobody yet')).toHaveLength(2);
+        expect(screen.getByText('Results fill in as people get their first messages.')).toBeTruthy();
         expect(sent(api, 'campaign.activity')).toEqual([fixtures['campaign.activity/summer'].request]);
     });
 
-    function resultsApi() {
-        return startedAgents()
-            .answer('campaign.list', 'campaign.list/screen')
-            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/some')
-            .answer('campaign.get', 'campaign.get/details')
-            .answer('campaign.activity', 'campaign.activity/one');
-    }
+    it('the one line is not said once somebody has been contacted', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
 
-    it('a read that failed says why, and is neither busy nor shows a figure', async () => {
+        expect(screen.queryByText('Results fill in as people get their first messages.')).toBeNull();
+    });
+
+    it('a read that failed says so where it would be drawn, and the other figures stay', async () => {
+        const api = resultsApi();
+        api.unreachable('reply.count');
+        api.unreachable('campaign.activity_by_period');
+        api.unreachable('workitem.list', (body) => (body as { role?: string }).role === 'manager');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect(await figures()).toEqual([
+            'People now, 22',
+            'Contacted in the last 7 days, 4',
+            'Replied in the last 7 days, 2',
+            'Bounced in the last 7 days, 2',
+            'Opted out in the last 7 days, 2',
+            'Interested conversations in the last 7 days, not read',
+        ]);
+        expect(await screen.findByText('The charts could not be read.')).toBeTruthy();
+        expect(await screen.findByText('Jason’s last review could not be read.')).toBeTruthy();
+    });
+
+    it('a count that failed says why, and is neither busy nor shows a figure', async () => {
         const api = resultsApi();
         api.unreachable('campaign.activity');
         open(api, { ...table, id: 'cmp_1', tab: 'results' });
@@ -1182,6 +1278,208 @@ describe('A campaign’s Results', () => {
         expect(document.querySelector('[aria-busy="true"]')).toBeNull();
         expect(screen.queryAllByRole('figure')).toEqual([]);
         expect(screen.queryByText('…')).toBeNull();
+    });
+
+    /** The campaign's own reads of the open tab: the requests that name it and no other campaign. */
+    const own = (api: FakeApi, operation: string) =>
+        sent(api, operation).filter((body) => {
+            const ids = body['campaign_ids'] as string[] | undefined;
+            return ids?.length === 1 && ids[0] === 'cmp_1';
+        });
+
+    /** Moves the open campaign's Results to another period, the way the address does. */
+    function pick(period: 'today' | '7d' | '30d') {
+        const next = { ...table, view: 'activity', id: 'cmp_1', tab: 'results', period } as Route;
+        location.hash = href(next);
+        route.value = next;
+    }
+
+    it('writes the counts as soon as they land: a slow interested count, chart or review leaves them drawn and fills in later', async () => {
+        const api = resultsApi();
+        const releases = [
+            api.hold('reply.count'),
+            api.hold('campaign.activity_by_period'),
+            api.hold('workitem.list', (body) => (body as { role?: string }).role === 'manager'),
+        ];
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect(await figures()).toEqual([
+            'People now, 22',
+            'Contacted in the last 7 days, 4',
+            'Replied in the last 7 days, 2',
+            'Bounced in the last 7 days, 2',
+            'Opted out in the last 7 days, 2',
+            'Interested conversations in the last 7 days',
+        ]);
+        expect(screen.queryByText('Jason last reviewed this agent 30 min ago')).toBeNull();
+        expect(screen.queryByText(/could not be read/)).toBeNull();
+
+        for (const release of releases) release();
+        expect(await screen.findByText('Jason last reviewed this agent 30 min ago')).toBeTruthy();
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+        expect(await screen.findByRole('group', { name: /^Contacted per day/ })).toBeTruthy();
+    });
+
+    it('a refresh of the same period keeps what is drawn until the new answers land', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+        await screen.findByText('Jason last reviewed this agent 30 min ago');
+        await screen.findByRole('group', { name: /^Contacted per day/ });
+
+        const releases = [
+            api.hold('reply.count'),
+            api.hold('campaign.activity_by_period'),
+            api.hold('workitem.list', (body) => (body as { role?: string }).role === 'manager'),
+        ];
+        await act(async () => {
+            await Promise.race([store.loadResults(api, 'cmp_1', '7d', new Date(), 'UTC'), Promise.resolve()]);
+        });
+
+        // The answers are on their way: the interested count, the review and the bars are still the last ones drawn.
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+        expect(screen.getByText('Jason last reviewed this agent 30 min ago')).toBeTruthy();
+        const contacted = screen.getByRole('group', { name: /^Contacted per day/ });
+        expect(within(contacted).getAllByRole('img')).toHaveLength(7);
+        for (const release of releases) release();
+        expect(await figures()).toContain('Interested conversations in the last 7 days, 2');
+    });
+
+    it('choosing Last 30 days on Results puts the period in the address, reads the period again, and a reload lands on it', async () => {
+        const api = resultsApi()
+            .answerAnyRequest('campaign.activity', 'campaign.activity/one')
+            .answerAnyRequest('reply.count', 'reply.count/period-spring')
+            .answerAnyRequest('campaign.activity_by_period', 'campaign.activity_by_period/contacted-one');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        const panel = document.querySelector('.campaign-tabs-results') as HTMLElement;
+        fireEvent.click(within(panel).getByRole('button', { name: 'Last 30 days' }));
+
+        await waitFor(() => expect(location.hash).toContain('period=30d'));
+        await waitFor(() => expect(own(api, 'campaign.activity').at(-1)!['since']).toBe('2026-09-17T00:00:00.000Z'));
+        expect(own(api, 'reply.count').at(-1)!['since']).toBe('2026-09-17T00:00:00.000Z');
+        for (const body of own(api, 'campaign.activity_by_period').slice(-2)) {
+            expect(body['since']).toBe('2026-09-17T00:00:00.000Z');
+            expect(body['period']).toBe('day');
+        }
+        const shown = await figures();
+        expect(shown[0]).toBe('People now, 22');
+        expect(shown[1]).toBe('Contacted in the last 30 days, 4');
+        // The address is the truth: a reload of it opens Results on the same period.
+        expect(parseRoute(location.hash)).toMatchObject({ tab: 'results', period: '30d' });
+        expect(within(panel).getByRole('button', { name: 'Last 30 days' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('another period sends the period’s reads again with its own window and bars, and People stays now', async () => {
+        const api = resultsApi()
+            .answerAnyRequest('campaign.activity', 'campaign.activity/one')
+            .answerAnyRequest('reply.count', 'reply.count/period-spring')
+            .answerAnyRequest('campaign.activity_by_period', 'campaign.activity_by_period/contacted-one');
+        open(api, { ...table, view: 'activity', id: 'cmp_1', tab: 'results' });
+        await figures();
+
+        const windows = {
+            '30d': { since: '2026-09-17T00:00:00.000Z', period: 'day', label: 'last 30 days' },
+            today: { since: '2026-10-16T00:00:00.000Z', period: 'hour', label: 'today' },
+        } as const;
+        for (const [period, expected] of Object.entries(windows) as [
+            keyof typeof windows,
+            (typeof windows)[keyof typeof windows],
+        ][]) {
+            pick(period);
+            await waitFor(() =>
+                expect(screen.getAllByText(new RegExp(`^(in the )?${expected.label}$`)).length).toBeGreaterThan(0),
+            );
+            const lastOf = (operation: string) => own(api, operation).at(-1)!;
+            await waitFor(() => expect(lastOf('campaign.activity')['since']).toBe(expected.since));
+            expect(lastOf('reply.count')).toEqual({
+                campaign_ids: ['cmp_1'],
+                since: expected.since,
+                until: '2026-10-16T09:00:00.000Z',
+            });
+            for (const body of own(api, 'campaign.activity_by_period').slice(-2)) {
+                expect(body['since']).toBe(expected.since);
+                expect(body['period']).toBe(expected.period);
+            }
+            // The people now is the campaign's own count at the moment, never re-labelled with the period.
+            expect((await figures())[0]).toBe('People now, 22');
+        }
+    });
+
+    it('nothing of an older period is drawn over the newer one when its reads answer late', async () => {
+        const old = (body: object) => (body as { since?: string }).since === '2026-10-10T00:00:00.000Z';
+        const api = resultsApi()
+            .answerAnyRequest('campaign.activity', (body) =>
+                (body as { campaign_ids?: string[] }).campaign_ids?.length === 1 && !old(body)
+                    ? 'campaign.activity/summer'
+                    : 'campaign.activity/one',
+            )
+            .answerAnyRequest('reply.count', (body) =>
+                old(body) ? 'reply.count/period-spring' : 'reply.count/period-none',
+            )
+            .answerAnyRequest('campaign.activity_by_period', 'campaign.activity_by_period/contacted-today');
+        const release = [
+            api.hold(
+                'campaign.activity',
+                (body) => old(body) && (body as { campaign_ids?: string[] }).campaign_ids?.length === 1,
+            ),
+            api.hold('reply.count', old),
+        ];
+        open(api, { ...table, view: 'activity', id: 'cmp_1', tab: 'results' });
+        await waitFor(() => expect(own(api, 'campaign.activity')).toHaveLength(1));
+
+        pick('30d');
+        expect(await figures()).toContain('Contacted in the last 30 days, 0');
+        for (const each of release) each();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(await figures()).toEqual([
+            'People now, 22',
+            'Contacted in the last 30 days, 0',
+            'Replied in the last 30 days, 0',
+            'Bounced in the last 30 days, 0',
+            'Opted out in the last 30 days, 0',
+            'Interested conversations in the last 30 days, 0',
+        ]);
+    });
+
+    it('a refused optional read says the runtime’s reason, and an unreachable runtime says only that it could not be read', async () => {
+        const api = resultsApi()
+            .answerAnyRequest('reply.count', 'reply.count/until-before-since')
+            .answerAnyRequest('workitem.list', (body) =>
+                (body as { role?: string }).role === 'manager'
+                    ? 'workitem.list/unknown-campaign'
+                    : 'workitem.list/creating-none',
+            );
+        api.unreachable('campaign.activity_by_period');
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+
+        expect(await figures()).toContain(
+            'Interested conversations in the last 7 days, not read: Validation failed: until: invalid.',
+        );
+        expect(
+            await screen.findByText("Jason’s last review could not be read: No campaign with id 'cmp_3'."),
+        ).toBeTruthy();
+        expect(await screen.findByText('The charts could not be read.')).toBeTruthy();
+    });
+
+    it('never names the role anywhere on the tab, in its text, its labels or its titles', async () => {
+        const api = resultsApi();
+        open(api, { ...table, id: 'cmp_1', tab: 'results' });
+        await figures();
+        await screen.findByText('Jason last reviewed this agent 30 min ago');
+
+        const tab = document.querySelector('.campaign-tabs-results')!;
+        const said = [
+            tab.textContent ?? '',
+            ...[...tab.querySelectorAll('[aria-label],[title]')].flatMap((each) => [
+                each.getAttribute('aria-label') ?? '',
+                each.getAttribute('title') ?? '',
+            ]),
+        ];
+        for (const text of said) expect(text).not.toMatch(/manager/i);
     });
 
     it('a failure is said over its own tab only: going to Sequence leaves it behind', async () => {

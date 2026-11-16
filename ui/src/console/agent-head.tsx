@@ -30,7 +30,7 @@ const pageTabNames: Record<Page, string> = {
 };
 
 /** The tabs only the demo draws, and the classic shell; the console's Live leaves them out, and their addresses open them all the same. */
-const demoOnly: readonly Page[] = ['sequence', 'results'];
+const demoOnly: readonly Page[] = ['sequence'];
 
 const number = new Intl.NumberFormat('en-US');
 

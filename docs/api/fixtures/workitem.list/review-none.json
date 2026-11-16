@@ -1,0 +1,18 @@
+{
+  "operation": "workitem.list",
+  "case": "review-none",
+  "request": {
+    "campaign_id": "cmp_1",
+    "role": "manager",
+    "status": [
+      "succeeded"
+    ],
+    "order": "finished",
+    "limit": 1
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

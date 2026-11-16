@@ -219,10 +219,14 @@ Jason observed them, the latest first (`jason journal list --campaign --kind inb
 moment the provider says its thread moved, the line's own moment only when it names none; the ten people Jason saw
 reply last, each with their threads asked of the plugin their line names (`jason contact threads`), and a reply tied to nobody as its
 channel and moment. It is read when the tab opens and when you refresh it, by its own Refresh, which it has whether
-it is loading, empty or failed, or by the toolbar's while the tab is open. Its **Results** are four figures as the runtime counts them,
-its people now and who was contacted, replied and opted out in the period (`jason campaign summary`, `jason campaign
-activity`), with nothing divided on the page. A read of the Inbox or the Results that failed says so over that
-tab of that campaign alone, never as loading, and is gone once you leave the tab. Its **Settings** are its record, its
+it is loading, empty or failed, or by the toolbar's while the tab is open. Its **Results** are the runtime's counts as figures,
+its people now and who was contacted, replied, bounced and opted out in the period (`jason campaign summary`, `jason campaign
+activity`), and the conversations a role judged interested in it (`jason reply count`, the Dashboard's own count), with nothing
+divided on the page; under them, contacted and replied by the hour, day or week (`jason campaign activity-by-period`) and when Jason
+last finished reviewing the agent (`jason workitem list --campaign <id> --role manager --status succeeded --order finished --limit 1`). The tab has the page's one period switch (today, the last 7 or 30 days); the period is in the address (`?period=30d`), so a reload lands on it. While nobody
+has been contacted, one line says the results fill in as people get their first messages. A read of the Inbox or the Results that
+failed says so over that tab of that campaign alone, never as loading, and is gone once you leave the tab; the Results' reads of
+the judged conversations, the charts and the last review fail one at a time, each saying so where it would be drawn. Its **Settings** are its record, its
 context as the roles read it and what each provider calls it, and in the console, last, where it is archived (below):
 the campaign's moves are in its header,
 beside **Add people** (in the console, in the agent's one header, with Add people at the top of its People tab), so they are within reach from every tab, each offered only where its status allows it and each
@@ -250,7 +254,7 @@ the list, read again without the agent, and says the agent is archived and what 
 archived agent's Settings say it is archived and offer nothing, and a confirmation opened after another window archived
 the agent says so. The browser
 shell, which is not the console, draws no archive. An address naming a campaign's Details opens its Settings, and one naming
-any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox and Settings and no Sequence or Results, its Chat, or its People where no chat can be made; an address that names Sequence or Results still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
+any other tab it no longer has opens its first tab, named Sequence for a provider's campaign and Paths for any other agent (in the console's Live, which draws the tabs Chat, where a chat can be made, People, Inbox, Results and Settings and no Sequence, its Chat, or its People where no chat can be made; an address that names Sequence still opens it; the browser shell, which is not the console, draws every tab, unchanged but for the kind beside the state and the first tab's name). In the console an agent is one place: its tabs
 and its Chat under one header ([below](#an-agent-in-the-console)). Its **Chat** opens the campaign's one conversation,
 kept by the desktop with what it showed ([desktop.md](desktop.md)); the Agents list's Chat opens the same one. An agent's
 conversation is made at your first message or choice in it. The desktop's window opens on **Start**, which asks who you want
