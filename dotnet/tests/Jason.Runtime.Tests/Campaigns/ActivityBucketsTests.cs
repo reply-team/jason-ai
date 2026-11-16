@@ -7,7 +7,18 @@ namespace Jason.Runtime.Tests.Campaigns;
 /// <summary>How a window is cut into the hours, days or weeks of a zone, as campaign.activity_by_period counts them.</summary>
 public class ActivityBucketsTests
 {
-    private static readonly TimeZoneInfo Kyiv = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+    // The zones are built here, each with the one adjustment rule the test is about: a real zone's own data is a legislature's
+    // to change, and a newer image of the platform's data once lost a change this file had pinned for a date still ahead.
+    private static readonly TimeZoneInfo Kyiv = Zone(
+        "Test/Kyiv", TimeSpan.FromHours(2),
+        TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 3, 0, 0), 3, 5, DayOfWeek.Sunday),
+        TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 4, 0, 0), 10, 5, DayOfWeek.Sunday));
+
+    private static TimeZoneInfo Zone(string id, TimeSpan standard, TimeZoneInfo.TransitionTime start, TimeZoneInfo.TransitionTime end)
+    {
+        var rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(DateTime.MinValue.Date, DateTime.MaxValue.Date, TimeSpan.FromHours(1), start, end);
+        return TimeZoneInfo.CreateCustomTimeZone(id, standard, id, id, id, [rule]);
+    }
 
     private static DateTime Utc(int month, int day, int hour) => new(2026, month, day, hour, 0, 0, DateTimeKind.Utc);
 
@@ -35,16 +46,23 @@ public class ActivityBucketsTests
     [Fact]
     public void A_day_whose_midnight_is_skipped_begins_at_the_change_and_one_whose_midnight_repeats_at_the_first()
     {
-        // Santiago goes from -04 to -03 at its midnight on 6 September 2026: that day begins at 01:00, 04:00 UTC.
-        var santiago = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        // A zone like Santiago's goes from -04 to -03 at its midnight on 6 September 2026 (the first Sunday of September): that
+        // day begins at 01:00, 04:00 UTC.
+        var santiago = Zone(
+            "Test/Santiago", TimeSpan.FromHours(-4),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 0, 0, 0), 9, 1, DayOfWeek.Sunday),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 0, 0, 0), 4, 1, DayOfWeek.Sunday));
 
         var buckets = ActivityBuckets.Cut(Utc(9, 5, 4), Utc(9, 7, 3), ActivityPeriod.Day, santiago);
 
         Assert.Equal([(Utc(9, 5, 4), Utc(9, 6, 4)), (Utc(9, 6, 4), Utc(9, 7, 3))], buckets);
 
-        // Havana goes back from 01:00 -04 to 00:00 -05 on 1 November 2026: its midnight comes at 04:00 and again at 05:00
-        // UTC, and the day begins at the first, so it is 25 hours long.
-        var havana = TimeZoneInfo.FindSystemTimeZoneById("America/Havana");
+        // A zone like Havana's goes back from 01:00 -04 to 00:00 -05 on 1 November 2026 (the first Sunday of November): its
+        // midnight comes at 04:00 and again at 05:00 UTC, and the day begins at the first, so it is 25 hours long.
+        var havana = Zone(
+            "Test/Havana", TimeSpan.FromHours(-5),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 0, 0, 0), 3, 2, DayOfWeek.Sunday),
+            TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 1, 0, 0), 11, 1, DayOfWeek.Sunday));
         Assert.Equal(
             [(Utc(10, 31, 4), Utc(11, 1, 4)), (Utc(11, 1, 4), Utc(11, 2, 5))],
             ActivityBuckets.Cut(Utc(10, 31, 4), Utc(11, 2, 5), ActivityPeriod.Day, havana));
