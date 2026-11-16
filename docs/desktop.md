@@ -536,6 +536,60 @@ The agent hosts keep their own transcripts of a turn, in their own folders: Clau
 and those of a turn on a provider's key are in that provider's keyed folder (see Its own files). Jason never touches the
 first, and the desktop keeps no transcript of a host.
 
+### Cards in the chat
+
+The agent may end a reply with one card, which the window draws under its words. These are all the kinds it can write;
+a card that does not hold what its kind needs is drawn as one line saying so, and what it held is never shown.
+
+- **Jason asks**: a question with two to five answers; a click sends that answer's words as your next message.
+- **People**: up to ten people of an agent, or of everyone, as the runtime lists them.
+- **Agent**: how one agent is doing, its counts now and over the last thirty days.
+- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
+- **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
+- **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
+  Connect**.
+- **Reply**, the card that opens Accounts: it only leads to the Accounts page, where Reply's sign-in and its accounts
+  are, with **Open Accounts**.
+- **Jason's proposal**: a plan the agent proposes, with what is on record under it.
+- **Your list**: a list of people you gave the chat, in an agent's own chat only (below).
+
+The cards that show data read the runtime when they are drawn, say when ("As of"), and read again only on their own
+**Refresh**; they take an id from the agent and never a number, a name or a state. The **AI** and **Reply** cards read
+nothing and act on nothing: they are not the AI card and the Reply card of the Connect and Accounts screens, which
+connect, sign in and change accounts with their own controls. No card acts in your place; of their buttons only **Add to
+this agent** on a list writes to the runtime, and pressing it is your own act.
+
+### A list you give the chat
+
+In an agent's own chat you can paste a list of people, or name a CSV file the agent can read, and ask for them to be
+added. The agent answers with a **Your list** card: how it read each of your columns and which it left out, and every
+row it will send, the first ten shown and **Show more** for the rest. A card holds at most 200 rows, and the agent puts
+fewer on one, so a longer list comes in parts, one card a turn, the next only after you say the last one is added or to
+skip it; if a card is not shown, tell the agent, and it sends fewer rows. A list past 1,000 rows is added from a
+terminal with `jason campaign add-contacts --file`.
+
+The card compares the rows' email addresses with what you wrote in this chat, without regard to case, and says how many
+of them are there, each found only where it stands whole, not inside a longer address; each row whose address is not
+is shown, unfolded. An answer you sent by clicking one of the agent's choices is not counted, since its words are the
+agent's. When none is there, it says so: rows the agent read from a file cannot be compared with it. A list matched by
+LinkedIn profile with no address column is not compared. The comparison holds nothing back.
+
+Under **On record now** the card reads the agent from the runtime: whether it is a draft, paused or running, and for a
+running agent what its send mode for people who have not replied yet means for the people you add, in one sentence:
+under **Every message waits for you**, each message to them waits for your approval; under automatic sending, a message
+the agent writes to them can go without asking you once Jason's own review of it passes. A draft or paused agent under
+automatic sending says the same of when it runs. The card adds nothing by
+itself. **Add to this agent** sends every row once, matched by email address (or by LinkedIn profile), with the reason
+"From a list given in the chat.", and the card then shows the runtime's answer row by row: added as a new person, added
+as the person Jason already held, already in this agent, taken out of this agent before and not added back, or not
+added with the runtime's reason, such as an address that is no address or a row with no address to match. The button
+is offered only on the conversation's last card, once its turn has ended, and never on an archived agent. A page opened
+again offers it again, and a second press adds nobody twice.
+
+Someone Jason already holds is added as they are: the list never changes their record. A person whose own record is
+archived is not matched, so the list makes them again as a new person; the do-not-contact list still holds them by their
+address. Nothing is sent on a channel where a person is on the do-not-contact list.
+
 ### Access modes
 
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -12,6 +12,7 @@ import {
     nameWords,
     passiveWords,
     readCard,
+    reservedCustomKeys,
     splitCards,
     type CardBlock,
     type CardPlace,
@@ -21,6 +22,16 @@ import { chipWords } from './chips';
 
 // The chat's card protocol, read the way the page reads it: which fenced blocks are cards, which block of a turn is
 // drawn, and what every block reads as, each row of the table of failures by name.
+
+/** Every C# source file under a folder. */
+const sources = (folder: string): string[] =>
+    readdirSync(folder, { withFileTypes: true }).flatMap((each) =>
+        each.isDirectory()
+            ? sources(join(folder, each.name))
+            : each.name.endsWith('.cs')
+              ? [join(folder, each.name)]
+              : [],
+    );
 
 /** A source file of the chat, beside this one. */
 const source = (file: string) => readFileSync(join(import.meta.dirname, file), 'utf8');
@@ -580,6 +591,7 @@ describe('a choice’s members', () => {
             ...buttonWords(source('card-needs.ts')),
             ...buttonWords(source('card-accounts.ts')),
             ...buttonWords(source('card-places.ts')),
+            ...buttonWords(source('card-own-list.ts')),
             ...modeNames(source('chat-model.ts')),
             ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
             // The chips' words, drawn from the tables of chips.ts.
@@ -720,6 +732,166 @@ describe('the people list’s members', () => {
     });
 });
 
+describe('a list card’s members', () => {
+    const columns = [
+        { from: 'Name', field: 'first_name' },
+        { from: 'E-mail', field: 'email' },
+        { field: 'custom:region' },
+    ];
+    const list = (fields: Record<string, unknown> = {}) => ({
+        kind: 'own_list',
+        match_by: 'email',
+        columns,
+        left_out: ['Notes'],
+        rows: [
+            ['Ann', 'ann@example.com', 'North'],
+            ['Bo', '', ''],
+        ],
+        ...fields,
+    });
+    const inAgent = (value: unknown) => object(value, agent);
+
+    it('reads a list in an agent’s chat, its rows as given and its empty cells kept', () => {
+        expect(inAgent(list())).toEqual({
+            state: 'card',
+            card: {
+                kind: 'own_list',
+                match_by: 'email',
+                columns,
+                left_out: ['Notes'],
+                rows: [
+                    ['Ann', 'ann@example.com', 'North'],
+                    ['Bo', '', ''],
+                ],
+            },
+        });
+        // Without left_out it leaves nothing out; with its own campaign named it is that chat's.
+        const bare = inAgent(list({ left_out: undefined, campaign: 'cmp_1' }));
+        expect(bare.state === 'card' && bare.card.kind === 'own_list' && bare.card.left_out).toEqual([]);
+        expect(
+            inAgent(list({ match_by: 'linkedin', columns: [{ field: 'linkedin' }], rows: [['in/ann']] })).state,
+        ).toBe('card');
+    });
+
+    it('stands in an agent’s chat alone, and says so for another agent’s id', () => {
+        expect(failure(object(list(), setup))).toBe(schema('own_list'));
+        expect(failure(object(list(), feed))).toBe(schema('own_list'));
+        expect(failure(object(list({ campaign: 'cmp_2' }), feed))).toBe(schema('own_list'));
+        expect(inAgent(list({ campaign: 'cmp_2' }))).toEqual({ state: 'elsewhere', kind: 'own_list' });
+    });
+
+    it.each([
+        ['another key', { note: 'x' }],
+        ['match_by missing', { match_by: undefined }],
+        ['a match_by of phone', { match_by: 'phone' }],
+        ['a match_by of a custom field', { match_by: 'custom:region' }],
+        ['a match_by no column holds', { match_by: 'linkedin' }],
+        ['a field outside the vocabulary', { columns: [...columns.slice(0, 2), { field: 'nickname' }] }],
+        ['a field named twice', { columns: [columns[0], columns[1], { field: 'first_name' }] }],
+        ['a custom name of other characters', { columns: [...columns.slice(0, 2), { field: 'custom:deal size' }] }],
+        ['a custom name over 64', { columns: [...columns.slice(0, 2), { field: `custom:${'x'.repeat(65)}` }] }],
+        ['a bare custom', { columns: [...columns.slice(0, 2), { field: 'custom:' }] }],
+        ['a column with another member', { columns: [...columns.slice(0, 2), { field: 'title', width: 3 }] }],
+        ['a header over 80', { columns: [{ from: 'x'.repeat(81), field: 'first_name' }, ...columns.slice(1)] }],
+        ['no columns', { columns: [], rows: [[]] }],
+        ['left_out over 20', { left_out: Array.from({ length: 21 }, (_, n) => `C${n}`) }],
+        ['a left-out header over 80', { left_out: ['x'.repeat(81)] }],
+        ['no rows', { rows: [] }],
+        ['a row too short', { rows: [['Ann', 'ann@example.com']] }],
+        ['a row too long', { rows: [['Ann', 'ann@example.com', 'North', 'x']] }],
+        ['a row that is no list', { rows: ['Ann'] }],
+        ['a null cell', { rows: [['Ann', null, '']] }],
+        ['a number in a cell', { rows: [['Ann', 'ann@example.com', 5]] }],
+        ['a cell over 500', { rows: [['x'.repeat(501), 'ann@example.com', '']] }],
+        ['a cell that breaks a line', { rows: [['Ann\nLee', 'ann@example.com', '']] }],
+        ['a cell with a tab', { rows: [['Ann\tLee', 'ann@example.com', '']] }],
+        ['a cell with an unseen character', { rows: [['Ann​', 'ann@example.com', '']] }],
+        ['a cell with a blank pattern', { rows: [['⠀', 'ann@example.com', '']] }],
+    ])('refuses %s', (_, fields) => expect(failure(inAgent(list(fields)))).toBe(schema('own_list')));
+
+    it('takes twelve columns and 200 rows, and no more', () => {
+        const twelve = ['first_name', 'last_name', 'company', 'title', 'time_zone', 'email', 'phone', 'linkedin'].map(
+            (field) => ({ field }),
+        );
+        const fields = [...twelve, ...['a', 'b', 'c', 'd'].map((name) => ({ field: `custom:${name}` }))];
+        const row = (width: number) => Array.from({ length: width }, () => '');
+        expect(inAgent(list({ columns: fields, rows: [row(12)] })).state).toBe('card');
+        expect(failure(inAgent(list({ columns: [...fields, { field: 'custom:e' }], rows: [row(13)] })))).toBe(
+            schema('own_list'),
+        );
+        const rows = (count: number) => Array.from({ length: count }, (_, n) => [`P${n}`, `p${n}@example.com`, '']);
+        expect(inAgent(list({ rows: rows(200) })).state).toBe('card');
+        expect(failure(inAgent(list({ rows: rows(201) })))).toBe(schema('own_list'));
+        expect(inAgent(list({ rows: [['x'.repeat(500), 'ann@example.com', '']] })).state).toBe('card');
+    });
+
+    it('reads a list of exactly 16,000 characters, and no list of 16,001', () => {
+        // A cell holds at most 500, so the edge is reached with full rows and one last row filled to it.
+        const many = (count: number) => {
+            const row = (cell: string) => [cell, 'ann@example.com', ''];
+            const text = (rows: string[][]) => JSON.stringify(list({ rows }));
+            const full: string[][] = [];
+            while (Array.from(text([...full, row('')])).length + 500 < count) full.push(row('ж'.repeat(500)));
+            return text([...full, row('ж'.repeat(count - Array.from(text([...full, row('')])).length))]);
+        };
+        const edge = many(blockLimit);
+        expect(Array.from(edge)).toHaveLength(16_000);
+        expect(read(edge, agent).state).toBe('card');
+        const over = many(blockLimit + 1);
+        expect(Array.from(over)).toHaveLength(16_001);
+        expect(failure(read(over, agent))).toBe('unknown too_long');
+    });
+
+    it('refuses a cell that turns the text around it, and __proto__ on the card or on a column', () => {
+        expect(failure(inAgent(list({ rows: [['Ann‮Lee', 'ann@example.com', '']] })))).toBe(schema('own_list'));
+        expect(failure(inAgent(list({ rows: [['‭', 'ann@example.com', '']] })))).toBe(schema('own_list'));
+        const text = JSON.stringify(list());
+        expect(
+            failure(read(text.replace('{"kind":"own_list",', '{"kind":"own_list","__proto__":{"x":1},'), agent)),
+        ).toBe(schema('own_list'));
+        expect(
+            failure(
+                read(
+                    text.replace(
+                        '{"from":"Name","field":"first_name"}',
+                        '{"from":"Name","field":"first_name","__proto__":{}}',
+                    ),
+                    agent,
+                ),
+            ),
+        ).toBe(schema('own_list'));
+        // The same text without them reads, so it is __proto__ that is refused.
+        expect(read(text, agent).state).toBe('card');
+    });
+
+    it('nests three levels deep, and refuses a cell that is a list', () => {
+        expect(depthOf(list())).toBe(3);
+        expect(failure(inAgent(list({ rows: [[['Ann'], 'ann@example.com', '']] })))).toBe(schema('own_list'));
+    });
+
+    it('refuses every key the runtime itself writes into a contact’s custom fields, as its own source writes them', () => {
+        const runtime = join(import.meta.dirname, '..', '..', '..', 'dotnet', 'src', 'Jason.Runtime');
+        const landing = readFileSync(join(runtime, 'Audiences', 'SearchLanding.cs'), 'utf8');
+        const contact = readFileSync(join(runtime, 'Persistence', 'Contact.cs'), 'utf8');
+        const custom = /private static JsonObject Custom\([\s\S]*?\n {8}\}\n/.exec(landing)?.[0] ?? '';
+        const added = Array.from(custom.matchAll(/\bAdd\("([^"]+)"/g), (match) => match[1]!);
+        const record = /const string ProviderRecordKey = "([^"]+)"/.exec(contact)?.[1];
+        expect(custom).toContain('custom[Contact.ProviderRecordKey] =');
+        expect([...added, record].sort()).toEqual([...reservedCustomKeys].sort());
+        // No other file of the runtime writes a key into a contact's custom fields.
+        const writers = sources(runtime).filter((file) =>
+            /\b[cC]ustom\s*\[[^\]]+\]\s*=(?!=)|\bCustom\s*=\s*new JsonObject\s*\{/.test(readFileSync(file, 'utf8')),
+        );
+        expect(writers.map((file) => file.slice(runtime.length + 1).replace(/\\/g, '/'))).toEqual([
+            'Audiences/SearchLanding.cs',
+        ]);
+        for (const key of reservedCustomKeys)
+            expect(failure(inAgent(list({ columns: [...columns.slice(0, 2), { field: `custom:${key}` }] })))).toBe(
+                schema('own_list'),
+            );
+    });
+});
+
 describe('the chat’s instructions', () => {
     // Every example card the instructions show reads as a card of its kind: an example the parser would refuse is a
     // lesson that fails.
@@ -750,7 +922,7 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('teaches only the kinds this window draws, a choice, four cards of data, two that lead to a place and a plan, and each example reads as one', () => {
+    it('teaches only the kinds this window draws, a choice, four cards of data, two that lead to a place, a plan and a list, and each example reads as one', () => {
         const shown = examples(instructions);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
             'choice',
@@ -761,9 +933,19 @@ describe('the chat’s instructions', () => {
             'ai_setup',
             'reply_setup',
             'plan',
+            'own_list',
         ]);
         expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([...cardKinds]);
-        for (const example of shown) expect(read(example).state, example).toBe('card');
+        // A list stands in an agent's own chat alone, so its example is read there.
+        for (const example of shown)
+            expect(read(example, example.includes('"own_list"') ? agent : setup).state, example).toBe('card');
+    });
+
+    it('names, for a list, the most rows a card carries, below the schema’s own ceiling, and every key Jason keeps', () => {
+        const rule = instructions.split('\n').find((line) => line.includes('"own_list"')) ?? '';
+        expect(rule).toContain('at most 100 rows');
+        expect(rule).toContain('Add to this agent');
+        for (const key of reservedCustomKeys) expect(rule).toContain(`custom:${key}`);
     });
 
     it('tells the AI never to ask in the chat for a key, a password or a sign-in', () => {

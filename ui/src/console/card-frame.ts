@@ -85,6 +85,14 @@ export function startRead<T>(chatId: string, index: number, now: ReadFor, read: 
     });
 }
 
+/**
+ * Holds a read a card's own act already made as the card's read now, answered at this moment: the read after a press
+ * lands with the press's answer, in one drawing, and any read under way is fenced as a new read would fence it.
+ */
+export function settleRead<T>(chatId: string, index: number, now: ReadFor, facts: T): void {
+    put(chatId, index, { ...now, serial: ++serials, state: 'read', at: Date.now(), facts });
+}
+
 /** The cards asked for while the thread was being drawn, read once the drawing is done: a drawing changes nothing. */
 const asked = new Set<string>();
 
