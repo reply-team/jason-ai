@@ -29,10 +29,11 @@ public class DesktopDenyListTests
 
     /// <summary>
     /// The verbs the chat refuses beyond the CLI's table of verbs that take no default actor: adding a role, whose entry
-    /// command the dispatcher starts when work names the role, and linking a project's folder, which then becomes a
-    /// working folder of every chat on the project's campaigns.
+    /// command the dispatcher starts when work names the role, linking a project's folder, which then becomes a working
+    /// folder of every chat on the project's campaigns, and starting a campaign or resuming one, which is what lets its
+    /// queued work run.
     /// </summary>
-    private static readonly string[] TheChatsOwnWord = ["role add", "project link"];
+    private static readonly string[] TheChatsOwnWord = ["role add", "project link", "campaign start"];
 
     /// <summary>
     /// The verbs the deny list leaves to the agent that still go to a person's card at every use: <c>doctor</c> writes its
@@ -98,7 +99,7 @@ public class DesktopDenyListTests
     private static readonly string[] ChangesTheAgentMakes =
     [
         "campaign add-contacts", "campaign archive", "campaign create", "campaign pause", "campaign remove-contacts",
-        "campaign start", "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
+        "campaign update", "campaign update-context", "contact archive", "contact create", "contact update",
         "decision raise", "events backfill", "events signal", "journal append", "project create", "project update",
         "reply record", "rolenote set", "suppression add", "workitem cancel", "workitem complete", "workitem create",
         "workitem heartbeat", "workitem set-result", "workitem update",
@@ -204,8 +205,8 @@ public class DesktopDenyListTests
             "# grant back, and changing which profile a role runs on.\n",
         [ConfinedVerbs.Kind.ChatsOwn] =
             "#\n# The verbs the chat refuses beyond the CLI's own table: adding a role, whose entry command the dispatcher starts when\n" +
-            "# work names the role, and linking a project's folder, which then becomes a working folder of every chat on the\n" +
-            "# project's campaigns.\n",
+            "# work names the role, linking a project's folder, which then becomes a working folder of every chat on the\n" +
+            "# project's campaigns, and starting a campaign or resuming one, which is what lets its queued work run.\n",
     };
 
     /// <summary>
@@ -339,6 +340,24 @@ public class DesktopDenyListTests
         var covered = ReadsTheAgentKeeps.Where(verb => listed.Any(entry => Covers(entry, verb))).ToList();
 
         Assert.Empty(covered);
+    }
+
+    /// <summary>
+    /// Starting a campaign is the person's own act in the chat: the command is off the allow list and on the deny list, and
+    /// its operation is a line of the file, so a text that names <c>campaign.start</c> is refused as the others are. The
+    /// acts that stop reaching a person stay on the allow list.
+    /// </summary>
+    [Fact]
+    public void Starting_a_campaign_is_denied_by_command_and_by_operation_and_the_acts_that_stop_reaching_a_person_stay_allowed()
+    {
+        Assert.Contains("campaign start", DenyList());
+        Assert.Contains(Operations.CampaignStart, DeniedOperations());
+        var allowed = AllowList();
+        Assert.DoesNotContain("campaign start", allowed);
+        foreach (var verb in new[] { "campaign pause", "campaign archive", "suppression add", "reply record", "workitem cancel" })
+        {
+            Assert.Contains(verb, allowed);
+        }
     }
 
     [Fact]
