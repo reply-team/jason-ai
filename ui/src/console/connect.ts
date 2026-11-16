@@ -948,11 +948,19 @@ export function shownProvider(providers: readonly DesktopHost[], picked: string 
     return providers.find((each) => each.id === picked) ?? providers.find((each) => !each.found) ?? providers[0];
 }
 
-/** The one line naming the key providers whose key is set; nothing when none is. */
+/**
+ * The key providers whose key is set, as one row of what is on this computer: "Model keys" and each such provider as a
+ * pill; nothing when none is.
+ */
 function keysSet(providers: readonly DesktopHost[]): Html | null {
-    const set = providers.filter((each) => each.found).map((each) => each.label);
+    const set = providers.filter((each) => each.found);
     if (set.length === 0) return null;
-    return html`<div class="meta keys-set">${set.length === 1 ? 'Key set' : 'Keys set'}: ${set.join(', ')}</div>`;
+    return html`<div class="setrow host-card keys-set">
+        <div class="row-hd">
+            <b>Model keys</b>
+            ${set.map((each) => html`<span class="pillc green key-held">${each.label}</span>`)}
+        </div>
+    </div>`;
 }
 
 /**
@@ -1331,8 +1339,8 @@ export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
 
 /**
  * The AI card, what Connect and Settings' Models hold for the AI, in two groups. What is on this computer: each program
- * found, a card, the one in use marked, and the key providers whose key is set, named. Under it, in a panel of its own,
- * what is not: the programs not found, with Install where it can be done, and the model keys' panel.
+ * found, a card, the one in use marked, then the key providers whose key is set, in one row. Under it, in a panel of its
+ * own, what can be added or changed: the programs not found, with Install where it can be done, and the model keys' panel.
  */
 function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
     const found = programs.filter(hostRow);
@@ -1354,7 +1362,14 @@ function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHo
                       </div>`
                     : null
             }
-            ${absent !== null || keys !== null ? html`<div class="ai-add">${absent}${keys}</div>` : null}
+            ${
+                absent !== null || keys !== null
+                    ? html`<div class="ai-add">
+                          <div class="group-label">Add or change</div>
+                          ${absent}${keys}
+                      </div>`
+                    : null
+            }
         </div>
     </div>`;
 }

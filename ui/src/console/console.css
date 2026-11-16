@@ -1369,9 +1369,9 @@ body,
     max-width: 240px;
 }
 /* The AI card in two groups. On this computer: each program found a card of its own, its name, state and "In use" on
-   one line, what it does under it and apart from the how-to lines; then the key providers whose key is set, named.
-   Under it, a tinted panel of what is not here yet: the programs not found on one quiet line, each that can be
-   installed followed by its own Install, and the model keys' panel. */
+   one line, what it does under it and apart from the how-to lines; then one row, "Model keys", with each provider that
+   holds a key as a pill. Under it, a tinted panel of what can be added or changed: the programs not found on one quiet
+   line, each that can be installed followed by its own Install, and the model keys' panel. */
 .jc-console .ai-card .group-label {
     margin: 2px 0 8px;
     font-size: 11.5px;
@@ -1413,10 +1413,6 @@ body,
 .jc-console .host-how .meta {
     color: var(--mute);
     overflow-wrap: anywhere;
-}
-.jc-console .keys-set {
-    margin: 2px 0 8px;
-    color: var(--mute);
 }
 .jc-console .ai-add {
     margin: 4px 16px 16px;

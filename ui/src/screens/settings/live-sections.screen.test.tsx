@@ -83,6 +83,8 @@ describe('Settings in Live', () => {
         const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
         await waitFor(() => expect(within(models).getByText('Drives the chat')).toBeTruthy());
         expect(within(models).getByText('Not found')).toBeTruthy();
+        // No key is saved: no row of keys.
+        expect(models.querySelector('.keys-set')).toBeNull();
         expect(desktop.calls.filter((each) => each.name === 'setup.status')).toHaveLength(read);
         // Connect keeps the same cards: nothing it had is taken away.
         flush(() => here().dock.show('connect'));
@@ -109,15 +111,18 @@ describe('Settings in Live', () => {
         await settings();
         const models = document.querySelector<HTMLElement>('[data-section="models"]')!;
         await waitFor(() => expect(models.querySelector('.ai-add')).toBeTruthy());
-        // On this computer: the programs found, a card each, the one in use marked, and the keys set, named.
+        // On this computer: the programs found, a card each, the one in use marked, then the keys set in one row.
         const here = models.querySelector<HTMLElement>('.ai-here')!;
-        const cards = Array.from(here.querySelectorAll<HTMLElement>('.host-card'));
+        const cards = Array.from(here.querySelectorAll<HTMLElement>('.host-row'));
         expect(cards.map((each) => each.querySelector('b')?.textContent)).toEqual(['Claude Code', 'Gemini CLI']);
         expect(cards.map((each) => each.querySelector('.in-use') !== null)).toEqual([true, false]);
-        expect(here.querySelector('.keys-set')?.textContent).toBe('Key set: Anthropic');
+        const keys = here.querySelector<HTMLElement>('.keys-set')!;
+        expect(keys.querySelector('b')?.textContent).toBe('Model keys');
+        expect(Array.from(keys.querySelectorAll('.pillc'), (each) => each.textContent)).toEqual(['Anthropic']);
         // Not here yet: the programs not found, and the keys through the one panel.
         // The card is painted again after each act, so each look reads it afresh.
         const add = () => models.querySelector<HTMLElement>('.ai-add')!;
+        expect(add().querySelector('.group-label')?.textContent).toBe('Add or change');
         const absent = add().querySelector<HTMLElement>('.hosts-absent')!;
         expect(absent.textContent).toContain('Codex');
         expect(absent.textContent).toContain('Cursor CLI');
