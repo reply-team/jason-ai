@@ -81,7 +81,8 @@ describe('the sheet of the two panes', () => {
     it('keeps the bar at the top while the content scrolls: the page scrolls, and a card clears the bar', () => {
         expect(sheet).toMatch(/\.settings\[data-chosen\] > h1 \{\s*position: sticky;\s*top: 0;/);
         // At both widths: no narrower rule moves the bar's offset.
-        expect(sheet.match(/position: sticky/g)).toHaveLength(1);
+        // Sticky are the bar and the list, and no narrower rule gives either a different offset.
+        expect(sheet.match(/position: sticky/g)).toHaveLength(2);
         expect(sheet).not.toMatch(/h1 \{[^}]*top: -/);
         // The harness page's inner content is no scroller of its own while Settings is in two panes.
         expect(sheet).toMatch(/\.harness \.content:has\(> \.settings\[data-chosen\]\) \{\s*overflow: visible;\s*\}/);
