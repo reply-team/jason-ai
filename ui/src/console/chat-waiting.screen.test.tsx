@@ -449,8 +449,8 @@ describe('what waits in an agent’s chat', () => {
         expect([...editor.querySelectorAll('*')].flatMap((element) => reaching(rules, element))).toEqual([]);
     });
 
-    // His option card: the options as pills, and one more in his words for an answer of one's own, which opens the free
-    // answer and the reason in place. Both stay one press away and are sent as before.
+    // A question's option card: the options as pills, and one more in its own words for an answer of one's own, which opens the free
+    // answer and the reason in place. Both stay one press away and are sent the same way.
     it('draws a question’s options as pills and one more, “Something else…”, that opens the own answer and the reason in place', async () => {
         renderConsole();
         const pane = await openChat('Spring');
