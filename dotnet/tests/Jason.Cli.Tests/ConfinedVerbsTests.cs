@@ -47,6 +47,7 @@ public class ConfinedVerbsTests
         ["role set-profile"] = ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["role add"] = ["role", "add", "researcher", "--execution-profile", "local-claude"],
         ["project link"] = ["project", "link", "prj_A", "--path", "."],
+        ["campaign start"] = ["campaign", "start", "cmp_A"],
     };
 
     public static TheoryData<string> Entries() => [.. ConfinedVerbs.Table.Select(entry => entry.Command)];
@@ -96,6 +97,7 @@ public class ConfinedVerbsTests
     [InlineData("block clear")]
     [InlineData("route set")]
     [InlineData("role add")]
+    [InlineData("campaign start")]
     public async Task Unset_the_verb_reaches_the_runtime(string entry)
     {
         var run = await DefaultActorTests.RunEachAsync(WithActor(entry), new Dictionary<string, string>());
@@ -241,6 +243,47 @@ public class ConfinedVerbsTests
             Assert.Empty(run.Requests);
             Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
         }
+    }
+
+    /// <summary>
+    /// Starting a campaign, or resuming a paused one, is what lets its queued work run, so in the chat it is the person's
+    /// own act: every form of the command is refused with the variable set, with a reason, an actor or an attempt named,
+    /// and nothing is sent.
+    /// </summary>
+    [Theory]
+    [InlineData("campaign", "start", "cmp_A")]
+    [InlineData("campaign", "start", "cmp_A", "--reason", "The person said go.")]
+    [InlineData("--actor", "human:x", "campaign", "start", "cmp_A")]
+    [InlineData("--actor", "agent:chat", "campaign", "start", "cmp_A", "--reason", "Resuming after the holiday.")]
+    [InlineData("campaign", "start", "cmp_A", "--actor", "human:x")]
+    public async Task Confined_starting_a_campaign_is_refused_in_every_form_and_nothing_is_sent(params string[] args)
+    {
+        foreach (var variables in new[] { new Dictionary<string, string> { [Variable] = "1" }, new Dictionary<string, string> { [Variable] = "1", ["JASON_ATTEMPT_ID"] = Attempt } })
+        {
+            var run = await DefaultActorTests.RunEachAsync(args, variables);
+
+            Assert.Equal(ExitCodes.ApiError, run.Exit);
+            Assert.Empty(run.Requests);
+            Assert.Equal(ConfinedVerbs.Sentence + Environment.NewLine, run.Error);
+        }
+    }
+
+    /// <summary>
+    /// The chat keeps the acts that stop reaching a person: pausing a campaign, archiving one, adding to the do-not-contact
+    /// register, cancelling work and recording a verdict on a reply run with the variable set.
+    /// </summary>
+    [Theory]
+    [InlineData("campaign", "pause", "cmp_A")]
+    [InlineData("campaign", "archive", "cmp_A")]
+    [InlineData("suppression", "add", "--channel", "email", "--value", "someone@example.com")]
+    [InlineData("workitem", "cancel", "wi_A")]
+    [InlineData("reply", "record", "cmp_A", "--plugin", "mailbox", "--thread", "thr_A", "--message", "msg_A", "--message-at", "2026-10-12T00:00:00Z", "--category", "interested", "--confidence", "0.9", "--reaction", "draft")]
+    public async Task Confined_the_acts_that_stop_reaching_a_person_run_as_before(params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(ExitCodes.Success, run.Exit);
+        Assert.NotEmpty(run.Requests);
     }
 
     /// <summary>The verbs a role attempt and a chat's agent keep are untouched with the variable set.</summary>

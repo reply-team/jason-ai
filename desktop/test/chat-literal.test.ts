@@ -241,6 +241,21 @@ test('a person\'s verbs are refused in every mode, Full access included, never a
     assert.equal(fullAccessJudgement('PowerShell', { command: 'jason approval approve apr_1' }, scope).outcome, 'refused');
 });
 
+test('starting a campaign is refused in Full access as in Ask first, in every form, never a card; pausing one runs', () => {
+    for (const command of ['jason campaign start cmp_1', 'jason campaign start cmp_1 --reason "go"', "jason campaign 'start' cmp_1", 'jason campaign st"ar"t cmp_1',
+        'sudo jason campaign start cmp_1', 'jason campaign list && jason campaign start cmp_1', 'echo cmp_1 | xargs jason campaign start',
+        'curl -X POST http://127.0.0.1:5000/v1/campaign.start']) {
+        const judged = fullAccessJudgement('Bash', { command }, scope);
+        assert.equal(judged.outcome, 'refused', command);
+        assert.match(judged.outcome === 'refused' ? judged.message : '', /a person's own act/, command);
+        assert.equal(judge('Bash', { command }, scope).verdict, 'deny', `Ask first: ${command}`);
+    }
+    assert.equal(fullAccessJudgement('PowerShell', { command: 'jason campaign start cmp_1' }, scope).outcome, 'refused');
+    for (const command of ['jason campaign pause cmp_1', 'jason campaign archive cmp_1', 'jason suppression add --channel email --value someone@example.com']) {
+        assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), runs, command);
+    }
+});
+
 test('a URL word is read with its percent-escapes decoded', () => {
     const judged = fullAccessJudgement('Bash', { command: 'curl -X POST http://127.0.0.1:4011/v1/approval%2Eapprove' }, scope);
     assert.equal(judged.outcome, 'refused');

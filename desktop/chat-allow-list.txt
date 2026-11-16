@@ -22,7 +22,6 @@ campaign list
 campaign list-contacts
 campaign pause
 campaign remove-contacts
-campaign start
 campaign summary
 campaign update
 campaign update-context
