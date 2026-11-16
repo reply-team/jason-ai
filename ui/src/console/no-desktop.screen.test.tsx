@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Api } from '../api/client';
+import { Unpaired, type Api } from '../api/client';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
 import { loadMode, mode } from '../platform/mode';
@@ -152,6 +152,15 @@ describe('the line under the words', () => {
         await new Promise((done) => setTimeout(done, 20));
         expect(line()).toBeNull();
         expect(page()!.querySelectorAll('main p')).toHaveLength(2);
+    });
+});
+
+describe('a token that was revoked', () => {
+    it('lands on pair-again: the page read answers unpaired, the session is cleared and the page gives way', async () => {
+        await renderIn('none', '', { call: () => Promise.reject(new Unpaired()) } as unknown as Api);
+        await waitFor(() => expect(screen.getByText(/isn't paired/)).toBeTruthy());
+        expect(page()).toBeNull();
+        expect(localStorage.getItem('jason.ui.session')).toBeNull();
     });
 });
 

@@ -21,7 +21,7 @@ Desktop, where to download it and, while something waits, what waits and where t
 
 On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
-`jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
+`jason ui open` does (with no desktop it lands on the one page described above, which ignores the address), and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
 Jason Desktop is installed for your account, the same click opens the desktop's Needs you instead
 ([desktop.md](desktop.md), Links).
 `jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
@@ -97,7 +97,8 @@ The release's build carries one page there, `sealed/demo.html`: the demo page Ja
 byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
 it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
 switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
-other address brings the console back, where it was. Nothing is kept and nothing is asked: the runtime is not told, the
+other address brings back where the tab was before: the console in a tab the desktop opened, and in a tab with no
+desktop the one page that tab shows ([below](#settings-and-chat-in-the-browser)). Nothing is kept and nothing is asked: the runtime is not told, the
 desktop is not asked and its mode is not changed, and your installation is as it was. A reload at `#/demo` shows the page
 again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
 the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
@@ -521,7 +522,7 @@ system's, in the order Light, Dark, System. A new installation meets Light; a br
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
 follows it.
 
-**The console in a browser.** A browser shows the same console as the desktop's window, in one of two ways. A tab Jason
+**The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
 Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
 while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
 is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
