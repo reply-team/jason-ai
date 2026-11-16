@@ -26,8 +26,9 @@ replaces the title and the body together.
 This release is about the chat and the console around it: the AI can show you what it found as cards you read, Needs you
 shows one item whole beside the list, and the agent's page and Settings are drawn in the console's look.
 
-- **Cards in the chat.** An AI turn can end with a card, and the chat draws it from the runtime's own answers, not from
-  the AI's account of them. A card only shows what the runtime says and never acts for you.
+- **Cards in the chat.** An AI turn can end with a card. The facts on a card are read from the runtime by the chat
+  itself, never taken from the AI's account of them, and what the AI proposes stands under its own label. No card acts
+  on its own: an act is always your click.
   - A **choice** card puts the AI's question to you with two to five options; a click sends that option's words as
     your next message, and any later entry of yours locks the choice.
   - **Data cards** show an agent's status (its counts now and over the last thirty days), a list of people of one
@@ -47,12 +48,15 @@ shows one item whole beside the list, and the agent's page and Settings are draw
   narrows them. Edit changes the words of a message and approves nothing: the runtime asks again with the new text.
   Reject asks for confirmation first. One number, from the runtime's own lists, is shown on the sidebar, the
   dashboard and each agent, with a plus where a further page exists.
+- **The dark theme reaches every screen.** People, Accounts, Settings, an agent's page, Work items, System and
+  Performance stand on the dark ground in the dark theme, with no light area left.
 - **The agent's page and Settings in the console's look.** An open agent takes the whole area, with the state and the
-  type as pills in the bar and Add people, the move and Close at the right. Settings lists its sections at the left
+  type as pills in the bar and Add people, Start, Pause or Resume, and Close at the right. Settings lists its sections at the left
   and shows the chosen one beside them.
 - **Starting an agent is your own act.** In the desktop's chat, `jason campaign start` (which starts a draft agent and
   resumes a paused one) is refused in every access mode. The chat says when an agent is ready and that you press Start
-  in the window; the Start and Resume dialogs say what starting lets go. The chat also leaves the sender's name and tone
+  in the window: the same Start, Pause or Resume stands in the bar of an agent's chat, beside its state, with the
+  agent page's own confirmation, and the Start and Resume dialogs say what starting lets go. The chat also leaves the sender's name and tone
   to you: they are set in Settings, and the chat does not set or ask for them.
 - **The sender's line on an approval.** An email approval, in the chat, in Needs you and on a work item, says under its
   sender the name the provider holds for that mailbox, read from the runtime's sender list when the approval is shown,
