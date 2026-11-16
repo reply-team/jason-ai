@@ -3551,6 +3551,26 @@ public sealed class DoctorComposerTests
     }
 
     /// <summary>
+    /// A jason in a folder whose name holds the separator of PATH is not ready, and the bundle carries the same check the
+    /// status verb says it by: required, failed, with no line.
+    /// </summary>
+    [Fact]
+    public async Task The_bundle_carries_a_folder_path_cannot_carry_as_the_status_check_says_it()
+    {
+        using var dir = new TempPaths();
+        var installed = Path.Combine(dir.Paths.Root, "programs", "a" + Path.PathSeparator + "b", OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        var bundle = await DoctorComposer.ComposeAsync(Machine(dir, Running(dir)) with { InstallPath = installed }, false, new FixedClock(Now), Ct);
+
+        var path = Section(bundle, "status")["checks"]!.AsArray().Single(check => Text(check!["name"]) == "path")!;
+        Assert.Equal("failed", Text(path["state"]));
+        Assert.True((bool)path["required"]!);
+        Assert.Null(path["fix"]);
+        Assert.Contains($"holds '{Path.PathSeparator}', which separates the entries of PATH, so no PATH entry can name it", Text(path["fact"]), StringComparison.Ordinal);
+        Assert.False((bool)Section(bundle, "status")["ready"]!);
+    }
+
+    /// <summary>
     /// The folder the <c>jason</c> on the PATH is in, outside home, is a name somebody chose — <c>Q:\Tools\Acme</c> — and
     /// the path check quotes it: it is written as its mark, and the header says so.
     /// </summary>

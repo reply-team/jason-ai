@@ -312,6 +312,10 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
   then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
+  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
+  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+  names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
+  the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary
@@ -338,7 +342,9 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
   would not see the command's environment; a host's program whose path holds `=`, which `/usr/bin/env` would read as a
   variable, is refused with `terminal_start_failed`. On macOS the script exports them, the folder going before
   Terminal's own `PATH`. Nothing is added to the host's own words. A build run through `dotnet` rather than installed as
-  one file has no such folder, and leaves `PATH` as it is.
+  one file has no such folder, and leaves `PATH` as it is. A `jason` whose folder's name holds the character that
+  separates the entries of `PATH`, `;` on Windows and `:` elsewhere, starts nothing on any system, `--dry-run`
+  included: no entry of the window's `PATH` can name that folder, and `jason status` says the installation is not ready.
 
 The page reads which system it runs on from the browser itself; the runtime is told nothing. `--dry-run` starts nothing
 and prints the whole command, the brief included, on macOS the script, and on Windows `environment`, the two variables

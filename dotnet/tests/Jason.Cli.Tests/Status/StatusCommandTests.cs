@@ -1144,6 +1144,118 @@ public class StatusCommandTests
     }
 
     /// <summary>
+    /// A jason in a folder whose name holds this system's separator of PATH can be on no PATH: every reader splits the
+    /// entry in two. The check is required and failed whether or not some other <c>jason</c> answers by name, and it offers
+    /// no line, since the line that puts a folder on PATH would write the same split entry again.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_jason_in_a_folder_path_cannot_carry_is_not_ready_and_offers_no_line(bool anotherJasonOnPath)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var folder = Path.Combine(dir.Paths.Root, "programs", "a" + Path.PathSeparator + "b");
+        var installed = Path.Combine(folder, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output, onPath: anotherJasonOnPath, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Read(output);
+        Assert.False(report.Ready);
+        var check = Assert.Single(report.Checks, check => check.Name == "path");
+        Assert.True(check.Required);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Null(check.Fix);
+        Assert.Equal(
+            $"This jason's folder {folder} holds '{Path.PathSeparator}', which separates the entries of PATH, so no PATH entry can name it: "
+            + $"no shell finds this jason by name, and a role's agent is not given it first on PATH. Install Jason into a folder whose name does not hold '{Path.PathSeparator}'.",
+            check.Fact);
+    }
+
+    /// <summary>
+    /// The check judges the separator alone (what PATH itself cannot carry): a jason answering by name from a folder holding
+    /// a character only an installer cannot write, a dollar sign, a quote or a <c>%NAME%</c>, is a working installation.
+    /// </summary>
+    [Theory]
+    [InlineData("a$b")]
+    [InlineData("a%JASON_TEST_NAME%b")]
+    [InlineData("a\"b")]
+    public async Task A_jason_found_by_name_in_a_folder_only_an_installer_cannot_write_is_on_path(string name)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows() && name.Contains('"', StringComparison.Ordinal), "Windows names no folder with a quote.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var installed = Path.Combine(dir.Paths.Root, "programs", name, OperatingSystem.IsWindows() ? "jason.exe" : "jason");
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed), Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.StartsWith("'jason' resolves to ", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder holding the separator that a manager's link reaches, from a folder on PATH, is found by name: it is the same
+    /// file, so the check does not say no shell finds it.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_in_a_separator_folder_reached_through_a_link_on_path_is_found_by_name()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var file = OperatingSystem.IsWindows() ? "jason.exe" : "jason";
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs", "a" + Path.PathSeparator + "b")).FullName;
+        var installed = Path.Combine(folder, file);
+        File.WriteAllText(installed, string.Empty);
+        var bin = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "links")).FullName;
+        try
+        {
+            File.CreateSymbolicLink(Path.Combine(bin, file), installed);
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
+        {
+            Assert.Skip("This account may not make a symbolic link.");
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = bin }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same file reached through a directory junction (no privilege needed on Windows) in a folder on PATH is found by name.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_in_a_separator_folder_reached_through_a_junction_on_path_is_found_by_name()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A directory junction is Windows's; the link row covers the other systems.");
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        Running(dir);
+        var folder = Directory.CreateDirectory(Path.Combine(dir.Paths.Root, "programs", "a;b")).FullName;
+        var installed = Path.Combine(folder, "jason.exe");
+        File.WriteAllText(installed, string.Empty);
+        var junction = Path.Combine(dir.Paths.Root, "junction");
+        using (var made = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junction}\" \"{folder}\"") { CreateNoWindow = true, RedirectStandardOutput = true }))
+        {
+            await made!.WaitForExitAsync(Ct);
+            Assert.Equal(0, made.ExitCode);
+        }
+
+        await CliApp.RunAsync(["status"], Machine(dir, output, machine: new RecordingRemover(), installPath: installed) with { SearchPath = junction }, Ct);
+
+        var check = Assert.Single(Read(output).Checks, check => check.Name == "path");
+        Assert.Equal(CheckState.Ok, check.State);
+        Assert.DoesNotContain("no shell finds", check.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Each repair once, in the order it was first called for.
     /// </summary>
     /// <remarks>

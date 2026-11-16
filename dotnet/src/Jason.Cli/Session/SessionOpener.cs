@@ -57,10 +57,12 @@ public static class SessionOpener
             return ExitCodes.ApiError;
         }
 
-        var byHand = $"To work on it by hand, run `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` in a terminal of your own and give the brief to your agent host.";
+        // A jason in a folder PATH cannot carry is found by no shell by name: its full path is what a person types.
+        var typedJason = ByHandProgram(env);
+        var byHand = $"To work on it by hand, run `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` in a terminal of your own and give the brief to your agent host.";
         if (item.DecidedState is { } decided)
         {
-            env.Error.WriteLine($"Nothing waits on this {noun}: {item.Id} was already {decided}, so no session was started; `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` still prints its brief.");
+            env.Error.WriteLine($"Nothing waits on this {noun}: {item.Id} was already {decided}, so no session was started; `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` still prints its brief.");
             return ExitCodes.ApiError;
         }
 
@@ -117,12 +119,12 @@ public static class SessionOpener
             : TerminalPlan.Find(terminals.Platform, terminals.SystemDirectory, Variable(env, "TERMINAL"), SearchPath(env));
         if (terminals is null || terminal is null)
         {
-            env.Error.WriteLine($"No terminal was found to start {hostWord} in. In a terminal of your own, at {shown}, run `jason {(approval ? "approval" : "decision")} get {item.Id} --prompt` and give the brief to your host.");
+            env.Error.WriteLine($"No terminal was found to start {hostWord} in. In a terminal of your own, at {shown}, run `{typedJason} {(approval ? "approval" : "decision")} get {item.Id} --prompt` and give the brief to your host.");
             return ExitCodes.ApiError;
         }
 
         IReadOnlyList<string> started = [.. program, .. AgentHosts.InteractiveArguments(host, prompt)];
-        if (TerminalPlan.Uncarried(terminals.Platform, started) is { } uncarried)
+        if (TerminalPlan.Uncarried(terminals.Platform, started, Own(env), Inherited(env)) is { } uncarried)
         {
             env.Error.WriteLine($"The terminal {terminal.Name} did not start ({uncarried}). {byHand}");
             return ExitCodes.ApiError;
@@ -323,6 +325,20 @@ public static class SessionOpener
         env.Variables is { } variables ? variables.GetValueOrDefault(name) : Environment.GetEnvironmentVariable(name);
 
     /// <summary>
+    /// What a person types to run this jason: the bare name, or, where its folder holds the separator of PATH and so no shell
+    /// finds it by name, its full path quoted for the shell a person types it in: PowerShell's call operator on Windows, the POSIX quote elsewhere.
+    /// </summary>
+    private static string ByHandProgram(CliEnvironment env)
+    {
+        var platform = env.Terminals?.Platform
+            ?? (OperatingSystem.IsWindows() ? TerminalPlatform.Windows : OperatingSystem.IsMacOS() ? TerminalPlatform.MacOs : TerminalPlatform.Linux);
+        var executable = env.InstallPath ?? SelfExecutable.InstalledImage;
+        return Own(env).ExecutableFolder is { } folder && executable is not null && TerminalPlan.Split(platform, folder) is not null
+            ? platform == TerminalPlatform.Windows ? "& '" + executable.Replace("'", "''", StringComparison.Ordinal) + "'" : TerminalPlan.ShellQuote(executable)
+            : "jason";
+    }
+
+    /// <summary>
     /// The installation the opened terminal's <c>jason</c> is to be: the data directory this CLI runs on, the one it
     /// resolved and made absolute whether or not <c>JASON_DATA_DIR</c> names it, since the terminal starts in another
     /// folder than the CLI and may not carry the CLI's environment; the folder of the file this jason is installed as,
@@ -334,6 +350,30 @@ public static class SessionOpener
             env.Paths.Root,
             Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty) is { Length: > 0 } folder ? folder : null,
             SearchPath(env));
+
+    /// <summary>
+    /// The variables the terminal inherits from this process, which on Windows the console host reads its command line
+    /// against (<see cref="TerminalPlan.Uncarried"/>): those handed in, in a test, else this process's own, as the start
+    /// <see cref="TerminalStartInfo.For"/> composes copies them.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> Inherited(CliEnvironment env)
+    {
+        if (env.Variables is { } given)
+        {
+            return given;
+        }
+
+        var read = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is string name && entry.Value is string value)
+            {
+                read[name] = value;
+            }
+        }
+
+        return read;
+    }
 
     /// <summary>
     /// The variables a launch is started with, for a dry run's answer: only where they are not already on the command
