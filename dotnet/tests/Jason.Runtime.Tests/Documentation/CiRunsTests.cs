@@ -1381,8 +1381,8 @@ public class CiRunsTests
 
         foreach (var (name, install) in new[]
         {
-            ("Browser", "npx playwright install --with-deps chromium"),
-            ("Browser's system libraries", "npx playwright install-deps chromium"),
+            ("Browser", "npx playwright install --with-deps chromium firefox webkit"),
+            ("Browser's system libraries", "npx playwright install-deps chromium firefox webkit"),
         })
         {
             var index = steps.FindIndex(step => Scalar(step, "name") == name);
@@ -1395,13 +1395,28 @@ public class CiRunsTests
             Assert.Equal($"if ! {install}; then", lines[0]);
             Assert.StartsWith("echo \"::warning title=Browser's system packages::", lines[1], StringComparison.Ordinal);
             Assert.EndsWith("the browser smoke decides.\"", lines[1], StringComparison.Ordinal);
-            Assert.Equal("npx playwright install chromium", lines[2]);
+            Assert.Equal("npx playwright install chromium firefox webkit", lines[2]);
             Assert.Equal("fi", lines[3]);
             Assert.Equal(4, lines.Count);
         }
 
         Assert.All(steps, step => Assert.Null(Node(step, "continue-on-error")));
         Assert.Null(Node(job, "continue-on-error"));
+    }
+
+    /// <summary>
+    /// The browser smoke runs the sealed probe, a hostile page in the console's frame, which runs nowhere but here: the
+    /// step names it, and the three engines it runs in are installed and cached under a key of their own, so a cache that
+    /// holds one engine is never taken for one that holds three.
+    /// </summary>
+    [Fact]
+    public void The_browser_smoke_runs_the_sealed_probe_in_three_engines()
+    {
+        var steps = Steps(Mapping(Jobs(), "ui"));
+        var smoke = steps.Single(step => Scalar(step, "name") == "Browser smoke");
+        Assert.Equal("1", Scalar(Mapping(smoke, "env"), "JASON_SEALED_PROBE"));
+        var cache = steps.Single(step => Scalar(step, "id") == "browser");
+        Assert.StartsWith("playwright-chromium-firefox-webkit-", Scalar(Mapping(cache, "with"), "key"), StringComparison.Ordinal);
     }
 
     /// <summary>

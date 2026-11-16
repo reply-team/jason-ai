@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Sealed probe</title>
+        <!--
+A hostile stand-in for a page under sealed/: the browser smoke places it where the demo page stands and opens it the way
+the console does, in its frame. Its script tries every way out of the seal it can name, and writes what happened to each
+into its own document, one item per try: "refused" when the try got nothing, "reached" when it got something it must
+not have. The smoke reads the items; it never trusts a try's own word beyond that.
+-->
+        <style>
+            body {
+                font:
+                    12px/1.4 system-ui,
+                    sans-serif;
+                margin: 48px 16px 16px;
+            }
+            li[data-outcome='reached'] {
+                color: #b00;
+            }
+        </style>
+    </head>
+    <body>
+        <ol id="outcomes"></ol>
+        <script>
+            (function () {
+                'use strict';
+                var list = document.getElementById('outcomes');
+                function say(name, outcome, detail) {
+                    var item = document.createElement('li');
+                    item.setAttribute('data-try', name);
+                    item.setAttribute('data-outcome', outcome);
+                    item.textContent = name + ': ' + outcome + (detail ? ' (' + detail + ')' : '');
+                    list.appendChild(item);
+                }
+                function nameOf(error) {
+                    return error && error.name ? error.name : String(error);
+                }
+                /** A try that must throw or return nothing: what it returns, if anything, is what it reached. */
+                function syncTry(name, act) {
+                    try {
+                        var got = act();
+                        if (got === undefined || got === null || got === '') say(name, 'refused', 'nothing');
+                        else say(name, 'reached', String(got).slice(0, 80));
+                    } catch (error) {
+                        say(name, 'refused', nameOf(error));
+                    }
+                }
+                /** A try that must reject, throw, or answer with nothing. */
+                function asyncTry(name, act) {
+                    var settled;
+                    try {
+                        settled = Promise.resolve(act());
+                    } catch (error) {
+                        say(name, 'refused', nameOf(error));
+                        return Promise.resolve();
+                    }
+                    return settled.then(
+                        function (got) {
+                            if (got === undefined || got === null || got === '') say(name, 'refused', 'nothing');
+                            else
+                                say(
+                                    name,
+                                    'reached',
+                                    typeof got === 'object' && 'status' in got
+                                        ? 'status ' + got.status
+                                        : String(got).slice(0, 80),
+                                );
+                        },
+                        function (error) {
+                            say(name, 'refused', nameOf(error));
+                        },
+                    );
+                }
+                /** A try that is refused unless its element fires the event that says it got through. */
+                function eventTry(name, start, reached, refused, ms) {
+                    return new Promise(function (resolve) {
+                        var done = false;
+                        function end(outcome, detail) {
+                            if (done) return;
+                            done = true;
+                            say(name, outcome, detail);
+                            resolve();
+                        }
+                        try {
+                            var target = start();
+                            target.addEventListener(reached, function () {
+                                end('reached', reached);
+                            });
+                            target.addEventListener(refused, function () {
+                                end('refused', refused);
+                            });
+                        } catch (error) {
+                            end('refused', nameOf(error));
+                            return;
+                        }
+                        setTimeout(function () {
+                            end('refused', 'no ' + reached + ' within ' + ms + ' ms');
+                        }, ms);
+                    });
+                }
+
+                var api = 'http://' + location.host;
+                // Opened by itself the page is its own parent and top: the tries of a page above it are no tries, and moving the top
+                // would move the probe itself away before it is read.
+                var framed = self !== top;
+                function framedTry(name, act) {
+                    if (framed) syncTry(name, act);
+                    else say(name, 'not-framed');
+                }
+                syncTry('origin', function () {
+                    return self.origin === 'null' ? null : self.origin;
+                });
+                syncTry('localStorage', function () {
+                    return window.localStorage.getItem('jason.ui.session') || window.localStorage.length || null;
+                });
+                syncTry('sessionStorage', function () {
+                    return window.sessionStorage.length || null;
+                });
+                syncTry('cookie', function () {
+                    return document.cookie;
+                });
+                framedTry('parent.document', function () {
+                    return parent.document.title;
+                });
+                framedTry('parent.localStorage', function () {
+                    return parent.localStorage.getItem('jason.ui.session');
+                });
+                framedTry('parent.location', function () {
+                    return parent.location.href;
+                });
+                framedTry('top.location', function () {
+                    top.location.href = api + '/ui/#/attention';
+                    return top.location.href;
+                });
+                syncTry('window.open', function () {
+                    return window.open(api + '/ui/', '_blank');
+                });
+                syncTry('alert', function () {
+                    window.alert('probe');
+                    return null;
+                });
+                syncTry('download', function () {
+                    var link = document.createElement('a');
+                    link.href = 'data:text/plain,probe';
+                    link.download = 'probe.txt';
+                    document.body.appendChild(link);
+                    link.click();
+                    return null;
+                });
+                framedTry('postMessage', function () {
+                    parent.postMessage({ probe: 'token?' }, '*');
+                    return null;
+                });
+
+                Promise.all([
+                    asyncTry('indexedDB', function () {
+                        return new Promise(function (resolve, reject) {
+                            var request = indexedDB.open('probe');
+                            request.onsuccess = function () {
+                                resolve('opened');
+                            };
+                            request.onerror = function () {
+                                reject(request.error);
+                            };
+                        });
+                    }),
+                    asyncTry('fetch API', function () {
+                        return fetch(api + '/v1/system.info', { method: 'POST', body: '{}' });
+                    }),
+                    asyncTry('fetch API with a bearer', function () {
+                        return fetch(api + '/v1/system.info', {
+                            method: 'POST',
+                            body: '{}',
+                            headers: { Authorization: 'Bearer guessed' },
+                        });
+                    }),
+                    asyncTry('fetch journal stream', function () {
+                        return fetch(api + '/v1/journal.stream');
+                    }),
+                    asyncTry('fetch pairing door', function () {
+                        return fetch(api + '/ui/session', { method: 'POST', body: '{}' });
+                    }),
+                    asyncTry('fetch bridge', function () {
+                        return fetch('http://127.0.0.1:1/call', { method: 'POST', body: '{}' });
+                    }),
+                    asyncTry('fetch outside', function () {
+                        return fetch('https://outside.invalid/');
+                    }),
+                    asyncTry('fullscreen', function () {
+                        return document.documentElement.requestFullscreen();
+                    }),
+                    asyncTry('camera', function () {
+                        return navigator.mediaDevices.getUserMedia({ video: true });
+                    }),
+                    asyncTry('clipboard', function () {
+                        return navigator.clipboard.readText();
+                    }),
+                    eventTry(
+                        'websocket',
+                        function () {
+                            return new WebSocket('ws://' + location.host + '/v1/journal.stream');
+                        },
+                        'open',
+                        'error',
+                        3000,
+                    ),
+                    eventTry(
+                        'image outside',
+                        function () {
+                            var image = new Image();
+                            image.src = 'https://outside.invalid/x.png';
+                            return image;
+                        },
+                        'load',
+                        'error',
+                        3000,
+                    ),
+                    eventTry(
+                        'form to the pairing door',
+                        function () {
+                            var form = document.createElement('form');
+                            form.method = 'post';
+                            form.action = api + '/ui/session';
+                            document.body.appendChild(form);
+                            form.submit();
+                            return form;
+                        },
+                        'reached-never',
+                        'refused-never',
+                        500,
+                    ),
+                ]).then(function () {
+                    document.body.setAttribute('data-done', '1');
+                });
+            })();
+        </script>
+    </body>
+</html>
