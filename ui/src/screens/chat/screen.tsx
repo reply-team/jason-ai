@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { session } from '../../api/session';
+import { consoleShell } from '../../platform/console-shell';
 import { t } from '../../platform/i18n';
 
 import { releasesPage } from '../../platform/places';
@@ -14,6 +15,8 @@ const TabChat = lazy(() => import('./tab-chat').then((module) => ({ default: mod
  * chat; any other tab says where the chat is. It starts nothing and asks nothing of the runtime or a desktop.
  */
 export function ChatScreen() {
+    // In the console the chat is the console's own, drawn in its area: this page has nothing of its own to draw there.
+    if (consoleShell.loaded) return null;
     const bridge = session.bridge.value;
     if (bridge !== null) {
         return (
