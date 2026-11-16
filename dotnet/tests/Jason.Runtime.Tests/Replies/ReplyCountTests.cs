@@ -423,6 +423,52 @@ public class ReplyCountTests
         Assert.Equal(["until/invalid"], backwards.Details!.Select(detail => $"{detail.Field}/{detail.Code}"));
     }
 
+    /// <summary>
+    /// What an agent's Results tab reads over its period: the replies judged in the last seven days of one campaign, and
+    /// the same window of a campaign nobody judged anything in.
+    /// </summary>
+    [Fact]
+    public async Task The_exchanges_of_a_campaigns_results_are_recorded()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(new DateTimeOffset(2026, 10, 16, 9, 0, 0, TimeSpan.Zero)));
+        var spring = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Spring outreach" }, Ct);
+        var summer = await api.PostOkAsync<CampaignDto>(Operations.CampaignCreate, new { name = "Summer partners" }, Ct);
+
+        async Task JudgeAsync(string thread, string message, string at, string category) =>
+            await api.PostOkAsync<JournalEntryDto>(
+                Operations.ReplyRecord,
+                new
+                {
+                    campaign_id = spring.Id,
+                    plugin_id = "mailbox",
+                    thread_id = thread,
+                    message_id = message,
+                    message_at = at,
+                    category,
+                    confidence = 0.9,
+                    reaction = "draft",
+                    actor = new { type = "role", id = "responder" },
+                },
+                Ct);
+
+        await JudgeAsync("thr-1", "msg-1", "2026-10-12T08:15:00.000Z", "interested");
+        await JudgeAsync("thr-1", "msg-2", "2026-10-12T09:40:00.000Z", "interested");
+        await JudgeAsync("thr-2", "msg-3", "2026-10-13T10:05:00.000Z", "interested");
+        await JudgeAsync("thr-3", "msg-4", "2026-10-14T10:05:00.000Z", "not_now");
+        await JudgeAsync("thr-4", "msg-5", "2026-10-02T10:05:00.000Z", "interested");
+
+        var window = new { since = "2026-10-10T00:00:00.000Z", until = "2026-10-16T09:00:00.000Z" };
+        var judged = await api.RecordAsync<ReplyCountResponse>(
+            Operations.ReplyCount, "period-spring", new { campaign_ids = new[] { spring.Id }, window.since, window.until }, Ct);
+        var none = await api.RecordAsync<ReplyCountResponse>(
+            Operations.ReplyCount, "period-none", new { campaign_ids = new[] { summer.Id }, window.since, window.until }, Ct);
+
+        var row = Assert.Single(judged.Campaigns);
+        Assert.Equal((4, 3), (row.Replies, row.Threads));
+        Assert.Equal([new("interested", 3, 2), new("not_now", 1, 1)], row.Categories);
+        Assert.Empty(Assert.Single(none.Campaigns).Categories);
+    }
+
     private static DateTimeOffset At(int hour) => DayStart.AddHours(hour);
 
     private static ReplyCounts Counts(JasonDbContext db) => new(db);

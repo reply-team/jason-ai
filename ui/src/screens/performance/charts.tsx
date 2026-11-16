@@ -30,7 +30,8 @@ function Chart({
     zone: string;
     now: Date;
     chosen: { count?: string | undefined; from?: string | undefined; to?: string | undefined };
-    onBar: (count: Charted, bucket: ActivityBucket) => void;
+    /** What a bar does when pressed; without it the bars only show their figures, as the agent's Results does. */
+    onBar?: ((count: Charted, bucket: ActivityBucket) => void) | undefined;
 }) {
     const max = Math.max(0, ...buckets.map((bucket) => bucket.value));
     const name = `${title} ${perBucket[period]}`;
@@ -47,23 +48,43 @@ function Chart({
                     const label = bucketLabel(bucket, period, zone, now, buckets.length);
                     const on = chosen.count === count && chosen.from === bucket.start && chosen.to === bucket.end;
                     const written = max > 0 && (bucket.value === max || label.current);
-                    return (
+                    const className = `bar${label.current ? ' today' : ''}${on ? ' on' : ''}${
+                        onBar ? '' : ' still'
+                    }${labelled(i, buckets.length, every.wide) ? '' : ' unlabelled'}${
+                        labelled(i, buckets.length, every.narrow) ? '' : ' unlabelled-narrow'
+                    }`;
+                    const style = { '--v': max > 0 ? (bucket.value / max).toFixed(3) : 0 } as CSSProperties;
+                    const inside = (
+                        <>
+                            <i />
+                            {written && <span className="v">{number.format(bucket.value)}</span>}
+                            <span className="d">{label.short}</span>
+                        </>
+                    );
+                    return onBar ? (
                         <button
                             key={bucket.start}
                             type="button"
-                            className={`bar${label.current ? ' today' : ''}${on ? ' on' : ''}${
-                                labelled(i, buckets.length, every.wide) ? '' : ' unlabelled'
-                            }${labelled(i, buckets.length, every.narrow) ? '' : ' unlabelled-narrow'}`}
-                            style={{ '--v': max > 0 ? (bucket.value / max).toFixed(3) : 0 } as CSSProperties}
+                            className={className}
+                            style={style}
                             title={`${label.long} · ${number.format(bucket.value)}`}
                             aria-label={`${label.long}, ${number.format(bucket.value)}`}
                             aria-pressed={on}
                             onClick={() => onBar(count, bucket)}
                         >
-                            <i />
-                            {written && <span className="v">{number.format(bucket.value)}</span>}
-                            <span className="d">{label.short}</span>
+                            {inside}
                         </button>
+                    ) : (
+                        <div
+                            key={bucket.start}
+                            role="img"
+                            className={className}
+                            style={style}
+                            title={`${label.long} · ${number.format(bucket.value)}`}
+                            aria-label={`${label.long}, ${number.format(bucket.value)}`}
+                        >
+                            {inside}
+                        </div>
                     );
                 })}
                 {max === 0 && !busy && (
@@ -83,7 +104,7 @@ export function Charts(props: {
     zone: string;
     now: Date;
     chosen: { count?: string | undefined; from?: string | undefined; to?: string | undefined };
-    onBar: (count: Charted, bucket: ActivityBucket) => void;
+    onBar?: ((count: Charted, bucket: ActivityBucket) => void) | undefined;
 }) {
     const { series, ...rest } = props;
     return (

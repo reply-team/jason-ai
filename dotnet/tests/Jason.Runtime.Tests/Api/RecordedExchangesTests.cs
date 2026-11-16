@@ -253,6 +253,63 @@ public class RecordedExchangesTests
     }
 
     /// <summary>
+    /// What an agent's Results tab reads for its last review: the newest finished succeeded item of the manager role in one
+    /// campaign, one request with a limit of one, and the answer of a campaign none has finished in.
+    /// </summary>
+    [Fact]
+    public async Task The_last_review_of_a_campaign_is_recorded()
+    {
+        var day = new DateTime(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc);
+        DateTime At(int hour, int minute = 0) => day.AddHours(hour).AddMinutes(minute);
+        object Ask(string campaign) => new { campaign_id = campaign, role = "manager", status = new[] { "succeeded" }, order = "finished", limit = 1 };
+
+        await using (var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine)))
+        {
+            string campaign;
+            using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+                var autumn = WorkItemFactory.NewCampaign("Autumn outreach", now: At(7));
+                autumn.PublicId = "cmp_01K7QN00000000000000000001";
+                db.Campaigns.Add(autumn);
+                void Manager(int n, WorkItemStatus status, DateTime? finished) =>
+                    db.WorkItems.Add(WorkItemFactory.NewAiRole(autumn, "manager", At(5), w =>
+                    {
+                        w.PublicId = $"wi_01K7QN{n:D20}";
+                        w.Status = status;
+                        w.FinishedAt = finished;
+                    }));
+                Manager(1, WorkItemStatus.Succeeded, At(6));
+                Manager(2, WorkItemStatus.Succeeded, At(8, 30));
+                Manager(3, WorkItemStatus.Failed, At(8, 50));
+                Manager(4, WorkItemStatus.Created, null);
+                await db.SaveChangesAsync(Ct);
+                campaign = autumn.PublicId;
+            }
+
+            var latest = await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "review-latest", Ask(campaign), Ct);
+            Assert.Equal("wi_01K7QN00000000000000000002", Assert.Single(latest.Items).Id);
+        }
+
+        await using (var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine)))
+        {
+            string campaign;
+            using (var scope = api.Resolve<IServiceScopeFactory>().CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<JasonDbContext>();
+                var autumn = WorkItemFactory.NewCampaign("Autumn outreach", now: At(7));
+                autumn.PublicId = "cmp_01K7QN00000000000000000001";
+                db.Campaigns.Add(autumn);
+                db.WorkItems.Add(WorkItemFactory.NewAiRole(autumn, "manager", At(5), w => w.PublicId = "wi_01K7QN00000000000000000001"));
+                await db.SaveChangesAsync(Ct);
+                campaign = autumn.PublicId;
+            }
+
+            Assert.Empty((await api.RecordAsync<Page<WorkItemSummaryDto>>(Operations.WorkItemList, "review-none", Ask(campaign), Ct)).Items);
+        }
+    }
+
+    /// <summary>
     /// What the Work items screen reads — the three tabs and their counts, a page and the next, a person's work, an empty
     /// filter, each kind of item opened, the lists its filters are made from — and then what its panel writes.
     /// </summary>

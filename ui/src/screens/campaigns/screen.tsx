@@ -402,6 +402,8 @@ export function CampaignsScreen() {
                                     period={at.period}
                                     shown={store.resultsFor(selected, at.period)}
                                     failed={tabFailure !== null}
+                                    zone={zone}
+                                    now={new Date()}
                                 />
                             )}
                             {at.tab === 'settings' && (

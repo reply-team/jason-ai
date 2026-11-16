@@ -1,3 +1,4 @@
+import type { ActivityPeriod } from '../api/types';
 import type { Period } from '../router';
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -9,6 +10,11 @@ export const periodLabels: Record<Period, string> = {
     '30d': 'Last 30 days',
     '90d': 'Last 90 days',
 };
+
+/** What each bar of a period is: today by the hour, a week or a month by the day, a quarter by the week. */
+export function bucketOf(period: Period): ActivityPeriod {
+    return period === 'today' ? 'hour' : period === '90d' ? 'week' : 'day';
+}
 
 /** How many whole days before today each period starts: today alone, or the six, twenty-nine or eighty-nine before it as well. */
 const daysBefore: Record<Period, number> = { today: 0, '7d': 6, '30d': 29, '90d': 89 };

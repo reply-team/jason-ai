@@ -6,6 +6,8 @@ import type {
     Approval,
     ApprovalSummary,
     Campaign,
+    ActivityBucket,
+    CampaignActivityByPeriodResponse,
     CampaignActivityResponse,
     CampaignActivityRow,
     CampaignSummary,
@@ -17,12 +19,13 @@ import type {
     MembershipItem,
     MembershipWhy,
     Page,
+    ReplyCountResponse,
     WorkItemSummary,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
 import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
-import { periodWindow } from '../../time/periods';
+import { bucketOf, periodWindow } from '../../time/periods';
 import { createBody, unfinishedCreate } from './kind';
 
 /**
@@ -301,36 +304,101 @@ function forget(tab: 'results' | 'inbox'): void {
     if (tabFailure.value?.tab === tab) tabFailure.value = null;
 }
 
+/** One read of the Results tab that may fail by itself: its value, or that it could not be read. */
+export type Read<T> = { ok: true; value: T } | { ok: false };
+
+/** The newest finished review of the campaign: when, or null while none has finished. */
+export type Review = string | null;
+
 /**
- * The Results tab's two answers, with the campaign and the period they were read for: the campaign's people now, from
- * campaign.summary, and the period's counts, from campaign.activity. The tab shows them as they came; it divides nothing.
+ * The Results tab's answers, with the campaign and the period they were read for: the campaign's people now, from
+ * campaign.summary, and the period's counts, from campaign.activity; those two or nothing. Beside them, each read
+ * that may fail alone: the conversations judged interested (reply.count), the two series (campaign.activity_by_period)
+ * and the last review (workitem.list). The tab shows them as they came; it divides nothing.
  */
 export const results = signal<{
     id: string;
     period: Period;
     now: CampaignSummaryRow;
     counts: CampaignActivityRow;
+    interested: Read<number>;
+    series: Read<{ contacted: ActivityBucket[]; replied: ActivityBucket[]; readAt: Date }>;
+    review: Read<Review>;
 } | null>(null);
 let resulting = 0;
 
-/** Reads the open campaign's Results again: both answers, or why not, said over this campaign's Results only. */
+/** The word reply.count counts a verdict of interest by: the Dashboard's. */
+const interestedWord = 'interested';
+
+/** Reads the open campaign's Results again: the counts, or why not, said over this campaign's Results only. */
 export async function loadResults(api: Api, id: string, period: Period, now: Date, zone: string): Promise<void> {
     const mine = ++resulting;
     forget('results');
-    try {
-        const [summed, active] = await Promise.all([
-            api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id], ...archivedLeftOut }),
-            api.call<CampaignActivityResponse>('campaign.activity', {
-                campaign_ids: [id],
-                ...periodWindow(period, now, zone),
-                ...archivedLeftOut,
-            }),
-        ]);
-        const [row, counts] = [summed.campaigns[0], active.campaigns[0]];
-        if (mine === resulting && row && counts) results.value = { id, period, now: row, counts };
-    } catch (error) {
-        if (mine === resulting) failOver(id, 'results', error);
+    const window = periodWindow(period, now, zone);
+    const over = (count: string) =>
+        api.call<CampaignActivityByPeriodResponse>('campaign.activity_by_period', {
+            campaign_ids: [id],
+            count,
+            period: bucketOf(period),
+            ...window,
+            zone,
+            ...archivedLeftOut,
+        });
+    const [summed, active, judged, contacted, replied, reviewed] = await Promise.allSettled([
+        api.call<CampaignSummaryResponse>('campaign.summary', { campaign_ids: [id], ...archivedLeftOut }),
+        api.call<CampaignActivityResponse>('campaign.activity', { campaign_ids: [id], ...window, ...archivedLeftOut }),
+        api.call<ReplyCountResponse>('reply.count', { campaign_ids: [id], ...window }),
+        over('contacted'),
+        over('replied'),
+        // The latest review the manager role finished here: one request, newest finished first, a limit of one.
+        api.call<Page<WorkItemSummary>>('workitem.list', {
+            campaign_id: id,
+            role: 'manager',
+            status: ['succeeded'],
+            order: 'finished',
+            limit: 1,
+        }),
+    ]);
+    if (mine !== resulting) return;
+    // A read of its own that failed is said where it would be drawn; a request nobody is paired for ends the session.
+    for (const each of [judged, contacted, replied, reviewed]) if (each.status === 'rejected') failureText(each.reason);
+    const first = summed.status === 'rejected' ? summed : active.status === 'rejected' ? active : null;
+    if (first) {
+        failOver(id, 'results', first.reason);
+        return;
     }
+    if (summed.status !== 'fulfilled' || active.status !== 'fulfilled') return;
+    const [row, counts] = [summed.value.campaigns[0], active.value.campaigns[0]];
+    if (!row || !counts) return;
+    results.value = {
+        id,
+        period,
+        now: row,
+        counts,
+        interested:
+            judged.status === 'fulfilled'
+                ? {
+                      ok: true,
+                      value:
+                          judged.value.total.categories.find((each) => each.category === interestedWord)?.threads ?? 0,
+                  }
+                : { ok: false },
+        series:
+            contacted.status === 'fulfilled' && replied.status === 'fulfilled'
+                ? {
+                      ok: true,
+                      value: {
+                          contacted: contacted.value.buckets,
+                          replied: replied.value.buckets,
+                          readAt: new Date(window.until),
+                      },
+                  }
+                : { ok: false },
+        review:
+            reviewed.status === 'fulfilled'
+                ? { ok: true, value: reviewed.value.items[0]?.finished_at ?? null }
+                : { ok: false },
+    };
 }
 
 /** The Results of this campaign for this period, or none while they are on their way. */
