@@ -176,25 +176,36 @@ export interface DemoAnswer {
 }
 
 /**
- * Pure: the scheme's answer. The view's one address, asked with GET, gets the file with the headers above; anything else
- * (another path, a query, a fragment, another method) gets nothing. The file is read only for the one address.
+ * Pure: whether an address is the view's own: the same text up to its fragment, which names a place in the page and asks
+ * nothing more of the scheme. The page moves itself to `#start` once it is loaded, so a reload asks for that. A fragment
+ * begins at the first `#` of an address, so the scheme, the host, the path and the query are compared whole.
+ */
+export function isOwnAddress(view: DemoView, url: string): boolean {
+    const hash = url.indexOf('#');
+    return (hash < 0 ? url : url.slice(0, hash)) === view.url;
+}
+
+/**
+ * Pure: the scheme's answer. The view's one address, asked with GET at any fragment, gets the file with the headers above;
+ * anything else (another path, a query, another method) gets nothing. The file is read only for the one address.
  */
 export function answerDemo(view: DemoView, url: string, method: string, read: () => Uint8Array): DemoAnswer {
-    if (method !== 'GET' || url !== view.url) return { status: 404, headers: { 'Cache-Control': 'no-store' }, body: null };
+    if (method !== 'GET' || !isOwnAddress(view, url)) return { status: 404, headers: { 'Cache-Control': 'no-store' }, body: null };
     return { status: 200, headers: demoHeaders(), body: read() };
 }
 
 /**
- * Pure: whether the view's session lets a request go on: its one address alone, and a `data:` address, which the policy
- * holds to fonts and images. Every other request is cancelled: http and https, a WebSocket, `file:` and any other scheme.
+ * Pure: whether the view's session lets a request go on: its one address alone, at any fragment, and a `data:` address,
+ * which the policy holds to fonts and images. Every other request is cancelled: http and https, a WebSocket, `file:` and
+ * any other scheme.
  */
 export function requestAllowed(view: DemoView, url: string): boolean {
-    return url === view.url || url.startsWith('data:');
+    return isOwnAddress(view, url) || url.startsWith('data:');
 }
 
-/** Pure: whether a navigation goes on: only the main frame's to the view's one address, a reload. */
+/** Pure: whether a navigation goes on: only the main frame's to the view's one address, at any fragment, a reload. */
 export function navigationAllowed(view: DemoView, url: string, isMainFrame: boolean): boolean {
-    return isMainFrame && url === view.url;
+    return isMainFrame && isOwnAddress(view, url);
 }
 
 /**
@@ -322,7 +333,7 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
     // A navigation Electron asks no handler about, `about:blank` from the page's script, is undone once it is made: the
     // main frame shows its own address or is loaded with it again.
     contents.on('did-navigate', (_event, url) => {
-        if (url === view.url) return;
+        if (isOwnAddress(view, url)) return;
         refuse('navigation');
         if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
     });

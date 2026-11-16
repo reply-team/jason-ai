@@ -104,7 +104,7 @@ test('the one answer carries the policy as a header, denies every feature, and i
     }
 });
 
-test('the scheme serves the one address to GET alone; another path, a query, a fragment or a method gets nothing, and the file is not read', () => {
+test('the scheme serves the one address to GET alone, at any fragment; another path, a query or a method gets nothing, and the file is not read', () => {
     let reads = 0;
     const read = () => {
         reads++;
@@ -118,7 +118,8 @@ test('the scheme serves the one address to GET alone; another path, a query, a f
     for (const [url, method] of [
         ['jason-demo://page/other.html', 'GET'],
         ['jason-demo://page/index.html?x=1', 'GET'],
-        ['jason-demo://page/index.html#x', 'GET'],
+        ['jason-demo://page/other.html#start', 'GET'],
+        ['jason-demo://page/index.html?x=1#start', 'GET'],
         ['jason-demo://page/', 'GET'],
         ['jason-demo://other/index.html', 'GET'],
         ['jason-demo://page/../index.html', 'GET'],
@@ -416,6 +417,55 @@ test('our switch reads the person’s choice from the navigation its view refuse
     call(view.on.get('will-navigate'), elsewhere);
     assert.ok(elsewhere.stopped);
     assert.deepEqual(view.refused, ['navigation'], 'any other navigation of the switch is still a refusal');
+});
+
+test('a reload of the page at any fragment draws the page: the navigation, the request, the answer and the commit all go on', async () => {
+    // The page moves itself to `#start` once it is loaded, so the menu's Reload asks for its address with a fragment.
+    for (const view of [demoPage, demoSwitch]) {
+        for (const url of [`${view.url}#start`, `${view.url}#`, `${view.url}#a/b?c#d`]) {
+            const sealedView = await sealed(view);
+            for (const name of ['will-navigate', 'will-frame-navigate', 'will-redirect']) {
+                const reload = event({ url, isMainFrame: true });
+                call(sealedView.on.get(name), reload);
+                assert.equal(reload.stopped, false, `${name} lets ${url} go`);
+            }
+            let cancelled: boolean | undefined;
+            call(sealedView.handler('onBeforeRequest'), { url }, (answer: { cancel: boolean }) => void (cancelled = answer.cancel));
+            assert.equal(cancelled, false, `the request for ${url} goes on`);
+            const answer = (await call(sealedView.protocols.get(view.scheme), { url, method: 'GET' })) as Response;
+            assert.equal(answer.status, 200, `the scheme serves ${url}`);
+            assert.equal(await answer.text(), new TextDecoder().decode(pageBytes));
+            call(sealedView.on.get('did-navigate'), event(), url, 200, 'OK');
+            assert.ok(!sealedView.calls.some((name) => name.startsWith('loadURL:')), `${url} is the page's own address`);
+            assert.deepEqual(sealedView.refused, [], `nothing refused at ${url}`);
+            assert.deepEqual(sealedView.asked, []);
+        }
+    }
+});
+
+test('only the fragment is ignored: another scheme, host, path or query with the page’s fragment is refused everywhere', async () => {
+    for (const url of [
+        'jason-demo://page/other.html#start',
+        'jason-demo://page/index.html?x=1#start',
+        'jason-demo://other/index.html#start',
+        'jason-demo://page/#start',
+        'jason-demo://page/index.htm#start',
+        'jason-demo://page/index.html/#start',
+        'jason-switch://page/index.html#start',
+        'https://page/index.html#start',
+        `${demoSwitch.url}#start`,
+        'about:blank#start',
+    ]) {
+        assert.ok(!requestAllowed(demoPage, url), `request ${url}`);
+        assert.ok(!navigationAllowed(demoPage, url, true), `navigation ${url}`);
+        assert.equal(answerDemo(demoPage, url, 'GET', () => pageBytes).status, 404, `answer ${url}`);
+        const view = await sealed(demoPage);
+        call(view.on.get('did-navigate'), event(), url, 200, 'OK');
+        assert.deepEqual(view.calls.filter((name) => name.startsWith('loadURL:')), [`loadURL:${demoPage.url}`], `${url} is undone`);
+        assert.deepEqual(view.refused, ['navigation']);
+    }
+    assert.ok(!navigationAllowed(demoPage, `${demoPage.url}#start`, false), 'a frame at the page’s address is still refused');
+    assert.equal(answerDemo(demoPage, `${demoPage.url}#start`, 'POST', () => pageBytes).status, 404);
 });
 
 test('a navigation that ends anywhere but the view’s own address, as about:blank does with no will-navigate, loads the page again', async () => {
