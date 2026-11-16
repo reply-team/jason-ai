@@ -129,8 +129,8 @@ export interface HostState {
      */
     ownServers: string[];
     /**
-     * The name of the execution profile the agents' roles run on by default, where `Roles:DefaultExecutionProfile` names
-     * an enabled profile whose host is this program and the chat can use this program: it drives the chat, is found here
+     * The name of the execution profile the agents' roles run on by default, where the default profile the runtime
+     * answers in force is an enabled profile whose host is this program and the chat can use this program: it drives the chat, is found here
      * and is at its version floor. Null otherwise, and for every key provider, which runs no role. The Connect row says it
      * in one line.
      */
@@ -268,11 +268,14 @@ export interface SetupDeps {
 const signInLimit = 5 * 60_000;
 /** How long `jason profile create` is given. */
 const profileLimit = 60_000;
+/** The reason the runtime journals with the default the desktop names; fixed text, never a person's. */
+export const namingReason = 'Jason Desktop named the profile it made for the agents’ roles';
 
 /**
  * What one call of `connectRoles` came to: already settled in this run, a default already in force, profiles or the
  * default in force it could not read, profiles that are there, no connected host, no mark it could write, a create
- * refused, a default the runtime did not name, a profile made and named, a profile made beside a default a person named
+ * refused, a default the runtime refused to name, a default not named because the runtime did not answer the look
+ * just before the naming or the naming itself, a profile made and named, a profile made beside a default a person named
  * meanwhile, which is kept, or a profile made earlier named now.
  */
 export type RolesOutcome =
@@ -284,9 +287,12 @@ export type RolesOutcome =
     | 'unmarked'
     | 'create_refused'
     | 'default_unwritten'
+    | 'default_unanswered'
     | 'made'
     | 'made_unnamed'
     | 'named';
+/** The ends of `connectRoles` that leave it to the next turn: a runtime that did not answer, or no connected host. */
+const unsettling: ReadonlySet<RolesOutcome> = new Set(['settled', 'profiles_unread', 'no_host', 'default_unanswered']);
 const installLimit = 5 * 60_000;
 
 function readText(file: string): string | null {
@@ -969,7 +975,7 @@ export class Setup {
     connectRoles(chosen: string | null): Promise<RolesOutcome> {
         return this.#serial(async () => {
             const outcome = await this.#connectRoles(chosen);
-            if (outcome !== 'settled' && outcome !== 'profiles_unread' && outcome !== 'no_host') this.#rolesSettled = true;
+            if (!unsettling.has(outcome)) this.#rolesSettled = true;
             this.#deps.log.info('roles_profile', { Outcome: outcome });
             return outcome;
         });
@@ -992,7 +998,7 @@ export class Setup {
         }
         if (next.kind === 'name') {
             const named = await this.#nameDefault(next.name);
-            return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : 'default_unwritten';
+            return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : named === 'unanswered' ? 'default_unanswered' : 'default_unwritten';
         }
 
         const { name, host } = roleProfiles[next.host];
@@ -1006,7 +1012,7 @@ export class Setup {
         const id = readProfile(made.stdout)?.id ?? null;
         if (id !== null) this.#mark({ name, id });
         const named = await this.#nameDefault(name);
-        return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : 'default_unwritten';
+        return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : named === 'unanswered' ? 'default_unanswered' : 'default_unwritten';
     }
 
     /** Whether Claude Code and Codex are connected as the cards say it: found, and Claude Code at its floor. */
@@ -1018,16 +1024,20 @@ export class Setup {
     /**
      * Asks the runtime to name the profile the default, `jason profile set-default`, where the default in force just
      * before names none, then takes the mark away and has the cards read again: `written` where the runtime answered that
-     * name in force, or `theirs` where a default was in force by then, which is kept and never named over; `unwritten`,
-     * the mark kept, where the runtime did not answer the look or refused the naming. The runtime's naming has no
+     * name in force, or `theirs` where a default was in force by then, which is kept and never named over. The mark is
+     * kept otherwise: `unanswered` where the runtime did not answer the look, or the naming exited as a runtime that did
+     * not answer (3) or was not finished (-1), which the next turn looks at again; `unwritten` where the runtime refused
+     * the naming, a request it took and did not answer in time included, which is never asked again blind: every later
+     * look starts with the list, so a naming the runtime did make is read back there. The runtime's naming has no
      * precondition, so a default a person names between the look and the naming is the one it replaces, and journals as
-     * it does every change of the default; no second request undoes it.
+     * it does every change of the default, with the desktop's fixed reason; no second request undoes it.
      */
-    async #nameDefault(name: string): Promise<'written' | 'theirs' | 'unwritten'> {
+    async #nameDefault(name: string): Promise<'written' | 'theirs' | 'unwritten' | 'unanswered'> {
         const inForce = await this.#defaultInForce();
-        if (inForce === undefined) return 'unwritten';
+        if (inForce === undefined) return 'unanswered';
         if (inForce === null) {
-            const named = await this.#deps.cli.run(['profile', 'set-default', name]);
+            const named = await this.#deps.cli.run(['profile', 'set-default', name, '--reason', namingReason]);
+            if (named.exit === 3 || named.exit === -1) return 'unanswered';
             if (named.exit !== 0 || readDefaultAnswer(named.stdout) !== name) return 'unwritten';
         }
         this.#mark(null);

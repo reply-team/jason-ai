@@ -144,7 +144,10 @@ if (args[0] === 'status') {
     // absent is none), or STUB_DEFAULT_IN_FORCE=<name>, as a JASON_ variable sets it; every page of the list says it, and
     // STUB_PROFILE_LIST_NO_DEFAULT=yes leaves it out, as a runtime older than the field does. set-default writes it into
     // the settings file, keeping every other key, and answers it; STUB_PROFILE_SET_DEFAULT_REFUSED=<code> refuses it with
-    // that code, and STUB_PROFILE_SET_DEFAULT_ANSWERS=<name> answers that name instead.
+    // that code, STUB_PROFILE_SET_DEFAULT_ANSWERS=<name> answers that name instead, STUB_PROFILE_SET_DEFAULT_LOST=yes writes
+    // it and answers request_timed_out, as a request the runtime took and did not answer in time does, and
+    // STUB_PROFILE_SET_DEFAULT_UNREACHABLE=yes answers as an unreachable runtime does. Under STUB_DEFAULT_IN_FORCE it is
+    // refused setting_shadowed, as the runtime refuses a default a JASON_ variable sets.
     const { dirname } = require('node:path');
     const store = join(dirname(process.env.STUB_RECORD), 'profiles.json');
     const stopped = join(dirname(process.env.STUB_RECORD), 'runtime-stopped');
@@ -188,7 +191,12 @@ if (args[0] === 'status') {
         const page = { items: listed.slice(0, size), next_cursor: listed.length > size ? String(size) : null };
         print(process.env.STUB_PROFILE_LIST_NO_DEFAULT === 'yes' ? page : { ...page, default_execution_profile: inForce() });
     } else if (verb === 'profile set-default') {
+        if (process.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE === 'yes') {
+            process.stderr.write('No runtime answered.\n');
+            process.exit(3);
+        }
         if (process.env.STUB_PROFILE_SET_DEFAULT_REFUSED) refuse(process.env.STUB_PROFILE_SET_DEFAULT_REFUSED, 'The default was not written.');
+        if (process.env.STUB_DEFAULT_IN_FORCE) refuse('setting_shadowed', 'A JASON_ variable sets the default, so the file would not be in force.');
         const name = args[2];
         if (!profiles.some((profile) => profile.name === name)) refuse('profile_not_found', 'No profile has that name.');
         const held = readHeld();
@@ -197,6 +205,7 @@ if (args[0] === 'status') {
         held[rolesKey] = { ...roles, [keyOf(roles, 'DefaultExecutionProfile')]: name };
         mkdirSync(join(data, 'config'), { recursive: true });
         writeFileSync(settingsFile, JSON.stringify(held, null, 2));
+        if (process.env.STUB_PROFILE_SET_DEFAULT_LOST === 'yes') refuse('request_timed_out', 'The runtime took the request and did not answer in time.');
         print({ execution_profile: process.env.STUB_PROFILE_SET_DEFAULT_ANSWERS || name });
     } else if (verb === 'profile get') {
         const found = profiles.find((profile) => profile.name === args[2]);

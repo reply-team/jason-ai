@@ -1,9 +1,9 @@
 /**
  * Pure: the agents' roles put on the AI the chat runs on. A fresh installation has no execution profile and names no
  * default, so no AI role can run; once the chat is on Claude Code or Codex and that host is connected, the desktop makes
- * one profile for it with `jason profile create` and names it `Roles:DefaultExecutionProfile` in the installation's
- * settings (`Setup.connectRoles`). In Live only, and only where the installation holds no profile at all and names no
- * default: a profile or a default a person made is never touched.
+ * one profile for it with `jason profile create` and asks the runtime to name it the default (`jason profile
+ * set-default`, `Setup.connectRoles`). In Live only, and only where the installation holds no profile at all and the
+ * runtime answers no default in force: a profile or a default a person made is never touched.
  */
 
 import type { Conversation } from './chat-conversations.ts';

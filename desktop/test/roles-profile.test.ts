@@ -3,7 +3,7 @@
 // default in force.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { loggedCli } from '../src/installation.ts';
@@ -13,7 +13,7 @@ import { ProviderKeys } from '../src/providers.ts';
 import { rolesMoments } from '../src/roles-moments.ts';
 import { lastChosenHost, profileProgram, roleHostOf } from '../src/roles-profile.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
-import { Setup, type SetupDeps } from '../src/setup.ts';
+import { namingReason, Setup, type SetupDeps } from '../src/setup.ts';
 import { bench, fakeBox, memoryLog, type Bench } from './harness.ts';
 
 /** A Setup on the bench whose desktop settings live in the bench's own file, read again by every Setup made on it. */
@@ -165,7 +165,7 @@ test('a fresh installation with Claude Code connected gets one profile for it, n
     assert.deepEqual(asked(b, 'profile create')[0]?.args, ['profile', 'create', 'claude-code', '--host', 'claude_code', '--program', programOf(b, 'claude')]);
     // The default is named by the runtime's own operation, after a look at the default in force just before it.
     assert.deepEqual(profileVerbs(b), ['profile list', 'profile create', 'profile list', 'profile set-default']);
-    assert.deepEqual(asked(b, 'profile set-default')[0]?.args, ['profile', 'set-default', 'claude-code']);
+    assert.deepEqual(asked(b, 'profile set-default')[0]?.args, ['profile', 'set-default', 'claude-code', '--reason', namingReason]);
     assert.deepEqual(installationSettings(b), { Routes: { Default: { Plugin: 'reply' } }, Roles: { MaxStdoutBytes: 1000, DefaultExecutionProfile: 'claude-code' } });
     assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined, 'the mark is taken away once the default is written');
     assert.ok(changed > 0, 'the cards are read again, so the line appears');
@@ -293,17 +293,106 @@ test('the half-done case: made and not named, the next start names the profile i
     assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined);
 });
 
-test('the default is unwritten, the mark and its id kept, where the runtime stops answering after the create or answers another name', async (t) => {
-    // The look just before the set finds no runtime: nothing is named.
+test('a runtime that stops answering after the create leaves the naming to the next turn, which names it with one set-default', async (t) => {
+    // The look just before the set finds no runtime: nothing is named, and the run is not settled.
     const stopped = bench(t, { programs: ['claude'], env: { STUB_PROFILE_CREATE_STOPS_RUNTIME: 'yes' } });
-    assert.equal(await setupOn(stopped).connectRoles(null), 'default_unwritten');
+    const setup = setupOn(stopped);
+    assert.equal(await setup.connectRoles(null), 'default_unanswered');
     assert.deepEqual(profileVerbs(stopped), ['profile list', 'profile create', 'profile list']);
     assert.deepEqual(readSettings(stopped.paths.settings).rolesProfilePending, { name: 'claude-code', id: profiles(stopped)[0]?.id });
 
+    // The runtime is back by the next turn: the profile the mark shows is named, once, and never made again.
+    delete stopped.env.STUB_PROFILE_CREATE_STOPS_RUNTIME;
+    rmSync(join(stopped.root, 'runtime-stopped'));
+    assert.equal(await setup.connectRoles('claude'), 'named');
+    assert.equal(asked(stopped, 'profile set-default').length, 1);
+    assert.equal(asked(stopped, 'profile create').length, 1);
+    assert.equal((installationSettings(stopped).Roles as Record<string, unknown>).DefaultExecutionProfile, 'claude-code');
+    assert.equal(readSettings(stopped.paths.settings).rolesProfilePending, undefined);
+
+    // The same where the naming itself finds no runtime.
+    const naming = bench(t, { programs: ['claude'], env: { STUB_PROFILE_SET_DEFAULT_UNREACHABLE: 'yes' } });
+    const again = setupOn(naming);
+    assert.equal(await again.connectRoles(null), 'default_unanswered');
+    delete naming.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE;
+    assert.equal(await again.connectRoles(null), 'named');
+    assert.equal(asked(naming, 'profile create').length, 1);
+
+    // And where the naming did not finish: killed at its limit, or never started.
+    const killed = bench(t, { programs: ['claude'] });
+    const cli = loggedCli(killed.cli, memoryLog());
+    let kills = 1;
+    const once = setupOn(killed, {
+        cli: { run: (args, options) => (args[1] === 'set-default' && kills-- > 0 ? Promise.resolve({ exit: -1, stdout: '', stderr: 'killed' }) : cli.run(args, options)) },
+    });
+    assert.equal(await once.connectRoles(null), 'default_unanswered');
+    assert.equal(await once.connectRoles(null), 'named');
+
+    // A profile made at an earlier start, its naming unanswered now: left to the next turn too.
+    const half = bench(t, { programs: ['claude'], env: { STUB_PROFILE_SET_DEFAULT_UNREACHABLE: 'yes' } });
+    writeSettings(half.paths.settings, { ...readSettings(half.paths.settings), rolesProfilePending: { name: 'claude-code', id: 'exp_01JD0000000000000000000000' } });
+    holdProfiles(half, [{ id: 'exp_01JD0000000000000000000000', name: 'claude-code', disabled: false, revision: { host: 'claude_code', program: 'claude' } }]);
+    const later = setupOn(half);
+    assert.equal(await later.connectRoles(null), 'default_unanswered');
+    delete half.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE;
+    assert.equal(await later.connectRoles(null), 'named');
+    assert.equal(asked(half, 'profile set-default').length, 2);
+});
+
+test('a naming the runtime refuses, or answers with another name, is unwritten, the mark and its id kept, and settles the run', async (t) => {
     // A success that answers a name other than the one asked is not taken for it.
     const other = bench(t, { programs: ['claude'], env: { STUB_PROFILE_SET_DEFAULT_ANSWERS: 'house' } });
-    assert.equal(await setupOn(other).connectRoles(null), 'default_unwritten');
+    const setup = setupOn(other);
+    assert.equal(await setup.connectRoles(null), 'default_unwritten');
     assert.deepEqual(readSettings(other.paths.settings).rolesProfilePending, { name: 'claude-code', id: profiles(other)[0]?.id });
+    assert.equal(await setup.connectRoles(null), 'settled');
+
+    // A default a JASON_ variable sets by the naming: refused setting_shadowed, nothing written; the next start finds it in
+    // force and lets the mark go.
+    const shadowed = bench(t, { programs: ['claude'] });
+    writeInstallationSettings(shadowed, { Roles: { MaxStdoutBytes: 1000 } });
+    const cli = loggedCli(shadowed.cli, memoryLog());
+    const first = setupOn(shadowed, {
+        cli: {
+            run: (args, options) => {
+                if (args[1] === 'set-default') shadowed.env.STUB_DEFAULT_IN_FORCE = 'house';
+                return cli.run(args, options);
+            },
+        },
+    });
+    assert.equal(await first.connectRoles(null), 'default_unwritten');
+    assert.deepEqual(installationSettings(shadowed), { Roles: { MaxStdoutBytes: 1000 } });
+    assert.deepEqual(readSettings(shadowed.paths.settings).rolesProfilePending, { name: 'claude-code', id: profiles(shadowed)[0]?.id });
+    assert.equal(await setupOn(shadowed).connectRoles(null), 'default_named');
+    assert.equal(readSettings(shadowed.paths.settings).rolesProfilePending, undefined);
+
+    // The profile gone by the naming: refused profile_not_found, the mark kept; the next start finds no profile and makes it.
+    const gone = bench(t, { programs: ['claude'] });
+    const goneCli = loggedCli(gone.cli, memoryLog());
+    const before = setupOn(gone, {
+        cli: {
+            run: (args, options) => {
+                if (args[1] === 'set-default') holdProfiles(gone, []);
+                return goneCli.run(args, options);
+            },
+        },
+    });
+    assert.equal(await before.connectRoles(null), 'default_unwritten');
+    assert.equal(existsSync(settingsFile(gone)), false);
+    assert.equal(readSettings(gone.paths.settings).rolesProfilePending?.name, 'claude-code');
+    assert.equal(await setupOn(gone).connectRoles(null), 'made');
+    assert.equal(asked(gone, 'profile set-default').length, 2);
+});
+
+test('a naming the runtime took and did not answer in time is never asked again blind: the next start reads it back', async (t) => {
+    const b = bench(t, { programs: ['claude'], env: { STUB_PROFILE_SET_DEFAULT_LOST: 'yes' } });
+    assert.equal(await setupOn(b).connectRoles(null), 'default_unwritten');
+    assert.deepEqual(readSettings(b.paths.settings).rolesProfilePending, { name: 'claude-code', id: profiles(b)[0]?.id }, 'the mark is kept');
+
+    delete b.env.STUB_PROFILE_SET_DEFAULT_LOST;
+    assert.equal(await setupOn(b).connectRoles(null), 'default_named', 'the next start lists first and finds the default in force');
+    assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined, 'and lets the mark go');
+    assert.equal(asked(b, 'profile set-default').length, 1, 'one naming in all');
 });
 
 test('a mark that cannot show the profile is the desktop\'s is let go and nothing is written: a lost answer, or a person\'s own profile of the same name', async (t) => {
