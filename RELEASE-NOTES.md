@@ -19,81 +19,97 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.44.0
+# Jason 0.45.0
 
-## What is new since 0.43.0
+## What is new since 0.44.0
 
-This release is about what the desktop's console asks of you. In Live it now shows the essentials, approvals and
-questions come to you in the agent's chat, and an approval is approved only after it has been read whole.
+This release is about what happens when you first start the desktop: an AI you connect now runs Jason's agents, the Demo
+opens at once as a sample page, and the console has a new look.
 
-- **Live shows the essentials.** In Live, the console's sidebar draws the brand, New GTM agent, Search, Needs you with
-  its count, Recent and Settings. Every other page is still reached by Search. An agent's page draws the tabs Chat
-  (inside the desktop), People, Inbox and Settings, and opens on People. Settings gains Models, the AI hosts and model
-  keys that Connect shows, and Runtime, the card that System shows. The Demo keeps the whole interface, and says so in its
-  strip and its start note: it is an example of what you can build on Jason, its data is samples, and nothing is sent.
-  The classic browser page is unchanged. See [the desktop](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md)
-  and [the browser UI](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/ui.md).
-- **Approvals and questions appear as cards in the agent's chat.** Under the conversation of an agent, its pending
-  approvals and questions are drawn as cards you can act on there: Approve, Edit for a message written as text, Reject
-  with an optional reason and Details for an approval, and the options or a free answer for a question. Only what the
-  runtime lists draws a card; nothing the AI writes in the chat does. A card leaves when the runtime no longer lists its
-  item, and a refused act keeps the runtime's code and words above the cards.
-- **An approval is approved only once it has been read whole.** On a card and on a row of Needs you alike, Approve waits
-  until the approval has been read in full, whatever its kind: a message, an invitation or an enrolment. Until then the
-  card or row says it is being read; if the read fails or does not answer within 30 seconds, it says so, with the
-  runtime's own words where the read failed, and the read is sent again at the next reload. A send that was doubted shows who doubted it and why,
-  above Approve. At the press, a message is checked against its work item, and one whose text changed since the approval
-  was asked is not approved.
-- **The agent's type in its header.** Beside the state badge, an agent's page says **Sequence** where a provider campaign
-  is pinned to the agent, and **Adaptive** where the agent has been started, no provider campaign is pinned and none is
-  being made, so that every message it sends is Jason's own. Otherwise, a draft included, it shows no type. Where the
-  label is not Sequence, the agent's first tab is named Paths instead of Sequence; its content is unchanged.
-- **A first message is short, and built on what is known about the person.** The personalizer role and the business
-  pack's campaign-launch skill carry one rule for a first message: build it on something that happened to the person or
-  that they said, never on a title or a company's name alone and never on the criteria a search drew the list by. With
-  little known, write a very short message that says who writes, why this person and asks one thing, with no interest,
-  familiarity or praise that nothing known supports. What is known decides what the message is built on, never its
-  length, and where you or a preference say how long a message is or what it holds, that holds. campaign-launch is now
-  version 3.1.0 and stays a draft.
-- **A crash's temporary settings file is swept, and never exported.** A writer that stopped between writing a temporary
-  copy of the settings and renaming it left that copy behind, secrets included. A start of the runtime now removes such
-  files, `settings.json.<id>.tmp` and, with the secrets kept apart, `secrets.json.<id>.tmp`, once they are ten minutes
-  old, and on Windows only when no program holds them (on Linux and macOS age alone decides); it logs only their counts. `jason export` never carries one, and `jason import` leaves
-  out one an older export carried, saying how many on stderr. See
+- **A new installation's agents run.** When an AI is connected in the desktop, Jason's roles (drafting, personalising,
+  answering) now run on it. In Live, where the installation has no execution profile at all and its settings name no
+  default one, the desktop makes one profile for the AI its chat runs on, `claude-code` or `codex`, and names it the
+  default, and Connect says so in one line beside that AI: "Your agents' roles run on Claude Code, by the execution
+  profile claude-code." Of Jason's settings it writes only one profile and one key, `Roles:DefaultExecutionProfile`, in
+  `~/.jason/config/settings.json`, which the runtime reads without a restart (while it works the desktop also keeps a
+  mark of its own, the profile's name and id, in its own settings, and removes it when done). An installation that already has a
+  profile, or already names a default, is not touched, and neither is one set up by hand. An AI reached by a model key
+  never gets a profile, since a profile holds no credential. If you install from the command line, the install guide
+  gives the two steps the desktop does for you: `jason profile create claude-code --host claude_code --program claude`,
+  then the line `"Roles": {"DefaultExecutionProfile": "claude-code"}` in the settings file. `jason status` now has an
+  optional check, `roles_launchable`, that says when no role can run and which of the two steps is missing. It never
+  decides `ready`, and it reads only the default profile: not one a work item, a campaign or a role names for itself.
+  See [the desktop](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md) and
   [the install guide](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/INSTALL.md).
+- **The Demo is a sample page.** The desktop's Demo opens at once on a new installation and shows an example of what
+  can be built on Jason. It runs no Jason behind it, sends nothing and reaches nothing: the page is shown sealed, so it
+  cannot reach the network, your installation or your disk, and what you do in it is not kept. Some of what it shows is
+  not in the product. The switch to Live is the one at the top of the window. Choosing Demo no longer starts a second
+  installation, and makes no folder of an installation. See
+  [the demo](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#the-demo).
+- **The console has a new look.** Every screen of the console now shares one palette, so People, Accounts, Settings,
+  an agent's tabs, Work items, System and Performance no longer look like another product beside it (in the light
+  theme; the dark theme and the classic browser page draw as before). The sidebar is wider, with its rows, counts and
+  icons redrawn, and the top strip sits to its right, with Demo | Live as one switch and a quieter Open in. The start
+  screen has the question centred over a box that grows with what you type, with the access mode and the model chosen
+  from menus, each saying what its choices do, in place of the browser's own selects, and one line under the box that
+  says what the mode lets the AI do. In the chat, the agent's words carry a small "Jason" label; an approval's Approve is
+  green and Reject red, a long message shows four lines with "Show the whole message" under them, and a question's
+  options are pills followed by "Something else…", which opens a box for an answer of your own. Nothing about deciding
+  has moved: an approval is still approved only once it has been read whole.
+- **On macOS the window has no title bar.** Its three buttons sit at the top left over the sidebar, and the window is
+  moved by the top strip and the top of the sidebar. So that it can be moved on every page it shows, the desktop adds a
+  small drag area of its own at the top left, over an older or custom console too. Windows and Linux keep their native
+  frame.
 
-## Fixed since 0.43.0
+## Fixed since 0.44.0
 
-- **Needs you showed Approve before an approval had been read, and showed no doubt.** In 0.43.0, every approval row on
-  Needs you offered Approve from the moment the list was drawn, with no check of a message against its work item, and a
-  doubt raised about a send was not shown there at all, even with Details open. A row now follows the rule above and
-  draws the doubt above Approve.
-- **The empty chat no longer promises approval in Full access.** A new chat says "Nothing written here reaches a person
-  without your approval." in Ask first, Plan only and Auto-edit, as before, and says nothing of the kind in Full access,
-  where the AI runs commands without asking.
-- **A person's `jason suppression add` is answered with the entry that was saved first.** When the runtime's own stop,
-  an opt-out or a bounce, put the same address on the do-not-contact register at the same instant, the add was answered
-  `500 internal_error`, marked retryable, for an address that was in fact stopped. It is now answered with the existing
-  entry and no second line in the journal.
-- **A notification's bounce count is counted by the database.** It used to read every provider event of the window into
-  memory, a window that grows while no notification reaches anybody. The count is the same.
+- **A new installation could not start any AI role.** Before this release, a new installation had no execution profile
+  and named no default one until a person made them, so the work of every AI role failed when it was claimed, with
+  `role_not_launchable`: nothing was drafted and no approval appeared after pressing Start, while `jason status` said
+  ready. The desktop now makes the profile, the status check now says when none can run, and the install guide gives the
+  two steps.
 
-## Upgrading from 0.43.0
+## Upgrading from 0.44.0
 
 Nothing stops, no setting is renamed and no database migration runs.
 
-- **The executable:** `jason update apply`, or run the install line again. After it, `jason skills update` brings the
-  two skills' rule on a first message, and `jason ui install` the console's Live sidebar, the agent's tabs, the cards and
-  the type in the header.
-- **The first start** sweeps the settings' stray temporary files described above, and logs how many it removed.
-- **The packages** are those of 0.43.0: reply 0.16.0, journal-forwarder 1.4.0, ntfy 1.0.3, slack 1.0.0 and
-  telegram 1.0.0.
+- **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
+  console's new look, and `jason status` shows the new optional check `roles_launchable`.
+- **The first Live start of the new desktop** with an AI connected makes the profile and writes the default described
+  above, where the installation has none of either. Where a profile exists, or a default is named, nothing changes, and
+  the desktop never replaces either. Without the desktop, `jason status` tells you the command and the line.
+- **The Demo** no longer uses the two folders the earlier Demo made, `~/.jason-demo` and `~/Jason-demo`. They stay on the
+  machine and nothing reads them. Remove What Jason Placed (the Jason menu and the tray, on macOS and Linux) and the
+  Windows uninstall take them off today; otherwise delete them by hand once nothing runs from them. A later release
+  removes them itself.
+- **The packages** are those of 0.44.0: reply 0.16.0, journal-forwarder 1.4.0, ntfy 1.0.3, slack 1.0.0 and
+  telegram 1.0.0, and the skills are unchanged.
 - **The desktop is a separate install,** as before: `jason update` does not install it. Download the installer or the
   disk image for your machine from this release, or let an installed desktop offer the update. This release's desktop
-  carries the console's changes above.
-- **From 0.42.x or earlier,** the notes of each release in between apply as well.
+  carries all of the changes above.
+- **From 0.43.x or earlier,** the notes of each release in between apply as well.
 
 ## Known issues
+
+The macOS window's new frame was not looked at on a Mac before this release: it is held by tests and by a reading of
+the type definitions of the Electron the desktop carries, and the Demo's macOS window, with its own band at the top, was not seen either. If the window
+cannot be moved there, open the console in a browser tab instead, with Open in's Browser or `jason ui open`, and tell
+us; Windows and Linux are not affected.
+
+On macOS, a console older than the desktop, or a custom one under `<data>/ui/custom`, draws its strip across the whole
+top of the window, so its first words sit under the window's buttons. The window still moves and no control is lost;
+`jason ui install` brings the current console.
+
+In the Demo, the page's own controls that would take you out of it, a link or a form, say, do nothing: the page is
+sealed. Use the switch at the top for Live.
+
+In the chat, the four-line clamp of a long message does not hold Approve: Approve is live with four lines shown, as it
+is when the whole message is open, once the approval has been read whole.
+
+The status check `roles_launchable` reads the default execution profile alone. It does not look at a profile a work
+item, a campaign's policy or a role's policy names, nor at an entry command, so it can say `ok` for a role that is
+launched on another profile that fails.
 
 A Needs you row can still be approved without opening the message: its subject and body show only in Details. Approve
 is live once the approval has been read whole, whether or not Details was opened.
@@ -201,7 +217,6 @@ the case to avoid.
 `jason session open --setup` adds the plugins folder only for Claude Code and Codex. Another host opens at the role
 skills folder alone, and reaches the plugins folder by the path `jason status` prints.
 
-The demo has limits: it is email only, with no LinkedIn channel; it raises no question; a person whose message waits for your approval never answers it, because a reply is attributed once, when it is stored; and no AI role runs in the demo's runtime, so no reply there is judged, and Interested, Meetings booked and **Replies by category** have nothing to count. The sample's story began when the release was built, with no past before it, so the Dashboard's 30 days hold it for thirty days after. Where the sample is placed, the replies the story wrote are already in when the demo opens; where it is made at the start instead, its story starts that day and its replies arrive within minutes. After that, a kept demo shows nothing new of the story until **Start the Demo Over**. In a placed demo the Dashboard's daily trends read ±0 at first, since nothing of the story falls in the last 24 hours.
 
 Open in's **Browser** hands the link to your browser as an argument. If the browser was not already running, its main
 process keeps the link, with the pairing code in it, in its arguments for its whole life, where another program of your
@@ -293,7 +308,6 @@ Not yet seen on a real machine:
 - On macOS, Remove What Jason Placed and the LaunchAgent; on every system, how the icon looks in the menu, the dock and the taskbar.
 - Open in with real editors, terminals and file managers, and Continue this chat with a real Claude Code or Codex: the tests run against stand-ins, and the words that continue a conversation were read from each program's own help.
 - The console in a tab of a real browser that the desktop opened: the page's tests run against a stand-in for the desktop's side, and the desktop's against a test client.
-- The demo placed from the release's archive on a Mac and on Linux: the placing has been timed on Windows alone.
 - Connect's list of MCP servers against a real Claude Code's and a real Codex's settings: the tests plant their own
   files in a temporary home.
 - A bounce on a real Reply account: the package's reading of Reply's change feed is tested against a stand-in for
