@@ -1168,7 +1168,11 @@ body,
 .jc-console .needs-pane.q .needs-title,
 .jc-console .needs-pane .ui-opts,
 .jc-console .needs-pane .needs-said,
-.jc-console .needs-pane .needs-edit {
+.jc-console .needs-pane .needs-edit,
+.jc-console .needs-pane .send-doubts,
+.jc-console .needs-pane .ask-a,
+.jc-console .needs-pane .ask-w,
+.jc-console .needs-pane > .note {
     max-width: 880px;
 }
 .jc-console .painted,

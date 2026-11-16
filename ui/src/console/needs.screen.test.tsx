@@ -107,6 +107,10 @@ describe('the sheet of Needs you', () => {
         '.jc-console .needs-pane .ui-opts',
         '.jc-console .needs-pane .needs-said',
         '.jc-console .needs-pane .needs-edit',
+        '.jc-console .needs-pane .send-doubts',
+        '.jc-console .needs-pane .ask-a',
+        '.jc-console .needs-pane .ask-w',
+        '.jc-console .needs-pane > .note',
     ];
 
     it('draws Needs you across the whole area, its list at one width beside a pane that takes the rest', () => {
@@ -141,6 +145,19 @@ describe('the sheet of Needs you', () => {
         await waitFor(() => expect(pane().querySelector('.ui-opts')).toBeTruthy());
         expect(capped(pane().querySelector('.needs-title')!)).toBe(true);
         expect(capped(pane().querySelector('.ui-opts')!)).toBe(true);
+        expect(capped(pane().querySelector('.ask-a')!)).toBe(true);
+    });
+
+    it('caps the doubt shown before Approve', async () => {
+        await renderConsole(
+            new FakeApi()
+                .answer('approval.list', 'approval.list/needs-inbox')
+                .answer('decision.list', 'decision.list/needs-questions')
+                .answer('approval.get', 'approval.get/park-doubted', 'approval.get/other-pending'),
+        );
+        await waitFor(() => expect(document.querySelector('.needs-pane .send-doubts')).toBeTruthy());
+        const doubt = document.querySelector('.needs-pane .send-doubts')!;
+        expect(read.some((selector) => doubt.matches(selector))).toBe(true);
     });
 });
 
