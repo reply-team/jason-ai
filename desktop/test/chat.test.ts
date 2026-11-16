@@ -1317,7 +1317,7 @@ test('the instruction text holds the sixteen rules in plain words, and says noth
     // Starting and resuming a campaign are the person's own acts, at the top of the campaign's chat; the chat says once that the work is ready.
     assert.equal(
         rules[11],
-        "12. Starting a campaign, which the window calls an agent, and resuming one, is the person's own act. When the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's chat, or Resume for a paused one. Never try to start or resume it, and never say it has started unless `jason campaign get` answers the status `active`. Archiving one is the person's own act too, and it cannot be undone: they archive it at the bottom of the agent's Settings tab, which says first what the archive cancels. Never try to archive one; when they ask, say where they do it.",
+        "12. Starting a campaign, which the window calls an agent, and resuming one, is the person's own act. When the plan is agreed and its work is queued, say once that it is ready and that they press Start at the top of the campaign's chat, or Resume for a paused one. Never try to start or resume it, and never say it has started unless `jason campaign get` answers the status `active`. Archiving one is the person's own act too, and it cannot be undone: they archive it at the bottom of the agent's Settings tab in Jason Desktop's window, which says first what the archive cancels. Never try to archive one; when they ask, say where they do it.",
     );
     // Who writes and how it sounds are set in Settings; the chat reads them, never asks for them or sets them, and only a missing name holds work.
     assert.equal(
