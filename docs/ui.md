@@ -106,8 +106,12 @@ that width and scrolls sideways, and the switch stands in a strip of its own abo
 
 The addresses the page holds are counted in [`desktop/demo/addresses.txt`](../desktop/demo/addresses.txt), each with why
 it is inert there; the UI's guards and the desktop's tests hold the page to that list exactly. What keeps them inert is
-the frame: a hostile page put where the demo page stands tries every way out it can name, and each must be refused (the
-sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium, Firefox and WebKit, and nowhere else.
+the content policy the page is served under, which in a frame is the one thing between its script and the network: a
+hostile page put where the demo page stands aims every way out it can name (a fetch, an image, a WebSocket, a form, a
+pop-up, the tab's address, the frame's own move) at a server on the loopback that answers anything, and at a file the UI
+serves, and the server must hear nothing and the file must not be reached; it reads nothing of the console's storage or
+of the page above it either (the sealed probe, `ui/tests/e2e/probe/`). It runs in each pull request's CI, in Chromium,
+Firefox and WebKit, and nowhere else.
 
 ## Paired browsers
 

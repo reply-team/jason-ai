@@ -149,7 +149,9 @@ demo page's addresses are held to the counted list beside it (`tests/guards/seal
 of it on every push.
 
 **The sealed probe.** `tests/e2e/probe/` puts a hostile page where the demo page stands and has the console show it in
-its frame; its script tries every way out it can name, and each must be refused. It runs in the CI job alone, which sets
+its frame; every way out it can name aims at a witness, a server of the test's own on the loopback, or at a file the
+UI serves, and the witness must hear nothing and the file must not be reached, which only the sealed content policy
+ensures; a probe that stays green with that policy's network rules removed proves nothing. It runs in the CI job alone, which sets
 `JASON_SEALED_PROBE=1`, in Chromium, Firefox and WebKit; without that variable `playwright test` leaves it out.
 
 **Running.** `npm test` (unit and screen), `npm run e2e` (needs `npm run build`, a runtime built from its source in Release, or `JASON_EXE` naming an installed `jason`, and `npx playwright install chromium` once; the probe runs in CI, not on a person's machine).

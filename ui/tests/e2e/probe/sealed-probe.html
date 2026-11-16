@@ -4,10 +4,12 @@
         <meta charset="utf-8" />
         <title>Sealed probe</title>
         <!--
-A hostile stand-in for a page under sealed/: the browser smoke places it where the demo page stands and opens it the way
-the console does, in its frame. Its script tries every way out of the seal it can name, and writes what happened to each
-into its own document, one item per try: "refused" when the try got nothing, "reached" when it got something it must
-not have. The smoke reads the items; it never trusts a try's own word beyond that.
+A hostile stand-in for a page under sealed/: the browser smoke places it where the demo page stands, with the address of
+a witness, a server of the smoke's own on the loopback, in place of __WITNESS_ORIGIN__. Every way out of the page aims at
+the witness, so what decides a try is whether the witness heard it, never the page's own word: the policy is the only
+thing between the page and an address that answers. Two tries aim at the runtime's own address, at a file the UI serves,
+which answers as well. The page also writes what each try came back with, one item per try, which the smoke reads for the
+tries that stay inside the page: its origin, its storage and the page above it.
 -->
         <style>
             body {
@@ -26,6 +28,7 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
         <script>
             (function () {
                 'use strict';
+                var witness = '__WITNESS_ORIGIN__';
                 var list = document.getElementById('outcomes');
                 function say(name, outcome, detail) {
                     var item = document.createElement('li');
@@ -47,7 +50,7 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                         say(name, 'refused', nameOf(error));
                     }
                 }
-                /** A try that must reject, throw, or answer with nothing. */
+                /** A try that must reject or throw: an answer of any kind, an opaque one included, is what it reached. */
                 function asyncTry(name, act) {
                     var settled;
                     try {
@@ -58,15 +61,13 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                     }
                     return settled.then(
                         function (got) {
-                            if (got === undefined || got === null || got === '') say(name, 'refused', 'nothing');
-                            else
-                                say(
-                                    name,
-                                    'reached',
-                                    typeof got === 'object' && 'status' in got
-                                        ? 'status ' + got.status
-                                        : String(got).slice(0, 80),
-                                );
+                            say(
+                                name,
+                                'reached',
+                                got && typeof got === 'object' && 'type' in got
+                                    ? 'a ' + got.type + ' answer'
+                                    : String(got),
+                            );
                         },
                         function (error) {
                             say(name, 'refused', nameOf(error));
@@ -100,8 +101,16 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                         }, ms);
                     });
                 }
+                /** A try whose outcome the witness and the smoke's own listeners decide: the page only says it was made. */
+                function tried(name, act) {
+                    try {
+                        act();
+                        say(name, 'tried');
+                    } catch (error) {
+                        say(name, 'tried', nameOf(error));
+                    }
+                }
 
-                var api = 'http://' + location.host;
                 // Opened by itself the page is its own parent and top: the tries of a page above it are no tries, and moving the top
                 // would move the probe itself away before it is read.
                 var framed = self !== top;
@@ -109,6 +118,8 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                     if (framed) syncTry(name, act);
                     else say(name, 'not-framed');
                 }
+
+                // Inside the page: its origin and what it may read.
                 syncTry('origin', function () {
                     return self.origin === 'null' ? null : self.origin;
                 });
@@ -130,28 +141,33 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                 framedTry('parent.location', function () {
                     return parent.location.href;
                 });
-                framedTry('top.location', function () {
-                    top.location.href = api + '/ui/#/attention';
-                    return top.location.href;
+
+                // Out of the page, at the witness: the witness hearing any of these is the seal broken.
+                if (framed)
+                    tried('witness top', function () {
+                        top.location.href = witness + '/top';
+                    });
+                else say('witness top', 'not-framed');
+                tried('witness window.open', function () {
+                    window.open(witness + '/popup', '_blank');
                 });
-                syncTry('window.open', function () {
-                    return window.open(api + '/ui/', '_blank');
+                tried('witness form', function () {
+                    var form = document.createElement('form');
+                    form.method = 'post';
+                    form.action = witness + '/form';
+                    document.body.appendChild(form);
+                    form.submit();
                 });
-                syncTry('alert', function () {
+                // Decided outside the page, by the smoke's own listeners: a dialog shown, a download begun.
+                tried('alert', function () {
                     window.alert('probe');
-                    return null;
                 });
-                syncTry('download', function () {
+                tried('download', function () {
                     var link = document.createElement('a');
                     link.href = 'data:text/plain,probe';
                     link.download = 'probe.txt';
                     document.body.appendChild(link);
                     link.click();
-                    return null;
-                });
-                framedTry('postMessage', function () {
-                    parent.postMessage({ probe: 'token?' }, '*');
-                    return null;
                 });
 
                 Promise.all([
@@ -166,51 +182,17 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                             };
                         });
                     }),
-                    asyncTry('fetch API', function () {
-                        return fetch(api + '/v1/system.info', { method: 'POST', body: '{}' });
+                    asyncTry('witness fetch', function () {
+                        return fetch(witness + '/fetch');
                     }),
-                    asyncTry('fetch API with a bearer', function () {
-                        return fetch(api + '/v1/system.info', {
-                            method: 'POST',
-                            body: '{}',
-                            headers: { Authorization: 'Bearer guessed' },
-                        });
-                    }),
-                    asyncTry('fetch journal stream', function () {
-                        return fetch(api + '/v1/journal.stream');
-                    }),
-                    asyncTry('fetch pairing door', function () {
-                        return fetch(api + '/ui/session', { method: 'POST', body: '{}' });
-                    }),
-                    asyncTry('fetch bridge', function () {
-                        return fetch('http://127.0.0.1:1/call', { method: 'POST', body: '{}' });
-                    }),
-                    asyncTry('fetch outside', function () {
-                        return fetch('https://outside.invalid/');
-                    }),
-                    asyncTry('fullscreen', function () {
-                        return document.documentElement.requestFullscreen();
-                    }),
-                    asyncTry('camera', function () {
-                        return navigator.mediaDevices.getUserMedia({ video: true });
-                    }),
-                    asyncTry('clipboard', function () {
-                        return navigator.clipboard.readText();
+                    asyncTry('witness fetch no-cors', function () {
+                        return fetch(witness + '/no-cors', { mode: 'no-cors' });
                     }),
                     eventTry(
-                        'websocket',
-                        function () {
-                            return new WebSocket('ws://' + location.host + '/v1/journal.stream');
-                        },
-                        'open',
-                        'error',
-                        3000,
-                    ),
-                    eventTry(
-                        'image outside',
+                        'witness image',
                         function () {
                             var image = new Image();
-                            image.src = 'https://outside.invalid/x.png';
+                            image.src = witness + '/image.png';
                             return image;
                         },
                         'load',
@@ -218,18 +200,28 @@ not have. The smoke reads the items; it never trusts a try's own word beyond tha
                         3000,
                     ),
                     eventTry(
-                        'form to the pairing door',
+                        'witness websocket',
                         function () {
-                            var form = document.createElement('form');
-                            form.method = 'post';
-                            form.action = api + '/ui/session';
-                            document.body.appendChild(form);
-                            form.submit();
-                            return form;
+                            return new WebSocket(witness.replace(/^http/, 'ws') + '/socket');
                         },
-                        'reached-never',
-                        'refused-never',
-                        500,
+                        'open',
+                        'error',
+                        3000,
+                    ),
+                    // At the runtime's own address, a file the UI serves to anyone: only the policy stands between the page and it.
+                    asyncTry('own fetch no-cors', function () {
+                        return fetch('/ui/favicon.svg', { mode: 'no-cors' });
+                    }),
+                    eventTry(
+                        'own image',
+                        function () {
+                            var image = new Image();
+                            image.src = '/ui/favicon.svg';
+                            return image;
+                        },
+                        'load',
+                        'error',
+                        3000,
                     ),
                 ]).then(function () {
                     document.body.setAttribute('data-done', '1');
