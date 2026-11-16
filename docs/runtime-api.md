@@ -740,7 +740,7 @@ for. A manifest with any other member makes the directory not a build, and the r
 
 The runtime serves files of these kinds and no other: `.html`, `.js`, `.css`, `.json`, `.map`, `.svg`, `.png`, `.ico`,
 `.woff2`, `.woff` and `.txt` — pages, scripts, styles, data, source maps, SVG, PNG and ICO images, WOFF and WOFF2
-fonts, and plain text, each by the exact name its directory holds. Every answer carries
+fonts, and plain text, each by the exact name its directory holds. Every answer to a GET carries
 `Content-Security-Policy: default-src 'self'; connect-src 'self' http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'`, but under `/ui/sealed/`,
 where a build keeps content the UI does not trust and every answer carries a policy that leaves it unable to act
 ([docs/ui.md](ui.md), "Files the UI does not trust"); and the runtime reads the directory at every request, so a build

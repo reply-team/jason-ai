@@ -22,4 +22,21 @@ public static class UiAssetLayout
     /// build holds it and whatever the file is called.
     /// </summary>
     public const string SealedDirectory = "sealed";
+
+    /// <summary>
+    /// The one kind of file under <see cref="SealedDirectory"/>, matched exactly: a page. A sealed page loads no file, and a
+    /// script or a style there could serve only the UI itself, which would run it with its own rights.
+    /// </summary>
+    public const string SealedPageExtension = ".html";
+
+    /// <summary>Whether a relative path of the layout is under <see cref="SealedDirectory"/> and so must be a page.</summary>
+    public static bool IsSealed(string relative)
+    {
+        ArgumentNullException.ThrowIfNull(relative);
+        return relative.StartsWith(SealedDirectory + "/", StringComparison.Ordinal);
+    }
+
+    /// <summary>Whether a path of the layout may hold a file: anything outside <see cref="SealedDirectory"/>, and a page inside it.</summary>
+    public static bool AdmitsKind(string relative) =>
+        !IsSealed(relative) || relative.EndsWith(SealedPageExtension, StringComparison.Ordinal);
 }

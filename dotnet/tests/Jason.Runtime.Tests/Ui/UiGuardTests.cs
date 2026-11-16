@@ -64,15 +64,21 @@ public class UiGuardTests(UiGuardTests.SharedRuntime shared) : IClassFixture<UiG
         Assert.Contains("\"ui_not_installed\"", body, StringComparison.Ordinal);
     }
 
-    /// <summary>With no UI directory a path under <c>sealed/</c> is answered as any other: the same refusal, and nothing made on disk.</summary>
+    /// <summary>
+    /// With no UI directory a path under <c>sealed/</c> gets the same refusal as any other, under the set its path
+    /// chooses, and nothing is made on disk.
+    /// </summary>
     [Fact]
-    public async Task With_no_ui_directory_a_path_under_sealed_answers_as_any_other_path()
+    public async Task With_no_ui_directory_a_path_under_sealed_gets_the_same_refusal_under_its_own_set()
     {
-        var (status, body, _) = await UiServingTests.GetAsync(shared.Api, "/ui/sealed/page.html");
-        var (_, other, _) = await UiServingTests.GetAsync(shared.Api, "/ui/page.html");
+        var (status, body, headers) = await UiServingTests.GetAsync(shared.Api, "/ui/sealed/page.html");
+        var (_, other, otherHeaders) = await UiServingTests.GetAsync(shared.Api, "/ui/page.html");
 
         Assert.Equal(HttpStatusCode.NotFound, status);
         Assert.Equal(other, body);
+        Assert.Equal(UiFiles.SealedContentSecurityPolicy, headers["Content-Security-Policy"]);
+        Assert.Equal(UiFiles.ContentSecurityPolicy, otherHeaders["Content-Security-Policy"]);
+        Assert.False(otherHeaders.ContainsKey("Permissions-Policy"));
         Assert.Contains("\"ui_not_installed\"", body, StringComparison.Ordinal);
         Assert.False(Directory.Exists(shared.Api.Paths.UiDirectory), "the runtime made a ui directory nobody asked for");
     }

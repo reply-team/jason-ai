@@ -29,10 +29,10 @@ public sealed class UiModule(JasonPaths paths)
 
     /// <summary>
     /// The file a request for <paramref name="relative"/> is answered with, or null: nothing outside the directory, no
-    /// hidden file, no directory, no index fallback. An empty path is the index. A file is found only by the names its
-    /// directories hold, segment by segment and ordinal, never by another spelling the disk takes for the same file
-    /// (another case, a trailing dot or space, a stream of a directory), so the path the headers were chosen by is the
-    /// path of the file served.
+    /// hidden file, no directory, no index fallback, and under <c>sealed/</c> nothing but a page. An empty path is the
+    /// index. A file is found only by the names its directories hold, segment by segment and ordinal, never by another
+    /// spelling the disk takes for the same file (another case, a trailing dot or space, a stream of a directory), so the
+    /// path the headers were chosen by is the path of the file served.
     /// </summary>
     public string? Resolve(string relative)
     {
@@ -48,15 +48,18 @@ public sealed class UiModule(JasonPaths paths)
             relative = UiAssetLayout.IndexFile;
         }
 
-        if (relative.Contains('\\', StringComparison.Ordinal) || Path.IsPathRooted(relative)
+        if (!UiAssetLayout.AdmitsKind(relative) || relative.Contains('\\', StringComparison.Ordinal) || Path.IsPathRooted(relative)
             || relative.Split('/').Any(segment => segment.Length == 0 || segment.StartsWith('.')))
         {
             return null;
         }
 
         var root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
-        return full.StartsWith(root, StringComparison.Ordinal) && File.Exists(full) && NamedAsHeld(root, relative.Split('/'), Names) ? full : null;
+        // The path the system builds must be the root and the request as written: a name it would rewrite (a trailing dot
+        // or space, which Windows drops) is never served, whatever the directory lists.
+        var written = root + relative.Replace('/', Path.DirectorySeparatorChar);
+        var full = Path.GetFullPath(written);
+        return string.Equals(full, written, StringComparison.Ordinal) && File.Exists(full) && NamedAsHeld(root, relative.Split('/'), Names) ? full : null;
     }
 
     /// <summary>

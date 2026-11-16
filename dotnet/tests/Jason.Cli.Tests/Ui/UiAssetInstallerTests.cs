@@ -57,17 +57,17 @@ public sealed class UiAssetInstallerTests : IDisposable
         Assert.Equal("mine", File.ReadAllText(Path.Combine(Paths.UiCustomDirectory, "index.html")));
     }
 
-    /// <summary>A build may hold files under <c>sealed/</c>, at any depth, beside its root and <c>assets/</c>.</summary>
+    /// <summary>A build may hold pages under <c>sealed/</c>, at any depth, beside its root and <c>assets/</c>.</summary>
     [Fact]
     public void A_build_may_hold_files_under_the_sealed_directory()
     {
-        var zip = Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("sealed/page.html", "page"), ("sealed/nested/part.js", "part"));
+        var zip = Zip(("index.html", "x"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}"), ("sealed/page.html", "page"), ("sealed/nested/part.html", "part"));
 
         var installed = Install(zip);
 
         Assert.Equal(4, installed.FileCount);
         Assert.Equal("page", File.ReadAllText(Path.Combine(Paths.UiDefaultDirectory, UiAssetLayout.SealedDirectory, "page.html")));
-        Assert.Equal("part", File.ReadAllText(Path.Combine(Paths.UiDefaultDirectory, UiAssetLayout.SealedDirectory, "nested", "part.js")));
+        Assert.Equal("part", File.ReadAllText(Path.Combine(Paths.UiDefaultDirectory, UiAssetLayout.SealedDirectory, "nested", "part.html")));
     }
 
     [Theory]
@@ -81,6 +81,11 @@ public sealed class UiAssetInstallerTests : IDisposable
     [InlineData("SEALED/page.html")]
     [InlineData("sealed-not/page.html")]
     [InlineData("sealed/con.html")]
+    [InlineData("sealed/script.js")]
+    [InlineData("sealed/style.css")]
+    [InlineData("sealed/nested/part.js")]
+    [InlineData("sealed/page.HTML")]
+    [InlineData("sealed/page")]
     public void An_entry_that_is_not_a_file_of_a_build_refuses_the_whole_asset_before_anything_changes(string entry)
     {
         Install(Zip(("index.html", "keep"), ("manifest.json", "{\"version\":\"0.10.0\",\"api_version\":\"v1\"}")));

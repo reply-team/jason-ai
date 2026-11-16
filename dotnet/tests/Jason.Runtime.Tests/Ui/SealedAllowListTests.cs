@@ -72,9 +72,9 @@ public class SealedAllowListTests
         var source = Source();
         var function = Regex.Match(source, @"export function demoHeaders\(\)[^{]*\{(?<body>.*?)\n\}", RegexOptions.Singleline);
         Assert.True(function.Success, "desktop/src/demo-page.ts has no demoHeaders");
-        var desktop = Regex.Matches(function.Groups["body"].Value, @"'(?<name>[A-Za-z-]+)':\s*'(?<value>[^']*)'")
-            .ToDictionary(match => match.Groups["name"].Value, match => match.Groups["value"].Value, StringComparer.Ordinal);
+        var desktop = Pairs(function.Groups["body"].Value);
         Assert.True(desktop.Count >= 5, $"read {desktop.Count} headers of the desktop's seal, fewer than it has");
+        Assert.Empty(Unread(function.Groups["body"].Value));
         Assert.Contains("'Content-Security-Policy': demoPolicy,", function.Groups["body"].Value, StringComparison.Ordinal);
         Assert.Equal("same-origin", desktop["Cross-Origin-Opener-Policy"]);
 
@@ -82,5 +82,45 @@ public class SealedAllowListTests
         var ours = UiFiles.HeadersFor("sealed/page.html").Where(header => header.Key is not ("Content-Security-Policy" or "Permissions-Policy")).OrderBy(header => header.Key, StringComparer.Ordinal);
         Assert.Equal(theirs, ours);
         Assert.DoesNotContain(UiFiles.HeadersFor("sealed/page.html"), header => header.Key == "Cross-Origin-Opener-Policy");
+    }
+
+    /// <summary>
+    /// The guard reads every key of the desktop's headers, so a header written another way, in double quotes or computed,
+    /// is a header it did not read, and red, never a header that stays out of the comparison.
+    /// </summary>
+    [Fact]
+    public void A_desktop_header_written_another_way_is_one_the_guard_did_not_read()
+    {
+        const string standIn = """
+                return {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Content-Security-Policy': demoPolicy,
+                    'Permissions-Policy': deniedFeatures.map((feature) => `${feature}=()`).join(', '),
+                    'Referrer-Policy': 'no-referrer',
+                    "X-Frame-Options": "DENY",
+                    'Cross-Origin-Embedder-Policy': embedder(),
+                    Origin_Agent_Cluster: '?1',
+                };
+            """;
+
+        Assert.Equal(["Content-Type", "Referrer-Policy"], Pairs(standIn).Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(["Cross-Origin-Embedder-Policy", "Origin_Agent_Cluster", "X-Frame-Options"], Unread(standIn).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>The headers a body names as a single-quoted name and a single-quoted value.</summary>
+    private static Dictionary<string, string> Pairs(string body) =>
+        Regex.Matches(body, @"'(?<name>[A-Za-z-]+)':\s*'(?<value>[^']*)'")
+            .ToDictionary(match => match.Groups["name"].Value, match => match.Groups["value"].Value, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Every key the body names, however written, that is neither a pair <see cref="Pairs"/> read nor one of the two
+    /// headers the guard compares by their own lists.
+    /// </summary>
+    private static List<string> Unread(string body)
+    {
+        var read = Pairs(body);
+        return [.. Regex.Matches(body, @"(?m)^\s*(?:'(?<name>[^']+)'|""(?<name>[^""]+)""|(?<name>[A-Za-z_$][\w$-]*))\s*:")
+            .Select(match => match.Groups["name"].Value)
+            .Where(name => !read.ContainsKey(name) && name is not ("Content-Security-Policy" or "Permissions-Policy"))];
     }
 }

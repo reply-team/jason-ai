@@ -201,7 +201,7 @@ public class UiServingTests
     private static readonly string[] Transport = ["Date", "Server", "Content-Type", "Content-Length", "Last-Modified", "Accept-Ranges", "ETag", "Transfer-Encoding"];
 
     /// <summary>
-    /// A file under <c>sealed/</c>, at any depth and of any kind, is answered with the sealed set and nothing of the
+    /// A page under <c>sealed/</c>, at any depth, is answered with the sealed set and nothing of the
     /// console's: opened by itself (a document request) or framed, the same headers, since the server cannot tell and
     /// does not ask. A file at the root or under <c>assets/</c> keeps the console's set and no feature policy.
     /// </summary>
@@ -217,7 +217,7 @@ public class UiServingTests
             UiBuild.WriteSealed(paths.UiDefaultDirectory);
         });
 
-        foreach (var path in (string[])["/ui/sealed/page.html", "/ui/sealed/nested/part.js"])
+        foreach (var path in (string[])["/ui/sealed/page.html", "/ui/sealed/nested/part.html"])
         {
             var (status, body, headers) = await GetAsync(api, path, destination);
             Assert.Equal(HttpStatusCode.OK, status);
@@ -255,8 +255,8 @@ public class UiServingTests
     [InlineData("/ui/Sealed/page.html", "404")]
     [InlineData("/ui/SEALED/page.HTML", "404")]
     [InlineData("/ui/sealed/PAGE.HTML", "404")]
-    [InlineData("/ui/Sealed/nested/part.js", "404")]
-    [InlineData("/ui/sealed/Nested/part.js", "404")]
+    [InlineData("/ui/Sealed/nested/part.html", "404")]
+    [InlineData("/ui/sealed/Nested/part.html", "404")]
     [InlineData("/ui/sealed./page.html", "404")]
     [InlineData("/ui/sealed/page.html.", "404")]
     [InlineData("/ui/sealed%20/page.html", "404")]
@@ -273,6 +273,17 @@ public class UiServingTests
     [InlineData("/ui//sealed/page.html", "404")]
     [InlineData("/ui/sealed%5Cpage.html", "404")]
     [InlineData("/ui/Sealed%5Cpage.html", "404")]
+    [InlineData("/ui/sealed/script.js", "404 sealed")]
+    [InlineData("/ui/sealed/style.css", "404 sealed")]
+    [InlineData("/ui/sealed", "404 console")]
+    [InlineData("/ui/sealed/", "404 sealed")]
+    [InlineData("/ui/sealed%252Fpage.html", "404")]
+    [InlineData("/ui/sealed%252e%252e/index.html", "404")]
+    [InlineData("/ui/con/page.html", "404")]
+    [InlineData("/ui/sealed/nul", "404")]
+    [InlineData("/ui/sealed/nul.html", "404")]
+    [InlineData("/ui/sealed/%2e%2e/index.html", "console")]
+    [InlineData("/ui/s%65aled/page.html", "sealed")]
     [InlineData("/ui/sealed/%2e/page.html", "sealed")]
     [InlineData("/ui/assets/%2e%2e/sealed/page.html", "sealed")]
     [InlineData("/ui/sealed/page.html", "sealed")]
@@ -288,16 +299,109 @@ public class UiServingTests
         });
 
         var (status, body, headers) = await GetAsync(api, path);
-        if (answer == "sealed")
+        switch (answer)
         {
-            Assert.Equal(HttpStatusCode.OK, status);
-            Assert.Contains("sealed content", body, StringComparison.Ordinal);
-            AssertSealed(headers, path);
-            return;
+            case "sealed":
+                Assert.Equal(HttpStatusCode.OK, status);
+                Assert.Contains("sealed content", body, StringComparison.Ordinal);
+                AssertSealed(headers, path);
+                return;
+            case "console":
+                Assert.Equal(HttpStatusCode.OK, status);
+                Assert.Contains("<title>Jason · default</title>", body, StringComparison.Ordinal);
+                Assert.Equal(Csp, headers["Content-Security-Policy"]);
+                return;
         }
 
         Assert.True(status == HttpStatusCode.NotFound, $"{path} answered {(int)status} under {headers.GetValueOrDefault("Content-Security-Policy")}");
         Assert.DoesNotContain("sealed content", body, StringComparison.Ordinal);
+        if (answer == "404 sealed")
+        {
+            AssertSealed(headers, path);
+        }
+        else if (answer == "404 console")
+        {
+            Assert.Equal(Csp, headers["Content-Security-Policy"]);
+        }
+    }
+
+    /// <summary>
+    /// A request that is no plain GET of the runtime's own pages, a HEAD or a request naming another origin, is answered
+    /// outside the files' route: never with a sealed file's bytes.
+    /// </summary>
+    [Theory]
+    [InlineData("HEAD", null)]
+    [InlineData("GET", "http://example.invalid")]
+    [InlineData("GET", "null")]
+    public async Task A_head_or_a_foreign_origin_gets_no_bytes_of_a_sealed_file(string method, string? origin)
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+            UiBuild.WriteSealed(paths.UiDefaultDirectory);
+        });
+
+        var (status, body, headers) = await GetAsync(api, "/ui/sealed/page.html", method: new HttpMethod(method), origin: origin);
+        Assert.NotEqual(HttpStatusCode.OK, status);
+        Assert.DoesNotContain("sealed content", body, StringComparison.Ordinal);
+        Assert.NotEqual("text/html; charset=utf-8", headers.GetValueOrDefault("Content-Type"));
+    }
+
+    /// <summary>
+    /// The served build is the one directory the runtime chose, never a file of the other: with a custom build that has no
+    /// <c>sealed/</c> active, the default's sealed page is a 404 under the sealed set.
+    /// </summary>
+    [Fact]
+    public async Task A_sealed_page_of_the_build_not_served_is_not_served()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+            UiBuild.WriteSealed(paths.UiDefaultDirectory);
+            UiBuild.Write(paths.UiCustomDirectory, marker: "custom");
+        });
+
+        var (index, indexBody, _) = await GetAsync(api, "/ui/");
+        Assert.Equal(HttpStatusCode.OK, index);
+        Assert.Contains("<title>Jason · custom</title>", indexBody, StringComparison.Ordinal);
+
+        var (status, body, headers) = await GetAsync(api, "/ui/sealed/page.html");
+        Assert.Equal(HttpStatusCode.NotFound, status);
+        Assert.DoesNotContain("sealed content", body, StringComparison.Ordinal);
+        AssertSealed(headers, "/ui/sealed/page.html");
+    }
+
+    /// <summary>
+    /// A name the system rewrites is not served: a directory <c>sealed.</c> placed beside <c>sealed/</c> (on Windows
+    /// only through the long-path prefix, which keeps the trailing dot) is listed by that name, while the path built from
+    /// it is taken for <c>sealed/</c>; the file is served only where the path built is the root and the request, as
+    /// written, so this is a 404 and never a sealed page under the console's set.
+    /// </summary>
+    [Fact]
+    public async Task A_name_the_system_rewrites_is_not_served()
+    {
+        string? placed = null;
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, prepare: paths =>
+        {
+            File.WriteAllText(paths.UserSettingsFile, RuntimeApiFixture.DispatcherOff);
+            UiBuild.Write(paths.UiDefaultDirectory);
+            UiBuild.WriteSealed(paths.UiDefaultDirectory);
+            placed = Path.Combine(Path.GetFullPath(paths.UiDefaultDirectory), "sealed.");
+            Directory.CreateDirectory(OperatingSystem.IsWindows() ? @"\\?\" + placed : placed);
+        });
+
+        try
+        {
+            var (status, body, headers) = await GetAsync(api, "/ui/sealed./page.html");
+            Assert.True(status == HttpStatusCode.NotFound, $"answered {(int)status} under {headers.GetValueOrDefault("Content-Security-Policy")}");
+            Assert.DoesNotContain("sealed content", body, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(OperatingSystem.IsWindows() ? @"\\?\" + placed : placed!);
+        }
     }
 
     /// <summary>
@@ -378,14 +482,19 @@ public class UiServingTests
         Assert.Equal("/ui/", headers["Location"]);
     }
 
-    internal static async Task<(HttpStatusCode Status, string Body, Dictionary<string, string> Headers)> GetAsync(RuntimeApiFixture api, string path, string? destination = null)
+    internal static async Task<(HttpStatusCode Status, string Body, Dictionary<string, string> Headers)> GetAsync(RuntimeApiFixture api, string path, string? destination = null, HttpMethod? method = null, string? origin = null)
     {
         using var handler = new HttpClientHandler { AllowAutoRedirect = false };
         using var http = new HttpClient(handler) { BaseAddress = api.Runtime.BaseUrl };
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(method ?? HttpMethod.Get, path);
         if (destination is not null)
         {
             request.Headers.Add("Sec-Fetch-Dest", destination);
+        }
+
+        if (origin is not null)
+        {
+            request.Headers.Add("Origin", origin);
         }
 
         using var response = await http.SendAsync(request, Ct);

@@ -107,7 +107,7 @@ public static class UiFiles
     public static IReadOnlyList<KeyValuePair<string, string>> HeadersFor(string relative)
     {
         ArgumentNullException.ThrowIfNull(relative);
-        return relative.StartsWith(UiAssetLayout.SealedDirectory + "/", StringComparison.Ordinal) ? SealedHeaders : ConsoleHeaders;
+        return UiAssetLayout.IsSealed(relative) ? SealedHeaders : ConsoleHeaders;
     }
 
     /// <summary>The console's set, on an answer that serves no file of a build: the door's.</summary>

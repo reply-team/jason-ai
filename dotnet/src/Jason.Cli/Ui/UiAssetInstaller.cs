@@ -120,6 +120,11 @@ public static class UiAssetInstaller
                 throw new UiAssetRefusedException($"'{name}' is not at the archive's root: a build holds its files at the root, under {UiAssetLayout.AssetsDirectory}/ and under {UiAssetLayout.SealedDirectory}/ only.");
             }
 
+            if (!UiAssetLayout.AdmitsKind(name))
+            {
+                throw new UiAssetRefusedException($"'{name}' is not a page: a build holds under {UiAssetLayout.SealedDirectory}/ only files whose names end in {UiAssetLayout.SealedPageExtension}.");
+            }
+
             if (!names.Add(name))
             {
                 throw new UiAssetRefusedException($"'{name}' appears twice.");
