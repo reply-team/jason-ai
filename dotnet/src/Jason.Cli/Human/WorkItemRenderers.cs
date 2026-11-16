@@ -36,7 +36,7 @@ public static class WorkItemRenderers
             Line("Not before:", RenderText.Moment(item.NotBefore)),
             Line("Due:", RenderText.Moment(item.DueAt)),
             Line("Retry after:", RenderText.Moment(item.RetryAfter)),
-            Line("Attempts:", Attempts(item.AttemptCount, item.CurrentAttemptId)),
+            Line("Attempts:", Attempts(item.AttemptCount, item.Attempts?.Count, item.CurrentAttemptId)),
             Line("Last error:", Error(item.LastError)),
         };
 
@@ -119,7 +119,7 @@ public static class WorkItemRenderers
             return null;
         }
 
-        var table = new HumanTable("ID", "CAMPAIGN", "PERSON", "KIND", "ROLE/OP", "STATUS", "ELIGIBLE", "PRIO", "ATTEMPTS", "CREATED");
+        var table = new HumanTable("ID", "CAMPAIGN", "PERSON", "KIND", "ROLE/OP", "STATUS", "ELIGIBLE", "PRIO", "FAILED TRIES", "CREATED");
         foreach (var item in page.Items)
         {
             table.Row(
@@ -330,10 +330,19 @@ public static class WorkItemRenderers
         return operation is null ? name : $"{name} (operation {operation})";
     }
 
-    private static string Attempts(int count, string? currentAttemptId)
+    /// <summary>
+    /// The count the runtime states is of failed attempts, the ones that count toward the limit. How many were made
+    /// is said only where the answer carries the attempts' list; otherwise no such number is printed.
+    /// </summary>
+    private static string Attempts(int counted, int? made, string? currentAttemptId)
     {
-        var made = count.ToString(CultureInfo.InvariantCulture);
-        return currentAttemptId is null ? made : $"{made}, current {currentAttemptId}";
+        var text = $"{counted.ToString(CultureInfo.InvariantCulture)} counted toward the limit";
+        if (made is { } total)
+        {
+            text = $"{total.ToString(CultureInfo.InvariantCulture)} made, {text}";
+        }
+
+        return currentAttemptId is null ? text : $"{text}, current {currentAttemptId}";
     }
 
     private static string? Error(AttemptErrorDto? error) =>
