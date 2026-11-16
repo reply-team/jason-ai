@@ -9,12 +9,11 @@
 // went to, the sequence it belongs to, the thread, the message and its moment, and the channel, and nothing anybody
 // wrote. It is reported only where the feed dates the message; a send it gives no date for is left out. The third kind,
 // a `bounce`, answers a send: a bounce notice lands on the thread of the send it answers as an inbound message, with
-// nothing in the message saying it is one, so where Reply flags the thread as holding a bounce and no reply and its last
-// message is inbound, that message is the notice and no move of the other side. An item is a bounce only where the
-// bounce is the one of Reply's four reply flags that is set: with a reply, an automatic reply or
-// an absence flagged as well it stays a moved thread, since the flags never clear and the feed cannot say which message
-// is newest. Reply's flags for an automatic reply and an absence are not carried, and nothing anybody wrote is in an
-// item at all.
+// nothing in the message saying it is one, so where Reply flags the thread as holding a bounce and no reply and its
+// last message is inbound, that message is the notice and no move of the other side. An item is a bounce only where the
+// bounce is the one of Reply's four reply flags that is set: with a reply, an automatic reply or an absence flagged as
+// well it stays a moved thread, since the flags never clear and the feed cannot say which message is newest. Reply's
+// flags for an automatic reply and an absence are not carried, and nothing anybody wrote is in an item at all.
 //
 // The cursor this package hands back has three forms, each with a prefix of its own, so that one of any other shape is
 // none it wrote. While a read goes on, `c|<Reply's cursor>` asks for the next page from where the last one ended. Once a

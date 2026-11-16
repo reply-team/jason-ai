@@ -358,13 +358,13 @@ nothing anybody wrote, no subject, preview, address or name:
   gives no date for, or one that is not a date, is not reported: the thread's last activity moves when any other message
   lands, so a send keyed by it could be said twice.
 
-A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and so is a send
-the feed gives no date for. The package writes one line on stderr for each, which carries the thread's and the
+A send on a thread Reply names no contact for is left out of the page, since it has nobody to say it of, and so is a
+send the feed gives no date for. The package writes one line on stderr for each, which carries the thread's and the
 sequence's identifiers and the thread's last activity, and nothing anybody wrote. A send at or past the end of a span
-still ends that span, and the cursor moves past
-every item as before. A message the account sends on a thread that holds a reply stays a move that names nobody. The
-other side's move, or one that names nobody, says `inbound_reply_observed`. A thread outside every sequence — the reply to a direct send — names no
-sequence, so it reaches the campaigns that hold its contact pinned, by `contact_pin`.
+still ends that span, and the cursor moves past every item as before. A message the account sends on a thread that holds
+a reply stays a move that names nobody. The other side's move, or one that names nobody, says `inbound_reply_observed`.
+A thread outside every sequence — the reply to a direct send — names no sequence, so it reaches the campaigns that hold
+its contact pinned, by `contact_pin`.
 
 The send is reported for email. Another channel's sends are reported the same way if the provider's feed carries them,
 which has not been seen on a real account. This reading needs Jason 0.47.0 or newer: an older runtime refuses the whole
