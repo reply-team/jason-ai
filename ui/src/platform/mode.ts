@@ -3,10 +3,12 @@ import { firstCampaignTab, parseRoute, route } from '../router';
 import { t } from './i18n';
 import { can, cannotHere } from './places';
 
-// The mode is which installation the desktop runs on: Live, the person's own, or Demo, a second installation of sample
-// data beside it. The page learns it from the desktop alone, once, as it loads, here and nowhere else; a browser shows
-// whatever runtime it is paired with, which is Live to the page. The rest of the page reads `mode`, and switches through
-// `switchMode`, which asks the desktop to keep the other mode and start again on it.
+// The mode is what the desktop's window shows: Live, the person's own installation, or Demo, a static page of sample data
+// the desktop shows in a sealed view of its own, with no installation behind it. The page learns it from the desktop
+// alone, once, as it loads, here and nowhere else; a browser shows whatever runtime it is paired with, which is Live to
+// the page, and shows the demo as a view of the tab alone (`platform/demo-frame.tsx`), never through this mode. The rest
+// of the page reads `mode`, and the window switches through `switchMode`, which asks the desktop to keep the other mode
+// and start again on it.
 
 export type Mode = 'live' | 'demo';
 

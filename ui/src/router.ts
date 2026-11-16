@@ -66,6 +66,8 @@ export type Route =
     | { screen: 'accounts' }
     | { screen: 'settings' }
     | { screen: 'chat' }
+    /** The demo page, a view of a browser tab alone; in the desktop's own window the demo is the desktop's view. */
+    | { screen: 'demo' }
     | { screen: 'workitems'; tab: Tab; id?: string; filters: WorkItemFilters }
     | { screen: 'people'; id?: string; tab: PersonTab; filters: PeopleFilters }
     | {
@@ -104,6 +106,7 @@ export function parseRoute(hash: string): Route {
     if (segments[0] === 'accounts') return { screen: 'accounts' };
     if (segments[0] === 'settings') return { screen: 'settings' };
     if (segments[0] === 'chat') return { screen: 'chat' };
+    if (segments[0] === 'demo') return { screen: 'demo' };
     if (segments[0] === 'workitems') return workItems(segments.slice(1), query);
     if (segments[0] === 'people') return people(segments.slice(1), query);
     if (segments[0] === 'campaigns') return campaigns(segments.slice(1), query);
@@ -264,6 +267,7 @@ export function href(route: Route): string {
     if (route.screen === 'accounts') return '#/accounts';
     if (route.screen === 'settings') return '#/settings';
     if (route.screen === 'chat') return '#/chat';
+    if (route.screen === 'demo') return '#/demo';
     if (route.screen === 'workitems') {
         const tab = route.tab !== 'now' || route.id ? `/${route.tab}` : '';
         const id = route.id ? `/${encodeURIComponent(route.id)}` : '';

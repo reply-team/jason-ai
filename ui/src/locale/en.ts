@@ -95,6 +95,10 @@ export const en = {
     'mode.switch': 'Data',
     'mode.switch.demo': 'Demo',
     'mode.switch.live': 'Live',
+    'demo.show': 'Shows the demo in this tab only. Your installation is unchanged.',
+    'demo.live':
+        'Back to your installation. The demo was shown in this tab only, and nothing of your installation changed.',
+    'demo.missing': 'This build of the UI carries no demo.',
     'place.elsewhere': "Done in Jason Desktop's own window.",
     'place.needs': 'This needs Jason Desktop.',
     'mode.notDemo': 'Not in the demo: accounts are connected in your own installation.',

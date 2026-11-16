@@ -121,12 +121,12 @@ describe('The console in a tab with no desktop', () => {
         expect(conversationsFailure.value).toBeNull();
     });
 
-    it('draws the Demo | Live switch off with the sentence, and no Open in', async () => {
+    it('draws the Demo | Live switch on, as this tab’s own view, and no Open in', async () => {
         await renderNone();
         const group = screen.getByRole('group', { name: 'Data' });
         for (const each of within(group).getAllByRole('button') as HTMLButtonElement[]) {
-            expect(each.disabled).toBe(true);
-            expect(each.title).toBe(needs);
+            expect(each.disabled).toBe(false);
+            expect(each.title).not.toBe(needs);
         }
         expect(document.querySelector('[data-slot="open-in"]')?.children).toHaveLength(0);
     });
