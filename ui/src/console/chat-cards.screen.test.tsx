@@ -129,6 +129,9 @@ const refusals = (desktop: StubDesktop) =>
 const reads = (fake: FakeApi) =>
     fake.calls.filter((each) => each.operation === 'journal.list').map((each) => each.body);
 const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+/** The open choice's field for the person's own words, or null where the card draws none. */
+const own = (pane: HTMLElement) =>
+    within(card(pane)).queryByRole<HTMLInputElement>('textbox', { name: 'Something else…' });
 
 beforeEach(() => {
     chats.value = {};
@@ -213,6 +216,70 @@ describe('a choice the AI asked for', () => {
         await waitFor(() => expect(sends(again.desktop)).toHaveLength(1));
         await waitFor(() => within(card(typed)).getByText('You answered in your own words.'));
         expect(option(typed, 'From me').hasAttribute('disabled')).toBe(true);
+    });
+
+    it('sends what is typed in its field as the person’s message, once, by the composer’s path, and leaves the draft', async () => {
+        const { desktop } = renderConsole([setUp(opened)]);
+        const pane = await openChat('Sending');
+        ask(desktop, setupChat);
+        await live(pane);
+        fireEvent.change(box(), { target: { value: 'A draft of my own' } });
+        const field = own(pane)!;
+        expect(field.getAttribute('placeholder')).toBe('Something else…');
+        const send = within(card(pane)).getByRole('button', { name: 'Send your own answer' });
+        // An empty field sends nothing, and the second press of a double press is no second send.
+        fireEvent.click(send, { detail: 1 });
+        fireEvent.input(field, { target: { value: '  Both of us, alternately  ' } });
+        fireEvent.click(send, { detail: 2 });
+        expect(sends(desktop)).toHaveLength(0);
+        fireEvent.click(send, { detail: 1 });
+        fireEvent.click(send, { detail: 2 });
+        fireEvent.keyDown(field, { key: 'Enter' });
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        const [id, text, options] = sends(desktop)[0]!.args as [string, string, object];
+        expect([id, text]).toEqual([setupChat, 'Both of us, alternately']);
+        expect(Object.keys(options).sort()).toEqual(['host']);
+        // The person's own words lock the choice as a typed message does; the composer's draft is as it was.
+        await waitFor(() => within(card(pane)).getByText('You answered in your own words.'));
+        expect(within(pane).getByText('Both of us, alternately')).toBeTruthy();
+        expect(own(pane)).toBeNull();
+        expect(box().value).toBe('A draft of my own');
+        cleanup();
+        chats.value = {};
+        const again = renderConsole([setUp(opened)]);
+        const entered = await openChat('Sending');
+        ask(again.desktop, setupChat);
+        await live(entered);
+        fireEvent.input(own(entered)!, { target: { value: 'From our sales lead' } });
+        fireEvent.keyDown(own(entered)!, { key: 'Enter' });
+        await waitFor(() => expect(sends(again.desktop)).toHaveLength(1));
+        expect(sends(again.desktop)[0]!.args[1]).toBe('From our sales lead');
+    });
+
+    it('draws its field only while it is open: never on a locked choice, an earlier one, or one opened again', async () => {
+        const { desktop } = renderConsole([setUp(opened)]);
+        const pane = await openChat('Sending');
+        ask(desktop, setupChat);
+        await live(pane);
+        expect(own(pane)).not.toBeNull();
+        flush(() => desktop.emit(setupChat, { kind: 'notice', text: 'A folder was left out of the chat.' }));
+        await waitFor(() => expect(option(pane, 'From me').hasAttribute('disabled')).toBe(true));
+        expect(own(pane)).toBeNull();
+        // The person answers below, and the AI asks again: the earlier card draws no field, the new one does.
+        fireEvent.change(box(), { target: { value: 'Neither yet' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(sends(desktop)).toHaveLength(1));
+        ask(desktop, setupChat);
+        await waitFor(() => expect(within(pane).getAllByRole('group', { name: 'Jason asks' })).toHaveLength(2));
+        const [earlier, last] = within(pane).getAllByRole('group', { name: 'Jason asks' });
+        await waitFor(() => expect(within(last!).queryByRole('textbox', { name: 'Something else…' })).not.toBeNull());
+        expect(within(earlier!).queryByRole('textbox', { name: 'Something else…' })).toBeNull();
+        cleanup();
+        chats.value = {};
+        renderConsole([setUp([{ kind: 'user', text: 'Set it up' }, asking()])]);
+        const reopened = await openChat('Sending');
+        await waitFor(() => within(card(reopened)).getByText(/asked before the chat was opened again/));
+        expect(own(reopened)).toBeNull();
     });
 
     it('is drawn answered as it was when the conversation is opened again, and locked, saying why, when it was not', async () => {
