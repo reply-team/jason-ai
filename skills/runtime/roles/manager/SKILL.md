@@ -565,7 +565,7 @@ The manager's own boundary is this, and nothing outside it:
 ```
 jason workitem update wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --priority 10 --reason "the reply is two days old"
 jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role researcher --context '{"account":"Analytical Engines","question":"which of the two sites is the target"}' --reason "the brief names neither site" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-research-sites
-jason workitem cancel wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "superseded by the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD"
+jason workitem cancel wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --reason "superseded by the person's answer to the question"
 jason campaign update-context cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --set '{"daily_cap":20}' --reason "the warm-up plan"
 ```
 
@@ -628,7 +628,7 @@ campaign sending to everybody in it with a preview that names how many; and `enr
 out of the provider's campaign:
 
 ```
-jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"skip","start":{"position":"first_step"},"first_touch":"authored_delay"}' --reason "the answer to dec_01JB6K8TQ2W9V4MZ0C3Y7H5NRD was to continue" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-enrol-after-answer
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation campaign.enroll --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"campaign":{"external_id":"7"},"channel":"email","collision":"skip","start":{"position":"first_step"},"first_touch":"authored_delay"}' --reason "the person's answer to the question was to continue" --idempotency-key wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD-enrol-after-answer
 ```
 
 You do not approve it. You created it; a person decides it.

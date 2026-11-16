@@ -45,6 +45,20 @@ public partial class RoleSkillTests
         Assert.True(read >= 10, $"Only {read} person-facing texts were read from the role skills' printed commands.");
     }
 
+    /// <summary>The guard's own rows: what it refuses and what it lets through, whatever the case of a word.</summary>
+    [Theory]
+    [InlineData("In thread 501 Marta Alvarez replied", true)]
+    [InlineData("Thread 501 needs an answer", true)]
+    [InlineData("THREAD 12 needs an answer", true)]
+    [InlineData("Is wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD stuck?", true)]
+    [InlineData("Marta Alvarez replied in the logistics campaign", false)]
+    [InlineData("Close the thread, or wait nine days?", false)]
+    [InlineData("Reach her at step 2 of the sequence", false)]
+    public void The_guard_refuses_an_identifier_in_text_a_person_reads_whatever_the_case(string text, bool refused)
+    {
+        Assert.Equal(refused, Identifier().IsMatch(text));
+    }
+
     private static IEnumerable<string> WrittenForAPerson(string line)
     {
         var words = ShellWords.Split(line).ToList();
@@ -76,6 +90,6 @@ public partial class RoleSkillTests
     }
 
     /// <summary>A public id (a prefix and a ULID), or a provider's thread by its number.</summary>
-    [GeneratedRegex(@"\b[a-z]{2,4}_[0-9A-Z]{26}\b|\bthread \d+\b")]
+    [GeneratedRegex(@"\b[a-z]{2,4}_[0-9A-Z]{26}\b|\b(?i:thread) \d+\b")]
     private static partial Regex Identifier();
 }

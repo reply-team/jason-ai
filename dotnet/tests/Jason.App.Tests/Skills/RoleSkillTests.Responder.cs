@@ -664,7 +664,7 @@ public partial class RoleSkillTests
         var words = ShellWords.Split(raise).ToList();
         var question = words[words.IndexOf("--question") + 1];
         Assert.DoesNotContain("thread 501", question, StringComparison.Ordinal);
-        Assert.Contains("Marta Weber", question, StringComparison.Ordinal);
+        Assert.Contains("Marta Alvarez", question, StringComparison.Ordinal);
         Assert.Equal("work_item:wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", words[words.IndexOf("--reference") + 1]);
         Assert.DoesNotContain("and why it fits", skill, StringComparison.Ordinal);
 
