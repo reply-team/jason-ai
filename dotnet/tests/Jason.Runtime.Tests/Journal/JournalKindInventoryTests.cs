@@ -39,6 +39,7 @@ public sealed class JournalKindInventoryTests
         [JournalKinds.ExternalIdDiverged] = "provider identifiers",
         [JournalKinds.InboundReplyObserved] = "provider identifiers",
         [JournalKinds.ProviderEventObserved] = "provider identifiers",
+        [JournalKinds.ProviderSendObserved] = "provider identifiers",
         [JournalKinds.ReplyClassified] = "the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits",
         [JournalKinds.StandingApprovalSet] = "the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits",
         [JournalKinds.StandingApprovalUnset] = "the verdicts roles recorded on replies and the decisions whose answers they carry, and the standing approvals people set: their categories, reactions, goals and limits",

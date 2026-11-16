@@ -88,6 +88,7 @@ public class ManagerOptionsTests
         Assert.DoesNotContain(JournalKinds.ProviderBlockCleared, options.Triggers);
         Assert.DoesNotContain(JournalKinds.AudienceReserveRecovered, options.Triggers);
         Assert.DoesNotContain(JournalKinds.AudiencePeopleLanded, options.Triggers);
+        Assert.DoesNotContain(JournalKinds.ProviderSendObserved, options.Triggers);
         Assert.Equal(18_000, options.ReviewSeconds);
         Assert.Equal(900, options.TimeoutSeconds);
         Assert.Equal(1, options.MaxAttempts);
@@ -186,6 +187,20 @@ public class ManagerOptionsTests
     /// Whether the provider found or created a person is a fact about an identifier, not something gone wrong with the
     /// campaign: a setting may name it, and the defaults never do.
     /// </summary>
+    /// <summary>
+    /// A send the provider reported is the course the campaign planned, so the defaults never wake a manager for one; it is
+    /// a kind only the runtime's own store says, so a person may list it beside the defaults, and the list stands.
+    /// </summary>
+    [Fact]
+    public void A_list_that_adds_the_provider_s_sends_to_the_defaults_validates()
+    {
+        Assert.DoesNotContain(JournalKinds.ProviderSendObserved, ManagerOptions.Default);
+
+        var result = new ManagerOptionsValidator().Validate(null, new ManagerOptions { Triggers = [.. ManagerOptions.Default, JournalKinds.ProviderSendObserved] });
+
+        Assert.True(result.Succeeded, string.Join(" ", result.Failures ?? []));
+    }
+
     [Fact]
     public void The_defaults_never_summon_a_manager_for_an_identifier_s_origin()
     {

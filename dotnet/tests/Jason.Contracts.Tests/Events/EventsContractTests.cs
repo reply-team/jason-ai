@@ -58,13 +58,59 @@ public sealed class EventsContractTests
         Assert.Empty(SchemaValidator.CheckDialect(contract.OutputSchema));
     }
 
-    /// <summary>The four kinds, read from the document's own branches, so nothing else in the build lists them twice.</summary>
+    /// <summary>The five kinds, read from the document's own branches, so nothing else in the build lists them twice.</summary>
     [Fact]
-    public void The_kinds_are_the_four_the_output_schema_publishes()
+    public void The_kinds_are_the_five_the_output_schema_publishes()
     {
         Assert.Equal(
-            ["thread_moved", "reply_detected", "invitation_accepted", "bounce"],
+            ["thread_moved", "reply_detected", "invitation_accepted", "bounce", "message_sent"],
             EventsCatalog.Find("events.read")!.Kinds);
+    }
+
+    /// <summary>
+    /// A message the account sent is a kind of its own, at version 1: a branch a plugin may return, which an older plugin
+    /// never does. It names the person it went to, always, and the provider campaign it belongs to where it has one;
+    /// nothing anybody wrote travels with it, as with every kind.
+    /// </summary>
+    [Fact]
+    public void A_send_names_its_person_always_and_its_provider_campaign_where_it_has_one()
+    {
+        var contract = EventsCatalog.Find("events.read")!;
+        var send = (JsonObject)contract.OutputSchema["$defs"]!["message_sent"]!;
+
+        Assert.Equal(1, contract.Version);
+        Assert.False((bool)send["additionalProperties"]!);
+        Assert.Equal(
+            ["kind", "id", "occurred_at", "contact", "campaign", "thread", "message", "channel"],
+            ((JsonArray)send["required"]!).Select(member => (string?)member));
+        var members = (JsonObject)send["properties"]!;
+        Assert.Equal("#/$defs/identifier", (string?)members["contact"]!["$ref"]);
+        Assert.All(
+            ["id", "campaign", "thread", "message"],
+            member => Assert.Equal("#/$defs/maybe_identifier", (string?)members[member]!["$ref"]));
+        Assert.Equal("#/$defs/channel", (string?)members["channel"]!["$ref"]);
+        Assert.Contains("a message the account sent", contract.Intent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A send is reported as a send, never as a thread the account moved, and it reaches a campaign only by the provider
+    /// campaign it names. Both are the plugin's to keep, so the document says so, and the plugin author's page with it.
+    /// </summary>
+    [Fact]
+    public void The_conformance_says_a_send_is_reported_as_one_and_named_by_its_provider_campaign()
+    {
+        const string AsASend = "Reports a message sent as the account, by whoever sent it, as message_sent, never as a thread_moved by account.";
+        const string ByItsCampaign = "Names under campaign the provider campaign the send belongs to, by the identifier campaign.get pins; a send it cannot place names null, and reaches no campaign.";
+        var contract = EventsCatalog.Find("events.read")!;
+
+        Assert.Contains(AsASend, contract.Conformance);
+        Assert.Contains(ByItsCampaign, contract.Conformance);
+
+        var page = string.Join(' ', File.ReadAllText(Path.Combine(OperationContracts.ContractFiles.Package, "events", "events.read.md"))
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Contains("## The five kinds", page, StringComparison.Ordinal);
+        Assert.Contains("reports a message sent as the account, by whoever sent it, as `message_sent`, never as a `thread_moved` by `account`", page, StringComparison.Ordinal);
+        Assert.Contains("names under `campaign` the provider campaign the send belongs to, by the identifier `campaign.get` pins; a send it cannot place names `null`, and reaches no campaign", page, StringComparison.Ordinal);
     }
 
     [Fact]
