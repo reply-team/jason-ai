@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals-react';
 import { ApiError } from '../api/client';
 import type { Plugin, Routes } from '../api/types';
-import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel } from '../platform/desktop';
+import type { DesktopReply, DesktopReplyAccount, DesktopReplyChannel, DesktopSetup } from '../platform/desktop';
 import { can } from '../platform/places';
 import { clock } from '../time/format';
 import { act, define } from './actions';
@@ -24,8 +24,11 @@ type Listed = Plugin & { name?: string | null };
 
 /** One drawn card's reads. */
 export interface AccountsHeld {
-    /** The kept entry the card stands after: a conversation opened again holds new entries, and its card reads afresh. */
-    entry: object;
+    /**
+     * The words of the text entry the card stands after. A plan's mark put on or taken off makes that entry anew and
+     * keeps its words, so the card keeps its read; other words at that place are another card, which reads afresh.
+     */
+    text: string;
     reading: boolean;
     /** When the last read was answered, by the person's clock; null until one was. */
     at: number | null;
@@ -65,17 +68,21 @@ function listed(answer: unknown): Listed[] {
 const readsProvider = (): boolean => !inTab() && can('setup.status');
 
 /** Reads the card's three answers, together, and keeps them under its key unless another read took its place. */
-function readFor(chatId: string, index: number, entry: object): void {
+function readFor(chatId: string, index: number, text: string): void {
     const before = heldAt(chatId, index);
-    const kept = before?.entry === entry ? before : null;
+    const kept = before?.text === text ? before : null;
     if (kept?.reading === true) return;
     const reading: AccountsHeld = kept
         ? { ...kept, reading: true }
-        : { entry, reading: true, at: null, reply: null, routes: null, plugins: null };
+        : { text, reading: true, at: null, reply: null, routes: null, plugins: null };
     put(chatId, index, reading);
     const { api, desktop } = here();
+    // A desktop that throws rather than refuses is a read that failed, like one that refuses.
     const reply: Promise<Part<DesktopReply> | null> = readsProvider()
-        ? desktop.setup.status().then((status) => answered(status.reply), failed)
+        ? new Promise<DesktopSetup>((resolve) => resolve(desktop.setup.status())).then(
+              (status) => answered(status.reply),
+              failed,
+          )
         : Promise.resolve(null);
     void Promise.all([
         reply,
@@ -83,26 +90,26 @@ function readFor(chatId: string, index: number, entry: object): void {
         api.call<unknown>('plugin.list').then((answer) => answered(listed(answer)), failed),
     ]).then(([replyPart, routes, plugins]) => {
         if (heldAt(chatId, index) !== reading) return;
-        put(chatId, index, { entry, reading: false, at: Date.now(), reply: replyPart, routes, plugins });
+        put(chatId, index, { text, reading: false, at: Date.now(), reply: replyPart, routes, plugins });
     });
 }
 
 /** The cards asked to read while a thread was being drawn, read once the drawing is done: a drawing writes nothing. */
 const asked = new Set<string>();
-function readSoon(chatId: string, index: number, entry: object): void {
+function readSoon(chatId: string, index: number, text: string): void {
     const key = `${chatId} ${index}`;
     if (asked.has(key)) return;
     asked.add(key);
     queueMicrotask(() => {
         asked.delete(key);
-        if (heldAt(chatId, index)?.entry !== entry) readFor(chatId, index, entry);
+        if (heldAt(chatId, index)?.text !== text) readFor(chatId, index, text);
     });
 }
 
 define('card.accounts.refresh', ([chatId, index]) => {
     if (typeof chatId !== 'string' || typeof index !== 'number') return;
     const entry = chats.value[chatId]?.entries[index];
-    if (entry !== undefined) readFor(chatId, index, entry);
+    if (entry?.kind === 'text') readFor(chatId, index, entry.text);
 });
 
 define('card.accounts.open', () => {
@@ -141,9 +148,19 @@ function replyPart(part: Part<DesktopReply>): Html {
                 >${reply.signedIn ? html`Signed in to Reply as <b>${reply.user ?? ''}</b>` : 'Not signed in to Reply'}</span
             >
             <span class="meta"
-                >${reply.wired ? 'Jason uses this sign-in' : 'Jason does not use a Reply sign-in yet'}</span
+                >${
+                    reply.wired
+                        ? 'The runtime’s Reply plugin uses this sign-in'
+                        : 'The runtime’s Reply plugin does not use a Reply sign-in yet'
+                }</span
             >
-            <span class="meta">${accountsWord(accounts.length)}</span>
+            <span class="meta"
+                >${
+                    unread.length === 0
+                        ? accountsWord(accounts.length)
+                        : `${accountsWord(accounts.length)} listed; ${unread.map(channelOf).join(' and ')} not read`
+                }</span
+            >
         </div>
         ${
             accounts.length === 0
@@ -173,15 +190,26 @@ function replyPart(part: Part<DesktopReply>): Html {
         )}`;
 }
 
-/** The plugin a route names, by its manifest's name and its id, and its state as the runtime lists it. */
-function routed(label: string, pluginId: string, plugins: readonly Listed[]): Html {
+/**
+ * The plugin a route for messages names, by its manifest's name and its id, and its state as the runtime lists it. It
+ * is said to send only where the list names `message.send` among its operations.
+ */
+function routed(where: string, pluginId: string, plugins: readonly Listed[]): Html {
     const plugin = plugins.find((each) => each.id === pluginId);
     const name = typeof plugin?.name === 'string' && plugin.name !== '' ? `${plugin.name} (${pluginId})` : pluginId;
+    const sends = Array.isArray(plugin?.operations) && plugin.operations.includes('message.send');
+    const label = sends ? `Plugin that sends messages ${where}` : `Plugin the route for messages names ${where}`;
     return html`<div class="card-fact">
         <span class="meta">${label}</span>
         <b>${name}</b>
         <span class="meta">
-            ${plugin === undefined ? 'The runtime does not list this plugin.' : `Its state: ${plugin.status}`}
+            ${
+                plugin === undefined
+                    ? 'The runtime does not list this plugin.'
+                    : sends
+                      ? `Its state: ${plugin.status}`
+                      : `Its state: ${plugin.status}. Its operations do not include message.send.`
+            }
         </span>
     </div>`;
 }
@@ -191,28 +219,31 @@ function routed(label: string, pluginId: string, plugins: readonly Listed[]): Ht
  * and any route of a channel beside it.
  */
 function runtimePart(routes: Part<Routes>, plugins: Part<Listed[]>): Html {
-    const failure = !routes.ok ? routes : !plugins.ok ? plugins : null;
-    if (failure !== null) return html`<div class="ask-w">The runtime could not be read: ${refusal(failure)}</div>`;
-    if (!routes.ok || !plugins.ok) return html``;
+    if (!routes.ok || !plugins.ok)
+        return html`${
+            routes.ok ? null : html`<div class="ask-w">The runtime’s routes could not be read: ${refusal(routes)}</div>`
+        }${
+            plugins.ok
+                ? null
+                : html`<div class="ask-w">The runtime’s plugins could not be read: ${refusal(plugins)}</div>`
+        }`;
     const global = routes.value.global;
     const sends = global.operations['message.send'] ?? global.default;
     const byChannel = Object.entries(global.channels['message.send'] ?? {});
     return html`${
         sends === null
             ? html`<div class="ask-w">No route sends messages: the runtime routes no plugin to send them.</div>`
-            : routed('Plugin that sends messages by default', sends.plugin_id, plugins.value)
+            : routed('by default', sends.plugin_id, plugins.value)
     }
-    ${byChannel.map(([channel, route]) =>
-        routed(`Plugin that sends on ${channelOf(channel)}`, route.plugin_id, plugins.value),
-    )}`;
+    ${byChannel.map(([channel, route]) => routed(`on ${channelOf(channel)}`, route.plugin_id, plugins.value))}`;
 }
 
 /** The card's header, when it read, and its Refresh, which is off while a read is under way. */
-function frame(chatId: string, index: number, held: AccountsHeld | undefined, body: Html): Html {
+function frame(chatId: string, index: number, header: string, held: AccountsHeld | undefined, body: Html): Html {
     const reading = held === undefined || held.reading;
-    return html`<div class="ask chat-card card-accounts" role="group" aria-label="Accounts">
+    return html`<div class="ask chat-card card-accounts" role="group" aria-label="${header}">
         <div class="ask-h">
-            <span class="card-cap">Accounts</span>
+            <span class="card-cap">${header}</span>
             <button
                 class="btn sm card-refresh"
                 type="button"
@@ -229,13 +260,16 @@ function frame(chatId: string, index: number, held: AccountsHeld | undefined, bo
     </div>`;
 }
 
-/** The accounts card after the text entry at `index` of the chat: read once when first drawn, then on Refresh. */
-export function accountsView(chatId: string, index: number, entry: object): Html {
+/**
+ * The accounts card after the text entry at `index` of the chat, whose words are `text`, under the header the cards'
+ * list gives it: read once when first drawn, then on Refresh.
+ */
+export function accountsView(chatId: string, index: number, text: string, header: string): Html {
     const found = heldAt(chatId, index);
-    const held = found?.entry === entry ? found : undefined;
-    if (held === undefined) readSoon(chatId, index, entry);
+    const held = found?.text === text ? found : undefined;
+    if (held === undefined) readSoon(chatId, index, text);
     if (held === undefined || held.reading)
-        return frame(chatId, index, held, html`<div class="ask-w card-reading">Reading…</div>`);
+        return frame(chatId, index, header, held, html`<div class="ask-w card-reading">Reading…</div>`);
     const provider =
         held.reply === null
             ? html`<p class="ask-w">
@@ -253,5 +287,5 @@ export function accountsView(chatId: string, index: number, entry: object): Html
                   <div class="card-cap">On record now</div>
                   ${runtimePart(held.routes, held.plugins)}
               </section>`;
-    return frame(chatId, index, held, html`${provider}${record}`);
+    return frame(chatId, index, header, held, html`${provider}${record}`);
 }

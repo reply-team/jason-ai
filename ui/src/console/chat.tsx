@@ -727,7 +727,8 @@ function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHo
             </div>`;
         case 'card':
             if (reading.card.kind === 'choice') return choiceView(chat, index, reading.card, host);
-            if (reading.card.kind === 'accounts') return accountsView(chat.id, index, entry);
+            if (reading.card.kind === 'accounts' && entry.kind === 'text')
+                return accountsView(chat.id, index, entry.text, cardHeaders.accounts);
             return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
     }
 }

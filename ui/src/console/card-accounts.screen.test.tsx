@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
 import type { DesktopConversationRecord, DesktopKeptEntry, DesktopSetup } from '../platform/desktop';
-import { loadMode } from '../platform/mode';
+import { loadMode, mode } from '../platform/mode';
 import { setPlace, tabDesktop } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -65,10 +65,8 @@ function renderConsole(
     fake: FakeApi = new FakeApi(),
     journal: StubStream = stubStream(),
 ): { fake: FakeApi; desktop: StubDesktop; journal: StubStream } {
-    fake.answer('plugin.list', 'plugin.list/card-accounts-reply').answer(
-        'route.list',
-        'route.list/card-accounts-reply',
-    );
+    if (!fake.offers('plugin.list')) fake.answer('plugin.list', 'plugin.list/card-accounts-reply');
+    if (!fake.offers('route.list')) fake.answer('route.list', 'route.list/card-accounts-reply');
     nothingWaitsInChats(fake)
         .answer('approval.list', 'approval.list/pending')
         .answer('decision.list', 'decision.list/pending')
@@ -134,7 +132,18 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    mode.value = 'live';
 });
+
+/** Opens the Feed from the sidebar's menu and returns its pane. */
+async function openFeed(): Promise<HTMLElement> {
+    await waitFor(() => {
+        const menu = within(document.querySelector<HTMLElement>('.side')!).getByRole('navigation', { name: 'Menu' });
+        fireEvent.click(within(menu).getByRole('button', { name: /^Feed/ }));
+        expect(document.querySelector('.area > .pane:not([hidden]) .chat-panel')).not.toBeNull();
+    });
+    return document.querySelector<HTMLElement>('.area > .pane:not([hidden])')!;
+}
 
 describe('the accounts card', () => {
     it('draws Reply as the desktop read it now, each state in Reply’s own word, and the route the runtime holds', async () => {
@@ -148,7 +157,7 @@ describe('the accounts card', () => {
         expect(shown.querySelector('.who')).toBeNull();
         const provider = within(shown).getByRole('region', { name: 'Read from Reply now' });
         expect(words(provider)).toContain('Signed in to Reply as owner@example.test');
-        expect(words(provider)).toContain('Jason uses this sign-in');
+        expect(words(provider)).toContain('The runtime’s Reply plugin uses this sign-in');
         expect(words(provider)).toContain('9 accounts');
         expect([...provider.querySelectorAll('th')].map((each) => words(each))).toEqual([
             'Address',
@@ -197,7 +206,7 @@ describe('the accounts card', () => {
         const pane = await openChat('Sending');
         const provider = within(await read(pane)).getByRole('region', { name: 'Read from Reply now' });
         expect(words(provider)).toContain('Not signed in to Reply');
-        expect(words(provider)).toContain('Jason does not use a Reply sign-in yet');
+        expect(words(provider)).toContain('The runtime’s Reply plugin does not use a Reply sign-in yet');
         expect(words(provider)).toContain('No accounts');
         expect(provider.querySelector('table')).toBeNull();
     });
@@ -205,7 +214,14 @@ describe('the accounts card', () => {
     it('says which channels Reply did not list, and why', async () => {
         const partly: DesktopSetup = {
             ...setupFound,
-            reply: { ...setupFound.reply, absent: ['linkedin'], unread: ['email'], accounts: [] },
+            reply: {
+                ...setupFound.reply,
+                absent: ['linkedin'],
+                unread: ['email'],
+                accounts: [
+                    { id: 'a4', channel: 'linkedin', name: 'Owner Example', address: 'owner-li', status: 'enabled' },
+                ],
+            },
         };
         renderConsole([setUp(turn())], stubDesktop(partly));
         const pane = await openChat('Sending');
@@ -214,6 +230,112 @@ describe('the accounts card', () => {
             within(provider).getByText('LinkedIn is not in this Reply account’s plan or role, so Reply lists none.'),
         ).toBeTruthy();
         expect(within(provider).getByText('Email accounts could not be read from Reply.')).toBeTruthy();
+        // The count is of what Reply listed, and says which channel was not read.
+        expect(words(provider)).toContain('1 account listed; Email not read');
+    });
+
+    it('is drawn in the Feed and reads once there', async () => {
+        // The Feed's row is in the demo's sidebar.
+        mode.value = 'demo';
+        const { fake } = renderConsole([
+            { id: 'conv_01JDACCOUNTS00000000000000F', campaignId: null, title: 'Feed', main: true, entries: turn() },
+        ]);
+        const feed = await openFeed();
+        const shown = await read(feed);
+        expect(within(shown).getByText('sales@example.test')).toBeTruthy();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect([asked(fake, 'route.list'), asked(fake, 'plugin.list')]).toEqual([1, 1]);
+    });
+
+    it('reads again on Refresh in one chat and leaves another chat’s card as it was read', async () => {
+        const at = new Date('2026-10-16T09:05:00.000Z').getTime();
+        const now = vi.spyOn(Date, 'now').mockReturnValue(at);
+        const { fake } = renderConsole([
+            setUp(turn()),
+            { id: 'conv_01JDACCOUNTS00000000000000B', campaignId: null, title: 'Second', entries: turn() },
+        ]);
+        await read(await openChat('Sending'));
+        now.mockReturnValue(at + 60_000);
+        const second = await openChat('Second');
+        expect(within(await read(second)).getByText(`As of ${clock(new Date(at + 60_000), zone)}`)).toBeTruthy();
+        expect(asked(fake, 'route.list')).toBe(2);
+        now.mockReturnValue(at + 5 * 60_000);
+        const again = await openChat('Sending');
+        fireEvent.click(within(card(again)).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => within(card(again)).getByText(`As of ${clock(new Date(at + 5 * 60_000), zone)}`));
+        expect(asked(fake, 'route.list')).toBe(3);
+        const back = await openChat('Second');
+        expect(within(await read(back)).getByText(`As of ${clock(new Date(at + 60_000), zone)}`)).toBeTruthy();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect([asked(fake, 'route.list'), asked(fake, 'plugin.list')]).toEqual([3, 3]);
+    });
+
+    it('says when no route sends messages', async () => {
+        const fake = new FakeApi().answer('route.list', 'route.list/empty');
+        renderConsole([setUp(turn())], stubDesktop(everyState), fake);
+        const pane = await openChat('Sending');
+        expect(words(within(await read(pane)).getByRole('region', { name: 'On record now' }))).toBe(
+            'On record now No route sends messages: the runtime routes no plugin to send them.',
+        );
+    });
+
+    it('says when the runtime does not list the plugin a route names, and does not say it sends', async () => {
+        const fake = new FakeApi().answer('plugin.list', 'plugin.list/none');
+        renderConsole([setUp(turn())], stubDesktop(everyState), fake);
+        const pane = await openChat('Sending');
+        const record = words(within(await read(pane)).getByRole('region', { name: 'On record now' }));
+        expect(record).toContain('reply');
+        expect(record).toContain('The runtime does not list this plugin.');
+        expect(record).not.toContain('sends messages');
+    });
+
+    it('does not read again when Plan only marks its words as the plan, or takes the mark off', async () => {
+        const desktop = stubDesktop(everyState);
+        const { fake } = renderConsole([{ ...setUp(turn()), mode: 'plan_only' }], desktop);
+        const pane = await openChat('Sending');
+        await read(pane);
+        flush(() => desktop.emit(setupChat, { kind: 'done', error: null, plan: true }));
+        flush(() => desktop.emit(setupChat, { kind: 'done', error: null }));
+        await read(pane);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect([asked(fake, 'route.list'), asked(fake, 'plugin.list')]).toEqual([1, 1]);
+    });
+
+    it('names no speaker among its facts: the word Jason is nowhere on it', async () => {
+        renderConsole([setUp(turn())]);
+        const pane = await openChat('Sending');
+        expect(card(pane).textContent).not.toMatch(/Jason/);
+        expect((await read(pane)).textContent).not.toMatch(/Jason/);
+    });
+
+    it('takes a desktop read that throws as a read that failed, and reads again on Refresh', async () => {
+        const desktop = stubDesktop(everyState);
+        const { fake } = renderConsole([setUp(turn())], desktop);
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'setup.status')).toBe(true));
+        const status = desktop.setup.status;
+        desktop.setup.status = () => {
+            throw new Error('The desktop could not answer.');
+        };
+        const pane = await openChat('Sending');
+        const shown = await read(pane);
+        expect(words(within(shown).getByRole('region', { name: 'Read from Reply now' }))).toContain(
+            'Reply could not be read: The desktop could not answer.',
+        );
+        desktop.setup.status = status;
+        fireEvent.click(within(shown).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => within(card(pane)).getByText('sales@example.test'));
+        expect(asked(fake, 'route.list')).toBe(2);
+    });
+
+    it('says each runtime read that failed, not the first alone', async () => {
+        const fake = new FakeApi();
+        fake.unreachable('route.list');
+        fake.unreachable('plugin.list');
+        renderConsole([setUp(turn())], stubDesktop(everyState), fake);
+        const pane = await openChat('Sending');
+        const record = words(within(await read(pane)).getByRole('region', { name: 'On record now' }));
+        expect(record).toContain('The runtime’s routes could not be read: Failed to fetch');
+        expect(record).toContain('The runtime’s plugins could not be read: Failed to fetch');
     });
 
     it('is drawn in an agent’s chat as in a set-up chat, its turn’s words after it named as the speaker’s', async () => {
@@ -337,7 +459,7 @@ describe('the accounts card', () => {
         const pane = await openChat('Sending');
         const shown = await read(pane);
         expect(words(within(shown).getByRole('region', { name: 'On record now' }))).toContain(
-            'The runtime could not be read: Failed to fetch',
+            'The runtime’s routes could not be read: Failed to fetch',
         );
         expect(within(shown).getByText('sales@example.test')).toBeTruthy();
         // The desktop's read refused: the runtime's part stands, Reply's says it could not be read.
