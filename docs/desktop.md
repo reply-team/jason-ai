@@ -237,15 +237,36 @@ there yet is refused, with a sentence that it is made with the first agent.
 **What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
 entries run `jason session open` on the folder, with the environment of the installation the desktop runs on; no first input is sent to the host, so the session is yours to begin. Typed by hand,
 the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). A successful open says "Opened {folder} in
-{place}.", with "Jason there works with the same data as this window." after a terminal, an editor or the file manager;
-Copy path says "Copied the path of {folder}.".
+{place}.", with "Jason there works with the same data as this window." after a terminal, since `jason session open` puts
+this installation's `jason` first on that terminal's PATH. After an editor it says instead, where the desktop can tell,
+which `jason` your PATH finds by name, by the same look the Command Line item of the Jason menu makes ([below](#the-command-line-and-the-login-items)),
+and no more than that:
+
+- this window's Jason, by its own path or a link to it: "jason on your PATH is this window's Jason, so a terminal there
+  works with the same data.";
+- another one: "jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
+  whose data that other one works with is not something the desktop can tell;
+- none: "jason is not on your PATH, so a terminal there does not find Jason.".
+
+Where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
+on the PATH where there is none; where another `jason` is found, the one that gives this window's Jason the name
+`jason-desktop`, the other keeping `jason`; where a command of the desktop's points elsewhere, the one that points it
+back at this window's Jason, and to type `jason-desktop` afterwards where that is its name; and where a `jason-desktop`
+of the desktop's is already there, it says to type that instead, with no act. An editor that was already running keeps
+the PATH it started with, so the sentences speak of your PATH, never of the editor. The desktop looks the name up as
+Command Prompt does; a shell inside an editor may resolve it in its own order (PowerShell takes a `jason.ps1` first,
+Git Bash an extensionless `jason`), so what answers there can differ from what the desktop finds. While `jason` on your PATH is another one or none, the menu carries one quiet
+line under Editors that says so. The file manager runs nothing, so after it the open says nothing about data, and Copy
+path says "Copied the path of {folder}.".
 
 Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
 comma, which File Explorer reads as a separator, and on macOS one whose name ends in `.app`, which could be started rather
 than shown.
 
-**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
-and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
+**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`, and an
+editor is not started with a changed PATH. The desktop and the command line share one data directory, the one
+`JASON_DATA_DIR` names or `~/.jason`, but a `jason` typed in an editor is whichever your PATH finds first, which may be
+another installation's or none; the sentence after an editor's open says which. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
 refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside

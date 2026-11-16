@@ -14,6 +14,7 @@ import type {
     DesktopLink,
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
+    DesktopOpenInJason,
     DesktopOpenInPlace,
     DesktopRefusal,
     DesktopReplyCopied,
@@ -29,6 +30,7 @@ import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
 import type { ContinueOffer, OpenInAnswer, OpenInRefusal, PlaceId } from '../src/open-in.ts';
+import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -150,6 +152,7 @@ type ModeIsTheSeam = [
 type OpenInIsTheSeam = [
     Holds<Equal<PlaceId, DesktopOpenInPlace>>,
     Holds<Equal<OpenInAnswer, DesktopOpenInAnswer>>,
+    Holds<Equal<JasonOnPath, DesktopOpenInJason>>,
     Holds<Equal<OpenInRefusal, DesktopRefusal>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['open']>, [target: DesktopOpenInPlace, campaignId?: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['targets']>, [campaignId?: string, chatId?: string]>>,

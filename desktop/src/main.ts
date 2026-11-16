@@ -589,6 +589,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
+        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look; none told where
+        // this run offers no command (the demo, a start that carries no copy).
+        ...(command === null ? {} : { jason: () => command.onPath() }),
         changeJason: {
             flags: changeJasonFlags,
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
