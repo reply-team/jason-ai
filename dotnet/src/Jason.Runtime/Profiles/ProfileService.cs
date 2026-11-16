@@ -319,11 +319,9 @@ public sealed class ProfileService(
     }
 
     /// <summary>
-    /// The registry, ordered by public id — the order the profiles were added. A disabled profile is out of
-    /// service and left out unless it is asked for: the question a listing answers is "what can run work now".
-    /// </summary>
-    /// <summary>
-    /// A page of profiles, and the configured default in force: the settings the claim reads, never the file, so a value a
+    /// A page of the registry, ordered by public id — the order the profiles were added — and the configured default in
+    /// force. A disabled profile is out of service and left out unless it is asked for: the question a listing answers is
+    /// "what can run work now". The default is read from the settings the claim reads, never the file, so a value a
     /// person's edit broke is answered as the one still in force.
     /// </summary>
     public async Task<ProfilePageDto> ListAsync(ProfileListRequest request, CancellationToken cancellationToken)

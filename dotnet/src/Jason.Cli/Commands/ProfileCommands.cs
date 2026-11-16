@@ -214,7 +214,8 @@ public static class ProfileCommands
     {
         var command = new Command(
             "unset-default",
-            "Take the default profile away, so agent work that nothing more specific names a profile for runs on its role's own command. "
+            "Take the default profile away, so agent work that nothing more specific names a profile for runs on its role's entry command, "
+            + "or on Roles:DefaultEntryCommand where the role has none, and is refused where there is neither. "
             + "Taken out of the settings file and in force at once, with no restart. "
             + ActorOption.ChangesJasonInsideARun);
         var reason = VerbOptions.Reason();

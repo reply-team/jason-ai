@@ -7,8 +7,13 @@ using Jason.Contracts.Json;
 using Jason.Runtime.Configuration;
 using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
+using Jason.Runtime.Persistence;
 using Jason.Runtime.Tests.Integration;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jason.Runtime.Tests.Profiles;
 
@@ -35,6 +40,13 @@ public class DefaultProfileTests
         "    // The machine's own settings.\n" +
         "    \"Dispatcher\": { \"Enabled\": false },\n" +
         "    \"Roles\": { \"MaxStdoutBytes\": 2097152, \"DefaultExecutionProfile\": \"house\" }\n" +
+        "}\n";
+
+    /// <summary>A file whose <c>Roles</c> section is there and empty: no default is named in it.</summary>
+    private const string EmptyRoles =
+        "{\n" +
+        "    \"Dispatcher\": { \"Enabled\": false },\n" +
+        "    \"Roles\": {}\n" +
         "}\n";
 
     private static readonly object Ada = new { type = "human", id = "ada" };
@@ -154,10 +166,16 @@ public class DefaultProfileTests
         Assert.Null(InForce(api));
     }
 
-    [Fact]
-    public async Task Taking_away_a_default_nobody_named_writes_nothing_and_answers_none()
+    /// <summary>
+    /// Nothing named is the state asked for, whatever else the section holds: a <c>Roles</c> object left empty by hand is
+    /// the person's, and taking away a default it does not hold does not take it away either.
+    /// </summary>
+    [Theory]
+    [InlineData(Original)]
+    [InlineData(EmptyRoles)]
+    public async Task Taking_away_a_default_nobody_named_writes_nothing_and_answers_none(string settings)
     {
-        await using var api = await StartAsync();
+        await using var api = await StartAsync(settings);
         var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
 
         var answer = await api.PostOkAsync<ProfileDefaultDto>(Operations.ProfileUnsetDefault, new { }, Ct);
@@ -283,6 +301,57 @@ public class DefaultProfileTests
     }
 
     /// <summary>
+    /// A hand edit the runtime has not yet read is read by the act itself, as <c>route.set</c> reads one: the file already
+    /// says what was asked, so nothing is written, and the value in force moves to it. That is a change of the default in
+    /// force like any other, and it is journaled like one. The settings file's watch is stopped, so the runtime learns of
+    /// the edit by its own read and by nothing else, however long the test takes.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.ProfileSetDefault, Original, WithHouse, null, "house")]
+    [InlineData(Operations.ProfileUnsetDefault, WithHouse, Original, "house", null)]
+    public async Task A_default_a_hand_edit_wrote_and_the_runtime_had_not_read_is_put_in_force_and_journaled(
+        string operation,
+        string settings,
+        string edited,
+        string? before,
+        string? after)
+    {
+        await using var api = await StartAsync(settings, watch: false);
+        await ProfileAsync(api, "house");
+        File.WriteAllText(api.Paths.UserSettingsFile, edited, new UTF8Encoding(false));
+        Assert.Equal(before, InForce(api));
+
+        var answer = await api.PostOkAsync<ProfileDefaultDto>(operation, new { name = "house", actor = Ada }, Ct);
+
+        Assert.Equal(after, answer.ExecutionProfile);
+        Assert.Equal(edited, File.ReadAllText(api.Paths.UserSettingsFile));
+        Assert.Equal(after, InForce(api));
+        var line = Assert.Single((await LinesAsync(api)).Items);
+        Assert.Equal(before, line.Old?.GetValue<string>());
+        Assert.Equal(after, line.New?.GetValue<string>());
+    }
+
+    /// <summary>
+    /// The order is <c>route.set</c>'s: the file is written, then the journal's line is saved, and a failure between the
+    /// two puts the file back. Here the database refuses the save of the line and nothing else, so the file, the default in
+    /// force and the chronicle are left as they were before the request, and the three agree.
+    /// </summary>
+    [Fact]
+    public async Task A_line_the_database_refuses_to_save_puts_the_file_back_and_leaves_the_default_as_it_was()
+    {
+        await using var api = await StartAsync(refuseTheLine: true);
+        await ProfileAsync(api, "house");
+        var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
+
+        var error = await api.PostErrorAsync(Operations.ProfileSetDefault, new { name = "house" }, HttpStatusCode.InternalServerError, Ct);
+
+        Assert.Equal("internal_error", error.Code);
+        Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
+        Assert.Null(InForce(api));
+        Assert.Empty((await LinesAsync(api)).Items);
+    }
+
+    /// <summary>
     /// The point of the verb: named through the runtime, the default is what the next claim resolves a role's work to, with
     /// no restart; taken away, the work that follows falls back to the role's own command again. The house profile names a
     /// program nobody installed, so the claim that resolves to it refuses before a child exists and says so.
@@ -352,7 +421,7 @@ public class DefaultProfileTests
     public async Task The_exchanges_are_recorded()
     {
         await using var api = await StartAsync(clock: new FixedClock(Nine));
-        await ProfileAsync(api, "house");
+        await RecordedProfileAsync(api, "house");
 
         await api.RecordAsync<ProfileDefaultDto>(Operations.ProfileSetDefault, "set", new { name = "house", reason = "the roles run on the house host" }, Ct);
         await api.RecordErrorAsync(Operations.ProfileSetDefault, "profile-not-found", new { name = "never-registered" }, HttpStatusCode.NotFound, Ct);
@@ -364,7 +433,7 @@ public class DefaultProfileTests
     public async Task The_listing_exchanges_are_recorded()
     {
         await using var api = await StartAsync(WithHouse, new FixedClock(Nine));
-        await ProfileAsync(api, "house");
+        await RecordedProfileAsync(api, "house");
 
         await api.RecordAsync<ProfilePageDto>(Operations.ProfileList, "with-default", new { }, Ct);
 
@@ -378,9 +447,49 @@ public class DefaultProfileTests
     private static Task<ExecutionProfileDto> ProfileAsync(RuntimeApiFixture api, string name) =>
         api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, ProfileRevisionTests.Minimal(name), Ct);
 
+    /// <summary>
+    /// A profile for a recording, with its CLI command named. Left out, it is this process's own file name without its
+    /// extension, which each system spells its own way: <c>Jason.Runtime.Tests.exe</c> on Windows, and on Linux and macOS
+    /// <c>Jason.Runtime.Tests</c>, whose last dot the extension rule takes away too.
+    /// </summary>
+    private static Task<ExecutionProfileDto> RecordedProfileAsync(RuntimeApiFixture api, string name) =>
+        api.PostOkAsync<ExecutionProfileDto>(Operations.ProfileCreate, new { name, host = "claude_code", program = "claude", cli_command = "jason" }, Ct);
+
     private static Task<Page<JournalEntryDto>> LinesAsync(RuntimeApiFixture api) =>
         api.PostOkAsync<Page<JournalEntryDto>>(Operations.JournalList, new { Kind = JournalKinds.DefaultProfileUpdated }, Ct);
 
-    private static Task<RuntimeApiFixture> StartAsync(string settings = Original, TimeProvider? clock = null) =>
-        RuntimeApiFixture.StartAsync(Ct, prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false)), clock: clock);
+    /// <param name="settings">The settings file the runtime starts from.</param>
+    /// <param name="clock">The runtime's clock, for a recording.</param>
+    /// <param name="watch">False stops the settings file's watch once the configuration is built, so an edit reaches the runtime only by a read it makes itself.</param>
+    /// <param name="refuseTheLine">True makes the database refuse every save that carries a <c>default_profile_updated</c> line, and nothing else.</param>
+    private static Task<RuntimeApiFixture> StartAsync(string settings = Original, TimeProvider? clock = null, bool watch = true, bool refuseTheLine = false) =>
+        RuntimeApiFixture.StartAsync(
+            Ct,
+            prepare: paths => File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false)),
+            clock: clock,
+            configureServices: refuseTheLine
+                ? services => services.ConfigureDbContext<JasonDbContext>(options => options.AddInterceptors(new RefusesTheLine()))
+                : null,
+            configurationBuilt: watch
+                ? null
+                : configuration =>
+                {
+                    foreach (var file in configuration.Providers.OfType<FileConfigurationProvider>())
+                    {
+                        (file.Source.FileProvider as IDisposable)?.Dispose();
+                    }
+                });
+
+    /// <summary>A save that carries a <c>default_profile_updated</c> line is refused; every other save and every read goes to the database.</summary>
+    private sealed class RefusesTheLine : SaveChangesInterceptor
+    {
+        public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result) =>
+            Carries(eventData) ? throw new InvalidOperationException("The database refused the save of the line.") : result;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            Carries(eventData) ? throw new InvalidOperationException("The database refused the save of the line.") : ValueTask.FromResult(result);
+
+        private static bool Carries(DbContextEventData eventData) =>
+            eventData.Context!.ChangeTracker.Entries<JournalEntry>().Any(entry => entry.State == EntityState.Added && entry.Entity.Kind == JournalKinds.DefaultProfileUpdated);
+    }
 }

@@ -18,7 +18,7 @@
           "args": [],
           "deny": [],
           "tools": [],
-          "cli_command": "Jason.Runtime.Tests",
+          "cli_command": "jason",
           "host_version_verified": null,
           "created_at": "2026-10-16T09:00:00.000Z"
         },

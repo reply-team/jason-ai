@@ -31,8 +31,11 @@ namespace Jason.Runtime.Profiles;
 /// and the file is put back. No plugin reload runs: nothing in the section is frozen by one.
 /// </para>
 /// <para>
-/// <b>One line per change.</b> A write that changed the value in force is journaled as <c>default_profile_updated</c>, in the
-/// same act; the state already asked for writes nothing and says nothing.
+/// <b>One line per change, in <c>route.set</c>'s order.</b> Every act that changes the default in force is journaled as
+/// <c>default_profile_updated</c> — the one that wrote the file, and the one that found a hand edit already saying what was
+/// asked and put it in force by reading it; the state already in force writes nothing and says nothing. The file is written
+/// first and the line saved after, inside the writer's act, so a save that fails puts the file back: the file, the default
+/// in force and the chronicle are left as they were, and agree.
 /// </para>
 /// </remarks>
 public sealed class DefaultProfileService(
@@ -62,7 +65,7 @@ public sealed class DefaultProfileService(
             throw DomainErrors.ProfileNotFound(name);
         }
 
-        return await WriteAsync([SettingsEdit.Set(Setting, JsonValue.Create(name))], name, actor, Text(request.Reason), cancellationToken).ConfigureAwait(false);
+        return await WriteAsync(_ => [SettingsEdit.Set(Setting, JsonValue.Create(name))], name, actor, Text(request.Reason), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ProfileDefaultDto> UnsetAsync(ProfileUnsetDefaultRequest request, CancellationToken cancellationToken)
@@ -75,8 +78,10 @@ public sealed class DefaultProfileService(
         errors.ThrowIfAny();
         await ActorVerification.VerifyAsync(db, actor, cancellationToken).ConfigureAwait(false);
 
+        // Read from the file as it stands: a file that names no default is the state asked for and is edited nowhere, so a
+        // Roles object a person left empty stays where it is.
         return await WriteAsync(
-            [SettingsEdit.Remove(Setting), SettingsEdit.RemoveIfEmpty(RolesOptions.Section)],
+            file => file.ContainsKey(Setting) ? [SettingsEdit.Remove(Setting), SettingsEdit.RemoveIfEmpty(RolesOptions.Section)] : [],
             wanted: null,
             actor,
             Text(request.Reason),
@@ -84,11 +89,19 @@ public sealed class DefaultProfileService(
     }
 
     /// <summary>
-    /// Both acts' one shape: under the reload gate, which the writer runs under, the file is edited; then the value in force
-    /// is read. A file the edit left as it was may say what was asked while its watch has not yet told the runtime, so it is
-    /// read now; a value in force that is still not the one asked for is refused, and a written file is put back.
+    /// Both acts' one shape, <c>route.set</c>'s: under the reload gate, which the writer runs under, the file is edited; then
+    /// the value in force is read. A file the edit left as it was may say what was asked while its watch has not yet told the
+    /// runtime, so it is read now. A value in force that is still not the one asked for is refused, and a written file is
+    /// put back; one that moved is journaled, whether this act wrote it or read it, and the line is saved before the act
+    /// answers, so a save that fails puts a written file back too.
     /// </summary>
-    private async Task<ProfileDefaultDto> WriteAsync(IReadOnlyList<SettingsEdit> edits, string? wanted, ActorRef actor, string? reason, CancellationToken cancellationToken)
+    /// <param name="edits">The edits, from the file as the configuration system flattens it, read again on every attempt.</param>
+    private async Task<ProfileDefaultDto> WriteAsync(
+        Func<IReadOnlyDictionary<string, string?>, IReadOnlyList<SettingsEdit>> edits,
+        string? wanted,
+        ActorRef actor,
+        string? reason,
+        CancellationToken cancellationToken)
     {
         await gate.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -96,6 +109,7 @@ public sealed class DefaultProfileService(
             var before = roles.Current.DefaultExecutionProfile;
             return await writer.WriteAsync(
                 edits,
+                [Setting],
                 RolesOptions.Section,
                 async (wrote, token) =>
                 {
@@ -104,6 +118,8 @@ public sealed class DefaultProfileService(
                         return new ProfileDefaultDto(before);
                     }
 
+                    // A write has just loaded the file under the settings lock; a file left as it was is read now, as
+                    // route.set reads it, since its watch may not yet have told the runtime of a hand edit.
                     if (!wrote)
                     {
                         settingsFile.Read();
@@ -115,7 +131,7 @@ public sealed class DefaultProfileService(
                         throw DomainErrors.SettingNotInForce(Setting, RolesOptions.Section);
                     }
 
-                    if (wrote && !Same(before, now))
+                    if (!Same(before, now))
                     {
                         journal.Append(
                             db,
