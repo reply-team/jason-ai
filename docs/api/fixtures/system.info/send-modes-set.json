@@ -183,7 +183,7 @@
         "id": "reply",
         "state": "not_installed",
         "released": {
-          "version": "0.17.0",
+          "version": "0.18.0",
           "digest": "sha256:recorded-3"
         },
         "installed": null
