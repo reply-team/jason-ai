@@ -7,6 +7,7 @@ import {
     controlWords,
     depthOf,
     foldLabel,
+    lastCardOf,
     readCard,
     splitCards,
     type CardBlock,
@@ -208,6 +209,22 @@ describe('which fenced block is a card', () => {
         const split = splitCards(`Thinking.\n\`\`\`card\n{"kind":"cho`);
         expect(split.blocks).toEqual([{ body: '{"kind":"cho', closed: false }]);
         expect(split.words.trim()).toBe('Thinking.');
+    });
+
+    it('takes out a text’s last block alone, every earlier block staying in its words as written', () => {
+        const needs = fence('{"kind":"needs"}');
+        const last = lastCardOf(`First.\n${needs}\nBetween.\r\n${fence(choice())}\r\nAfter.`);
+        expect(last).toEqual({
+            words: `First.\n${needs}\nBetween.\n\nAfter.`,
+            block: { body: choice(), closed: true },
+        });
+        expect(lastCardOf(`Open.\n\`\`\`card\n{"kind"`)).toEqual({
+            words: 'Open.\n',
+            block: { body: '{"kind"', closed: false },
+        });
+        // A fence that is no card is the words', and a text with no card has none to take out.
+        expect(lastCardOf(`Code.\n${fence(choice(), 'json')}`)).toBeNull();
+        expect(lastCardOf('Just words.')).toBeNull();
     });
 });
 

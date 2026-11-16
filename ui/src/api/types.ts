@@ -168,6 +168,8 @@ export type RouteResolution = {
     plugin_id: string | null;
     scope: string | null;
     usable: boolean;
+    /** What the claim would refuse the route for, in the claim's own codes; none when it is usable. */
+    problems: ErrorDetail[];
     /** The channel the answer was resolved for; null when none was named. */
     channel: string | null;
 };

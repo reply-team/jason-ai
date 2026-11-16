@@ -262,6 +262,16 @@ import journalListSummer from '../../../docs/api/fixtures/journal.list/summer.js
 // A person's acts on campaign A since the moment a choice was asked in its chat: a pause, and none.
 import journalListCardChoiceActs from '../../../docs/api/fixtures/journal.list/card-choice-acts.json';
 import journalListCardChoiceActsNone from '../../../docs/api/fixtures/journal.list/card-choice-acts-none.json';
+// What a plan card reads under "On record now": a draft agent, its people, the plugin routed to send its messages, an
+// agent with no such route, and for a chat about no agent yet the installation's send modes and default route.
+import campaignGetCardPlanDraft from '../../../docs/api/fixtures/campaign.get/card-plan-draft.json';
+import campaignSummaryCardPlanDraft from '../../../docs/api/fixtures/campaign.summary/card-plan-draft.json';
+import routeResolveCardPlanMessageSend from '../../../docs/api/fixtures/route.resolve/card-plan-message-send.json';
+import routeResolveCardPlanNoRoute from '../../../docs/api/fixtures/route.resolve/card-plan-no-route.json';
+import campaignGetCardStatus from '../../../docs/api/fixtures/campaign.get/card-status.json';
+import campaignSummaryCardStatus from '../../../docs/api/fixtures/campaign.summary/card-status.json';
+import routeListCardAccounts from '../../../docs/api/fixtures/route.list/card-accounts.json';
+import systemInfoSendModesSet from '../../../docs/api/fixtures/system.info/send-modes-set.json';
 import pluginListNone from '../../../docs/api/fixtures/plugin.list/none.json';
 import replyCountArchivedNamed from '../../../docs/api/fixtures/reply.count/archived-named.json';
 import replyCountEveryCampaign from '../../../docs/api/fixtures/reply.count/every-campaign.json';
@@ -965,6 +975,26 @@ export const fixtures = {
         JournalListRequest,
         Page<JournalEntry>
     >,
+    'campaign.get/card-plan-draft': campaignGetCardPlanDraft satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.summary/card-plan-draft': campaignSummaryCardPlanDraft satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'route.resolve/card-plan-message-send': routeResolveCardPlanMessageSend satisfies Exchange<
+        RouteResolveRequest,
+        RouteResolution
+    >,
+    'route.resolve/card-plan-no-route': routeResolveCardPlanNoRoute satisfies Exchange<
+        RouteResolveRequest,
+        ErrorEnvelope
+    >,
+    'campaign.get/card-status': campaignGetCardStatus satisfies Exchange<{ campaign_id: string }, Campaign>,
+    'campaign.summary/card-status': campaignSummaryCardStatus satisfies Exchange<
+        CampaignSummaryRequest,
+        CampaignSummaryResponse
+    >,
+    'route.list/card-accounts': routeListCardAccounts satisfies Exchange<object, Routes>,
+    'system.info/send-modes-set': systemInfoSendModesSet satisfies Exchange<object, SystemInfo>,
     'plugin.list/none': pluginListNone satisfies Exchange<object, object>,
     'reply.count/archived-named': replyCountArchivedNamed satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,
     'reply.count/every-campaign': replyCountEveryCampaign satisfies Exchange<ReplyCountRequest, ReplyCountResponse>,

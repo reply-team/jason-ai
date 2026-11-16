@@ -204,6 +204,23 @@ export function splitCards(text: string): { words: string; blocks: CardBlock[] }
     return { words: kept.join('\n'), blocks };
 }
 
+/**
+ * A text's words with its last card block alone taken out, its place left as one empty line, and that block; null for a
+ * text with none. Every earlier block stays in the words, as written.
+ */
+export function lastCardOf(text: string): { words: string; block: CardBlock } | null {
+    const fence = fences(text)
+        .filter((each) => opensCard(each.indent, each.info))
+        .at(-1);
+    if (fence === undefined) return null;
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const end = fence.close ?? lines.length;
+    return {
+        words: [...lines.slice(0, fence.open), '', ...lines.slice(end + 1)].join('\n'),
+        block: { body: lines.slice(fence.open + 1, end).join('\n'), closed: fence.close !== null },
+    };
+}
+
 /** An entry of a chat as the layout reads it: only a `text` entry's words are read, and a plan's mark. */
 export interface LaidEntry {
     kind: string;
@@ -220,7 +237,9 @@ export interface PlacedCard extends CardBlock {
  * A chat's entries as the thread draws them: by the index of each text entry that held a card block, its words with
  * every block taken out; and by the index of the text entry that held it, each turn's last block. A turn runs from a
  * person's message to the next one; a person's own words are never read for a card. A turn the desktop marked a plan
- * is left whole: what Approve and run tells the AI to carry out is its answer, so every block of it stays in its words.
+ * is left whole: what Approve and run tells the AI to carry out is its answer, so every block of it stays in its words,
+ * but for a plan card its marked words end in, which the plan's own card takes out and draws inside it (`proposalOf`,
+ * which has to read the block to know it is one).
  */
 export function cardLayout(entries: readonly LaidEntry[]): {
     words: ReadonlyMap<number, string>;

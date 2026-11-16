@@ -6,6 +6,7 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
+import { askedAsWords, lastReading, planView, proposalOf, proposals } from './card-plan';
 import {
     cardLayout,
     openChoice,
@@ -13,6 +14,7 @@ import {
     placeOf,
     readCard,
     type CardKind,
+    type CardOption,
     type ChoiceCard,
     type PlacedCard,
 } from './cards';
@@ -527,9 +529,10 @@ function planCard(
     entry: Extract<Entry, { kind: 'text' }>,
     host: DesktopHost | null,
     words: string = entry.text,
+    drawn: Html | null = null,
 ): Html {
-    // Approve and run is offered over words a person can read: never over a plan of none.
-    const last = entry === chat.entries.at(-1) && words.trim() !== '';
+    // Approve and run is offered over what a person can read: never over a plan of none.
+    const last = entry === chat.entries.at(-1) && (words.trim() !== '' || drawn !== null);
     const live = last && livePlan(chat, host?.id ?? null);
     const elsewhere = last && planElsewhere(chat, host?.id ?? null);
     const approving = last && chat.plan === 'approving';
@@ -546,7 +549,7 @@ function planCard(
                 : null;
     return html`<div class="ask chat-plan">
         <div class="ask-h">${svg('journal', 14)}<b>Plan</b></div>
-        <div class="said plan-text">${words}</div>
+        ${words.trim() === '' ? null : html`<div class="said plan-text">${words}</div>`} ${drawn}
         ${line === null ? null : html`<div class="ask-w">${line}</div>`}
         ${
             (live || approving) && inTab()
@@ -667,11 +670,26 @@ function tellRefused(chatId: string, entry: object, kind: CardKind | 'unknown', 
  * stands. In a tab that may not send it is only shown, as the plan card is.
  */
 function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHost | null): Html {
+    return asksView(chat, index, card.question, card.options, host, 'ask chat-card chat-choice');
+}
+
+/**
+ * A question the AI asked on a card, a choice's or a plan's, under the AI's name: its options, each a button that sends
+ * its label, live only while `choiceState` says so.
+ */
+function asksView(
+    chat: Chat,
+    index: number,
+    question: string,
+    options: readonly CardOption[],
+    host: DesktopHost | null,
+    kind: string,
+): Html {
     const maySend = host !== null && (!inTab() || tabMaySend(chat.mode));
     const state = choiceState(
         chat,
         index,
-        card.options.map((option) => option.label),
+        options.map((option) => option.label),
         acts.value[chat.id] ?? null,
         maySend,
     );
@@ -680,11 +698,11 @@ function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHo
     const said =
         choiceWords[state.state] ??
         (state.state === 'idle' && inTab() && !tabMaySend(chat.mode) ? answeredInDesktop : null);
-    return html`<div class="ask chat-card chat-choice${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
+    return html`<div class="${kind}${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
         <div class="card-who">${cardHeaders.choice}</div>
-        <div class="ask-s">${card.question}</div>
+        <div class="ask-s">${question}</div>
         <div class="ui-opts">
-            ${card.options.map((option, at) => {
+            ${options.map((option, at) => {
                 const mine = option.label === chosen;
                 return html`<button
                     class="ui-opt${mine ? ' chosen' : chosen !== null ? ' faint' : ''}"
@@ -704,11 +722,18 @@ function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHo
 
 /**
  * The card a turn's last block draws, right after the text entry that held it, with no speaker's label over it: a
- * choice; the frame that says a data card is about another agent; one line in the desktop's words for a block that did
- * not read, said once to the desktop's log; nothing for a block still being written. The kinds this release does not
- * draw yet say so in a line.
+ * choice; a plan, its part that reads drawn as a stub unless it is the conversation's last card that reads (`last`); the
+ * frame that says a data card is about another agent; one line in the desktop's words for a block that did not read,
+ * said once to the desktop's log; nothing for a block still being written. The kinds this release does not draw yet say
+ * so in a line.
  */
-function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHost | null): Html | null {
+function cardView(
+    chat: Chat,
+    index: number,
+    placed: PlacedCard,
+    host: DesktopHost | null,
+    last: number | null,
+): Html | null {
     const entry = chat.entries[index]!;
     const reading = readCard(placed, {
         place: placeOf(chat),
@@ -727,9 +752,20 @@ function cardView(chat: Chat, index: number, placed: PlacedCard, host: DesktopHo
                 <div class="ask-w">This chat shows only its own agent.</div>
             </div>`;
         case 'card':
-            return reading.card.kind === 'choice'
-                ? choiceView(chat, index, reading.card, host)
-                : noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+            switch (reading.card.kind) {
+                case 'choice':
+                    return choiceView(chat, index, reading.card, host);
+                case 'plan': {
+                    const { question, options } = reading.card;
+                    const asks =
+                        question === undefined || options === undefined
+                            ? null
+                            : asksView(chat, index, question, options, host, 'proposal-asks');
+                    return planView(chat, index, reading.card, last, asks);
+                }
+                default:
+                    return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
+            }
     }
 }
 
@@ -800,6 +836,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
     // The cards the AI asked for: each text's words without its card blocks, and each turn's last block, by the index of
     // the text entry that held it.
     const layout = cardLayout(chat.entries);
+    const lastReads = lastReading(chat, layout.cards);
     const indexOf = new Map<object, number>(chat.entries.map((entry, index) => [entry, index]));
     // The speaker is named over the agent's first words of each turn: after the person's message, or at the start. A
     // card has no speaker's label over it: a turn's words after one are named instead.
@@ -828,11 +865,25 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
             case 'text': {
                 const index = indexOf.get(entry) ?? -1;
                 const cut = layout.words.get(index);
-                // A plan the desktop marked is drawn by the plan's card, whole: its turn draws no card (`cardLayout`).
-                if (entry.plan === true && !chat.main) return planCard(chat, entry, host);
+                // A plan the desktop marked is drawn by the plan's card: its turn draws no card of its own (`cardLayout`),
+                // and a plan card its words end in is drawn inside it, its question as words; every other block stays.
+                if (entry.plan === true && !chat.main) {
+                    const marked = proposalOf(chat, index);
+                    if (marked === null) return planCard(chat, entry, host);
+                    const { question, options } = marked.card;
+                    const asks =
+                        question === undefined || options === undefined ? null : askedAsWords(question, options);
+                    return planCard(
+                        chat,
+                        entry,
+                        host,
+                        marked.words,
+                        planView(chat, index, marked.card, lastReads, asks),
+                    );
+                }
                 const words = cut ?? entry.text;
                 const placed = layout.cards.get(index);
-                const card = placed === undefined ? null : cardView(chat, index, placed, host);
+                const card = placed === undefined ? null : cardView(chat, index, placed, host, lastReads);
                 if (cut !== undefined && words.trim() === '') return card;
                 const who = named ? null : html`<div class="who">Jason</div>`;
                 named = true;
@@ -904,6 +955,7 @@ function threadOf(chatId: string) {
         now: number;
         card: string;
         asked: unknown;
+        proposed: unknown;
         view: Html;
     } | null = null;
     return computed(() => {
@@ -920,6 +972,8 @@ function threadOf(chatId: string) {
         // A choice the AI asked is live by the person's acts on the agent as read. A message waits only while a turn
         // runs, after the person's message, which has locked every choice already.
         const asked = acts.value[chatId];
+        // A plan card draws what it read, once its read is answered, and the drafts the person opened.
+        const proposed = proposals.value[chatId];
         const same =
             last !== null &&
             last.now === now &&
@@ -929,10 +983,11 @@ function threadOf(chatId: string) {
             last.chat.running === chat.running &&
             last.card === card &&
             last.asked === asked &&
+            last.proposed === proposed &&
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, asked, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, card, asked, proposed, view: threadView(chat, host) };
         return last!.view;
     });
 }

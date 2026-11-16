@@ -551,25 +551,105 @@ describe('Plan only’s plan card', () => {
         expect(document.querySelectorAll('.m.ai')).toHaveLength(0);
     });
 
-    // A block the AI wrote for a card is part of what Approve and run tells it to carry out: it stays in the plan's words.
+    // A plan the AI wrote as a card is drawn inside the plan's own card, both of its parts, so the person approves only
+    // what is on screen; a block the window does not draw as a card stays in the plan's words, as written.
     const block =
-        '```card\n{"kind":"plan","title":"Spring","channels":["email"],"steps":[{"channel":"email","body":"Hi there"}]}\n```';
+        '```card\n{"kind":"plan","title":"Spring","channels":["email"],"steps":[{"channel":"email","subject":"Hello","body":"Hi there,\\nA short note."}],"question":"Shall I keep it short?","options":[{"label":"Yes, short","detail":"Two lines"},{"label":"Longer"}]}\n```';
+    const proposal = () => within(card()!).queryByRole('group', { name: 'Jason’s proposal' });
+    const routes = (fake: FakeApi) => fake.answer('route.list', 'route.list/card-accounts');
 
-    it('shows a card block of the plan as its text, and offers Approve and run only over the whole of it', async () => {
-        const desktop = renderConsole();
+    it('draws a plan card inside the plan’s card, both parts and its question as words, with Approve and run under all of it', async () => {
+        const desktop = renderConsole(chatDesktop(), routes);
         await planned(desktop, `Here is the plan.\n${block}`);
-        await waitFor(() => expect(card()).not.toBeNull());
-        expect(card()!.querySelector('.plan-text')!.textContent).toBe(`Here is the plan.\n${block}`);
-        expect(approve()).not.toBeNull();
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe('Here is the plan.');
+        const drawn = proposal()!;
+        expect(within(drawn).getByText('This card creates and sends nothing.')).toBeTruthy();
+        expect(within(drawn).getByText('Spring')).toBeTruthy();
+        expect(within(drawn).getByText('Hello')).toBeTruthy();
+        await waitFor(() => within(drawn).getByText('No agent is created yet.'));
+        // Its question is the AI's words, shown whole, and nothing on it is a button to press: the plan's card decides.
+        const asked = within(drawn).getByRole('group', { name: 'Jason asks' });
+        expect(within(asked).getByText('Shall I keep it short?')).toBeTruthy();
+        expect(within(asked).getByText('Yes, short')).toBeTruthy();
+        expect(within(asked).getByText('Two lines')).toBeTruthy();
+        expect(within(asked).getByText('Longer')).toBeTruthy();
+        expect(within(asked).queryAllByRole('button')).toEqual([]);
+        expect(document.querySelector('.ui-opt')).toBeNull();
+        // Approve and run comes after everything of the answer, the draft one press away.
+        expect(drawn.compareDocumentPosition(approve()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(within(drawn).getByRole('button', { name: 'Show the draft' })).toBeTruthy();
+        expect(card()!.textContent).not.toContain('"kind"');
         expect(screen.queryByText('Jason asked for a card this app does not draw.')).toBeNull();
     });
 
-    it('shows a plan that is only a card block as that text, never as an empty card with Approve and run', async () => {
-        const desktop = renderConsole();
+    it('draws a plan that is only a plan card as that card, with Approve and run under it', async () => {
+        const desktop = renderConsole(chatDesktop(), routes);
         await planned(desktop, block);
-        await waitFor(() => expect(card()).not.toBeNull());
-        expect(card()!.querySelector('.plan-text')!.textContent).toBe(block);
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(card()!.querySelector('.plan-text')).toBeNull();
         expect(approve()).not.toBeNull();
+    });
+
+    it('opening a draft in the plan’s card approves nothing and sends nothing', async () => {
+        const desktop = renderConsole(chatDesktop(), routes);
+        await planned(desktop, block);
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        const before = calls(desktop, 'chat.setMode').length;
+        fireEvent.click(within(proposal()!).getByRole('button', { name: 'Show the draft' }));
+        await waitFor(() => within(proposal()!).getByText('Jason’s draft'));
+        expect(proposal()!.querySelector('.proposal-body')!.textContent).toBe('Hi there,\nA short note.');
+        expect(calls(desktop, 'chat.setMode')).toHaveLength(before);
+        expect(calls(desktop, 'chat.send')).toHaveLength(1);
+        expect(approve()).not.toBeNull();
+    });
+
+    it.each([
+        ['a plan card that does not read', '```card\n{"kind":"plan","channels":["email"]}\n```'],
+        ['a choice', '```card\n{"kind":"choice","question":"Which?","options":[{"label":"One"},{"label":"Two"}]}\n```'],
+        ['a data card', '```card\n{"kind":"needs"}\n```'],
+    ])(
+        'keeps %s in the plan’s words as written, never an empty frame, and offers Approve and run over it',
+        async (_, other) => {
+            const desktop = renderConsole();
+            await planned(desktop, `Here is the plan.\n${other}`);
+            await waitFor(() => expect(card()).not.toBeNull());
+            expect(card()!.querySelector('.plan-text')!.textContent).toBe(`Here is the plan.\n${other}`);
+            expect(proposal()).toBeNull();
+            expect(within(card()!).queryByRole('group', { name: 'Jason asks' })).toBeNull();
+            expect(approve()).not.toBeNull();
+            expect(screen.queryByText(/^Jason(’s card| asked for a card)/)).toBeNull();
+        },
+    );
+
+    it('keeps an earlier block of the plan in its words when its last block is the plan card drawn', async () => {
+        const desktop = renderConsole(chatDesktop(), routes);
+        const earlier = '```card\n{"kind":"needs"}\n```';
+        await planned(desktop, `First this.\n${earlier}\nThen the plan.\n${block}`);
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(card()!.querySelector('.plan-text')!.textContent).toBe(`First this.\n${earlier}\nThen the plan.`);
+    });
+
+    it('reads what is on record once across the turn’s end that marks the words its plan, and again only on Refresh', async () => {
+        let fake!: FakeApi;
+        const desktop = renderConsole(chatDesktop(), (given) => routes((fake = given)));
+        await waitFor(() => menu());
+        choose('plan_only');
+        await waitForMenus(() => expect(value()).toBe('plan_only'));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Plan it' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(1));
+        const id = calls(desktop, 'chat.send')[0]!.args[0] as string;
+        const routeReads = () => fake.calls.filter((each) => each.operation === 'route.list');
+        // The words arrive while the turn runs, and their plan card reads; the turn's end marks them the plan.
+        flush(() => desktop.emit(id, { kind: 'text', text: block }));
+        await waitFor(() => screen.getByText('No agent is created yet.'));
+        flush(() => desktop.emit(id, { kind: 'done', error: null, plan: true }));
+        await waitFor(() => expect(proposal()).not.toBeNull());
+        expect(within(proposal()!).getByText('No agent is created yet.')).toBeTruthy();
+        expect(routeReads()).toHaveLength(1);
+        fireEvent.click(within(proposal()!).getByRole('button', { name: 'Refresh' }));
+        await waitFor(() => expect(routeReads()).toHaveLength(2));
     });
 
     it('offers no Approve and run over a plan of no words', async () => {
