@@ -772,6 +772,12 @@ public sealed class JasonDbContext(DbContextOptions<JasonDbContext> options) : D
                 .IsUnique()
                 .HasFilter("kind = 'provider_event_observed'");
 
+            // A send the provider reported is said once per campaign the same way, under the event's own key, in an index
+            // of its own: the store looks the page's keys up by kind before it writes, and a second line is refused.
+            entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_provider_sends")
+                .IsUnique()
+                .HasFilter("kind = 'provider_send_observed'");
+
             // A send seen to have gone out is said once, under the key of the work item that accepted it, in an index of
             // its own: the reads that find it look the key up first, and a second line is refused.
             entry.HasIndex(e => new { e.CampaignId, e.Kind, e.Key }, "ix_journal_campaign_kind_key_sends")

@@ -13,7 +13,8 @@ public partial class JournalKindPageLinksTests
     [InlineData("inbound-sync.md", "inbound_reply_observed", "`plugin`, `thread`, `channel`, `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id`")]
     [InlineData("events.md", "inbound_reply_observed", "`plugin`, `thread`, `channel`, `last_activity_at`, `unread`, `has_meeting_intent`, `contact_id`")]
     [InlineData("events.md", "provider_event_observed", "`kind`, `plugin`, `event_id`, `occurred_at`, `channel`, `contact_id`")]
-    [InlineData("events.md", "events_read", "the source, the plugin, the binding identity, how it read, the pages")]
+    [InlineData("events.md", "provider_send_observed", "`plugin`, `event_id`, `occurred_at`, `channel`, `contact_id`, `attributed_by`")]
+    [InlineData("events.md", "events_read","the source, the plugin, the binding identity, how it read, the pages")]
     [InlineData("notifications.md", "notification_sent", "\"notification_id\": \"ntf_01K")]
     public void The_page_links_the_kinds_document_instead_of_listing_its_fields(string page, string kind, string list)
     {

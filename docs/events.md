@@ -1,13 +1,14 @@
 # Events
 
-A provider knows things Jason was not there for: somebody replied, an invitation was accepted, a message bounced. The
-events family is how Jason comes to know them — by reading each account a route binds, a page at a time, from the
-point the plugin's own cursor names — and how what it read reaches a campaign: as a line in that campaign's chronicle,
-which wakes its manager like a failed item or an answered question does ([campaign manager](campaign-manager.md)).
+A provider knows things Jason was not there for: somebody replied, an invitation was accepted, a message bounced, a
+sequence sent its next step. The events family is how Jason comes to know them — by reading each account a route binds,
+a page at a time, from the point the plugin's own cursor names — and how what it read reaches a campaign: as a line in
+that campaign's chronicle, which, for anything but a send, wakes its manager like a failed item or an answered question
+does ([campaign manager](campaign-manager.md)).
 
 Nothing here reads meaning. An event is identifiers, moments and the provider's own flags; which campaigns it concerns
 is decided by the identifiers the campaigns' own operations pinned — the provider campaign first, the person where that
-finds no campaign — and what it calls for is the manager's.
+finds no campaign and the event is not a send — and what it calls for is the manager's.
 
 This page is the contract for reading an account, the events store and the lines it writes, a span read again on a
 person's request, and the record of the accounts. What a plugin author implements is
@@ -31,10 +32,14 @@ at most 100 events, the cursor to read on from, and whether more follow now. A c
 | `reply_detected` | `contact`, `campaign`, `thread` | `channel` |
 | `invitation_accepted` | `contact`, `campaign`, `account` | — |
 | `bounce` | `contact`, `campaign`, `message` | `bounce` |
+| `message_sent` | `contact`, `campaign`, `thread`, `message` | `channel` |
 
-`moved_by` is the provider's own word for who moved a thread: `other_side`, `account` — a message sent as the account,
-Jason's own replies among them — `provider`, a change with no message such as a category or the read flag, or `null`
-where the provider cannot say. Every kind is a closed object, so a subject, a preview or a name is refused with the
+`message_sent` is a message the account sent to a person — by Jason, a sequence or a person in the provider's own
+screens, which the provider does not tell apart — named by the person, always, and the provider campaign it belongs to,
+the thread and the message where the provider names them. `moved_by` is the provider's own word for who moved a thread:
+`other_side`, `account` — a message sent as the account, Jason's own replies among them, which the contract asks to be
+reported as the `message_sent` it is — `provider`, a change with no message such as a category or the read flag, or
+`null` where the provider cannot say. Every kind is a closed object, so a subject, a preview or a name is refused with the
 whole page, and so is an identifier with a space in it.
 
 A failure carries one of `events_unreachable` (transient), `events_unauthorized`, `events_unsupported` and
@@ -96,6 +101,12 @@ An event that finds a campaign by neither concerns nobody: nothing else counts, 
 not a name. A value kept only as a divergence beside a pin is not a pin, and an identifier pinned to two contacts names
 nobody, so it reaches no campaign by the person either.
 
+**A send by the first rule alone.** A `message_sent` reaches a campaign by `campaign_pin` and never by the person: the
+second rule is not asked for it. That rule is there for what no provider campaign places, a direct email's reply, and
+for a send that audience is wrong: a direct send of one campaign to a person who is also a member of another would read
+as the other's. So a send that names no provider campaign — a direct send, a person's own mail in the provider's
+screens — or one no campaign that is not archived holds, or more than one does, is stored and concerns nobody.
+
 **Why in that order.** A sequence's event belongs to the campaign that runs the sequence. The inbound read lists a
 campaign's own threads, and the events path must agree with it about a campaign; so the person's rule is the rule for
 the event no provider campaign places — a direct email's reply, a LinkedIn message outside a sequence — never a second
@@ -111,12 +122,16 @@ For each campaign it concerns, a stored event says at most one line, written in 
 | `thread_moved` by `other_side`, or by `null` | `inbound_reply_observed` |
 | `thread_moved` by `account` or `provider` | none |
 | `reply_detected`, `invitation_accepted`, `bounce` | `provider_event_observed` |
+| `message_sent` | `provider_send_observed` |
 
-Both lines are written by `system:dispatcher`, name the campaign and no work item or attempt, and are trigger kinds a
-manager is woken by under the default `Manager:Triggers`; an `inbound_reply_observed` line whose `attributed_by` is
-`campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder, and a
+The three lines are written by `system:dispatcher` and name the campaign and no work item or attempt.
+`inbound_reply_observed` and `provider_event_observed` are trigger kinds a manager is woken by under the default
+`Manager:Triggers`; `provider_send_observed` is not, since a send is the course the campaign planned, and an
+installation may add it ([campaign manager](campaign-manager.md)). An `inbound_reply_observed` line whose
+`attributed_by` is `campaign_pin`, or `contact_pin` with `campaign_own`, also wakes the campaign's responder, and a
 `provider_event_observed` line of a `bounce` asks for reads of the campaign's own sends it could be of
-([inbound sync](inbound-sync.md) §1).
+([inbound sync](inbound-sync.md) §1). A send's line is a kind apart, so neither the responder nor the bounce step, nor
+anything else that reads replies or provider events, reads it.
 
 - **`inbound_reply_observed`** is the line the inbound read writes, with the fields
   [its document](contracts/journal/inbound_reply_observed.json) requires, and two more, `event_id`, the stored event,
@@ -144,6 +159,11 @@ manager is woken by under the default `Manager:Triggers`; an `inbound_reply_obse
   identifiers and flags, field by field in [its document](contracts/journal/provider_event_observed.json). It is keyed
   by the event's own key. A bounce's line is counted by each notification until one reaches anybody, once by that
   key however many campaigns the bounce reached ([notifications](notifications.md)).
+- **`provider_send_observed`** carries the send, the person it went to where one contact is pinned with the provider's
+  identifier, `attributed_by`, always `campaign_pin`, and the thread and the message by the provider's identifiers, field
+  by field in [its document](contracts/journal/provider_send_observed.json). It names no kind, since the line's own kind
+  says it, and it is keyed by the event's own key. Two sends the provider reports as one — two messages on one thread
+  between two reads, where it reports only the latest — are one event and one line.
 
 **Said once.** A campaign says each line once under its key, and the database refuses a second; one key may be said in
 two campaigns, and the rule that found a campaign is no part of the key. **History is not said.** An event that
