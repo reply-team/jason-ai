@@ -163,6 +163,9 @@ public partial class InstallScriptTests
     [InlineData("\n", false)]
     [InlineData("$", true)]
     [InlineData("\n", true)]
+    [InlineData("\"", true)]
+    [InlineData("`", true)]
+    [InlineData("\\", true)]
     public void Install_sh_refuses_a_directory_its_profile_line_cannot_write_only_where_it_writes_it(string character, bool noModifyPath)
     {
         using var tree = new TempTree();
