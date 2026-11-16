@@ -4,6 +4,7 @@ import { HttpApi, type Api } from '../api/client';
 import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { CurrentPage } from '../app';
+import { Notice } from '../layout/notice';
 import { DemoView } from '../platform/demo-frame';
 import { can, earlier, placeKind } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
@@ -86,20 +87,42 @@ function chatAbout(campaign?: { id: string; name: string }): void {
 /** What the Accounts page is handed to draw the provider's accounts: the Reply card, as the Connect panel acts on it. */
 const providerAccounts = { view: connect.accountsReplyView, gone: connect.accountsReplyGone };
 
+/** The agent whose conversation the desktop could not open, and why: its Chat tab says so until it opens. */
+const chatUnopened = signal<{ agent: string; why: string } | null>(null);
+
+/** An agent's Chat tab whose conversation could not be opened: what the desktop said, and a way to try again. */
+function ChatUnopened({ agent, why }: { agent: string; why: string }) {
+    return (
+        <Notice danger>
+            This agent’s conversation could not be opened. {why}{' '}
+            <button type="button" className="btn sm" onClick={() => here().dock.page(agentChatRoute(agent))}>
+                Try again
+            </button>
+        </Notice>
+    );
+}
+
 function PagePanel() {
-    // An agent's Chat is the console's own pane: while the address names it, the page draws nothing behind it.
-    const chatShown = agentChatOf(route.value) !== null && can('chat.create');
+    // An agent's Chat is the console's own pane: while the address names it, the page draws nothing behind it but the
+    // word that its conversation could not be opened.
+    const chatOf = can('chat.create') ? agentChatOf(route.value) : null;
+    const unopened = chatUnopened.value;
     return (
         <div className="harness">
             <div className="app chromeless">
                 <div className="content">
-                    <CampaignChat.Provider value={chatAbout}>
-                        <AgentHeaded.Provider value={true}>
-                            <ProviderAccountsContext.Provider value={providerAccounts}>
-                                {!chatShown && <CurrentPage />}
-                            </ProviderAccountsContext.Provider>
-                        </AgentHeaded.Provider>
-                    </CampaignChat.Provider>
+                    {chatOf === null ? (
+                        <CampaignChat.Provider value={chatAbout}>
+                            <AgentHeaded.Provider value={true}>
+                                <ProviderAccountsContext.Provider value={providerAccounts}>
+                                    <CurrentPage />
+                                </ProviderAccountsContext.Provider>
+                            </AgentHeaded.Provider>
+                        </CampaignChat.Provider>
+                    ) : (
+                        unopened !== null &&
+                        unopened.agent === chatOf && <ChatUnopened agent={unopened.agent} why={unopened.why} />
+                    )}
                 </div>
             </div>
         </div>
@@ -327,8 +350,14 @@ function showAgentChat(id: string): void {
             reveal('page');
             return;
         }
-        if (chatId === null) return;
         moveBar(agentChatRoute(id));
+        if (chatId === null) {
+            // Under the agent's own header, never another's pane: its Chat tab says why and offers to try again.
+            chatUnopened.value = { agent: id, why: conversationsFailure.value ?? 'The desktop did not say why.' };
+            reveal('page');
+            return;
+        }
+        if (chatUnopened.value?.agent === id) chatUnopened.value = null;
         reveal(chatPane(chatId));
     });
 }

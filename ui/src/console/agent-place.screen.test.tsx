@@ -486,6 +486,38 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
     });
 });
 
+describe('An agent whose conversation the desktop could not open', () => {
+    it('says so under its own header on its Chat tab, never another agent’s pane, and tries again', async () => {
+        const { desktop } = await renderAt(
+            'window',
+            '#/campaigns/cmp_2/chat',
+            api().answerAnyRequest('route.resolve', 'route.resolve/no-route'),
+        );
+        // Another agent's Chat was shown first.
+        await waitFor(() => expect(activePanel.value).toBe('chat:unmade:cmp_2'));
+        desktop.refuse.set('chat.open', 'The conversation’s file could not be read.');
+        flush(() => {
+            location.hash = '#/campaigns/cmp_1/chat';
+        });
+        const failure = await waitFor(() => {
+            const page = document.querySelector<HTMLElement>('[data-pane="page"]:not([hidden])');
+            expect(page).not.toBeNull();
+            return within(page!).getByRole('alert');
+        });
+        expect(failure.textContent).toContain('The conversation’s file could not be read.');
+        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+        expect(head()?.querySelector('h2')?.textContent).not.toBe('Autumn');
+        await waitFor(() => expect(tab('Chat').getAttribute('aria-selected')).toBe('true'));
+        expect(document.querySelector('[data-pane^="chat:"]:not([hidden])')).toBeNull();
+        desktop.refuse.delete('chat.open');
+        fireEvent.click(
+            within(failure.closest<HTMLElement>('[data-pane]')!).getByRole('button', { name: 'Try again' }),
+        );
+        await springChatShown();
+        expect(location.hash).toBe('#/campaigns/cmp_1/chat');
+    });
+});
+
 describe('An agent the runtime no longer knows', () => {
     it.each(['#/campaigns/cmp_gone', '#/campaigns/cmp_gone/chat'])(
         'at %s, says the agent no longer exists, draws no composer and makes nothing',
