@@ -136,8 +136,10 @@ function replyPart(part: Part<DesktopReply>): Html {
     const absent = Array.isArray(reply.absent) ? reply.absent : [];
     const unread = Array.isArray(reply.unread) ? reply.unread : [];
     return html`<div class="card-line">
-            ${reply.cli.found ? null : html`The Reply CLI was not found. `}
-            ${reply.signedIn ? html`Signed in to Reply as <b>${reply.user ?? ''}</b>` : 'Not signed in to Reply'}
+            ${reply.cli.found ? null : html`<span>The Reply CLI was not found.</span>`}
+            <span
+                >${reply.signedIn ? html`Signed in to Reply as <b>${reply.user ?? ''}</b>` : 'Not signed in to Reply'}</span
+            >
             <span class="meta"
                 >${reply.wired ? 'Jason uses this sign-in' : 'Jason does not use a Reply sign-in yet'}</span
             >
