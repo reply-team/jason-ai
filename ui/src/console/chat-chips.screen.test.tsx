@@ -215,6 +215,28 @@ describe('the chips under an agent’s last answer', () => {
         expect(chips(pane)).toEqual([]);
         expect(pane.querySelector('.sugs')).toBeNull();
     });
+
+    it('do not stand in the chat of an archived agent, which the console does not list', async () => {
+        renderConsole([agent('conv_01JDCHIPS0000000000000000E', 'cmp_4', 'Archived one'), autumn()]);
+        const listed = await openChat('Autumn');
+        await waitFor(() => expect(chips(listed)).toHaveLength(2));
+        const pane = await openChat('Archived one');
+        await waitFor(() => within(pane).getByText('Hello.'));
+        expect(chips(pane)).toEqual([]);
+    });
+
+    it('wait while the send waits for a model’s name, and stand again once one is typed', async () => {
+        const { desktop } = renderConsole([autumn()]);
+        const pane = await openChat('Autumn');
+        await waitFor(() => expect(chips(pane)).toHaveLength(2));
+        fireEvent.click(within(pane).getByRole('button', { name: /^Model:/ }));
+        fireEvent.click(within(pane).getByRole('menuitemradio', { name: 'Another model…' }));
+        const name = await waitFor(() => within(pane).getByRole('textbox', { name: 'Model name' }));
+        await waitFor(() => expect(chips(pane)).toEqual([]));
+        expect(sends(desktop)).toEqual([]);
+        fireEvent.change(name, { target: { value: 'claude-opus-5-5' } });
+        await waitFor(() => expect(chips(pane)).toEqual(['How is it going?', 'Show me the people']));
+    });
 });
 
 describe('the chips under an answer in a chat of no agent', () => {

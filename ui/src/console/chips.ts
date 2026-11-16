@@ -42,11 +42,23 @@ export const chipWords: readonly string[] = [
     ...new Set([...openingChips, ...nobody, waiting, ...unstarted, ...underway].map((each) => each.shown)),
 ];
 
-/** The chips of an agent by its counts now: who to reach while nobody is in it; else what waits first, then the rest. */
-function agentChips(row: CampaignSummaryRow): readonly Chip[] {
+/** An agent as the console read it: its state, as `campaign.list` says it, and its counts now. */
+export interface Agent {
+    status: string;
+    row: CampaignSummaryRow;
+}
+
+/**
+ * The chips of an agent by its state and counts now: none once it is archived; who to reach while nobody is in it; else
+ * what waits first, then the people and what happens when it starts while it has not started (a draft, or paused) and
+ * nobody in it was worked on, and otherwise how it is going.
+ */
+function agentChips({ status, row }: Agent): readonly Chip[] {
+    if (status === 'archived') return [];
     if (row.people === 0) return nobody;
     // `new` counts the people nothing was done or planned for; any other count is someone worked on.
-    const rest = row.new >= row.people ? unstarted : underway;
+    const notStarted = (status === 'draft' || status === 'paused') && row.new >= row.people;
+    const rest = notStarted ? unstarted : underway;
     return row.waiting > 0 ? [waiting, ...rest] : rest;
 }
 
@@ -62,19 +74,19 @@ const most = 3;
 /**
  * The chips under a chat's last answer. None while a turn runs; none on an empty chat, whose opening draws its own; none
  * when the conversation's last entry (the Feed's lines and gaps aside) is anything but the AI's words, a plan the
- * desktop marked included; none while a choice stands open. Otherwise an agent's by its counts (none while they are
- * unread), and the opening three in the Feed and a set-up chat; never one that asks the person's last message again, as
+ * desktop marked included; none while a choice stands open. Otherwise an agent's by its state and counts (none while
+ * they are unread), and the opening three in the Feed and a set-up chat; never one that asks the person's last message again, as
  * a person reads it.
  */
 export function chipsUnder(
     chat: Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>,
-    row: CampaignSummaryRow | undefined,
+    agent: Agent | undefined,
 ): readonly Chip[] {
     if (chat.running) return [];
     const last = latest(chat.entries, (entry) => entry.kind !== 'line' && entry.kind !== 'gap');
     if (last?.kind !== 'text' || (last.plan === true && !chat.main)) return [];
     if (openChoice(chat) !== null) return [];
-    const offered = placeOf(chat) !== 'agent' ? openingChips : row === undefined ? [] : agentChips(row);
+    const offered = placeOf(chat) !== 'agent' ? openingChips : agent === undefined ? [] : agentChips(agent);
     const said = latest(chat.entries, (entry) => entry.kind === 'user');
     const asked = said?.kind === 'user' ? foldLabel(said.text) : null;
     return offered

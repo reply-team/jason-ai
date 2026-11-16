@@ -124,6 +124,17 @@ export const passiveWords: readonly string[] = [
     'Show me the people',
     'What happens when it starts?',
     'How is it going?',
+    // The data cards' controls: a read again, which decides nothing, and the places they open.
+    'Show now',
+    'Refresh',
+    'Show what waits',
+    'Show them',
+    'Open',
+    'More in Needs you',
+    'People',
+    'Inbox',
+    'Results',
+    'Settings',
 ];
 
 /**

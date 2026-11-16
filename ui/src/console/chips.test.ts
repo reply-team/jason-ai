@@ -1,24 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import type { CampaignSummaryRow } from '../api/types';
 import type { Chat, Entry } from './chat-model';
-import { chipWords, chipsUnder, openingChips } from './chips';
+import { chipWords, chipsUnder, openingChips, type Agent } from './chips';
 
 // The chips under a chat's last answer: chosen from the campaign's counts as the runtime keeps them, words a person
 // would ask and never a claim, none while a turn runs or a choice stands open, never the question just asked again.
 
-const row = (counts: Partial<CampaignSummaryRow> = {}): CampaignSummaryRow => ({
-    campaign_id: 'cmp_1',
-    people: 0,
-    waiting: 0,
-    failed: 0,
-    working: 0,
-    new: 0,
-    idle: 0,
-    sequence: 0,
-    out: 0,
-    removed: 0,
-    sequence_linked: false,
-    ...counts,
+/** An agent as the console read it: its state from `campaign.list` (a draft unless said) and its counts. */
+const row = (counts: Partial<CampaignSummaryRow> = {}, status = 'draft'): Agent => ({
+    status,
+    row: {
+        campaign_id: 'cmp_1',
+        people: 0,
+        waiting: 0,
+        failed: 0,
+        working: 0,
+        new: 0,
+        idle: 0,
+        sequence: 0,
+        out: 0,
+        removed: 0,
+        sequence_linked: false,
+        ...counts,
+    },
 });
 
 type Asked = Pick<Chat, 'entries' | 'campaignId' | 'main' | 'running' | 'reopened'>;
@@ -53,11 +57,24 @@ describe('the chips under an agent’s answer', () => {
         ).toEqual(['What is waiting for me?', 'How is it going?', 'Show me the people']);
     });
 
-    it('asks about the people and the start while nobody in it was worked on', () => {
-        expect(shown(chipsUnder(answered(), row({ people: 2, new: 2 })))).toEqual([
+    it('asks about the people and the start while nobody in it was worked on and it is a draft or paused', () => {
+        for (const status of ['draft', 'paused'])
+            expect(shown(chipsUnder(answered(), row({ people: 2, new: 2 }, status))), status).toEqual([
+                'Show me the people',
+                'What happens when it starts?',
+            ]);
+    });
+
+    it('asks how it goes, not what happens at the start, for an active agent whose people are all new', () => {
+        expect(shown(chipsUnder(answered(), row({ people: 2, new: 2 }, 'active')))).toEqual([
+            'How is it going?',
             'Show me the people',
-            'What happens when it starts?',
         ]);
+    });
+
+    it('offers nothing in an archived agent’s chat', () => {
+        for (const counts of [{}, { people: 2, new: 2 }, { people: 3, waiting: 1, working: 2 }])
+            expect(chipsUnder(answered(), row(counts, 'archived'))).toEqual([]);
     });
 
     it('asks how it goes once anyone in it was worked on, by any count past new', () => {
@@ -68,7 +85,7 @@ describe('the chips under an agent’s answer', () => {
             ]);
     });
 
-    it('offers nothing for an agent whose counts were not read', () => {
+    it('offers nothing for an agent the console did not read, an archived one it does not list among them', () => {
         expect(chipsUnder(answered(), undefined)).toEqual([]);
     });
 

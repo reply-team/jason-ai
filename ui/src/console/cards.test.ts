@@ -525,6 +525,12 @@ describe('a choice’s members', () => {
         // The Reply card's offers after a refusal, drawn from a table.
         'Open the shared mailbox page…',
         'Delete anyway…',
+        // The status card's page buttons, whose words are arguments of one helper (card-status.ts, `page`). A people
+        // list's rows and footer draw a person's name and a count from the runtime's answer, which no list holds.
+        'People',
+        'Inbox',
+        'Results',
+        'Settings',
         // The words of a permission answered are a sentence beside the card, not a button; the effort dots' words are
         // only their names for a screen reader, never drawn; neither is held.
     ];
@@ -538,6 +544,10 @@ describe('a choice’s members', () => {
             ...buttonWords(source('../screens/campaigns/moves.tsx')),
             ...buttonWords(source('../screens/campaigns/pause-dialog.tsx')),
             ...buttonWords(source('../screens/attention/message-editor.tsx')),
+            ...buttonWords(source('card-frame.ts')),
+            ...buttonWords(source('card-status.ts')),
+            ...buttonWords(source('card-people.ts')),
+            ...buttonWords(source('card-needs.ts')),
             ...modeNames(source('chat-model.ts')),
             ...moveVerbs(source('../screens/campaigns/pause-dialog.tsx')),
             // The chips' words, drawn from the tables of chips.ts.
@@ -708,9 +718,14 @@ describe('the chat’s instructions', () => {
         return found;
     }
 
-    it('teaches only the kind this window draws, the choice, and its example reads as one', () => {
+    it('teaches only the kinds this window draws, a choice and three cards of data, and each example reads as one', () => {
         const shown = examples(instructions);
-        expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual(['choice']);
+        expect(shown.map((each) => (JSON.parse(each) as { kind: string }).kind)).toEqual([
+            'choice',
+            'people_list',
+            'agent_status',
+            'needs',
+        ]);
         for (const example of shown) expect(read(example).state, example).toBe('card');
     });
 });
