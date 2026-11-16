@@ -832,7 +832,15 @@ In a period, removed people included, so a past period does not change when some
 - `worked_on` — Work about them finished in the period, whether it succeeded or failed.
 - `contacted` — Something was sent to them, or they were put into the provider's sequence, in the period. That is a
   `campaign.enroll`, `message.send`, `conversation.reply` or `social_invitation.send` about them that succeeded, even
-  an enrollment into a provider campaign not live yet; research never counts.
+  an enrollment into a provider campaign not live yet, or the provider's events said the account sent them a message of
+  the campaign's provider campaign (`provider_send_observed`, [docs/events.md](events.md) §4), a step of the sequence
+  among them; research never counts. A send is dated by the moment the provider gives it, as a bounce is, and a person
+  reached both ways, or sent several messages, counts once; their why in the list is the latest of the two, a send's
+  code `message_sent`. A send outside every provider campaign, and one in a span the events left unread
+  (`events_gap_observed`), is not counted. Only email sends are claimed to be read so far. No count of messages is
+  offered: the provider's events may report two sends on one thread as its latest. Sends from before the account's
+  events were first read are not read by themselves; a person may ask for the last thirty days to be read again
+  (`jason events backfill`).
 - `replied` — Their first reply in this campaign came in the period. A reply is dated by the moment the provider gives
   it, so a reply read again later, or a follow-up in the same thread, never counts them a second time.
 - `bounced` — A provider's event said in the period that a message to them bounced, hard or soft: an event does not

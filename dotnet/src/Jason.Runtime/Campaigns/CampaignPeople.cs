@@ -169,6 +169,22 @@ internal static partial class CampaignPeople
         WHERE b.day >= julianday({1}) AND b.day < julianday({2})
         """;
 
+    // Every message the provider's events said the account sent a person of the campaign, dated by the provider's moment
+    // as a bounce is: a span read again writes a send from weeks ago today. Only a send its provider campaign placed is a
+    // line of the campaign at all; a line that names nobody is about no membership.
+    private const string Sends = $$"""
+        SELECT jl.campaign_id, jl.contact_id, julianday(json_extract(jl.new_json, '$.occurred_at')) AS day
+        FROM journal AS jl
+        WHERE jl.campaign_id IN {{Asked}} AND jl.kind = 'provider_send_observed' AND jl.contact_id IS NOT NULL
+        """;
+
+    // Sent to in the period, per person and campaign, however many messages: no count of messages is offered.
+    private const string Sent = $$"""
+        SELECT DISTINCT s.campaign_id, s.contact_id
+        FROM ({{Sends}}) AS s
+        WHERE s.day >= julianday({1}) AND s.day < julianday({2})
+        """;
+
     // The register forgets an entry once it is lifted; the journal does not. Read from the period's opt-outs, each found
     // among the channels by its value; whose campaign they are in is the memberships' join to say. An entry the runtime
     // wrote for a bounce (actor system:bounce) is a dead address, not a person's wish, and is no opt-out.
@@ -219,6 +235,8 @@ internal static partial class CampaignPeople
     private static readonly Part FinishedPart = new(
         "fw", Finished, ByPerson: false, "coalesce(fw.worked_on, 0) AS was_worked_on, coalesce(fw.contacted, 0) AS was_contacted");
 
+    private static readonly Part SentPart = new("sn", Sent, ByPerson: false, "sn.contact_id IS NOT NULL AS was_sent");
+
     private static readonly Part FirstReplyPart = new(
         "fr", FirstReply, ByPerson: false, "coalesce(fr.first >= julianday({1}) AND fr.first < julianday({2}), 0) AS has_replied");
 
@@ -247,7 +265,9 @@ internal static partial class CampaignPeople
     [
         new(CampaignActivityFilter.Added, "f.was_added", [ReAddedPart]),
         new(CampaignActivityFilter.WorkedOn, "f.was_worked_on", [FinishedPart]),
-        new(CampaignActivityFilter.Contacted, "f.was_contacted", [FinishedPart]),
+        // Contacted: an act of Jason's about them succeeded, or the provider's events said the account sent them a message,
+        // in the period: one condition over one membership, so a person reached both ways, or many times, counts once.
+        new(CampaignActivityFilter.Contacted, "(f.was_contacted OR f.was_sent)", [FinishedPart, SentPart]),
         new(CampaignActivityFilter.Replied, "f.has_replied", [FirstReplyPart]),
         new(CampaignActivityFilter.Bounced, "f.has_bounced", [BouncedPart]),
         new(CampaignActivityFilter.OptedOut, "f.has_opted_out", [OptedOutPart]),
@@ -268,10 +288,10 @@ internal static partial class CampaignPeople
     private const string PageMembers = "cc.contact_id IN (SELECT value FROM json_each({1}))";
 
     // When each Activity count's happenings happened, one row each, dated where the list's why dates it: an addition by
-    // the membership or the line that added the person back, work by its finish, a reply by the provider's moment of the
-    // first, a bounce by the provider's moment of each, an opt-out and a removal by their line. Only members are counted,
-    // as the counts count memberships. Work is read by its finish, so a short window reads only the work that finished in
-    // it.
+    // the membership or the line that added the person back, work by its finish, a send and a bounce by the provider's
+    // moment of each, a reply by the provider's moment of the first, an opt-out and a removal by their line. Only members
+    // are counted, as the counts count memberships. Work is read by its finish, so a short window reads only the work that
+    // finished in it.
     private const string AddedMoments = $$"""
         SELECT cc.campaign_id, cc.contact_id, julianday(cc.added_at) AS day
         FROM campaign_contacts AS cc
@@ -295,6 +315,10 @@ internal static partial class CampaignPeople
         FROM work_items AS w INDEXED BY ix_work_items_campaign_id_finished_at
         WHERE w.campaign_id IN {{Asked}} AND w.contact_id IS NOT NULL AND w.finished_at >= {1} AND w.finished_at < {2}
           AND {{ContactedSql}}
+        UNION ALL
+        SELECT s.campaign_id, s.contact_id, s.day
+        FROM ({{Sends}}) AS s
+        WHERE s.day >= julianday({1}) AND s.day < julianday({2})
         """;
 
     private const string RepliedMoments = $$"""
@@ -336,9 +360,10 @@ internal static partial class CampaignPeople
         [CampaignActivityFilter.Removed] = RemovedMoments,
     }.ToFrozenDictionary();
 
-    // People is every count's happenings; Contacted's are work that finished, so Worked on already holds them.
-    private static readonly string People = string.Join(
-        " UNION ALL ", HappeningMoments.Where(pair => pair.Key != CampaignActivityFilter.Contacted).Select(pair => pair.Value));
+    // People is every count's happenings. Contacted's are not all work: a send the provider's events said is no work of
+    // Jason's, so Worked on does not hold it, and Contacted's own are read too. An act's finish stands in both; the series
+    // counts a person once a bucket and a listing takes their latest moment, so a moment read twice changes neither.
+    private static readonly string People = string.Join(" UNION ALL ", HappeningMoments.Values);
 
     /// <summary>The reads over every membership of the campaigns asked.</summary>
     internal static readonly Reads Everyone = new(SummaryMembers, ActivityMembers, string.Empty);

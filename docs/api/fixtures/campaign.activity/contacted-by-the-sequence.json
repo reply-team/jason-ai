@@ -1,0 +1,37 @@
+{
+  "operation": "campaign.activity",
+  "case": "contacted-by-the-sequence",
+  "request": {
+    "campaign_ids": [
+      "cmp_1"
+    ],
+    "since": "2026-10-10T00:00:00.000Z",
+    "until": "2026-10-16T09:00:00.000Z"
+  },
+  "status": 200,
+  "response": {
+    "campaigns": [
+      {
+        "campaign_id": "cmp_1",
+        "people": 2,
+        "added": 0,
+        "worked_on": 1,
+        "contacted": 2,
+        "replied": 0,
+        "bounced": 0,
+        "opted_out": 0,
+        "removed": 0
+      }
+    ],
+    "total": {
+      "people": 2,
+      "added": 0,
+      "worked_on": 1,
+      "contacted": 2,
+      "replied": 0,
+      "bounced": 0,
+      "opted_out": 0,
+      "removed": 0
+    }
+  }
+}

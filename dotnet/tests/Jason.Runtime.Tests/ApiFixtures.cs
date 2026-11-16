@@ -135,6 +135,7 @@ public static class ApiFixtures
         "campaign.activity/audience",
         "campaign.activity/audience-nobody-landed",
         "campaign.activity/card-status-30-days",
+        "campaign.activity/contacted-by-the-sequence",
         "campaign.activity/last-7-days",
         "campaign.activity/many",
         "campaign.activity/many-one",
