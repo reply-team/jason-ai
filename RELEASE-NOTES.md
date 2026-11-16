@@ -45,7 +45,7 @@ opens at once as a sample page, and the console has a new look.
   can be built on Jason. It runs no Jason behind it, sends nothing and reaches nothing: the page is shown sealed, so it
   cannot reach the network, your installation or your disk, and what you do in it is not kept. Some of what it shows is
   not in the product. The switch to Live is the one at the top of the window. Choosing Demo no longer starts a second
-  installation, and no longer makes folders on your machine. See
+  installation, and makes no folder of an installation. See
   [the demo](https://github.com/reply-team/jason-ai/blob/v{{version}}/docs/desktop.md#the-demo).
 - **The console has a new look.** Every screen of the console now shares one palette, so People, Accounts, Settings,
   an agent's tabs, Work items, System and Performance no longer look like another product beside it (in the light
