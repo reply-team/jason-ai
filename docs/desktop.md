@@ -221,6 +221,9 @@ opens a folder in the place you used last, and its arrow lists every place avail
 - **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
   ([below](#the-chat-in-a-browser-tab)).
 
+On Windows and macOS, the row of an installed application shows that application's own icon, read at run time. On Linux,
+and for rows with no application of their own, the menu keeps its glyphs.
+
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
 otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in

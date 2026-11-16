@@ -1906,6 +1906,12 @@ body,
     height: 20px;
     color: var(--mute);
 }
+/* An application's own icon fills the icon's cell, whatever the size of the pixels the desktop read. */
+.jc-console .open-in-menu .oi-app {
+    display: block;
+    width: 20px;
+    height: 20px;
+}
 .jc-console .open-in-menu .oi-text {
     display: flex;
     flex-direction: column;
