@@ -426,13 +426,17 @@ public partial class CardExchangesTests
     /// A list a person gave in the chat, added to a campaign as the card sends it: each row matched by its email
     /// address, with the card's fixed reason. A new person, a person the installation holds, a row repeated, a person taken
     /// out of the campaign, an address that is no address, a row with no address, and a person whose record is archived; then
-    /// the same request again.
+    /// the same request again. The campaign is read as the card reads it: a draft before the list, then started, then with
+    /// its send mode for people who have not replied set to automatic by a person, then paused, then archived, when the same
+    /// request is refused whole.
     /// </summary>
     [Fact]
     public async Task A_list_given_in_the_chat_is_added_row_by_row_and_again_with_every_row_already_there()
     {
         await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
         var scene = await Scene.OpenAsync(api, "Spring launch");
+        var draft = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal(CampaignStatus.Draft, draft.Status);
         var held = await api.PostOkAsync<ContactDto>(Operations.ContactCreate, new { first_name = "Ines", last_name = "Duarte", channels = new[] { new { channel = "email", value = "ines@example.test", primary = true } }, actor = Ada }, Ct);
         var removed = await scene.PersonAsync("Omar", "Reyes", "email", "omar@example.test");
         await api.PostOkAsync<RemoveContactsResult>(Operations.CampaignRemoveContacts, new { campaign_id = scene.Campaign, contact_ids = new[] { removed }, reason = "Not a fit.", actor = Ada }, Ct);
@@ -485,6 +489,24 @@ public partial class CardExchangesTests
             [MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Enrolled, MembershipState.Excluded, null, null, MembershipState.Enrolled],
             again.Items.Select(i => i.State));
         Assert.All(again.Items, i => Assert.False(i.ContactCreated));
+
+        await scene.StartAsync();
+        var running = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-running", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal(CampaignStatus.Active, running.Status);
+        Assert.Equal(SendMode.EveryMessage, running.SendModesInForce!.Cold.Mode);
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignSetSendMode, new { campaign_id = scene.Campaign, cold = "automatic", actor = Ada }, Ct);
+        var automatic = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-automatic", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal((CampaignStatus.Active, SendMode.Automatic, SendMode.EveryMessage), (automatic.Status, automatic.SendModesInForce!.Cold.Mode, automatic.SendModesInForce.Warm.Mode));
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignPause, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
+        var paused = await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-paused", new { campaign_id = scene.Campaign }, Ct);
+        Assert.Equal((CampaignStatus.Paused, SendMode.Automatic), (paused.Status, paused.SendModesInForce!.Cold.Mode));
+
+        await api.PostOkAsync<CampaignDto>(Operations.CampaignArchive, new { campaign_id = scene.Campaign, actor = Ada }, Ct);
+        Assert.Equal(CampaignStatus.Archived, (await api.RecordAsync<CampaignDto>(Operations.CampaignGet, "own-list-archived", new { campaign_id = scene.Campaign }, Ct)).Status);
+        var refused = await api.RecordErrorAsync(Operations.CampaignAddContacts, "own-list-archived", request, System.Net.HttpStatusCode.Conflict, Ct);
+        Assert.Equal("campaign_archived", refused.Code);
     }
 
     /// <summary>A person's own record, without the campaigns and activity that adding them to one is meant to change.</summary>

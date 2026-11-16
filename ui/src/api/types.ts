@@ -516,6 +516,24 @@ export type AddContactsRequest = {
     reason?: string;
     actor?: ActorRef;
 };
+/** One person of a list given as payloads, as `campaign.add_contacts` takes one: only the values given. */
+export type ListContact = {
+    first_name?: string;
+    last_name?: string;
+    company?: string;
+    title?: string;
+    time_zone?: string;
+    channels?: { channel: string; value: string }[];
+    custom?: Record<string, string>;
+};
+/** A list added as payloads, each matched by `match_by` so a person held is found and none is added twice. */
+export type ListAddRequest = {
+    campaign_id: string;
+    match_by: string;
+    contacts: ListContact[];
+    reason: string;
+    actor?: ActorRef;
+};
 export type AddContactsResult = {
     campaign_id: string;
     summary: { added: number; already_member: number; rejected: number };
@@ -523,8 +541,10 @@ export type AddContactsResult = {
         index: number;
         status: string;
         contact_id: string | null;
+        /** Whether the runtime made the person, rather than finding one it held; absent from an earlier runtime. */
+        contact_created?: boolean;
         state: string | null;
-        error: { code: string; message: string } | null;
+        error: { code: string; message: string; details?: { field: string; code: string; message: string }[] } | null;
     }[];
 };
 // The person panel: what it reads and what its acts send, as the runtime takes and answers them.
