@@ -6,6 +6,7 @@ import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/d
 import { t } from '../platform/i18n';
 import { act, define } from './actions';
 import { acts, readActs } from './card-acts';
+import { accountsCard } from './card-accounts';
 import { aiCaption, cardHead, cardReads, forgetCards, lastReadingCard } from './card-frame';
 import { needsCard } from './card-needs';
 import { peopleCard } from './card-people';
@@ -748,6 +749,8 @@ function cardView(
                     return statusCard(chat, index, reading.card, last);
                 case 'needs':
                     return needsCard(chat, index, reading.card, last);
+                case 'accounts':
+                    return accountsCard(chat, index, last, cardHeaders.accounts);
                 default:
                     return noteLine(cardRefusedLine(reading.card.kind, 'kind_unknown'));
             }

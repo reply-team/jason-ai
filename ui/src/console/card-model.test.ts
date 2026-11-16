@@ -58,13 +58,14 @@ describe('which card of a conversation reads', () => {
         ).toBe(3);
         expect(lastReading([{ index: 2, kind: 'choice' }])).toBeNull();
         expect(lastReading([])).toBeNull();
-        // A kind this build draws only as a line that it is not drawn reads nothing, so the card before it still reads.
+        // The accounts card reads, so it is the last that reads after a needs card.
         expect(
             lastReading([
                 { index: 1, kind: 'needs' },
                 { index: 4, kind: 'accounts' },
             ]),
-        ).toBe(1);
+        ).toBe(4);
+        // A kind this build draws only as a line that it is not drawn reads nothing, so the card before it still reads.
         expect(
             lastReading([
                 { index: 1, kind: 'needs' },

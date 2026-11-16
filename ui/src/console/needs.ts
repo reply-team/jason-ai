@@ -1,7 +1,7 @@
 import { batch, effect, signal } from '@preact/signals-react';
 import { Unpaired } from '../api/client';
 import type { Approval, ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
-import { attentionStore } from '../screens/attention/store';
+import { attentionStore, repeated } from '../screens/attention/store';
 import { reasonLabel } from '../screens/attention/labels';
 import {
     TextMoved,
@@ -232,14 +232,11 @@ function focusPane(selector: string): void {
 }
 
 /**
- * How many of the person's acts are under way, from the press until the lists read after it have answered: the pane's
- * acts are drawn disabled meanwhile, so a second click never lands on the next item's, and an item that leaves
- * meanwhile left by the person's hand.
+ * How many of the person's acts are under way, from the press until the lists read after it have answered, counted by
+ * the holder (`attention.acting`): the pane's acts are drawn disabled meanwhile, so a second click never lands on the
+ * next item's, and an item that leaves meanwhile left by the person's hand.
  */
-const acting = signal(0);
-
-/** A click that is the second or later of a double click: an act takes the first alone. */
-const repeated = (event: Event): boolean => event instanceof MouseEvent && event.detail > 1;
+const acting = attention.acting;
 
 /**
  * The reads behind the sending name under an approval's From (`senders.ts`), and the approval the pane draws it for with
@@ -292,16 +289,11 @@ function take(): void {
 
 /** An act of the person's, after which the keyboard is on the line the pane then shows, never on a button. */
 async function acted(work: () => Promise<unknown>): Promise<void> {
-    batch(() => {
-        acting.value += 1;
-        left.value = false;
-    });
-    try {
+    left.value = false;
+    await attention.hold(async () => {
         await work();
         take();
-    } finally {
-        acting.value = Math.max(0, acting.value - 1);
-    }
+    });
     const shown = chosen.value;
     if (shown !== null) focusRow(shown.id);
     if (drawn > 0) await fillApprovals(here().api, reads);

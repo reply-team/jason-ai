@@ -4,6 +4,7 @@ import { useApi } from '../api/context';
 import type { ApprovalSummary, DecisionSummary, WorkItem } from '../api/types';
 import { MessageEditor } from '../screens/attention/message-editor';
 import { SenderLine } from '../screens/attention/sender-line';
+import { repeated } from '../screens/attention/store';
 import { editable, readItem, sentence } from '../screens/attention/message-edit';
 import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
@@ -30,7 +31,9 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const whole = waiting.approvals.value[row.id];
     const gate = approvalGate(whole, waiting.unread.value[row.id]);
     const card = toApprovalCard(row, whole, clock.value);
-    const busy = waiting.store.busy.value;
+    // An act of this chat's, on any card, holds every card's acts from its press until the lists read after it have
+    // answered: a second click never lands on the card that moves up into the decided one's place.
+    const busy = waiting.store.busy.value || waiting.store.acting.value > 0;
     const [rejecting, setRejecting] = useState(false);
     const [reason, setReason] = useState('');
     const [editing, setEditing] = useState<WorkItem | null>(null);
@@ -185,14 +188,29 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                         <button className="btn sm" type="button" onClick={() => setRejecting(false)}>
                             Cancel
                         </button>
-                        <button className="btn sm no" type="submit" disabled={busy}>
+                        <button
+                            className="btn sm no"
+                            type="submit"
+                            disabled={busy}
+                            onClick={(event) => {
+                                if (repeated(event.nativeEvent)) event.preventDefault();
+                            }}
+                        >
                             Reject
                         </button>
                     </div>
                 </form>
             ) : (
                 <div className="ask-a">
-                    <button className="btn sm ok" type="button" disabled={held} onClick={() => void approve()}>
+                    <button
+                        className="btn sm ok"
+                        type="button"
+                        disabled={held}
+                        onClick={(event) => {
+                            // The second click of a double click is no second Approve.
+                            if (!repeated(event.nativeEvent)) void approve();
+                        }}
+                    >
                         Approve
                     </button>
                     {whole !== undefined && editable(whole) && (
@@ -224,7 +242,7 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
 function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSummary }) {
     const api = useApi();
     const card = toQuestionCard(row, waiting.questions.value[row.id], clock.value);
-    const busy = waiting.store.busy.value;
+    const busy = waiting.store.busy.value || waiting.store.acting.value > 0;
     const [text, setText] = useState('');
     const [reason, setReason] = useState('');
     // An answer of one's own and the reason sit behind one more pill, "Something else…", as the console's option card
@@ -258,15 +276,16 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
                             type="button"
                             title={option.detail ?? undefined}
                             disabled={busy}
-                            onClick={() =>
+                            onClick={(event) => {
+                                if (repeated(event.nativeEvent)) return;
                                 void answerWaiting(
                                     api,
                                     waiting,
                                     row.id,
                                     { option: option.label },
                                     own ? optional(reason) : undefined,
-                                )
-                            }
+                                );
+                            }}
                         >
                             {option.label}
                         </button>
@@ -295,7 +314,14 @@ function QuestionCardView({ waiting, row }: { waiting: Waiting; row: DecisionSum
                         value={text}
                         onChange={(event) => setText(event.target.value)}
                     />
-                    <button className="btn sm p" type="submit" disabled={busy || !text.trim()}>
+                    <button
+                        className="btn sm p"
+                        type="submit"
+                        disabled={busy || !text.trim()}
+                        onClick={(event) => {
+                            if (repeated(event.nativeEvent)) event.preventDefault();
+                        }}
+                    >
                         Answer
                     </button>
                     <input
