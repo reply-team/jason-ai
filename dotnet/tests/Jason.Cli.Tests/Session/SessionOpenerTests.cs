@@ -716,6 +716,84 @@ public sealed class SessionOpenerTests : IDisposable
         Assert.Empty(_run.Terminals.Launches);
     }
 
+    /// <summary>
+    /// On Windows the console host replaces every <c>%NAME%</c> of a variable it is started with before the host reads its
+    /// words, so a campaign folder whose name holds one would reach the agent as another folder: nothing is started, and the
+    /// refusal names the line and the variable and says how to do the same by hand.
+    /// </summary>
+    [Fact]
+    public async Task A_folder_the_console_host_would_change_starts_nothing_and_says_how_by_hand()
+    {
+        _run.Programs.AddProgram("claude");
+        var folder = FolderHolding("%JASON_TEST_DEFINED%");
+        _run.Variables["JASON_TEST_DEFINED"] = "elsewhere";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Empty(_run.Output.ToString());
+        Assert.Equal(
+            $"The terminal conhost did not start (the line 'Campaign folder: {folder}' holds %JASON_TEST_DEFINED%, which the console host replaces with the value of the variable JASON_TEST_DEFINED before the program it starts reads it). "
+            + "To work on it by hand, run `jason approval get apr_1 --prompt` in a terminal of your own and give the brief to your agent host.",
+            _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>A dry run refuses the same way: it would print a command the host never receives.</summary>
+    [Fact]
+    public async Task A_dry_run_refuses_a_folder_the_console_host_would_change_too()
+    {
+        _run.Programs.AddProgram("claude");
+        FolderHolding("%JASON_TEST_DEFINED%");
+        _run.Variables["JASON_TEST_DEFINED"] = "elsewhere";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1", "--dry-run");
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Output.ToString());
+        Assert.Contains("holds %JASON_TEST_DEFINED%, which the console host replaces", _run.Error.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>A name no variable has is left as it is by the console host, so the same folder starts.</summary>
+    [Fact]
+    public async Task A_folder_whose_name_no_variable_has_starts()
+    {
+        var claude = _run.Programs.AddProgram("claude");
+        var folder = FolderHolding("%JASON_TEST_DEFINED%");
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var argv = Assert.Single(_run.Terminals.Launches).Argv;
+        Assert.Equal(claude, argv[2]);
+        Assert.Contains("Campaign folder: " + folder + "\n", argv[3], StringComparison.Ordinal);
+    }
+
+    /// <summary>No other system's terminal reads the command line so: on Linux the same folder starts.</summary>
+    [Fact]
+    public async Task On_linux_a_folder_holding_a_variables_name_starts()
+    {
+        _run.Terminals.Platform = TerminalPlatform.Linux;
+        _run.Programs.Add("x-terminal-emulator", executable: true);
+        _run.Programs.AddProgram("claude");
+        FolderHolding("%JASON_TEST_DEFINED%");
+        _run.Variables["JASON_TEST_DEFINED"] = "elsewhere";
+
+        var exit = await _run.Cli("session", "open", "--approval", "apr_1");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Single(_run.Terminals.Launches);
+    }
+
+    /// <summary>A campaign folder whose name holds <paramref name="part"/>, made on disk and named by the campaign's answer.</summary>
+    private string FolderHolding(string part)
+    {
+        var folder = Path.Combine(_run.DataDirectory, "Jason", "projects", "acme-corp", "campaigns", "q3" + part + "leads").Replace('\\', '/');
+        Directory.CreateDirectory(folder);
+        _run.Campaign = CopyPromptTests.Fixture("campaign.get", "in-project-with-folder").Replace(SessionRuntime.RecordedFolder, folder, StringComparison.Ordinal);
+        return folder;
+    }
+
     private static string Quoted(string text) => System.Text.Json.JsonSerializer.Serialize(text);
 
     /// <summary>A runtime that answers the recorded exchanges a session takes, and a machine of temporary folders.</summary>

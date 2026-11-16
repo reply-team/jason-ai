@@ -122,7 +122,7 @@ public static class SessionOpener
         }
 
         IReadOnlyList<string> started = [.. program, .. AgentHosts.InteractiveArguments(host, prompt)];
-        if (TerminalPlan.Uncarried(terminals.Platform, started) is { } uncarried)
+        if (TerminalPlan.Uncarried(terminals.Platform, started, Own(env), Inherited(env)) is { } uncarried)
         {
             env.Error.WriteLine($"The terminal {terminal.Name} did not start ({uncarried}). {byHand}");
             return ExitCodes.ApiError;
@@ -334,6 +334,30 @@ public static class SessionOpener
             env.Paths.Root,
             Path.GetDirectoryName(env.InstallPath ?? SelfExecutable.InstalledImage ?? string.Empty) is { Length: > 0 } folder ? folder : null,
             SearchPath(env));
+
+    /// <summary>
+    /// The variables the terminal inherits from this process, which on Windows the console host reads its command line
+    /// against (<see cref="TerminalPlan.Uncarried"/>): those handed in, in a test, else this process's own, as the start
+    /// <see cref="TerminalStartInfo.For"/> composes copies them.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> Inherited(CliEnvironment env)
+    {
+        if (env.Variables is { } given)
+        {
+            return given;
+        }
+
+        var read = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is string name && entry.Value is string value)
+            {
+                read[name] = value;
+            }
+        }
+
+        return read;
+    }
 
     /// <summary>
     /// The variables a launch is started with, for a dry run's answer: only where they are not already on the command

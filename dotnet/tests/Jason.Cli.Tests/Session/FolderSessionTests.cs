@@ -372,6 +372,58 @@ public sealed class FolderSessionTests : IDisposable
         Assert.Equal("terminal_start_failed", Code());
     }
 
+    /// <summary>
+    /// On Windows a word the console host would change, the host's program under a folder whose name holds the
+    /// <c>%NAME%</c> of a variable it is started with, starts nothing, a dry run included; the refusal names the word and
+    /// the line to run by hand, the conversation to continue in it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task On_windows_a_word_the_console_host_would_change_starts_nothing(bool dryRun)
+    {
+        var claude = ProgramIn("to%JASON_TEST_DEFINED%ols");
+        _run.Variables["JASON_TEST_DEFINED"] = "elsewhere";
+
+        string[] args = dryRun ? ["session", "open", "--host", "claude_code", "--resume", "abc", "--dry-run"] : ["session", "open", "--host", "claude_code", "--resume", "abc"];
+        var exit = await _run.Cli(args);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", Code());
+        Assert.Equal(
+            $"The terminal conhost did not start (the word '{claude}' holds %JASON_TEST_DEFINED%, which the console host replaces with the value of the variable JASON_TEST_DEFINED before the program it starts reads it), so nothing was started; "
+            + $"to do the same by hand, run `claude --resume abc` in a terminal of your own at {_root}.",
+            _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>The same program with no variable of that name starts: the console host leaves the name as it is.</summary>
+    [Fact]
+    public async Task On_windows_a_name_no_variable_has_starts()
+    {
+        var claude = ProgramIn("to%JASON_TEST_DEFINED%ols");
+
+        var exit = await _run.Cli("session", "open", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal([_run.ConsoleHost, "--", claude], Assert.Single(_run.Terminals.Launches).Argv);
+    }
+
+    /// <summary>A stand-in for the host's program in a folder of that name under the search path's, the only folder searched.</summary>
+    private string ProgramIn(string name)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, name)).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder;
+        return claude;
+    }
+
     /// <summary>A SHELL that is unset, relative or names no program is not trusted: /bin/sh.</summary>
     [Theory]
     [InlineData(null)]

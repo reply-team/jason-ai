@@ -270,6 +270,10 @@ why: run it in a terminal and it prints the refusal and how to do the same by ha
 
 - **Windows** starts the console host, `conhost.exe` from the system folder, with the host after `--`. Which window you
   then see, a plain console window or one of your default terminal's, is not yet measured on a machine.
+  The console host replaces every `%NAME%` of a variable it is started with across the command line it hands on,
+  before the host reads a word of it, so a word it would change starts nothing: a host's program, a folder the brief
+  names or the plugins folder whose name holds such a name is refused, the refusal naming the word, the variable and
+  the way to do the same by hand, and `--dry-run` refuses the same way. Nothing is escaped in its place.
   The link works once a Windows toast has been shown, which is when Windows learns `jason:` links
   ([notifications.md](notifications.md), §7); until then the command beside it is the way.
 - **macOS** opens Terminal through `open -a Terminal` on a script written to a folder of its own under the temporary

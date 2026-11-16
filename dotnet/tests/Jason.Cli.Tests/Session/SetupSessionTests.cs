@@ -290,6 +290,60 @@ public sealed class SetupSessionTests : IDisposable
         Assert.Equal("terminal_start_failed", (string?)Answer()["error"]!["code"]);
     }
 
+    /// <summary>
+    /// On Windows a host's program whose path holds the <c>%NAME%</c> of a variable the console host is started with would
+    /// be read as another path: nothing is started, a dry run included, and the refusal names the word and the line to run
+    /// by hand.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Setup_on_windows_with_a_word_the_console_host_would_change_starts_nothing(bool dryRun)
+    {
+        var claude = ProgramIn("to%JASON_TEST_DEFINED%ols");
+        _run.Variables["JASON_TEST_DEFINED"] = "elsewhere";
+        DeploySkill(AgentHostKind.ClaudeCode);
+
+        string[] args = dryRun ? ["session", "open", "--setup", "--host", "claude_code", "--dry-run"] : ["session", "open", "--setup", "--host", "claude_code"];
+        var exit = await _run.Cli(args);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(_run.Terminals.Launches);
+        Assert.Equal("terminal_start_failed", (string?)Answer()["error"]!["code"]);
+        Assert.Equal(
+            $"The terminal conhost did not start (the word '{claude}' holds %JASON_TEST_DEFINED%, which the console host replaces with the value of the variable JASON_TEST_DEFINED before the program it starts reads it), so nothing was started; "
+            + $"to do the same by hand, run `claude` in a terminal of your own at {_setup.RoleSkillsDirectory} and ask it to use the skill customising-jason.",
+            _run.Error.ToString().TrimEnd());
+    }
+
+    /// <summary>The same program with no variable of that name starts: the console host leaves the name as it is.</summary>
+    [Fact]
+    public async Task Setup_on_windows_with_a_name_no_variable_has_starts()
+    {
+        var claude = ProgramIn("to%JASON_TEST_DEFINED%ols");
+        DeploySkill(AgentHostKind.ClaudeCode);
+
+        var exit = await _run.Cli("session", "open", "--setup", "--host", "claude_code");
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(claude, Assert.Single(_run.Terminals.Launches).Argv[2]);
+    }
+
+    /// <summary>A stand-in for the host's program in a folder of that name under the search path's, the only folder searched.</summary>
+    private string ProgramIn(string name)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_run.Programs.Root, name)).FullName;
+        var claude = Path.Combine(folder, OperatingSystem.IsWindows() ? "claude.exe" : "claude");
+        File.WriteAllText(claude, "not a real program");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        _run.SearchPath = folder;
+        return claude;
+    }
+
     [Fact]
     public async Task Setup_refuses_a_host_that_is_not_installed()
     {
