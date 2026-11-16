@@ -59,7 +59,7 @@ could serve only the UI itself, which would run it with its own rights, so `jaso
 there and the runtime answers a 404 for one. Every answer to a GET under `/ui/sealed/`, a missing file's included,
 carries this policy instead of the one above:
 
-`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-forms`
+`Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts`
 
 with a `Permissions-Policy` that denies each feature it names to every origin, the file's own included:
 
@@ -72,7 +72,7 @@ another origin, is answered before the files are looked at, with no file in it. 
 with a sandbox the policy sets is not established, so it is left out rather than relied on.
 
 What that leaves a file there: its own inline script and style, and fonts and images it carries as `data:` addresses.
-It loads nothing from any address, connects to no address, sends a form nowhere and opens no frame, worker or plugin. Only
+It loads nothing from any address, connects to no address, submits no form and opens no frame, worker or plugin. Only
 a page of the runtime's own address may show it in a frame. The `sandbox` gives it an origin that belongs to nobody,
 in a frame and opened by itself alike, so it reads nothing the browser keeps for the runtime's address, the UI's token
 included, and keeps nothing of its own; it opens no window, moves no page above it to another address, downloads

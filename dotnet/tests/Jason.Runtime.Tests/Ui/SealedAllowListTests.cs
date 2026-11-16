@@ -18,7 +18,7 @@ public class SealedAllowListTests
     private static readonly Dictionary<string, string> Differences = new(StringComparer.Ordinal)
     {
         ["frame-ancestors"] = "frame-ancestors 'self'",
-        ["sandbox"] = "sandbox allow-scripts allow-forms",
+        ["sandbox"] = "sandbox allow-scripts",
     };
 
     private static string Source() => File.ReadAllText(Path.Combine(RepositoryTree.Root(), "desktop", "src", "demo-page.ts"));
@@ -46,6 +46,7 @@ public class SealedAllowListTests
 
         Assert.Equal(expected, runtime);
         Assert.DoesNotContain("allow-same-origin", UiFiles.SealedContentSecurityPolicy, StringComparison.Ordinal);
+        Assert.DoesNotContain("allow-forms", UiFiles.SealedContentSecurityPolicy, StringComparison.Ordinal);
     }
 
     [Fact]
