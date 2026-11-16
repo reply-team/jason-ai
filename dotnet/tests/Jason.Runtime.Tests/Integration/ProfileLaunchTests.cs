@@ -456,15 +456,67 @@ public class ProfileLaunchTests
 
     /// <summary>
     /// A fresh installation, as the install line and the desktop leave it: no profile, no default, and a builtin role's
-    /// work fails at its claim. Then the repair <c>jason status</c> prints, typed back into the real CLI against the real
-    /// runtime with the stand-in host as the program, and the line of settings its fact gives, written beside what the
-    /// file holds: the next item of the same role is claimed, launched on the profile the default names and succeeds,
-    /// with no restart. The desktop makes the same two acts, by the same command and the same key.
+    /// work fails at its claim. Then the two commands <c>jason status</c> names, typed back into the real CLI against the
+    /// real runtime with the stand-in host as the program: <c>jason profile create</c> from the check's repair and
+    /// <c>jason profile set-default</c> from its fact. The next item of the same role is claimed, launched on the profile
+    /// the default names and succeeds, with no restart.
     /// </summary>
     [Fact]
+    [Critical(Family.D1, BrokenUntouched.PrintedCommand)]
     public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_profile_status_names_is_made_the_default()
     {
         await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var (campaign, check) = await FailFreshAsync(host);
+
+        var made = new StringWriter();
+        var error = new StringWriter();
+        var exit = await Jason.Cli.CliApp.RunAsync([.. CreateRepair(check)[1..^1], ProfileFixture.Program], new Jason.Cli.CliEnvironment(made, error, host.Paths), Ct);
+        Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, error.ToString()));
+
+        // Made and not yet named: every role's work would still fail, so the check is not ok, and the command is the step left.
+        var half = await RolesCheckAsync(host);
+        Assert.Equal(("absent", null), ((string?)half["state"], (string?)half["fix"]));
+
+        // The command between the fact's second pair of backticks, run as typed; the runtime applies it with no restart.
+        var step = ((string?)check["fact"])!.Split('`')[3];
+        Assert.Equal("jason profile set-default claude-code", step);
+        var named = new StringWriter();
+        var namedError = new StringWriter();
+        exit = await Jason.Cli.CliApp.RunAsync(step.Split(' ')[1..], new Jason.Cli.CliEnvironment(named, namedError, host.Paths), Ct);
+        Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, namedError.ToString()));
+
+        await AssertNextItemRunsOnDefaultAsync(host, campaign);
+    }
+
+    /// <summary>
+    /// The same fresh installation repaired the way the desktop does it: the profile made by the CLI, the default named by
+    /// writing <c>Roles:DefaultExecutionProfile</c> into the settings file beside the dispatcher's settings, which the
+    /// running runtime picks up live. No other Runtime test writes the key into a file and then sees a role launch on it.
+    /// </summary>
+    [Fact]
+    public async Task A_builtin_role_that_failed_role_not_launchable_runs_after_the_settings_file_names_the_default()
+    {
+        await using var host = await FakeHostRuntime.StartAsync(Ct);
+        var (campaign, check) = await FailFreshAsync(host);
+
+        var made = new StringWriter();
+        var error = new StringWriter();
+        var exit = await Jason.Cli.CliApp.RunAsync([.. CreateRepair(check)[1..^1], ProfileFixture.Program], new Jason.Cli.CliEnvironment(made, error, host.Paths), Ct);
+        Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, error.ToString()));
+
+        const string line = """
+            "Roles": {"DefaultExecutionProfile": "claude-code"}
+            """;
+        await File.WriteAllTextAsync(host.Paths.UserSettingsFile, FakeHostRuntime.Settings.TrimEnd()[..^1] + "," + line + "}", Ct);
+        var roles = host.Fixture.Resolve<Microsoft.Extensions.Options.IOptionsMonitor<Jason.Runtime.Configuration.RolesOptions>>();
+        Assert.True(await FakeHostRuntime.EventuallyAsync(() => Task.FromResult(roles.CurrentValue.DefaultExecutionProfile == "claude-code"), Ct));
+
+        await AssertNextItemRunsOnDefaultAsync(host, campaign);
+    }
+
+    /// <summary>A builtin role's work failing at its claim on a fresh installation; the campaign and the check as it stood then.</summary>
+    private static async Task<(string Campaign, JsonNode Check)> FailFreshAsync(FakeHostRuntime host)
+    {
         var campaign = await host.CampaignAsync(Ct);
         var before = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "researcher", context = new { behaviour = "succeed" } }, Ct);
 
@@ -475,27 +527,18 @@ public class ProfileLaunchTests
 
         var check = await RolesCheckAsync(host);
         Assert.Equal("absent", (string?)check["state"]);
+        return (campaign, check);
+    }
+
+    private static string[] CreateRepair(JsonNode check)
+    {
         var repair = ((string?)check["fix"])!.Split(' ');
         Assert.Equal(["jason", "profile", "create", "claude-code", "--host", "claude_code", "--program", "claude"], repair);
+        return repair;
+    }
 
-        var made = new StringWriter();
-        var error = new StringWriter();
-        var exit = await Jason.Cli.CliApp.RunAsync([.. repair[1..^1], ProfileFixture.Program], new Jason.Cli.CliEnvironment(made, error, host.Paths), Ct);
-        Assert.Equal((Jason.Cli.ExitCodes.Success, string.Empty), (exit, error.ToString()));
-
-        // Made and not yet named: every role's work would still fail, so the check is not ok, and the line is the step left.
-        var half = await RolesCheckAsync(host);
-        Assert.Equal(("absent", null), ((string?)half["state"], (string?)half["fix"]));
-
-        // The line between the fact's second pair of backticks, written into the file beside the dispatcher's settings.
-        var line = ((string?)check["fact"])!.Split('`')[3];
-        Assert.Equal("""
-            "Roles": {"DefaultExecutionProfile": "claude-code"}
-            """, line);
-        await File.WriteAllTextAsync(host.Paths.UserSettingsFile, FakeHostRuntime.Settings.TrimEnd()[..^1] + "," + line + "}", Ct);
-        var roles = host.Fixture.Resolve<Microsoft.Extensions.Options.IOptionsMonitor<Jason.Runtime.Configuration.RolesOptions>>();
-        Assert.True(await FakeHostRuntime.EventuallyAsync(() => Task.FromResult(roles.CurrentValue.DefaultExecutionProfile == "claude-code"), Ct));
-
+    private static async Task AssertNextItemRunsOnDefaultAsync(FakeHostRuntime host, string campaign)
+    {
         var after = await host.CreateAsync(new { campaign_id = campaign, kind = "ai_role", role = "researcher", context = new { behaviour = "succeed" } }, Ct);
         await host.ScanAsync(Ct);
         var done = await host.WaitForStatusAsync(after.Id, WorkItemStatus.Succeeded, Ct);
