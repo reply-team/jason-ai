@@ -6,6 +6,7 @@ using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
 using Jason.Contracts.Notifications;
 using Jason.Runtime.Dispatch;
+using Jason.Runtime.Execution;
 using Jason.Runtime.Journal;
 using Jason.Runtime.Notifications;
 using Jason.Runtime.Notifications.Desktop;
@@ -34,8 +35,9 @@ public class ProviderBlockParkTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
-    /// An idle loop, a trial every fifteen minutes, and every role — the manager among them — launched through the
-    /// stand-in host, which answers a check-in in the shape it is held to.
+    /// A loop that ticks every five minutes of a clock only the test moves, a trial every fifteen minutes, and every
+    /// role — the manager among them — launched through the stand-in host, which answers a check-in in the shape it is
+    /// held to.
     /// </summary>
     private static string Settings()
     {
@@ -44,7 +46,7 @@ public class ProviderBlockParkTests
             new[] { "dotnet", Execution.FakeAgentHost.Dll, "manager" }.Select(part => JsonSerializer.Serialize(part)));
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{{\"Dispatcher\":{{\"TickSeconds\":3600,\"RetryDelaySeconds\":0,\"ExitGraceSeconds\":30,\"Blocks\":{{\"TrialSeconds\":900}},"
+            $"{{\"Dispatcher\":{{\"TickSeconds\":300,\"RetryDelaySeconds\":0,\"ExitGraceSeconds\":30,\"Blocks\":{{\"TrialSeconds\":900}},"
             + $"\"AiRole\":{{\"TimeoutSeconds\":60,\"HeartbeatSeconds\":10,\"MaxAttempts\":2}}}},"
             + $"\"Roles\":{{\"DefaultEntryCommand\":[{command}]}},"
             + $"\"Manager\":{{\"ReviewSeconds\":86400,\"TimeoutSeconds\":60}}}}");
@@ -58,6 +60,7 @@ public class ProviderBlockParkTests
     }
 
     [Fact]
+    [Critical(Family.S2, "a block alone holds the rest while a trial runs under the approval it kept")]
     public async Task Work_an_account_block_holds_waits_on_it_a_read_runs_and_a_trial_that_gets_past_it_runs_the_rest()
     {
         using var workspace = new TestWorkspace();
@@ -127,17 +130,12 @@ public class ProviderBlockParkTests
         await SettleAsync(host, campaign, () => AllAsync(host, WorkItemStatus.Succeeded, read));
         Assert.True(await AllAsync(host, WorkItemStatus.Waiting, first, second), "The read released what the block holds.");
 
-        // 4. The trial comes due and lets the first enrolment through. The refused call had learned what the account
-        //    calls Marta, so what would run is no longer the document the person approved, and they decide once more —
-        //    the rule every repeat of approved work is held to. The account takes it, and the block clears; the next
-        //    scan releases the other one, whose document did not change, and it runs once and is taken too.
-        //    The same scans point a person at the block, once: the first notification of this runtime, which the moment
-        //    makes due, says the block is open and holds work, and nothing of it but the counts. The moment is two hours
-        //    on, past the trial and past the quiet window a notification waits out after a start: two of this runtime's
-        //    hour-long scans.
-        host.Clock.Advance(TimeSpan.FromSeconds(7_201));
-        await SettleAsync(host, campaign, () => AllAsync(host, WorkItemStatus.AwaitingApproval, first));
-        Assert.Equal(WorkItemStatus.Waiting, (await host.GetAsync(second, Ct)).Status);
+        // 4. A person is pointed at the block, once, while it holds both: the first notification of this runtime, which
+        //    the moment makes due, says the block is open and holds work, and nothing of it but the counts. The moment is
+        //    ten minutes on, past the quiet window a notification waits out after a start — two of this runtime's
+        //    five-minute ticks — and short of the block's trial.
+        host.Clock.Advance(TimeSpan.FromSeconds(601));
+        await host.ScanAsync(Ct);
         var pointed = Assert.Single(await PointersAsync(host, 1));
         Assert.Equal(1, (int)pointed.New!["counts"]!["blocks"]!);
         var said = Assert.Single(person.Messages).Text;
@@ -145,7 +143,26 @@ public class ProviderBlockParkTests
         Assert.Contains("jason block list", said, StringComparison.Ordinal);
         Assert.DoesNotContain("provider.example", said, StringComparison.Ordinal);
         Assert.DoesNotContain("billing", said, StringComparison.Ordinal);
-        await ApproveAsync(host);
+        await HeldByTheBlockAsync(host, second, blockedBy, "Before the trial");
+
+        // 5. The trial comes due and lets the first enrolment through. The refused call had learned what the account
+        //    calls Marta, a pin added where the approved subject held none, so the person's approval still covers the
+        //    work and nobody is asked again. While the trial is out at the account the block alone holds the other
+        //    enrolment — no approval and no attempt of its own — and a scan then lets nothing else through. The account
+        //    takes the trial and the block clears; until the next scan the other one is still held, and that scan
+        //    releases it, whose document did not change either, and it runs once and is taken too.
+        workspace.HoldOnce(first);
+        host.Clock.Advance(TimeSpan.FromSeconds(300));
+        await host.ScanAsync(Ct);
+        Assert.True(await workspace.HeldAsync(first, Ct), "The trial never reached the account.");
+        Assert.Equal(WorkItemStatus.Processing, (await host.GetAsync(first, Ct)).Status);
+        await HeldByTheBlockAsync(host, second, blockedBy, "While the trial is out");
+        await host.ScanAsync(Ct);
+        await HeldByTheBlockAsync(host, second, blockedBy, "After a scan while the trial is out");
+        Assert.Empty((await host.Fixture.PostOkAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, new { }, Ct)).Items);
+        workspace.Release(first);
+        await host.WaitForStatusAsync(first, WorkItemStatus.Succeeded, Ct);
+        await HeldByTheBlockAsync(host, second, blockedBy, "After the trial, before a scan");
         await SettleAsync(host, campaign, () => AllAsync(host, WorkItemStatus.Succeeded, first, second));
         Assert.Equal([AttemptStatus.Blocked, AttemptStatus.Succeeded], [.. (await host.GetAsync(first, Ct)).Attempts!.OrderBy(a => a.Number).Select(a => a.Status)]);
         Assert.Equal(AttemptStatus.Succeeded, Assert.Single((await host.GetAsync(second, Ct)).Attempts!).Status);
@@ -153,8 +170,12 @@ public class ProviderBlockParkTests
         Assert.Equal(["block_trial"], await BecauseAsync(host, first));
         Assert.Equal(["block_cleared"], await BecauseAsync(host, second));
         Assert.Equal(blockedBy.ProviderBlockId, Assert.Single(await LinesAsync(host, campaign, JournalKinds.ProviderBlockCleared)).Key);
+        Assert.Equal(2, (await host.Fixture.PostOkAsync<Page<ApprovalSummaryDto>>(
+            Operations.ApprovalList,
+            new { statuses = Enum.GetValues<ApprovalStatus>(), limit = 100 },
+            Ct)).Items.Count);
 
-        // 5. The clear woke nobody: the manager was summoned once, by the block; and once the floor between two
+        // 6. The clear woke nobody: the manager was summoned once, by the block; and once the floor between two
         //    notifications has passed, no pointer says the block again.
         await host.ScanAsync(Ct);
         Assert.Single(await CheckInsAsync(host, campaign));
@@ -163,6 +184,21 @@ public class ProviderBlockParkTests
         await host.ScanAsync(Ct);
         Assert.Single(await PointersAsync(host, 1));
         Assert.Single(person.Messages);
+    }
+
+    /// <summary>
+    /// The item waits on the block and on nothing else: no attempt of its own, no person's decision, no moment and no
+    /// other item, with the code the runtime gives work a block holds.
+    /// </summary>
+    private static async Task HeldByTheBlockAsync(FakeHostRuntime host, string item, WaitBlockedByDto block, string when)
+    {
+        var held = await host.GetAsync(item, Ct);
+        Assert.True(held.Status == WorkItemStatus.Waiting, $"{when}: the item is {held.Status}, not waiting on the block.");
+        Assert.Empty(held.Attempts!);
+        Assert.Equal(block, held.Wait!.BlockedBy);
+        Assert.Empty(held.Wait.On);
+        Assert.Null(held.Wait.Until);
+        Assert.Equal(AttemptErrors.ProviderBlocked, held.LastError!.Code);
     }
 
     /// <summary>

@@ -119,7 +119,7 @@ import { lastChosenHost } from './roles-profile.ts';
 export type FreshReason = 'host_changed' | 'not_found';
 
 /** The kinds of card the page draws, and "unknown" for a block it could not read a kind from: what the log may name. */
-export const refusedCardKinds: ReadonlySet<string> = new Set(['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'plan', 'own_list', 'unknown']);
+export const refusedCardKinds: ReadonlySet<string> = new Set(['choice', 'people_list', 'agent_status', 'needs', 'accounts', 'ai_setup', 'reply_setup', 'plan', 'own_list', 'unknown']);
 /** Why a card the AI asked for did not draw, as the page says it: the log's closed list. */
 export const cardFailures: ReadonlySet<string> = new Set(['kind_unknown', 'too_long', 'malformed', 'schema']);
 
