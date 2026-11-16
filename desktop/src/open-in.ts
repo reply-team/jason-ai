@@ -17,6 +17,7 @@
  */
 
 import { posix, win32 } from 'node:path';
+import type { JasonOnPath } from './path-command.ts';
 
 /** Every place the menu can offer, in the order it offers them. */
 export const placeIds = ['claude', 'codex', 'terminal', 'vscode', 'cursor', 'antigravity', 'windsurf', 'zed', 'files', 'browser', 'copy'] as const;
@@ -69,6 +70,11 @@ export interface OpenInAnswer {
     continue?: ContinueOffer;
     /** Present only in the person's own installation: the entry "Change Jason itself". It names no host, which the preference chooses. */
     changeJason?: true;
+    /**
+     * Which `jason` the PATH an editor is started with finds by name, and the way out the Jason menu offers
+     * (`PathCommand.onPath`). Absent where the desktop cannot tell, or offers no PATH command: in the demo, say.
+     */
+    jason?: JasonOnPath;
 }
 
 export interface OpenInRefusal {
@@ -271,6 +277,8 @@ export interface OpenInDeps {
     continueFlags: ContinueFlags;
     logContinue?(event: 'open_in_continued' | 'open_in_continue_refused', fields: { Host: ContinueHost }): void;
     changeJason?: ChangeJasonDeps;
+    /** Which `jason` the PATH finds by name (`PathCommand.onPath`); absent, or undefined, where that is not told. */
+    jason?(): JasonOnPath | undefined;
 }
 
 /** The refusals of the entry that continues a chat, in the desktop's own words. */
@@ -385,6 +393,13 @@ export class OpenIn {
         const found = chatId === undefined || chatId === null ? null : this.#deps.continuable(chatId);
         if (found !== null) answer.continue = { host: found.host, label: labels[found.host], running: found.running };
         if (this.#deps.changeJason !== undefined) answer.changeJason = true;
+        let jason: JasonOnPath | undefined;
+        try {
+            jason = this.#deps.jason?.();
+        } catch {
+            jason = undefined;
+        }
+        if (jason !== undefined) answer.jason = jason;
         return answer;
     }
 

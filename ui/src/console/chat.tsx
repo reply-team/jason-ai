@@ -13,7 +13,7 @@ import { useApi } from '../api/context';
 import type { JournalEntry } from '../api/types';
 import type { DesktopChatMode, DesktopHost, DesktopRefusal } from '../platform/desktop';
 import { t } from '../platform/i18n';
-import { act, define } from './actions';
+import { act, argsOf, define } from './actions';
 import { acts, readActs } from './card-acts';
 import { askedAsWords, forgetProposals, lastReadingOrPlan, planView, proposalOf, proposals } from './card-plan';
 import { accountsCard } from './card-accounts';
@@ -80,9 +80,10 @@ import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
-import { svg } from './icons';
+import { barMarks, svg } from './icons';
 import { chatHosts, isSignInFailure, signInSentence, toCampaignRow } from './live';
 import { CampaignMoves } from '../screens/campaigns/moves';
+import { repeated } from '../screens/attention/store';
 import { Painted } from './painted';
 import { AccessButton, Glyph, ModeMark, ModelButton, modeSays, useFit } from './start-menus';
 import { WaitingCards } from './waiting-cards';
@@ -124,6 +125,27 @@ const answerWords: Readonly<Record<Answer, string>> = {
 /** Whether the desktop answered a call with a refusal: its sentence, as a value, never a thrown error. */
 export const isRefusal = (answer: unknown): answer is DesktopRefusal =>
     typeof answer === 'object' && answer !== null && typeof (answer as { refused?: unknown }).refused === 'string';
+
+/** One of the chat bar's marks, drawn in the console's stroke on its 24-unit grid; the button around it names it. */
+function BarMark({ name }: { name: keyof typeof barMarks }) {
+    return (
+        <svg
+            width={15}
+            height={15}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+        >
+            {barMarks[name].map((each) => (
+                <path key={each} d={each} />
+            ))}
+        </svg>
+    );
+}
 
 /** A refusal the desktop answered, thrown on as an Error whose message is the sentence alone. */
 function unless<T>(answer: T | DesktopRefusal): T {
@@ -844,18 +866,55 @@ function tellRefused(chatId: string, entry: object, kind: CardKind | 'unknown', 
 }
 
 /**
- * A choice the AI asked for: under its frame's label, the AI's question and its options, each a button that sends its
- * label, exactly, as the person's next message, and does nothing else. Every word of it is the AI's, drawn as text. Live
- * only while `choiceState` says so; once answered the chosen option is marked, and otherwise it says why it no longer
- * stands. In a tab that may not send it is only shown, as the plan card is.
+ * A choice the AI asked for: under its frame's label, the AI's question as the card's title and its options, each a
+ * button that sends its label, exactly, as the person's next message, and does nothing else: compact chips in a row, or
+ * a grid of equal cells when an option carries a detail. Every word of it is the AI's, drawn as text. Live only while
+ * `choiceState` says so, when a field under the options also takes an answer in the person's own words; once answered
+ * the chosen option is marked, and otherwise it says why it no longer stands. In a tab that may not send it is only
+ * shown, as the plan card is.
  */
 function choiceView(chat: Chat, index: number, card: ChoiceCard, host: DesktopHost | null): Html {
-    return asksView(chat, index, card.question, card.options, host, 'ask chat-card chat-choice');
+    return asksView(chat, index, card.question, card.options, host, 'ask chat-card chat-choice', true);
+}
+
+/** What the person typed into an open choice's own field, by chat and entry, kept while the thread is painted again. */
+const ownTyped = new Map<string, string>();
+const ownKey = (chatId: string, index: number): string => `${chatId}:${index}`;
+
+/**
+ * The open choice's field for an answer in the person's own words, with the composer's arrow: what is typed goes as the
+ * person's next message by the composer's own path, and the arrow is off where the composer's is.
+ */
+function ownField(chat: Chat, index: number, host: DesktopHost | null): Html {
+    const off = host === null || chat.removing || sendHeld(onHost(chat, host.id), host);
+    return html`<div class="choice-own">
+        <input
+            class="inp"
+            type="text"
+            aria-label="Something else…"
+            placeholder="Something else…"
+            value="${ownTyped.get(ownKey(chat.id, index)) ?? ''}"
+            data-input="chat.typeOwn"
+            data-enter="chat.sendOwn"
+            ${argsOf(chat.id, index)}
+        />
+        <button
+            class="send"
+            type="button"
+            title="Send your own answer"
+            aria-label="Send your own answer"
+            ${off ? html`disabled` : null}
+            ${act('chat.sendOwn', chat.id, index)}
+        >
+            ${svg('up', 16)}
+        </button>
+    </div>`;
 }
 
 /**
  * A question the AI asked on a card, a choice's or a plan's, under the AI's name: its options, each a button that sends
- * its label, live only while `choiceState` says so.
+ * its label, live only while `choiceState` says so. A choice's (`own`) draws its options by their kind and, while live,
+ * the field for the person's own words.
  */
 function asksView(
     chat: Chat,
@@ -864,6 +923,7 @@ function asksView(
     options: readonly CardOption[],
     host: DesktopHost | null,
     kind: string,
+    own = false,
 ): Html {
     const maySend = host !== null && (!inTab() || tabMaySend(chat.mode));
     const state = choiceState(
@@ -878,10 +938,11 @@ function asksView(
     const said =
         choiceWords[state.state] ??
         (state.state === 'idle' && inTab() && !tabMaySend(chat.mode) ? answeredInDesktop : null);
+    const rich = own && options.some((option) => option.detail !== undefined);
     return html`<div class="${kind}${live ? ' live' : ' done'}" role="group" aria-label="Jason asks">
         ${aiCaption(cardHeaders.choice)}
-        <div class="ask-s">${question}</div>
-        <div class="ui-opts">
+        <div class="ask-s${own ? ' choice-q' : ''}">${question}</div>
+        <div class="ui-opts${rich ? ' rich' : ''}">
             ${options.map((option, at) => {
                 const mine = option.label === chosen;
                 return html`<button
@@ -896,6 +957,7 @@ function asksView(
                 </button>`;
             })}
         </div>
+        ${own && live ? ownField(chat, index, host) : null}
         ${said === null ? null : html`<div class="ask-w choice-said">${said}</div>`}
     </div>`;
 }
@@ -990,6 +1052,33 @@ define('chat.choose', ([id, index, option]) => {
     if (label === undefined || choiceState(chat, index, labels, acts.value[id] ?? null, maySend).state !== 'live')
         return;
     sendTurn(id, label);
+});
+
+define('chat.typeOwn', ([id, index], element) => {
+    if (typeof id !== 'string' || typeof index !== 'number' || !(element instanceof HTMLInputElement)) return;
+    ownTyped.set(ownKey(id, index), element.value);
+});
+
+/**
+ * The open choice's own field sends: its words, trimmed, as the person's next message by the composer's path, once; the
+ * second press of a double press, an empty field, and a choice no longer open send nothing. The composer's draft stays.
+ */
+define('chat.sendOwn', ([id, index], _element, event) => {
+    if (repeated(event) || typeof id !== 'string' || typeof index !== 'number') return;
+    const chat = chats.value[id];
+    if (!chat || chat.removing) return;
+    const asked = openChoice(chat);
+    if (asked === null || asked.index !== index || asked.card.kind !== 'choice') return;
+    const host = hostOf(chat);
+    if (host === null || sendHeld(onHost(chat, host.id), host)) return;
+    const labels = optionsOf(asked.card).map((each) => each.label);
+    const maySend = !inTab() || tabMaySend(chat.mode);
+    if (choiceState(chat, index, labels, acts.value[id] ?? null, maySend).state !== 'live') return;
+    const key = ownKey(id, index);
+    const words = ownTyped.get(key)?.trim() ?? '';
+    if (!words) return;
+    ownTyped.delete(key);
+    sendTurn(id, words);
 });
 
 /** A line of the Feed, or nothing for a line the page does not know: the kind in words, how many it stands for, its campaign as a link, its age. */
@@ -1515,8 +1604,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     !underHead && (
                         <button
                             ref={renameButton}
-                            className="btn sm"
+                            className="btn sm ib"
                             type="button"
+                            aria-label="Rename"
                             disabled={!keptByDesktop || chat.removing}
                             title={
                                 keptByDesktop
@@ -1525,7 +1615,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             }
                             onClick={() => changeChat(chatId, (each) => ({ ...each, renaming: each.title }))}
                         >
-                            Rename
+                            <BarMark name="rename" />
                         </button>
                     )
                 ) : (
@@ -1562,24 +1652,27 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                 )}
                 {!inTab() && !underHead && (
                     <button
-                        className="btn sm"
+                        className="btn sm ib"
                         type="button"
+                        aria-label="Start afresh"
                         disabled={chat.running || chat.removing}
                         title="The AI's next turn begins without its memory of this conversation; what is shown here stays"
                         onClick={() => restartChat(chatId)}
                     >
-                        Start afresh
+                        <BarMark name="restart" />
                     </button>
                 )}
                 {chat.main || inTab() || underHead ? null : (
                     <button
                         ref={removeButton}
-                        className="btn sm"
+                        className="btn sm ib"
                         type="button"
+                        aria-label="Remove"
                         disabled={chat.running || chat.removing}
+                        title="Remove this conversation"
                         onClick={() => changeChat(chatId, (each) => ({ ...each, removing: true }))}
                     >
-                        Remove
+                        <BarMark name="remove" />
                     </button>
                 )}
                 {chat.campaignId !== null && !chat.main && !underHead && <AgentInBar campaignId={chat.campaignId} />}
