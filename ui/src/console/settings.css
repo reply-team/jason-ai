@@ -48,7 +48,7 @@
 .jc-console .harness .settings > section > p {
     margin: 0 0 12px;
     font-size: 13px;
-    color: var(--faint);
+    color: var(--mute);
 }
 .jc-console .harness .settings > section > p:last-child {
     margin-bottom: 0;
