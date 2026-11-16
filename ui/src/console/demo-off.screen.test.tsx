@@ -106,15 +106,17 @@ describe('The Connect panel in the demo', () => {
         expect(within(replyCard()).getAllByRole('note').map(words)).toContain(sentence);
     });
 
-    it('turns off Sign in, the API key, Add account and every act on an account row, and still lists the accounts', async () => {
+    it('turns off Sign in with Reply, the API key, Add account and every act on an account row, and still lists the accounts', async () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
-        for (const name of ['Sign in', 'Connect', 'Add account']) expect(button(card, name).disabled).toBe(true);
+        for (const name of ['Sign in with Reply', 'Connect', 'Add account'])
+            expect(button(card, name).disabled).toBe(true);
         const acts = within(rowOf(card)).getAllByRole('button') as HTMLButtonElement[];
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
         for (const each of acts) expect(each.disabled).toBe(true);
-        for (const each of [...acts, button(card, 'Add account'), button(card, 'Sign in')]) fireEvent.click(each);
+        for (const each of [...acts, button(card, 'Add account'), button(card, 'Sign in with Reply')])
+            fireEvent.click(each);
         expect(card.querySelector('.add-account')).toBeNull();
         expect(
             desktop.calls.filter((each) => each.name.startsWith('setup.reply') || each.name === 'setup.connectReply'),
@@ -209,7 +211,8 @@ describe('The same screens in Live', () => {
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
-        for (const name of ['Sign in', 'Connect', 'Add account']) expect(button(card, name).disabled).toBe(false);
+        for (const name of ['Sign in with Reply', 'Connect', 'Add account'])
+            expect(button(card, name).disabled).toBe(false);
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);
         fireEvent.click(button(card, 'Add account'));
