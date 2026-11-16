@@ -707,7 +707,7 @@ export interface JasonDesktop {
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
-         * "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
+         * "Start fresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
          * while its turn runs.
          */
         restart(chatId: string): Promise<DesktopRefusal | null>;
