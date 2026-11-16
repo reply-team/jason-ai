@@ -1970,3 +1970,16 @@ body,
     border-color: var(--teal);
     color: #fff;
 }
+/* A campaign's chat carries the agent's state at the bar's start and its one move at the bar's end: the group is laid
+   out by the bar itself, the state first and the move last, the chat's own buttons between them. */
+.jc-console .chat-agent {
+    display: contents;
+}
+.jc-console .chat-agent-state {
+    order: -1;
+    margin-right: auto;
+    align-self: center;
+}
+.jc-console .chat-agent-move {
+    order: 1;
+}

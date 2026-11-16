@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, Unpaired, type Api } from '../../api/client';
 import { useApi } from '../../api/context';
 import { session } from '../../api/session';
-import type { Campaign, CampaignSummaryResponse, ModeInForce } from '../../api/types';
+import type { Campaign, CampaignSummary, CampaignSummaryResponse, ExternalId, ModeInForce } from '../../api/types';
 import { t } from '../../platform/i18n';
 import { sourceWords } from '../send-modes/agent-modes';
 import { kinds, modeWords, type Kind } from '../send-modes/model';
@@ -13,7 +13,14 @@ import { Notice } from '../../layout/notice';
 /** Pause stops an active campaign's work; Resume releases a paused one's again; Start releases a draft's for the first time. */
 export type Transition = 'pause' | 'resume' | 'start';
 
-type Props = { campaign: Campaign; kind: Transition; onDone: () => void; onClose: () => void };
+/**
+ * The campaign a move is offered for: its id, name and status, as every list of campaigns carries them, and the
+ * provider's pins where the caller has read them. Without the pins, the Pause dialog reads the campaign before it says
+ * what pausing does.
+ */
+export type Movable = CampaignSummary & { external_ids?: ExternalId[] };
+
+type Props = { campaign: Movable; kind: Transition; onDone: () => void; onClose: () => void };
 
 /** Each move by the word its button and its dialog say. */
 export const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resume', start: 'Start' };
@@ -22,7 +29,7 @@ export const verbs: Record<Transition, string> = { pause: 'Pause', resume: 'Resu
  * What the runtime lets this campaign's status move to: an active one pauses, a paused one resumes and a draft starts,
  * each through `campaign.pause` or `campaign.start`; an archived campaign is over and moves nowhere.
  */
-export function transitions(campaign: Campaign): Transition[] {
+export function transitions(campaign: Pick<CampaignSummary, 'status'>): Transition[] {
     if (campaign.status === 'active') return ['pause'];
     if (campaign.status === 'paused') return ['resume'];
     if (campaign.status === 'draft') return ['start'];
@@ -30,13 +37,13 @@ export function transitions(campaign: Campaign): Transition[] {
 }
 
 /** The provider campaign's own name for itself: the plugin that holds its pin, as a person would write it. */
-function provider(campaign: Campaign): string | null {
-    const pin = campaign.external_ids.find((p) => p.kind === 'campaign');
+function provider(campaign: Movable): string | null {
+    const pin = (campaign.external_ids ?? []).find((p) => p.kind === 'campaign');
     return pin ? pin.plugin_id.charAt(0).toUpperCase() + pin.plugin_id.slice(1) : null;
 }
 
 /** What pausing or starting does, said before it is done: Jason's own release of work, and nothing at the provider. */
-function says(campaign: Campaign, kind: Transition): string {
+function says(campaign: Movable, kind: Transition): string {
     if (kind === 'resume') return "Jason releases this agent's work again.";
     if (kind === 'start') return "Jason starts releasing this agent's work.";
     const name = provider(campaign);
@@ -130,7 +137,28 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
             current = false;
         };
     }, [api, campaign.id, releasing]);
-    const reading = releasing && releases === null;
+    // A Pause offered where the provider's pins were not read reads the campaign first, so it can say what keeps sending.
+    const readsRecord = kind === 'pause' && campaign.external_ids === undefined;
+    const [record, setRecord] = useState<Campaign | null | undefined>(undefined);
+    useEffect(() => {
+        if (!readsRecord) return;
+        let current = true;
+        setRecord(undefined);
+        api.call<Campaign>('campaign.get', { campaign_id: campaign.id }).then(
+            (read) => {
+                if (current) setRecord(read);
+            },
+            (error: unknown) => {
+                if (!current) return;
+                if (error instanceof Unpaired) session.clear();
+                else setRecord(null);
+            },
+        );
+        return () => {
+            current = false;
+        };
+    }, [api, campaign.id, readsRecord]);
+    const reading = (releasing && releases === null) || (readsRecord && record === undefined);
 
     const act = async () => {
         setBusy(true);
@@ -168,7 +196,7 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
                 </>
             }
         >
-            <p>{says(campaign, kind)}</p>
+            <p>{says(record ?? campaign, kind)}</p>
             {reading && <p className="muted">{t('modes.settings.reading')}</p>}
             {releases && <WhatStartingReleases releases={releases} />}
             <div className="field">
