@@ -96,7 +96,8 @@ export function SystemScreen() {
                         {placeKind() === 'window' && currentDesktop() ? (
                             <>
                                 The desktop updates itself and the jason it carries. Choose Check for Updates… in the
-                                desktop&apos;s Jason menu, or in the menu of its icon in the tray.
+                                desktop&apos;s Jason menu, or in the menu of its icon in the tray, or press{' '}
+                                {currentDesktop()?.platform === 'darwin' ? 'Cmd' : 'Ctrl'}+Shift+D.
                             </>
                         ) : (
                             <>

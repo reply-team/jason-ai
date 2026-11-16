@@ -144,14 +144,22 @@ describe('System, the update sentence', () => {
         expect(screen.getByText(/jason update apply/)).toBeTruthy();
     });
 
-    it("in the desktop names the desktop's own update and not the terminal command", async () => {
-        recorded.update = update;
-        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
-        systemFake();
-        await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
-        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
-        expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
-        expect(screen.queryByText(/jason update apply/)).toBeNull();
+    it("in the desktop names the desktop's own update, by its menu item and by its key, and not the terminal command", async () => {
+        for (const [platform, key] of [
+            ['linux', 'Ctrl+Shift+D'],
+            ['darwin', 'Cmd+Shift+D'],
+        ] as const) {
+            recorded.update = update;
+            window.jasonDesktop = { platform } as NonNullable<typeof window.jasonDesktop>;
+            systemFake();
+            await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+            expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+            expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
+            // A window with no menu bar, on a desktop that shows no tray, has the key alone.
+            expect(screen.getByText(new RegExp(`or press ${key.replace(/\+/g, '\\+')}\\.`))).toBeTruthy();
+            expect(screen.queryByText(/jason update apply/)).toBeNull();
+            cleanup();
+        }
     });
 });
 

@@ -12,7 +12,7 @@ import type { Cli, CliResult } from '../src/cli.ts';
 import { AttentionWatcher, attentionCadenceMs, notice, readAttention, trayView, type Attention } from '../src/attention.ts';
 import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
-import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
+import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, itemKeys, keyWords, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
 import type { DesktopCommand as PageCommand } from '../../ui/src/platform/desktop.d.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -219,6 +219,43 @@ test('every key is an accelerator Electron reads, and no two keys are the same',
     for (const binding of bindings) assert.match(binding.accelerator, acceleratorPattern, binding.label);
     assert.equal(new Set(bindings.map((binding) => binding.accelerator)).size, bindings.length);
     assert.equal(new Set(bindings.map((binding) => binding.label)).size, bindings.length);
+});
+
+test('the update item and the way back from the Demo have keys of their own, which no other key of the window takes', () => {
+    // Where a window shows no menu bar and the desktop no tray, these two acts have no other way in.
+    // One spelling for each key: CommandOrControl as CmdOrCtrl, the modifiers in one order.
+    const plain = (key: string) => {
+        const parts = key.replace(/CommandOrControl/g, 'CmdOrCtrl').split('+');
+        return [...parts.slice(0, -1).sort(), parts.at(-1)].join('+');
+    };
+    const taken = [
+        ...bindings.map((binding) => binding.accelerator),
+        'CmdOrCtrl+Q', // Quit Jason
+        'CmdOrCtrl+K', // the console's palette
+        // The Edit and Window menus' own roles and full screen, as Electron 44 gives them on each system.
+        'CmdOrCtrl+Z', 'Shift+CmdOrCtrl+Z', 'Control+Y', 'CmdOrCtrl+X', 'CmdOrCtrl+C', 'CmdOrCtrl+V', 'CmdOrCtrl+A',
+        'CmdOrCtrl+M', 'CmdOrCtrl+W', 'F11', 'Command+H', 'Command+Alt+H', 'Control+Command+F',
+        // GNOME's input method takes Ctrl+Shift+U for a Unicode character while a text field has the focus.
+        'CmdOrCtrl+Shift+U',
+    ].map(plain);
+    for (const key of Object.values(itemKeys)) {
+        assert.match(key, acceleratorPattern, key);
+        assert.ok(!taken.includes(plain(key)), `${key} is taken`);
+    }
+    assert.notEqual(itemKeys.update, itemKeys.back);
+    // A person reads each as their system spells it.
+    assert.equal(keyWords(itemKeys.back, 'linux'), 'Ctrl+Shift+L');
+    assert.equal(keyWords(itemKeys.back, 'win32'), 'Ctrl+Shift+L');
+    assert.equal(keyWords(itemKeys.back, 'darwin'), 'Cmd+Shift+L');
+    assert.equal(keyWords(itemKeys.update, 'linux'), 'Ctrl+Shift+D');
+    // The menu's two items carry them, in the window's menu and the tray's alike.
+    const desk = readFileSync(join(root, 'src', 'desk.ts'), 'utf8');
+    const method = (name: string) => desk.slice(desk.indexOf(`private ${name}(`), desk.indexOf('\n    }\n', desk.indexOf(`private ${name}(`)));
+    assert.match(method('updateItems'), /accelerator: itemKeys\.update,/);
+    assert.match(method('backItems'), /accelerator: itemKeys\.back,/);
+    // The System screen spells the update's key itself, Cmd or Ctrl by the desktop's platform; held to the same key here.
+    const system = readFileSync(join(root, '..', 'ui', 'src', 'screens', 'system', 'screen.tsx'), 'utf8');
+    assert.ok(system.includes(`'Ctrl'}+${itemKeys.update.replace(/^CmdOrCtrl\+/, '')}.`), 'the System screen names the update key');
 });
 
 test('a packaged build offers no developer tools', () => {

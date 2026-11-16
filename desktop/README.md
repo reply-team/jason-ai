@@ -734,9 +734,15 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
 ## On Linux
 
 - The window shows no menu bar, as on Windows (above): the menu's keys act, and the tray carries the Jason menu's acts
-  but About. A session that shows no tray icon (GNOME without an extension for one) has no way from the window to the
-  items without a key: Open Jason at Login, Start the Runtime at Logon, the update item, Command Line, Remove What Jason
-  Placed and Back to Your Own Installation. Closing the window quits the application; the runtime keeps running. A
+  but About. The update item and Back to Your Own Installation have keys of their own (`itemKeys` in
+  `src/keybindings.ts`: Ctrl+Shift+D and Ctrl+Shift+L, Cmd on a Mac), named in the versions-differ sentence, the
+  System screen's notice of an update and the page shown when the Demo could not be shown, so a session that shows no
+  tray icon (GNOME without an extension for one) still reaches them. The update key acts on the item's current step
+  (check, download, restart to install), which shows only in the item's label: on such a session, nowhere. That is
+  accepted, since a Linux desktop without a tray is not where Jason is expected; no dialog or notification is added
+  for it; `jason update`'s refusal of a runtime the desktop
+  carries still names the menu and the tray alone. Such a session has no way from the window to the items without a
+  key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the window quits the application; the runtime keeps running. A
   start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as

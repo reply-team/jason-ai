@@ -133,7 +133,10 @@ its settings and the starting page and the window's background before the page l
 Linux the window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
-On Windows and Linux the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's
+Beside Quit Jason, two more items of the Jason menu have keys of their own: the update item, Ctrl+Shift+D, and Back to
+Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
+Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
+the tray's menu or the Mac's menu bar, and a desktop that shows neither shows it nowhere. On Windows and Linux the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's
 acts, all but About, which neither the window nor the tray reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
@@ -329,8 +332,8 @@ a little tighter. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
-meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
-carries the same switch, with **Demo** to come back.
+meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
+the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
@@ -825,10 +828,11 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   one on a title bar does on your desktop (it maximizes on GNOME and Plasma). If your desktop puts the buttons at the
   left, they stand over the sidebar's top, over the name Jason AI.
 - The window shows no menu bar: the keys work without it, and the tray carries the Jason menu's acts; About is not
-  reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), Open
-  Jason at Login, Start the Runtime at Logon, the update item, Command Line, Remove What Jason Placed and Back to Your
-  Own Installation cannot be reached from the window. Closing the window quits the application; the runtime keeps
-  running. A start at sign-in opens the window minimized.
+  reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), the
+  update item and Back to Your Own Installation are reached by their keys (Ctrl+Shift+D, Ctrl+Shift+L; the update key
+  acts on the item's current step, which shows nowhere there), and Open Jason at Login, Start the Runtime at Logon,
+  Command Line and Remove What Jason Placed cannot be reached from the window.
+  Closing the window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.
 - An AppImage update that installs under a new file name moves an entry that is on to it, and re-points a logon

@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { AttentionWatcher, trayView, type Attention } from './attention.ts';
 import type { Cli } from './cli.ts';
 import { eventChannels } from './ipc.ts';
-import { bindingsFor, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
+import { bindingsFor, itemKeys, mayCommand, type Binding, type DesktopCommand } from './keybindings.ts';
 import type { Logger } from './log.ts';
 import { bringForward, type LoginItem, type RuntimeAutostart } from './login-item.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
@@ -192,8 +192,11 @@ export class Desk {
         return [
             {
                 label: item.label,
+                accelerator: itemKeys.update,
                 enabled: item.enabled && !this.removing(),
                 click: () => {
+                    // The item is disabled while Remove What Jason Placed runs; its key does nothing then either.
+                    if (this.removing()) return;
                     if (item.act === 'check') void updates?.check();
                     else if (item.act === 'download') void updates?.download();
                     else if (item.act === 'install') void updates?.install();
@@ -261,7 +264,7 @@ export class Desk {
         if (demo === null) return [];
         return [
             { type: 'separator' },
-            { label: demo.back.label, enabled: demo.back.enabled, click: () => this.deps.back() },
+            { label: demo.back.label, accelerator: itemKeys.back, enabled: demo.back.enabled, click: () => this.deps.back() },
         ];
     }
 

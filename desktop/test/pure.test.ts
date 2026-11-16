@@ -111,13 +111,13 @@ test('jason status is read by its checks: the runtime up, whether it is the bund
 
 test('the system screen’s sentence names jason update when another installation’s runtime differs, and nothing when they agree', () => {
     for (const ours of [false, true]) {
-        assert.equal(versionsDifferSentence('0.34.0-rc.1', '0.34.0-rc.1', ours), null);
-        assert.equal(versionsDifferSentence(null, '0.34.0-rc.1', ours), null);
+        assert.equal(versionsDifferSentence('0.34.0-rc.1', '0.34.0-rc.1', ours, 'linux'), null);
+        assert.equal(versionsDifferSentence(null, '0.34.0-rc.1', ours, 'linux'), null);
         // The runtime reports its build after a plus, as the executable the desktop carries does; that is the one version.
-        assert.equal(versionsDifferSentence('0.34.0-rc.1+14315ba2bcc0ac52ba8eeebbd1b52d9306913d5e', '0.34.0-rc.1', ours), null);
-        assert.notEqual(versionsDifferSentence('0.34.0-rc.2+14315ba2', '0.34.0-rc.1', ours), null);
+        assert.equal(versionsDifferSentence('0.34.0-rc.1+14315ba2bcc0ac52ba8eeebbd1b52d9306913d5e', '0.34.0-rc.1', ours, 'linux'), null);
+        assert.notEqual(versionsDifferSentence('0.34.0-rc.2+14315ba2', '0.34.0-rc.1', ours, 'linux'), null);
     }
-    const sentence = versionsDifferSentence('0.33.0', '0.34.0-rc.1', false) ?? '';
+    const sentence = versionsDifferSentence('0.33.0', '0.34.0-rc.1', false, 'linux') ?? '';
     assert.match(sentence, /0\.33\.0/);
     assert.match(sentence, /0\.34\.0-rc\.1/);
     assert.match(sentence, /`jason update`/);
@@ -125,12 +125,14 @@ test('the system screen’s sentence names jason update when another installatio
 });
 
 test('the system screen’s sentence names Check for Updates when the runtime is the desktop’s own, which jason update refuses to change', () => {
-    const sentence = versionsDifferSentence('0.35.0', '0.34.0', true) ?? '';
+    const sentence = versionsDifferSentence('0.35.0', '0.34.0', true, 'linux') ?? '';
     assert.match(sentence, /0\.35\.0/);
     assert.match(sentence, /0\.34\.0/);
     assert.match(sentence, /Check for Updates…/);
-    // A Windows or Linux window shows no menu bar, so the sentence names the tray's menu too, in the CLI's own words.
-    assert.match(sentence, /in the desktop's Jason menu, or in the menu of its icon in the tray/);
+    // A Windows or Linux window shows no menu bar, so the sentence names the tray's menu too, in the CLI's own words, and
+    // the item's key, which needs neither.
+    assert.match(sentence, /in the desktop's Jason menu, or in the menu of its icon in the tray, or press Ctrl\+Shift\+D,/);
+    assert.match(versionsDifferSentence('0.35.0', '0.34.0', true, 'darwin') ?? '', /press Cmd\+Shift\+D,/);
     assert.doesNotMatch(sentence, /jason update/);
 });
 

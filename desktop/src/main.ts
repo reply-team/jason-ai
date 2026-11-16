@@ -39,7 +39,7 @@ import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistra
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { demoBeforeReady } from './demo-page.ts';
@@ -781,7 +781,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     desk.open();
     showWindow = () => desk.show();
 
-    const unshown = 'The demo could not be shown. Choose Back to Your Own Installation in the Jason menu or the tray.';
+    const unshown = demoUnshownSentence(process.platform);
     try {
         views = await openDemo(window, {
             appPath: app.getAppPath(),
