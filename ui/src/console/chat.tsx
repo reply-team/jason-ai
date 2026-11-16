@@ -61,7 +61,8 @@ import {
     type Chat,
     type Entry,
 } from './chat-model';
-import { campaigns, reload as reloadCampaigns } from './campaigns';
+import { campaigns, reload as reloadCampaigns, summary } from './campaigns';
+import { chipsUnder, openingChips, type Agent, type Chip } from './chips';
 import { toFeedLine, toFeedRow } from './feed';
 import { html, type Html } from './html';
 import { markdownView } from './markdown-view';
@@ -98,13 +99,6 @@ import { fullAccessStanding, standingKnown, takeBackStanding } from '../platform
 // host, and the model and effort chosen in the box, nothing more. A line never starts a turn.
 // The menu beside the composer asks the desktop for the conversation's access mode; the desktop confirms Full access
 // with the person itself, and the page shows the mode the desktop answers with.
-
-// A chip shows the page's word for a campaign, "agent", and sends the runtime's, "campaign": the AI's own rules say campaign.
-const suggestions: readonly { shown: string; sent: string }[] = [
-    { shown: 'What is waiting for me?', sent: 'What is waiting for me?' },
-    { shown: 'How are my agents doing?', sent: 'How are my campaigns doing?' },
-    { shown: 'Help me start a new agent.', sent: 'Help me start a new campaign.' },
-];
 
 const answerWords: Readonly<Record<Answer, string>> = {
     allow: 'Allowed',
@@ -822,9 +816,7 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
                 <h2>${chat.campaignId ? `What should Jason do in ${chat.title}?` : 'What should Jason work on?'}</h2>
                 ${chat.mode === 'ask_first' || chat.mode === 'auto_edit' || chat.mode === 'plan_only' ? html`<p>Nothing written here reaches a person without your approval.</p>` : null}
             </div>
-            <div class="sugs">
-                ${suggestions.map((chip) => html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`)}
-            </div>`;
+            <div class="sugs">${chipButtons(chat, openingChips)}</div>`;
     const sentence = host && signInSentence(host);
     const lastPick = [...chat.entries].reverse().find((entry) => entry.kind === 'pick');
     // The cards the AI asked for: each text's words without its card blocks, and each turn's last block, by the index of
@@ -913,7 +905,32 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         chat.dropped > 0
             ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
             : null;
-    return html`${dropped}${parts}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+}
+
+/** The agent of a chat as the console last read it, its state and its counts; none for a chat of no agent. */
+function agentOf(campaignId: string | null): Agent | undefined {
+    const status = campaigns.value.find((each) => each.id === campaignId)?.status;
+    const row = campaignId === null ? undefined : summary.value[campaignId];
+    return status === undefined || row === undefined ? undefined : { status, row };
+}
+
+/** Chips: each shows its words and sends its own as the person's next message, as a word typed would be. */
+const chipButtons = (chat: Chat, chips: readonly Chip[]): Html[] =>
+    chips.map(
+        (chip) =>
+            html`<button class="sug" type="button" ${act('chat.suggest', chat.id, chip.sent)}>${chip.shown}</button>`,
+    );
+
+/**
+ * The chips under the last answer (`chipsUnder`), where a message could be sent from here now: none without a host, in a
+ * tab that may not send, or while the send waits for a model's name. An agent the console did not list, an archived one
+ * among them, has none.
+ */
+function chipsNext(chat: Chat, host: DesktopHost | null): Html | null {
+    if (host === null || (inTab() && !tabMaySend(chat.mode)) || sendHeld(onHost(chat, host.id), host)) return null;
+    const chips = chipsUnder(chat, agentOf(chat.campaignId));
+    return chips.length === 0 ? null : html`<div class="sugs next">${chipButtons(chat, chips)}</div>`;
 }
 
 /** What the plan card shows beyond the entries and the host: whether it is live, on another host, approving or approved. */
@@ -933,6 +950,8 @@ function threadOf(chatId: string) {
         host: DesktopHost | null;
         named: unknown;
         now: number;
+        counts: unknown;
+        held: string;
         card: string;
         asked: unknown;
         read: unknown;
@@ -944,6 +963,11 @@ function threadOf(chatId: string) {
         const host = hostOf(chat);
         // A pick names its campaigns by the names the console read, which may come after the pick.
         const named = campaigns.value;
+        // The chips under an agent's last answer are chosen from its state, read with `named`, and its counts as the
+        // console last read them; none stand while the send waits for a model's name, which the model chosen and whether
+        // one is being typed decide (`sendHeld`, asked only when the thread is drawn: it counts as a draw).
+        const counts = chat.campaignId === null ? undefined : summary.value[chat.campaignId];
+        const held = `${chat.typing === true} ${chat.model ?? ''}`;
         // A line's age is counted from the console's clock, which moves on every half minute.
         const now = clock.value;
         // The plan card is the one part of the thread drawn from the chat's mode, its waiting words and the person's
@@ -959,6 +983,8 @@ function threadOf(chatId: string) {
             last.now === now &&
             last.host === host &&
             last.named === named &&
+            last.counts === counts &&
+            last.held === held &&
             last.chat.entries === chat.entries &&
             last.chat.running === chat.running &&
             last.card === card &&
@@ -967,7 +993,7 @@ function threadOf(chatId: string) {
             last.chat.mode === chat.mode &&
             last.chat.title === chat.title &&
             last.chat.campaignId === chat.campaignId;
-        if (!same) last = { chat, host, named, now, card, asked, read, view: threadView(chat, host) };
+        if (!same) last = { chat, host, named, now, counts, held, card, asked, read, view: threadView(chat, host) };
         return last!.view;
     });
 }
