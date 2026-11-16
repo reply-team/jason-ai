@@ -60,7 +60,7 @@ import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from 
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
-import { frameOf, keepMovable } from './window-frame.ts';
+import { followTheme, frameOf, keepMovable } from './window-frame.ts';
 
 function readText(file: string): string | null {
     try {
@@ -258,8 +258,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // On macOS no title bar: the page leaves the window's buttons their band and marks where it is dragged by.
-        ...frameOf(process.platform),
+        // On macOS and Windows no title bar: the page leaves the window's buttons their room and marks where it is dragged
+        // by; on Windows the caption buttons are drawn in the theme in force.
+        ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
         show: !atLogin || conduct.atLogin === 'minimized',
@@ -283,8 +284,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
     keepWindowTitle(window);
-    // With no title bar on macOS, every page the window shows is given a band to drag the window by.
+    // With no title bar on macOS and Windows, every page the window shows is given a band to drag the window by.
     keepMovable(window, process.platform);
+    // On Windows the caption buttons follow each change of the theme in force while the window is open.
+    followTheme(window, nativeTheme, process.platform);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
     window.setMenuBarVisibility(conduct.menuBar);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
@@ -729,8 +732,9 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); elsewhere the system's.
-        ...frameOf(process.platform),
+        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); on
+        // Windows none either, the caption buttons over the strip's right end, drawn light as the page is; on Linux the system's.
+        ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: lightBackground,
         webPreferences: {

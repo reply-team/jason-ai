@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { can } from '../platform/places';
 import type {
     DesktopOpenInAnswer,
@@ -159,7 +159,8 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     }, [read]);
 
     useEffect(() => {
-        if (!menu || answer === null) return;
+        // The menu is drawn only with places or a sentence to show, and only a drawn menu listens for its closing.
+        if (!menu || (answer === null && problem === null)) return;
         const away = (event: MouseEvent) => {
             if (root.current && !root.current.contains(event.target as Node)) setMenu(false);
         };
@@ -172,7 +173,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
             document.removeEventListener('mousedown', away);
             document.removeEventListener('keydown', escape);
         };
-    }, [menu, answer]);
+    }, [menu, answer, problem]);
 
     const open = async (place: DesktopOpenInPlace) => {
         setMenu(false);
@@ -253,6 +254,10 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
         return () => clearTimeout(gone);
     }, [toast]);
 
+    // A sentence cut short in a narrow strip is still whole for the keyboard: each part is described by it, and the
+    // menu says it first.
+    const problemId = useId();
+    const described = problem !== null ? problemId : undefined;
     const places = answer?.places ?? [];
     const main = places.find((each) => each.id === answer?.default);
     const agents = places.filter((each) => each.id === 'claude' || each.id === 'codex');
@@ -275,7 +280,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
     return (
         <div className="open-in" ref={root}>
             {problem !== null && (
-                <span className="open-in-problem" role="alert">
+                <span className="open-in-problem" id={problemId} role="alert" title={problem}>
                     {problem}
                 </span>
             )}
@@ -285,6 +290,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     className="open-in-main"
                     disabled={main === undefined}
                     aria-label={mainWords}
+                    aria-describedby={described}
                     title={
                         main === undefined
                             ? undefined
@@ -299,6 +305,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     type="button"
                     className="open-in-arrow"
                     aria-label={t('openIn.choose')}
+                    aria-describedby={described}
                     title={t('openIn.title')}
                     aria-haspopup="menu"
                     aria-expanded={menu}
@@ -315,8 +322,9 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                     {toast}
                 </span>
             )}
-            {menu && answer !== null && (
+            {menu && (answer !== null || problem !== null) && (
                 <div className="open-in-menu" role="menu" aria-label={t('openIn.title')}>
+                    {problem !== null && <div className="open-in-note open-in-said">{problem}</div>}
                     {agents.length > 0 && <div className="open-in-header">{t('openIn.agents')}</div>}
                     {agents.map((place) => item(place, t('openIn.session')))}
                     {editors.length > 0 && <div className="open-in-header">{t('openIn.editors')}</div>}
@@ -325,7 +333,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         item(
                             place,
                             place.id === 'copy'
-                                ? answer.folder
+                                ? answer?.folder
                                 : place.id === 'browser'
                                   ? t('openIn.browser')
                                   : undefined,
@@ -337,7 +345,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
                         ),
                     )}
                     {mode.value === 'demo' && <div className="open-in-note">{t('openIn.demoNote')}</div>}
-                    {answer.changeJason === true && <ChangeJasonEntry onChoose={() => void changeJason()} />}
+                    {answer?.changeJason === true && <ChangeJasonEntry onChoose={() => void changeJason()} />}
                     {continuing !== undefined && (
                         <ContinueEntry
                             offered={continuing}

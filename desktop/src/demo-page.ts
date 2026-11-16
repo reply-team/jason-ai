@@ -13,7 +13,7 @@
  */
 
 import type { Rectangle, Session, WebContents, WebPreferences } from 'electron';
-import { titleBand } from './window-frame.ts';
+import { stripHeight, titleBand } from './window-frame.ts';
 
 /** A view of the Demo: the scheme its one file is served by, that file's address, and its session's name. */
 export interface DemoView {
@@ -387,9 +387,11 @@ export function switchChoice(url: string): 'live' | null {
  * its top strip is 38 high (the strip and its one-pixel border), the window's drag region, where it draws its own switch.
  * Ours covers that strip whole, from the sidebar to the window's right edge. On macOS the window's title bar is hidden,
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
- * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`).
+ * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
+ * Windows the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
+ * free, told it in its own view's coordinates.
  */
-export const demoGeometry = { sidebar: 284, strip: 38, macBand: titleBand } as const;
+export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
 
 export interface DemoLayout {
     page: Rectangle;
