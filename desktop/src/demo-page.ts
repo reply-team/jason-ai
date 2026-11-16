@@ -100,8 +100,8 @@ export function demoViewPreferences(view: DemoView): WebPreferences {
  * `data:` addresses, and nothing else: no address to fetch, connect or open a socket to, no frame, worker, plugin, form
  * target or base. Its `sandbox` is the page's own frame, the one it was built and walked in: scripts and nothing more.
  * Without same-origin the page's origin is opaque (`null`): it shares nothing with any other page and sets no cookie, and
- * what it keeps lives in the view's session, which is in memory only. It leaves out forms, pop-ups, top-level navigation, downloads, modal dialogs and printing, pointer lock, presentation and
- * orientation lock. The desktop's own refusals below hold the page to the same whatever the policy does.
+ * what it keeps lives in the view's session, which is in memory only. It leaves out forms, pop-ups, top-level
+ * navigation, downloads, modal dialogs and printing, pointer lock, presentation and orientation lock. The desktop's own refusals below hold the page to the same whatever the policy does.
  */
 export const demoPolicy = [
     "default-src 'none'",
