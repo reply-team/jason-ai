@@ -7,12 +7,12 @@
  * again. A new installation's first start, with no record, writes the record as the demo first (`keepFirstStart`), so
  * the person meets the product on the page and nothing of their own installation is made until they choose Live.
  *
- * Until 0.45 Demo was a second installation of sample data beside the person's, `~/.jason-demo`; what made, opened and
- * entered it (`runsOn`, `startOn`, `enterRun`, `demoDirectory`) stays here, unreached by any start, until it goes.
+ * Up to 0.44 Demo was a second installation of sample data beside the person's, `~/.jason-demo`; of it only the name of
+ * its data directory stays here (`demoDirectory`), which Live reads to stop and to take off what such a demo left.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 export type Mode = 'live' | 'demo';
 
@@ -23,9 +23,6 @@ export const isMode = (value: unknown): value is Mode => value === 'live' || val
 
 /** The desktop's sentence when the mode could not be kept: the desktop then stays as it is. */
 export const modeUnkept = 'The mode could not be saved, so Jason stays as it is.';
-
-/** The desktop's sentence when a switch or a start over is asked while the demo's sample is still being made. */
-export const demoPreparing = 'The demo is still being prepared. Try again once it is ready.';
 
 /**
  * Pure: whether this start writes the record as the demo: the first start of a new installation (`isNewInstallation`,
@@ -78,56 +75,30 @@ export function writeMode(file: string, mode: Mode): void {
     }
 }
 
-/** Pure: the demo's data directory, a sibling of the person's: its path with `-demo` after it. */
+/**
+ * Pure: an earlier version's demo's data directory, a sibling of the person's: its path with `-demo` after it. Live reads
+ * it to stop a runtime such a demo left running (`demo-runtime.ts`) and to take its folders off (`uninstall.ts`).
+ */
 export function demoDirectory(person: string): string {
     const trimmed = person.replace(/[\\/]+$/, '');
     return `${trimmed === '' ? person : trimmed}-demo`;
 }
 
-/** Which installation a start runs on. */
-export interface RunsOn {
+/** A start's installation: the person's own directory in both modes. */
+export interface StartRun {
     /** The person's data directory, where the record is: the one `JASON_DATA_DIR` or the default names. */
     person: string;
-    /** The data directory this run uses: the person's in Live, the demo's in Demo. */
+    /** The data directory this run uses: the person's, in both modes. */
     data: string;
     mode: Mode;
-}
-
-/**
- * Pure: the installation a start runs on, from the person's directory and what its record says. The installer's and
- * the uninstaller's starts ignore the record: they act on the person's installation alone.
- */
-export function runsOn(person: string, record: Mode, installerStart: boolean): RunsOn {
-    const mode = installerStart ? 'live' : record;
-    return { person, data: mode === 'demo' ? demoDirectory(person) : person, mode };
-}
-
-/** The person's own installation, seen from a demo run: its data directory and its harness root. */
-export interface PersonsOwn {
-    data: string;
-    harnessRoot: string;
-}
-
-/**
- * Pure: the person's own directories a run's chat refuses whole (`ChatScope.personsOwn`): in a demo run the person's data
- * directory and harness root, none in the person's own installation. It is read before `enterRun`, which takes away the
- * variable that may name the person's harness root; the root is read only for a demo run.
- */
-export function personsOwnOf(run: RunsOn, personsHarnessRoot: () => string): PersonsOwn | undefined {
-    return run.mode === 'demo' ? { data: run.person, harnessRoot: personsHarnessRoot() } : undefined;
-}
-
-/** What the first screen says when this start meant the demo and opened the person's own installation instead. */
-export const demoUnopened = 'The demo could not be opened, so Jason opened your own installation.';
-
-/** A start's installation, and why it is not the demo the record named; null when it is what the record named. */
-export interface StartRun extends RunsOn {
-    unopened: string | null;
+    /** Null: every start is on the installation the record named. The seam's answer carries it for the page (`ModeAnswer`). */
+    unopened: null;
 }
 
 /**
  * What the page is told of the run: its mode, the sentence that says the demo the record named could not be opened,
- * null when the run is on the installation the record named, and whether the demo's sample is still being made.
+ * null when the run is on the installation the record named, and whether the demo's sample is still being made. A
+ * desktop since 0.45 answers null and false: the demo is a page that opens no installation and makes no sample.
  */
 export interface ModeAnswer {
     mode: Mode;
@@ -135,56 +106,11 @@ export interface ModeAnswer {
     preparing: boolean;
 }
 
-/** Makes the demo's directory when it is not there and proves it is a folder this account can write in; throws when not. */
-export function openDirectory(directory: string): void {
-    mkdirSync(directory, { recursive: true });
-    if (!statSync(directory).isDirectory()) throw new Error('not a folder');
-    const probe = join(directory, `.mode-probe-${process.pid}`);
-    writeFileSync(probe, '');
-    rmSync(probe, { force: true });
-}
-
-export interface StartDeps {
-    /** Makes the demo's directory and proves it usable (`openDirectory`); throws when it cannot. */
-    open(directory: string): void;
-    /**
-     * The seam after the demo's directory is made and before the demo's runtime is ever started: what the demo
-     * installation must hold before it runs, its settings first (`writeDemoSettings`). Throws when it cannot, which makes
-     * the start the person's own as an unusable directory does. Never called for a Live start.
-     */
-    prepare(directory: string): void;
-    /** Keeps the mode in the person's record; throws when it cannot. */
-    keep(mode: Mode): void;
-}
-
-/**
- * The installation a start runs on (`runsOn`), with the demo's directory opened and prepared first: one that cannot be
- * made, used or prepared makes the start the person's own, sets the record back to Live (a record that cannot be set
- * back changes nothing of that) and says so.
- */
-export function startOn(person: string, record: Mode, installerStart: boolean, deps: StartDeps): StartRun {
-    const run = runsOn(person, record, installerStart);
-    if (run.mode !== 'demo') return { ...run, unopened: null };
-    try {
-        deps.open(run.data);
-        deps.prepare(run.data);
-        return { ...run, unopened: null };
-    } catch {
-        try {
-            deps.keep('live');
-        } catch {
-            // The record stays as it was; this start is the person's all the same.
-        }
-        return { person, data: person, mode: 'live', unopened: demoUnopened };
-    }
-}
-
 /**
  * Pure: the installation a start runs on since the demo is a page the application carries: the person's own directory in
  * both modes. A Demo run makes, opens and prepares no directory and starts no runtime; it keeps only the desktop's own
  * records in the person's directory, the mode, Electron's profile and its log (`isNewInstallation` counts them as none
- * of an installation's). The installer's and the uninstaller's starts ignore the record. `runsOn`, `startOn` and
- * `enterRun` are the earlier demo's, which no start reaches.
+ * of an installation's). The installer's and the uninstaller's starts ignore the record.
  */
 export function startRun(person: string, record: Mode, installerStart: boolean): StartRun {
     return { person, data: person, mode: installerStart ? 'live' : record, unopened: null };
@@ -193,7 +119,7 @@ export function startRun(person: string, record: Mode, installerStart: boolean):
 /** A process environment, as `process.env` is one. */
 export type Environment = Record<string, string | undefined>;
 
-/** What a demo run changes in its own process's environment, as the person's environment held it at start. */
+/** What the person's environment held at start, which a start of the desktop again puts back (`relaunchAsPerson`). */
 export interface PersonEnvironment {
     /** `JASON_DATA_DIR` as the person gave it, or undefined when they gave none. */
     dataDirectory: string | undefined;
@@ -210,23 +136,6 @@ export function isSettingsVariable(name: string): boolean {
 }
 
 /**
- * Points this process at the run's installation and answers what the person's environment said. A demo run sets
- * `JASON_DATA_DIR` to the demo's directory and takes away every runtime settings variable the person set (a harness
- * root, a route, a role's switch), so the demo's runtime is configured by the demo's own settings file
- * (`writeDemoSettings`) and nothing else, as a terminal with `JASON_DATA_DIR` alone would be. Variables without a
- * double underscore stay. A Live run changes nothing.
- */
-export function enterRun(env: Environment, run: RunsOn): PersonEnvironment {
-    const person = personEnvironmentOf(env);
-    const { settings } = person;
-    if (run.mode === 'demo') {
-        env.JASON_DATA_DIR = run.data;
-        for (const name of Object.keys(settings)) delete env[name];
-    }
-    return person;
-}
-
-/**
  * Pure: what the person's environment says, taken as it stands and changing nothing: `JASON_DATA_DIR` and every runtime
  * settings variable, which `relaunchAsPerson` puts back before the desktop starts itself again.
  */
@@ -239,8 +148,8 @@ export function personEnvironmentOf(env: Environment): PersonEnvironment {
 }
 
 /**
- * Puts back what `enterRun` changed, exactly as the person's environment held it: `JASON_DATA_DIR` as theirs or none,
- * and every runtime settings variable by its name and value, with none of their own added since.
+ * Puts back the person's environment exactly as it held it: `JASON_DATA_DIR` as theirs or none, and every runtime
+ * settings variable by its name and value, with none of their own added since.
  */
 export function leaveRun(env: Environment, person: PersonEnvironment): void {
     if (person.dataDirectory === undefined) delete env.JASON_DATA_DIR;
@@ -318,11 +227,9 @@ export interface ModeDeps {
 /**
  * The page asks for a mode: the record is written first and the desktop started again after, answering null. A write
  * that fails starts nothing and answers the refusal; a word that is neither mode is refused before anything is done.
- * While the demo's sample is still being made nothing is written or started, and the refusal says why.
  */
-export function applyMode(choice: unknown, deps: ModeDeps, preparing = false): { refused: string } | null {
+export function applyMode(choice: unknown, deps: ModeDeps): { refused: string } | null {
     if (!isMode(choice)) throw new Error('That is not a mode.');
-    if (preparing) return { refused: demoPreparing };
     try {
         deps.write(choice);
     } catch {

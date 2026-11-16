@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliAt, type Cli } from '../src/cli.ts';
+import { demoMarkerName, demoMarkerText } from '../src/demo-folders.ts';
 import type { Logger } from '../src/log.ts';
 import { desktopPaths, type DesktopPaths } from '../src/paths.ts';
 import type { SandboxCheck } from '../src/codex-sandbox.ts';
@@ -197,4 +198,10 @@ export async function outsideStandIn(check: SandboxCheck): Promise<RunResult> {
         }
     });
     return { exit: 0, stdout: [`${check.ran} `, ...opened].join('\r\n') + '\r\n', stderr: '' };
+}
+
+/** A folder as the desktop of 0.44 and earlier made one of its demo's: made where nothing was, and marked. */
+export function markedDemoFolder(folder: string): void {
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, demoMarkerName), demoMarkerText);
 }

@@ -15,11 +15,10 @@ import { autostartEntry, autostartEntryFile, launchAgent, launchAgentFile, Login
 import type { StopOutcome } from '../src/own-runtime.ts';
 import { AttentionWatcher } from '../src/attention.ts';
 import { PathCommand } from '../src/path-command.ts';
-import { claimDemoFolder } from '../src/demo-folders.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { debPackage, placedRemoval, quietWatcher, RemovalAct, removalOffered, removalQuestion, removalText, removeApplication, removeLabel, removePlaced, type RemovalScope } from '../src/remove-placed.ts';
 import { processesRunFrom, stopFromAny, uninstall, type RunsFrom, type UninstallDeps } from '../src/uninstall.ts';
-import { memoryLog } from './harness.ts';
+import { markedDemoFolder, memoryLog } from './harness.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -790,7 +789,7 @@ test('the act takes off the demo beside the person’s installation, worked out 
     const paths = desktopPaths(`${root}/data`);
     const person = `${root}/people/Jason`;
     for (const folder of [paths.data, person]) mkdirSync(folder, { recursive: true });
-    for (const folder of [`${root}/data-demo`, `${person}-demo`]) claimDemoFolder(folder);
+    for (const folder of [`${root}/data-demo`, `${person}-demo`]) markedDemoFolder(folder);
     writeFileSync(`${paths.data}/kept.txt`, 'x');
     writeFileSync(`${person}/kept.txt`, 'x');
     writeFileSync(`${root}/data-demo/file.txt`, 'x');
@@ -830,7 +829,7 @@ test('the act takes off a copy a start over left beside the demo, only when it c
     const paths = desktopPaths(`${root}/data`);
     const person = `${root}/people/Jason`;
     for (const folder of [paths.data, person]) mkdirSync(folder, { recursive: true });
-    for (const folder of [`${root}/data-demo`, `${person}-demo`, `${root}/data-demo.removing-5`]) claimDemoFolder(folder);
+    for (const folder of [`${root}/data-demo`, `${person}-demo`, `${root}/data-demo.removing-5`]) markedDemoFolder(folder);
     mkdirSync(`${person}-demo.removing-6`);
     writeFileSync(`${person}-demo.removing-6/theirs.txt`, 'x');
     const removal = placedRemoval({
