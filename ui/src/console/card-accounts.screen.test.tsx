@@ -172,22 +172,38 @@ describe('the accounts card', () => {
         expect(words(provider)).toContain('The runtime’s Reply plugin uses this sign-in');
         expect(words(provider)).toContain('9 accounts');
         expect([...provider.querySelectorAll('th')].map((each) => words(each))).toEqual([
-            'Address',
-            'Name at Reply',
+            'Account at Reply',
             'Channel',
             'Status at Reply',
         ]);
         expect(rows(provider)).toEqual([
-            ['sales@example.test', 'Sales inbox', 'Email', 'connected'],
-            ['old@example.test', 'Old inbox', 'Email', 'disconnected'],
-            ['team@example.test', 'Shared inbox', 'Email', 'unknown'],
-            ['owner-li', 'Owner Example', 'LinkedIn', 'enabled'],
-            ['second-li', 'Second Seat', 'LinkedIn', 'disabled'],
-            ['third-li', 'Third Seat', 'LinkedIn', 'cookieInvalid'],
-            ['fourth-li', 'Fourth Seat', 'LinkedIn', 'dailyLimitReached'],
-            ['new@example.test', 'New inbox', 'Email', 'warmingUp'],
-            ['quiet@example.test', 'Quiet inbox', 'Email', 'none given'],
+            ['Sales inbox sales@example.test', 'Email', 'connected'],
+            ['Old inbox old@example.test', 'Email', 'disconnected'],
+            ['Shared inbox team@example.test', 'Email', 'unknown'],
+            ['Owner Example owner-li', 'LinkedIn', 'enabled'],
+            ['Second Seat second-li', 'LinkedIn', 'disabled'],
+            ['Third Seat third-li', 'LinkedIn', 'cookieInvalid'],
+            ['Fourth Seat fourth-li', 'LinkedIn', 'dailyLimitReached'],
+            ['New inbox new@example.test', 'Email', 'warmingUp'],
+            ['Quiet inbox quiet@example.test', 'Email', 'none given'],
         ]);
+        // The account is its name over its address, the channel has a glyph, the status is a chip in Reply's own word, and
+        // only the two words Reply uses for a usable account are green.
+        const chips = [...provider.querySelectorAll('.acct-chip')];
+        expect(chips.map((each) => [each.textContent, each.classList.contains('ready')])).toEqual([
+            ['connected', true],
+            ['disconnected', false],
+            ['unknown', false],
+            ['enabled', true],
+            ['disabled', false],
+            ['cookieInvalid', false],
+            ['dailyLimitReached', false],
+            ['warmingUp', false],
+            ['none given', false],
+        ]);
+        expect(provider.querySelectorAll('tbody .acct-chan svg')).toHaveLength(9);
+        expect(provider.querySelector('tbody tr .acct-name')?.textContent).toBe('Sales inbox');
+        expect(provider.querySelector('tbody tr .acct-sub')?.textContent).toBe('sales@example.test');
         const record = onRecord(shown);
         expect(words(record)).toContain('Plugin that sends messages by default Reply (reply)');
         expect(words(record)).toContain('Its state: valid');

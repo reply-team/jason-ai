@@ -141,6 +141,10 @@ describe('the status card', () => {
         expect(within(read).getByText('As of 09:05')).toBeTruthy();
         expect(within(read).getByText('On record now')).toBeTruthy();
         expect(within(read).getByText('It is active.')).toBeTruthy();
+        // The state is a pill at the top of the card, in the runtime's own status and the agent list's tone.
+        const pill = read.querySelector('.card-pills .card-state');
+        expect(pill?.textContent).toBe('Active');
+        expect(pill?.classList.contains('green')).toBe(true);
         expect(tiles(read)).toEqual([
             '12 People',
             '2 People waiting on you',
