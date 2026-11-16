@@ -592,14 +592,18 @@ test('our switch’s view is transparent, so the page’s strip shows through it
     assert.ok(window.indexOf("ours.setBackgroundColor('#00000000');") < window.indexOf('window.contentView.addChildView(ours);'), 'before it is shown');
 });
 
-test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags', () => {
+// The band's document is the window's own contents, which fill the whole window under the two views, and Electron asks
+// the window's own contents first whether a point is in a drag region, whichever view is drawn over it: so only the band's
+// own height drags, never the document as a whole.
+test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags over its own height alone', () => {
     const page = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8');
     assert.ok(!/<script|on[a-z]+\s*=|javascript:|href=|<a\b|<button|<input/i.test(page), 'no script and nothing to follow');
     assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
     const css = page.replace(/\s+/g, ' ');
-    assert.ok(/html \{[^}]*-webkit-app-region: drag;/.test(css));
     assert.ok(/background: linear-gradient\(to right, #f3f5f9 0 284px, #fff4d6 284px\);/.test(css));
-    assert.ok(!/no-drag/.test(css), 'all of it drags');
+    assert.ok(/html \{[^}]*\}/.test(css) && !/html \{[^}]*-webkit-app-region/.test(css), 'the document as a whole carries no drag region');
+    assert.equal(css.split('-webkit-app-region').length - 1, 1, 'one drag region');
+    assert.ok(css.includes(`body { margin: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: drag; }`), 'the body drags, as high as the band');
 });
 
 test('the Demo window takes the window’s own frame, loads our band under its views on macOS, and elsewhere keeps its frame', () => {

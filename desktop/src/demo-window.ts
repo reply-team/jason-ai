@@ -3,7 +3,8 @@
  * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip whose right
  * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an installation is here: no jason, no runtime, no chat, no
  * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
- * above the page (`shell/demo-band.html`, no script, the window's drag region).
+ * above the page (`shell/demo-band.html`, no script). Electron asks the window's own contents first whether a point is in
+ * a drag region, whichever view is drawn over it, so the band's document drags over the band's height alone.
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
