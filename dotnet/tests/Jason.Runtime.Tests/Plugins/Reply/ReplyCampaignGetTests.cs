@@ -197,6 +197,58 @@ public class ReplyCampaignGetTests
     }
 
     [Fact]
+    public async Task The_mailboxes_a_sequence_sends_from_are_named_by_id_as_text_under_vendor()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "active");
+        account.WithEmailAccounts(Sequence, new JsonArray(77, 12));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        // An id and nothing else: an address is `sender.list`'s fact, and whoever shows one joins the two.
+        Assert.Equal(
+            """[{"id":"77"},{"id":"12"}]""",
+            answer["vendor"]!["mailboxes"]!.ToJsonString());
+    }
+
+    [Fact]
+    public async Task A_sequence_with_no_mailboxes_says_an_empty_list()
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "active");
+        account.WithEmailAccounts(Sequence, new JsonArray());
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        Assert.Equal("[]", answer["vendor"]!["mailboxes"]!.ToJsonString());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("\"77\"")]
+    [InlineData("{\"id\":77}")]
+    [InlineData("[77,\"12\"]")]
+    [InlineData("[77,1.5]")]
+    public async Task A_member_that_is_absent_or_of_another_shape_gives_no_mailboxes_member_and_never_fails_the_read(string? written)
+    {
+        using var account = new ReplyAccount();
+        account.WithSequence(Sequence, "Q3 outbound", "active");
+        account.WithEmailAccounts(Sequence, written is null ? null : JsonNode.Parse(written));
+        using var found = new ProcessVariable(ReplyAccount.ConfigHomeVariable, account.ConfigHome);
+        await using var api = await ReplyPlugins.StartAsync(Ct);
+
+        var answer = Succeeded(await InvokeAsync(api, Input(supplied: "7"), Ct));
+
+        // Absent is not empty: `[]` would say the sequence sends from no mailbox, which the provider did not say.
+        Assert.False(((JsonObject)answer["vendor"]!).ContainsKey("mailboxes"));
+        Assert.Equal("Q3 outbound", answer["campaign"]!["name"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task No_contact_is_paged_to_put_a_number_in_counts()
     {
         // An empty `counts` is a real answer: it says the provider reports none, which is not the same as
