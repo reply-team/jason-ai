@@ -20,3 +20,11 @@ describe('the frame of a screen', () => {
         );
     });
 });
+
+describe('the agent page in a narrow window', () => {
+    it('stacks a send-mode row, label then choice then Apply, instead of squeezing the label', () => {
+        const agent = strip(readFileSync(['src/console/', 'agent', '.css'].join(''), 'utf8'));
+        const narrow = agent.slice(agent.indexOf('@media (max-width: 820px)'));
+        expect(narrow).toMatch(/[.]send-mode-row [{]\s*grid-template-columns: minmax\(0, 1fr\);\s*[}]/);
+    });
+});
