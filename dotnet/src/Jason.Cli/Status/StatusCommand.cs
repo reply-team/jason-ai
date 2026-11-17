@@ -35,11 +35,12 @@ public static class StatusCommand
         """
         Required — a failure exits 1:   the runtime answers, and no update stopped part-way from its swap on
                                         (its repair is jason update apply) | the running runtime is the build
-                                        this CLI is | migrations are applied | the plugin registry is alive
-                                        (zero plugins is alive) | role skills are present for every role Jason
-                                        ships (a role of your own is reported, never failed), named after their
-                                        directories and within the runtime's live cap | 'jason' resolves on
-                                        PATH, in this shell or in every shell started from now on
+                                        this CLI is | the runtime is not draining (its repair is jason
+                                        runtime resume) | migrations are applied | the plugin registry is
+                                        alive (zero plugins is alive) | role skills are present for every role
+                                        Jason ships (a role of your own is reported, never failed), named
+                                        after their directories and within the runtime's live cap | 'jason'
+                                        resolves on PATH, in this shell or in every shell started from now on
         Optional — absent never fails:  no update is waiting to be resumed | a provider plugin is installed |
                                         each plugin package this release publishes is the one installed |
                                         every plugin installed is available | a plugin is granted a journal
@@ -99,6 +100,13 @@ public static class StatusCommand
         set-default claude-code, which the runtime applies without a restart; only the second where
         the profile is there, and the name of your own profile where you have one and name none. Its fix is
         the create command alone, never set-default. It never decides readiness.
+
+        The dispatcher check fails while the runtime is draining: it answers every question and claims no new
+        work, until jason runtime resume or a restart of the runtime. A drain is what jason runtime drain does,
+        and what an update or an install leaves where it ended part-way; its repair is jason runtime resume.
+        While an update stands unfinished the drain is the update's: the check says so and its repair is
+        jason update apply, never a resume in the middle of it. A dispatcher the settings turned off
+        (Dispatcher:Enabled) is said and never failed.
 
         The build check compares the version the runtime reports with this CLI's own, as whole strings: a
         runtime left running across an upgrade that replaced the executable fails it, and its repair is

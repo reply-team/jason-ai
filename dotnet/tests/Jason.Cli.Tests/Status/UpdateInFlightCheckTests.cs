@@ -348,7 +348,7 @@ public sealed class UpdateInFlightCheckTests
         return path;
     }
 
-    private static UpdateLedger Ledger(TempPaths dir, UpdateStep step)
+    internal static UpdateLedger Ledger(TempPaths dir, UpdateStep step)
     {
         var update = new UpdatePaths(dir.Paths);
         var to = SemanticVersion.Parse("9.9.9");
