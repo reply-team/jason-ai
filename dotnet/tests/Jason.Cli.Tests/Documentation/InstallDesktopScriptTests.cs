@@ -29,7 +29,8 @@ namespace Jason.Cli.Tests.Documentation;
 /// </para>
 /// <para>
 /// On macOS's route the commands a Mac has that a test machine may not — <c>uname</c>, <c>sysctl</c>, <c>ditto</c> and
-/// <c>codesign</c> — are stand-ins first on the PATH, the application's zip is a tar the stand-in <c>ditto</c> unpacks, and
+/// <c>codesign</c> — are stand-ins first on the PATH, with an <c>mv</c> that can make a Jason.app appear just before the
+/// move into its place, the application's zip is a tar the stand-in <c>ditto</c> unpacks, and
 /// the script's copy names a folder of the test's own as the shared applications folder. Those rows run on Linux and macOS,
 /// wherever there is a <c>/bin/sh</c>; on Windows they are skipped, and the Windows rows run there alone.
 /// </para>
@@ -44,6 +45,18 @@ public sealed class InstallDesktopScriptTests : IDisposable
     private const string SignatureCheck = "    function Assert-Signed([string] $file) {";
 
     private const string ShortCircuited = "    function Assert-Signed([string] $file) { return";
+
+    /// <summary>The verification install.sh asks of codesign, as the stand-in logs it with the application's path left out.</summary>
+    private const string VerifyCall = "codesign --verify --deep --strict -R=" + Requirement;
+
+    /// <summary>A test build's signature check that says it was reached and waits for the test's word before it returns.</summary>
+    private const string HeldUntilGo =
+        "    function Assert-Signed([string] $file) { New-Item -ItemType File -Path $env:JASON_TEST_ASKED | Out-Null; "
+        + "while (-not (Test-Path -LiteralPath $env:JASON_TEST_GO)) { Start-Sleep -Milliseconds 50 }; return";
+
+    /// <summary>The requirement a Developer ID application of the team that signs Jason satisfies, as install.sh tests it.</summary>
+    private const string Requirement =
+        "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"BD8M7U5YBV\"";
 
     private static readonly Lazy<byte[]> StandIn = new(Compile);
 
@@ -69,9 +82,54 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         var sh = Script("install.sh");
         Assert.Equal(1, Count(sh, "\nAPP_TEAM=\"BD8M7U5YBV\"\n"));
+        // The team is proven by Apple's chain, not read from the signature's own claim: one line, which a test build may
+        // change and the release never does.
+        Assert.Equal(1, Count(sh, "\nAPP_REQUIREMENT='" + Requirement + "'\n"));
         Assert.Equal(1, Count(sh, "\nSYSTEM_APPLICATIONS=\"/Applications\"\n"));
-        Assert.Contains("codesign --verify --deep --strict \"$STAGE/Jason.app\"", sh, StringComparison.Ordinal);
-        Assert.Contains("[ \"$TEAM\" = \"$APP_TEAM\" ]", sh, StringComparison.Ordinal);
+        var code = Code("install.sh");
+        Assert.Equal(1, Count(code, "codesign --verify --deep --strict -R=\"$APP_REQUIREMENT\" \"$1\""));
+        Assert.Equal(1, Count(code, "codesign --verify"));
+        // A new application and a kept one are held to it, the kept one before its jason is run.
+        Assert.Contains("if ! signed_as_jason \"$STAGE/Jason.app\"; then", code, StringComparison.Ordinal);
+        Assert.Contains("signed_as_jason \"$DEST\" || fail", code, StringComparison.Ordinal);
+        Assert.True(
+            code.IndexOf("signed_as_jason \"$DEST\" || fail", StringComparison.Ordinal) < code.IndexOf("if answers \"$CARRIED\"", StringComparison.Ordinal),
+            "install.sh asks a kept application's jason before its signature is verified.");
+    }
+
+    /// <summary>
+    /// install.sh's --help says what is true of a Mac on this release: an Intel Mac is refused, and the script, not
+    /// Homebrew's formula, installs Jason Desktop.
+    /// </summary>
+    [Fact]
+    public void The_shell_script_s_help_says_an_intel_mac_is_refused_and_homebrew_is_the_command_line_alone()
+    {
+        var sh = Script("install.sh");
+        var start = sh.IndexOf("usage() {", StringComparison.Ordinal);
+        var help = Regex.Replace(sh[start..sh.IndexOf("\nEOF\n", start, StringComparison.Ordinal)], @"\s+", " ");
+
+        Assert.Contains("Jason Desktop for macOS is built for Apple silicon: on an Intel Mac it stops before it downloads anything, since no build for one is published.", help, StringComparison.Ordinal);
+        Assert.Contains("On a Mac this script is the way to install Jason; Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// install.ps1 looks for an open window again right before it runs the setup: nothing of the download or its checks
+    /// stands between that look and the setup.
+    /// </summary>
+    [Fact]
+    public void Windows_the_window_is_looked_for_again_right_before_the_setup_runs()
+    {
+        var code = Code("install.ps1");
+        var setup = code.IndexOf("$installer = Start-Process -FilePath $setup", StringComparison.Ordinal);
+        var look = code.LastIndexOf("if (Test-WindowOpen) {", setup, StringComparison.Ordinal);
+        Assert.True(setup > 0 && look > 0, "install.ps1 does not look for the window before the setup.");
+        var between = code[look..setup];
+        foreach (var step in new[] { "Fetch ", "Get-FileHash", "Assert-Signed", "Unblock-File" })
+        {
+            Assert.DoesNotContain(step, between, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(2, Count(code, "if (Test-WindowOpen) {"));
     }
 
     /// <summary>
@@ -190,6 +248,60 @@ public sealed class InstallDesktopScriptTests : IDisposable
         {
             open.Kill();
             open.WaitForExit();
+        }
+    }
+
+    /// <summary>
+    /// A window opened while the setup is downloaded and checked stops the install as well: the window is looked for again
+    /// right before the setup runs. The test build holds the script inside its signature check until the window is open.
+    /// </summary>
+    [Fact]
+    public async Task Windows_a_window_opened_while_the_setup_is_downloaded_and_checked_still_stops_the_install()
+    {
+        var windows = Windows.Start(_tree);
+        Assert.True(windows.Run(windows.Feed()).Exit == 0);
+        File.Delete(windows.Log);
+        var window = Path.Combine(windows.App, "Jason.exe");
+        File.WriteAllBytes(window, StandIn.Value);
+        var asked = Path.Combine(_tree.NewDirectory("asked"), "asked");
+        var go = Path.Combine(_tree.NewDirectory("go"), "go");
+        windows.Variables["JASON_TEST_ASKED"] = asked;
+        windows.Variables["JASON_TEST_GO"] = go;
+        var cancellation = TestContext.Current.CancellationToken;
+        System.Diagnostics.Process? open = null;
+        var opener = Task.Run(async () =>
+        {
+            var until = DateTime.UtcNow.AddSeconds(90);
+            while (!File.Exists(asked) && DateTime.UtcNow < until)
+            {
+                await Task.Delay(50, cancellation);
+            }
+
+            if (File.Exists(asked))
+            {
+                open = System.Diagnostics.Process.Start(new ProcessStartInfo(window) { UseShellExecute = false, CreateNoWindow = true })!;
+                await File.WriteAllTextAsync(go, string.Empty, cancellation);
+            }
+        }, cancellation);
+        try
+        {
+            var run = windows.Run(windows.Feed("0.49.1"), signatureCheck: HeldUntilGo);
+
+            Assert.True(open is not null, "the script never reached its signature check: " + run.Stdout + run.Stderr);
+            Assert.Equal(1, run.Exit);
+            AssertSaid("Close Jason Desktop and run this line again.", run.Stderr);
+            Assert.DoesNotContain(windows.Calls(), call => call.StartsWith("setup", StringComparison.Ordinal));
+            Assert.Contains(Version, File.ReadAllText(Path.Combine(windows.App, "resources", "bundle", "version.json")), StringComparison.Ordinal);
+        }
+        finally
+        {
+            await opener.WaitAsync(TimeSpan.FromSeconds(100), cancellation);
+            if (open is not null)
+            {
+                open.Kill();
+                open.WaitForExit();
+                open.Dispose();
+            }
         }
     }
 
@@ -316,6 +428,50 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.DoesNotContain(windows.Calls(), call => call.StartsWith("runtime start", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// On failure too: a setup that stopped a runtime and then ended without installing leaves one started again, from the
+    /// jason that is whole at that step, here the command-line install's, since the application never arrived.
+    /// </summary>
+    [Fact]
+    public void Windows_a_setup_that_stopped_a_runtime_and_failed_leaves_one_started_from_the_jason_that_is_whole()
+    {
+        var windows = Windows.Start(_tree);
+        windows.PlantCommandLineInstall();
+        File.WriteAllText(windows.Running, string.Empty);
+        windows.Variables["JASON_STANDIN_SETUP_STOPS"] = "1";
+        windows.Variables["JASON_STANDIN_SETUP_EXIT"] = "2";
+
+        var run = windows.Run(windows.Feed());
+
+        Assert.Equal(1, run.Exit);
+        AssertSaid("another install of Jason ran at the same time", run.Stderr);
+        Assert.False(File.Exists(windows.Carried), "the stand-in setup installed although it failed");
+        Assert.Equal($"runtime start|{windows.Data}", windows.Calls()[^1]);
+        Assert.True(File.Exists(windows.Running), "no runtime was started again after the setup failed");
+        Assert.Contains("so one is started again from " + Path.Combine(windows.Root, "Programs", "jason", "jason.exe"), run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A line jason install writes on stderr goes through to stderr and never fails the install: Windows PowerShell 5.1
+    /// turns such a line into an error record once the script's streams are redirected, as an agent's are.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Windows_a_line_on_stderr_from_jason_install_goes_through_and_the_install_succeeds(bool windowsPowerShell)
+    {
+        var windows = Windows.Start(_tree);
+        windows.Variables["JASON_STANDIN_INSTALL_STDERR"] = "A diagnostic line from jason install.";
+
+        var run = windows.Run(windows.Feed(), windowsPowerShell: windowsPowerShell);
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains("A diagnostic line from jason install.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("A diagnostic line from jason install.", run.Stdout, StringComparison.Ordinal);
+        Assert.Contains(Lines(run.Stdout), line => line.StartsWith("{\"version\":", StringComparison.Ordinal));
+        Assert.EndsWith(windows.Carried, Lines(run.Stdout)[^1], StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(1, "a Jason process runs from")]
     [InlineData(2, "another install of Jason ran at the same time")]
@@ -357,24 +513,30 @@ public sealed class InstallDesktopScriptTests : IDisposable
         var app = Path.Combine(mac.Shared, "Jason.app");
         Assert.True(File.Exists(Path.Combine(app, "Contents", "Resources", "bundle", "jason")), run.Stdout + run.Stderr);
         Assert.Equal(["Jason.app"], Directory.EnumerateFileSystemEntries(mac.Shared).Select(Path.GetFileName));
-        Assert.Equal(
-            ["ditto -x -k", "codesign --verify --deep --strict", "codesign --display --verbose=2", $"install --roles|{mac.Data}"],
-            mac.Calls().Select(call => Regex.Replace(call, @" /\S+", string.Empty)));
+        Assert.Equal(["ditto -x -k", VerifyCall, $"install --roles|{mac.Data}"], mac.PathlessCalls());
         var lines = Lines(run.Stdout);
         Assert.Equal($"Jason {Version} is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v{Version}/LICENSE", lines[^3]);
         Assert.Equal($"A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: {Path.Combine(mac.Home, ".local", "bin", "jason")}", lines[^1]);
     }
 
+    /// <summary>
+    /// No Jason Desktop for an Intel Mac is published, as the install page says, so the script refuses one before it
+    /// downloads anything, naming the platforms there are builds for.
+    /// </summary>
     [Fact]
-    public void Macos_an_intel_mac_is_given_the_x64_application()
+    public void Macos_an_intel_mac_is_refused_before_anything_is_downloaded()
     {
         var mac = Mac.Start(_tree);
         mac.Variables["STUB_ARM64"] = "absent";
 
         var run = mac.Run(mac.Feed(arch: "x64"));
 
-        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
-        Assert.Contains("for macOS on x64", run.Stdout, StringComparison.Ordinal);
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("this is an Intel Mac, for which no build is published; nothing was installed.", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("Linux x64, Windows x64 and Apple silicon Macs", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
+        Assert.Empty(mac.Calls());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
     }
 
     [Fact]
@@ -447,7 +609,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         Assert.Contains($"Jason Desktop 0.49.5 is already installed at {Path.Combine(mac.Shared, "Jason.app")}; it is kept as it is", run.Stdout, StringComparison.Ordinal);
-        Assert.Equal([$"runtime status|{mac.Data}", $"install --roles|{mac.Data}"], mac.Calls());
+        Assert.Equal([VerifyCall, $"runtime status|{mac.Data}", $"install --roles|{mac.Data}"], mac.PathlessCalls());
         Assert.DoesNotContain("update apply", run.Stdout, StringComparison.Ordinal);
         Assert.StartsWith("A terminal opened from now on", Lines(run.Stdout)[^1], StringComparison.Ordinal);
     }
@@ -505,7 +667,118 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         Assert.Contains("nothing to download", run.Stdout, StringComparison.Ordinal);
-        Assert.Equal([$"runtime status|{mac.Data}", $"install --roles|{mac.Data}"], mac.Calls());
+        Assert.Equal([VerifyCall, $"runtime status|{mac.Data}", $"install --roles|{mac.Data}"], mac.PathlessCalls());
+    }
+
+    /// <summary>
+    /// A kept application's jason is run only once the application verifies as a new one must: an application at the
+    /// place that does not is left as it is, and its jason is never asked anything.
+    /// </summary>
+    [Fact]
+    public void Macos_a_kept_application_that_does_not_verify_is_left_as_it_is_and_its_jason_is_never_run()
+    {
+        var mac = Mac.Start(_tree);
+        var feed = mac.Feed();
+        Assert.True(mac.Run(feed).Exit == 0);
+        File.Delete(mac.Log);
+        mac.Variables["STUB_VERIFY"] = "1";
+
+        var run = mac.Run(feed);
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("does not verify as signed by BD8M7U5YBV, the team that signs Jason (said above), so its jason was not run; nothing was changed", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal([VerifyCall], mac.PathlessCalls());
+        Assert.True(File.Exists(mac.Carried));
+    }
+
+    /// <summary>The application in the zip has to be the release's version, or it is never placed.</summary>
+    [Fact]
+    public void Macos_an_application_of_another_version_than_the_release_is_never_placed()
+    {
+        var mac = Mac.Start(_tree);
+
+        var run = mac.Run(mac.Feed(carries: "0.49.3"));
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains($"is not Jason {Version}; nothing was installed", run.Stderr, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
+        Assert.DoesNotContain(mac.Calls(), call => call.StartsWith("install", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A Jason.app that appears between the check and the rename would take the new one inside it: the new one is taken
+    /// back out, the one that appeared is left as it was, and nothing is set up.
+    /// </summary>
+    [Fact]
+    public void Macos_an_application_that_appears_just_before_the_rename_is_left_as_it_was()
+    {
+        var mac = Mac.Start(_tree);
+        var dest = Path.Combine(mac.Shared, "Jason.app");
+        mac.Variables["STUB_RACE"] = dest;
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("appeared while this ran and is left as it was; nothing was installed", run.Stderr, StringComparison.Ordinal);
+        Assert.Equal(["Jason.app"], Directory.EnumerateFileSystemEntries(mac.Shared).Select(Path.GetFileName));
+        Assert.Equal(["Contents"], Directory.EnumerateFileSystemEntries(dest).Select(Path.GetFileName));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(dest, "Contents")));
+        Assert.DoesNotContain(mac.Calls(), call => call.StartsWith("install", StringComparison.Ordinal));
+    }
+
+    /// <summary>Stopped by a signal while it unpacks, the script still removes the staging folder beside the place.</summary>
+    [Theory]
+    [InlineData("TERM", 143)]
+    [InlineData("INT", 130)]
+    [InlineData("HUP", 129)]
+    public void Macos_a_script_stopped_by_a_signal_leaves_no_staging_folder(string signal, int exit)
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STUB_SIGNAL"] = signal;
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.Equal(exit, run.Exit);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
+        Assert.DoesNotContain(mac.Calls(), call => call.StartsWith("install", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The runtime rule on a Mac: where a runtime answered before the install and none answers after it, though the report
+    /// does not say it stopped one, a runtime is started again from the application's jason.
+    /// </summary>
+    [Fact]
+    public void Macos_a_runtime_that_answered_before_and_not_after_is_started_again_from_the_carried_jason()
+    {
+        var mac = Mac.Start(_tree);
+        mac.PlantCommandLineInstall();
+        File.WriteAllText(mac.Running, string.Empty);
+        mac.Variables["STANDIN_INSTALL_STOPS"] = "1";
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Equal($"runtime start|{mac.Data}", mac.Calls()[^1]);
+        Assert.True(File.Exists(mac.Running), "no runtime was started again");
+        Assert.Contains("so one is started again from " + mac.Carried, run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>A refusal and a run that printed no report end non-zero as well, each saying which.</summary>
+    [Theory]
+    [InlineData("refused", "jason install refused, as its report above says, so jason was not put in the terminal")]
+    [InlineData("no report", "jason install printed no report, so whether jason is in the terminal is not known")]
+    public void Macos_an_install_that_refused_or_printed_no_report_ends_non_zero_and_says_why(string kind, string said)
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STANDIN_REPORT"] = kind == "refused"
+            ? "{\"error\":{\"code\":\"install_not_carried\",\"message\":\"Not carried.\",\"retryable\":false}}"
+            : "not a report";
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains(said, run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("call it by its full path", run.Stdout, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -614,7 +887,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
         /// <summary>The calls the stand-ins were given, in order: <c>setup &lt;arguments&gt;</c>, else <c>&lt;arguments&gt;|&lt;data directory&gt;</c>.</summary>
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];
 
-        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, params string[] arguments)
+        public (int Exit, string Stdout, string Stderr) Run(string feed, bool published = false, bool windowsPowerShell = false, string signatureCheck = ShortCircuited, params string[] arguments)
         {
             var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
             if (!published)
@@ -622,7 +895,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
                 var text = File.ReadAllText(script);
                 Assert.Equal(1, Count(text.ReplaceLineEndings("\n"), SignatureCheck + "\n"));
                 script = Path.Combine(_tree.NewDirectory("test-build"), "install.ps1");
-                File.WriteAllText(script, text.Replace(SignatureCheck, ShortCircuited, StringComparison.Ordinal));
+                File.WriteAllText(script, text.Replace(SignatureCheck, signatureCheck, StringComparison.Ordinal));
             }
 
             var environment = new Dictionary<string, string>(Variables)
@@ -660,8 +933,50 @@ public sealed class InstallDesktopScriptTests : IDisposable
             Stubs = tree.NewDirectory("stubs");
             Stub("uname", "case \"${1:-}\" in -m) echo arm64 ;; *) echo Darwin ;; esac\n");
             Stub("sysctl", "[ \"${STUB_ARM64:-1}\" = absent ] && { echo \"sysctl: unknown oid 'hw.optional.arm64'\" >&2; exit 1; }\necho \"${STUB_ARM64:-1}\"\n");
-            Stub("ditto", $"echo \"ditto $*\" >> '{Log}'\ntar -xzf \"$3\" -C \"$4\"\n");
-            Stub("codesign", $"echo \"codesign $*\" >> '{Log}'\ncase \"$1\" in --verify) exit \"${{STUB_VERIFY:-0}}\" ;; --display) echo \"TeamIdentifier=${{STUB_TEAM:-BD8M7U5YBV}}\" >&2 ;; esac\n");
+            // ditto unpacks, and where a row says so the script is then sent a signal, as an agent's timeout sends one.
+            Stub("ditto", $"echo \"ditto $*\" >> '{Log}'\ntar -xzf \"$3\" -C \"$4\"\n[ -z \"${{STUB_SIGNAL:-}}\" ] || kill -\"$STUB_SIGNAL\" \"$PPID\"\n");
+            // codesign verifies only against the release's requirement, given as -R=, and only an application of that team.
+            Stub(
+                "codesign",
+                $"echo \"codesign $*\" >> '{Log}'\n"
+                + "case \"$1\" in\n"
+                + "  --verify)\n"
+                + "    GIVEN=''\n"
+                + "    for A in \"$@\"; do [ \"$A\" = \"-R=$STUB_REQUIREMENT\" ] && GIVEN=1; done\n"
+                + "    [ -n \"$GIVEN\" ] || { echo 'test-requirement not given' >&2; exit 3; }\n"
+                + "    [ \"${STUB_TEAM:-BD8M7U5YBV}\" = BD8M7U5YBV ] || { echo 'test-requirement not satisfied' >&2; exit 3; }\n"
+                + "    exit \"${STUB_VERIFY:-0}\" ;;\n"
+                + "  --display) echo \"TeamIdentifier=${STUB_TEAM:-BD8M7U5YBV}\" >&2 ;;\n"
+                + "esac\n");
+            // mv as it is, except that where a row names a place, a Jason.app appears there just before the move into it.
+            Stub("mv", "[ -n \"${STUB_RACE:-}\" ] && [ \"$2\" = \"$STUB_RACE\" ] && mkdir -p \"$2/Contents\"\nexec /bin/mv \"$@\"\n");
+        }
+
+        /// <summary>The stand-in jason: it logs each call, answers runtime status by the flag file, makes it at runtime start, and prints a row's report.</summary>
+        private string StandInJason =>
+            "#!/bin/sh\n"
+            + $"printf '%s|%s\\n' \"$*\" \"${{JASON_DATA_DIR:-}}\" >> '{Log}'\n"
+            + "case \"$1 ${2:-}\" in\n"
+            + $"  'runtime status') [ -f '{Running}' ] ;;\n"
+            + $"  'runtime start') : > '{Running}' ;;\n"
+            + $"  'install --roles') [ -z \"${{STANDIN_INSTALL_STOPS:-}}\" ] || rm -f '{Running}'\n"
+            + "    printf '%s\\n' \"${STANDIN_REPORT:-$STANDIN_DEFAULT}\" | sed \"s|{self}|$HOME/.local/bin/jason|g; s|{dir}|$HOME/.local/bin|g\" ;;\n"
+            + "esac\n";
+
+        /// <summary>The application's jason where the feed's application is put.</summary>
+        public string Carried => Path.Combine(Shared, "Jason.app", "Contents", "Resources", "bundle", "jason");
+
+        /// <summary>A command-line install of an earlier release in its installer's place, its notice beside it: a runtime may run from it.</summary>
+        public void PlantCommandLineInstall()
+        {
+            var bin = Path.Combine(Home, ".local", "bin");
+            Directory.CreateDirectory(bin);
+            File.WriteAllText(Path.Combine(bin, "jason"), StandInJason);
+            File.WriteAllText(Path.Combine(bin, "jason-LICENSE"), "MIT\n");
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(Path.Combine(bin, "jason"), (UnixFileMode)0b111_101_101);
+            }
         }
 
         public string Home { get; }
@@ -686,20 +1001,16 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
         public List<string> Calls() => File.Exists(Log) ? [.. File.ReadAllLines(Log)] : [];
 
+        /// <summary>The calls with the paths they were given left out.</summary>
+        public List<string> PathlessCalls() => [.. Calls().Select(call => Regex.Replace(call, @" /\S+", string.Empty))];
+
         /// <summary>A feed holding the application's zip for <paramref name="arch"/> — a tar the stand-in ditto unpacks — its manifest and its checksums.</summary>
-        public string Feed(string version = Version, string arch = "arm64")
+        public string Feed(string version = Version, string arch = "arm64", string? carries = null)
         {
             var feed = _tree.NewDirectory("feed");
             var asset = $"jason-desktop-macos-{arch}.zip";
             var zip = Path.Combine(feed, asset);
-            var jason =
-                "#!/bin/sh\n"
-                + $"printf '%s|%s\\n' \"$*\" \"${{JASON_DATA_DIR:-}}\" >> '{Log}'\n"
-                + "case \"$1 ${2:-}\" in\n"
-                + $"  'runtime status') [ -f '{Running}' ] ;;\n"
-                + $"  'runtime start') : > '{Running}' ;;\n"
-                + "  'install --roles') printf '%s\\n' \"${STANDIN_REPORT:-$STANDIN_DEFAULT}\" | sed \"s|{self}|$HOME/.local/bin/jason|g; s|{dir}|$HOME/.local/bin|g\" ;;\n"
-                + "esac\n";
+            var jason = StandInJason;
             using (var file = File.Create(zip))
             using (var gzip = new GZipStream(file, CompressionLevel.Fastest))
             using (var tar = new TarWriter(gzip, TarEntryFormat.Pax))
@@ -712,7 +1023,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
                 tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "Jason.app/Contents/Resources/bundle/version.json")
                 {
                     Mode = (UnixFileMode)0b110_100_100,
-                    DataStream = new MemoryStream(Encoding.UTF8.GetBytes("{\"version\": \"" + version + "\"}\n")),
+                    DataStream = new MemoryStream(Encoding.UTF8.GetBytes("{\"version\": \"" + (carries ?? version) + "\"}\n")),
                 });
             }
 
@@ -734,6 +1045,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
                 ["JASON_DATA_DIR"] = Data,
                 ["PATH"] = Stubs + ":" + (Environment.GetEnvironmentVariable("PATH") ?? "/usr/bin:/bin"),
                 ["STANDIN_DEFAULT"] = Report(placed: true, runtime: "not_running", completed: true),
+                ["STUB_REQUIREMENT"] = Requirement,
             };
             return RunToEnd("/bin/sh", environment, [script, "--feed", feed, .. arguments]);
         }
@@ -794,6 +1106,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             if (Path.GetFileName(self) == "Jason.exe") { System.Threading.Thread.Sleep(120000); return 0; }
             if (Path.GetFileName(self).Contains("setup")) {
               if (log != null) File.AppendAllText(log, "setup " + string.Join(" ", a) + "\n");
+              if (E("JASON_STANDIN_SETUP_STOPS") != null && running != null) File.Delete(running);
               var code = E("JASON_STANDIN_SETUP_EXIT");
               if (code != null && code != "0") return int.Parse(code);
               var line = Environment.CommandLine; var at = line.IndexOf(" /D=");
@@ -801,13 +1114,13 @@ public sealed class InstallDesktopScriptTests : IDisposable
               Directory.CreateDirectory(bundle);
               File.Copy(E("JASON_STANDIN_CARRIED"), Path.Combine(bundle, "jason.exe"), true);
               File.WriteAllText(Path.Combine(bundle, "version.json"), "{\"version\": \"" + E("JASON_STANDIN_VERSION") + "\"}\n");
-              if (E("JASON_STANDIN_SETUP_STOPS") != null && running != null) File.Delete(running);
               return 0;
             }
             if (log != null) File.AppendAllText(log, string.Join(" ", a) + "|" + E("JASON_DATA_DIR") + "\n");
             if (a.Length >= 2 && a[0] == "runtime" && a[1] == "status") return running != null && File.Exists(running) ? 0 : 3;
             if (a.Length >= 2 && a[0] == "runtime" && a[1] == "start") { if (running != null) File.WriteAllText(running, ""); Console.WriteLine("{\"instance\":\"standin\"}"); return 0; }
             if (a.Length >= 1 && a[0] == "install") {
+              var said = E("JASON_STANDIN_INSTALL_STDERR"); if (said != null) Console.Error.WriteLine(said);
               var report = E("JASON_STANDIN_REPORT") ?? "{\"version\":\"0.49.0\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":true,\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[]},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\"not_running\",\"done\":[],\"left\":[],\"problems\":[],\"completed\":true}";
               Console.WriteLine(report.Replace("{self}", self.Replace("\\", "\\\\")).Replace("{dir}", Path.GetDirectoryName(self).Replace("\\", "\\\\")));
               var code = E("JASON_STANDIN_INSTALL_EXIT");
