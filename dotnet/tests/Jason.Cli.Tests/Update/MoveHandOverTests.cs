@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Installation;
 using Jason.Cli.Status;
+using Jason.Cli.Tests.Commands;
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
 using Jason.Contracts.Json;
@@ -176,16 +177,134 @@ public sealed class MoveHandOverTests
         Assert.Equal(CheckState.Ok, StatusChecks.Move(rig.Env with { InstallPath = rig.Carried }).State);
     }
 
-    private static int Install(MoveRig rig, StringWriter output, string carried, string? updateLock, string? retire)
-    {
-        var variables = new Dictionary<string, string>();
-        if (updateLock is not null)
-        {
-            variables[UpdateLock.Variable] = updateLock;
-        }
+    private static int Install(MoveRig rig, StringWriter output, string carried, string? updateLock, string? retire) =>
+        Install(rig, output, carried, updateLock is null ? [] : new Dictionary<string, string> { [UpdateLock.Variable] = updateLock }, retire, null);
 
-        var env = rig.Env with { Out = output, Error = new StringWriter(), InstallPath = carried, Variables = variables, SearchPath = "/usr/bin:/bin" };
+    private static int Install(MoveRig rig, StringWriter output, string carried, Dictionary<string, string> variables, string? retire, SetupPlaces? places)
+    {
+        var env = rig.Env with { Out = output, Error = new StringWriter(), InstallPath = carried, Variables = variables, SearchPath = "/usr/bin:/bin", Setup = places ?? rig.Places };
         return InstallCommand.RunAsync(env, new InstallOptions(false, false, retire, StopTimeout: TimeSpan.FromSeconds(5), StopPoll: TimeSpan.FromMilliseconds(20)), CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    // --- the installer's own jason install ------------------------------------------------------------------
+
+    /// <summary>
+    /// The installer's own <c>jason install</c>, a grandchild through NSIS, is given the environment the move gives the setup:
+    /// the move's nonce is never in it, even where the move's own environment held one, so that grandchild finds the move's
+    /// lock held and is refused before it sets anything up; the move's routine runs once the setup has returned.
+    /// </summary>
+    [Fact]
+    public async Task The_installers_own_jason_install_is_given_no_nonce_and_is_refused_while_the_move_holds_the_lock()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        var grandchild = new List<(bool NonceReached, string? Code)>();
+        rig.System.OnSetup = arguments =>
+        {
+            var place = arguments.Single(argument => argument.StartsWith("/D=", StringComparison.Ordinal))[3..];
+            MoveRig.PlantApplication(place, windows: true, SemanticVersion.Current.ToString());
+
+            // The move's own environment at its worst: holding the very nonce the move hands its routine.
+            var nonce = File.ReadAllText(rig.Update.LockHolder).Trim().Split(' ')[^1];
+            var environment = rig.Env.Variables!.ToDictionary(pair => pair.Key, pair => (string?)pair.Value);
+            environment[UpdateLock.Variable] = nonce;
+            MoveSystem.SetupEnvironment(environment);
+
+            // NSIS's customInstall: `"$INSTDIR\resources\bundle\jason.exe" install`, in that environment.
+            var said = new StringWriter();
+            var exit = Install(rig, said, MoveRig.CarriedOf(place, windows: true), environment.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value!), null, null);
+            Assert.Equal(ExitCodes.ApiError, exit);
+            grandchild.Add((environment.ContainsKey(UpdateLock.Variable), RuntimeVerbs.Envelope(said.ToString()).Code));
+            return Task.FromResult(new SetupRun(true, 0));
+        };
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal([(false, (string?)UpdateCodes.InProgress)], grandchild);
+        Assert.Equal(MoveStates.Done, answer.State);
+        Assert.Equal(["signature", $"setup /S /D={rig.Application}", "routine", "stop", $"launch {rig.Carried}"], rig.Acts);
+        Assert.NotNull(rig.RoutineLocks.Single().Handed);
+    }
+
+    /// <summary>
+    /// Consequence (a): a setup that outlives the move's bound, or one the move was killed under, goes on alone, and the move's
+    /// lock is let go (the bound ends the move; a kill ends its process, and with it the open handle that is the lock). The
+    /// setup's own <c>jason install</c>, no flags and no nonce, then gets in: it finds the install the update recorded, stops
+    /// its runtime leaving the note that a start is owed, retires it and starts nothing; status reports the install retired.
+    /// The setup's routine is this build's own in the macOS shape, because the Windows one writes this account's Path, which no
+    /// row here may: the lock, the record it finds the install by, the stop and the note are the same code on both.
+    /// </summary>
+    [Fact]
+    public async Task A_setup_that_outlives_the_move_gets_its_own_routine_in_which_retires_the_install_and_leaves_the_start_owed()
+    {
+        using var rig = new MoveRig(windows: true);
+
+        // The command-line install where install.sh puts it, as the update recorded it, its runtime running from it.
+        var old = Path.Combine(rig.Home, ".local", "bin", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.Copy(rig.Old, old);
+        rig.Installation.RunsFrom = old;
+        rig.Installation.WithRuntime();
+        var ledger = rig.Complete() with { InstallPath = old };
+        ledger.Write(rig.Update.Ledger);
+        string? application = null;
+        rig.System.OnSetup = arguments =>
+        {
+            application = arguments.Single(argument => argument.StartsWith("/D=", StringComparison.Ordinal))[3..];
+            return Task.FromResult(new SetupRun(false, 0));
+        };
+
+        var answer = await rig.Move().RunAsync(ledger, rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Pending, answer.State);
+        Assert.True(rig.Installation.Running, "the move stopped nothing");
+        Assert.False(File.Exists(rig.Update.LockHolder), "the move let its lock go");
+
+        // The setup goes on and ends: the application in place, then its customInstall.
+        MoveRig.PlantApplication(application!, windows: true, SemanticVersion.Current.ToString());
+        var mac = new SetupPlaces(SetupSystem.MacOs, rig.Home, null, @"Software\jason-tests\never-written", "/bin/zsh") { Temporary = rig.Temporary };
+        var said = new StringWriter();
+        var exit = Install(rig, said, MoveRig.CarriedOf(application!, windows: true), [], null, mac);
+
+        Assert.True(exit == ExitCodes.Success, said.ToString());
+        var report = JsonNode.Parse(said.ToString())!;
+        Assert.Equal(old, report["retired"]!["executable"]!.GetValue<string>());
+        Assert.Equal(MachineSetup.RuntimeStates.Stopped, report["runtime"]!.GetValue<string>());
+        Assert.True(CommandFiles.IsWrapperFile(old));
+        Assert.False(rig.Installation.Running);
+        Assert.True(StartOwed.Read(rig.Installation.Paths).Stands, "the routine left the note that a start is owed");
+        Assert.DoesNotContain(rig.Acts, act => act.StartsWith("launch", StringComparison.Ordinal));
+        Assert.Equal(CheckState.Ok, StatusChecks.Move(rig.Env with { InstallPath = MoveRig.CarriedOf(application!, windows: true) }).State);
+    }
+
+    // --- going back --------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Once the move is done, a rollback from the application's jason refuses: it names no path, the retired install's
+    /// above all, and no command, and points to the page's section on going back from 0.49; nothing is changed.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task After_a_done_move_a_rollback_refuses_and_points_to_going_back_from_0_49(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        var ledger = File.ReadAllText(rig.Update.Ledger);
+        var output = new StringWriter();
+
+        var exit = await UpdateCommands.RollBackAsync(rig.Env with { Out = output, InstallPath = rig.Carried }, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(UpdateCodes.CarriedByDesktop, refusal.Code);
+        Assert.EndsWith(PublicRepository.GoingBackFrom049, refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rig.Installation.Root, refusal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("`", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(ledger, File.ReadAllText(rig.Update.Ledger));
+        Assert.True(File.Exists(rig.Update.PreviousExecutable));
+        Assert.True(rig.Installation.Running);
     }
 
     // --- a kill at each step ------------------------------------------------------------------------------

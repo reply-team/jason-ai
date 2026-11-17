@@ -152,6 +152,12 @@ public sealed class MoveSystem : IMoveSystem
         return exit == 0 ? null : (error.Trim() is { Length: > 0 } said ? said : $"ditto exited with {exit}");
     }
 
+    /// <summary>
+    /// The environment the setup is given, from this process's: nothing of the update's lock, so its own <c>jason install</c>,
+    /// a grandchild through the installer, finds the move's lock held and is refused, whatever nonce this process was handed.
+    /// </summary>
+    internal static void SetupEnvironment(IDictionary<string, string?> environment) => environment.Remove(UpdateLock.Variable);
+
     public async Task<SetupRun> RunSetupAsync(string setup, IReadOnlyList<string> arguments, TimeSpan bound, CancellationToken cancellationToken)
     {
         var start = ChildProcess.StartInfo(setup, ChildKind.SystemToolWithInput);
@@ -160,8 +166,7 @@ public sealed class MoveSystem : IMoveSystem
             start.ArgumentList.Add(argument);
         }
 
-        // Nothing of the update's is handed to the setup: its own install step then finds the update's lock held.
-        start.Environment.Remove(UpdateLock.Variable);
+        SetupEnvironment(start.Environment);
         Process.StandardStreams.KeepOutOfChildren();
         using var process = ChildProcess.Start(start) ?? throw new IOException($"{setup} could not be started.");
         process.StandardInput.Close();

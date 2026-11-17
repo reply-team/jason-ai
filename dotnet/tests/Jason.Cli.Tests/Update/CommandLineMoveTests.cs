@@ -362,21 +362,24 @@ public sealed class CommandLineMoveTests
     // --- the routine and the start ------------------------------------------------------------------------
 
     /// <summary>
-    /// The routine's runtime would not stop: nothing was retired, the runtime runs from the command-line install as it did,
-    /// and the move is pending; no start is owed, so none is made.
+    /// The routine's runtime would not stop, or names no image it runs from, so the routine left it running: nothing was
+    /// retired, the runtime runs from the command-line install as it did, and the move is pending with the routine's sentence;
+    /// no start is owed, so none is made.
     /// </summary>
-    [Fact]
-    public async Task A_runtime_that_would_not_stop_leaves_the_move_pending_and_the_runtime_running()
+    [Theory]
+    [InlineData(MachineSetup.RuntimeStates.WouldNotStop, "The runtime running from it would not stop, so nothing of that install was retired.")]
+    [InlineData(MachineSetup.RuntimeStates.Running, "The runtime that runs on the data directory does not name the executable it runs from, so it was not retired and the runtime was left running.")]
+    public async Task A_runtime_the_routine_left_running_leaves_the_move_pending_and_the_runtime_running(string runtime, string said)
     {
         using var rig = new MoveRig(windows: true);
         rig.Installation.WithRuntime();
-        rig.Routine = (command, _) => Report(rig, runtime: MachineSetup.RuntimeStates.WouldNotStop, retired: false, problems: ["The runtime running from it would not stop, so nothing of that install was retired."]);
+        rig.Routine = (command, _) => Report(rig, runtime: runtime, retired: false, problems: [said]);
 
         var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
 
         Assert.Equal(MoveStates.Pending, answer.State);
         Assert.Equal(MoveSteps.Placed, answer.Step);
-        Assert.Contains("would not stop", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains(said, answer.Reason!, StringComparison.Ordinal);
         Assert.True(rig.Installation.Running);
         Assert.DoesNotContain(rig.Acts, act => act.StartsWith("launch", StringComparison.Ordinal));
     }

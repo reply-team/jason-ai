@@ -538,7 +538,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             var why = problems.Count > 0 ? string.Join(" ", problems.Select(OneLine)) : "it found no command-line install to retire.";
             return (
                 $"The application's `jason install` did not retire the command-line install at {old}: {why} `jason update apply` carries the move on.",
-                runtime == MachineSetup.RuntimeStates.WouldNotStop,
+                runtime is MachineSetup.RuntimeStates.WouldNotStop or MachineSetup.RuntimeStates.Running,
                 stopped);
         }
 

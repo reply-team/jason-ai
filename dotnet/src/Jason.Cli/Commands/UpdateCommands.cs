@@ -884,7 +884,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's, and, with update_carried_by_desktop, when that update moved a command-line install into Jason Desktop: it does not go back from 0.49, and its sentence says where that is described.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 
@@ -995,12 +995,38 @@ public static class UpdateCommands
             return false;
         }
 
+        // The update that moved a command-line install into the application: the file it names is retired, and no command puts
+        // the install back, so none is named.
+        if (MovedFrom(env, ledger.InstallPath))
+        {
+            env.Out.WriteLine(CliErrors.Serialize(
+                UpdateCodes.CarriedByDesktop,
+                "This Jason was moved from a command-line install into Jason Desktop, and a rollback here does not take it back from 0.49; nothing was changed. "
+                + $"Going back from 0.49 is described at {PublicRepository.GoingBackFrom049}",
+                retryable: false));
+            return true;
+        }
+
         env.Out.WriteLine(CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} is of the jason at {ledger.InstallPath}, not of the one the Jason desktop application carries, "
             + $"at {carried.Executable}, so this jason does not roll it back: that jason does, with `{ledger.InstallPath} update rollback`.",
             retryable: false));
         return true;
+    }
+
+    /// <summary>Whether a move into Jason Desktop is done from the command-line install at <paramref name="installPath"/>.</summary>
+    private static bool MovedFrom(CliEnvironment env, string installPath)
+    {
+        try
+        {
+            return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { State: MoveStates.Done } done
+                && string.Equals(Path.GetFullPath(done.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+        catch (MoveRecordUnreadable)
+        {
+            return false;
+        }
     }
 
     /// <summary>

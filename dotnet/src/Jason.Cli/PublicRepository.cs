@@ -16,4 +16,10 @@ public static class PublicRepository
     /// submitted. The address itself is the README's to give; this program names no vendor.
     /// </summary>
     public const string GettingHelp = Url + "#getting-help";
+
+    /// <summary>
+    /// The release page's section on going back from 0.49, to which <c>jason update rollback</c> points once a command-line install
+    /// was moved into Jason Desktop: the one thing it says for now is that the command does not do it.
+    /// </summary>
+    public const string GoingBackFrom049 = Url + "/blob/main/docs/release-and-update.md#going-back-from-049";
 }

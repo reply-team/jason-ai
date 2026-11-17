@@ -1310,14 +1310,17 @@ point, the runtime's start it owed with it, leaves the note that a start is owed
 It is `pending`, never begun, in a process run as an administrator or as root and for an install a package manager
 made, and writes no record there; on an Intel Mac it is `pending` at `looked`, with nothing changed.
 
-**Going back after a move.** `jason update rollback` run as the application's `jason` refuses with
-`update_carried_by_desktop`, as for any update the application carries; the 0.48 executable the update kept stays in
-`<data>/update/previous/` until the next update. Putting a command-line install back after a move is not a step any
-verb takes.
+**After a move,** the executable the update replaced stays in `<data>/update/previous/` until the next update, and
+`jason update rollback` refuses, pointing to the section below.
 
 **A test build.** A CLI built with `-p:JasonTestBuild=true` reads the Windows signer and the macOS requirement from
 `JASON_TEST_BUILD_SIGNER` and `JASON_TEST_BUILD_REQUIREMENT`, so a CI run can move into an application it signed itself;
 no released build is one, which a guard holds.
+
+### Going back from 0.49
+
+`jason update rollback` does not roll Jason 0.49 back from a move of a command-line install into Jason Desktop: once the
+move is done, it refuses with `update_carried_by_desktop` and points here.
 
 ## 8. Starting at logon
 
