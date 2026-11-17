@@ -300,7 +300,7 @@ jason journal list --kind notification_sent
   runtime reads them only when it sends a toast: a switch off now — the runtime's own entry, every app, or a group
   policy — is said as it is now, whether the last toast was shown or not, and after a toast that failed, which it still
   says first and as `failed`; a switch on now never promises a toast reaches you, and after one Windows did not show
-  it says only that Windows allows them now and when the last one was not shown. The entry is the runtime's: Jason
+  it says only that the switches read as on now and when the last one was not shown. The entry is the runtime's: Jason
   Desktop has an entry of its own under the same name, which changes nothing here.
 - The runtime's log (`~/.jason/logs/`, compact JSON, one line per event) has a line for each failed channel. It keeps
   the message template and the values apart, so the line to look for is the one whose `"@mt"` is

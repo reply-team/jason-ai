@@ -33,12 +33,13 @@ public interface IToastSetting
 }
 
 /// <summary>
-/// This account's settings, read and never written, from the three values Windows' own Settings and a group policy write,
-/// in the order Windows weighs them: the policy first, then the switch for every app, then the runtime's own entry.
+/// This account's settings, read and never written, from the values Windows' own Settings and a group policy write, in the
+/// order Windows weighs them: the policy first, then the switch for every app, then the runtime's own entry. The policy is
+/// read under this account and under the machine, since the same value can be set for either.
 /// </summary>
 public sealed class WindowsToastSetting : IToastSetting
 {
-    /// <summary>Where the policy "Turn off toast notifications" is written for this account.</summary>
+    /// <summary>Where the policy "Turn off toast notifications" is written, under this account's hive and the machine's.</summary>
     public const string PolicyKey = @"Software\Policies\Microsoft\Windows\CurrentVersion\PushNotifications";
 
     /// <summary>The policy's value: 1 switches the toasts of every app off.</summary>
@@ -62,32 +63,36 @@ public sealed class WindowsToastSetting : IToastSetting
 
         try
         {
-            return From(Dword(PolicyKey, PolicyValue), Dword(EveryAppKey, EveryAppValue), Dword(ToastRegistration.WindowsSettingsKey, EntryValue));
+            return From(
+                Dword(Microsoft.Win32.Registry.CurrentUser, PolicyKey, PolicyValue),
+                Dword(Microsoft.Win32.Registry.LocalMachine, PolicyKey, PolicyValue),
+                Dword(Microsoft.Win32.Registry.CurrentUser, EveryAppKey, EveryAppValue),
+                Dword(Microsoft.Win32.Registry.CurrentUser, ToastRegistration.WindowsSettingsKey, EntryValue));
         }
         catch (Exception exception) when (exception is SecurityException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
 
-        static int? Dword(string key, string name)
+        static int? Dword(Microsoft.Win32.RegistryKey hive, string key, string name)
         {
             if (!OperatingSystem.IsWindows())
             {
                 return null;
             }
 
-            using var opened = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(key, writable: false);
+            using var opened = hive.OpenSubKey(key, writable: false);
             return opened?.GetValue(name) is int value ? value : null;
         }
     }
 
     /// <summary>
-    /// The switch the three values make, a value absent being null: the policy at 1 is off by policy, else the switch for
-    /// every app at 0 is off for every app, else the entry at 0 is off for Jason, else none is off. An absent value is
-    /// Windows' default, which switches nothing off.
+    /// The switch the values make, a value absent being null: the policy at 1 under this account or under the machine is off
+    /// by policy, else the switch for every app at 0 is off for every app, else the entry at 0 is off for Jason, else none
+    /// is off. An absent value is Windows' default, which switches nothing off.
     /// </summary>
-    public static ToastSwitch From(int? policy, int? everyApp, int? entry) =>
-        policy == 1 ? ToastSwitch.OffByPolicy
+    public static ToastSwitch From(int? userPolicy, int? machinePolicy, int? everyApp, int? entry) =>
+        userPolicy == 1 || machinePolicy == 1 ? ToastSwitch.OffByPolicy
         : everyApp == 0 ? ToastSwitch.OffForEveryApp
         : entry == 0 ? ToastSwitch.OffForJason
         : ToastSwitch.NotOff;

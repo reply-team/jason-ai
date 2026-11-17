@@ -2205,7 +2205,7 @@ internal static partial class StatusChecks
             else if (channel.Kind == ChannelKinds.Toast && switchNow == ToastSwitch.NotOff && outcome == ChannelResults.Silenced
                 && channel.Reason is SilencedReasons.DisabledForApplication or SilencedReasons.DisabledForUser or SilencedReasons.DisabledByGroupPolicy)
             {
-                asides.Add($"Windows allows Jason's notifications now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
+                asides.Add($"Windows' switches for Jason's notifications read as on now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
             }
             else if (outcome == ChannelResults.Silenced)
             {

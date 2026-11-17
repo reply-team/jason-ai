@@ -352,7 +352,7 @@ public sealed class NotificationsCheckTests
         "A group policy on this machine switches Windows' notifications off now, so none of Jason's is shown: only an administrator can change it.";
 
     private const string AllowsNow =
-        "Windows allows Jason's notifications now; the last one, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then.";
+        "Windows' switches for Jason's notifications read as on now; the last one, at 2026-10-01 09:06 UTC, was not shown, because Windows had them switched off then.";
 
     /// <summary>Windows' switches as a test sets them: never this machine's own, and counted, so a read that was not needed shows.</summary>
     private sealed class FakeToastSetting(ToastSwitch? now) : IToastSetting
@@ -535,19 +535,26 @@ public sealed class NotificationsCheckTests
         }
     }
 
-    /// <summary>The three values in the order Windows weighs them: the policy, the switch for every app, the entry.</summary>
+    /// <summary>
+    /// The values in the order Windows weighs them: the policy, under this account or under the machine, either at 1 off by
+    /// policy; then the switch for every app; then the entry. Fake values only: no row reads a registry.
+    /// </summary>
     [Theory]
-    [InlineData(null, null, null, ToastSwitch.NotOff)]
-    [InlineData(0, 1, 1, ToastSwitch.NotOff)]
-    [InlineData(1, null, null, ToastSwitch.OffByPolicy)]
-    [InlineData(1, 0, 0, ToastSwitch.OffByPolicy)]
-    [InlineData(null, 0, null, ToastSwitch.OffForEveryApp)]
-    [InlineData(0, 0, 0, ToastSwitch.OffForEveryApp)]
-    [InlineData(null, null, 0, ToastSwitch.OffForJason)]
-    [InlineData(null, 1, 0, ToastSwitch.OffForJason)]
-    [InlineData(2, 2, 2, ToastSwitch.NotOff)]
-    public void The_three_values_make_one_switch(int? policy, int? everyApp, int? entry, ToastSwitch expected) =>
-        Assert.Equal(expected, WindowsToastSetting.From(policy, everyApp, entry));
+    [InlineData(null, null, null, null, ToastSwitch.NotOff)]
+    [InlineData(0, 0, 1, 1, ToastSwitch.NotOff)]
+    [InlineData(1, null, null, null, ToastSwitch.OffByPolicy)]
+    [InlineData(null, 1, null, null, ToastSwitch.OffByPolicy)]
+    [InlineData(0, 1, 1, 1, ToastSwitch.OffByPolicy)]
+    [InlineData(1, 0, 1, 1, ToastSwitch.OffByPolicy)]
+    [InlineData(1, 1, 0, 0, ToastSwitch.OffByPolicy)]
+    [InlineData(null, 1, 0, 0, ToastSwitch.OffByPolicy)]
+    [InlineData(null, null, 0, null, ToastSwitch.OffForEveryApp)]
+    [InlineData(0, 0, 0, 0, ToastSwitch.OffForEveryApp)]
+    [InlineData(null, null, null, 0, ToastSwitch.OffForJason)]
+    [InlineData(null, 0, 1, 0, ToastSwitch.OffForJason)]
+    [InlineData(2, 2, 2, 2, ToastSwitch.NotOff)]
+    public void The_values_make_one_switch_and_a_policy_in_either_hive_is_off_by_policy(int? userPolicy, int? machinePolicy, int? everyApp, int? entry, ToastSwitch expected) =>
+        Assert.Equal(expected, WindowsToastSetting.From(userPolicy, machinePolicy, everyApp, entry));
 
     /// <summary>
     /// The acts in their order: the registration first, with what to do when it is refused; the stop never without it
