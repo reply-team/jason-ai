@@ -57,6 +57,12 @@ mentions it. The real work begins with the person's brief — what they tell you
 their first campaign, in their own words — and a campaign planned with the business pack's `campaign-planning` skill,
 and this skill is how the brief and that plan become work the runtime and Jason's roles perform.
 
+The wiring check also has a section for a direct send, `docs/golden-path.md`, "A direct send": one real email to the
+person's own address, which they state, from a mailbox of theirs. Offer it when they ask whether a direct send works,
+or before the first direct send of an installation. It is irreversible and counts against the mailbox's allowance, so
+propose it and say what it will do, and create the item only on their yes; read the approval's preview with them
+before it is approved, and never run it unasked.
+
 ## What the person has already written down
 
 Some of what the person wants was written down before this conversation, and you read it before any work is

@@ -1903,7 +1903,7 @@ public partial class PageClaimsTests
         var page = Page("docs", "golden-path.md");
         var inputs = FencedLines(page).Where(line => line.Contains("--input", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal(6, inputs.Count);
+        Assert.Equal(7, inputs.Count);
         Assert.All(inputs, line => Assert.Contains("--input '{", line, StringComparison.Ordinal));
         Assert.DoesNotContain(inputs, line => line.Contains("\\\"", StringComparison.Ordinal));
         Assert.Contains(
@@ -2038,7 +2038,9 @@ public partial class PageClaimsTests
         Assert.All(others, row => Assert.True(row.index > create, $"Step 6 runs this before the create: {row.line}"));
         Assert.DoesNotContain(
             FencedLines(page),
-            line => line.Contains("--kind provider_op", StringComparison.Ordinal) && line.Contains("external_id", StringComparison.Ordinal));
+            line => line.Contains("--kind provider_op", StringComparison.Ordinal)
+                && line.Contains("external_id", StringComparison.Ordinal)
+                && !line.Contains("--operation message.send ", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -2120,13 +2122,17 @@ public partial class PageClaimsTests
             Flat(Section(page, "## 8. ")),
             StringComparison.Ordinal);
 
-        var scanned = string.Join("\n\n", page.Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
+        // The section on a direct send is about a mailbox by its nature, so it is left out of this scan.
+        var direct = page.IndexOf("\n## A direct send\n", StringComparison.Ordinal);
+        var guarantees = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
+        Assert.True(direct > 0 && guarantees > direct, "docs/golden-path.md no longer has \"A direct send\" followed by \"What this guarantees\".");
+        var scanned = string.Join("\n\n", page.Remove(direct, guarantees - direct).Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
         var sender = Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
         Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index} of the page without the paragraph on the provider's web app.");
 
         var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
-        var to = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
-        Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"What this guarantees\".");
+        var to = page.IndexOf("\n## A direct send\n", StringComparison.Ordinal);
+        Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"A direct send\".");
         var made = Regex.Match(page[from..to], @"\b(?:schedules?|sending address(?:es)?|sends? from)\b", RegexOptions.IgnoreCase);
         Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {from + made.Index}.");
     }
