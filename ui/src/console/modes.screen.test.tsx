@@ -249,8 +249,8 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
             target: { value: 'And then the next' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Queued message' })).toBeTruthy());
         choose('ask_first');
         await waitFor(() => expect(line()).toBeNull());
         // The desktop stops the turn it ran in Full access; its end says no error.
@@ -261,7 +261,7 @@ describe('a chat’s access mode, on the host and around a running turn', () => 
             ),
         );
         expect(calls(desktop, 'chat.send')).toHaveLength(1);
-        expect(screen.queryByRole('status', { name: 'Waiting message' })).toBeNull();
+        expect(screen.queryByRole('group', { name: 'Queued message' })).toBeNull();
     });
 });
 
@@ -338,8 +338,8 @@ describe('a change of mode around a running turn, narrow to wide', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
             target: { value: 'And then the next' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Queued message' })).toBeTruthy());
     }
 
     const givenBack = async (desktop: StubDesktop): Promise<void> => {
@@ -382,7 +382,7 @@ describe('a change of mode around a running turn, narrow to wide', () => {
         await running(desktop);
         choose('full_access');
         await waitFor(() => expect(line()).not.toBeNull());
-        expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Queued message' })).toBeTruthy();
         flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));
         await waitFor(() => expect(calls(desktop, 'chat.send')).toHaveLength(2));
     });
@@ -400,8 +400,8 @@ describe('a change to Plan only around a running turn', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), {
             target: { value: 'And then the next' },
         });
-        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-        await waitFor(() => expect(screen.getByRole('status', { name: 'Waiting message' })).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+        await waitFor(() => expect(screen.getByRole('group', { name: 'Queued message' })).toBeTruthy());
         choose('plan_only');
         await waitForMenus(() => expect(value()).toBe('plan_only'));
         flush(() => desktop.emit(chatId(), { kind: 'done', error: null }));

@@ -1422,8 +1422,10 @@ public class CiRunsTests
     /// <summary>
     /// One job runs the desktop application's checks, in the order desktop/README.md gives them: the install, the
     /// type-check and the Node tests, in the desktop's own folder, on a node of 22 or later, which runs the tests' TypeScript
-    /// as it is. Electron's own binary is never downloaded: no test starts a window. None of the steps may fail without
-    /// failing the job, and none may be skipped.
+    /// as it is. No test starts a window, so the install fetches no Electron binary; one step before the Node tests fetches
+    /// it, by the electron package's own installer, for the rows that run code under it as Node, and the Node tests are
+    /// told that its absence is a failure there, never a skip. None of the steps may fail without failing the job, and
+    /// none may be skipped.
     /// </summary>
     [Fact]
     public void The_desktop_job_runs_the_install_the_type_check_and_the_node_tests_in_order()
@@ -1441,6 +1443,12 @@ public class CiRunsTests
         var order = commands.Select(command => runs.IndexOf(command)).ToList();
         Assert.DoesNotContain(-1, order);
         Assert.Equal(order.Order(), order);
+
+        var electron = runs.IndexOf("node node_modules/electron/install.js");
+        Assert.InRange(electron, order[0] + 1, order[2] - 1);
+        Assert.Equal("", Scalar(Mapping(steps[electron], "env"), "ELECTRON_SKIP_BINARY_DOWNLOAD"));
+        Assert.Null(Node(steps[electron], "if"));
+        Assert.Equal("1", Scalar(Mapping(steps[order[2]], "env"), "JASON_DESKTOP_ELECTRON_REQUIRED"));
 
         var node = steps.FindIndex(step => Scalar(step, "uses")?.StartsWith("actions/setup-node@", StringComparison.Ordinal) == true);
         Assert.InRange(node, 0, order[0] - 1);

@@ -103,7 +103,8 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
+  channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
+  narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
   that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
@@ -112,8 +113,9 @@ shows before anything is typed and what you send waits, while the window is open
   if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
   agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
-  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
-  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
+  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a
+  reply in a conversation, from the account this conversation is in, which it does not name), on which channel, and
+  the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
   and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
@@ -128,6 +130,16 @@ shows before anything is typed and what you send waits, while the window is open
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
   conversation to its foot above the box; opening a chat leaves its place alone.
+- While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
+  **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
+  a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
+  queued. It shows in the conversation as your message, with "Queued · Jason takes it when this turn ends" under it,
+  and goes as your next message once the turn ends well. A message you send while one is queued is added under it, a
+  blank line between, and the two go together. **Take back** puts the whole queue into the box when the box is empty.
+  Escape in the box stops the turn, with words typed or none, except while a menu, a list, the search box or a dialog is
+  open on the screen: then the key is theirs, and the sidebar's menus and the search box close by it. A turn you stop,
+  and a turn that fails, gives the queued words back to the box, above what you typed there, and so does a turn that
+  ends while a tab may no longer send to its chat; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
@@ -298,11 +310,15 @@ it, to change Jason itself.
 
 **Changing Jason itself.** **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
-plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
-`jason session open --setup`, which opens the host the preference
-[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
-host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
-the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
+plugins folder beside it and a first message that tells it how Jason is changed. The program it opens is, in this order:
+the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have
+stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or
+Codex and is installed; else Claude Code. When you choose the entry, the desktop reads the preference and the program in
+use and runs `jason session open --setup`, with `--host` naming the program in use only where you have stated no
+preference; where either cannot be read, or no program is in use, it runs the command with no host, which opens the
+preference's host, else Claude Code. Only where the host it ran the command for is not installed, or the preference
+cannot be read or names no host this jason knows, does it run the command once more with a host the desktop finds that
+was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
 changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
@@ -961,7 +977,8 @@ only on your word again. The download is kept in the updater's cache under your 
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
-the package names.
+the package names. On Windows and macOS a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
+install 0.48.5 or later yourself once, and from then on the application's own update works.
 
 Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
 updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
@@ -977,7 +994,10 @@ started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself, because the
+`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
+installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
+version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing puts the kept copy back by itself, because the
 runtime has no guard against a data directory a newer version migrated: if the new version does not start, the
 starting page says what went wrong and where the kept version is, and going back is quitting Jason and putting that
 folder back in the place of the installed application. That puts back the previous application and the Jason it carried;

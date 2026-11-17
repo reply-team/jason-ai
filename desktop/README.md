@@ -479,8 +479,8 @@ applies to the turns a person starts by sending, from the next one on.
   still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
   in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
-  - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
-    the mode of the moment it goes;
+  - a message the person sends while a turn runs waits in the page, every one sent meanwhile added under the one before,
+    and they go together as the next turn once that one ends well, in the mode of the moment it goes;
   - a resumed host session is the same send started again with a recap, in the same mode, and stops with it;
   - a set-up chat's naming run is no turn: it has no tool at all, no hook and no permission mode, in every mode;
   - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
@@ -845,10 +845,16 @@ From `desktop/`:
 ```sh
 npm ci
 npm run check         # the type-check of the sources and the tests
+node node_modules/electron/install.js   # Electron's own binary, for the rows that run under it
 npm test              # the Node tests
 npm run prepare:bundle -- --pre rc.1   # publishes this checkout's jason into bundle/ as <VersionPrefix>-rc.1
 npm run dev           # builds and starts the window
 ```
+
+The electron package fetches its binary only when asked, held to the sha256 its `checksums.json` names, and no test
+downloads it. `test/rollback-electron.test.ts` runs the copy an update keeps aside under that binary as Node, where the
+file system reads `resources/app.asar` as an archive as the application's main process does; without the binary it skips
+and says so, and with `JASON_DESKTOP_ELECTRON_REQUIRED=1`, as CI sets it, it fails instead.
 
 A desktop build always carries a candidate's version string (`0.34.0-rc.1`), never `dev`, so `jason ui install` and
 `jason plugin install` resolve that candidate's own release directory. `test/candidate-version.test.ts` proves it against

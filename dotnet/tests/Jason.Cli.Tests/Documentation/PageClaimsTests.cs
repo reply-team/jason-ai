@@ -1150,6 +1150,26 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Change Jason itself opens, in this order, the host a person's stated preference names, else the program marked In
+    /// use in Settings › Models, else Claude Code (<c>OpenIn.changeJason</c>); the desktop's page and the page on changing
+    /// Jason say that order, and neither says the preference is followed by Claude Code alone.
+    /// </summary>
+    [Fact]
+    public void The_pages_say_which_program_change_Jason_itself_opens()
+    {
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.Contains(
+            "The program it opens is, in this order: the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or Codex and is installed; else Claude Code.",
+            desktop,
+            StringComparison.Ordinal);
+        Assert.Contains("with `--host` naming the program in use only where you have stated no preference", desktop, StringComparison.Ordinal);
+        Assert.DoesNotContain("which opens the host the preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only", desktop, StringComparison.Ordinal);
+
+        var customising = Flat(Page("docs", "customising.md"));
+        Assert.Contains("(the one your preference names, else the program marked In use in Settings › Models, else Claude Code, else Codex)", customising, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Starting the runtime at logon is not asked at install: the guide marks it as not done, so an agent says it at the
     /// end with the command and an unmarked paragraph cannot be read as an act to run.
     /// </summary>
