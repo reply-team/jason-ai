@@ -354,6 +354,31 @@ public static class PathEntry
     }
 
     /// <summary>
+    /// How <c>install.sh</c> asks whether a terminal finds its folder already, the test it keeps before it writes any profile:
+    /// the opening of its <c>case</c> and the arm that writes nothing. <see cref="OnPath"/> is the same test in C#, which
+    /// <c>jason install</c> keeps on macOS; the script carries this text verbatim, its indentation aside, and a test runs it in
+    /// <c>sh</c> beside the C#.
+    /// </summary>
+    public const string OnPathTest =
+        """
+        case ":$PATH:" in
+            *":$INSTALL_DIR:"*) ;;
+        """;
+
+    /// <summary>
+    /// <see cref="OnPathTest"/> in C#: whether a colon-separated PATH names the directory as one of its entries, exactly as
+    /// the script's pattern matches — <c>:PATH:</c> holding <c>:directory:</c>, ordinal, a trailing slash a different entry.
+    /// A PATH nobody could read is null, and names nothing.
+    /// </summary>
+    /// <param name="path">The PATH a terminal has, or null where it is not known.</param>
+    /// <param name="directory">The directory the profile lines would put on it.</param>
+    public static bool OnPath(string? path, string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        return path is not null && $":{path}:".Contains($":{directory}:", StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The profiles <c>install.sh</c> puts the line into for this account, in its order: the <see cref="LoginProfile"/>, then
     /// the <see cref="InteractiveProfile"/> where the shell has one.
     /// </summary>

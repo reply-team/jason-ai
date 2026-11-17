@@ -42,11 +42,16 @@ public static class InstallCommand
           2. The terminal command.
              macOS: ~/.local/bin/jason, the application's own two-line sh wrapper running this jason (naming
              JASON_DATA_DIR where that is set), written over an earlier wrapper, the retired executable, or a
-             link to an application's jason, and over no other file; then install.sh's two lines,
+             link to an application's jason, and over no other file; then, only where the PATH a terminal has
+             does not name ~/.local/bin already (install.sh's own test, case ":$PATH:" in *":$INSTALL_DIR:"*),
+             install.sh's two lines,
                # added by jason install
                export PATH="$HOME/.local/bin:$PATH"   (the home spelled out)
              appended to the login profile of the account's shell and to ~/.zshrc or ~/.bashrc beside it,
-             each only where the line is not already a line of that file.
+             each only where the line is not already a line of that file. The PATH a terminal has is the one
+             --terminal-path names, and without it this process's own, which is a terminal's when a script
+             runs this. --terminal-path with the empty value says the login shell gave no answer: the folder
+             counts as not there, and the lines are written.
              Windows: one entry in this account's Path naming this jason's folder, only where it is not there,
              the value's kind kept and running programs told; and the jason and jason-desktop command files
              Jason Desktop placed in %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is
@@ -72,9 +77,11 @@ public static class InstallCommand
         logon registration made again.
 
         Callers: the Windows installer, at every install and update, silent or not, with no flags; the agent's
-        install script on macOS, once the application is in place, with --roles; the application's start, where
-        this last ran for an older version, with no flags; the move of a command-line install, with --retire
-        naming the executable it moves from.
+        install script on macOS, once the application is in place, with --roles and no --terminal-path; the
+        application's start, where this last ran for an older version, with --terminal-path naming the PATH its
+        login shell printed (never the application's own PATH, which it adds places to), or the empty value
+        where the shell gave none; the move of a command-line install, with --retire naming the executable it
+        moves from.
 
         The document: version, executable (this jason); command {runs (what a new terminal finds: the wrapper on
         macOS, the folder on the Path on Windows), open_shell, changed, profiles, taken_back}; skills [{root,
@@ -99,13 +106,17 @@ public static class InstallCommand
         var human = VerbOptions.Human();
         var roles = new Option<bool>("--roles") { Description = "Also deploy the role skills into the data directory, which the runtime cannot work without. Without it nothing is written under the data directory." };
         var retire = new Option<string?>("--retire") { Description = "The executable of a command-line install to retire, where it is not in the installer's default place." };
+        var terminalPath = new Option<string?>("--terminal-path")
+        {
+            Description = "macOS: the PATH a terminal of this account has, colon-separated, as its login shell printed it; the profile lines are written only where it does not name ~/.local/bin. The empty value says the shell gave no answer, and the lines are written. Without it, this process's own PATH. Windows: read by nothing.",
+        };
 
-        foreach (var option in new Option[] { human, roles, retire })
+        foreach (var option in new Option[] { human, roles, retire, terminalPath })
         {
             command.Options.Add(option);
         }
 
-        command.SetAction((parse, cancellationToken) => RunAsync(env, new InstallOptions(parse.GetValue(human), parse.GetValue(roles), parse.GetValue(retire)), cancellationToken));
+        command.SetAction((parse, cancellationToken) => RunAsync(env, new InstallOptions(parse.GetValue(human), parse.GetValue(roles), parse.GetValue(retire), TerminalPath: parse.GetValue(terminalPath)), cancellationToken));
         return command;
     }
 

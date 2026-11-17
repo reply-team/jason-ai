@@ -22,7 +22,7 @@ namespace Jason.Cli.Installation;
 /// <param name="Drain">How long a runtime running from that executable is given to finish what it holds. Null is a minute.</param>
 /// <param name="StopTimeout">How long it is given to go. Null is the stop verb's own wait.</param>
 /// <param name="StopPoll">How often it is asked. Null is the stop verb's own interval.</param>
-public sealed record InstallOptions(bool Human, bool Roles, string? Retire, TimeSpan? Drain = null, TimeSpan? StopTimeout = null, TimeSpan? StopPoll = null);
+public sealed record InstallOptions(bool Human, bool Roles, string? Retire, TimeSpan? Drain = null, TimeSpan? StopTimeout = null, TimeSpan? StopPoll = null, string? TerminalPath = null);
 
 /// <summary>The terminal command, as this run left it.</summary>
 /// <param name="Runs">
@@ -290,7 +290,8 @@ public static class MachineSetup
         // --- the terminal command ----------------------------------------------------------------------------
 
         /// <summary>
-        /// macOS: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape, then <c>install.sh</c>'s two lines
+        /// macOS: the wrapper at <c>~/.local/bin/jason</c>, in the application's own shape, then, where the PATH a terminal has
+        /// does not name <c>~/.local/bin</c> (<see cref="TerminalPath"/>, judged by <c>install.sh</c>'s own test), its two lines
         /// in each profile it writes them into, where that profile does not hold the line already. The wrapper goes over an
         /// older wrapper of the application's, an older command-line install's executable, or a link to an application's jason;
         /// any other file there is another program's, and stays.
@@ -338,6 +339,12 @@ public static class MachineSetup
             }
 
             var added = new List<string>();
+            if (PathEntry.OnPath(TerminalPath(), places.LocalBin))
+            {
+                Done.Add($"{places.LocalBin} is on the PATH a terminal has already, so no profile was written.");
+                return new InstallCommandOutcome(target, target, changed, added, []);
+            }
+
             foreach (var profile in PathEntry.ProfileTargets(places.Home, places.Shell))
             {
                 try
@@ -755,6 +762,20 @@ public static class MachineSetup
         }
 
         // --- reading the machine -----------------------------------------------------------------------------
+
+        /// <summary>
+        /// The PATH a terminal of this account has, which decides whether the profile lines are written, as it decides for
+        /// <c>install.sh</c>: the one the caller names with <c>--terminal-path</c>, null where it names the empty value — its
+        /// login shell gave no answer, and a folder counts as not there — and, where it names none, this process's own,
+        /// which is a terminal's when a script runs this.
+        /// </summary>
+        private string? TerminalPath() =>
+            options.TerminalPath switch
+            {
+                null => env.SearchPath ?? Environment.GetEnvironmentVariable("PATH"),
+                "" => null,
+                var named => named,
+            };
 
         /// <summary><c>JASON_DATA_DIR</c> where it is set, which the wrapper then names as the application's does; else null.</summary>
         private string? DataDirectoryNamed()

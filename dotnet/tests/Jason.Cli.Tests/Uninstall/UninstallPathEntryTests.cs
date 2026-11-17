@@ -422,6 +422,62 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// <c>install.sh</c> writes no profile where the PATH it runs with names the folder already, and <c>jason install</c>
+    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the script carries the test the C# spells, word for word, its
+    /// indentation aside.
+    /// </summary>
+    [Fact]
+    public void The_installer_carries_the_on_path_test_word_for_word()
+    {
+        static string Unindented(string text) => System.Text.RegularExpressions.Regex.Replace(text.Replace("\r\n", "\n", StringComparison.Ordinal), @"(?m)^[ \t]+", string.Empty);
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
+
+        Assert.Contains(Unindented(PathEntry.OnPathTest) + "\n", Unindented(script), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the two judge a PATH alike: the script's test run in <c>sh</c> with that PATH, the C# beside it — a folder named
+    /// first, last, alone or between empty entries is there; one with a trailing slash, one that only begins an entry, and
+    /// an empty PATH are not. A PATH nobody could read (null) is not there either.
+    /// </summary>
+    [Theory]
+    [InlineData("/usr/bin:{dir}", true)]
+    [InlineData("{dir}:/usr/bin", true)]
+    [InlineData("{dir}", true)]
+    [InlineData("::{dir}::", true)]
+    [InlineData("/usr/bin:{dir}/", false)]
+    [InlineData("/usr/bin:{dir}x:/bin", false)]
+    [InlineData("/usr/bin:/bin", false)]
+    [InlineData("", false)]
+    public void The_installers_on_path_test_and_the_csharp_one_agree(string path, bool on)
+    {
+        var directory = "/home/a b/.local/bin";
+        var value = path.Replace("{dir}", directory, StringComparison.Ordinal);
+
+        Assert.Equal(on, PathEntry.OnPath(value, directory));
+        Assert.False(PathEntry.OnPath(null, directory));
+
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"set -eu\nPATH=\"$1\"\nINSTALL_DIR=\"$2\"\non=1\n{PathEntry.OnPathTest}\n    *) on=0 ;;\nesac\nprintf '%s' \"$on\"");
+        start.ArgumentList.Add("sh");
+        start.ArgumentList.Add(value);
+        start.ArgumentList.Add(directory);
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var said = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
+        Assert.Equal(on ? "1" : "0", said);
+    }
+
+    /// <summary>
     /// And the two writers leave the same bytes: the script's function run in <c>sh</c> on one copy of each case, the C# on
     /// another — no file, an empty one, one with the line, one with the line commented out, one ending without a newline,
     /// one with a CRLF line — twice each, so a second run is held too.

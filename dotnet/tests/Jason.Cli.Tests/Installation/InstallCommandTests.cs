@@ -131,6 +131,87 @@ public sealed class InstallCommandTests : IDisposable
         Assert.All(report.GetProperty("skills").EnumerateArray(), root => Assert.Equal(0, root.GetProperty("written").GetInt32()));
     }
 
+    /// <summary>
+    /// The gate <c>install.sh</c> keeps before it writes a profile, judged by the PATH a terminal has: the agent's script passes
+    /// nothing, and the routine reads its own process's PATH, as the script does; the application passes its login shell's
+    /// PATH with <c>--terminal-path</c>, or the empty value where the shell gave no answer, which names no folder. The
+    /// process's own PATH is the seam's here, so a row that leaves the option out is judged by it and the rest are not.
+    /// </summary>
+    [Theory]
+    [InlineData("on the terminal's PATH", "/usr/bin:{bin}", "/usr/bin:/bin", false)]
+    [InlineData("only on the caller's own PATH", "/usr/bin:/bin", "/usr/bin:{bin}:/bin", true)]
+    [InlineData("the terminal's PATH unknown", "", "{bin}:/usr/bin:/bin", true)]
+    [InlineData("no option, on the routine's own PATH", null, "/usr/bin:{bin}", false)]
+    [InlineData("no option, not on the routine's own PATH", null, "/usr/bin:/bin", true)]
+    public async Task The_profiles_are_written_only_where_a_terminal_does_not_find_the_folder(string row, string? terminalPath, string ownPath, bool written)
+    {
+        var bin = Path.Combine(Home, ".local", "bin");
+        var executable = Carried();
+        var (env, output) = Environment(MacPlaces(), executable);
+        env = env with { SearchPath = ownPath.Replace("{bin}", bin, StringComparison.Ordinal) };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: terminalPath?.Replace("{bin}", bin, StringComparison.Ordinal)), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(CommandFiles.Wrapper(executable, null), File.ReadAllText(Path.Combine(bin, "jason")));
+        var report = Report(output);
+        var profiles = report.GetProperty("command").GetProperty("profiles");
+        if (written)
+        {
+            var line = $"export PATH=\"{bin}:$PATH\"";
+            foreach (var profile in new[] { ".zprofile", ".zshrc" })
+            {
+                Assert.Equal($"\n# added by jason install\n{line}\n", File.ReadAllText(Path.Combine(Home, profile)));
+            }
+
+            Assert.Equal(2, profiles.GetArrayLength());
+        }
+        else
+        {
+            Assert.False(File.Exists(Path.Combine(Home, ".zprofile")), $"{row}: a profile was written for a folder a terminal finds");
+            Assert.False(File.Exists(Path.Combine(Home, ".zshrc")), $"{row}: a profile was written for a folder a terminal finds");
+            Assert.Equal(0, profiles.GetArrayLength());
+            Assert.Contains(report.GetProperty("done").EnumerateArray(), said => said.GetString() == $"{bin} is on the PATH a terminal has already, so no profile was written.");
+        }
+    }
+
+    /// <summary>
+    /// The option as a caller types it: the empty value reaches the routine as "the shell gave no answer", and a PATH as that
+    /// PATH, with the routine's own PATH naming the folder in both, so only the option decides.
+    /// </summary>
+    [Theory]
+    [InlineData("", true)]
+    [InlineData("/usr/bin:{bin}", false)]
+    public async Task The_terminal_path_option_is_read_as_the_caller_types_it(string value, bool written)
+    {
+        var bin = Path.Combine(Home, ".local", "bin");
+        var (env, _) = Environment(MacPlaces(), Carried());
+        env = env with { SearchPath = bin };
+
+        var exit = await CliApp.RunAsync(["install", "--terminal-path", value.Replace("{bin}", bin, StringComparison.Ordinal)], env, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(written, File.Exists(Path.Combine(Home, ".zprofile")));
+    }
+
+    /// <summary>The gate is macOS's: on Windows a terminal PATH that names the folder already still leaves the Path entry written.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_the_terminal_path_changes_nothing()
+    {
+        using var key = ScratchKey.Create();
+        key.SetPath(@"C:\Tools", RegistryValueKind.String);
+        var executable = Carried("jason.exe");
+        var bundle = Path.GetDirectoryName(executable)!;
+        var (env, output) = Environment(WindowsPlaces(key.SubKey), executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: bundle), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal((@"C:\Tools;" + bundle, RegistryValueKind.String), key.ReadPath());
+        Assert.True(Report(output).GetProperty("command").GetProperty("changed").GetBoolean());
+    }
+
     [Fact]
     public async Task A_profile_that_holds_the_line_already_takes_nothing()
     {
@@ -491,7 +572,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }
@@ -592,6 +673,7 @@ public sealed class InstallCommandTests : IDisposable
             Autostart: new RecordingRegistrar(places?.Platform is SetupSystem.Windows ? AutostartPlatform.Windows : AutostartPlatform.MacOs),
             Harnesses: HarnessLocators.ForHome(Home),
             Variables: new Dictionary<string, string>(),
+            SearchPath: "/usr/bin:/bin",
             Setup: places);
         return (env, output);
     }
