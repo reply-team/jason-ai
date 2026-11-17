@@ -505,12 +505,12 @@ otherwise: half of what it reports is not the runtime's to know.
 |---|---|
 | the runtime answers, and no update stopped part-way from its swap on — its repair then is `jason update apply`, never `jason runtime start` | no update is waiting to be resumed |
 | the running runtime is the build this CLI is | a provider plugin is installed |
-| migrations are applied | each plugin package this release publishes is the one installed |
-| the plugin registry is alive (zero plugins is alive) | every plugin installed is available |
-| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | a plugin is granted a journal kind |
-| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | every plugin is granted something of each capability it asks for |
+| the runtime is not draining — a drain, by `jason runtime drain` or an update or install that ended part-way, lasts until `jason runtime resume`, its repair, or a restart of the runtime | each plugin package this release publishes is the one installed |
+| migrations are applied | every plugin installed is available |
+| the plugin registry is alive (zero plugins is alive) | a plugin is granted a journal kind |
+| role skills are present for every role Jason ships — a role of your own is reported, never failed — named after their directories and within the runtime's live cap | every plugin is granted something of each capability it asks for |
+| `jason` resolves on PATH — in this shell, or in every shell started from now on — and which file answers | a route is configured |
 | the data directory is laid out as this jason runs it (`layout.json`; none means layout 1) — a layout a newer Jason set up, or a stamp that cannot be read, fails it with the sentence the refused verbs say | |
-| | a route is configured |
 | | a binding names an account |
 | | a provider CLI **you name** answers |
 | | the skill packs are deployed to an agent harness, and the files their record names are there |
@@ -557,7 +557,7 @@ answers to `jason`; a line would only write the same split entry again. The chec
 on is to install Jason into a directory whose name does not hold it. The installers refuse such a directory.
 
 A fresh installation that has done §2 through §4 but has not yet started the runtime is expected to report
-`runtime`, `runtime_version`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with
+`runtime`, `runtime_version`, `dispatcher`, `migrations`, `plugin_registry` and `role_skills` as failed-or-unknown with
 `jason runtime start` as the repair. That is §6.
 
 `runtime_version` compares the version the running runtime reports with this CLI's own. It fails when a runtime
@@ -566,6 +566,11 @@ hand — because that runtime is still the old build and starts its plugin hosts
 `jason runtime restart`. Where the runtime is the newer of the two, the fact says so and the repair is
 `jason update apply`, since a restart from this older `jason` would start the older build on the newer data, which a
 Jason from 0.49.0 on refuses to start on (`data_newer`).
+
+`dispatcher` fails while the runtime is draining: it answers every question and claims no new work. A drain is what
+`jason runtime drain` does, and what an update or an install leaves where it ended part-way; it lasts until
+`jason runtime resume`, the check's repair, or a restart of the runtime. A dispatcher the settings turn off
+(`Dispatcher:Enabled`) is said there and never failed.
 
 `plugin_package` compares each plugin package the release you run publishes — today the Reply plugin's, the journal
 forwarder's, ntfy's, Slack's and Telegram's — with the package

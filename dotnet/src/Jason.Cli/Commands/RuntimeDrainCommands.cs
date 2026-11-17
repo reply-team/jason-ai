@@ -25,8 +25,9 @@ public static class RuntimeDrainCommands
             actor,
             "drain",
             Operations.SystemDrain,
-            "Tell the runtime to claim no new work; what it is already running goes on to its end. It answers the dispatcher's "
-            + "state and how many attempts are still running, and draining one already draining is the same answer. "
+            "Tell the runtime to claim no new work; what it is already running goes on to its end. A drain lasts until "
+            + "'jason runtime resume' or a restart of the runtime, and 'jason status' is not ready while it does. It answers the "
+            + "dispatcher's state and how many attempts are still running, and draining one already draining is the same answer. "
             + "'jason update apply' and 'jason install' send it before they stop a runtime; 'jason runtime resume' undoes it.");
 
         yield return Verb(

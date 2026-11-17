@@ -41,7 +41,8 @@ public static class RuntimeStopCommand
     /// The verb with <c>--start-owed</c>: a stop made on behalf of an install or an update, which leaves the note that a
     /// start is owed rather than taking it back, since the runtime it stops is one nobody asked to stop. The note is
     /// written just before the shutdown is asked, so it stands from the stop on, the caller killed during the wait
-    /// included, and taken back where the runtime then did not stop. Where no runtime answers to this data directory
+    /// included, and taken back where the runtime then did not stop. It takes back only what it wrote: where an older note
+    /// already stands it writes none and leaves that one, whatever the stop comes to. Where no runtime answers to this data directory
     /// nothing is stopped and nothing is written: no start is owed for a runtime that was not running, and a data
     /// directory that is not there is not made.
     /// </summary>
@@ -54,20 +55,27 @@ public static class RuntimeStopCommand
             return await RunAsync(env, human, cancellationToken, timeout, poll).ConfigureAwait(false);
         }
 
+        // An older note already standing is not this stop's: it is neither written over, which would lose its moment, nor
+        // taken back below, since a start was owed before this stop and still is.
+        var wrote = false;
         string? unwritten = null;
-        try
+        if (!Installation.StartOwed.Read(env.Paths).Stands)
         {
-            Installation.StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
-        }
-        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-        {
-            unwritten = refused.Message;
+            try
+            {
+                Installation.StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
+                wrote = true;
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                unwritten = refused.Message;
+            }
         }
 
         var exit = await RunAsync(env, human, cancellationToken, timeout, poll).ConfigureAwait(false);
-        if (exit != ExitCodes.Success && unwritten is null)
+        if (exit != ExitCodes.Success && wrote)
         {
-            // Still running, so no start is owed.
+            // Still running, so no start is owed: the note this stop wrote is taken back, and only that one.
             Installation.StartOwed.Remove(env.Paths);
         }
         else if (exit == ExitCodes.Success && unwritten is not null)

@@ -63,6 +63,7 @@ public class RuntimeDrainCommandsTests
     /// <summary>The help of each says what it does and which routines send the same operation.</summary>
     [Theory]
     [InlineData("drain", "claim no new work", "'jason update apply' and 'jason install' send it before they stop a runtime")]
+    [InlineData("drain", "A drain lasts until 'jason runtime resume' or a restart of the runtime", "'jason status' is not ready while it does")]
     [InlineData("resume", "claim work again", "'jason install' sends it to a runtime it drained and could not stop")]
     public async Task Help_says_what_it_does_and_who_else_sends_it(string verb, string does, string who)
     {

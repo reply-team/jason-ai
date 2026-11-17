@@ -116,6 +116,42 @@ public class RuntimeStopCommandTests
         Assert.Equal("{\"stopped_at\":\"2026-11-17T15:05:35Z\"}", File.ReadAllText(dir.Paths.StartOwedFile));
     }
 
+    /// <summary>
+    /// The flag takes back only what it wrote. With an older note already standing it writes none and leaves that one,
+    /// byte for byte, whatever the stop comes to: refused, outlived, or done, when the older moment is kept, not replaced.
+    /// </summary>
+    [Fact]
+    public async Task With_start_owed_an_older_note_already_standing_is_left_whatever_the_stop_comes_to()
+    {
+        const string Older = "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}";
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, Older);
+        var later = new FixedClock(new DateTimeOffset(2026, 11, 17, 17, 40, 12, TimeSpan.Zero));
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
+        var (refuses, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, Refused)), new FakeProcessControl());
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], refuses with { Clock = later }, Ct));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+
+        var stays = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (outlives, _, _) = RuntimeVerbs.Environment(dir, new FakeHandler(_ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"))), stays);
+        Assert.Equal(ExitCodes.ApiError, await RuntimeStopCommand.RunOnBehalfAsync(outlives with { Clock = later }, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+
+        var (stops, _, _) = RuntimeVerbs.Environment(
+            dir,
+            new FakeHandler(_ =>
+            {
+                File.Delete(dir.Paths.DescriptorFile);
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+            }),
+            new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], stops with { Clock = later }, Ct));
+        Assert.Equal(Older, File.ReadAllText(dir.Paths.StartOwedFile));
+    }
+
     /// <summary>With no data directory there is no runtime to stop: the flag writes nothing and makes no folder.</summary>
     [Fact]
     public async Task With_start_owed_and_no_data_directory_nothing_is_written()

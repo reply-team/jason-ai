@@ -72,6 +72,9 @@ internal static partial class StatusChecks
 
         public const string Restart = "jason runtime restart";
 
+        /// <summary>The repair for a runtime left draining: it claims again, with nothing restarted.</summary>
+        public const string Resume = "jason runtime resume";
+
         /// <summary>
         /// The repair for an update that stopped part-way: the apply carries it on from the step its ledger names, starts the
         /// runtime itself and finishes what the update still owes. Never <see cref="Start"/>, which would run the new build
@@ -270,6 +273,7 @@ internal static partial class StatusChecks
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
             checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
+            checks.Add(Dispatcher(info));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
@@ -438,6 +442,37 @@ internal static partial class StatusChecks
                 $"The runtime running is {info.RuntimeVersion}, newer than this CLI, {build}: a restart from this CLI would start the older build on data the newer one may have changed, so update this jason instead.",
                 Repair.UpdateThisJason)
             : new StatusCheck("runtime_version", true, CheckState.Failed, $"The runtime running is {info.RuntimeVersion}; this CLI is {build}.", Repair.Restart);
+    }
+
+    /// <summary>
+    /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
+    /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
+    /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
+    /// restarts nothing. A dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never
+    /// failed; a runtime that did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
+    /// </summary>
+    private static StatusCheck Dispatcher(SystemInfoResponse? info)
+    {
+        const string Name = "dispatcher";
+        if (info is null)
+        {
+            return new StatusCheck(Name, true, CheckState.Unknown, "The runtime did not answer, so whether it claims work was not asked.", Repair.Start);
+        }
+
+        var running = info.Dispatcher.RunningAttempts == 1
+            ? "1 attempt is still running"
+            : string.Create(CultureInfo.InvariantCulture, $"{info.Dispatcher.RunningAttempts} attempts are still running");
+        return info.Dispatcher.State switch
+        {
+            DispatcherState.Draining => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining: it claims no new work until `{Repair.Resume}` or a restart of the runtime; {running}.",
+                Repair.Resume),
+            DispatcherState.Disabled => new StatusCheck(Name, true, CheckState.Ok, "The dispatcher is turned off by the settings (Dispatcher:Enabled), so this runtime claims no work.", null),
+            _ => new StatusCheck(Name, true, CheckState.Ok, "The runtime claims work.", null),
+        };
     }
 
     private static StatusCheck Migrations(SystemInfoResponse? info)

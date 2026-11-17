@@ -57,7 +57,8 @@ public static class RuntimeCommands
             Description = "For a stop made on behalf of an install or an update, never one a person or an agent asks for: write "
                 + "run/start-owed.json in the data directory, the note that a start is owed, instead of taking it back, so "
                 + "Jason Desktop starts a runtime again and jason status says one is owed. The note is written as the shutdown is "
-                + "asked and taken back if the runtime does not stop; with no runtime answering nothing is written. Jason "
+                + "asked and taken back if the runtime does not stop; an older note already standing is left as it is; with no "
+                + "runtime answering nothing is written. Jason "
                 + "Desktop's own stop for its installer passes it.",
         };
         return Verb(
