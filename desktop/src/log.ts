@@ -66,6 +66,7 @@ export const templates = {
     machine_setup_ran: 'jason install ran at {Why} and exited {Exit}; completed {Completed}',
     machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}',
     machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
+    machine_setup_runtime: 'A runtime answered before jason install ran at {Why} and none after it; one was started again {Started}',
     // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',

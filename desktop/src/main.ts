@@ -39,7 +39,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, readHead, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
+import { commandIsSetup, jasonOnPath, liveWaitMs, MachineSetup, placeLine, readHead, runtimeDoor, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -477,7 +477,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     desk.open();
     showWindow = () => desk.show();
+    // The logon start is moved from another copy only once the machine set-up has ended, never beside it: the routine may
+    // move the same registration when it retires an older command-line install.
     const repointed = (async () => {
+        await machineSetup?.settled();
         if (otherCopy !== null) await autostart?.repoint(otherCopy, paths.data).catch(() => log.error('repoint_failed', { What: 'autostart', Exit: -1 }));
         await desk.readAutostart();
     })();
@@ -703,11 +706,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         return;
     }
 
-    // The machine set-up this start runs, where it runs one, ends before the installation is brought up: it may stop the
-    // runtime of a command-line install it retires, which `jason runtime start` then starts from the carried jason. The
-    // window is up meanwhile, saying so, and the routine's own time limit bounds the wait.
+    // The machine set-up this start runs, where it runs one, is waited for at most `liveWaitMs` before the installation is
+    // brought up, the window saying meanwhile what is being done. Past it Live goes on and the routine is left to end; a
+    // runtime it stops then, of a command-line install it retires, is started again from the carried jason by the set-up
+    // itself (`machine-setup.ts`), as one it stops in time is.
     if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
-    await machineSetup?.settled();
+    await machineSetup?.settledWithin(liveWaitMs);
 
     try {
         const started = await startInstallation({
@@ -947,14 +951,18 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
     if (!commandIsSetup(process.platform)) return null;
     const bundle = bundleDirectory();
     const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    const cli = cliAt(executable, withPath(process.env, pathOf(process.env)));
     return new MachineSetup({
-        cli: cliAt(executable, withPath(process.env, pathOf(process.env))),
+        cli,
         executable,
         version: bundleVersion(bundle),
         platform: process.platform,
         offered: setupOffered(process.platform, app.isPackaged),
         record: desktopPaths(runOn.person).machineSetup,
         terminalPath: () => askedShell(),
+        // The runtime on the person's data directory, read before and after each run and started again from the carried
+        // jason where the run left none that had answered: in Demo as in Live, the person's installation's, not the Demo's.
+        runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile),
         log,
         // The finishing step's seam (`machine-setup.ts`) stays unset until the command line offers that step.
     });

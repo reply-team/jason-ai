@@ -9,25 +9,46 @@
  *   writes nothing there; where it ran is `<data>/desktop/machine-setup.json`, which `isNewInstallation` counts among the
  *   desktop's own records, so a new installation's first start still opens on the Demo. The record is written only when
  *   the routine reported that it completed, so a run that did not get there runs again at the next start.
- * - **Never between the person and the window.** A start runs it once, with a time limit; a failure or a run that does
- *   not end is said in the item, which offers to put it back, and nothing is tried again in a loop.
+ * - **Never between the person and the window.** A start runs it once. Live waits for it at most `liveWaitMs` and then
+ *   goes on; the run is never ended by the desktop, and one past `setupLongMs` is said in the item as taking long. A
+ *   failure is said in the item, which offers to put it back, and nothing is tried again in a loop.
+ * - **A runtime it stops is started again.** Before the routine, whether a runtime answers on the data directory is read
+ *   by a read that writes nothing (`jason runtime status`; none where there is no descriptor). After any outcome, a
+ *   report, a refusal, no report or a run that ended after Live went on, where one answered before and none answers now,
+ *   one is started from the carried file (`jason runtime start`): in Demo as in Live, and on Put Back alike, since
+ *   whoever asked for the stop starts a runtime again.
  * - **The PATH it is told** is the login shell's own, as that shell printed it, or the empty value where it gave none, on
  *   macOS; never the desktop's, which adds places to it. Windows reads none.
- * - **Its report is shown as facts**: where a new terminal finds `jason` and what a terminal already open types, the
- *   skills by the programs that read them, and the routine's own sentences of what it left and why, and of what it did
- *   not do. Never its JSON.
+ * - **Its report is shown as facts**: where a new terminal finds `jason`, only where the routine read it back as placed,
+ *   and what a terminal already open types, the skills by the programs that read them, the routine's own sentences of
+ *   what it left and why, and of what it did not do, and what became of a runtime it stopped. Never its JSON.
  */
 
-import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { wrapperTarget } from './command-line.ts';
 import type { Logger } from './log.ts';
 import { sameFinalFile, type JasonOnPath } from './path-command.ts';
 import { findOnPath } from './program-path.ts';
+import { hosts } from './providers-model.ts';
+import { hostWords } from './roles-profile.ts';
 
-/** How long a run is given: a retired install's runtime is drained for up to a minute, then stopped. */
-export const setupLimitMs = 300_000;
+/**
+ * How long Live waits for the start's run before it brings the installation up anyway. The run is left to end: a retired
+ * install's runtime is drained for up to a minute and then stopped, and a stop that comes later is answered as one in time.
+ */
+export const liveWaitMs = 30_000;
+
+/** Past this the Command Line item says the run is taking long; nothing else changes, and the run is never ended. */
+export const setupLongMs = 300_000;
+
+/** The routine's time limit, as `cli.ts` hands it to `execFile`: none. Node ends a child only where it is above 0. */
+export const noLimit = 0;
+
+/** How long the read of whether a runtime answers, and the start of one, are given: `installation.ts`'s own bounds. */
+const lookLimitMs = 30_000;
+const startLimitMs = 180_000;
 
 /** Whether the Command Line item is the routine's status: on macOS and Windows; Linux keeps its PATH command. */
 export function commandIsSetup(platform: NodeJS.Platform): boolean {
@@ -48,10 +69,15 @@ export function setupArguments(platform: NodeJS.Platform, terminalPath: string |
 export interface SetupReport {
     version: string;
     executable: string;
-    /** The terminal command; null where it was not placed. */
-    command: { runs: string; openShell: string; changed: boolean; profiles: string[]; takenBack: string[] } | null;
+    /**
+     * The terminal command; null where the routine placed none. `placed` is whether a new terminal finds this jason, as the
+     * routine read it back: a wrapper whose profile lines were refused, or a Path entry that was not written, is not.
+     */
+    command: { runs: string; placed: boolean; openShell: string; changed: boolean; profiles: string[]; takenBack: string[] } | null;
     /** One entry per skills root of an agent host found. */
     skills: { root: string; hosts: string[]; written: number; unchanged: number; leftAlone: string[] }[];
+    /** What became of a runtime on the data directory: `not_running`, `running`, `stopped` or `would_not_stop`. */
+    runtime: string;
     done: string[];
     left: string[];
     problems: string[];
@@ -65,19 +91,19 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 /** Pure: the report a document says, or null for anything that is not one. */
 export function reportOf(raw: unknown): SetupReport | null {
     if (!isObject(raw)) return null;
-    const { version, executable, command, skills, done, left, problems, completed } = raw;
+    const { version, executable, command, skills, runtime, done, left, problems, completed } = raw;
     const doneSaid = texts(done);
     const leftSaid = texts(left);
     const problemsSaid = texts(problems);
-    if (!isText(version) || !isText(executable) || typeof completed !== 'boolean' || !Array.isArray(skills)) return null;
+    if (!isText(version) || !isText(executable) || !isText(runtime) || typeof completed !== 'boolean' || !Array.isArray(skills)) return null;
     if (doneSaid === null || leftSaid === null || problemsSaid === null) return null;
     let placed: SetupReport['command'] = null;
     if (command !== null) {
         if (!isObject(command)) return null;
         const profiles = texts(command.profiles);
         const takenBack = texts(command.taken_back);
-        if (!isText(command.runs) || !isText(command.open_shell) || typeof command.changed !== 'boolean' || profiles === null || takenBack === null) return null;
-        placed = { runs: command.runs, openShell: command.open_shell, changed: command.changed, profiles, takenBack };
+        if (!isText(command.runs) || typeof command.placed !== 'boolean' || !isText(command.open_shell) || typeof command.changed !== 'boolean' || profiles === null || takenBack === null) return null;
+        placed = { runs: command.runs, placed: command.placed, openShell: command.open_shell, changed: command.changed, profiles, takenBack };
     }
     const roots: SetupReport['skills'] = [];
     for (const entry of skills) {
@@ -87,26 +113,69 @@ export function reportOf(raw: unknown): SetupReport | null {
         if (!isText(entry.root) || hosts === null || leftAlone === null || typeof entry.written !== 'number' || typeof entry.unchanged !== 'number') return null;
         roots.push({ root: entry.root, hosts, written: entry.written, unchanged: entry.unchanged, leftAlone });
     }
-    return { version, executable, command: placed, skills: roots, done: doneSaid, left: leftSaid, problems: problemsSaid, completed };
+    return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed };
 }
 
 /** What a run of the routine answered: its report, or why there is none, in its own sentence where it said one. */
 export type SetupAnswer = { report: SetupReport } | { refused: string };
 
+/** The error sentence a CLI run printed as its document, or null. */
+function errorSaid(stdout: string): string | null {
+    let parsed: unknown = null;
+    try {
+        parsed = JSON.parse(stdout);
+    } catch {
+        return null;
+    }
+    const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null;
+    return error !== null && isText(error.message) && error.message !== '' ? error.message : null;
+}
+
 /** Pure: a run's answer from what the CLI gave back. */
 export function answerOf(result: CliResult): SetupAnswer {
-    if (result.exit === -1) return { refused: `jason install could not be started, or did not end within ${setupLimitMs / 60_000} minutes.` };
+    if (result.exit === -1) return { refused: 'jason install could not be started, or ended before it printed a report.' };
+    const said = errorSaid(result.stdout);
+    if (said !== null) return { refused: said };
     let parsed: unknown = null;
     try {
         parsed = JSON.parse(result.stdout);
     } catch {
         parsed = null;
     }
-    const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null;
-    if (error !== null && isText(error.message) && error.message !== '') return { refused: error.message };
     const report = reportOf(parsed);
     return report === null ? { refused: `jason install exited ${result.exit} and printed no report.` } : { report };
 }
+
+/**
+ * The runtime on the data directory, as the set-up's caller asks after it: whether one answers, by a read that writes
+ * nothing, and the start of one from the carried file. `start` answers null where it started one, else why not.
+ */
+export interface RuntimeDoor {
+    answers(): Promise<boolean>;
+    start(): Promise<string | null>;
+}
+
+/**
+ * The door through the carried jason: `jason runtime status`, which reads the descriptor and asks the runtime, run only
+ * where the descriptor `<data>/run/runtime.json` is there: with none, or no data directory, no runtime answers and no
+ * jason is run, so a new installation's first start writes nothing by asking. And `jason runtime start`.
+ */
+export function runtimeDoor(cli: Cli, runFile: string, exists: (path: string) => boolean = existsSync): RuntimeDoor {
+    return {
+        async answers() {
+            if (!exists(runFile)) return false;
+            return (await cli.run(['runtime', 'status'], { timeoutMs: lookLimitMs })).exit === 0;
+        },
+        async start() {
+            const result = await cli.run(['runtime', 'start'], { timeoutMs: startLimitMs });
+            if (result.exit === 0) return null;
+            return errorSaid(result.stdout) ?? `jason runtime start exited ${result.exit}.`;
+        },
+    };
+}
+
+/** What the desktop did for a runtime that answered before the routine and did not after it. */
+export type RuntimeAfter = { act: 'started' } | { act: 'not_started'; why: string };
 
 /** Where the routine last ran, by the desktop's own record: the version and the report of a run that completed. */
 export interface SetupRecord {
@@ -148,9 +217,10 @@ export type SetupState =
     | { state: 'unoffered' }
     /** Offered, and nothing of a run of this version to show. */
     | { state: 'idle' }
-    | { state: 'running' }
-    | { state: 'reported'; report: SetupReport }
-    | { state: 'refused'; why: string };
+    /** `long` once it has run past `setupLongMs`. */
+    | { state: 'running'; long?: boolean }
+    | { state: 'reported'; report: SetupReport; runtimeAfter?: RuntimeAfter }
+    | { state: 'refused'; why: string; runtimeAfter?: RuntimeAfter };
 
 export interface MachineSetupDeps {
     /** The carried jason. */
@@ -166,7 +236,11 @@ export interface MachineSetupDeps {
     record: string;
     /** The login shell's own PATH, or null where it printed none. */
     terminalPath(): Promise<string | null>;
+    /** The runtime on the data directory (`runtimeDoor`), read before and after each run. */
+    runtime: RuntimeDoor;
     log: Logger;
+    /** Past how long a run is said as taking long; `setupLongMs` unless a test names another. */
+    longAfterMs?: number;
     /**
      * THE FINISHING STEP'S SEAM: the command line's own finishing step of an update (`jason update apply --finish`, run on a
      * carried install with no update in flight, `docs/release-and-update.md` §7), which brings the plugin packages, the
@@ -182,6 +256,8 @@ export interface FinishingStep {
     completed: boolean;
     problems: string[];
 }
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export class MachineSetup {
     readonly #deps: MachineSetupDeps;
@@ -235,6 +311,24 @@ export class MachineSetup {
         await (this.#atStart ?? Promise.resolve());
     }
 
+    /**
+     * Resolves once the start's run has ended (`ended`), or once `boundMs` has passed with it still running (`running`),
+     * whichever is first; the run itself goes on either way.
+     */
+    async settledWithin(boundMs: number): Promise<'ended' | 'running'> {
+        const run = this.#atStart;
+        if (run === null) return 'ended';
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const bound = new Promise<'running'>((resolve) => {
+            timer = setTimeout(() => resolve('running'), boundMs);
+        });
+        try {
+            return await Promise.race([run.then(() => 'ended' as const), bound]);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
     /** Put back, on the person's word: the routine run again, unless it is running already. */
     putBack(): Promise<SetupState> {
         if (!this.#deps.offered || this.#deps.version === null) return Promise.resolve(this.#state);
@@ -244,40 +338,63 @@ export class MachineSetup {
     #run(why: 'start' | 'put_back'): Promise<SetupState> {
         if (this.#running !== null) return this.#running;
         this.#set({ state: 'running' });
-        this.#running = (async () => {
-            const { cli, platform, log, record } = this.#deps;
-            const version = this.#deps.version ?? '';
-            let terminalPath: string | null = null;
-            if (platform === 'darwin') terminalPath = await this.#deps.terminalPath().catch(() => null);
-            const result = await cli.run(setupArguments(platform, terminalPath), { timeoutMs: setupLimitMs });
-            const answer = answerOf(result);
-            const routineDone = 'report' in answer && answer.report.completed && result.exit === 0;
-            log.info('machine_setup_ran', { Why: why, Exit: result.exit, Completed: routineDone });
-            let finishing: FinishingStep | null = null;
-            if (routineDone && this.#deps.finishingStep !== undefined) {
-                finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${error instanceof Error ? error.message : String(error)}`] }));
-                log.info('machine_setup_finished', { Why: why, Completed: finishing.completed });
+        // Said once, as taking long; the run is never ended for it.
+        const long = setTimeout(() => {
+            if (this.#state.state === 'running') this.#set({ state: 'running', long: true });
+        }, this.#deps.longAfterMs ?? setupLongMs);
+        long.unref?.();
+        this.#running = (async (): Promise<SetupState> => {
+            const { runtime, log } = this.#deps;
+            // Whether a runtime answers on the data directory before the routine, which may stop it.
+            const before = await runtime.answers().catch(() => false);
+            let next: Extract<SetupState, { state: 'reported' | 'refused' }>;
+            try {
+                next = await this.#routine(why);
+            } catch (error) {
+                next = { state: 'refused', why: messageOf(error) };
             }
-            const completed = routineDone && (finishing === null || finishing.completed);
-            if (completed) {
-                try {
-                    writeSetupRecord(record, version, JSON.parse(result.stdout));
-                } catch {
-                    log.warn('machine_setup_unrecorded', { Version: version });
-                }
-            }
-            if (!('report' in answer)) return { state: 'refused', why: answer.refused } as const;
-            // What the finishing step did not do is said beside the routine's own problems.
-            const report = finishing === null || finishing.completed ? answer.report : { ...answer.report, problems: [...answer.report.problems, ...finishing.problems], completed: false };
-            return { state: 'reported', report } as const;
-        })()
-            .catch((error: unknown) => ({ state: 'refused', why: error instanceof Error ? error.message : String(error) }) as const)
-            .then((next) => {
-                this.#running = null;
-                this.#set(next);
-                return next;
-            });
+            // After any outcome: one answered before and none answers now, so one is started from the carried file.
+            if (!before || (await runtime.answers().catch(() => false))) return next;
+            const failed = await runtime.start().catch(messageOf);
+            log.info('machine_setup_runtime', { Why: why, Started: failed === null });
+            return { ...next, runtimeAfter: failed === null ? { act: 'started' } : { act: 'not_started', why: failed } };
+        })().then((next) => {
+            clearTimeout(long);
+            this.#running = null;
+            this.#set(next);
+            return next;
+        });
         return this.#running;
+    }
+
+    /** One run of the routine and the finishing step after it, the record written where both completed. */
+    async #routine(why: 'start' | 'put_back'): Promise<Extract<SetupState, { state: 'reported' | 'refused' }>> {
+        const { cli, platform, log, record } = this.#deps;
+        const version = this.#deps.version ?? '';
+        let terminalPath: string | null = null;
+        if (platform === 'darwin') terminalPath = await this.#deps.terminalPath().catch(() => null);
+        // No time limit: a routine ended mid-write would leave a runtime draining or a retirement half done.
+        const result = await cli.run(setupArguments(platform, terminalPath), { timeoutMs: noLimit });
+        const answer = answerOf(result);
+        const routineDone = 'report' in answer && answer.report.completed && result.exit === 0;
+        log.info('machine_setup_ran', { Why: why, Exit: result.exit, Completed: routineDone });
+        let finishing: FinishingStep | null = null;
+        if (routineDone && this.#deps.finishingStep !== undefined) {
+            finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${messageOf(error)}`] }));
+            log.info('machine_setup_finished', { Why: why, Completed: finishing.completed });
+        }
+        const completed = routineDone && (finishing === null || finishing.completed);
+        if (completed) {
+            try {
+                writeSetupRecord(record, version, JSON.parse(result.stdout));
+            } catch {
+                log.warn('machine_setup_unrecorded', { Version: version });
+            }
+        }
+        if (!('report' in answer)) return { state: 'refused', why: answer.refused };
+        // What the finishing step did not do is said beside the routine's own problems.
+        const report = finishing === null || finishing.completed ? answer.report : { ...answer.report, problems: [...answer.report.problems, ...finishing.problems], completed: false };
+        return { state: 'reported', report };
     }
 
     #set(next: SetupState): void {
@@ -289,16 +406,21 @@ export class MachineSetup {
 /** What the starting page says while Live waits for the start's run. */
 export const settingUpSentence = 'Putting jason where a terminal finds it, and the skills where your agents read them…';
 
+/** What the item says of a run past `setupLongMs`. */
+export const takingLongSentence = 'The set-up is taking long: it has run for over five minutes, and it is left to finish.';
+
 /** The act's label in the Command Line submenu. */
 export const putBackLabel = 'Put Back jason and the Skills…';
 
-const hostNames: Readonly<Record<string, string>> = { claude_code: 'Claude Code', codex: 'Codex' };
+/** The routine's host words, by the names the desktop already shows for them (`providers-model.ts`). */
+const hostNames: Readonly<Record<string, string>> = Object.fromEntries(hosts.flatMap((host) => (hostWords[host.id] === undefined ? [] : [[hostWords[host.id], host.label]])));
 
 /** Pure: the report as lines a person reads. */
 export function reportLines(report: SetupReport): string[] {
     const lines: string[] = [];
-    if (report.command === null) {
-        lines.push('jason was not placed where a terminal finds it.');
+    if (report.command === null || !report.command.placed) {
+        // Said only where the routine read the command back as placed; what stopped it is among the problems below.
+        lines.push('jason is not yet where a new terminal finds it.');
     } else {
         lines.push(`A new terminal finds jason through ${report.command.runs}.`);
         lines.push(`A terminal that was already open finds it by its full path only: ${report.command.openShell}.`);
@@ -311,6 +433,15 @@ export function reportLines(report: SetupReport): string[] {
     return lines;
 }
 
+/** Pure: what became of a runtime that answered before the run and not after it, where the desktop started one or tried. */
+export function runtimeLines(after: RuntimeAfter | undefined, report: SetupReport | null): string[] {
+    if (after === undefined) return [];
+    const stopped = report?.runtime === 'stopped' ? 'The set-up stopped the runtime of the older command-line install' : 'The runtime that was running stopped while the set-up ran';
+    return after.act === 'started'
+        ? [`${stopped}; Jason Desktop started one again from its own jason.`]
+        : [`${stopped}, and starting one again did not work: ${after.why} \`jason runtime start\` starts one.`];
+}
+
 /** Pure: the Command Line submenu on macOS and Windows: the executable, where the set-up stands, and put back. */
 export function setupMenuOf(state: SetupState, executable: string): { lines: string[]; acts: { label: string; act: 'put_back' }[] } {
     const lines = [`The jason executable: ${executable}`];
@@ -319,13 +450,13 @@ export function setupMenuOf(state: SetupState, executable: string): { lines: str
         case 'unoffered':
             return { lines: [...lines, 'A development build sets nothing up: its jason is the checkout’s.'], acts: [] };
         case 'running':
-            return { lines: [...lines, settingUpSentence], acts: [] };
+            return { lines: [...lines, state.long === true ? takingLongSentence : settingUpSentence], acts: [] };
         case 'idle':
             return { lines: [...lines, 'No set-up of this version is recorded.'], acts: putBack };
         case 'refused':
-            return { lines: [...lines, `The set-up did not finish: ${state.why}`], acts: putBack };
+            return { lines: [...lines, `The set-up did not finish: ${state.why}`, ...runtimeLines(state.runtimeAfter, null)], acts: putBack };
         case 'reported':
-            return { lines: [...lines, ...reportLines(state.report)], acts: putBack };
+            return { lines: [...lines, ...reportLines(state.report), ...runtimeLines(state.runtimeAfter, state.report)], acts: putBack };
     }
 }
 
@@ -341,7 +472,7 @@ export function putBackQuestion(platform: NodeJS.Platform, executable: string): 
             `This runs ${executable} install.`,
             command,
             'It deploys Jason’s skills for Claude Code and Codex where they are installed, and leaves a skill of your own under the same name as it is.',
-            'An older command-line install of Jason is retired, and a runtime running from it is stopped.',
+            'An older command-line install of Jason is retired, and a runtime running from it is stopped and then started again from this application’s jason.',
         ].join(' '),
         button: 'Put It Back',
     };
@@ -351,10 +482,12 @@ export function putBackQuestion(platform: NodeJS.Platform, executable: string): 
 export function putBackTold(state: SetupState): { type: 'info' | 'warning'; message: string; detail: string } {
     if (state.state === 'reported') {
         const { report } = state;
-        if (report.completed) return { type: 'info', message: 'jason and the skills are in place.', detail: [...report.done, ...report.left].join('\n') };
-        return { type: 'warning', message: 'Part of the set-up did not get there.', detail: [...report.problems.map((problem) => `Not done: ${problem}`), ...report.done, ...report.left].join('\n') };
+        const runtime = runtimeLines(state.runtimeAfter, report);
+        const runtimeFailed = state.runtimeAfter?.act === 'not_started';
+        if (report.completed && !runtimeFailed) return { type: 'info', message: 'jason and the skills are in place.', detail: [...report.done, ...report.left, ...runtime].join('\n') };
+        return { type: 'warning', message: 'Part of the set-up did not get there.', detail: [...report.problems.map((problem) => `Not done: ${problem}`), ...runtime, ...report.done, ...report.left].join('\n') };
     }
-    if (state.state === 'refused') return { type: 'warning', message: 'The set-up did not run.', detail: state.why };
+    if (state.state === 'refused') return { type: 'warning', message: 'The set-up did not run.', detail: [state.why, ...runtimeLines(state.runtimeAfter, null)].join('\n') };
     return { type: 'warning', message: 'The set-up did not run.', detail: setupMenuOf(state, '').lines.slice(1).join('\n') };
 }
 

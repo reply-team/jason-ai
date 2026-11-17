@@ -15,12 +15,21 @@ import {
     putBackTold,
     readHead,
     readSetupRecord,
+    liveWaitMs,
+    noLimit,
+    reportLines,
+    reportOf,
+    runtimeDoor,
+    runtimeLines,
     setupArguments,
-    setupLimitMs,
+    setupLongMs,
     setupMenuOf,
     setupOffered,
+    takingLongSentence,
+    type RuntimeDoor,
     type SetupState,
 } from '../src/machine-setup.ts';
+import { cliAt } from '../src/cli.ts';
 import { keepFirstStart, readMode } from '../src/mode.ts';
 import { desktopPaths } from '../src/paths.ts';
 import { isNewInstallation } from '../src/theme.ts';
@@ -34,7 +43,7 @@ function report(over: Record<string, unknown> = {}): Record<string, unknown> {
     return {
         version: '0.49.0',
         executable: macExe,
-        command: { runs: '/Users/a/.local/bin/jason', open_shell: '/Users/a/.local/bin/jason', changed: true, profiles: ['/Users/a/.zprofile', '/Users/a/.zshrc'], taken_back: [] },
+        command: { runs: '/Users/a/.local/bin/jason', placed: true, open_shell: '/Users/a/.local/bin/jason', changed: true, profiles: ['/Users/a/.zprofile', '/Users/a/.zshrc'], taken_back: [] },
         skills: [
             { root: '/Users/a/.claude/skills', hosts: ['claude_code'], written: 12, unchanged: 0, left_alone: [] },
             { root: '/Users/a/.agents/skills', hosts: ['codex'], written: 12, unchanged: 0, left_alone: ['sdr-operations'] },
@@ -64,9 +73,28 @@ function fakeCli(...results: CliResult[]): Cli & { calls: { args: readonly strin
     };
 }
 
+/** A runtime that never answers, which the rows that are not about the runtime are given. */
+const noRuntime: RuntimeDoor = { answers: async () => false, start: async () => 'no runtime is started by this row' };
+
+/** A runtime that answers as `answers` says in turn, the last answer repeated, and records what it was asked. */
+function runtimeOf(answers: boolean[], started: string | null = null): RuntimeDoor & { asked: string[] } {
+    const asked: string[] = [];
+    return {
+        asked,
+        async answers() {
+            asked.push('answers');
+            return answers.length > 1 ? (answers.shift() ?? false) : (answers[0] ?? false);
+        },
+        async start() {
+            asked.push('start');
+            return started;
+        },
+    };
+}
+
 function setupOn(data: string, cli: Cli, over: Partial<ConstructorParameters<typeof MachineSetup>[0]> = {}) {
     const log = memoryLog();
-    const setup = new MachineSetup({ cli, executable: macExe, version: '0.49.0', platform: 'darwin', offered: true, record: desktopPaths(data).machineSetup, terminalPath: async () => '/usr/bin:/bin', log, ...over });
+    const setup = new MachineSetup({ cli, executable: macExe, version: '0.49.0', platform: 'darwin', offered: true, record: desktopPaths(data).machineSetup, terminalPath: async () => '/usr/bin:/bin', runtime: noRuntime, log, ...over });
     return { setup, log };
 }
 
@@ -94,9 +122,10 @@ test('a first start runs the routine once, with the shell’s PATH and no --role
     // A new installation's first start writes its mode record as the demo, then runs the routine.
     assert.equal(keepFirstStart(desktopPaths(data).mode, isNewInstallation(data), false), true);
     const cli = fakeCli(printed(report()));
-    const { setup } = setupOn(data, cli, { terminalPath: async () => '/usr/bin:/bin:/usr/sbin' });
+    // The real door: with no descriptor it runs no jason to ask, so the routine is the one run.
+    const { setup } = setupOn(data, cli, { terminalPath: async () => '/usr/bin:/bin:/usr/sbin', runtime: runtimeDoor(cli, desktopPaths(data).runFile) });
     await setup.atStart();
-    assert.deepEqual(cli.calls, [{ args: ['install', '--terminal-path', '/usr/bin:/bin:/usr/sbin'], timeoutMs: setupLimitMs }]);
+    assert.deepEqual(cli.calls, [{ args: ['install', '--terminal-path', '/usr/bin:/bin:/usr/sbin'], timeoutMs: noLimit }]);
     assert.equal(cli.calls[0]?.args.includes('--roles'), false);
     assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
     // What is under the data directory now is the desktop's own records alone: the installation is still new, and its
@@ -141,7 +170,7 @@ test('a run that reports a problem writes no record, says what was not placed, o
     assert.equal(cli.calls.length, 1, 'nothing is retried in a loop: once a start');
     assert.equal(existsSync(desktopPaths(data).machineSetup), false, 'the record is written only on success');
     const menu = setupMenuOf(setup.state, macExe);
-    assert.ok(menu.lines.includes('jason was not placed where a terminal finds it.'), menu.lines.join('\n'));
+    assert.ok(menu.lines.includes('jason is not yet where a new terminal finds it.'), menu.lines.join('\n'));
     assert.ok(menu.lines.some((line) => line.startsWith('Not done: The profile /Users/a/.zshrc is a link')));
     assert.deepEqual(menu.acts, [{ label: putBackLabel, act: 'put_back' }]);
     // The next start tries once more, since no record says it ran.
@@ -154,7 +183,7 @@ test('a refusal, an answer that is no report and a run that could not end are sa
     const cases: [CliResult, RegExp][] = [
         [printed({ error: { code: 'install_not_carried', message: 'This jason is not the one Jason Desktop carries.', retryable: false } }, 1), /^This jason is not the one Jason Desktop carries\.$/],
         [{ exit: 1, stdout: 'not json', stderr: '' }, /exited 1 and printed no report/],
-        [{ exit: -1, stdout: '', stderr: 'spawn ENOENT' }, /could not be started, or did not end within 5 minutes/],
+        [{ exit: -1, stdout: '', stderr: 'spawn ENOENT' }, /^jason install could not be started, or ended before it printed a report\.$/],
         [printed({ version: '0.49.0' }, 0), /exited 0 and printed no report/],
     ];
     for (const [result, said] of cases) {
@@ -252,7 +281,7 @@ test('the item shows the report as facts a person reads: where a terminal finds 
     ]);
     for (const line of menu.lines) assert.equal(/[{}[\]]|"\w+":/.test(line), false, line);
     // Windows: the folder on the Path.
-    const windows: SetupState = { state: 'reported', report: { version: '0.49.0', executable: 'C:\\J\\resources\\bundle\\jason.exe', command: { runs: 'C:\\J\\resources\\bundle', openShell: 'C:\\J\\resources\\bundle\\jason.exe', changed: true, profiles: [], takenBack: ['C:\\W\\jason.cmd'] }, skills: [], done: [], left: ['No Claude Code (~/.claude) or Codex (~/.codex) was found, so no harness skills were deployed; a run after one is installed deploys them.'], problems: [], completed: true } };
+    const windows: SetupState = { state: 'reported', report: { version: '0.49.0', executable: 'C:\\J\\resources\\bundle\\jason.exe', command: { runs: 'C:\\J\\resources\\bundle', placed: true, openShell: 'C:\\J\\resources\\bundle\\jason.exe', changed: true, profiles: [], takenBack: ['C:\\W\\jason.cmd'] }, skills: [], runtime: 'not_running', done: [], left: ['No Claude Code (~/.claude) or Codex (~/.codex) was found, so no harness skills were deployed; a run after one is installed deploys them.'], problems: [], completed: true } };
     assert.ok(setupMenuOf(windows, 'C:\\J\\resources\\bundle\\jason.exe').lines.includes('A new terminal finds jason through C:\\J\\resources\\bundle.'));
 });
 
@@ -328,7 +357,7 @@ test('on macOS the update item says where Jason is and whether an update can wri
 });
 
 // What runs around Electron's own start cannot be run here: how a start reaches the routine is held on the main module's text.
-test('a windowed start runs the routine before the Demo or Live run goes on, and Live waits for it before it brings the installation up', () => {
+test('a windowed start runs the routine before the Demo or Live run goes on, and Live waits for it at most the bound before it brings the installation up', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const start = main.slice(main.indexOf('function startDesktop('));
     const lock = start.indexOf('const early = startLog();');
@@ -339,14 +368,18 @@ test('a windowed start runs the routine before the Demo or Live run goes on, and
     // The installer's, the uninstaller's and a terminal's update starts run none: the routine is made in the windowed branch alone.
     assert.equal(main.split('makeMachineSetup(').length - 1, 2, 'declared once, called once');
     const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
-    const waited = run.indexOf('await machineSetup?.settled();');
+    const waited = run.indexOf('await machineSetup?.settledWithin(liveWaitMs);');
+    assert.equal(run.includes('await machineSetup?.settled();\n\n    try {'), false, 'never the whole run');
     assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startInstallation({'), 'the window is up first, and the installation after the routine');
-    // The Demo's run itself still makes no jason and touches no set-up.
+    // The Demo's run itself still makes no jason and touches no set-up: the one start a Demo start may make, of a runtime the
+    // routine left down, is the set-up's own, through the door the factory gives it on the person's descriptor.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
-    for (const never of ['machineSetup', 'cliAt(', 'MachineSetup']) assert.equal(demo.includes(never), false, never);
+    for (const never of ['machineSetup', 'cliAt(', 'MachineSetup', 'runtimeDoor(']) assert.equal(demo.includes(never), false, never);
+    assert.equal(main.split('runtimeDoor(').length - 1, 1, 'one door, the factory’s');
     // The routine is told the login shell's PATH from the one read every start shares, never the desktop's own.
     const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
     assert.ok(factory.includes('terminalPath: () => askedShell(),'));
+    assert.ok(factory.includes('runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile),'));
     assert.ok(run.includes('const shellRead = askedShell();'));
     assert.equal(main.includes('shellPath()'), true);
     assert.equal(main.split('shellPath()').length - 1, 1, 'the login shell is asked once a start');
@@ -418,4 +451,215 @@ test('main gives the set-up no finishing step yet: the seam waits for the comman
     const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
     assert.equal(factory.includes('finishingStep'), false);
     assert.equal(main.includes("'--finish'"), false);
+});
+
+const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A CLI whose routine runs until `finish` is called; every other verb answers at once. */
+function hangingCli(): Cli & { calls: { args: readonly string[]; timeoutMs: number | undefined }[]; finish(result: CliResult): void } {
+    const calls: { args: readonly string[]; timeoutMs: number | undefined }[] = [];
+    let finish: (result: CliResult) => void = () => undefined;
+    return {
+        calls,
+        finish: (result) => finish(result),
+        run(args, options) {
+            calls.push({ args, timeoutMs: options?.timeoutMs });
+            return new Promise((resolve) => (finish = resolve));
+        },
+    };
+}
+
+test('M1: Live waits for the start’s run at most the bound and goes on; the run is never ended, and past five minutes the item says it is taking long', async () => {
+    assert.equal(liveWaitMs, 30_000, 'thirty seconds, not five minutes');
+    assert.equal(setupLongMs, 300_000);
+    assert.equal(noLimit, 0);
+    const data = join(folder(), '.jason');
+    const cli = hangingCli();
+    const { setup } = setupOn(data, cli, { longAfterMs: 40 });
+    void setup.atStart();
+    // The bound passes with the routine still running: Live is released, and the run goes on.
+    assert.equal(await setup.settledWithin(20), 'running');
+    assert.equal(setup.state.state, 'running');
+    assert.deepEqual(cli.calls.map((call) => call.timeoutMs), [noLimit], 'the routine is given no time limit, so nothing ends it');
+    assert.deepEqual(setupMenuOf(setup.state, macExe).lines.slice(1), ['Putting jason where a terminal finds it, and the skills where your agents read them…']);
+    await tick(60);
+    assert.deepEqual(setup.state, { state: 'running', long: true });
+    assert.deepEqual(setupMenuOf(setup.state, macExe).lines.slice(1), [takingLongSentence], 'taking long, nothing more');
+    assert.deepEqual(setupMenuOf(setup.state, macExe).acts, []);
+    // It ends late, and what it reported is the item's as a report in time would have been.
+    cli.finish(printed(report()));
+    assert.equal(await setup.settledWithin(20), 'ended');
+    assert.equal(setup.state.state, 'reported');
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
+    // A start that runs nothing is settled within any bound at once.
+    assert.equal(await setupOn(join(folder(), '.jason'), fakeCli(), { offered: false }).setup.settledWithin(1), 'ended');
+});
+
+test('M1: the carried jason is started with no time limit, and a child that runs past what a limit would allow ends on its own', async () => {
+    const cli = cliAt(process.execPath, { ...(process.env as Record<string, string>) }, ['-e', 'setTimeout(() => process.stdout.write("done"), 300)']);
+    const result = await cli.run([], { timeoutMs: noLimit });
+    assert.deepEqual([result.exit, result.stdout], [0, 'done']);
+    // The same child under a limit is ended by Node, which is what the routine is never given.
+    const limited = await cli.run([], { timeoutMs: 50 });
+    assert.equal(limited.exit === 0 && limited.stdout === 'done', false);
+});
+
+test('M2+M4: a runtime that answered before the routine and not after it is started again from the carried file, after a report that says it was stopped', async () => {
+    const data = join(folder(), '.jason');
+    const runtime = runtimeOf([true, false]);
+    const { setup, log } = setupOn(data, fakeCli(printed(report({ retired: { executable: '/Users/a/.local/bin/jason', aside: null, removed: true, reregistered: true }, runtime: 'stopped' }))), { runtime });
+    await setup.atStart();
+    assert.deepEqual(runtime.asked, ['answers', 'answers', 'start']);
+    assert.equal(setup.state.state === 'reported' && setup.state.report.runtime, 'stopped', 'the report’s runtime is read');
+    assert.deepEqual(setup.state.state === 'reported' ? setup.state.runtimeAfter : null, { act: 'started' });
+    assert.ok(setupMenuOf(setup.state, macExe).lines.includes('The set-up stopped the runtime of the older command-line install; Jason Desktop started one again from its own jason.'));
+    assert.deepEqual(log.lines.at(-1), { level: 'info', name: 'machine_setup_runtime', fields: { Why: 'start', Started: true } });
+});
+
+test('M2+M4: the same rule after a refusal, no report and a routine that ended with nothing: one runtime started, and said', async () => {
+    const outcomes: CliResult[] = [
+        printed({ error: { code: 'install_not_carried', message: 'No.', retryable: false } }, 1),
+        { exit: 1, stdout: 'not json', stderr: '' },
+        { exit: -1, stdout: '', stderr: 'killed' },
+    ];
+    for (const outcome of outcomes) {
+        const runtime = runtimeOf([true, false]);
+        const { setup } = setupOn(join(folder(), '.jason'), fakeCli(outcome), { runtime });
+        await setup.atStart();
+        assert.deepEqual(runtime.asked, ['answers', 'answers', 'start'], outcome.stdout);
+        assert.equal(setup.state.state, 'refused');
+        assert.ok(setupMenuOf(setup.state, macExe).lines.includes('The runtime that was running stopped while the set-up ran; Jason Desktop started one again from its own jason.'));
+    }
+});
+
+test('M2+M4: none is started where none answered before, where one still answers after, or twice', async () => {
+    for (const answers of [[false, false], [false, true], [true, true]]) {
+        const runtime = runtimeOf([...answers]);
+        const { setup } = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ runtime: answers[0] === true ? 'running' : 'not_running' }))), { runtime });
+        await setup.atStart();
+        assert.equal(runtime.asked.includes('start'), false, answers.join());
+        assert.equal(setup.state.state === 'reported' ? setup.state.runtimeAfter : 'none', undefined);
+    }
+});
+
+test('M2: a stop that comes after Live went on is answered by the same code: the runtime started once the routine ends', async () => {
+    const cli = hangingCli();
+    const order: string[] = [];
+    const runtime: RuntimeDoor = {
+        answers: async () => (order.push('answers'), order.length === 1),
+        start: async () => (order.push('start'), null),
+    };
+    const { setup } = setupOn(join(folder(), '.jason'), cli, { runtime });
+    void setup.atStart();
+    assert.equal(await setup.settledWithin(10), 'running');
+    assert.deepEqual(order, ['answers'], 'nothing is started while the routine runs');
+    cli.finish(printed(report({ runtime: 'stopped' })));
+    await setup.settled();
+    assert.deepEqual(order, ['answers', 'answers', 'start']);
+    assert.deepEqual(setup.state.state === 'reported' ? setup.state.runtimeAfter : null, { act: 'started' });
+});
+
+test('M2: a start that fails is said with its own sentence and the verb that starts one, and Put Back warns', async () => {
+    const runtime = runtimeOf([true, false], 'The port is taken.');
+    const { setup } = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ runtime: 'stopped' }))), { runtime });
+    await setup.atStart();
+    assert.ok(setupMenuOf(setup.state, macExe).lines.includes('The set-up stopped the runtime of the older command-line install, and starting one again did not work: The port is taken. `jason runtime start` starts one.'));
+    const told = putBackTold(setup.state);
+    assert.equal(told.type, 'warning');
+    assert.match(told.detail, /starting one again did not work/);
+});
+
+test('M2: Put Back is the same rule: a runtime Live ran on that the routine stops is started again', async () => {
+    const runtime = runtimeOf([true, false]);
+    const { setup } = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ runtime: 'stopped' }))), { runtime });
+    const after = await setup.putBack();
+    assert.deepEqual(runtime.asked, ['answers', 'answers', 'start']);
+    assert.deepEqual(after.state === 'reported' ? after.runtimeAfter : null, { act: 'started' });
+    const told = putBackTold(after);
+    assert.equal(told.type, 'info');
+    assert.match(told.detail, /Jason Desktop started one again from its own jason\./);
+});
+
+test('M4: a Demo start with a retired install and a running runtime starts a runtime at once; the Demo’s record and samples are untouched', async () => {
+    const data = join(folder(), '.jason');
+    // An installation that exists, its record set to the demo, an old command-line runtime up on its directory.
+    mkdirSync(join(data, 'run'), { recursive: true });
+    writeFileSync(desktopPaths(data).runFile, '{}');
+    mkdirSync(join(data, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(data).mode, 'demo\n');
+    let up = true;
+    const calls: (readonly string[])[] = [];
+    const cli: Cli = {
+        async run(args) {
+            calls.push(args);
+            if (args[0] === 'runtime' && args[1] === 'status') return { exit: up ? 0 : 3, stdout: '{}', stderr: '' };
+            if (args[0] === 'runtime' && args[1] === 'start') return (up = true), { exit: 0, stdout: '{}', stderr: '' };
+            up = false;
+            return printed(report({ retired: { executable: '/Users/a/.local/bin/jason', aside: null, removed: true, reregistered: true }, runtime: 'stopped' }));
+        },
+    };
+    const { setup } = setupOn(data, cli, { runtime: runtimeDoor(cli, desktopPaths(data).runFile) });
+    await setup.atStart();
+    assert.deepEqual(calls, [['runtime', 'status'], ['install', '--terminal-path', '/usr/bin:/bin'], ['runtime', 'status'], ['runtime', 'start']]);
+    assert.equal(up, true, 'the person’s runtime is up again');
+    assert.equal(readMode(desktopPaths(data).mode), 'demo');
+});
+
+test('M2: the door asks nothing where there is no descriptor, reads a runtime by `jason runtime status` where there is, and starts one by `jason runtime start`', async () => {
+    const data = join(folder(), '.jason');
+    const cli = fakeCli({ exit: 0, stdout: '{}', stderr: '' }, { exit: 3, stdout: '{}', stderr: '' }, { exit: 1, stdout: JSON.stringify({ error: { code: 'x', message: 'It would not start.', retryable: false } }), stderr: '' }, { exit: 1, stdout: '', stderr: '' }, { exit: 0, stdout: '', stderr: '' });
+    const door = runtimeDoor(cli, desktopPaths(data).runFile);
+    assert.equal(await door.answers(), false);
+    assert.equal(cli.calls.length, 0, 'no descriptor, no data directory: nothing is run to ask');
+    mkdirSync(join(data, 'run'), { recursive: true });
+    writeFileSync(desktopPaths(data).runFile, '{}');
+    assert.equal(await door.answers(), true);
+    assert.equal(await door.answers(), false, 'unreachable is none');
+    assert.equal(await door.start(), 'It would not start.');
+    assert.equal(await door.start(), 'jason runtime start exited 1.');
+    assert.equal(await door.start(), null);
+    assert.deepEqual(cli.calls.map((call) => call.args.join(' ')), ['runtime status', 'runtime status', 'runtime start', 'runtime start', 'runtime start']);
+    assert.ok(cli.calls.every((call) => call.timeoutMs !== undefined && call.timeoutMs > 0), 'the read and the start are bounded; only the routine is not');
+    assert.deepEqual(readdirSync(data), ['run'], 'asking wrote nothing');
+});
+
+test('M3: the item says a new terminal finds jason only where the routine read the command back as placed', () => {
+    const notPlaced = reportOf(report({ command: { runs: '/Users/a/.local/bin/jason', placed: false, open_shell: '/Users/a/.local/bin/jason', changed: true, profiles: [], taken_back: [] }, problems: ['The profile /Users/a/.zshrc is not writable, so no line was added.'], completed: false }));
+    assert.ok(notPlaced !== null);
+    const lines = reportLines(notPlaced);
+    assert.equal(lines[0], 'jason is not yet where a new terminal finds it.');
+    assert.equal(lines.some((line) => line.includes('finds jason')), false, lines.join('\n'));
+    assert.ok(lines.includes('Not done: The profile /Users/a/.zshrc is not writable, so no line was added.'), 'what stopped it is under it');
+    // Windows: a Path entry that was not written.
+    const windows = reportOf(report({ command: { runs: 'C:\\J\\resources\\bundle', placed: false, open_shell: 'C:\\J\\resources\\bundle\\jason.exe', changed: false, profiles: [], taken_back: [] }, problems: ['The Path could not be written.'], completed: false }));
+    assert.equal(windows !== null && reportLines(windows)[0], 'jason is not yet where a new terminal finds it.');
+    const placed = reportOf(report());
+    assert.equal(placed !== null && reportLines(placed)[0], 'A new terminal finds jason through /Users/a/.local/bin/jason.');
+    // A document without the member is no report: the carried jason prints it.
+    const without = report();
+    delete (without.command as Record<string, unknown>).placed;
+    assert.equal(reportOf(without), null);
+    assert.equal(reportOf({ ...report(), runtime: undefined }), null);
+});
+
+test('N1: the skills are named by the hosts’ display names the desktop already shows, and a word it has none for is left as it is', () => {
+    const named = reportOf(report({ skills: [{ root: '/Users/a/.agents/skills', hosts: ['codex', 'copilot_cli', 'cursor_cli', 'gemini_cli', 'antigravity_cli', 'other_cli'], written: 1, unchanged: 0, left_alone: [] }] }));
+    assert.ok(named !== null);
+    assert.ok(reportLines(named).includes('Jason’s skills for Codex and GitHub Copilot CLI and Cursor CLI and Gemini CLI and Antigravity CLI and other_cli: /Users/a/.agents/skills'));
+    assert.deepEqual(runtimeLines(undefined, named), []);
+});
+
+test('N3: the logon start is moved from another copy only once the machine set-up has ended, never beside it', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const block = main.slice(main.indexOf('const repointed = (async () => {'), main.indexOf('const repointed = (async () => {') + 400);
+    assert.ok(block.indexOf('await machineSetup?.settled();') > 0);
+    assert.ok(block.indexOf('await machineSetup?.settled();') < block.indexOf('autostart?.repoint('));
+});
+
+test('a fresh machine holding only the set-up’s record still counts as new', () => {
+    const data = join(folder(), '.jason');
+    mkdirSync(join(data, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    assert.deepEqual(readdirSync(data), ['desktop']);
+    assert.equal(isNewInstallation(data), true);
 });

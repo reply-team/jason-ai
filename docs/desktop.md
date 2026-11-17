@@ -370,10 +370,14 @@ updated from an earlier version open where they did.
 application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
 you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
 installed, and retires an older command-line install of Jason. It writes nothing under your data directory but the
-desktop's record of it, so the demo still opens first. It never keeps the window from you: a run that fails or does not
-end within five minutes is said in the Command Line item, which offers to put it back, and it is tried again only at the
-next start. In Live, the window's start waits for it before it brings the runtime up, since a runtime of the install it
-retires is stopped by it and then started from the application's `jason`.
+desktop's record of it, so the demo still opens first. It never keeps the window from you: the window says what is being
+done, and in Live the start waits for it at most thirty seconds before it brings the runtime up, and then goes on while it
+finishes. The application never ends a run; one still running after five minutes is said in the Command Line item as
+taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
+start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
+run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in
+Demo as in Live and after a put back too, and the item says so. That runtime is your installation's, with your campaigns;
+the demo goes on showing its samples.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
 for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
@@ -915,7 +919,9 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   `jason` (on macOS the wrapper `~/.local/bin/jason`, with the installer's two lines in your shell profiles where a new
   terminal's PATH lacked that folder; on Windows the application's `resources\bundle` folder on your account's Path), the
   full path a terminal already open types instead, the folders Jason's skills were deployed to and for which programs, and
-  what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. **Put Back
+  what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. Where
+  `jason install` read the command back as not in place (a profile it could not write, a Path entry not written), the item
+  says jason is not yet where a new terminal finds it, with what stopped it. **Put Back
   jason and the Skills…** runs `jason install` again on your word, after a confirmation that says what it writes, and then
   tells what it did in its own sentences. The application places no command of its own there any more; the `jason.cmd`
   shim and the Git Bash wrapper an earlier version put in `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the
