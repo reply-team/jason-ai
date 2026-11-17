@@ -24,6 +24,7 @@
 #   from-previous <previous> <feed> <version>
 #                                  the previous release's command-line Jason, installed by its own script, with a runtime
 #                                  and a logon registration, updated by its own jason update apply from a served feed
+#   requirement <zip>              install.sh's APP_REQUIREMENT against a published application: admitted, and refused for another team
 #   held                           fails when any compare above found the machine after an uninstall not the one before
 #   assess                         Gatekeeper's assessment of the placed application at its final path: accepted, as a
 #                                  notarized Developer ID application (the release's packages alone)
@@ -98,9 +99,12 @@ write_listing() {
         launchctl print "gui/$(id -u)" 2>/dev/null | grep -oE 'ai\.jason[A-Za-z0-9.-]*' | sort -u | sed 's/^/launchd job\t/' || true
         folder 'updater cache' "$HOME/Library/Caches/jason-desktop-updater"
         folder 'ShipIt cache' "$HOME/Library/Caches/ai.jasonharness.desktop.ShipIt"
-        # What macOS itself keeps for an application that ran, by its bundle id: listed, so a person sees what stays.
-        for kept in "Library/Preferences/ai.jasonharness.desktop.plist" "Library/Saved Application State/ai.jasonharness.desktop.savedState" "Library/HTTPStorages/ai.jasonharness.desktop" "Library/Caches/ai.jasonharness.desktop" "Library/Application Support/Jason" "Library/Application Support/jason-desktop" "Library/Logs/Jason"; do
-            [ -e "$HOME/$kept" ] && printf 'system-kept\t%s\n' "$kept"
+        # What macOS and Electron keep for an application that ran, by its bundle id or its name, in every place of
+        # ~/Library they keep such things: listed, so a person sees what stays. The jobs open the window before each
+        # uninstall, so these places are written as a person's are.
+        for parent in Preferences "Saved Application State" HTTPStorages Caches "Application Support" Logs WebKit Cookies; do
+            [ -d "$HOME/Library/$parent" ] || continue
+            find "$HOME/Library/$parent" -maxdepth 1 -iname '*jason*' 2>/dev/null | while IFS= read -r kept; do printf 'system-kept\t%s\n' "${kept#$HOME/}"; done
         done
         folder 'claude skills' "$HOME/.claude/skills"
         folder 'agents skills' "$HOME/.agents/skills"
@@ -286,6 +290,25 @@ from-previous)
     say "the command-line install now says $version and its runtime answers (the move into the application is asserted once it lands)"
 
     "$WRAPPER" uninstall > "$OUT/uninstall-previous.json" || fail "jason uninstall of the updated command-line install failed: $(cat "$OUT/uninstall-previous.json")"
+    ;;
+
+requirement)
+    # The requirement install.sh holds an application to, read from the script itself, against an application a release
+    # published: the release's own signature must satisfy it, and the same requirement naming another team must refuse
+    # it, so that what codesign tests is the line and not a string a row compares.
+    zip="$1"
+    requirement="$(sed -n "s/^APP_REQUIREMENT='\(.*\)'\$/\1/p" install/install.sh)"
+    [ -n "$requirement" ] && [ "$(printf '%s\n' "$requirement" | grep -c .)" = 1 ] || fail "install.sh names no single APP_REQUIREMENT line"
+    unpacked="$RUNNER_TEMP/published-application"
+    rm -rf "$unpacked"; mkdir -p "$unpacked"
+    ditto -x -k "$zip" "$unpacked" || fail "$zip could not be unpacked"
+    [ -d "$unpacked/Jason.app" ] || fail "$zip holds no Jason.app"
+    echo "requirement: $requirement"
+    codesign --verify --deep --strict --verbose=2 -R="$requirement" "$unpacked/Jason.app" || fail "the published application does not satisfy install.sh's requirement"
+    other="${requirement//BD8M7U5YBV/AAAAAAAAAA}"
+    [ "$other" != "$requirement" ] || fail "install.sh's requirement names no team"
+    if codesign --verify --deep --strict -R="$other" "$unpacked/Jason.app" 2> /dev/null; then fail "the published application satisfies the requirement with another team: -R is not what decides"; fi
+    say "the published application $(version_of "$unpacked/Jason.app") satisfies install.sh's requirement, and the same requirement naming another team refuses it"
     ;;
 
 assess)
