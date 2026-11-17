@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 /**
  * What a dialog focuses as it opens: its first field or picker, so Escape and typing reach it at once; a dialog with no
@@ -10,11 +10,6 @@ const wayOut = 'button[data-dismiss]';
 /**
  * A question over the page: its heading, what it asks for, and its buttons — the way out on the left, then what it
  * does. Escape is the way out too, once no list open inside it has taken the key.
- *
- * It opens as the browser's modal dialog, in the top layer, wherever in the page it is drawn: nothing of the page is
- * painted over it, whatever stacking an element of the page makes for itself (a z-index, an opacity, a transform), and
- * the page under it takes no click and no focus. The layer is the dimmed ground (`.overlay`), the box sits in it. The
- * browser's own close on Escape is refused, so the dialog closes only through `onClose`, as the page decides.
  */
 export function Dialog({
     title,
@@ -31,13 +26,7 @@ export function Dialog({
     buttons: ReactNode;
     children: ReactNode;
 }) {
-    const layer = useRef<HTMLDialogElement>(null);
     const box = useRef<HTMLDivElement>(null);
-    // Into the top layer before the first paint, so the dialog is never seen in the page's own stacking.
-    useLayoutEffect(() => {
-        const dialog = layer.current;
-        if (dialog !== null && !dialog.open) dialog.showModal();
-    }, []);
     useEffect(
         () =>
             (
@@ -46,17 +35,14 @@ export function Dialog({
         [],
     );
     return (
-        <dialog
-            ref={layer}
+        <div
             className="overlay"
-            aria-label={label}
-            onCancel={(e) => e.preventDefault()}
             onKeyDown={(e) => {
                 // A list open inside the dialog takes Escape first; the next Escape is the dialog's.
                 if (e.key === 'Escape' && !e.defaultPrevented) onClose();
             }}
         >
-            <div className="dialog" ref={box}>
+            <div className="dialog" role="dialog" aria-label={label} ref={box}>
                 <h2>{title}</h2>
                 {children}
                 <div className="btn-row">
@@ -66,6 +52,6 @@ export function Dialog({
                     {buttons}
                 </div>
             </div>
-        </dialog>
+        </div>
     );
 }
