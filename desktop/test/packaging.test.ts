@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { allowListFile, denyListFile, instructionsFile, planListFile } from '../src/chat-deny.ts';
 import { planCommand } from '../src/command-line.ts';
 import { debFile } from '../src/updates.ts';
-import { bundleFiles, bundleFolder, chatFiles, checkBundle, configuration, copyChromiumNotices, fuses, releaseVersion, signer } from '../electron-builder.config.mjs';
+import { bundleFiles, bundleFolder, chatFiles, checkBundle, configuration, copyChromiumNotices, fromEnvironment, fuses, releaseVersion, signer, testBuildVariable } from '../electron-builder.config.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> };
@@ -240,6 +240,48 @@ test('a Windows package is signed when a signing module is given, and every Mac 
     assert.equal(built.mac.hardenedRuntime, true);
     assert.equal(built.mac.notarize, true);
     assert.equal(built.dmg.sign, true);
+});
+
+test('a test build, CI’s alone, turns every signature step and check off and changes nothing else', () => {
+    const test = configuration({ version: '0.49.0-ci.7', testBuild: true });
+    assert.equal(testBuildVariable, 'JASON_DESKTOP_TEST_BUILD');
+    // Windows: nothing signed, and no publisher an update must carry, so app-update.yml names none.
+    assert.equal(test.win.verifyUpdateCodeSignature, false);
+    assert.equal('sign' in test.win.signtoolOptions, false);
+    assert.equal('forceCodeSigning' in test.win, false);
+    // macOS: an ad hoc signature, which names no team, no hardened runtime, no notarization, and the zip alone.
+    assert.equal(test.mac.identity, '-');
+    assert.equal(test.mac.hardenedRuntime, false);
+    assert.equal(test.mac.notarize, false);
+    assert.equal(test.mac.forceCodeSigning, false);
+    assert.equal(test.dmg.sign, false);
+    assert.deepEqual(test.mac.target, [{ target: 'zip', arch: ['arm64', 'x64'] }]);
+    // Everything else is the release's package: the same feed, fuses, files, bundle and names.
+    const strip = (built: Configuration) => {
+        const { win, mac, dmg, beforePack, afterPack, artifactBuildStarted, artifactBuildCompleted, ...rest } = built;
+        const { verifyUpdateCodeSignature, ...winRest } = win;
+        const { target, identity, hardenedRuntime, notarize, forceCodeSigning, ...macRest } = mac;
+        const { sign, ...dmgRest } = dmg;
+        void [beforePack, afterPack, artifactBuildStarted, artifactBuildCompleted, verifyUpdateCodeSignature, target, identity, hardenedRuntime, notarize, forceCodeSigning, sign];
+        return { ...rest, win: winRest, mac: macRest, dmg: dmgRest };
+    };
+    assert.deepEqual(strip(test), strip(configuration({ version: '0.49.0-ci.7' })));
+});
+
+test('a release’s package is never a test build: the default keeps every signature step and check, and a test build refuses a signing module', () => {
+    const release = configuration({ version: '0.49.0' });
+    assert.equal(release.win.verifyUpdateCodeSignature, true);
+    assert.equal('identity' in release.mac, false);
+    assert.equal(release.mac.hardenedRuntime, true);
+    assert.equal(release.mac.notarize, true);
+    assert.equal(release.mac.forceCodeSigning, true);
+    assert.equal(release.dmg.sign, true);
+    assert.throws(() => configuration({ version: '0.49.0', sign: '/x/sign-windows.mjs', testBuild: true }), /JASON_DESKTOP_TEST_BUILD asks for a test build, which signs nothing/);
+    // The pack reads the variable, and only the word 1 turns it on; beside JASON_WINDOWS_SIGN it is refused.
+    assert.equal(fromEnvironment({ JASON_VERSION: '0.49.0' }).win.verifyUpdateCodeSignature, true);
+    assert.equal(fromEnvironment({ JASON_VERSION: '0.49.0', JASON_DESKTOP_TEST_BUILD: 'true' }).win.verifyUpdateCodeSignature, true);
+    assert.equal(fromEnvironment({ JASON_VERSION: '0.49.0-ci.7', JASON_DESKTOP_TEST_BUILD: '1' }).win.verifyUpdateCodeSignature, false);
+    assert.throws(() => fromEnvironment({ JASON_VERSION: '0.49.0', JASON_WINDOWS_SIGN: '1', JASON_DESKTOP_TEST_BUILD: '1' }), /signs nothing/);
 });
 
 test('the bundled jason keeps its own signature on macOS, and the application asks for V8’s two entitlements alone', () => {
