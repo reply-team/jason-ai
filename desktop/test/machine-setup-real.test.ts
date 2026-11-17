@@ -131,7 +131,7 @@ test('L1: a fresh machine’s first start, with the real carried jason, writes n
     assert.equal(setup.state.state, 'reported');
 });
 
-test('L1, the command line’s half: the real finishing step on a data directory holding the desktop’s records alone makes nothing and asks no network', { skip, todo: 'the CLI’s half of L1 is another unit’s; this row holds release/49’s CLI once it is merged there' }, async (t) => {
+test('L1, the command line’s half: the real finishing step on a data directory holding the desktop’s records alone makes nothing and asks no network', { skip }, async (t) => {
     const proxy = await countingProxy();
     t.after(() => proxy.server.close());
     const { data, cli } = freshMachine(t, proxy.url);
@@ -139,5 +139,12 @@ test('L1, the command line’s half: the real finishing step on a data directory
     assert.equal(finished.exit, 0, finished.stdout + finished.stderr);
     assert.deepEqual(listing(data), ['desktop', 'desktop/mode']);
     assert.equal(proxy.connections(), 0, 'no request was made');
-    assert.deepEqual(finishingOf(finished), { completed: true, problems: [] });
+    // The command line's answer as release/49 states it: found, nothing done, each part naming the Desktop's own records.
+    const answer = JSON.parse(finished.stdout) as { data_dir_found: boolean; complete: boolean; parts: { part: string; state: string; reason: string }[] };
+    assert.equal(answer.data_dir_found, true);
+    assert.equal(answer.complete, false);
+    assert.deepEqual(answer.parts.map((part) => [part.part, part.state]), [['plugins', 'not_done'], ['skills', 'not_done'], ['ui', 'not_done']]);
+    for (const part of answer.parts) assert.match(part.reason, /holds nothing of an installation but Jason Desktop's own/);
+    // The Desktop never asks it where the installation is new (the row above); were it asked, it would read three problems.
+    assert.equal(finishingOf(finished).completed, false);
 });
