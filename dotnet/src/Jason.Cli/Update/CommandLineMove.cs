@@ -397,8 +397,8 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 break;
             case SetupExits.ProcessRunsFromPlace:
                 return End(MoveStates.Failed, $"The installer stopped before it replaced a file: a Jason process runs from {application}. Stop it, then run `jason update apply` to carry the move on; the command-line install was not touched.");
-            case SetupExits.AnotherInstall:
-                return End(MoveStates.Failed, "The installer stopped before it installed: another install of Jason ran at the same time. Run `jason update apply` to carry the move on; the command-line install was not touched.");
+            case SetupExits.StoppedBeforeInstalling:
+                return End(MoveStates.Failed, $"The installer stopped before Jason Desktop {version} was installed: another installer of Jason Desktop was running at the same time, or the uninstaller of the Jason Desktop already installed refused, a file of it held, and left that version as it was. The command-line install was not touched. Once no other installer of Jason Desktop runs and Jason Desktop is quit, run `jason update apply` to carry the move on.");
             case SetupExits.ApplicationRunning:
                 return End(MoveStates.Pending, $"Jason Desktop is running, in its window or in the tray, and its installer changes nothing while it runs, so Jason Desktop {version} was not installed and nothing was ended; the command-line install answers as jason as it did. Quit Jason Desktop, then run `jason update apply` again to carry the move on.");
             default:

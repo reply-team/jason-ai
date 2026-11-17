@@ -18,8 +18,14 @@ public static class SetupExits
     /// <summary>A Jason process runs from the place the installer was to replace files in.</summary>
     public const int ProcessRunsFromPlace = 1;
 
-    /// <summary>Another install of Jason ran at the same time.</summary>
-    public const int AnotherInstall = 2;
+    /// <summary>
+    /// The installer's exit 2: it stopped before Jason Desktop was installed. Run silently it has two causes. Another installer
+    /// of Jason Desktop holds the installer's mutex, and the template's <c>.onInit</c> aborts, which NSIS ends with 2 when no
+    /// error level was set (the template's own <c>quitSuccess</c> sets 0 to avoid it); nothing is changed. Or the installed
+    /// version's own uninstaller refused, a file of it held, and the include's <c>customUnInstallCheck</c> hooks set 2 and
+    /// quit before a file is replaced, that version left as its uninstaller put it back.
+    /// </summary>
+    public const int StoppedBeforeInstalling = 2;
 
     /// <summary>
     /// The installer's exit 3: run silently, an update or not, it found Jason Desktop's own Jason.exe running at the install

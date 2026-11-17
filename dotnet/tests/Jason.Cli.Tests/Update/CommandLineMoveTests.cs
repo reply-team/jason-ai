@@ -368,7 +368,7 @@ public sealed class CommandLineMoveTests
     /// <summary>The setup's own refusals fail the move and leave the command-line install as it was.</summary>
     [Theory]
     [InlineData(1, "a Jason process runs from")]
-    [InlineData(2, "another install of Jason")]
+    [InlineData(2, "another installer of Jason Desktop was running at the same time, or the uninstaller of the Jason Desktop already installed refused")]
     [InlineData(5, "exited with 5")]
     public async Task A_setup_that_refuses_fails_the_move_and_touches_nothing(int code, string said)
     {
@@ -410,7 +410,7 @@ public sealed class CommandLineMoveTests
         Assert.Equal("jason update apply", check.Fix);
         Assert.NotEqual(SetupExits.ProcessRunsFromPlace, SetupExits.ApplicationRunning);
         Assert.Equal(3, SetupExits.ApplicationRunning);
-        Assert.NotEqual(SetupExits.AnotherInstall, SetupExits.ApplicationRunning);
+        Assert.NotEqual(SetupExits.StoppedBeforeInstalling, SetupExits.ApplicationRunning);
 
         // The page says the same number: the constant and the sentence move together.
         var page = File.ReadAllText(Path.Combine(TreeRoot(), "docs", "release-and-update.md"));
