@@ -546,7 +546,8 @@ test('the carried uninstall’s report is read for the uninstaller: a refusal st
     assert.equal(shown.message, 'Jason is being removed from this computer.');
     assert.ok(shown.detail.includes('Taken off:\n• Stopped the runtime.'));
     assert.ok(shown.detail.includes('• C:\\y could not be removed: held.'));
-    assert.ok(shown.detail.includes('jason uninstall --purge-data, typed in a terminal, removes Jason with its data; once Jason is removed, deleting that folder removes it'));
+    assert.ok(shown.detail.includes('The data directory, C:\\Users\\a\\.jason, with the campaigns, the journal, the settings and the logs. Once Jason is removed, deleting the folder C:\\Users\\a\\.jason removes them'));
+    assert.equal(shown.detail.includes('jason uninstall'), false, 'the command this uninstall has just taken off is not offered');
     assert.ok(shown.detail.includes('The harness root, C:\\Users\\a\\Jason, with your folders and memory files'));
     assert.equal(shown.detail.includes('The application at'), false, 'the folder is the uninstaller’s, and the person is not told it is kept');
     assert.equal(shown.detail.includes('The data directory at'), false, 'the data directory is said once, in the person’s terms');

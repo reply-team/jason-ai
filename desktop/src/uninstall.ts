@@ -671,7 +671,8 @@ export function carriedUninstallExit(outcome: CarriedUninstall): number {
 
 /**
  * What the person is shown, or null where the uninstaller says it itself (a start that gave no report). The data
- * directory and the harness root are named as kept, with the terminal line that removes Jason with its data.
+ * directory and the harness root are named as kept, with how the data directory is deleted by hand: the jason command
+ * that could remove it has just been taken off this computer.
  */
 export function carriedUninstallText(outcome: CarriedUninstall, dataDirectory: string, root: string): { message: string; detail: string } | null {
     if (outcome.kind === 'failed') return null;
@@ -682,7 +683,7 @@ export function carriedUninstallText(outcome: CarriedUninstall, dataDirectory: s
     const left = [
         ...outcome.problems,
         ...kept,
-        `The data directory, ${dataDirectory}, with the campaigns, the journal, the settings and the logs. jason uninstall --purge-data, typed in a terminal, removes Jason with its data; once Jason is removed, deleting that folder removes it`,
+        `The data directory, ${dataDirectory}, with the campaigns, the journal, the settings and the logs. Once Jason is removed, deleting the folder ${dataDirectory} removes them`,
         `The harness root, ${root}, with your folders and memory files`,
     ];
     const taken = outcome.done.length === 0 ? 'Nothing was taken off.' : `Taken off:\n${list(outcome.done)}`;
