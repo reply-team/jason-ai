@@ -128,6 +128,13 @@ shows before anything is typed and what you send waits, while the window is open
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
   conversation to its foot above the box; opening a chat leaves its place alone.
+- While a turn runs, the round button beside the box is **Stop** while the box is empty, and the arrow once you type:
+  what you send then is queued. It shows in the conversation as your message, with "Queued · Jason takes it when this
+  turn ends" under it, and goes as your next message once the turn ends well. A message you send while one is queued is
+  added under it, a blank line between, and the two go together. **Take back** puts the queued words into the box when
+  the box is empty. With words typed, Escape in the box stops the turn, unless a menu, a list or a dialog is open, which
+  the key closes instead. A turn you stop, and a turn that fails, gives the queued words back to the box, above what you
+  typed there; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on

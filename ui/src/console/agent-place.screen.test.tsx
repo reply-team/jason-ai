@@ -416,18 +416,18 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(head()?.querySelector('h2')?.textContent).toBe('Autumn');
     });
 
-    it('two quick sends make one conversation, the second waiting for the first turn', async () => {
+    it('quick sends make one conversation, the later ones waiting together for the first turn', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         await autumnChatShown();
-        fireEvent.change(shownBox(), { target: { value: 'first' } });
-        fireEvent.keyDown(shownBox(), { key: 'Enter' });
-        fireEvent.change(shownBox(), { target: { value: 'second' } });
-        fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        for (const words of ['first', 'second', 'third']) {
+            fireEvent.change(shownBox(), { target: { value: words } });
+            fireEvent.keyDown(shownBox(), { key: 'Enter' });
+        }
         await waitFor(() => expect(sends(desktop)).toHaveLength(1));
         expect(creates(desktop)).toHaveLength(1);
         expect(sends(desktop)[0]!.args[1]).toBe('first');
-        await waitFor(() => expect(within(shown()).getByRole('status', { name: 'Waiting message' })).toBeTruthy());
-        expect(within(shown()).getByText('second')).toBeTruthy();
+        const queued = await waitFor(() => within(shown()).getByRole('group', { name: 'Queued message' }));
+        expect(queued.querySelector('.bub')!.textContent).toBe('second' + String.fromCharCode(10, 10) + 'third');
     });
 
     it('a chip makes exactly one conversation and sends its words', async () => {
@@ -590,7 +590,7 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         fireEvent.keyDown(shownBox(), { key: 'Enter' });
         await waitFor(() => expect(within(shown()).getByText(/could not make the conversation/)).toBeTruthy());
         await waitFor(() => expect(shownBox().value).toBe('first thought\n\nsecond thought'));
-        expect(within(shown()).queryByRole('status', { name: 'Waiting message' })).toBeNull();
+        expect(within(shown()).queryByRole('group', { name: 'Queued message' })).toBeNull();
         expect(creates(desktop)).toHaveLength(1);
         expect(sends(desktop)).toEqual([]);
     });

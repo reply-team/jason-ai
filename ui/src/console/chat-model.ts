@@ -82,10 +82,11 @@ export interface Chat {
     running: boolean;
     /** What is typed in the message box. */
     draft: string;
-    /** The message sent while the turn runs, which waits for its end; null when none waits. */
+    /**
+     * The words sent while the turn runs, which wait for its end and go together as the next turn: each message sent
+     * meanwhile is added under the one before, a blank line between. Null when none waits.
+     */
     waiting: string | null;
-    /** Whether the waiting message is held, not sent: given back while the box held other words. It is never sent. */
-    held: boolean;
     /** Whether the person asked the running turn to stop. */
     stopping: boolean;
     /** The message the turn's end made the next turn, until the page has handed it to the desktop. */
@@ -145,7 +146,6 @@ export function newChat(id: string, host: string | null, campaign?: { id: string
         running: false,
         draft: '',
         waiting: null,
-        held: false,
         stopping: false,
         outbox: null,
         resent: null,
@@ -573,7 +573,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                     : words;
             const over = ended({ ...chat, entries, plan: null });
             if (event.error === null)
-                return chat.waiting !== null && !chat.held ? { ...over, waiting: null, outbox: chat.waiting } : over;
+                return chat.waiting !== null ? { ...over, waiting: null, outbox: chat.waiting } : over;
             return givenBackAfterFailure(chat, {
                 ...over,
                 entries: [...over.entries, { kind: 'error', text: event.error }],
@@ -582,25 +582,31 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
     }
 }
 
-/**
- * Words given back to the person: into the box when it is empty, else held in sight as not sent while nothing else
- * is. When both places are taken the words are the failed turn's own, shown in the thread, and stay there alone.
- */
+/** Words joined as one message: each trimmed, the empty ones left out, a blank line between. */
+const joined = (words: readonly (string | null | undefined)[]): string =>
+    words
+        .map((each) => each?.trim() ?? '')
+        .filter((each) => each !== '')
+        .join('\n\n');
+
+/** Words given back to the person: into the box, above whatever is typed there, a blank line between; none is lost. */
 function givenBack(chat: Chat, text: string): Chat {
     if (!chat.draft.trim()) return { ...chat, draft: text };
-    if (chat.waiting === null) return { ...chat, waiting: text, held: true };
-    return chat;
+    return { ...chat, draft: joined([text, chat.draft]) };
 }
 
 /** The waiting message, when one waits for the turn's end, taken out of waiting and given back. */
 function released(chat: Chat): Chat {
-    if (chat.waiting === null || chat.held) return chat;
+    if (chat.waiting === null) return chat;
     return givenBack({ ...chat, waiting: null }, chat.waiting);
 }
 
-/** A failed turn gives back the waiting message first, which is nowhere else, then the turn's own words if resent. */
+/**
+ * A failed turn gives back the waiting message, which is nowhere else, and above it the turn's own words when they were
+ * a waiting message: the box holds them in the order they were written, then what is typed there.
+ */
 function givenBackAfterFailure(before: Chat, after: Chat): Chat {
-    const back = released({ ...after, waiting: before.waiting, held: before.held });
+    const back = released({ ...after, waiting: before.waiting });
     return before.resent === null ? back : givenBack(back, before.resent);
 }
 
@@ -608,27 +614,27 @@ function givenBackAfterFailure(before: Chat, after: Chat): Chat {
 export const typed = (chat: Chat, text: string): Chat => ({ ...chat, draft: text });
 
 /**
- * The box's text sent while the turn runs: it waits for the turn's end and the box is cleared. While one already
- * waits, or is held, or the person asked the turn to stop, nothing changes and the text stays in the box, so a second
- * message replaces the first only by Replace.
+ * The box's text added to the waiting message, under it with a blank line between, and the box cleared: what is sent
+ * while a message already waits goes with it. A box with nothing in it changes nothing.
  */
-export function kept(chat: Chat): Chat {
-    const text = chat.draft.trim();
-    if (!chat.running || chat.stopping || chat.waiting !== null || !text) return chat;
-    return { ...chat, waiting: text, draft: '' };
+export function queued(chat: Chat): Chat {
+    if (!chat.draft.trim()) return chat;
+    return { ...chat, waiting: joined([chat.waiting, chat.draft]), draft: '' };
 }
 
-/** The box's text takes the waiting message's place, which goes into the box: the two are swapped, never merged. */
-export function replaced(chat: Chat): Chat {
-    const text = chat.draft.trim();
-    if (chat.waiting === null || !text) return chat;
-    return { ...chat, waiting: text, draft: chat.waiting };
+/**
+ * The box's text sent while the turn runs: it waits for the turn's end (`queued`). While the person asked the turn to
+ * stop nothing changes and the text stays in the box.
+ */
+export function kept(chat: Chat): Chat {
+    if (!chat.running || chat.stopping) return chat;
+    return queued(chat);
 }
 
 /** The waiting message taken back into the box; only into an empty one, so no word typed there is overwritten. */
 export function takenBack(chat: Chat): Chat {
     if (chat.waiting === null || chat.draft.trim()) return chat;
-    return { ...chat, waiting: null, held: false, draft: chat.waiting };
+    return { ...chat, waiting: null, draft: chat.waiting };
 }
 
 /**
@@ -636,9 +642,8 @@ export function takenBack(chat: Chat): Chat {
  * message that waited after them, then whatever is in the box. For a send nothing could take, so no word is dropped.
  */
 export function everyWordBack(chat: Chat, sent?: string): Chat {
-    const words = [sent, chat.waiting, chat.draft].map((each) => each?.trim() ?? '').filter((each) => each !== '');
     if (chat.waiting === null && (sent === undefined || !sent.trim())) return chat;
-    return { ...chat, waiting: null, held: false, draft: words.join('\n\n') };
+    return { ...chat, waiting: null, draft: joined([sent, chat.waiting, chat.draft]) };
 }
 
 /**

@@ -62,7 +62,7 @@ import {
     planLine,
     codexPlanLine,
     planModeMoved,
-    replaced,
+    queued,
     said,
     shown,
     stopAsked,
@@ -356,7 +356,6 @@ function retire(id: string, real: string): void {
             ...each,
             draft: each.draft.trim() ? each.draft : now.draft,
             waiting: each.waiting ?? now.waiting,
-            held: each.waiting === null ? now.held : each.held,
         }));
     const rest = { ...chats.value };
     delete rest[id];
@@ -1362,6 +1361,44 @@ function threadOf(chatId: string) {
 }
 
 /**
+ * What takes an Escape pressed in the message box before the box does: an open menu or list, the palette, a dialog or a
+ * question that asks in place (a reject's reason, a removal). With one open, the key is theirs and the turn goes on.
+ */
+const escapeTakers = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"], dialog[open]';
+
+/** Whether anything on the page takes an Escape before the message box does (`escapeTakers`). */
+function escapeTaken(): boolean {
+    return document.querySelector(escapeTakers) !== null;
+}
+
+/**
+ * The words sent while a turn runs, drawn in the conversation as a message sent is, with a quiet line under it: they
+ * are queued and go when the turn ends. Take back puts them into the box, only an empty one, so nothing typed there is
+ * overwritten.
+ */
+function Queued({ text, boxEmpty, takeBack }: { text: string; boxEmpty: boolean; takeBack: () => void }) {
+    return (
+        <div className="chat-queued" role="group" aria-label={t('chat.queue.label')}>
+            <div className="m user">
+                <div className="bub said">{text}</div>
+                <div className="queued-line">
+                    <span>{t('chat.queue.line')}</span>
+                    <button
+                        className="btn sm"
+                        type="button"
+                        disabled={!boxEmpty}
+                        title={boxEmpty ? undefined : t('chat.queue.emptyFirst')}
+                        onClick={takeBack}
+                    >
+                        {t('chat.queue.takeBack')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
  * The controls in a composer's row: the access mode on the left, and on the right what the next turn runs on (host,
  * model, effort). The chat's own composer and the start screen's draw the same two menus (`start-menus.tsx`); `change`
  * and `choose` say where a choice goes. Nothing here decides what a mode offers: `modeChoices` does. A tab cannot change
@@ -1585,7 +1622,8 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
     // conversation, above the composer; a thread merely opened, or growing with the AI's words, keeps its place.
     const scroller = useRef<HTMLDivElement>(null);
     const seenMoves = useRef<{ chat: string; keys: ReadonlySet<string> } | null>(null);
-    const moves = movesOf(entries ?? []);
+    const waiting = record?.waiting ?? null;
+    const moves = waiting === null ? movesOf(entries ?? []) : [...movesOf(entries ?? []), `q:${waiting}`];
     const movesKey = moves.join('|');
     useEffect(() => {
         const before = seenMoves.current;
@@ -1621,23 +1659,32 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             return;
         }
         if (makingNow(chatId)) {
-            changeChat(chatId, (each) =>
-                each.waiting !== null || !each.draft.trim() ? each : { ...each, waiting: each.draft.trim(), draft: '' },
-            );
+            changeChat(chatId, queued);
             return;
         }
         if (!current.draft.trim()) return;
         changeChat(chatId, (each) => typed(each, ''));
         sendTurn(chatId, current.draft);
     };
-    const enter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) send(event);
-    };
     const stop = () => {
         changeChat(chatId, stopAsked);
         here()
             .desktop.chat.stop(chatId)
             .catch((error: unknown) => changeChat(chatId, (each) => failed(each, messageOf(error))));
+    };
+    // Enter sends, or adds to what waits while a turn runs; Shift+Enter makes a new line. Escape stops the running turn
+    // when nothing else on the page takes that key (`escapeTaken`), and never while a stop is already asked for; what is
+    // typed stays in the box, and what waited comes back above it.
+    const keys = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Escape') {
+            const current = chats.value[chatId];
+            if (!current?.running || current.stopping || current.removing || escapeTaken()) return;
+            event.preventDefault();
+            stop();
+            return;
+        }
+        if (event.key === 'Enter' && !event.shiftKey) send(event);
     };
     const underHead = headed && chat.campaignId !== null && !chat.main;
     return (
@@ -1747,6 +1794,13 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
             )}
             <div className="chat-scroll" ref={scroller}>
                 <Painted className="thread" view={view} />
+                {chat.waiting !== null && (
+                    <Queued
+                        text={chat.waiting}
+                        boxEmpty={chat.draft.trim() === ''}
+                        takeBack={() => changeChat(chatId, takenBack)}
+                    />
+                )}
                 {/* An agent's approvals and questions, from its campaign's lists and never from what the AI wrote. */}
                 {chat.campaignId !== null && !chat.main && <WaitingCards campaignId={chat.campaignId} />}
             </div>
@@ -1799,47 +1853,17 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             )}
                         </div>
                     )}
-                    {chat.waiting !== null && (
-                        <div className="note chat-waiting" role="status" aria-label="Waiting message">
-                            <div>
-                                {chat.held
-                                    ? 'Not sent. Take it back when the box is empty, or swap it with the box.'
-                                    : 'Waiting to send when this turn ends'}
-                            </div>
-                            <div className="said">{chat.waiting}</div>
-                            <div className="crow">
-                                <button
-                                    className="btn sm"
-                                    type="button"
-                                    disabled={chat.draft.trim() !== ''}
-                                    title={chat.draft.trim() !== '' ? 'Empty the box to take it back' : undefined}
-                                    onClick={() => changeChat(chatId, takenBack)}
-                                >
-                                    Take back
-                                </button>
-                                {chat.draft.trim() !== '' && (
-                                    <button
-                                        className="btn sm"
-                                        type="button"
-                                        onClick={() => changeChat(chatId, replaced)}
-                                    >
-                                        Replace
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    )}
                     {tabLocked && <div className="note am">{tabLockedSentence(chat.mode)}</div>}
                     {host?.modelsUnread && <div className="note model-unread">{host.modelsUnread}</div>}
                     <textarea
                         ref={messageBox}
                         rows={1}
                         disabled={chat.removing || tabLocked}
-                        placeholder={chat.running ? 'Sent when this turn ends…' : 'Ask Jason…'}
+                        placeholder={chat.running ? t('chat.queue.placeholder') : 'Ask Jason…'}
                         aria-label="Your message"
                         value={chat.draft}
                         onChange={(event) => changeChat(chatId, (each) => typed(each, event.target.value))}
-                        onKeyDown={enter}
+                        onKeyDown={keys}
                     />
                     <div
                         className="crow"
@@ -1853,32 +1877,33 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             takeBack={() => takeBackChoice(chatId)}
                             modeMenu={modeMenu}
                         />
-                        {chat.running ? (
-                            <>
-                                <button
-                                    className="btn sm"
-                                    type="submit"
-                                    disabled={
-                                        chat.removing ||
-                                        chat.stopping ||
-                                        chat.waiting !== null ||
-                                        chat.draft.trim() === '' ||
-                                        nameMissing
-                                    }
-                                >
-                                    Send when the turn ends
-                                </button>
-                                <button
-                                    className="send"
-                                    type="button"
-                                    title="Stop"
-                                    aria-label="Stop"
-                                    disabled={chat.removing}
-                                    onClick={stop}
-                                >
-                                    <Glyph name="stop" size={16} />
-                                </button>
-                            </>
+                        {/* One round button. While a turn runs it stops the turn with the box empty, and with words typed
+                            sends them to wait for the turn's end; Escape in the box still stops the turn then. */}
+                        {chat.running && chat.draft.trim() === '' ? (
+                            <button
+                                className="send"
+                                type="button"
+                                title="Stop"
+                                aria-label="Stop"
+                                disabled={chat.removing}
+                                onClick={stop}
+                            >
+                                <Glyph name="stop" size={16} />
+                            </button>
+                        ) : chat.running ? (
+                            <button
+                                className="send"
+                                type="submit"
+                                title={
+                                    nameMissing
+                                        ? 'Type the model name, or choose another model'
+                                        : t('chat.queue.sendTitle')
+                                }
+                                aria-label={t('chat.queue.send')}
+                                disabled={chat.removing || chat.stopping || nameMissing || tabLocked}
+                            >
+                                <Glyph name="up" size={16} />
+                            </button>
                         ) : (
                             <button
                                 className="send"

@@ -86,6 +86,13 @@ export const en = {
     'chat.tab.empty': 'No chats yet.',
     'chat.tab.pick': 'Choose a chat, or start a new one.',
     'chat.tab.running': 'running',
+    'chat.queue.placeholder': 'Sent when this turn ends · Esc stops it',
+    'chat.queue.send': 'Send when this turn ends',
+    'chat.queue.sendTitle': 'Send when this turn ends (Esc stops the turn)',
+    'chat.queue.label': 'Queued message',
+    'chat.queue.line': 'Queued · Jason takes it when this turn ends',
+    'chat.queue.takeBack': 'Take back',
+    'chat.queue.emptyFirst': 'Empty the box to take it back',
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',

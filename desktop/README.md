@@ -479,8 +479,8 @@ applies to the turns a person starts by sending, from the next one on.
   still do more than it lets; a change to a wider mode, Auto-edit to Full access included, lets the running turn finish
   in the mode it started in.
 - **No turn starts by itself.** Every turn is a person's send:
-  - a message the person sends while a turn runs waits in the page and goes as the next turn once that one ends well, in
-    the mode of the moment it goes;
+  - a message the person sends while a turn runs waits in the page, every one sent meanwhile added under the one before,
+    and they go together as the next turn once that one ends well, in the mode of the moment it goes;
   - a resumed host session is the same send started again with a recap, in the same mode, and stops with it;
   - a set-up chat's naming run is no turn: it has no tool at all, no hook and no permission mode, in every mode;
   - a line the Feed takes never starts a turn: it reaches the agent with the person's next message, in the mode of that
