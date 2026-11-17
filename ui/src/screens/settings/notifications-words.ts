@@ -42,6 +42,22 @@ export function outcomeWords(channel: NotificationChannel, now: Date): string {
     }
 }
 
+const notReady: Readonly<Record<string, string>> = {
+    unavailable: 'the plugin is unavailable',
+    not_declared: 'the plugin does not declare notifications',
+    binding_invalid: 'its binding is not valid',
+};
+
+/**
+ * Why a plugin channel's switch cannot turn it on, from what the runtime reads of it now: null for the toast, for a channel
+ * that could deliver, and from a runtime that does not say.
+ */
+export function notReadyWords(channel: NotificationChannel): string | null {
+    if (channel.kind === 'toast' || !channel.readiness || channel.readiness === 'ready') return null;
+    const why = notReady[channel.readiness] ?? channel.readiness;
+    return `Cannot be turned on: ${why}${channel.readiness_detail ? ` (${channel.readiness_detail})` : ''}.`;
+}
+
 /** The pill's tone for an outcome: green for a delivery, red for a failure, none for the rest. */
 export function outcomeTone(channel: NotificationChannel): 'success' | 'danger' | '' {
     if (!channel.on) return '';

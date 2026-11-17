@@ -17,8 +17,8 @@ import { renderApp } from '../../test/render-app';
 import * as shell from '../../shell/shell';
 import { chosenSection } from './chosen';
 
-// The Notifications section of Settings: the notification channels as system.info says them, read only, in a browser
-// and inside the desktop's window.
+// The Notifications section of Settings: the notification channels as system.info says them, in a browser and inside the
+// desktop's window, with a switch per channel that asks the runtime to turn that one channel on or off.
 
 const channel = (fields: Partial<NotificationChannel> & { channel: string }): NotificationChannel => ({
     kind: 'plugin',
@@ -141,17 +141,149 @@ describe('Notifications in Settings in a browser', () => {
         await waitFor(() => screen.getByText('This runtime does not report its notification channels.'));
     });
 
-    it('says what the channels are for and how they are turned on or off, in a browser by asking the AI, and writes nothing', async () => {
-        const fake = inBrowser(report([channel({ channel: 'ntfy' })]));
+    it('says what the channels are for and how one is switched, and writes nothing until a switch is pressed', async () => {
+        const fake = inBrowser(report([channel({ channel: 'toast', kind: 'toast' }), channel({ channel: 'ntfy' })]));
         await waitFor(() => screen.getByText('ntfy'));
         const text = words(notifications());
         expect(text).toContain(
-            'This is how Jason tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your AI.',
+            'This is how Jason tells you that an approval or a question is waiting for you. Turn one channel on or off with its switch, or with jason notification enable or disable. Every notification at once is switched in the settings file.',
         );
         expect(text).not.toContain('Connect panel');
-        expect(text).not.toContain('Notifications:*');
-        expect(within(notifications()).queryAllByRole('button')).toEqual([]);
+        const switches = within(notifications()).getAllByRole('switch');
+        expect(switches.map((each) => [each.getAttribute('aria-label'), each.getAttribute('aria-checked')])).toEqual([
+            ['Desktop toast', 'true'],
+            ['ntfy', 'true'],
+        ]);
+        expect(switches.every((each) => !(each as HTMLButtonElement).disabled)).toBe(true);
         expect(within(notifications()).queryAllByRole('textbox')).toEqual([]);
+        expect(fake.calls.filter((call) => call.kind === 'write')).toEqual([]);
+    });
+
+    it('turns one channel off as the paired person and shows the channels as the runtime answers', async () => {
+        const fake = inBrowser(report([channel({ channel: 'toast', kind: 'toast', presence: 'available' })]));
+        fake.answerAnyRequest('notification.disable', 'notification.disable/toast');
+        await waitFor(() => screen.getByText('Desktop toast'));
+
+        fireEvent.click(within(notifications()).getByRole('switch', { name: 'Desktop toast' }));
+
+        await waitFor(() =>
+            expect(
+                within(notifications()).getByRole('switch', { name: 'Desktop toast' }).getAttribute('aria-checked'),
+            ).toBe('false'),
+        );
+        expect(fake.calls.filter((call) => call.kind === 'write')).toEqual([
+            { operation: 'notification.disable', body: { channel: 'toast' }, kind: 'write' },
+        ]);
+        // The answer is the runtime's whole section: the plugin channels it names come with it.
+        expect(within(notifications()).getByRole('switch', { name: 'pager' }).getAttribute('aria-checked')).toBe(
+            'true',
+        );
+    });
+
+    it('turns a channel that is off on with enable', async () => {
+        const fake = inBrowser(
+            report([channel({ channel: 'toast', kind: 'toast', on: false, presence: 'available' })]),
+        );
+        fake.answerAnyRequest('notification.enable', 'notification.enable/toast');
+        await waitFor(() => screen.getByText('Desktop toast'));
+
+        fireEvent.click(within(notifications()).getByRole('switch', { name: 'Desktop toast' }));
+
+        await waitFor(() =>
+            expect(
+                within(notifications()).getByRole('switch', { name: 'Desktop toast' }).getAttribute('aria-checked'),
+            ).toBe('true'),
+        );
+        expect(fake.sent('notification.enable')).toEqual({ channel: 'toast' });
+    });
+
+    it('shows the sentence of the runtime for a refused switch, and the switch stays where it was', async () => {
+        const fake = inBrowser(report([channel({ channel: 'chat-room', on: false, readiness: 'ready' })]));
+        fake.answerAnyRequest('notification.enable', 'notification.enable/not-configured');
+        await waitFor(() => screen.getByText('chat-room'));
+
+        fireEvent.click(within(notifications()).getByRole('switch', { name: 'chat-room' }));
+
+        const alert = await within(notifications()).findByRole('alert');
+        expect(words(alert)).toBe(
+            (fixtures['notification.enable/not-configured'].response as { error: { message: string } }).error.message,
+        );
+        const after = within(notifications()).getByRole('switch', { name: 'chat-room' }) as HTMLButtonElement;
+        expect(after.getAttribute('aria-checked')).toBe('false');
+        expect(after.disabled).toBe(false);
+    });
+
+    it('draws a plugin channel that could not deliver with an inert switch and what is missing', async () => {
+        inBrowser(
+            report([
+                channel({
+                    channel: 'chat-room',
+                    on: false,
+                    readiness: 'binding_invalid',
+                    readiness_detail: '/chat required',
+                }),
+                channel({ channel: 'pager', on: true, readiness: 'unavailable', readiness_detail: 'not loaded' }),
+            ]),
+        );
+        await waitFor(() => screen.getByText('chat-room'));
+        const rows = Array.from(notifications().querySelectorAll('tbody tr'));
+        expect(words(rows[0]!.children[1]!)).toBe(
+            'off Cannot be turned on: its binding is not valid (/chat required).',
+        );
+        expect((within(rows[0] as HTMLElement).getByRole('switch') as HTMLButtonElement).disabled).toBe(true);
+        // One that is on can always be turned off.
+        expect((within(rows[1] as HTMLElement).getByRole('switch') as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('while every notification is off, says the one line to change and every switch is off and inert', async () => {
+        const fake = inBrowser(
+            report(
+                [channel({ channel: 'toast', kind: 'toast', on: false }), channel({ channel: 'ntfy', on: false })],
+                false,
+            ),
+        );
+        await waitFor(() => screen.getByText('ntfy'));
+        const said = (fixtures['notification.enable/notifications-off'].response as { error: { message: string } })
+            .error.message;
+        expect(words(notifications())).toContain(said);
+        const switches = within(notifications()).getAllByRole('switch') as HTMLButtonElement[];
+        expect(switches.map((each) => [each.getAttribute('aria-checked'), each.disabled])).toEqual([
+            ['false', true],
+            ['false', true],
+        ]);
+        fireEvent.click(switches[0]!);
+        expect(fake.calls.filter((call) => call.kind === 'write')).toEqual([]);
+    });
+
+    it('keeps the switch of the toast beside the words that Windows did not show the last one', async () => {
+        inBrowser(
+            report([
+                channel({
+                    channel: 'toast',
+                    kind: 'toast',
+                    outcome: 'silenced',
+                    reason: 'disabled_for_application',
+                    at: new Date().toISOString(),
+                    presence: 'available',
+                }),
+            ]),
+        );
+        await waitFor(() => screen.getByText('Desktop toast'));
+        const toast = within(notifications()).getByRole('switch', { name: 'Desktop toast' }) as HTMLButtonElement;
+        expect([toast.getAttribute('aria-checked'), toast.disabled]).toEqual(['true', false]);
+        expect(words(notifications())).toContain(
+            'Windows did not show it: Jason is switched off in its notification settings.',
+        );
+    });
+
+    it('in the Demo, every switch is inert and says so', async () => {
+        mode.value = 'demo';
+        const fake = inBrowser(report([channel({ channel: 'toast', kind: 'toast' })]));
+        await waitFor(() => screen.getByText('Desktop toast'));
+        const toast = within(notifications()).getByRole('switch', { name: 'Desktop toast' }) as HTMLButtonElement;
+        expect(toast.disabled).toBe(true);
+        expect(words(notifications())).toContain('This is the Demo: its switches change nothing.');
+        fireEvent.click(toast);
         expect(fake.calls.filter((call) => call.kind === 'write')).toEqual([]);
     });
 });
@@ -189,7 +321,7 @@ describe('Notifications in Settings inside the desktop', () => {
         fireEvent.click(list.getByRole('button', { name: 'Notifications' }));
         await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
         expect(words(notifications())).toContain(
-            'To turn a channel on or off, ask your AI; a provider’s channel can also be connected or disconnected on the Connect panel.',
+            'Turn one channel on or off with its switch, or with jason notification enable or disable; a provider’s channel is connected or disconnected on the Connect panel. Every notification at once is switched in the settings file.',
         );
     });
 });

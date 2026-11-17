@@ -11,6 +11,8 @@ import type {
     DecisionListRequest,
     DecisionSummary,
     ErrorEnvelope,
+    NotificationSwitchRequest,
+    NotificationsInfo,
     Page,
     Project,
     RouteResolution,
@@ -391,6 +393,13 @@ import preferenceSetSendModeColdEveryMessage from '../../../docs/api/fixtures/pr
 import preferenceSetSendModeWarm from '../../../docs/api/fixtures/preference.set/send-mode-warm.json';
 import preferenceSetSender from '../../../docs/api/fixtures/preference.set/sender.json';
 import preferenceSetTone from '../../../docs/api/fixtures/preference.set/tone.json';
+import notificationDisablePlugin from '../../../docs/api/fixtures/notification.disable/plugin.json';
+import notificationDisableToast from '../../../docs/api/fixtures/notification.disable/toast.json';
+import notificationEnableNotConfigured from '../../../docs/api/fixtures/notification.enable/not-configured.json';
+import notificationEnableNotNamed from '../../../docs/api/fixtures/notification.enable/not-named.json';
+import notificationEnableNotificationsOff from '../../../docs/api/fixtures/notification.enable/notifications-off.json';
+import notificationEnableToast from '../../../docs/api/fixtures/notification.enable/toast.json';
+import notificationEnableUnknownChannel from '../../../docs/api/fixtures/notification.enable/unknown-channel.json';
 import preferenceUnsetSendModeCold from '../../../docs/api/fixtures/preference.unset/send-mode-cold.json';
 import projectGetById from '../../../docs/api/fixtures/project.get/by-id.json';
 import projectGetBySlug from '../../../docs/api/fixtures/project.get/by-slug.json';
@@ -1436,6 +1445,34 @@ export const fixtures = {
         PreferenceItem
     >,
     'preference.set/send-mode-warm': preferenceSetSendModeWarm satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
+    'notification.disable/plugin': notificationDisablePlugin satisfies Exchange<
+        NotificationSwitchRequest,
+        NotificationsInfo
+    >,
+    'notification.disable/toast': notificationDisableToast satisfies Exchange<
+        NotificationSwitchRequest,
+        NotificationsInfo
+    >,
+    'notification.enable/not-configured': notificationEnableNotConfigured satisfies Exchange<
+        NotificationSwitchRequest,
+        ErrorEnvelope
+    >,
+    'notification.enable/not-named': notificationEnableNotNamed satisfies Exchange<
+        NotificationSwitchRequest,
+        ErrorEnvelope
+    >,
+    'notification.enable/notifications-off': notificationEnableNotificationsOff satisfies Exchange<
+        NotificationSwitchRequest,
+        ErrorEnvelope
+    >,
+    'notification.enable/toast': notificationEnableToast satisfies Exchange<
+        NotificationSwitchRequest,
+        NotificationsInfo
+    >,
+    'notification.enable/unknown-channel': notificationEnableUnknownChannel satisfies Exchange<
+        NotificationSwitchRequest,
+        ErrorEnvelope
+    >,
     'preference.set/sender': preferenceSetSender satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.set/tone': preferenceSetTone satisfies Exchange<PreferenceSetRequest, PreferenceItem>,
     'preference.unset/send-mode-cold': preferenceUnsetSendModeCold satisfies Exchange<

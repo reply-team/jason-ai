@@ -164,7 +164,17 @@ export type NotificationChannel = {
     at: string | null;
     /** The toast's: `available`, or `no_desktop`. */
     presence?: string | null;
+    /**
+     * A plugin channel's: `ready`, or why a notification given to it now would not be tried (`unavailable`, `not_declared`,
+     * `binding_invalid`); null for the toast, absent from a runtime older than the switch.
+     */
+    readiness?: string | null;
+    /** What is missing where the channel is not ready, in the runtime's words. */
+    readiness_detail?: string | null;
 };
+
+/** The body of `notification.enable` and `notification.disable`: one channel, `toast` or a plugin's id. */
+export type NotificationSwitchRequest = { channel: string; reason?: string };
 export type Plugin = {
     id: string;
     version: string;
