@@ -349,7 +349,7 @@ jason sender list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --owners own --chann
 jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-The last command lists your own mailboxes. You choose which one the message goes from, and the send names it by the
+`sender list` lists your own mailboxes. You choose which one the message goes from, and the send names it by the
 identifier and the address the list gives, as in `sender` below; a send whose address is not the one
 held for that identifier fails `sender_mismatch`, and nothing is sent. Where the list is empty, there is nothing to send
 from, and the check ends here.
