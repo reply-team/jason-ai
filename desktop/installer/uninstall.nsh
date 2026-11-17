@@ -133,7 +133,12 @@
 ; command-line install it retired - whoever ran this installer starts one again from the carried file: a person's run
 ; and the window's own update (--force-run) start the application once this step is done, and its start brings the
 ; runtime up as every start of it does; a run a terminal asked for - the install script's silent run, or that of
-; jason update apply - is that command's, which starts one itself. What it did not get done never fails the
+; jason update apply - is that command's, which starts one itself. None of them is relied on alone: where the routine
+; stopped a command-line install's runtime it left the note that a start is owed, run/start-owed.json in the data
+; directory, which stands until a runtime starts there - through a caller that quit or relaunched first, a start that
+; opened in the Demo, or a routine that was killed - and the application, at every start of its own, Demo or Live,
+; starts a runtime from the carried file when it finds the note standing and none answering; jason status names it
+; meanwhile. What it did not get done never fails the
 ; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
 ; start runs it where its last run was for an older version.
 !macro customInstall

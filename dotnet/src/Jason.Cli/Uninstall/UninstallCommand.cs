@@ -41,7 +41,9 @@ public static class UninstallCommand
         $"""
         Removed, in this order, each step reported:
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
-             account's, on Windows including the task an earlier version registered as Jason
+             account's, on Windows including the task an earlier version registered as Jason. On macOS it
+             comes just after step 2: taking the job out of launchd ends the runtime launchd started, with
+             no drain, and the job starts no runtime that stopped
           2. the runtime — and if it will not stop, nothing further is removed
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
              two entries Windows made for it, and the jason: link registration where its command names this
@@ -94,29 +96,46 @@ public static class UninstallCommand
           - refused before anything is removed while Jason Desktop is open (desktop_running): quit it
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
-            jason (jason_running): a runtime of another data directory, a journal watch, an agent's call. The
-            application's uninstaller removes nothing while one does. The runtime this stops is not counted.
-          - with the logon registration: Open Jason at Login, where it starts this application.
+            jason, in any session (jason_running): a runtime of another data directory, a journal watch, a
+            call of an agent host opened by hand. The application's uninstaller removes nothing while one
+            does. The runtime this stops, and every process it started (its plugin hosts, its agents' calls),
+            are not counted.
+          - with the logon registration: Open Jason at Login, where it starts this application. On macOS,
+            with --keep-application, its file goes and its job is not unloaded, since the application kept
+            may be that job's own window: the output says the job stays loaded until the next login.
           - with the runtime: the runtime an earlier version's demo left running on its own data directory.
           - with the jason: link: the jason-desktop link registration, where it starts this application.
           - in place of steps 5 and 6: the terminal command jason install placed, by the rules it placed it by:
             on macOS ~/.local/bin/jason and jason-desktop where each is the application's wrapper running this
             jason (or a jason that is gone), then install.sh's lines for ~/.local/bin where it then holds nothing
-            but Jason, then the folder once empty; on Windows the application's jason and jason-desktop command
+            but Jason, a profile file removed only where jason install recorded that it created it and nothing
+            but whitespace is left, then the folder once empty; on Windows the application's jason and jason-desktop command
             files in WindowsApps, and the entry in this account's Path naming the application's resources\bundle,
             where that folder holds nothing but what the application carries there. An older command-line install
             of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
             profile block and its folder. Then the folders an earlier version's demo made, each only where it
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
             ai.jasonharness.desktop.ShipIt).
+          - macOS, just before the application and only where it goes: its own state under ~/Library, each
+            where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through
+            defaults delete, then the file), Saved Application State/ai.jasonharness.desktop.savedState,
+            Caches/ai.jasonharness.desktop (Squirrel's), HTTPStorages/ai.jasonharness.desktop and its
+            .binarycookies, WebKit/ai.jasonharness.desktop and Application Support/ai.jasonharness.desktop
+            (jason install's record of the profiles it created). Application Support/Jason and Logs/Jason,
+            named after the application and not its identifier, are named and left, --purge-data or not:
+            nothing in them proves them Jason Desktop's, which keeps its own in the data directory.
+            --keep-application keeps all of it. Where the home directory is / or not the account's own,
+            nothing under ~/Library is looked at, and the plan says so.
+          - with the data kept: run/start-owed.json, the note that a start is owed, since with this
+            installation taken off none is.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
             Windows: a waiter is started, which once this command has ended runs the application's own
             uninstaller silently on its folder, so the folder goes after this ends; the report says so.
             --keep-application leaves it: the Windows uninstaller in Installed apps calls this so, and removes
             the folder itself next. --keep-application with --purge-data is refused (uninstall_refused).
             macOS: the bundle is deleted only where its Contents/Info.plist names ai.jasonharness.desktop. If
-            macOS refuses the delete, the report says what is left and the verb exits 1: move Jason from
-            Applications to the Bin.
+            macOS refuses the delete, the report says what is left and the verb exits 1: move the bundle it
+            names, wherever it is, to the Bin.
         Elsewhere (Linux), and where no system's places are known, the jason the application carries refuses
         (uninstall_carried_by_desktop) before anything is read or removed, and the message names the way the
         system removes the application.
@@ -540,6 +559,11 @@ public static class UninstallCommand
             env.Out.WriteLine($"  the updater's cache, {cache}");
         }
 
+        foreach (var place in desktop.ApplicationState)
+        {
+            env.Out.WriteLine($"  the application's own state, {place}, just before the application");
+        }
+
         foreach (var line in desktop.Left)
         {
             env.Out.WriteLine($"  NOT touched: {line}");
@@ -588,9 +612,11 @@ public static class UninstallCommand
         return others.Count == 0
             ? null
             : $"Another jason runs from the application's folder (process {string.Join(", ", others.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), "
-              + "and the application's uninstaller removes nothing while one does, so nothing was removed. It may be a runtime "
-              + $"of another data directory, which `\"{carried.Executable}\" runtime stop` with JASON_DATA_DIR set to that directory "
-              + "stops, a `jason journal watch`, or an agent's call, which ends by itself. Once none runs, run this again.";
+              + "and the application's uninstaller removes nothing while one does, so nothing was removed. It is neither the runtime "
+              + $"of {env.Paths.Root}, which this would stop, nor anything that runtime started. It may be a runtime of another data "
+              + $"directory, which `\"{carried.Executable}\" runtime stop` with JASON_DATA_DIR set to that directory stops, a "
+              + "`jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; in another session "
+              + "of this account, it may be a task that runs whether you are signed in or not. Once none runs, run this again.";
     }
 
     /// <summary>

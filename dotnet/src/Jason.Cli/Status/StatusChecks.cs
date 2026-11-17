@@ -269,7 +269,7 @@ internal static partial class StatusChecks
             }
 
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
-            checks.Add(Runtime(descriptor, info, unfinished));
+            checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
@@ -310,7 +310,11 @@ internal static partial class StatusChecks
         return new StatusReport(checks.All(check => !check.Required || check.State == CheckState.Ok), checks, SetupInfo.From(env.Paths));
     }
 
-    private static StatusCheck Runtime(Contracts.Discovery.RuntimeDescriptor? descriptor, SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
+    private static StatusCheck Runtime(
+        Contracts.Discovery.RuntimeDescriptor? descriptor,
+        SystemInfoResponse? info,
+        Contracts.Update.UnfinishedUpdate? unfinished,
+        (bool Stands, DateTimeOffset? StoppedAt) owed)
     {
         // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
         // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
@@ -334,13 +338,20 @@ internal static partial class StatusChecks
                 : new StatusCheck("runtime", true, CheckState.Failed, $"{unfinished.Said()}.", null);
         }
 
+        // jason install stopped this data directory's runtime and started none, and none has started since: the note it left
+        // is said with the one command that pays it. A runtime that answers has removed it at its start, or pays it already.
+        var owes = owed.Stands
+            ? " `jason install` stopped the runtime on this data directory"
+              + (owed.StoppedAt is { } moment ? string.Create(CultureInfo.InvariantCulture, $" at {moment.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss'Z'}") : string.Empty)
+              + $" and none has started since, so a start is owed: `{Repair.Start}` starts one."
+            : string.Empty;
         if (descriptor is null)
         {
-            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask.", Repair.Start);
+            return new StatusCheck("runtime", true, CheckState.Failed, "No runtime is running: there is no endpoint descriptor to ask." + owes, Repair.Start);
         }
 
         return info is null
-            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there.", Repair.Start)
+            ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there." + owes, Repair.Start)
             : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 

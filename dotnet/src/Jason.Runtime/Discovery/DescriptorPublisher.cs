@@ -130,7 +130,25 @@ public sealed class DescriptorPublisher(JasonPaths paths)
         }
 
         FilePermissions.VerifyRestrictedToCurrentUser(paths.DescriptorFile);
+        RemoveStartOwed();
         return descriptor;
+    }
+
+    /// <summary>
+    /// A runtime's own start pays the start a stop owed: the note <c>jason install</c> leaves when it stops this data
+    /// directory's runtime (<see cref="JasonPaths.StartOwedFile"/>) is removed once the descriptor is published. One that
+    /// cannot be removed is left; it names a start that is owed only while no runtime answers, and this one does.
+    /// </summary>
+    private void RemoveStartOwed()
+    {
+        try
+        {
+            File.Delete(paths.StartOwedFile);
+        }
+        catch (Exception left) when (left is IOException or UnauthorizedAccessException)
+        {
+            // Left standing: the start is not refused for it.
+        }
     }
 
     /// <summary>

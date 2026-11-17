@@ -4,6 +4,7 @@ import { session } from '../../api/session';
 import type { Approval, ApprovalSummary, Decision, DecisionSummary, Page } from '../../api/types';
 import { mergePage } from '../../lists/paging';
 import { pendingMark } from '../../shell/attention-mark';
+import { keepEdited, keptReads, withdrawn } from './reasking';
 
 export type Kind = 'approvals' | 'questions';
 
@@ -81,6 +82,13 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
 
     /** Which list is shown, so the reload after an action reads the same one. */
     let shownDecided = false;
+    /**
+     * The pending approvals as last drawn, a message edited on this page among them: the next read keeps such a row
+     * where it stood (`keepEdited`), so a list never loses a row to its person's own edit.
+     */
+    let pendingRows: ApprovalSummary[] = [];
+    /** Which journal lines this list has read its kept rows' work items after. */
+    const due = keptReads();
 
     /** A list's first page, then, for a holder that keeps its pages, the pages after it the person had read. */
     async function readList<T extends { id: string }>(
@@ -111,13 +119,17 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
     let generation = 0;
     let latest: Promise<void> = Promise.resolve();
 
-    function load(api: Api, decided: boolean): Promise<void> {
+    /**
+     * Reads the lists again. `followed` says the read follows a journal line rather than the person or the screen: a
+     * kept row's work item is then read again only when a line named it.
+     */
+    function load(api: Api, decided: boolean, followed = false): Promise<void> {
         const mine = ++generation;
-        latest = read(api, decided, mine);
+        latest = read(api, decided, mine, followed);
         return latest;
     }
 
-    async function read(api: Api, decided: boolean, mine: number): Promise<void> {
+    async function read(api: Api, decided: boolean, mine: number, followed: boolean): Promise<void> {
         shownDecided = decided;
         failure.value = null;
         failureCode.value = null;
@@ -127,11 +139,14 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
                 readList<DecisionSummary>(api, 'questions', decided, 'decision.list'),
             ]);
             if (mine !== generation) return await latest;
-            approvals.value = a.items;
+            const rows = decided ? a.items : await keepEdited(api, pendingRows, a.items, (item) => due(item, followed));
+            if (mine !== generation) return await latest;
+            approvals.value = rows;
+            if (!decided) pendingRows = rows;
             approvalsCursor.value = a.next_cursor;
             questions.value = q.items;
             questionsCursor.value = q.next_cursor;
-            if (!decided && campaignId === undefined) pendingMark.value = a.items.length + q.items.length > 0;
+            if (!decided && campaignId === undefined) pendingMark.value = rows.length + q.items.length > 0;
             loaded.value = true;
         } catch (error) {
             if (mine !== generation) return await latest;
@@ -147,6 +162,7 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
             if (kind === 'approvals') {
                 const page = await api.call<Page<ApprovalSummary>>('approval.list', { ...status, cursor });
                 approvals.value = mergePage(approvals.value, page.items, (i) => i.id);
+                if (!decided) pendingRows = approvals.value;
                 approvalsCursor.value = page.next_cursor;
                 pages.approvals += 1;
             } else {
@@ -235,11 +251,14 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
         });
     }
 
+    /** An approval an edit on this page withdrew is never decided here: the runtime refuses it, and the page asks nothing. */
     function approve(api: Api, id: string): Promise<boolean> {
+        if (withdrawn(id) !== undefined) return Promise.resolve(false);
         return act(api, () => api.call('approval.approve', { approval_id: id }, 'write'));
     }
 
     function reject(api: Api, id: string, reason?: string): Promise<boolean> {
+        if (withdrawn(id) !== undefined) return Promise.resolve(false);
         return act(api, () => api.call('approval.reject', { approval_id: id, ...(reason ? { reason } : {}) }, 'write'));
     }
 
@@ -260,6 +279,7 @@ export function attentionStore(scope?: { campaignId?: string; keepPages?: boolea
     function forgetPages(): void {
         pages.approvals = 1;
         pages.questions = 1;
+        pendingRows = [];
     }
 
     return {
