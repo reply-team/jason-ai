@@ -68,7 +68,6 @@ public sealed class RuntimeVersionCheckTests
     /// </summary>
     [Theory]
     [InlineData("0.9.0-dev", "0.9.0")]
-    [InlineData("0.9.0", "0.9.0-dev")]
     [InlineData("0.9.0-dev+1ec19a3", "0.9.0-dev+4910ebb")]
     public async Task Two_builds_that_differ_only_after_the_version_are_two_builds(string runtime, string cli)
     {
@@ -81,6 +80,51 @@ public sealed class RuntimeVersionCheckTests
         var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "runtime_version");
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal($"The runtime running is {runtime}; this CLI is {cli}.", check.Fact);
+        Assert.Equal("jason runtime restart", check.Fix);
+    }
+
+    /// <summary>
+    /// A runtime newer than this CLI is never restarted from it: the restart would start this older build on data the newer
+    /// one may have migrated, which a build from 0.49.0 on refuses (<c>data_newer</c>) and an earlier one runs unguarded. The
+    /// repair is to bring this jason up to the runtime, and the fact says which side is newer. A release is newer than its
+    /// own development build, and a version that cannot be read is compared as before, by the restart.
+    /// </summary>
+    [Theory]
+    [InlineData("0.50.0", "0.49.0")]
+    [InlineData("0.9.0", "0.9.0-dev")]
+    [InlineData("1.0.0-rc.2", "1.0.0-rc.1+4910ebb")]
+    public async Task A_runtime_newer_than_this_cli_names_the_update_and_not_the_restart(string runtime, string cli)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir, version: runtime);
+
+        var exit = await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: cli), Ct);
+
+        var report = StatusCommandTests.Read(output);
+        Assert.False(report.Ready);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(report.Checks, check => check.Name == "runtime_version");
+        Assert.True(check.Required);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal(
+            $"The runtime running is {runtime}, newer than this CLI, {cli}: a restart from this CLI would start the older build on data the newer one may have changed, so update this jason instead.",
+            check.Fact);
+        Assert.Equal("jason update apply", check.Fix);
+    }
+
+    [Fact]
+    public async Task A_version_that_cannot_be_read_is_given_the_restart_as_before()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir, version: "not a version");
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output, build: "0.49.0"), Ct);
+
+        var check = Assert.Single(StatusCommandTests.Read(output).Checks, check => check.Name == "runtime_version");
+        Assert.Equal("The runtime running is not a version; this CLI is 0.49.0.", check.Fact);
+        Assert.Equal("jason runtime restart", check.Fix);
     }
 
     /// <summary>

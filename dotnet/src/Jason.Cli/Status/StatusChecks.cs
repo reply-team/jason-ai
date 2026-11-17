@@ -79,6 +79,12 @@ internal static partial class StatusChecks
         /// </summary>
         public const string FinishUpdate = "jason update apply";
 
+        /// <summary>
+        /// The repair for a runtime newer than this CLI: this jason brought up to the runtime, never the runtime restarted from
+        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason.
+        /// </summary>
+        public const string UpdateThisJason = "jason update apply";
+
         public const string ReloadPlugins = "jason plugin reload";
 
         /// <summary>
@@ -406,8 +412,20 @@ internal static partial class StatusChecks
             return new StatusCheck("runtime_version", true, CheckState.Unknown, "The runtime did not answer, so which build it is was not asked.", Repair.Start);
         }
 
-        return string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
-            ? new StatusCheck("runtime_version", true, CheckState.Ok, $"The runtime running is {build}, the build this CLI is.", null)
+        if (string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal))
+        {
+            return new StatusCheck("runtime_version", true, CheckState.Ok, $"The runtime running is {build}, the build this CLI is.", null);
+        }
+
+        // A runtime newer than this CLI is not restarted from it: that would start this older build on data the newer one
+        // may have migrated, which a build from 0.49.0 on refuses and an earlier one runs unguarded.
+        return SemanticVersion.TryParse(info.RuntimeVersion, out var running) && SemanticVersion.TryParse(build, out var self) && running > self
+            ? new StatusCheck(
+                "runtime_version",
+                true,
+                CheckState.Failed,
+                $"The runtime running is {info.RuntimeVersion}, newer than this CLI, {build}: a restart from this CLI would start the older build on data the newer one may have changed, so update this jason instead.",
+                Repair.UpdateThisJason)
             : new StatusCheck("runtime_version", true, CheckState.Failed, $"The runtime running is {info.RuntimeVersion}; this CLI is {build}.", Repair.Restart);
     }
 

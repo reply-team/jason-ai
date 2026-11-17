@@ -446,12 +446,12 @@ test('a first start refused for the data directory’s layout refuses no version
     assert.equal(isRejected(readRollback(s.rollback), '0.35.0'), true);
 });
 
-test('the starting page’s failed start is wired to the layout refusal: no version refused, and the CLI’s sentence alone', () => {
+test('the starting page’s failed start is wired to the layout refusal and the newer database’s: no version refused, and the CLI’s sentence alone', () => {
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8').split(/\s+/).join(' ');
     const from = main.indexOf("log.error('window_load_failed'");
     assert.ok(from >= 0);
     const failed = main.slice(from, main.indexOf('startInFlight = false;', from));
-    assert.ok(failed.includes('const layoutRefused = error instanceof LayoutRefused;'));
+    assert.ok(failed.includes('const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;'));
     assert.ok(failed.includes('const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);'));
     assert.ok(failed.includes('const notice = failedStartNotice( said, layoutRefused,'));
     assert.ok(failed.includes('await showStarting(current, notice, true);'));

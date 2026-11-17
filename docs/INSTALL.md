@@ -220,14 +220,14 @@ Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-pat
 A one-liner takes them like this:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v0.48.2/install.sh | sh -s -- --version 0.48.2
+curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.0/install.sh | sh -s -- --version 0.49.0
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.48.2/install.ps1))) -Version 0.48.2
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.49.0/install.ps1))) -Version 0.49.0
 ```
 
-These install 0.48.2 with 0.48.2's own script: a pinned install fetches the script from the release it installs.
+These install 0.49.0 with 0.49.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
 nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
@@ -523,7 +523,9 @@ A fresh installation that has done §2 through §4 but has not yet started the r
 `runtime_version` compares the version the running runtime reports with this CLI's own. It fails when a runtime
 was left running across an upgrade that replaced the executable — a package manager's, or a file copied over by
 hand — because that runtime is still the old build and starts its plugin hosts from the old image. Its repair is
-`jason runtime restart`.
+`jason runtime restart`. Where the runtime is the newer of the two, the fact says so and the repair is
+`jason update apply`, since a restart from this older `jason` would start the older build on the newer data, which a
+Jason from 0.49.0 on refuses to start on (`data_newer`).
 
 `plugin_package` compares each plugin package the release you run publishes — today the Reply plugin's, the journal
 forwarder's, ntfy's, Slack's and Telegram's — with the package

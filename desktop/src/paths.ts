@@ -175,6 +175,12 @@ export const layoutNewerCode = 'layout_newer';
 export const layoutUnreadableCode = 'layout_unreadable';
 
 /**
+ * The runtime's refusal of a database a newer Jason migrated (`DataNewer`), which `jason runtime start` answers as its
+ * own: only the runtime reads the database, so nothing here can find it out before the start.
+ */
+export const dataNewerCode = 'data_newer';
+
+/**
  * What a data directory's `layout.json` was found to say, read by the rules `LayoutStamp` reads it by: nothing (layout 1,
  * the layout every Jason before the stamp kept), a layout with the version that wrote it, or that it cannot be read,
  * with why. Members this build does not know are ignored; the number alone decides.

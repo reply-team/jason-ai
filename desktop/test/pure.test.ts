@@ -124,6 +124,18 @@ test('the system screen’s sentence names jason update when another installatio
     assert.doesNotMatch(sentence, /Check for Updates/);
 });
 
+test('the system screen’s sentence names Check for Updates, not jason update, when another installation’s runtime is newer than this desktop', () => {
+    for (const [runtime, bundle] of [['0.50.0', '0.49.0'], ['0.49.0', '0.49.0-rc.1'], ['0.50.0+14315ba2', '0.49.0']] as const) {
+        const sentence = versionsDifferSentence(runtime, bundle, false, 'Ctrl+Shift+D') ?? '';
+        assert.match(sentence, /Check for Updates…/, `${runtime} over ${bundle}`);
+        assert.match(sentence, /press Ctrl\+Shift\+D,/, `${runtime} over ${bundle}`);
+        assert.doesNotMatch(sentence, /jason update/, `${runtime} over ${bundle}`);
+    }
+    // And the other way round, an older runtime of another installation is still brought up by jason update.
+    assert.match(versionsDifferSentence('0.48.2', '0.49.0', false, 'Ctrl+Shift+D') ?? '', /Run `jason update`/);
+    assert.doesNotMatch(versionsDifferSentence('0.48.2', '0.49.0', false, 'Ctrl+Shift+D') ?? '', /Check for Updates/);
+});
+
 test('the system screen’s sentence names Check for Updates when the runtime is the desktop’s own, which jason update refuses to change', () => {
     const sentence = versionsDifferSentence('0.35.0', '0.34.0', true, 'Ctrl+Shift+D') ?? '';
     assert.match(sentence, /0\.35\.0/);

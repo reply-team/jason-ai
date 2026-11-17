@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, sy
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { AgentFolderUnowned } from '../src/chat-agent-folder.ts';
-import { LayoutRefused, layoutRefusalIn, loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
+import { DataNewerRefused, dataNewerRefusalIn, LayoutRefused, layoutRefusalIn, loggedCli, startInstallation, StartFailed } from '../src/installation.ts';
 import { SkillsGate } from '../src/skills-gate.ts';
 import type { DesktopSettings } from '../src/settings.ts';
 import { bench, memoryLog, type Bench } from './harness.ts';
@@ -174,6 +174,35 @@ test('a layout jason runtime start refuses stops the start in the CLI’s own wo
     // Any other failure stays a failed start in what the CLI said, the same refusal envelope with another code included.
     const other = bench(t, { env: { STUB_START_REFUSES: 'runtime_not_started', STUB_START_SAYS: 'It did not start.' } });
     await assert.rejects(start(other), (error: unknown) => error instanceof StartFailed && !(error instanceof LayoutRefused) && error.step === 'runtime start');
+});
+
+test('a database a newer Jason migrated, which jason runtime start answers by its code, stops the start in the CLI’s own words and nothing after it is run', async (t) => {
+    const message = 'This Jason is 0.49.0, and the data in /data was changed by a newer Jason, so the runtime was not started and nothing was changed. Update Jason with `jason update apply`, or Check for Updates in Jason Desktop.';
+    const b = bench(t, { env: { STUB_START_REFUSES: 'data_newer', STUB_START_SAYS: message } });
+    const log = memoryLog();
+    await assert.rejects(
+        startInstallation({ cli: loggedCli(b.cli, log), paths: b.paths, log, bundle: join(b.root, 'bundle'), bundleVersion, settings: { feed: null, skillsDeployedFor: null, theme: null }, saveSettings: () => assert.fail('nothing is saved'), programs: b.programs }),
+        (error: unknown) => error instanceof DataNewerRefused && error instanceof StartFailed && !(error instanceof LayoutRefused) && error.step === 'data' && error.code === 'data_newer' && error.message === message && error.exit === 1,
+    );
+    const verbs = b.record().filter((entry) => entry.name === 'jason').map((entry) => entry.args.slice(0, 2).join(' '));
+    assert.deepEqual(verbs, ['status', 'runtime start'], 'nothing after the start');
+    assert.equal(existsSync(b.paths.runFile), false);
+    assert.equal(existsSync(b.paths.chat), false, 'the chat folder is not made');
+    assert.deepEqual(
+        log.lines.filter((line) => line.name === 'data_newer_refused').map((line) => line.fields),
+        [{ Code: 'data_newer' }],
+    );
+    assert.deepEqual(log.lines.filter((line) => line.name === 'layout_refused'), []);
+});
+
+test('only data_newer with a sentence on stdout is a newer database’s refusal', () => {
+    const envelope = (code: unknown, message: unknown) => JSON.stringify({ error: { code, message, retryable: false } });
+    assert.equal(dataNewerRefusalIn(envelope('data_newer', 'Newer.')), 'Newer.');
+    assert.equal(dataNewerRefusalIn(envelope('data_newer', 'Newer.') + String.fromCharCode(10)), 'Newer.');
+    for (const stdout of ['', 'data_newer', '{"error":null}', '[]', envelope('data_newer', ''), envelope('data_newer', 3), envelope('Data_Newer', 'x'), envelope('layout_newer', 'x'), envelope('runtime_start_failed', 'It said: data_newer')]) {
+        assert.equal(dataNewerRefusalIn(stdout), null, stdout);
+    }
+    assert.equal(layoutRefusalIn(envelope('data_newer', 'Newer.')), null, 'a newer database is not a layout');
 });
 
 test('only a layout code on stdout is a layout refusal', () => {

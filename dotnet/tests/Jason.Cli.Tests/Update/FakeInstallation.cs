@@ -62,6 +62,19 @@ public sealed class FakeInstallation : HttpMessageHandler
                 // descriptor. Which version it is, is whatever file is at the install path.
                 OnStart?.Invoke();
 
+                // A version put back from DataNewer.FirstRefusing on, on the database the newer one migrated: its runtime
+                // refuses before it changes the database, says so in the envelope a refused start writes, and exits.
+                if (PutBackRefusesTheDatabase && Installed() == From.ToString())
+                {
+                    StartsHandedOver.Add(_handedOver);
+                    return new FakeProcessHandle(4242)
+                    {
+                        HasExited = true,
+                        ExitCode = 1,
+                        Said = PutBackSays ?? JsonSerializer.Serialize(new ErrorResponse(new ErrorBody(DataNewer.Code, DataNewer.Sentence(From.ToString(), Paths.Root), Retryable: false)), JasonJson.Options),
+                    };
+                }
+
                 // What a first start of a new version does before it listens: it backs the database up and
                 // migrates it. The file is real here, because a rollback is going to copy it back.
                 if (Migrates && Installed() == To.ToString())
@@ -222,6 +235,15 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// one where nothing can be asked of the runtime because it never listened.
     /// </summary>
     public bool StartsButNeverServes { get; set; }
+
+    /// <summary>
+    /// Whether the version this update replaced refuses to start once it is put back, as one from
+    /// <see cref="DataNewer.FirstRefusing"/> on does on a database the newer one migrated and a rollback left as it is.
+    /// </summary>
+    public bool PutBackRefusesTheDatabase { get; set; }
+
+    /// <summary>What that refusing start says on its standard error, where it is not the refusal's own envelope.</summary>
+    public string? PutBackSays { get; set; }
 
     /// <summary>
     /// What the runtime says it is, when that has to differ from whatever file is at the install path.

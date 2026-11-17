@@ -528,7 +528,8 @@ install location and the package directory as they were. Homebrew replaces the i
 deletes the old keg, and a running runtime starts every plugin host from its own image, so provider work fails at launch
 until the runtime is restarted. A runtime left running across such an upgrade, or across a file copied over by hand, is
 still the old build; `jason status` says so in its required `runtime_version` check, whose repair is
-`jason runtime restart`.
+`jason runtime restart`. A runtime newer than the `jason` asking is the other way round, and its repair is
+`jason update apply`: a restart from the older `jason` would start the older build on the newer data.
 
 **It refuses a `jason` the desktop application carries** (§6), with `update_carried_by_desktop`, before anything is
 staged, drained or stopped, and so does `jason update rollback`: the desktop's Check for Updates updates the application
@@ -768,6 +769,16 @@ answers are the same answer: the executable goes back, the database is left exac
 stands, and the message names the backup file. The section below is how you then put that database back
 yourself, having decided that you want to.
 
+**A Jason does not start on a database a newer one migrated.** From 0.49.0 on, a runtime whose database holds a
+migration its build does not know refuses to start, with `data_newer` and a sentence that names its version and the
+data directory and says to update, before it takes the lock, writes a log or a backup, or runs a migration: no file in
+the data directory is added or removed, and the database and its write-ahead log keep every byte; SQLite may
+rebuild `jason.db-shm`, its index of a log a runtime left behind. `jason runtime start` and `restart` answer that refusal by its code, and a start at
+logon refuses the same way and starts nothing. So a version from 0.49.0 on that a rollback put back, with the database
+left as it stands, starts no runtime until that database is put back by hand; the refusal says so instead of that it
+may refuse. A version before 0.49.0 has no such check, and EF Core passes over the history rows it has no migration
+for, so it runs its own model over the newer schema.
+
 You will usually be typing `jason update rollback` from the PATH, which means the executable being replaced is
 the one running the command. That is expected and it works — the file is renamed out of the way rather than
 written over — but it is also why the replaced executable may still be sitting in `~/.jason/update/replaced/`
@@ -821,10 +832,11 @@ loaded. Settings you wrote for the newer package, a grant of a host by name, say
 again if you update forward later.
 
 None of this touches the database, and an apply of an older release migrates nothing: the older executable opens the
-database as the newer one left it, and may refuse to open one the newer one migrated, as `jason update rollback` itself
-warns. A rollback after such an apply puts the newer executable back and leaves the database as it is. "Going back"
-above says when a rollback restores a backup and why the write-ahead log beside a restored file is deleted; read it
-before you rely on an older executable with the data directory you have.
+database as the newer one left it. One from 0.49.0 on refuses to start on a database the newer one migrated
+(`data_newer`, "Going back" above), so the apply's own start of it fails; an earlier one may fail on it, as `jason
+update rollback` itself warns. A rollback after such an apply puts the newer executable back and leaves the database
+as it is. "Going back" above says when a rollback restores a backup and why the write-ahead log beside a restored file
+is deleted; read it before you rely on an older executable with the data directory you have.
 
 ### Restoring a database by hand
 
@@ -896,7 +908,7 @@ a code on its own tells nobody what to do next.
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed, or the new executable could not be run to finish the update. The executable can be put back |
 | `update_file_refused` | a file could not be moved, copied or written: a directory that is not one, a permission, a lock. It covers every file these two verbs touch — an update's renames and a rollback's, the ledger both are recorded in, and the database restore. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH. On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for 10 seconds first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable: the same command, once the file is free |
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
-| `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
+| `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. A version from 0.49.0 on that was put back does not start on the database the newer one migrated (`data_newer`), and the message says so. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start`, `restart` and `run` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
 
 ## 8. Starting at logon

@@ -170,6 +170,55 @@ public class RuntimeStartCommandTests
         Assert.Contains($"It said: {reason}", RuntimeVerbs.Envelope(output.ToString()).Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A runtime that refuses its data directory because a newer Jason migrated its database says so in an envelope with
+    /// <c>data_newer</c>, and the start answers that envelope as its own: the code is what an agent and the desktop branch on,
+    /// and the CLI cannot read the database to find it out itself. Its restart says the same, since it ends in this start.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R2, "a database a newer Jason migrated reaches the starter by its code")]
+    public async Task A_child_that_refuses_a_database_a_newer_jason_migrated_is_answered_by_its_code()
+    {
+        using var dir = new TempPaths();
+        var sentence = DataNewer.Sentence("0.49.0", dir.Paths.Root);
+        var envelope = CliErrors.Serialize(DataNewer.Code, sentence, retryable: false);
+        var processes = new FakeProcessControl { OnLaunch = _ => new FakeProcessHandle(4242) { HasExited = true, ExitCode = 1, Said = envelope } };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(envelope + System.Environment.NewLine, output.ToString());
+        var error = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal("data_newer", error.Code);
+        Assert.Equal(sentence, error.Message);
+        Assert.False(error.Retryable);
+    }
+
+    /// <summary>
+    /// Only that envelope, whole: one with another code, or <c>data_newer</c> with no sentence, or one with more after it, is
+    /// what the runtime said and is heard after "It said:" as before.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"error":{"code":"layout_newer","message":"Newer.","retryable":false}}""")]
+    [InlineData("""{"error":{"code":"data_newer","message":"","retryable":false}}""")]
+    [InlineData("""{"error":{"code":"data_newer","retryable":false}}""")]
+    [InlineData("""{"error":{"code":"data_newer","message":"Newer.","retryable":false}} and more""")]
+    [InlineData("data_newer")]
+    public async Task Anything_else_a_child_says_is_heard_after_it_said(string said)
+    {
+        using var dir = new TempPaths();
+        var processes = new FakeProcessControl { OnLaunch = _ => new FakeProcessHandle(4242) { HasExited = true, ExitCode = 1, Said = said } };
+        var (env, output, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.EchoesTheDescriptor(dir), processes);
+
+        var exit = await RuntimeStartCommand.RunAsync(env, human: false, Ct, RuntimeVerbs.Timeout, RuntimeVerbs.Poll);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var error = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(CliErrors.RuntimeStartFailed, error.Code);
+        Assert.Contains($"It said: {said}", error.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>And where this start wrote one, it still sends them there.</summary>
     [Fact]
     public async Task A_child_that_died_after_writing_a_log_is_sent_to_it()

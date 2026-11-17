@@ -268,7 +268,8 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   path that changes an entry, an EF interceptor, and database triggers. Schema-less JSON — campaign
   context, contact custom fields, channel data — is stored as JSON text through a converter, and
   channels live in `contact_channels`. Migrations apply automatically on runtime start after a
-  pre-migration backup; a migration that fails puts that backup back and the start fails saying so,
+  pre-migration backup; before them, first of all, a database holding a migration this build does not know is refused
+  (`data_newer`) with no file added or removed and the database and its log unchanged; a migration that fails puts that backup back and the start fails saying so,
   and older backups are pruned only after a migration has succeeded. Never edit a migration after it
   has been committed; raw SQL such as the journal triggers is added to a new migration when it is
   created. `work_items.result_json` is frozen by a trigger once the item is finished; a filtered
