@@ -381,6 +381,10 @@ desktop's chat, and within the campaign's daily ceiling; the choice is theirs an
 becomes `awaiting_approval`, no attempt is made, and nothing is sent to the provider.
 The decision is a person's — a session must not make it, and the runtime refuses a decision that does not name
 one. Presenting what is waiting, and recording what the person says about it, is **`approvals-and-questions`**.
+When the person asks where to see what is waiting or what became of the work, name what works: **Needs you** in Jason
+Desktop, or `jason approval list` and `jason decision list` in a terminal, and `jason workitem list --campaign
+<campaign-id>` for the queue. Do not send them to the browser tab `jason ui open` opens: without Jason Desktop it opens
+on the Demo, or, while something waits, on one page of text that says so; neither is their work.
 
 **A question a role raised is answered by recording the answer, and the campaign's manager acts on it.** When the
 person answers a question a launched role raised, you record it with `jason decision answer` and the person as
@@ -449,6 +453,31 @@ jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
 refuse with `no_route` when no current route reaches the plugin that learned the person's identifier, and take
 `--plugin` for a person several providers know. A `conversation.get` work item reads the thread as work instead, and
 keeps what it read as the item's result (`docs/contracts/operations/conversation.get.md`).
+
+**Asked whether somebody answered, read now.** "Is there a reply?" is a question about the provider at this moment, and
+Jason's own next read may be minutes away, so never answer "nothing yet" and wait for it. Read the person's threads
+yourself, then the one that moved, and say what you saw:
+
+```
+jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
+```
+
+Tell the person that this is what the provider shows now and that such a read records nothing. Whether Jason has
+noticed the reply is in the lines below, the two kinds of journal line and the responder's items, so read those too
+and say what they hold:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder
+```
+
+Where it has not, Jason notices the reply at its own next read and only then wakes its responder. How long that takes
+depends on how the campaign's plugin is read: a plugin that reads an account's events is read every
+`Dispatcher:EventsCadenceSeconds` (600 by default, `docs/events.md`), and any other plugin by the inbound scan, every
+`Inbound:SyncSeconds` after the last read of the campaign started (900 by default, `docs/inbound-sync.md`). The
+person's settings may differ; say which way the campaign is read and give the number only as the default unless you
+have read theirs.
 
 **A line that names no person is read by its thread.** Its `contact_id` is null when no contact, or more than one, is
 pinned at that plugin with the identifier the provider gave, so there is nobody to name to `jason contact thread`.

@@ -1,6 +1,7 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach } from 'vitest';
 import { setPlace } from '../platform/places';
+import { forgetEdits } from '../screens/attention/reasking';
 import { takeUnanswered } from './fake-api';
 
 // Times on the page are the person's clock; a test reads them in one zone on every machine.
@@ -14,6 +15,9 @@ configure({ asyncUtilTimeout: 15_000 });
 // A request the test recorded no answer for fails it, even when the screen caught the error and showed a failure.
 // A screen test runs in the desktop's own window unless it says otherwise; the page names its place as it starts.
 beforeEach(() => setPlace('window'));
+
+// A message edited on the page is the page's own memory, which a test starts without.
+beforeEach(() => forgetEdits());
 
 afterEach(() => {
     cleanup();

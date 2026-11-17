@@ -106,8 +106,11 @@ shows before anything is typed and what you send waits, while the window is open
   channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
   that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
-  for that mailbox now, in the words an agent's chat's card uses below. With nothing waiting it says you are caught up
-  and offers **Open your agents**.
+  for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
+  chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
+  and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
+  if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
+  agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
   channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,

@@ -5,7 +5,6 @@ import {
     approvalGate,
     keptAndMissing,
     readingSentence,
-    stillAsking,
     toApprovalCard,
     toQuestionCard,
     unreadSentence,
@@ -60,13 +59,6 @@ describe('a question’s card in a chat', () => {
 describe('what the chat keeps between reads', () => {
     it('keeps the whole reads of the rows still listed, and names the rows not read yet', () => {
         expect(keptAndMissing({ a: 1, b: 2 }, ['b', 'c'])).toEqual({ kept: { b: 2 }, missing: ['c'] });
-    });
-
-    it('says an edited message is asked again until another approval of its work item is listed', () => {
-        const reasked = [{ workItemId: 'wi_1', approvalId: 'apr_1' }];
-        expect(stillAsking(reasked, [rows[0]!])).toEqual(reasked);
-        expect(stillAsking(reasked, [])).toEqual(reasked);
-        expect(stillAsking(reasked, [{ ...rows[0]!, id: 'apr_7' }])).toEqual([]);
     });
 });
 
