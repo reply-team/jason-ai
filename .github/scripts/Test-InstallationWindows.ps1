@@ -504,7 +504,7 @@ switch ($Step) {
     }
 
     'SilentUpdateLegs' {
-        # Three legs over an open 0.48.2 window, each from 0.48.2 installed and its window open on the Demo:
+        # Three legs over an open window of the previous release, each from it installed and its window open on the Demo:
         #  1. the hung state, run 8's: --updated /S --force-run with the window left open; at 120 s the setup's own windows,
         #     then the setup and the window ended, for the next leg;
         #  2. the arguments 0.49's window-less update hands the installer (updates.ts quitAndInstall(true, false):
@@ -521,18 +521,16 @@ switch ($Step) {
         }
         function From-Previous {
             if (Test-Path -LiteralPath $carried) {
-                if ((Read-Version $carried) -ne '0.48.2' -or $true) {
-                    $entry = @(Get-JasonUninstallEntries)
-                    if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
-                        $null = Wait-Program $Matches['file'] @($Matches['arguments'])
-                        Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
-                    }
+                $entry = @(Get-JasonUninstallEntries)
+                if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
+                    $null = Wait-Program $Matches['file'] @($Matches['arguments'])
+                    Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
                 }
             }
             $installed = Wait-Program $old @('/S')
             if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
             $null = Open-Window
-            Say "0.48.2 $(Read-Version $carried) installed, its window open; a runtime answering: $(Test-Runtime)"
+            Say "the previous release $(Read-Version $carried) installed, its window open; a runtime answering: $(Test-Runtime)"
         }
         function Run-Leg([string] $name, [string[]] $arguments, [int] $quitAfter, [int] $describeAt) {
             Write-Host "--- $name"
@@ -542,7 +540,7 @@ switch ($Step) {
             if ($quitAfter -ge 0) {
                 if ($quitAfter -gt 0) { Start-Sleep -Seconds $quitAfter }
                 End-Window
-                Say "$name - the 0.48.2 window ended $([int]((Get-Date) - $started).TotalSeconds) s after the setup started"
+                Say "$name - the previous release's window ended $([int]((Get-Date) - $started).TotalSeconds) s after the setup started"
             }
             $ended = Get-Date
             if ($describeAt -gt 0 -and -not $installer.WaitForExit($describeAt * 1000)) {
