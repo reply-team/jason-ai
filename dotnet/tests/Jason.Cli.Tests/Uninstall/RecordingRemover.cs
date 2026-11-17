@@ -276,7 +276,7 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
 
     public int? ParentOf(int pid) => Parents.TryGetValue(pid, out var parent) ? parent : null;
 
-    public void UnloadLaunchAgent(string file) => Record("launchagent.unload", file);
+    public void UnloadLaunchAgent(string file, string label) => Record("launchagent.unload", file);
 
     public void DeletePreferences(string domain) => Record("preferences.delete", domain);
 

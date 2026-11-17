@@ -294,19 +294,6 @@ public static class MachineSetup
                 return (RuntimeStates.Running, false);
             }
 
-            // The stop owes a start, and this routine starts none: the note says so from before the stop, so a routine killed
-            // part-way, or a caller that quits before it starts one, leaves it standing for the next to find. A runtime's own
-            // start removes it.
-            string? unwritten = null;
-            try
-            {
-                StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
-            }
-            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-            {
-                unwritten = refused.Message;
-            }
-
             using var said = new StringWriter();
             var quiet = env with { Out = said };
             var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
@@ -319,14 +306,24 @@ public static class MachineSetup
             var exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
             if (exit != ExitCodes.Success)
             {
-                // Still running, so no start is owed.
-                StartOwed.Remove(env.Paths);
-
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
                 var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
                 Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason system resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
                 return (RuntimeStates.WouldNotStop, true);
+            }
+
+            // The stop owes a start, and this routine starts none: the note says so from the moment the runtime is gone, so a
+            // routine killed after it, or a caller that quits before it starts one, leaves it standing for the next to find.
+            // A runtime's own start removes it, and so does a person's own `jason runtime stop`.
+            string? unwritten = null;
+            try
+            {
+                StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                unwritten = refused.Message;
             }
 
             Done.Add($"Stopped the runtime that ran from {old}.");

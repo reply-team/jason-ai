@@ -22,6 +22,37 @@ public class RuntimeStopCommandTests
         Assert.Equal(CliErrors.NoDescriptor, RuntimeVerbs.Envelope(output.ToString()).Code);
     }
 
+    /// <summary>
+    /// A person's own <c>jason runtime stop</c> says no start is wanted, so a standing note that one is owed goes with a stop
+    /// that succeeded; a stop with nothing to stop leaves it, and the routines that stop on their own account leave it too.
+    /// </summary>
+    [Fact]
+    public async Task A_persons_own_stop_takes_back_the_note_that_a_start_is_owed()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+
+        var (idle, _, _) = RuntimeVerbs.Environment(dir, RuntimeVerbs.NeverCalled(), new FakeProcessControl());
+        Assert.Equal(ExitCodes.RuntimeUnavailable, await CliApp.RunAsync(["runtime", "stop"], idle, Ct));
+        Assert.True(File.Exists(dir.Paths.StartOwedFile), "a stop with nothing to stop took the note back");
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var handler = new FakeHandler(_ =>
+        {
+            File.Delete(dir.Paths.DescriptorFile);
+            return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (routine, _, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await RuntimeStopCommand.RunAsync(routine, human: false, Ct, RuntimeVerbs.ShortTimeout, RuntimeVerbs.Poll));
+        Assert.True(File.Exists(dir.Paths.StartOwedFile), "a routine's own stop took the note back");
+
+        dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (person, _, _) = RuntimeVerbs.Environment(dir, handler, new FakeProcessControl());
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop"], person, Ct));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "a person's own stop left the note that a start is owed");
+    }
+
     [Fact]
     public async Task A_runtime_that_goes_away_prints_the_acknowledgement_and_exits_0()
     {

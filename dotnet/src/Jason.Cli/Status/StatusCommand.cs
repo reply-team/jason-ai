@@ -85,7 +85,7 @@ public static class StatusCommand
 
         Where jason install stopped the runtime to retire an older install and none has started since, the
         runtime check says so, from the note it left in the data directory (run/start-owed.json), which a
-        runtime's own start removes; its repair is jason runtime start.
+        runtime's own start removes, and a jason runtime stop of your own; its repair is jason runtime start.
 
         The roles check reads the same profiles, and Roles:DefaultExecutionProfile as the runtime would:
         JASON_Roles__DefaultExecutionProfile over the settings file, the value as written, with nothing trimmed;

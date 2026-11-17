@@ -113,14 +113,17 @@ public static class UninstallCommand
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
             ai.jasonharness.desktop.ShipIt).
           - macOS, just before the application and only where it goes: its own state under ~/Library, each
-            where found as itself: Preferences/ai.jasonharness.desktop.plist (through defaults delete, then
-            the file), Saved Application State/ai.jasonharness.desktop.savedState, Caches/
-            ai.jasonharness.desktop (Squirrel's), HTTPStorages/ai.jasonharness.desktop and its
-            .binarycookies, WebKit/ai.jasonharness.desktop, Logs/Jason (Electron's default log folder) and
-            Application Support/ai.jasonharness.desktop (jason install's record of the profiles it created).
-            Electron's default profile, Application Support/Jason, which may hold the person's work, goes only
-            with --purge-data and only where it carries Chromium's Local State file. --keep-application
-            keeps all of it.
+            where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through
+            defaults delete, then the file), Saved Application State/ai.jasonharness.desktop.savedState,
+            Caches/ai.jasonharness.desktop (Squirrel's), HTTPStorages/ai.jasonharness.desktop and its
+            .binarycookies, WebKit/ai.jasonharness.desktop and Application Support/ai.jasonharness.desktop
+            (jason install's record of the profiles it created). Application Support/Jason and Logs/Jason,
+            named after the application and not its identifier, are named and left, --purge-data or not:
+            nothing in them proves them Jason Desktop's, which keeps its own in the data directory.
+            --keep-application keeps all of it. Where the home directory is / or not the account's own,
+            nothing under ~/Library is looked at, and the plan says so.
+          - with the data kept: run/start-owed.json, the note that a start is owed, since with this
+            installation taken off none is.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
             Windows: a waiter is started, which once this command has ended runs the application's own
             uninstaller silently on its folder, so the folder goes after this ends; the report says so.
@@ -264,7 +267,7 @@ public static class UninstallCommand
         {
             // The plan is read after the application that asked has quit, so it is the machine as the uninstall finds it.
             await WaitForAsync(env, options, cancellationToken).ConfigureAwait(false);
-            desktop = DesktopRemoval.Read(env, carried, places, options.KeepApplication, options.PurgeData);
+            desktop = DesktopRemoval.Read(env, carried, places, options.KeepApplication);
             if (DesktopOpen(env, desktop, places, options) is { } open)
             {
                 return Refuse(env, options.Human, CliErrors.DesktopRunning, open);
@@ -550,6 +553,11 @@ public static class UninstallCommand
         foreach (var cache in desktop.Caches)
         {
             env.Out.WriteLine($"  the updater's cache, {cache}");
+        }
+
+        foreach (var place in desktop.ApplicationState)
+        {
+            env.Out.WriteLine($"  the application's own state, {place}, just before the application");
         }
 
         foreach (var line in desktop.Left)

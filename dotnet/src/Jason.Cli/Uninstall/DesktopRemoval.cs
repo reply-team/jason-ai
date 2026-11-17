@@ -63,15 +63,10 @@ public sealed record DesktopPlan(
     /// <summary>
     /// macOS: what the application of this bundle identifier leaves under <c>~/Library</c> as its own state, found there,
     /// each going with the application, just before it: its preferences, saved window state, caches, HTTP and WebKit
-    /// storage, Electron's default log folder and its support folder. Never where the application stays.
+    /// storage and its support folder. Never where the application stays, nor where the home is <c>/</c> or not the
+    /// account's own.
     /// </summary>
     public IReadOnlyList<string> ApplicationState { get; init; } = [];
-
-    /// <summary>
-    /// macOS: what under <c>~/Library</c> may hold the person's work, Electron's default profile folder: listed, and removed,
-    /// only under <c>--purge-data</c>, and never where the application stays.
-    /// </summary>
-    public IReadOnlyList<string> PersonsState { get; init; } = [];
 }
 
 /// <summary>
@@ -239,7 +234,7 @@ public static partial class DesktopRemoval
     private static bool Named(string folder, string name) => string.Equals(Path.GetFileName(folder), name, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Reads what the application's steps will take off. It changes nothing.</summary>
-    public static DesktopPlan Read(CliEnvironment env, CarriedExecutable carried, SetupPlaces places, bool keepApplication, bool purgeData = false)
+    public static DesktopPlan Read(CliEnvironment env, CarriedExecutable carried, SetupPlaces places, bool keepApplication)
     {
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(carried);
@@ -276,8 +271,7 @@ public static partial class DesktopRemoval
             Caches(places),
             left)
         {
-            ApplicationState = fate == ApplicationFates.Deleted ? ApplicationStateOf(places) : [],
-            PersonsState = purgeData && fate == ApplicationFates.Deleted ? PersonsStateOf(places, left) : [],
+            ApplicationState = fate == ApplicationFates.Deleted ? ApplicationStateOf(places, left) : [],
         };
     }
 
@@ -287,9 +281,6 @@ public static partial class DesktopRemoval
     /// default log folder (<c>~/Library/Logs/YourAppName</c>).
     /// </summary>
     public const string ElectronName = "Jason";
-
-    /// <summary>The file Chromium keeps at the top of a profile folder, which marks Electron's own.</summary>
-    public const string ChromiumProfileMarker = "Local State";
 
     /// <summary>
     /// The application's own state under <c>~/Library</c>, by its bundle identifier, each found as itself (never through a
@@ -307,40 +298,66 @@ public static partial class DesktopRemoval
             Path.Combine(library, "HTTPStorages", Identifier),
             Path.Combine(library, "HTTPStorages", Identifier + ".binarycookies"),
             Path.Combine(library, "WebKit", Identifier),
-            Path.Combine(library, "Logs", ElectronName),
             Installation.CreatedProfiles.SupportFolder(home),
         ];
+    }
+
+    /// <summary>
+    /// The two folders under <c>~/Library</c> Electron names by the application's name and not its identifier: its default
+    /// profile and log folders. Jason Desktop has kept its profile and logs in the data directory since its first release
+    /// (<c>app.setPath('userData')</c>, <c>setAppLogsPath</c>, before Electron is ready), so no file in them is one only Jason
+    /// Desktop writes, and nothing proves them Jason's rather than another application's named Jason: they are named and
+    /// left, never removed.
+    /// </summary>
+    public static IReadOnlyList<string> ElectronNamedPlaces(string home) =>
+    [
+        Path.Combine(home, "Library", "Application Support", ElectronName),
+        Path.Combine(home, "Library", "Logs", ElectronName),
+    ];
+
+    /// <summary>
+    /// Why the steps under <c>~/Library</c> are skipped, or null: a home of <c>/</c>, whose <c>Library</c> is the system's, and
+    /// a home that is not this account's own, as the account database names it. An account home that cannot be read decides
+    /// nothing.
+    /// </summary>
+    public static string? LibraryRefusal(string home, string? accountHome)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(home));
+        if (string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full) ?? string.Empty), StringComparison.Ordinal))
+        {
+            return $"The home directory is {home}, whose Library is the system's, so nothing under {Path.Combine(home, "Library")} was looked at or removed.";
+        }
+
+        if (accountHome is not null && !string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetFullPath(accountHome)), StringComparison.Ordinal))
+        {
+            return $"The home directory is {home}, which is not this account's own ({accountHome}), so nothing under {Path.Combine(home, "Library")} was looked at or removed.";
+        }
+
+        return null;
     }
 
     /// <summary>The preferences file macOS keeps for this bundle identifier.</summary>
     public static string PreferencesFile(string home) => Path.Combine(home, "Library", "Preferences", Identifier + ".plist");
 
-    /// <summary>Electron's default profile folder, <c>~/Library/Application Support/Jason</c>.</summary>
-    public static string ElectronDefaultProfile(string home) => Path.Combine(home, "Library", "Application Support", ElectronName);
-
-    private static IReadOnlyList<string> ApplicationStateOf(SetupPlaces places) =>
-        places.Platform is SetupSystem.MacOs ? [.. ApplicationStatePlaces(places.Home).Where(Present)] : [];
-
-    private static IReadOnlyList<string> PersonsStateOf(SetupPlaces places, List<string> left)
+    private static IReadOnlyList<string> ApplicationStateOf(SetupPlaces places, List<string> left)
     {
         if (places.Platform is not SetupSystem.MacOs)
         {
             return [];
         }
 
-        var profile = ElectronDefaultProfile(places.Home);
-        if (!Present(profile))
+        if (LibraryRefusal(places.Home, places.AccountHome()) is { } refusal)
         {
+            left.Add(refusal);
             return [];
         }
 
-        if (File.Exists(Path.Combine(profile, ChromiumProfileMarker)))
+        foreach (var named in ElectronNamedPlaces(places.Home).Where(Present))
         {
-            return [profile];
+            left.Add($"{named} is named after the application, not its identifier, and holds no file only Jason Desktop writes (it keeps its own in the data directory), so it may be another application's: left as it is, --purge-data or not. Delete it yourself if it is Jason's.");
         }
 
-        left.Add($"{profile} carries no Chromium '{ChromiumProfileMarker}' file, so it is not known to be Jason Desktop's profile: left as it is, --purge-data or not.");
-        return [];
+        return [.. ApplicationStatePlaces(places.Home).Where(Present)];
     }
 
     /// <summary>There as itself: a file or a folder, never a link, which is left as it stands.</summary>
@@ -634,7 +651,7 @@ public static partial class DesktopRemoval
                     // would end it, so the file alone goes.
                     if (plan.ApplicationFate == ApplicationFates.Deleted)
                     {
-                        env.Removes!.UnloadLaunchAgent(item);
+                        env.Removes!.UnloadLaunchAgent(item, Identifier);
                     }
 
                     env.Removes!.RemoveFile(item);
@@ -861,14 +878,14 @@ public static partial class DesktopRemoval
     }
 
     /// <summary>
-    /// macOS, just before the bundle: the application's own state under <c>~/Library</c>, and under <c>--purge-data</c> the
-    /// profile that may hold the person's work. The preferences go through the preferences system first
+    /// macOS, just before the bundle: the application's own state under <c>~/Library</c>. The preferences go through the
+    /// preferences system first
     /// (<c>defaults delete</c>), which would otherwise write back a copy it holds, then as a file.
     /// </summary>
     private static void RemoveApplicationState(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> problems)
     {
-        foreach (var (place, what) in plan.ApplicationState.Select(place => (place, "the application's own state"))
-            .Concat(plan.PersonsState.Select(place => (place, "Electron's default profile, on --purge-data"))))
+        const string what = "the application's own state";
+        foreach (var place in plan.ApplicationState)
         {
             try
             {

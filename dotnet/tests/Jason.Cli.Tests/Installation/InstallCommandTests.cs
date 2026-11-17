@@ -396,35 +396,34 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Contains(report.GetProperty("left").EnumerateArray(), line => line.GetString()!.Contains("`jason runtime start`", StringComparison.Ordinal)
             && line.GetString()!.Contains(_data.Paths.StartOwedFile, StringComparison.Ordinal));
 
-        // The stop owes a start, and the note says so from before the runtime was asked to stop until one starts.
-        Assert.True(owedAtTheStop, "the note that a start is owed was not written before the stop");
+        // The stop owes a start, and the note says so from the moment the runtime is gone until one starts.
+        Assert.False(owedAtTheStop, "the note was written before the runtime had stopped");
         Assert.Equal(Path.Combine(_data.Paths.Root, "run", "start-owed.json"), _data.Paths.StartOwedFile);
         Assert.Equal("{\"stopped_at\":\"2026-11-17T15:05:35Z\"}", File.ReadAllText(_data.Paths.StartOwedFile));
         Assert.Equal((true, (DateTimeOffset?)clock.GetUtcNow()), StartOwed.Read(_data.Paths));
     }
 
     /// <summary>
-    /// A routine killed part-way through the stop leaves on disk what it had written: the note stands while the runtime is
-    /// being stopped, before anything of the routine could start one. The routine is held there, the disk read, and then let
-    /// go with its token cancelled, as an abandoned one; nothing it does after takes the note back.
+    /// A routine killed after the stop leaves on disk what it had written by then: the note stands from the moment the
+    /// runtime is found gone, before anything of the routine could start one. The routine is held at its next act after the
+    /// stop (the logon registration's read), the disk read, and then let go with its token cancelled, as an abandoned one;
+    /// nothing it does after takes the note back.
     /// </summary>
     [Fact]
-    public async Task A_routine_killed_part_way_through_the_stop_leaves_the_start_owed()
+    public async Task A_routine_killed_after_the_stop_leaves_the_start_owed()
     {
         var old = PlantMacCommandLineInstall();
         Directory.CreateDirectory(_data.Paths.Root);
         _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
         var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
         using var killed = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        var atTheStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var letGo = new ManualResetEventSlim();
+        var held = new HeldRegistrar(letGo, Ct);
         var handler = new FakeHandler(request =>
         {
             var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
             if (operation == Operations.SystemShutdown)
             {
-                atTheStop.TrySetResult();
-                letGo.Wait(Ct);
                 File.Delete(_data.Paths.DescriptorFile);
                 processes.RunningPids.Clear();
                 return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD"));
@@ -435,13 +434,14 @@ public sealed class InstallCommandTests : IDisposable
                 : RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD"));
         });
         var (env, _) = Environment(MacPlaces(), Carried());
-        env = env with { HttpHandler = handler, Processes = processes };
+        env = env with { HttpHandler = handler, Processes = processes, Autostart = held };
 
         var routine = Task.Run(() => InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), killed.Token), Ct);
-        await atTheStop.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        await held.Reached.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
 
-        // What a kill here leaves: the note, on disk, and no runtime started.
-        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "the note that a start is owed was not on disk while the runtime was being stopped");
+        // What a kill here leaves: the runtime gone, the note on disk, and no runtime started.
+        Assert.Empty(processes.RunningPids);
+        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "the note that a start is owed was not on disk once the runtime had stopped");
         Assert.Empty(processes.Launches);
 
         killed.Cancel();
@@ -457,6 +457,27 @@ public sealed class InstallCommandTests : IDisposable
 
         Assert.True(StartOwed.Read(_data.Paths).Stands, "the note that a start is owed was taken back with no runtime started");
         Assert.Empty(processes.Launches);
+    }
+
+    /// <summary>A logon registrar that holds whoever reads it until it is let go: the routine's next act after the stop.</summary>
+    private sealed class HeldRegistrar(ManualResetEventSlim letGo, CancellationToken cancellation) : IAutostartRegistrar
+    {
+        public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public AutostartPlatform Platform => AutostartPlatform.MacOs;
+
+        public AutostartState Read()
+        {
+            Reached.TrySetResult();
+            letGo.Wait(cancellation);
+            return new AutostartState(false, [], null);
+        }
+
+        public void Apply(AutostartRegistration registration)
+        {
+        }
+
+        public AutostartRemoval Remove(AutostartRegistration registration) => new(false, false);
     }
 
     /// <summary>

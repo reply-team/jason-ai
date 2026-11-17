@@ -187,7 +187,7 @@ public interface IInstallationRemover
     /// macOS: unloads the LaunchAgent at <paramref name="file"/> from this login session before the file goes, so it is not
     /// left loaded until the person logs out. One not loaded is not an error.
     /// </summary>
-    void UnloadLaunchAgent(string file)
+    void UnloadLaunchAgent(string file, string label)
     {
     }
 
@@ -807,7 +807,7 @@ public static class InstallationRemovers
             // Its answer is not read: a domain with nothing in it is the ordinary case, and the file goes either way.
             try
             {
-                Jason.Cli.Autostart.AutostartRegistrars.Run(["/usr/bin/defaults", "delete", domain], LaunchctlLimit);
+                Jason.Cli.Autostart.AutostartRegistrars.Run(["/usr/bin/defaults", "delete", domain], Jason.Cli.Autostart.LaunchdJobs.Limit);
             }
             catch (Jason.Cli.Autostart.AutostartException)
             {
@@ -815,30 +815,19 @@ public static class InstallationRemovers
             }
         }
 
-        /// <summary>How long <c>launchctl unload</c> is waited for before the uninstall goes on without its answer.</summary>
-        internal static readonly TimeSpan LaunchctlLimit = TimeSpan.FromSeconds(10);
-
-        public void UnloadLaunchAgent(string file)
+        public void UnloadLaunchAgent(string file, string label)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(file);
+            ArgumentException.ThrowIfNullOrWhiteSpace(label);
             if (!OperatingSystem.IsMacOS())
             {
                 return;
             }
 
             // Without -w, which marks the label disabled for good ("Overrides the Disabled key and sets it to ... true for
-            // the ... unload subcommand"), and would keep a later Open at Login from starting it. Its answer is not read: a
-            // job that is not loaded is the ordinary case, and the file goes either way. Waited for ten seconds at most,
-            // so a launchctl that does not answer does not hold the uninstall.
-            try
-            {
-                Jason.Cli.Autostart.AutostartRegistrars.Run(["/bin/launchctl", "unload", file], LaunchctlLimit);
-            }
-            catch (Jason.Cli.Autostart.AutostartException)
-            {
-                // launchctl could not be started, or did not answer in time; the file still goes, and the job with the
-                // login session.
-            }
+            // the ... unload subcommand"), and would keep a later Open at Login from starting it; then by its label. Each
+            // waited for ten seconds at most, and neither's answer read: a job that is not loaded is the ordinary case.
+            Jason.Cli.Autostart.LaunchdJobs.TakeOut([[Jason.Cli.Autostart.LaunchdJobs.Launchctl, "unload", file]], label);
         }
 
         public void RemoveExtractedLibraries(string directory)

@@ -117,6 +117,20 @@ public static class UninstallRunner
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
             }
 
+            // The note that a start is owed, where the data is kept: with this installation taken off no start is owed, and a
+            // later install would otherwise start a runtime for an old jason install's stop. A purge takes it with the rest.
+            if (!purge && File.Exists(env.Paths.StartOwedFile))
+            {
+                if (Installation.StartOwed.Remove(env.Paths))
+                {
+                    done.Add($"Removed {env.Paths.StartOwedFile}, the note that a start was owed: with this installation taken off, none is.");
+                }
+                else
+                {
+                    problems.Add($"{env.Paths.StartOwedFile}, the note that a start is owed, could not be removed: delete it, or a later install of Jason Desktop starts a runtime at its first start.");
+                }
+            }
+
             if (desktop is not null && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);

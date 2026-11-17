@@ -19,6 +19,24 @@ public static class RuntimeStopCommand
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DefaultPoll = TimeSpan.FromMilliseconds(200);
 
+    /// <summary>
+    /// The verb a person types: the stop, and on success the note that a start is owed taken back, since a runtime this
+    /// person stopped is not one any start owes them (<see cref="Installation.StartOwed"/>). The routines that stop a runtime
+    /// on their own account call <see cref="RunAsync"/>, which leaves it.
+    /// </summary>
+    public static async Task<int> RunAsDeliberateAsync(CliEnvironment env, bool human, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+
+        var exit = await RunAsync(env, human, cancellationToken).ConfigureAwait(false);
+        if (exit == ExitCodes.Success)
+        {
+            Installation.StartOwed.Remove(env.Paths);
+        }
+
+        return exit;
+    }
+
     public static async Task<int> RunAsync(CliEnvironment env, bool human, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null)
     {
         ArgumentNullException.ThrowIfNull(env);
