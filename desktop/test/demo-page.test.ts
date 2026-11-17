@@ -32,6 +32,8 @@ import {
     demoStripAt,
     demoStripSheets,
     demoBeforeReady,
+    demoBandSheet,
+    demoSwitchMost,
     demoLinkGestureMs,
     demoLinkMark,
     demoLinkOpener,
@@ -553,7 +555,7 @@ test('the host-resolver rule is set by a Demo start alone, before ready, and a L
 // ---- Our switch's place and page --------------------------------------------------------------------------------------
 
 test('the page’s strip is fixed: right of its 284-pixel sidebar, 38 high; on macOS the window’s band of 26 lies under the page', () => {
-    assert.deepEqual(demoGeometry, { sidebar: 284, strip: 38, macBand: 26 });
+    assert.deepEqual(demoGeometry, { sidebar: 284, strip: 38, macBand: 26, macCut: 177 });
     assert.equal(demoGeometry.macBand, titleBand, 'the band is the window frame’s own');
     assert.equal(demoGeometry.strip, stripHeight, 'the strip is as high as the caption buttons on Windows');
 });
@@ -577,18 +579,18 @@ test('elsewhere than macOS the page fills the content and our switch covers the 
     assert.deepEqual(demoLayout('linux', 200, 100).switch, { x: 284, y: 0, width: 0, height: 38 });
 });
 
-test('on macOS the page and our switch start at the window’s top edge, over our band, which drags the top 26 but under the switch’s view', () => {
+test('on macOS the page and our switch start at the window’s top edge, over our band, which drags the top 26 left of the switch’s span', () => {
     assert.deepEqual(demoLayout('darwin', 1440, 900), {
         page: { x: 0, y: 0, width: 1440, height: 900 },
         switch: { x: 284, y: 0, width: 1156, height: 38 },
         band: { x: 0, y: 0, width: 1440, height: 26 },
-        cut: { x: 284, y: 0, width: 1156, height: 26 },
+        cut: { x: 1263, y: 0, width: 177, height: 26 },
     });
     assert.deepEqual(demoLayout('darwin', 900, 600), {
         page: { x: 0, y: 0, width: 900, height: 600 },
         switch: { x: 284, y: 0, width: 616, height: 38 },
         band: { x: 0, y: 0, width: 900, height: 26 },
-        cut: { x: 284, y: 0, width: 616, height: 26 },
+        cut: { x: 723, y: 0, width: 177, height: 26 },
     });
     // The page and the switch stand where they stand on Windows and Linux, to the pixel.
     for (const [width, height] of [[900, 600], [1440, 900], [2600, 1600]] as const) {
@@ -600,26 +602,49 @@ test('on macOS the page and our switch start at the window’s top edge, over ou
     }
 });
 
-// The band never drags over our switch's view: the span cut out of it is that view's own rectangle, as the same layout
-// gives it, clipped to the band's height, so no guess about the switch's width in the Mac's font is made. Inside the
-// view its own page decides: everything of it drags but the switch itself, as on Windows and Linux.
-test('on macOS the span cut out of the band is our switch’s view’s rectangle within the band, at every width', () => {
-    for (const [width, height] of [[900, 600], [1440, 900]] as const) {
-        const at = demoLayout('darwin', width, height);
-        const band = at.band!;
-        const ours = at.switch;
-        assert.deepEqual(at.cut, { x: ours.x, y: band.y, width: ours.width, height: Math.min(ours.height, band.height) }, `${width}`);
-        // What still drags of the band: from the window's left edge to the switch view's left edge, over the sidebar.
-        assert.equal(at.cut!.x + at.cut!.width, band.x + band.width, `${width}: the cut runs to the window's right edge`);
-        assert.equal(at.cut!.x, demoGeometry.sidebar);
-    }
-    // The band's own page cuts out the same rectangle: from the sidebar's right edge to the window's, as high as the band.
-    const css = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8').replace(/\s+/g, ' ');
-    assert.ok(css.includes(`.cut { position: absolute; top: 0; left: ${demoGeometry.sidebar}px; right: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: no-drag; }`));
-    // Inside its rectangle the switch's page drags but for the switch.
+// The control lies inside the span cut out of the band by construction: the switch's own stylesheet fixes its greatest
+// extent (a width it is clipped to, its offset from the right edge, its shadow), whatever font draws its words, and the
+// span is those together, from one definition the layout and the band's sheet both use. Everything left of the span
+// drags by the window's own contents: over the sidebar and over the Demo strip.
+test('on macOS the span cut out of the band holds the switch at its greatest extent, and the band drags left of it, at every width', () => {
+    assert.deepEqual(demoSwitchMost, { width: 160, offset: 12, shadow: 5 });
+    assert.equal(demoGeometry.macCut, demoSwitchMost.width + demoSwitchMost.offset + demoSwitchMost.shadow);
+    // The switch page's own numbers, read from its stylesheet: a change there that the span does not hold turns this red.
     const ours = readFileSync(join(root, 'shell', 'demo-switch.html'), 'utf8').replace(/\s+/g, ' ');
+    const rule = /\.switch \{([^}]*)\}/.exec(ours)?.[1] ?? '';
+    const segments = /\.switch a, \.switch span \{([^}]*)\}/.exec(ours)?.[1] ?? '';
+    const ring = /\.switch a:focus-visible \{([^}]*)\}/.exec(ours)?.[1] ?? '';
+    const most = Number(/max-width: (\d+)px;/.exec(rule)?.[1]);
+    const shadow = Number(/box-shadow: 0 0 0 (\d+)px #fff4d6;/.exec(rule)?.[1]);
+    const offset = Number(/body \{[^}]*padding-right: calc\((\d+)px \+ 100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, 100vw\)\);/.exec(ours)?.[1]);
+    // The box is at most that wide, its padding inside it, and its segments shrink to fit and hide what would not, so
+    // no font draws the control wider; beyond the box only the shadow is drawn, the focus ring within it.
+    assert.ok(/box-sizing: border-box;/.test(rule) && /padding: 2px;/.test(rule), 'the greatest width is the box’s, its padding inside');
+    assert.ok(/min-width: 0; overflow: hidden;/.test(segments), 'the segments shrink and clip their words');
+    const ringOut = Number(/outline: (\d+)px solid/.exec(ring)?.[1]) + Number(/outline-offset: (\d+)px;/.exec(ring)?.[1]) - 2;
+    assert.ok(most > 0 && shadow > 0 && offset > 0 && ringOut <= shadow, 'each number is read, and the ring stays within the shadow');
+    assert.ok(demoGeometry.macCut >= most + offset + shadow, `the span (${demoGeometry.macCut}) holds the control at its greatest extent`);
+    // Well above what the control measures today, in Segoe UI: its two segments, its padding.
+    assert.ok(most >= 1.5 * demoStrip.ours.normal, 'its greatest width is half again what it measures');
+    // Inside the span the switch's page drags but for the switch.
     assert.ok(/html, body \{[^}]*-webkit-app-region: drag;/.test(ours));
     assert.ok(/\.switch \{ -webkit-app-region: no-drag;/.test(ours));
+    for (const [width, height] of [[900, 600], [1440, 900]] as const) {
+        const at = demoLayout('darwin', width, height);
+        assert.deepEqual(at.cut, { x: width - demoGeometry.macCut, y: 0, width: demoGeometry.macCut, height: demoGeometry.macBand }, `${width}`);
+        // What drags by the band: from the window's left edge to the span, over the sidebar and the Demo strip.
+        const drags = { from: at.band!.x, to: at.cut!.x };
+        assert.deepEqual(drags, { from: 0, to: width - 177 }, `${width}`);
+        assert.ok(drags.to - demoGeometry.sidebar >= 400, `${width}: a long stretch of the Demo strip drags`);
+    }
+    // At the window's least width (900) the band still drags 439 pixels of the Demo strip.
+    assert.equal(demoLayout('darwin', 900, 600).cut!.x - demoGeometry.sidebar, 439);
+    // The band's sheet makes the cut its right span, from the same number; until it lands, the cut is the whole band.
+    assert.equal(demoBandSheet, '.cut { left: auto !important; width: 177px !important; }');
+    const band = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8').replace(/\s+/g, ' ');
+    assert.ok(band.includes(`.cut { position: absolute; top: 0; left: 0; right: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: no-drag; }`));
+    // Windows and Linux have no band and no span.
+    for (const platform of ['win32', 'linux'] as const) assert.equal(demoLayout(platform, 900, 600).cut, null);
 });
 
 test('on macOS the page’s view gets a sheet that moves its sidebar’s contents below the traffic lights; elsewhere its sheet is as it was', () => {
@@ -647,12 +672,8 @@ test('on macOS the page’s view gets a sheet that moves its sidebar’s content
         ],
     );
     assert.equal(demo.split('desktop-mac').length - 1, 2, 'the class is named nowhere else, by no script either');
-    const mac = demoLayout('darwin', 1440, 900);
-    assert.deepEqual(
-        { x: mac.band!.x, y: mac.band!.y, width: mac.cut!.x - mac.band!.x, height: mac.band!.height },
-        { x: 0, y: 0, width: 284, height: 26 },
-        'what the band drags is the page’s own drag region for a Mac window',
-    );
+    const mac = demoLayout('darwin', 900, 600);
+    assert.ok(mac.band!.x === 0 && mac.band!.y === 0 && mac.cut!.x > 284 && mac.band!.height === 26, 'the band drags the page’s own drag region for a Mac window, and more');
     // Its strip starts at the top of its view, right of the sidebar, and holds no control once the embedding script has
     // taken its switch out, so the band's drag region over its top 26 pixels takes no click meant for the page.
     assert.ok(demo.includes('.jc-console #mode-bar{box-sizing:border-box;z-index:20;white-space:nowrap;-webkit-app-region:drag;align-items:center;gap:8px;height:38px;padding:0 12px 0 16px;font-size:13px;display:flex;position:fixed;top:0;left:284px;right:0}'));
@@ -685,9 +706,9 @@ test('our switch’s view is transparent, so the page’s strip shows through it
 
 // The band's document is the window's own contents, which fill the whole window under the two views, and Electron asks
 // the window's own contents first whether a point is in a drag region, whichever view is drawn over it: so only the band's
-// own height drags, never the document as a whole, and never under our switch's view. The page covers it whole;
+// own height drags, never the document as a whole, and never where our switch stands. The page covers it whole;
 // what it paints before the page is shown is the page's own ground, never the Demo strip's yellow.
-test('our band on macOS holds no script and nothing to click, is the page’s own ground, and drags over its own height alone, never under our switch’s view', () => {
+test('our band on macOS holds no script and nothing to click, is the page’s own ground, and drags over its own height alone, never where our switch stands', () => {
     const page = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8');
     assert.ok(!/<script|on[a-z]+\s*=|javascript:|href=|<a\b|<button|<input/i.test(page), 'no script and nothing to follow');
     assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
@@ -702,8 +723,8 @@ test('our band on macOS holds no script and nothing to click, is the page’s ow
     assert.equal(css.split('-webkit-app-region').length - 1, 2, 'one drag region and its cut-out');
     assert.ok(css.includes(`body { margin: 0; height: ${demoGeometry.macBand}px; position: relative; -webkit-app-region: drag; }`), 'the body drags, as high as the band');
     assert.ok(
-        css.includes(`.cut { position: absolute; top: 0; left: ${demoGeometry.sidebar}px; right: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: no-drag; }`),
-        'our switch’s view’s rectangle within it does not drag',
+        css.includes(`.cut { position: absolute; top: 0; left: 0; right: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: no-drag; }`),
+        'until the desktop’s sheet narrows it to the switch’s span, none of it drags',
     );
     const body = page.slice(page.indexOf('<body>'), page.indexOf('</body>') + '</body>'.length);
     assert.equal(body, '<body><div class="cut"></div></body>', 'the body holds the cut-out and nothing else');
@@ -715,7 +736,13 @@ test('the Demo window takes the window’s own frame, loads our band under its v
     assert.ok(demo.includes('...frameOf(process.platform, nativeTheme.shouldUseDarkColors),'));
     assert.ok(!/demoMacFrame/.test(main));
     const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
-    assert.ok(window.includes("if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);"));
+    // The band is loaded, then narrowed by its sheet, before either view is loaded.
+    const band = window.indexOf('await window.webContents.loadFile(bandFile);');
+    const sheet = window.indexOf("await window.webContents.insertCSS(demoBandSheet, { cssOrigin: 'user' });");
+    const views = window.indexOf('await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);');
+    assert.ok(band > 0 && band < sheet && sheet < views);
+    assert.ok(window.slice(window.lastIndexOf("if (deps.platform === 'darwin') {", band), band).length < 60, 'on macOS alone');
+    assert.equal(window.split('insertCSS(').length - 1, 1, 'the band’s sheet is the window’s one');
     assert.ok(window.includes('const at = demoLayout(deps.platform, width, height);'));
 });
 

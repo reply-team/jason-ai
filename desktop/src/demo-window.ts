@@ -6,15 +6,16 @@
  * under the two views, but on macOS, where they hold our band (`shell/demo-band.html`, no script), the window's drag
  * region over its top 26 pixels, under the page that starts at the window's top edge. Electron asks the window's own
  * contents first whether a point is in a drag region, whichever view is drawn over it, so the band's document drags
- * over the band's height alone, and never over our switch's view. The page's view also carries the desktop's link on
- * the repository's address in the page's note, and that address alone leaves it, to the person's browser
- * (`demoRepository`).
+ * over the band's height alone, and never over the span where our switch stands. The page's view also carries the
+ * desktop's link on the repository's address in the page's note, and that address alone leaves it, to the person's
+ * browser (`demoRepository`).
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    demoBandSheet,
     demoLayout,
     demoLinkOpener,
     demoLinkScript,
@@ -111,7 +112,11 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     window.on('closed', close);
     try {
         // On macOS the band, the window's own contents under the views, drags the window; elsewhere they stay empty.
-        if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);
+        if (deps.platform === 'darwin') {
+            await window.webContents.loadFile(bandFile);
+            // The band's drag region narrowed to all but the switch's span, before either view is loaded.
+            await window.webContents.insertCSS(demoBandSheet, { cssOrigin: 'user' });
+        }
         await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);
     } catch {
         window.contentView.removeChildView(ours);

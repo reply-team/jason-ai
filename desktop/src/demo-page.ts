@@ -547,35 +547,42 @@ export function demoLinkOpener(open: () => void, gestureAt: () => number | null,
  * over the left end of the page's sidebar. The page cannot know it is on a Mac and keeps nothing clear for them, so
  * there the desktop puts a sheet of its own into the page's view (`demoMacSheet`) that moves the sidebar's contents
  * down by the band's height, and the window is dragged by a band of ours under the views (`shell/demo-band.html`): the
- * window's own contents, whose body is the drag region over the window's top 26 pixels, but for our switch's view's
- * rectangle within them (`cut`), so the band drags from the window's left edge to the switch view's left edge, over
- * the sidebar, and never over the switch's view. Inside its own rectangle the switch's page decides what drags and
- * what takes a click, as on Windows and Linux: everything of it drags but the switch itself. On Windows and Linux the
- * caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width free, told
- * it in its own view's coordinates.
+ * window's own contents, whose body is the drag region over the window's top 26 pixels, from the window's left edge to
+ * the span at its right end where our switch stands (`macCut`), over the sidebar and over the Demo strip up to that
+ * span. The span holds the switch by construction: the switch's page fixes the control's greatest extent in its own
+ * stylesheet (`demoSwitchMost`: its box's greatest width, which its segments shrink to fit, its offset from the right
+ * edge, its shadow), so no font draws it wider, and the span is those three together. Inside the span the switch's page
+ * decides what drags and what takes a click, as on Windows and Linux: everything of it drags but the switch itself. On
+ * Windows and Linux the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves
+ * their width free, told it in its own view's coordinates.
  */
-export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
+export const demoSwitchMost = { width: 160, offset: 12, shadow: 5 } as const;
+
+export const demoGeometry = {
+    sidebar: 284,
+    strip: stripHeight,
+    macBand: titleBand,
+    macCut: demoSwitchMost.width + demoSwitchMost.offset + demoSwitchMost.shadow,
+} as const;
 
 export interface DemoLayout {
     page: Rectangle;
     switch: Rectangle;
     /** Our band on macOS, under the views: the window's drag region over its top `macBand` pixels; `null` elsewhere. */
     band: Rectangle | null;
-    /** The band's part that does not drag: our switch's view's rectangle within it; `null` where there is no band. */
+    /** The band's part that does not drag: its right `macCut` pixels, where our switch stands; `null` with no band. */
     cut: Rectangle | null;
 }
 
 /** Pure: the Demo's views in a window's content area of this size, on this platform. */
 export function demoLayout(platform: NodeJS.Platform, width: number, height: number): DemoLayout {
     const mac = platform === 'darwin';
-    const ours = { x: demoGeometry.sidebar, y: 0, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip };
-    const band = { x: 0, y: 0, width, height: demoGeometry.macBand };
+    const cut = Math.min(width, demoGeometry.macCut);
     return {
         page: { x: 0, y: 0, width, height },
-        switch: ours,
-        band: mac ? band : null,
-        // Our switch's view clipped to the band: the band never drags over it.
-        cut: mac ? { x: ours.x, y: ours.y, width: ours.width, height: Math.min(ours.height, band.height) } : null,
+        switch: { x: demoGeometry.sidebar, y: 0, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
+        band: mac ? { x: 0, y: 0, width, height: demoGeometry.macBand } : null,
+        cut: mac ? { x: width - cut, y: 0, width: cut, height: demoGeometry.macBand } : null,
     };
 }
 
@@ -589,6 +596,14 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
  * is the window's (`noDragSheet`), and the band drags those same pixels.
  */
 export const demoMacSheet = `.jc-console .side { padding-top: ${demoGeometry.macBand}px !important; }`;
+
+/**
+ * The band's sheet on macOS, of the user's origin and important, put into the band's document once it is loaded and
+ * before either view is: the span cut out of its drag region is its right `macCut` pixels, the one number the layout
+ * uses too. Until it lands the band's own stylesheet cuts out the whole band, so at no moment does the band drag where
+ * the switch stands.
+ */
+export const demoBandSheet = `.cut { left: auto !important; width: ${demoGeometry.macCut}px !important; }`;
 
 /**
  * The page's strip on Windows and Linux. The caption buttons stand over the strip's right end, and the page cannot know

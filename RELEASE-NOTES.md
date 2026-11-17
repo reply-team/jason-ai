@@ -25,8 +25,8 @@ replaces the title and the body together.
 
 - **The Mac Demo window has no empty strip at its top.** On macOS the Demo page now starts at the window's top edge,
   as it does on Windows and Linux. The empty white strip above the yellow Demo line is gone. The window's buttons
-  stand over the top of the sidebar, and the sidebar's contents start below them. You still move the window by its
-  top strip, and the **Demo | Live** switch at its right end takes your click.
+  stand over the top of the sidebar, and the sidebar's contents start below them. You move the window by its top
+  strip, up to a little way before the **Demo | Live** switch, and the switch takes your click.
 
 ## Upgrading from 0.48.3
 
