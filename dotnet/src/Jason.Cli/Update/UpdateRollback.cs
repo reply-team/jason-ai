@@ -100,6 +100,20 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                     $"The update to {ledger.ToVersion} stands at '{step}': Jason Desktop never kept the application or handed it to its installer, so there is nothing to put back. `jason update apply` carries the update on.");
         }
 
+        // At kept the command line has changed nothing yet, and where the installer has not put the new version in place the
+        // application is still the version the update left: a step by hand that put the kept copy back would put that version
+        // over itself.
+        if (Application is not null
+            && ledger.Step == UpdateStep.Kept
+            && CarriedExecutable.Of(ledger.InstallPath)?.Version is { } carriedNow
+            && SemanticVersion.TryParse(carriedNow, out var stillThere)
+            && stillThere == ledger.FromVersion)
+        {
+            throw new UpdateException(
+                UpdateCodes.NothingToRollBack,
+                $"The update to {ledger.ToVersion} stands at 'kept', and the application is {ledger.FromVersion} already: Jason Desktop's installer has not put {ledger.ToVersion} in place, so there is nothing to put back. `jason update apply` carries the update on.");
+        }
+
         if (Application is null && !File.Exists(ledger.PreviousPath))
         {
             throw new UpdateException(

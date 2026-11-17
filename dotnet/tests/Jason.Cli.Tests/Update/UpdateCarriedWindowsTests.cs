@@ -122,7 +122,7 @@ public sealed class UpdateCarriedWindowsTests
     [InlineData("window_never_answers", UpdateCodes.DesktopUnanswered)]
     public async Task Every_end_before_the_download_leaves_everything_as_it_was(string outcome, string code)
     {
-        var (installation, desktop, carried) = Windows();
+        var (installation, desktop, carried) = Windows(outcome == "desktop_hangs" ? ShortDesktopWait : null);
         using var _ = installation;
         using var __ = desktop;
         var original = File.ReadAllText(installation.InstallPath);
@@ -971,11 +971,22 @@ public sealed class UpdateCarriedWindowsTests
         return 0;
     }
 
-    private static (FakeInstallation Installation, FakeDesktop Desktop, CarriedUpdate Carried) Windows()
+    private static (FakeInstallation Installation, FakeDesktop Desktop, CarriedUpdate Carried) Windows(TimeSpan? desktopWait = null)
     {
         var (installation, desktop) = FakeDesktop.Carried(system: SetupSystem.Windows);
-        return (installation, desktop, Handing(installation, id => Path.Combine(installation.Root, "store", id, ReleaseAssets.ExecutableName)));
+        return (installation, desktop, Handing(installation, id => Path.Combine(installation.Root, "store", id, ReleaseAssets.ExecutableName), desktopWait: desktopWait));
     }
+
+    /// <summary>
+    /// The bound on the Desktop's start in these rows, which covers everything from the request to the start's end - the
+    /// drain, the stop, the look, the move and the go among them - so a row that does not test the bound must not race it: 30
+    /// seconds, past anything a loaded machine takes for those steps. A row that needs the bound to pass names
+    /// <see cref="ShortDesktopWait"/>.
+    /// </summary>
+    private static readonly TimeSpan DesktopWaitOutOfTheWay = TimeSpan.FromSeconds(30);
+
+    /// <summary>The bound for a row about a Desktop's start that never ends: short, since the row waits it out whole.</summary>
+    private static readonly TimeSpan ShortDesktopWait = TimeSpan.FromMilliseconds(600);
 
     private static CarriedUpdate Handing(
         FakeInstallation installation,
@@ -984,7 +995,8 @@ public sealed class UpdateCarriedWindowsTests
         Action<UpdateLedger>? writes = null,
         Action<string, string>? mover = null,
         TimeSpan? installWait = null,
-        TimeSpan? othersEnd = null) =>
+        TimeSpan? othersEnd = null,
+        TimeSpan? desktopWait = null) =>
         new(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.Windows)
         {
             MovesItself = true,
@@ -995,7 +1007,7 @@ public sealed class UpdateCarriedWindowsTests
             Mover = mover ?? ((from, to) => File.Move(from, to)),
             InstallWait = installWait ?? TimeSpan.FromMilliseconds(200),
             OthersEnd = othersEnd ?? TimeSpan.FromMilliseconds(100),
-            DesktopWait = TimeSpan.FromMilliseconds(600),
+            DesktopWait = desktopWait ?? DesktopWaitOutOfTheWay,
             WindowAnswers = TimeSpan.FromMilliseconds(100),
             WindowWait = TimeSpan.FromMilliseconds(300),
             Poll = TimeSpan.FromMilliseconds(10),

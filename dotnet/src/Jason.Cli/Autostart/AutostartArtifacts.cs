@@ -132,6 +132,43 @@ public static class AutostartArtifacts
     }
 
     /// <summary>
+    /// The removal <c>jason uninstall</c> makes, which leaves no mark for the name: on macOS the job is unloaded through its
+    /// file without <c>-w</c>, and the disabled state an earlier removal with <c>-w</c> left for the label is cleared in this
+    /// account's login domain. Every other platform's removal is the one <c>disable</c> makes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>-w</c> "Overrides the Disabled key and sets it to false or true for the load and unload subcommands respectively",
+    /// and that state outlives the file: "Once a service is disabled, it cannot be loaded in the specified domain until it is
+    /// once again enabled. This state persists across boots of the device." A label left disabled after an uninstall would
+    /// refuse the job a later install registers under the same label. <c>disable</c> keeps <c>-w</c>: there a person asks that
+    /// the runtime not start at logon, and where its file could not be deleted the disabled state is what keeps it from
+    /// loading at the next login; its <c>enable</c> loads with <c>-w</c>, which sets the state back to false.
+    /// </para>
+    /// <para>
+    /// The clearing is <c>launchctl enable gui/&lt;uid&gt;/ai.jason.runtime</c>: <c>enable</c> "may only target services
+    /// within the system domain or user and user-login domains", and <c>gui/&lt;uid&gt;</c> is "another form of the
+    /// <c>login</c> specifier", the user-login domain "created when the user logs in at the GUI" (launchctl(1)). Composed only
+    /// where the account's user id is known; enabling a label that is not disabled changes nothing.
+    /// </para>
+    /// </remarks>
+    /// <param name="registration">The registration as a removal composes it.</param>
+    /// <param name="userId">This account's user id on macOS; null where it is not known.</param>
+    public static AutostartRegistration LeavingNoMark(AutostartRegistration registration, uint? userId)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        return registration.Platform is not AutostartPlatform.MacOs
+            ? registration
+            : registration with
+            {
+                Remove = [["launchctl", "unload", registration.ArtifactPath]],
+                Forget = userId is { } account
+                    ? [[LaunchdJobs.Launchctl, "enable", $"gui/{account.ToString(CultureInfo.InvariantCulture)}/{registration.Name}"]]
+                    : [],
+            };
+    }
+
+    /// <summary>
     /// The command that asks a machine whether this account has anything registered. It depends on the platform
     /// and, on Windows, on the account the task is named for — never on the data directory, which is what lets a
     /// registrar ask before it knows one: what it is about to read may have been registered by another

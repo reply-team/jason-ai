@@ -43,6 +43,41 @@ public sealed class AutostartRunLimitTests : IDisposable
     }
 
     /// <summary>
+    /// The uninstall's removal on macOS: unloaded through its file without <c>-w</c>, removed by its label, and the label's
+    /// disabled state cleared in the account's login domain, each with the bound, before the file goes; and where the file is
+    /// gone already, as an earlier version's <c>disable</c> left it, with the label disabled, the label is still cleared.
+    /// </summary>
+    [Fact]
+    public void The_uninstalls_removal_unloads_without_w_and_clears_the_labels_disabled_state_file_or_none()
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var plist = AutostartArtifacts.ArtifactPath(AutostartPlatform.MacOs, home, string.Empty);
+        Directory.CreateDirectory(Path.GetDirectoryName(plist)!);
+        File.WriteAllText(plist, "<plist/>");
+        var ran = new List<(string Command, bool FileThere, TimeSpan? Limit)>();
+        var registrar = new LaunchAgentRegistrar((command, limit) =>
+        {
+            ran.Add((string.Join(" ", command), File.Exists(plist), limit));
+            return (0, string.Empty, string.Empty);
+        }, home);
+        var registration = AutostartArtifacts.LeavingNoMark(
+            AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone") with { ArtifactPath = plist },
+            501);
+
+        Assert.True(registrar.Remove(registration).Registration);
+        Assert.Equal(
+            [$"launchctl unload {plist}", "/bin/launchctl remove ai.jason.runtime", "/bin/launchctl enable gui/501/ai.jason.runtime"],
+            ran.Select(run => run.Command));
+        Assert.All(ran, run => Assert.True(run.FileThere, $"{run.Command} ran after the file went"));
+        Assert.All(ran, run => Assert.Equal(LaunchdJobs.Limit, run.Limit));
+        Assert.False(File.Exists(plist), "the agent's file is still there");
+
+        ran.Clear();
+        Assert.False(registrar.Remove(registration).Registration);
+        Assert.Equal(["/bin/launchctl remove ai.jason.runtime", "/bin/launchctl enable gui/501/ai.jason.runtime"], ran.Select(run => run.Command));
+    }
+
+    /// <summary>
     /// A job left loaded with its file gone is taken out by its label all the same, and a job that is not loaded, which
     /// launchctl answers with a failure, or a launchctl that cannot be run, is no error.
     /// </summary>
