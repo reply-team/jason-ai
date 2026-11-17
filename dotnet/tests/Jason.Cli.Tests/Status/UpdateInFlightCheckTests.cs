@@ -1,4 +1,5 @@
 using Jason.Cli.Commands;
+using Jason.Cli.Installation;
 using Jason.Cli.Status;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Tests.Process;
@@ -108,6 +109,46 @@ public sealed class UpdateInFlightCheckTests
         Assert.Contains($"An update from 0.1.0 to 9.9.9 stopped at '{said}' and is not finished", update.Fact, StringComparison.Ordinal);
         Assert.Contains("nothing has been replaced", update.Fact, StringComparison.Ordinal);
         Assert.DoesNotContain("rollback", update.Fact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A carried update the Desktop's installer landed after the jason that asked for it ended with the go given: the record
+    /// stands before the swap and the application names the new version already. Both checks name the finish, which starts
+    /// the runtime; where the application is still the old version the check is the one before the swap.
+    /// </summary>
+    [Theory]
+    [InlineData(UpdateStep.Stopped, "9.9.9", true)]
+    [InlineData(UpdateStep.Kept, "9.9.9", true)]
+    [InlineData(UpdateStep.Stopped, "0.1.0", false)]
+    public async Task A_carried_update_the_installer_landed_is_named_with_the_finish_that_starts_the_runtime(UpdateStep step, string application, bool landed)
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        var ledger = Ledger(dir, step);
+        Directory.CreateDirectory(Path.GetDirectoryName(ledger.InstallPath)!);
+        File.WriteAllText(ledger.InstallPath, $"jason {application}");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(ledger.InstallPath)!, CarriedExecutable.RecordName), $"{{ \"version\": \"{application}\" }}");
+        ledger.Write(new UpdatePaths(dir.Paths).Ledger);
+
+        await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output), Ct);
+
+        var report = StatusCommandTests.Read(output);
+        var runtime = Assert.Single(report.Checks, check => check.Name == "runtime");
+        var update = Assert.Single(report.Checks, check => check.Name == "update");
+        Assert.Equal(CheckState.Failed, update.State);
+        Assert.Equal("jason update apply", update.Fix);
+        if (landed)
+        {
+            Assert.Equal(CheckState.Failed, runtime.State);
+            Assert.Equal("jason update apply", runtime.Fix);
+            Assert.All((string[])[runtime.Fact, update.Fact], fact =>
+                Assert.Contains("Jason Desktop's installer has put 9.9.9 in place already: `jason update apply` finishes it and starts the runtime.", fact, StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Contains("nothing has been replaced", update.Fact, StringComparison.Ordinal);
+            Assert.DoesNotContain("in place already", runtime.Fact, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
