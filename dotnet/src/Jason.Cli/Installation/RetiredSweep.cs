@@ -104,6 +104,6 @@ public static partial class RetiredSweep
         }
     }
 
-    [GeneratedRegex("^\\.?jason-retired-[0-9a-f]{32}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^\\.?jason-retired-[0-9a-f]{32}\\z", RegexOptions.CultureInvariant)]
     private static partial Regex Name();
 }
