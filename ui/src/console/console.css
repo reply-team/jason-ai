@@ -250,9 +250,18 @@
     font-size: 15px;
     font-weight: 650;
 }
+/* Every row of the card is one line that wraps: a note spans the card, and an account's state and acts keep their own
+   sizes beside its name, instead of the three columns a page of settings gives a row. */
 .jc-console .reply-card .setrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
     padding-left: 0;
     padding-right: 0;
+}
+.jc-console .reply-card .setrow .grow {
+    flex: 1 1 240px;
 }
 .jc-console .reply-card .reply-why {
     margin: 4px 0 0;

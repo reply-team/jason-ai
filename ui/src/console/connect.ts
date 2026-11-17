@@ -1064,7 +1064,7 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                         and your LinkedIn account to it, and Jason sends from them once you approve.
                     </p>
                 </div>
-                ${state.cli.found ? html`<button class="btn p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
+                ${state.cli.found ? html`<button class="${state.signedIn ? 'btn' : 'btn p'}" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
             </div>
             ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${
@@ -1089,7 +1089,13 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
             <div class="setrow reply-state">
                 <div class="grow">
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
-                    <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
+                    ${
+                        state.signedIn
+                            ? html`<span class="meta"
+                                  >${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span
+                              >`
+                            : null
+                    }
                 </div>
             </div>
             ${

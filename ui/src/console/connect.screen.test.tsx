@@ -379,6 +379,9 @@ describe('the Reply card, its acts', () => {
             'Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox and your LinkedIn account to it, and Jason sends from them once you approve.',
         );
         expect(words(card)).toContain('Not signed in');
+        expect(words(card)).not.toContain('Jason uses this sign-in');
+        expect(words(card)).not.toContain('Jason does not use it yet');
+        expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(true);
         expect(within(card).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
         const key = within(card).getByPlaceholderText('Or paste a Reply API key');
         expect(key.getAttribute('type')).toBe('password');
@@ -391,6 +394,8 @@ describe('the Reply card, its acts', () => {
         renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
         const card = replyCard(await openConnect());
         expect(words(card)).toContain('Signed in as ann@example.test');
+        expect(words(card)).toContain('Jason uses this sign-in');
+        expect(within(card).getByRole('button', { name: 'Sign in with Reply' }).classList.contains('p')).toBe(false);
         expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
     });
 
