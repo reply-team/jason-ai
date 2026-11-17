@@ -309,18 +309,34 @@ public class DesktopDenyListTests
     }
 
     /// <summary>
-    /// A noun the deny list refuses verb by verb is named by nothing on the allow list: so its bare noun, its help and a
-    /// verb added under it later are never let through by the host, and go to the person's card unless refused outright.
+    /// The notification noun is refused verb by verb, not as a whole, so a verb added under it later must be classified
+    /// before it is green: every verb the CLI has under the noun is in the confined table and on the deny list in both its
+    /// forms, the command and the operation of the same name, and every operation of the noun is denied too. The allow
+    /// list names nothing under the noun, so its bare noun and its help go to the person's card.
     /// </summary>
     [Fact]
-    public void The_allow_list_names_nothing_under_the_notification_noun()
+    public void Every_verb_under_the_notification_noun_is_confined_and_denied_in_both_forms()
     {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var verbs = Assert.Single(root.Subcommands, command => command.Name == "notification").Subcommands.Select(verb => verb.Name).ToList();
+        var operations = typeof(Operations).GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .Where(name => name.StartsWith("notification.", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(verbs);
+        Assert.Equal(verbs.Select(verb => "notification." + verb.Replace('-', '_')).Order(StringComparer.Ordinal), operations.Order(StringComparer.Ordinal));
+        var unclassified = verbs.Select(verb => "notification " + verb)
+            .Where(verb => !ConfinedVerbs.Table.Any(entry => entry.Command == verb) || !DenyList().Contains(verb))
+            .Concat(operations.Where(operation => !DeniedOperations().Contains(operation)))
+            .ToList();
+        Assert.True(unclassified.Count == 0, $"Not confined and denied: {string.Join(", ", unclassified)}");
+
         var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
         var allowed = File.ReadAllLines(file).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#'));
-
         Assert.DoesNotContain(allowed, verb => verb == "notification" || verb.StartsWith("notification ", StringComparison.Ordinal));
-        Assert.Contains("notification enable", DenyList());
-        Assert.Contains("notification disable", DenyList());
     }
 
     [Fact]

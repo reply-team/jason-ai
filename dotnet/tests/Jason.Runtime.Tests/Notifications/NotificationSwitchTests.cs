@@ -36,6 +36,9 @@ public class NotificationSwitchTests
     /// <summary>A provider plugin installed and loaded: never a channel, since it declares no delivery contract.</summary>
     private const string Other = "crm";
 
+    /// <summary>A notification plugin that leaves the delivery contract out, as its kind may: never a channel either.</summary>
+    private const string Mute = "mute";
+
     /// <summary>The settings file the runtime starts from: layout, a comment and a setting of the same section the writer must keep.</summary>
     private const string Original =
         "{\n" +
@@ -150,12 +153,13 @@ public class NotificationSwitchTests
 
     /// <summary>
     /// An installed notification plugin that is not named under <c>Notifications:Plugins</c> is no channel: it has no
-    /// binding, and the switch cannot make one. Both acts refuse it and say what is missing; nothing is written.
+    /// binding, and the switch cannot make one. Both acts refuse it, each saying what is true for it: turning it on is
+    /// naming it with its binding, and there is nothing yet to turn off. Nothing is written.
     /// </summary>
     [Theory]
-    [InlineData(Operations.NotificationEnable)]
-    [InlineData(Operations.NotificationDisable)]
-    public async Task An_installed_plugin_nobody_named_is_not_configured_and_nothing_is_written(string operation)
+    [InlineData(Operations.NotificationEnable, "The plugin pager is a notification plugin, but nothing names it under Notifications:Plugins:pager in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.")]
+    [InlineData(Operations.NotificationDisable, "The plugin pager is a notification plugin, but nothing names it under Notifications:Plugins:pager in the settings file, so it is no channel yet and there is nothing to turn off.")]
+    public async Task An_installed_plugin_nobody_named_is_not_configured_and_nothing_is_written(string operation, string message)
     {
         await using var api = await StartAsync();
         var bytes = File.ReadAllBytes(api.Paths.UserSettingsFile);
@@ -164,9 +168,7 @@ public class NotificationSwitchTests
 
         Assert.Equal("notification_channel_not_configured", error.Code);
         Assert.False(error.Retryable);
-        Assert.Equal(
-            $"The plugin {Ready} is a notification plugin, but nothing names it under Notifications:Plugins:{Ready} in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
-            error.Message);
+        Assert.Equal(message, error.Message);
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("channel", "not_named"), (detail.Field, detail.Code));
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
@@ -174,13 +176,14 @@ public class NotificationSwitchTests
     }
 
     /// <summary>
-    /// An installed plugin nobody named that is not a notification plugin is told so rather than advised to be named: one
-    /// of another kind would only be refused again as declaring no delivery contract, and one that is not loaded cannot be
-    /// told apart until it is, which no setting of a channel changes.
+    /// An installed plugin nobody named that could not deliver is told so rather than advised to be named: one that does
+    /// not declare the delivery contract would only be refused again, and one that is not loaded cannot be told apart until
+    /// it is, which no setting of a channel changes. A notification plugin that leaves the contract out is told the same.
     /// </summary>
     [Theory]
-    [InlineData(Operations.NotificationEnable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
-    [InlineData(Operations.NotificationDisable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
+    [InlineData(Operations.NotificationEnable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm does not declare the delivery contract (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
+    [InlineData(Operations.NotificationDisable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm does not declare the delivery contract (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
+    [InlineData(Operations.NotificationEnable, Mute, NotAttemptedReasons.NotDeclared, "The plugin mute does not declare the delivery contract (a notification plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
     [InlineData(Operations.NotificationEnable, Provider, NotAttemptedReasons.Unavailable, "The plugin fake-provider is installed but is not loaded, or cannot run on this machine (executable_missing), so it is no notification channel yet; the list of plugins says why. Once it is loaded, a notification plugin becomes a channel when Notifications:Plugins:fake-provider in the settings file names it with its binding.")]
     public async Task An_installed_plugin_that_is_no_notification_plugin_is_told_why_not_how_to_name_it(string operation, string channel, string reason, string message)
     {
@@ -201,7 +204,7 @@ public class NotificationSwitchTests
     /// </summary>
     [Theory]
     [InlineData("gone", "The notification channel gone cannot be turned on: its plugin is not loaded, or cannot run on this machine (not loaded). No setting of the channel changes that: the list of plugins says why the plugin is not loaded; once it is, try again.")]
-    [InlineData(Other, "The notification channel crm cannot be turned on: its plugin is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract). No setting makes it one: Notifications:Plugins:crm in the settings file names a plugin that cannot deliver a notification.")]
+    [InlineData(Other, "The notification channel crm cannot be turned on: its plugin does not declare the delivery contract (a provider plugin declaring no version 1 of the delivery contract). No setting of the channel changes that: Notifications:Plugins:crm in the settings file names a plugin that cannot deliver a notification.")]
     public async Task A_named_channel_that_cannot_be_turned_on_says_what_would_change_that(string channel, string message)
     {
         var settings = $"{{\n    \"Dispatcher\": {{ \"Enabled\": false }},\n    \"Notifications\": {{ \"Plugins\": {{ \"{channel}\": {{ \"Enabled\": false }} }} }}\n}}\n";
@@ -437,6 +440,7 @@ public class NotificationSwitchTests
                 File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false));
                 TestPlugins.InstallFakeProvider(paths);
                 TestPlugins.Write(paths, Other, TestPlugins.Manifest(Other), Delivers);
+                TestPlugins.Write(paths, Mute, $"manifest_version: 1\nid: {Mute}\nversion: 1.0.0\nkind: notification\ncontracts:\n  protocol: [1]\n", Delivers);
                 TestPlugins.Write(paths, Ready, Notifier(Ready, string.Empty), Delivers);
                 TestPlugins.Write(
                     paths,

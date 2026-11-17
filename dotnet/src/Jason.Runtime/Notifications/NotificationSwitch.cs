@@ -172,7 +172,8 @@ public sealed class NotificationSwitch(
             throw DomainErrors.NotificationChannelNotNamed(
                 channel,
                 what is NotAttemptedReasons.Unavailable or NotAttemptedReasons.NotDeclared ? what : "not_named",
-                said);
+                said,
+                on);
         }
 
         if (!on)

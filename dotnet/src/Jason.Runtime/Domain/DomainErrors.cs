@@ -440,24 +440,29 @@ public static class DomainErrors
             $"No notification channel is called {channel}: a channel is the toast, or a notification plugin installed in this data directory, by its id. jason runtime status --human says each on its Notify: line.");
 
     /// <summary>
-    /// An installed plugin nothing names under <c>Notifications:Plugins</c>, said by what the plugin is: a notification
-    /// plugin is no channel until it is named with the binding that says where it delivers, which a switch cannot write; a
-    /// plugin of another kind never is one, so naming it would only be refused again; and one that is not loaded cannot be
-    /// told apart until it is. The word under the field <c>channel</c> is <c>not_named</c>, <c>not_declared</c> or
-    /// <c>unavailable</c>, as the readiness of a named channel would say. Not retryable: something else changes first.
+    /// An installed plugin nothing names under <c>Notifications:Plugins</c>, said by what the plugin is: one that could
+    /// deliver is no channel until it is named with the binding that says where it delivers, which a switch cannot write,
+    /// so there is nothing yet to turn off and turning it on is naming it; one that does not declare the delivery contract
+    /// — a plugin of another kind, or a notification plugin that leaves it out — never is one, so naming it would only be
+    /// refused again; and one that is not loaded cannot be told apart until it is. The word under the field
+    /// <c>channel</c> is <c>not_named</c>, <c>not_declared</c> or <c>unavailable</c>, as the readiness of a named channel
+    /// would say. Not retryable: something else changes first.
     /// </summary>
-    public static DomainException NotificationChannelNotNamed(string channel, string reason, string? detail)
+    public static DomainException NotificationChannelNotNamed(string channel, string reason, string? detail, bool on)
     {
         var (message, said) = reason switch
         {
             Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
-                $"The plugin {channel} is not a notification plugin ({detail}), so it is no notification channel, and naming it in the settings file would not make it one.",
+                $"The plugin {channel} does not declare the delivery contract ({detail}), so it is no notification channel, and naming it in the settings file would not make it one.",
                 detail ?? reason),
             Contracts.Notifications.NotAttemptedReasons.Unavailable => (
                 $"The plugin {channel} is installed but is not loaded, or cannot run on this machine ({detail}), so it is no notification channel yet; the list of plugins says why. Once it is loaded, a notification plugin becomes a channel when Notifications:Plugins:{channel} in the settings file names it with its binding.",
                 detail ?? reason),
-            _ => (
+            _ when on => (
                 $"The plugin {channel} is a notification plugin, but nothing names it under Notifications:Plugins:{channel} in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
+                "Nothing names the plugin under Notifications:Plugins."),
+            _ => (
+                $"The plugin {channel} is a notification plugin, but nothing names it under Notifications:Plugins:{channel} in the settings file, so it is no channel yet and there is nothing to turn off.",
                 "Nothing names the plugin under Notifications:Plugins."),
         };
         return new(StatusCodes.Status409Conflict, "notification_channel_not_configured", message, details: [new ErrorDetail("channel", reason, said)]);
@@ -477,8 +482,8 @@ public static class DomainErrors
                 "its plugin is not loaded, or cannot run on this machine",
                 "No setting of the channel changes that: the list of plugins says why the plugin is not loaded; once it is, try again."),
             Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
-                "its plugin is not a notification plugin",
-                $"No setting makes it one: Notifications:Plugins:{channel} in the settings file names a plugin that cannot deliver a notification."),
+                "its plugin does not declare the delivery contract",
+                $"No setting of the channel changes that: Notifications:Plugins:{channel} in the settings file names a plugin that cannot deliver a notification."),
             _ => (
                 "its binding does not satisfy the plugin's own schema",
                 $"Mend Notifications:Plugins:{channel}:Binding in the settings file, then try again."),

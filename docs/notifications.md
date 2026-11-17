@@ -293,7 +293,8 @@ jason journal list --kind notification_sent
 - `jason runtime status --human` says what each channel did last, on its `Notify:` line — including, before anything
   has been sent, a toast with no desktop.
 - `jason status` has an optional `notifications` check: off is `absent`; a channel that failed, a named plugin that was
-  not attempted, and a runtime in session 0 are `failed`, each saying why; a person's own setting — notifications
+  not attempted, a channel that is on and cannot deliver (its `readiness` is not `ready`), and a runtime in session 0
+  are `failed`, each saying why; a person's own setting — notifications
   switched off, a machine with no desktop by design — is never `failed`. Being optional, it never makes an
   installation unready.
 - The runtime's log (`~/.jason/logs/`, compact JSON, one line per event) has a line for each failed channel. It keeps

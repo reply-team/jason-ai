@@ -535,8 +535,8 @@ question, and for one whose `inbound_reply` anybody but the runtime changed befo
   settings file, and while it is `false` an enable is `409` `notifications_off`, which names it. `404`
   `notification_channel_not_found` is a name that is neither the toast nor a plugin installed in the data directory;
   `409` `notification_channel_not_configured` is an installed plugin nothing names under `Notifications:Plugins` —
-  `not_named` for a notification plugin, `not_declared` for a plugin of another kind, which naming would not make a
-  channel, `unavailable` for one that is not loaded — or an enable of a named one a notification would not be tried on,
+  `not_named` for a notification plugin, `not_declared` for a plugin that does not declare the delivery contract, which
+  naming would not make a channel, `unavailable` for one that is not loaded — or an enable of a named one a notification would not be tried on,
   `unavailable`, `not_declared` or `binding_invalid`, the reason under the field `channel` and what would change it in
   the message. The settings file's own
   refusals and `setting_not_in_force` are answered as for `profile.set_default`. Each change of the channel in force is
