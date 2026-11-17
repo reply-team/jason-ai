@@ -1793,194 +1793,388 @@ jobs:
           [ "$(grep -c '# added by jason install' "$HOME/.profile")" = "1" ] || { echo "the uninstall took away the line another tool is found through"; exit 1; }
           grep -q 'holds more than this installer writes there' uninstall.json || { cat uninstall.json; exit 1; }
 
-  install-ps1:
-    name: install.ps1 on windows
-    needs: [version, build-test-publish]
+  # Jason as one installation on Windows, proven on a build of this tree wherever every check runs (the release's pull
+  # request, a push to main that runs every check, and a run started by hand): this tree's jason packaged as a release
+  # packages it, Jason Desktop built around it as a test build (JASON_DESKTOP_TEST_BUILD: nothing signed, no publisher an
+  # update must carry, and nothing else changed), then installed by install.ps1 as an agent runs it, uninstalled from a
+  # terminal, installed over the previous release's Jason Desktop as its updater runs an installer, uninstalled from
+  # Installed apps, and the previous release's command-line Jason updated by its own `jason update apply`. Each act is
+  # followed by what it must have left, and what remains after each uninstall is compared with a listing taken before
+  # anything was installed; the listings are uploaded, and they are what a person reads. The scripts are
+  # .github/scripts/Test-InstallationWindows.ps1, which the release's proof job runs on the signed packages too.
+  union-windows:
+    name: one installation on windows
+    needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
-    # Its token reads the repository for the checkout, and nothing more.
+    # Its token reads the repository for the checkout and the previous release's assets, and nothing more.
     permissions:
       contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}
+      OUT: ${{ github.workspace }}\installation
+      FEED: ${{ github.workspace }}\feed
+      PREVIOUS: ${{ github.workspace }}\previous
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v7
+      - uses: ./.github/actions/setup-dotnet
         with:
-          pattern: jason-*
-          merge-multiple: true
-          path: feed
+          sdk-version: ${{ needs.version.outputs.sdk }}
 
-      # And the skills' package of this checkout, written as a release writes its own, so a feed served from here holds
-      # what the installer's skills step reads; its ref drops the pre-release because the version CI builds is a -dev
-      # one, whose pin is the release it is on the way to.
+      # A package is built at a release's or a candidate's version and never at the -dev one the tree carries, so this
+      # job's carries the release this tree is on the way to with a ci word and the run's number, as the desktop job's
+      # does. Its upload is named for this job, outside jason-*, so no download of a release's files takes it.
+      - name: Package jason for win-x64 as a release does
+        id: package
+        uses: ./.github/actions/package
+        with:
+          rid: win-x64
+          version: ${{ env.VERSION }}
+          artifact: ci-union-win-x64
+          retention-days: 3
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Build Jason Desktop around it as a test build
+        shell: pwsh
+        working-directory: desktop
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          JASON_DESKTOP_TEST_BUILD: '1'
+        run: |
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw "npm ci exited with $LASTEXITCODE" }
+          node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+          if ($LASTEXITCODE -ne 0) { throw "prepare.mjs exited with $LASTEXITCODE" }
+          $env:JASON_VERSION = $env:VERSION
+          npm run package -- --win --x64
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
+
+      # The feed a release would carry for this platform: the archive and its fragment, the skills' package, the installer,
+      # its block map and its update feed, with the manifest and the checksums written over them as a release writes them.
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
         run: |
-          ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive feed/jason-skills.zip -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ("${{ needs.version.outputs.version }}" -replace '-.*$', '')) -Commit "${{ github.sha }}"
-          ./.github/scripts/Write-Manifest.ps1 -Version ${{ needs.version.outputs.version }} -Directory feed -Require ${{ needs.version.outputs.rids }} -Plugins jason-skills.zip
+          New-Item -ItemType Directory -Force -Path $env:FEED | Out-Null
+          Copy-Item artifacts/release/* $env:FEED
+          Copy-Item desktop/dist/jason-desktop-windows-x64-setup.exe, desktop/dist/jason-desktop-windows-x64-setup.exe.blockmap, desktop/dist/latest.yml $env:FEED
+          ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive (Join-Path $env:FEED 'jason-skills.zip') -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ($env:VERSION -replace '-.*$', '')) -Commit "${{ github.sha }}"
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml -MinUpgradeFrom 0.19.0
+          Get-Content (Join-Path $env:FEED 'manifest.json')
 
-      # Windows PowerShell 5.1 rather than pwsh: it is what a fresh Windows has, and what the one-liner is typed into.
-      - name: Install, twice over, and once more without touching the PATH
-        shell: powershell
-        env:
-          JASON_Update__CheckEnabled: 'false'
-          JASON_INSTALL_FEED: ${{ github.workspace }}\feed
-          VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\jason'
-          $exe = Join-Path $dir 'jason.exe'
-          function UserPathEntries { @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_.TrimEnd('\') -ieq $dir }) }
-
-          $first = ./install/install.ps1 -NoModifyPath 6>&1 | Out-String
-          Write-Host $first
-          $installed = & $exe --version
-          if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed', expected $env:VERSION" }
-
-          # The feed is a directory, which the skills verb does not read: the verb is not run, and a line says what to run.
-          # Read with its white space taken out, as the second run's words are below.
-          $directoryLine = 'The role skills were not deployed: the feed is a directory, which `jason skills install` does not read. Run `jason skills install --roles-only` now that Jason is installed, offline with `--source <checkout>`.'
-          if (-not ($first -replace '\s+', '').Contains(($directoryLine -replace '\s+', ''))) { throw "the first run did not say that a directory feed deploys no role skills" }
-
-          # The licence and the third-party notices are kept beside it, by the names it keeps them as: the archive's
-          # LICENSE is this tree's LICENSE.
-          $notices = @{ 'jason-LICENSE' = 'LICENSE'; 'jason-THIRD-PARTY-NOTICES' = 'THIRD-PARTY-NOTICES' }
-          foreach ($name in $notices.Keys) {
-            if ((Get-FileHash (Join-Path $dir $name)).Hash -ne (Get-FileHash $notices[$name]).Hash) { throw "$name beside the executable is not the archive's" }
-          }
-
-          # What was installed opens its database, which is the half of "it runs" that --version cannot see.
-          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'installed-data'
-          & $exe runtime start | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not start a runtime ($LASTEXITCODE)" }
-          $running = & $exe runtime status
-          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the installed jason did not migrate: $running" }
-          & $exe runtime stop | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "the installed jason could not stop its runtime ($LASTEXITCODE)" }
-          Remove-Item Env:\JASON_DATA_DIR
-          if ((UserPathEntries).Count -ne 0) { throw "-NoModifyPath edited the user PATH" }
-
-          # The account's Path as an ordinary account has it: REG_EXPAND_SZ, with an entry spelled through a variable.
-          # Through [Environment]'s pair the script expanded every such entry and wrote the whole value back as
-          # REG_SZ, which a fresh account's install turned out to do. This runner's own value is whatever the image
-          # left, so the job gives it the shape to be kept rather than hoping for one; everything already in it stays.
-          $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
-          $kept = '%USERPROFILE%\jason-ci-kept'
-          $storedBefore = ((@(([string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $_ })) + $kept) -join ';'
-          $key.SetValue('Path', $storedBefore, [Microsoft.Win32.RegistryValueKind]::ExpandString)
-          $key.Dispose()
-
-          # The same version again with a notice missing, as an installation an older jason updated has it: the archive
-          # is fetched and checked for the notice alone, the executable is left as it was, and this time the PATH gains
-          # the directory.
-          # 6>&1 because the script talks to the person in front of it with Write-Host, which goes to the
-          # information stream: an assignment on its own captures nothing, and the check below would be reading
-          # an empty string while the words it is looking for scrolled past in the log.
-          Remove-Item (Join-Path $dir 'jason-THIRD-PARTY-NOTICES')
-          $executable = (Get-FileHash $exe).Hash
-          $again = ./install/install.ps1 6>&1 | Out-String
-          Write-Host $again
-          if ($again -notmatch 'already installed') { throw "the second run did not say the version was already installed" }
-          # Read with its white space taken out, and the sentences looked for likewise: Windows PowerShell wraps what
-          # Write-Host said at the console's width once it is captured, wherever the width falls, inside a word as well.
-          $said = $again -replace '\s+', ''
-          function Said([string] $sentence) { $said.Contains(($sentence -replace '\s+', '')) }
-          if (-not (Said 'its licence files were missing and are written beside it now')) { throw "the second run did not write the missing notice" }
-          if ((Get-FileHash (Join-Path $dir 'jason-THIRD-PARTY-NOTICES')).Hash -ne (Get-FileHash THIRD-PARTY-NOTICES).Hash) { throw "the notice written again is not the archive's" }
-          if ((Get-FileHash $exe).Hash -ne $executable) { throw "writing the missing notice changed the executable" }
-          if (-not (Said "is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v$env:VERSION/LICENSE")) { throw "the second run did not say the licence" }
-          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once" }
-
-          # And it kept the value's kind and every entry as it was written, variables unexpanded.
-          $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
-          $kindAfter = $key.GetValueKind('Path')
-          $storedAfter = [string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
-          $key.Dispose()
-          Write-Host "user Path before: ExpandString  $storedBefore"
-          Write-Host "user Path after:  $kindAfter  $storedAfter"
-          if ($kindAfter -ne [Microsoft.Win32.RegistryValueKind]::ExpandString) { throw "the install turned the user Path from ExpandString into $kindAfter" }
-          foreach ($entry in @($storedBefore -split ';')) { if (@($storedAfter -split ';') -cnotcontains $entry) { throw "the install rewrote the user Path entry '$entry'" } }
-
-          # A third run adds no second entry.
-          ./install/install.ps1
-          if ((UserPathEntries).Count -ne 1) { throw "the user PATH does not hold the directory exactly once after a third run" }
-
-          # And a fourth, in the shape the one-liner really uses: `irm ... | iex` runs the text in the session
-          # that typed it, so anything the script defines is still defined there when it is done. The three runs
-          # above cannot see that - a script run as a file gets a scope of its own.
-          Invoke-Expression (Get-Content ./install/install.ps1 -Raw)
-          if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { throw "install.ps1 left Install-Jason defined in the session that ran it" }
-
-      # The same feed served from this machine and nowhere else, as the update's job serves its own: a feed at an address
-      # is one the skills verb reads, so the installer hands it the feed's manifest, and the role skills are deployed
-      # from this run's own package, with no other network.
-      - name: Install from a feed served on this machine, the role skills with it
-        shell: powershell
+      # The released script, unchanged, holds the test build to the release's signer and refuses it, every run: the
+      # check the rest of this job steps past is live.
+      - name: The released install.ps1 refuses the unsigned test build
+        shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
         run: |
-          $ErrorActionPreference = 'Stop'
-          $dir = Join-Path $env:RUNNER_TEMP 'served-bin'
-          $exe = Join-Path $dir 'jason.exe'
-          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'served-data'
-          $env:JASON_Harness__Root = Join-Path $env:RUNNER_TEMP 'served-harness'
+          $said = (& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$env:JASON_INSTALL_FEED = '$env:FEED'; & ./install/install.ps1" 2>&1 | ForEach-Object { "$_" }) -join "`n"
+          $code = $LASTEXITCODE
+          Write-Host $said
+          if ($code -eq 0) { throw "the released install.ps1 installed an unsigned setup" }
+          if (-not ($said -replace '\s+', '').Contains('doesnotcarryavalidsignature')) { throw "the released install.ps1 failed for another reason than the signature" }
+          if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Programs\jason-desktop')) { throw "the refused install left the application's folder" }
 
-          $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', 'feed' -PassThru
-          try {
-            $ready = $false
-            for ($try = 0; $try -lt 50; $try++) {
-              try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; $ready = $true; break }
-              catch { Start-Sleep -Milliseconds 200 }
-            }
-            if (-not $ready) { throw "the feed on 127.0.0.1:8099 never answered within 10 s" }
+      # The stand-in for the release's signer, on this runner alone: a code-signing certificate made here, its key never
+      # leaving this runner, trusted in this machine's root store, signs the test build's setup, so the script's own check -
+      # a valid signature, by the signer it names - runs as it runs on a release. The released script refuses that signer
+      # too; the copy the next steps run differs from it by the one line naming the signer, counted, and lives in the
+      # runner's temporary directory, never uploaded. Nothing of this runs anywhere but a GitHub-hosted runner.
+      - name: Sign the test build with this runner's own certificate, and copy install.ps1 to name it
+        id: stand-in
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw "This step trusts a certificate in the machine's root store, and runs on a GitHub-hosted runner alone." }
+          $standIn = 'Jason CI test build'
+          $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=$standIn" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
+          $public = Join-Path $env:RUNNER_TEMP 'stand-in.cer'
+          Export-Certificate -Cert $certificate -FilePath $public | Out-Null
+          Import-Certificate -FilePath $public -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+          $setup = Join-Path $env:FEED 'jason-desktop-windows-x64-setup.exe'
+          $signed = Set-AuthenticodeSignature -FilePath $setup -Certificate $certificate -HashAlgorithm SHA256
+          if ($signed.Status -ne 'Valid') { throw "the stand-in signature is $($signed.Status)" }
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml -MinUpgradeFrom 0.19.0
 
-            $served = ./install/install.ps1 -Feed http://127.0.0.1:8099 -InstallDir $dir -NoModifyPath 6>&1 | Out-String
-            Write-Host $served
-            if (($served -replace '\s+', '').Contains('Theroleskillswerenotdeployed')) { throw "the installer did not deploy the role skills" }
+          # The released script refuses the stand-in's signature by its signer's name.
+          $said = (& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$env:JASON_INSTALL_FEED = '$env:FEED'; & ./install/install.ps1" 2>&1 | ForEach-Object { "$_" }) -join "`n"
+          $code = $LASTEXITCODE
+          Write-Host $said
+          if ($code -eq 0 -or -not ($said -replace '\s+', '').Contains(("is signed by '$standIn', not by ReplyApp Inc." -replace '\s+', ''))) { throw "the released install.ps1 did not refuse the stand-in signer by name" }
 
-            # The deployment's record, in the data directory, names the feed it came from; and a runtime started over it
-            # says its role skills are in place.
-            $record = Get-Content -Raw (Join-Path $env:JASON_DATA_DIR 'skills\roles\.jason-skills.json')
-            if (-not $record.Contains('http://127.0.0.1:8099/manifest.json')) { throw "the role skills' record does not name the served feed: $record" }
-            & $exe runtime start | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "the installed jason could not start a runtime ($LASTEXITCODE)" }
-            $status = & $exe status
-            & $exe runtime stop | Out-Null
-            if (-not ($status -match '"name":"role_skills","required":true,"state":"ok"')) { throw "role_skills is not ok: $status" }
-          }
-          finally {
-            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-          }
+          # The copy: the one line naming the signer, and nothing else.
+          $released = @(Get-Content -LiteralPath install/install.ps1)
+          $line = "        `$signer = 'ReplyApp Inc.'"
+          if (@($released | Where-Object { $_ -ceq $line }).Count -ne 1) { throw "install.ps1 does not name its signer in exactly one line '$line'" }
+          $copy = @($released | ForEach-Object { if ($_ -ceq $line) { "        `$signer = '$standIn'" } else { $_ } })
+          $changed = @(for ($at = 0; $at -lt $released.Count; $at++) { if ($released[$at] -cne $copy[$at]) { $at } })
+          if ($copy.Count -ne $released.Count -or $changed.Count -ne 1) { throw "the copy differs from install.ps1 in $($changed.Count) line(s), not one" }
+          $script = Join-Path $env:RUNNER_TEMP 'install-stand-in-signer.ps1'
+          Set-Content -LiteralPath $script -Value $copy -Encoding ascii
+          "script=$script" >> $env:GITHUB_OUTPUT
 
-      # The fixture names all three archives, which only a run that builds macOS packages.
-      - name: Install from the schema-1 fixture, the feed layout 0.1.0 published
-        if: needs.version.outputs.macos == 'true'
-        shell: powershell
+      # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
+      # Jason ships. Then the listing everything after is compared with.
+      - name: The machine before anything is installed
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.claude'), (Join-Path $env:USERPROFILE '.codex'), (Join-Path $env:USERPROFILE '.agents\skills\quick-start') | Out-Null
+          [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.agents\skills\quick-start\SKILL.md'), "a person's own skill`n")
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name before
+
+      - name: Install as an agent does, with install.ps1
+        shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
-          VERSION: ${{ needs.version.outputs.version }}
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
+
+      - name: Uninstall from a new terminal
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
         run: |
-          # A published tag can point today's script at a feed in the layout it was published with. The fixture is
-          # 0.1.0's two files with the values taken out; filled over this run's archives, it is a feed in that layout.
-          $ErrorActionPreference = 'Stop'
-          $feed = Join-Path $env:RUNNER_TEMP 'schema-1-feed'
-          pwsh -NoProfile -File ./.github/scripts/Fill-FeedFixture.ps1 -Fixture install/feeds/schema-1 -Archives feed -Version $env:VERSION -Out $feed
-          if ($LASTEXITCODE -ne 0) { throw "filling the schema-1 fixture exited with $LASTEXITCODE" }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
 
-          $dir = Join-Path $env:RUNNER_TEMP 'schema-1-bin'
-          ./install/install.ps1 -Feed $feed -Version $env:VERSION -InstallDir $dir -NoModifyPath
-          $installed = & (Join-Path $dir 'jason.exe') --version
-          if (($installed -split '\+')[0] -ne $env:VERSION) { throw "installed '$installed' from the schema-1 fixture, expected $env:VERSION" }
+      # The previous release, resolved now: the newest published release that is not the one this tree is on the way to.
+      - name: Fetch the previous release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = "v$($env:VERSION -replace '-.*$', '')"
+          $tag = @(gh release list -R reply-team/jason-ai --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName') | Where-Object { $_ -cne $release } | Select-Object -First 1
+          if (-not $tag) { throw "no published release other than $release was found" }
+          gh release download $tag -R reply-team/jason-ai -D $env:PREVIOUS -p install.ps1 -p jason-win-x64.zip -p manifest.json -p checksums.txt -p jason-desktop-windows-x64-setup.exe
+          if ($LASTEXITCODE -ne 0) { throw "gh release download $tag exited with $LASTEXITCODE" }
+          foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
+            $hash, $name = $line -split '  ', 2
+            $file = Join-Path $env:PREVIOUS $name
+            if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
+          }
+          Write-Host "the previous release is $tag"
+          if ($env:GITHUB_STEP_SUMMARY) { "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
 
-          # And what it installed opens its database, the half of "it runs" that --version cannot see.
-          $env:JASON_DATA_DIR = Join-Path $env:RUNNER_TEMP 'schema-1-data'
-          & (Join-Path $dir 'jason.exe') runtime start | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "the jason installed from the schema-1 fixture could not start a runtime ($LASTEXITCODE)" }
-          $running = & (Join-Path $dir 'jason.exe') runtime status
-          if ($LASTEXITCODE -ne 0 -or $running -notmatch '"applied_migrations":\["') { throw "the jason installed from the schema-1 fixture did not migrate: $running" }
-          & (Join-Path $dir 'jason.exe') runtime stop | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "the jason installed from the schema-1 fixture could not stop its runtime ($LASTEXITCODE)" }
-          Remove-Item Env:\JASON_DATA_DIR
+      - name: Install this build over the previous release's Jason Desktop, as its updater runs an installer
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+
+      - name: Uninstall from Installed apps
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
+
+      - name: Update the previous release's command-line Jason with its own update apply
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
+
+      - name: Read the module path Windows PowerShell rebuilds from an empty one
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
+
+      - name: Say what this job does not prove
+        if: always()
+        shell: pwsh
+        run: |
+          @(
+            '### What this job does not prove',
+            '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
+            '- The updater: this build''s updater checks no publisher, and no update is downloaded here. The release''s proof job updates a signed build to a signed next one.',
+            '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
+            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Keep the listings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-union-windows-listings
+          path: installation
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # Jason as one installation on macOS, proven on a build of this tree wherever every check runs, as the Windows job above
+  # proves it there: this tree's jason for osx-arm64 packaged as a release packages it, Jason Desktop built around it as a
+  # test build (an ad hoc signature, no hardened runtime, no notarization, no dmg), then installed by install.sh as an
+  # agent runs it, its uninstall refused while the application runs, uninstalled from a terminal, installed again and
+  # uninstalled by what the application's Uninstall Jason item starts, and the previous release's command-line Jason
+  # updated by its own `jason update apply`. The scripts are .github/scripts/test-installation-macos.sh.
+  union-macos:
+    name: one installation on macos
+    needs: version
+    if: needs.version.outputs.full == 'true'
+    runs-on: macos-latest
+    # Its token reads the repository for the checkout and the previous release's assets, and nothing more.
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}
+      OUT: ${{ github.workspace }}/installation
+      FEED: ${{ github.workspace }}/feed
+      PREVIOUS: ${{ github.workspace }}/previous
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-dotnet
+        with:
+          sdk-version: ${{ needs.version.outputs.sdk }}
+
+      - name: Package jason for osx-arm64 as a pull request does
+        id: package
+        uses: ./.github/actions/package
+        with:
+          rid: osx-arm64
+          version: ${{ env.VERSION }}
+          artifact: ci-union-osx-arm64
+          retention-days: 3
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # CSC_FOR_PULL_REQUEST: electron-builder skips every signature on a pull request's build, the ad hoc one included,
+      # and an arm64 Mac runs no program without one. CSC_IDENTITY_AUTO_DISCOVERY: no identity of this runner is looked for.
+      - name: Build Jason Desktop around it as a test build
+        shell: bash
+        working-directory: desktop
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          JASON_DESKTOP_TEST_BUILD: '1'
+          CSC_FOR_PULL_REQUEST: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci --ignore-scripts
+          node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
+          JASON_VERSION="$VERSION" npm run package -- --mac --arm64
+          codesign --verify --deep --strict --verbose=2 dist/mac-arm64/Jason.app
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:FEED | Out-Null
+          Copy-Item artifacts/release/* $env:FEED
+          Copy-Item desktop/dist/jason-desktop-macos-arm64.zip, desktop/dist/jason-desktop-macos-arm64.zip.blockmap, desktop/dist/latest-mac.yml $env:FEED
+          ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive (Join-Path $env:FEED 'jason-skills.zip') -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ($env:VERSION -replace '-.*$', '')) -Commit "${{ github.sha }}"
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require osx-arm64 -Plugins jason-skills.zip,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,latest-mac.yml -MinUpgradeFrom 0.19.0
+          Get-Content (Join-Path $env:FEED 'manifest.json')
+
+      # The released script, unchanged, holds the test build to the release's team and refuses it, every run. The copy the
+      # next steps run differs from it by the one line naming what a signature must satisfy, counted; it names this
+      # build's own ad hoc signature, and lives in the runner's temporary directory, never uploaded.
+      - name: The released install.sh refuses the ad hoc test build, and a copy names its signature
+        id: stand-in
+        shell: bash
+        run: |
+          status=0
+          JASON_INSTALL_FEED="$FEED" sh install/install.sh > "$RUNNER_TEMP/refused.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/refused.txt"
+          [ "$status" -ne 0 ] || { echo "::error::the released install.sh installed an ad hoc signed application"; exit 1; }
+          grep -qi 'sign' "$RUNNER_TEMP/refused.txt" || { echo "::error::the released install.sh failed for another reason than the signature"; exit 1; }
+          [ ! -e /Applications/Jason.app ] && [ ! -e "$HOME/Applications/Jason.app" ] || { echo "::error::the refused install left an application"; exit 1; }
+
+          app=desktop/dist/mac-arm64/Jason.app
+          line="$(grep -n 'BD8M7U5YBV' install/install.sh)"
+          [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || { echo "::error::install.sh does not name the release's team in exactly one line"; exit 1; }
+          number="${line%%:*}"
+          text="${line#*:}"
+          case "$text" in
+            APP_TEAM=*) standin="APP_TEAM=\"$(codesign --display --verbose=2 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')\"" ;;
+            *) cdhash="$(codesign --display --verbose=3 "$app" 2>&1 | sed -n 's/^CDHash=//p' | head -n 1)"
+               standin="$(printf '%s\n' "$text" | sed -E "s/'[^']*BD8M7U5YBV[^']*'/'cdhash H\"$cdhash\"'/; s/\"[^\"]*BD8M7U5YBV[^\"]*\"/\"cdhash H\\\\\"$cdhash\\\\\"\"/")" ;;
+          esac
+          copy="$RUNNER_TEMP/install-stand-in-signer.sh"
+          awk -v n="$number" -v s="$standin" 'NR == n { print s; next } { print }' install/install.sh > "$copy"
+          changed="$(diff install/install.sh "$copy" | grep -c '^[<>]' || true)"
+          [ "$changed" = 2 ] || { echo "::error::the copy differs from install.sh in more than the one line naming the signature"; diff install/install.sh "$copy"; exit 1; }
+          diff install/install.sh "$copy" || true
+          echo "script=$copy" >> "$GITHUB_OUTPUT"
+
+      - name: The machine before anything is installed
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills/quick-start"
+          printf "a person's own skill" > "$HOME/.agents/skills/quick-start/SKILL.md"
+          bash .github/scripts/test-installation-macos.sh listing before
+
+      - name: Install as an agent does, with install.sh
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+
+      - name: Uninstall from a new terminal, refused first while the application runs
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh refuse-while-open
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-terminal-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-terminal-uninstall before
+
+      - name: Install again, and uninstall from the application's Uninstall Jason item
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+          bash .github/scripts/test-installation-macos.sh uninstall-menu
+          bash .github/scripts/test-installation-macos.sh listing after-menu-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
+
+      - name: Fetch the previous release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release="v${VERSION%%-*}"
+          tag="$(gh release list -R reply-team/jason-ai --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName' | grep -vx "$release" | head -n 1)"
+          [ -n "$tag" ] || { echo "::error::no published release other than $release was found"; exit 1; }
+          gh release download "$tag" -R reply-team/jason-ai -D "$PREVIOUS" -p install.sh -p jason-osx-arm64.tar.gz -p manifest.json -p checksums.txt
+          (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
+          echo "the previous release is $tag"
+          echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update the previous release's command-line Jason with its own update apply
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before
+
+      - name: Say what this job does not prove
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### What this job does not prove'
+            echo "- The release's signature and Gatekeeper: the application here is signed ad hoc, and install.sh is run as a copy naming that signature. The release's proof job runs the released script on the signed, notarized packages, with a quarantined variant."
+            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job updates a signed build to a signed next one."
+            echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
+            echo "- The previous release's own Desktop updater reaching this version: it reads only the published releases."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the listings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-union-macos-listings
+          path: installation
+          if-no-files-found: ignore
+          retention-days: 3
 
   # The UI's checks, tests, build and smoke, on the one runner with Node: typecheck, lint, the unit and screen tests
   # against the exchanges the runtime's tests recorded, the build, the asset zip uploaded for a person to try, and the
