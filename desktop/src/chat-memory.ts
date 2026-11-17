@@ -25,8 +25,11 @@ export const memoryReadLimitMs = 3000;
 /** How long the chat waits before it looks again at a file found absent that a session was given, in milliseconds. */
 export const memorySecondLookMs = 250;
 
-/** A digest as a record keeps it. */
-export const digestShape = /^sha256:[0-9a-f]{64}$/;
+/**
+ * A digest as a record keeps it: of a file given, or, marked `skipped:`, of a file the session was only told was not
+ * given, so a later absence is not said to undo what was never given.
+ */
+export const digestShape = /^(skipped:)?sha256:[0-9a-f]{64}$/;
 
 /** Where a level's file should be: the folder the runtime records, and below the root the id its marker must name. */
 export interface MemoryPlace {
@@ -108,7 +111,8 @@ export function memoryToGive(reads: readonly MemoryRead[], prior: GivenDigests |
         if (read === undefined) continue;
         const before = prior?.[level];
         if (read.kind === 'absent') {
-            if (before !== undefined) out.push({ read, how: 'gone' });
+            // Only a file the session was given can be said to hold no longer; one it was told was not given says nothing.
+            if (before !== undefined && !before.startsWith('skipped:')) out.push({ read, how: 'gone' });
         } else if (read.digest === null || before !== read.digest) {
             out.push({ read, how: read.kind === 'skipped' ? 'skipped' : before === undefined ? 'given' : 'changed' });
         }

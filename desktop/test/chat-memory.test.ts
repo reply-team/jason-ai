@@ -250,12 +250,38 @@ test('a file over the limit gives its first 32 KiB, a character the cut split le
 });
 
 test('a read that does not answer in time is said not to have answered, and the turn goes on', async () => {
-    const place = { level: 'project' as const, folder: join(import.meta.dirname, 'nowhere'), id: projectId };
+    const place = { level: 'project' as const, folder: join(import.meta.dirname, 'nowhere-slow'), id: projectId };
     const started = Date.now();
-    const read = await readMemoryWithin(place, 40, process.platform, () => new Promise(() => {}));
+    let release: (read: MemoryRead | null) => void = () => {};
+    const read = await readMemoryWithin(place, 40, process.platform, () => new Promise((resolve) => (release = resolve)));
     assert.ok(Date.now() - started < 2000);
     assert.deepEqual(read, { kind: 'skipped', level: 'project', path: join(place.folder, 'AGENTS.md'), why: 'slow', digest: null });
+    release(null);
+    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(await readMemoryWithin(place, 40, process.platform, async () => ({ kind: 'absent', level: 'project' })).then((each) => each?.kind), 'absent');
+});
+
+test('a place whose read is still pending is not read again: it is said not to have answered at once, until that read returns', async () => {
+    const place = { level: 'client' as const, folder: join(import.meta.dirname, 'nowhere-pending') };
+    let started = 0;
+    let release: (read: MemoryRead | null) => void = () => {};
+    const hung = () => {
+        started++;
+        return new Promise<MemoryRead | null>((resolve) => (release = resolve));
+    };
+    const slow = { kind: 'skipped', level: 'client', path: join(place.folder, 'AGENTS.md'), why: 'slow', digest: null };
+    assert.deepEqual(await readMemoryWithin(place, 40, process.platform, hung), slow);
+    // The limit is long, and the answer comes at once: no second read of the place was started.
+    const before = Date.now();
+    for (let turn = 0; turn < 5; turn++) assert.deepEqual(await readMemoryWithin(place, 60_000, process.platform, hung), slow);
+    assert.ok(Date.now() - before < 2000);
+    assert.equal(started, 1, 'one read of the place, however many turns ask');
+    // Another place, or the same folder at another level, is read as ever.
+    assert.equal((await readMemoryWithin({ ...place, folder: join(place.folder, 'other') }, 40, process.platform, async () => ({ kind: 'absent', level: 'client' })))?.kind, 'absent');
+    // Once the hung read returns, the place is read again.
+    release(null);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await readMemoryWithin(place, 40, process.platform, async () => ({ kind: 'absent', level: 'client' })))?.kind, 'absent');
 });
 
 // ---- What a session is given ---------------------------------------------------------------------------------------
@@ -277,6 +303,8 @@ test('a session is given every file once, then only one that changed, a level re
     const linked: MemoryRead = { kind: 'skipped', level: 'client', path: '/h/AGENTS.md', why: 'linked', digest: 'sha256:7' };
     const slow: MemoryRead = { kind: 'skipped', level: 'project', path: '/p/AGENTS.md', why: 'slow', digest: null };
     assert.deepEqual(memoryToGive([linked, slow], { client: 'sha256:7' }), [{ read: slow, how: 'skipped' }]);
+    // A level the session was only told was not given, absent now: nothing was given of it to stop holding.
+    assert.deepEqual(memoryToGive([{ kind: 'absent', level: 'client' }], { client: `skipped:sha256:${'0'.repeat(64)}` }), []);
     assert.equal(memoryBlock([]), null);
     const shown = memoryBlock([
         { read: { kind: 'absent', level: 'client' } },
@@ -367,18 +395,46 @@ test('a level the turn could not read says nothing, not "no longer holds", and i
 
 test('a read that does not answer in time is named to the agent each turn, and the file is given at the first turn that reads it', async (t) => {
     let hang = true;
-    const r = rig(t, () => ({ memoryReadLimitMs: 50, memoryReader: (place, platform) => (place.level === 'project' && hang ? new Promise(() => {}) : readMemoryFile(place, platform)) }));
+    let reads = 0;
+    let release: (read: MemoryRead | null) => void = () => {};
+    const r = rig(t, () => ({
+        memoryReadLimitMs: 50,
+        memoryReader: (place, platform) => {
+            if (place.level !== 'project' || !hang) return readMemoryFile(place, platform);
+            reads++;
+            return new Promise((resolve) => (release = resolve));
+        },
+    }));
+    const slowLine = `${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}, is not given: it did not answer within 3 seconds; Jason reads it again at the next message, and the person can keep it where it opens at once. Tell the person.`;
     await r.turn('c1', 'first', { host: 'claude', campaignId });
     const lines = (block(r.hosts()[0]?.stdin ?? '') ?? '').split('\n').filter((line) => !line.startsWith('"'));
-    assert.deepEqual(lines, [
-        `${names.client}, at ${JSON.stringify(join(r.root, 'AGENTS.md'))}:`,
-        `${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}, is not given: it did not answer within 3 seconds; Jason reads it again at the next message, and the person can keep it where it opens at once. Tell the person.`,
-        `${names.campaign}, at ${JSON.stringify(join(r.campaign, 'AGENTS.md'))}:`,
-    ]);
+    assert.deepEqual(lines, [`${names.client}, at ${JSON.stringify(join(r.root, 'AGENTS.md'))}:`, slowLine, `${names.campaign}, at ${JSON.stringify(join(r.campaign, 'AGENTS.md'))}:`]);
     assert.equal(r.record('c1')?.claude?.files.project, undefined);
-    hang = false;
+    // Still hung: said again, and no second read of it started.
     await r.turn('c1', 'second', { host: 'claude' });
-    assert.deepEqual((block(r.hosts()[1]?.stdin ?? '') ?? '').split('\n'), [`${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}:`, JSON.stringify('Project rule: mention the pilot.\n')]);
+    assert.deepEqual((block(r.hosts()[1]?.stdin ?? '') ?? '').split('\n'), [slowLine]);
+    assert.equal(reads, 1);
+    // It returns; the next turn reads it and gives it.
+    hang = false;
+    release(null);
+    await r.turn('c1', 'third', { host: 'claude' });
+    assert.deepEqual((block(r.hosts()[2]?.stdin ?? '') ?? '').split('\n'), [`${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}:`, JSON.stringify('Project rule: mention the pilot.\n')]);
+});
+
+test('a file the session was only told was not given, and that then goes absent, is not said to have stopped holding', async (t) => {
+    const r = rig(t);
+    const clientFile = join(r.root, 'AGENTS.md');
+    unlinkSync(clientFile);
+    const kept = join(r.b.root, 'kept-elsewhere.md');
+    writeFileSync(kept, 'Rules kept elsewhere.\n');
+    linkSync(kept, clientFile);
+    await r.turn('c1', 'first', { host: 'claude', campaignId });
+    assert.match(block(r.hosts()[0]?.stdin ?? '') ?? '', /is not given: it is a link/);
+    assert.match(r.record('c1')?.claude?.files.client ?? '', /^skipped:sha256:[0-9a-f]{64}$/);
+    unlinkSync(clientFile);
+    await r.turn('c1', 'second', { host: 'claude' });
+    assert.equal(block(r.hosts()[1]?.stdin ?? ''), null, 'nothing was given of it, so nothing is said to hold no longer');
+    assert.equal(r.record('c1')?.claude?.files.client, undefined);
 });
 
 test('a file the person can mend is named once to the session, with what to do, and given once mended', async (t) => {

@@ -25,8 +25,16 @@ const markerKinds: Readonly<Record<MemoryLevel, string>> = { client: 'root', pro
 const pathsFor = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix);
 
 /**
+ * The reads not yet returned, by level and folder. A read past its time cannot be stopped and holds one of the system's
+ * file threads until the system returns; a place that hangs would take one more at every turn and starve the process of
+ * them, so no read of a place starts while an earlier one of it is pending.
+ */
+const pendingReads = new Map<string, Promise<MemoryRead | null>>();
+
+/**
  * A level's read, given the most time it may take: past `limitMs` the turn goes on without it, and it is said not to have
- * answered (`slow`). The read itself cannot be stopped; what it finds later is dropped.
+ * answered (`slow`). The read itself cannot be stopped; what it finds later is dropped. While an earlier read of the same
+ * place is still pending, none is started, and the level is said not to have answered at once.
  */
 export async function readMemoryWithin(
     place: MemoryPlace,
@@ -34,14 +42,21 @@ export async function readMemoryWithin(
     platform: NodeJS.Platform = process.platform,
     reader: (place: MemoryPlace, platform: NodeJS.Platform) => Promise<MemoryRead | null> = readMemoryFile,
 ): Promise<MemoryRead | null> {
+    const slow: MemoryRead = { kind: 'skipped', level: place.level, path: pathsFor(platform).join(place.folder, memoryFileName), why: 'slow', digest: null };
+    const key = `${place.level}\n${place.folder}`;
+    if (pendingReads.has(key)) return slow;
+    // Taken off the list once it returns, before the race below answers.
+    const reading = reader(place, platform)
+        .catch(() => null)
+        .finally(() => pendingReads.delete(key));
+    pendingReads.set(key, reading);
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<'late'>((resolve) => {
         timer = setTimeout(() => resolve('late'), limitMs);
     });
     try {
-        const read = await Promise.race([reader(place, platform).catch(() => null), late]);
-        if (read !== 'late') return read;
-        return { kind: 'skipped', level: place.level, path: pathsFor(platform).join(place.folder, memoryFileName), why: 'slow', digest: null };
+        const read = await Promise.race([reading, late]);
+        return read === 'late' ? slow : read;
     } finally {
         clearTimeout(timer);
     }
@@ -69,7 +84,7 @@ export async function readMemoryFile(place: MemoryPlace, platform: NodeJS.Platfo
 
 /** A file not given, with what a record keeps of it: its level, its path and why, hashed, never a word of it. */
 function skipped(level: MemoryLevel, path: string, why: Exclude<MemorySkip, 'slow'>): MemoryRead {
-    return { kind: 'skipped', level, path, why, digest: `sha256:${createHash('sha256').update(`${level}\n${path}\nskipped ${why}\n`).digest('hex')}` };
+    return { kind: 'skipped', level, path, why, digest: `skipped:sha256:${createHash('sha256').update(`${level}\n${path}\nskipped ${why}\n`).digest('hex')}` };
 }
 
 /** Whether a path is a folder itself: not a link, a junction or anything else. */
