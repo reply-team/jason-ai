@@ -261,8 +261,10 @@ switch ($Step) {
         # Typed in a new terminal, where jason is the application's own on the Path; the data directory purged, so that a
         # start of the application after the verb, which the uninstaller makes unless --uninstalled-by-jason says the
         # terminal did it all, would show as a data directory written again.
-        $runtime = Invoke-Program $carried @('runtime', 'start') @{ JASON_Update__CheckEnabled = 'false' }
-        if ($runtime.Exit -ne 0) { Fail "a runtime could not be started before the uninstall ($($runtime.Exit))" }
+        if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) {
+            $runtime = Invoke-Program $carried @('runtime', 'start') @{ JASON_Update__CheckEnabled = 'false' }
+            if ($runtime.Exit -ne 0) { Fail "a runtime could not be started before the uninstall ($($runtime.Exit))" }
+        }
         $file = Join-Path $Out 'uninstall-terminal.json'
         $probe = "jason uninstall --purge-data --yes | Set-Content -LiteralPath '$file'; exit `$LASTEXITCODE"
         $verb = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $probe -UseNewEnvironment -Wait -PassThru -NoNewWindow
