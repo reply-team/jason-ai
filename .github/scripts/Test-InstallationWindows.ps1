@@ -364,7 +364,7 @@ switch ($Step) {
         $previousVersion = ((& $jason --version) -split '\+')[0]
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
-        if ((Invoke-Program $jason @('autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
+        if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         Say "the previous release's command-line Jason $previousVersion installed by its own script, with a runtime and a logon registration"
 
         # Its own update, from the feed served on this machine.

@@ -265,7 +265,7 @@ from-previous)
     env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" || fail "the previous release's install.sh failed"
     old="$("$WRAPPER" --version | cut -d+ -f1)"
     "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
-    "$WRAPPER" autostart enable > "$OUT/autostart.json" || fail "the previous release could not register its logon start: $(cat "$OUT/autostart.json")"
+    "$WRAPPER" runtime autostart enable > "$OUT/autostart.json" || fail "the previous release could not register its logon start: $(cat "$OUT/autostart.json")"
     say "the previous release's command-line Jason $old installed by its own script, with a runtime and a logon registration"
 
     python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/feed-server.log" 2>&1 &
