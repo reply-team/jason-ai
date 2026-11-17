@@ -51,6 +51,15 @@
 ; is replaced.
 !define JASON_APP_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
 
+; An update closes nothing it has not asked about: the application quits itself before an update, and the update waits
+; for it, looking twice a second, until no process runs from its executable or a minute has passed - three times the
+; twenty seconds late a slow quit is proven at, and well inside the ten minutes jason update apply gives the installer.
+; The wait answers as the look does: exit 1 as soon as nothing is found, and at the bound 0 where the application is still
+; found or 2 where the last look failed, both read as found. The old version's uninstaller the update then runs closes
+; any application it finds, and refuses with 2 while a file of the folder is held, so it is never run while one is found.
+!define JASON_APP_WAIT_SECONDS 60
+!define JASON_APP_GONE `$$ErrorActionPreference = 'Stop'; $$clock = [Diagnostics.Stopwatch]::StartNew(); while ($$true) { try { if (@(${JASON_OWN_APP}).Count -eq 0) { exit 1 }; $$failed = $$false } catch { $$failed = $$true }; if ($$clock.Elapsed.TotalSeconds -ge ${JASON_APP_WAIT_SECONDS}) { if ($$failed) { exit 2 }; exit 0 }; Start-Sleep -Milliseconds 500 }`
+
 ; What a person is told: exit 0 is a process found; any other exit but 1 is a look that could not be made, said as such.
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
 !define JASON_LOOK_ASK "Jason could not look for its own processes, so it cannot tell whether a Jason runtime is running from this application's folder. Choose OK to stop it if it is, and go on."
@@ -89,21 +98,27 @@
       ${endIf}
     ${endIf}
     ${if} ${isUpdated}
-      ; The application quits itself before an update; this gives it the moment to.
-      Sleep 300
+      ; The application quits itself before an update; it is given the bound above to.
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_GONE}"`
+    ${else}
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
     ${endIf}
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
     Pop $R0
     ${if} $R0 != 1
-      ${ifNot} ${isUpdated}
-        ${if} $R0 S== 0
-          StrCpy $R1 "$(appRunning)"
-        ${else}
-          StrCpy $R1 "${JASON_APP_UNSURE}"
-        ${endIf}
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2
+      ; A silent update closes nothing and shows nothing: it ends before a file is replaced, and the old version stays
+      ; installed as it was. An update a person watches, the window's own install, asks them as an install does.
+      ${if} ${isUpdated}
+      ${AndIf} ${Silent}
+        SetErrorLevel 1
         Quit
       ${endIf}
+      ${if} $R0 S== 0
+        StrCpy $R1 "$(appRunning)"
+      ${else}
+        StrCpy $R1 "${JASON_APP_UNSURE}"
+      ${endIf}
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2
+      Quit
       DetailPrint "$(appClosing)"
       nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_OWN_APP} | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"`
       Pop $R0
@@ -113,8 +128,7 @@
       nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
       Pop $R0
       ${if} $R0 != 1
-        ${ifNot} ${isUpdated}
-        ${AndIfNot} ${Silent}
+        ${ifNot} ${Silent}
           ${if} $R0 S== 0
             StrCpy $R1 "${JASON_APP_STILL}"
           ${else}
@@ -132,7 +146,12 @@
       ${ifNot} ${isUpdated}
       ${AndIfNot} ${Silent}
       ${AndIf} $JasonRuntimeAsked == ""
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3
+        ${if} $R0 S== 0
+          StrCpy $R1 "${JASON_RUNTIME_ASK}"
+        ${else}
+          StrCpy $R1 "${JASON_LOOK_ASK}"
+        ${endIf}
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3
         SetErrorLevel 1
         Quit
       ${endIf}
@@ -163,6 +182,33 @@
   ${endIf}
 !macroend
 
+; What an update does with the old version's uninstaller's answer, which electron-builder hands to these two hooks, for
+; the shell context and for the current user, in place of its own handling (installUtil.nsh, handleUninstallResult). Its
+; own shows a box with no silent answer when the old uninstaller refuses - and one refuses with 2 while a file of the
+; folder is held, a moment after it put back what it had moved - so a silent update would wait for a click no one gives,
+; holding the installer's mutex against every later setup. Here it is the same: the same sentence to a person who
+; watches, the same lines of details, the same error level 2 before a file is replaced, and the old version left
+; installed as its uninstaller put it back; a silent run is shown nothing and only ends. An old uninstaller that could not
+; be started at all is said, and the install goes on over its files, as electron-builder's own does.
+!macro jasonOldUninstallerResult
+  ${if} ${Errors}
+    DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
+  ${elseIf} $R0 != 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0" /SD IDOK
+    DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    SetErrorLevel 2
+    Quit
+  ${endIf}
+!macroend
+
+!macro customUnInstallCheck
+  !insertmacro jasonOldUninstallerResult
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  !insertmacro jasonOldUninstallerResult
+!macroend
+
 ; The installer's own last step, once the files are in place, at every install and every update, silent or not: the
 ; machine set up for the jason this application carries, through that jason's own `jason install` with no flags. It puts
 ; jason in the terminal (this account's Path names the carried file's folder), gives the skills of every agent host found
@@ -181,13 +227,14 @@
 ; starts a runtime from the carried file when it finds the note standing and none answering; jason status names it
 ; meanwhile. What it did not get done never fails the
 ; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
-; start runs it where its last run was for an older version. A run a person watches says so in one line of its details.
+; start runs it where its last run was for an older version. A run a person watches says so in a box, since a one-click
+; installer shows no details; a silent run answers the box itself and shows nothing.
 !macro customInstall
   DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of every agent host found."
   nsExec::Exec '"$INSTDIR\resources\bundle\jason.exe" install'
   Pop $R0
   ${if} $R0 S!= 0
-    DetailPrint "jason install did not set everything up (it answered $R0). Run $INSTDIR\resources\bundle\jason.exe install in a terminal to see what it says."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "jason install did not set everything up (it answered $R0). Run $INSTDIR\resources\bundle\jason.exe install in a terminal to see what it says." /SD IDOK
   ${endIf}
 !macroend
 
