@@ -70,6 +70,7 @@ export const templates = {
     update_checked: 'The releases were read; a newer one to offer: {Available}',
     update_offered: 'Jason {Version} is offered',
     update_downloaded: 'Jason {Version} was downloaded',
+    update_go_missed: 'Jason {Version} was downloaded and no go came for it, so nothing was installed',
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',

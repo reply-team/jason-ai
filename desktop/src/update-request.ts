@@ -14,11 +14,18 @@
  * goes as far as the download and stops there unless one switch says it may close to install (`windowOpenUpdate`), and
  * takes none that names a feed.
  *
+ * `--await-go` makes a request wait, once the update is downloaded, for the verb's go before anything is stopped, kept or
+ * installed: the request's file names `downloaded`, the verb drains and stops the runtime and steps out of the
+ * application's folder, and only then makes `<data>/update/desktop-<id>.go`, by an exclusive create. A request that names
+ * no `--await-go` never waits, as before. A go that does not come within `goWaitMs` refuses the request as `go_timed_out`,
+ * with nothing stopped, kept or installed and the download left under the menu's install item; a go file already there
+ * when the request is taken is no go, and refuses it as `go_there`.
+ *
  * `--update-settle` is the other start: once the new version's runtime answered, it records the update the window-less
  * install left pending as kept (`rollback.ts`), as a window's first start would, under the single-instance lock.
  */
 
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
@@ -35,6 +42,8 @@ export const updateSettleFlag = '--update-settle';
 export const toFlag = '--to';
 export const requestFlag = '--request';
 export const feedFlag = '--feed';
+/** The request waits for the verb's go once the update is downloaded (`goFile`). */
+export const awaitGoFlag = '--await-go';
 
 /**
  * What a window does with a terminal's request once the update is downloaded: `stop` there, leaving it under the menu's
@@ -47,11 +56,30 @@ export const windowOpenUpdate: WindowOpenUpdate = 'stop';
 /** How long a window-less start waits for its request to end, the install included, before it says so and exits. */
 export const headlessLimitMs = 30 * 60_000;
 
-/** The request the verb names: an id of its own, the version it planned for, and a loopback feed or none. */
+/**
+ * How long a request that waits for the go waits for it once the update is downloaded: longer than the verb may take
+ * between reading `downloaded` and making the go, ten minutes by the verb's own bound (the drain, the stop and the move),
+ * by a margin of five minutes. A window-less start that waits for the go is bounded by `headlessLimitMs` and this together.
+ */
+export const goWaitMs = 15 * 60_000;
+
+/** How often the go file is looked for while the request waits for it. */
+export const goPollMs = 250;
+
+/** The bound of a window-less start: `headlessLimitMs`, and `goWaitMs` beside it where the request waits for the go. */
+export function headlessLimitOf(request: UpdateRequest): number {
+    return request.awaitGo === true ? headlessLimitMs + goWaitMs : headlessLimitMs;
+}
+
+/**
+ * The request the verb names: an id of its own, the version it planned for, a loopback feed or none, and whether it waits
+ * for the verb's go once the update is downloaded (there only where it does).
+ */
 export interface UpdateRequest {
     id: string;
     to: string;
     feed: string | null;
+    awaitGo?: true;
 }
 
 /** What a start's arguments ask: a request, the settling start, or neither read, with the id when that one was. */
@@ -108,7 +136,7 @@ export function updateStart(argv: readonly string[]): UpdateStart | null {
     const usage = (why: string): UpdateStart => ({ kind: 'usage', id, why });
     if (applying && settling) return usage(`${updateApplyFlag} and ${updateSettleFlag} are two starts, not one`);
     if (settling) {
-        return [toFlag, requestFlag, feedFlag].some((flag) => argv.includes(flag)) ? usage(`${updateSettleFlag} takes nothing beside it`) : { kind: 'settle' };
+        return [toFlag, requestFlag, feedFlag, awaitGoFlag].some((flag) => argv.includes(flag)) ? usage(`${updateSettleFlag} takes nothing beside it`) : { kind: 'settle' };
     }
     if (argv.indexOf(updateApplyFlag) !== argv.lastIndexOf(updateApplyFlag)) return usage(`${updateApplyFlag} is given once`);
     if (id === null) return usage(`${requestFlag} names the request: letters, digits, - and _, at most 64`);
@@ -118,12 +146,14 @@ export function updateStart(argv: readonly string[]): UpdateStart | null {
     if (rawFeed === false) return usage(`${feedFlag} names the feed's address once`);
     const feed = rawFeed === null ? null : loopbackFeed(rawFeed);
     if (rawFeed !== null && feed === null) return usage(`${feedFlag} is an http address on the loopback address, and no other`);
-    return { kind: 'apply', request: { id, to, feed } };
+    const waits = argv.indexOf(awaitGoFlag);
+    if (waits >= 0 && argv.indexOf(awaitGoFlag, waits + 1) >= 0) return usage(`${awaitGoFlag} is given once`);
+    return { kind: 'apply', request: waits >= 0 ? { id, to, feed, awaitGo: true } : { id, to, feed } };
 }
 
 /** What a start that could not take the lock hands the running application, in the lock's additional data. */
 export function handedData(request: UpdateRequest): { update: UpdateRequest } {
-    return { update: { id: request.id, to: request.to, feed: request.feed } };
+    return { update: request.awaitGo === true ? { id: request.id, to: request.to, feed: request.feed, awaitGo: true } : { id: request.id, to: request.to, feed: request.feed } };
 }
 
 /** The request a second start handed over, read again here and never trusted; null when there is none or it is not one. */
@@ -131,11 +161,13 @@ export function requestOf(data: unknown): UpdateRequest | null {
     if (data === null || typeof data !== 'object' || !('update' in data)) return null;
     const raw = (data as { update: unknown }).update;
     if (raw === null || typeof raw !== 'object') return null;
-    const { id, to, feed } = raw as Record<string, unknown>;
+    const { id, to, feed, awaitGo } = raw as Record<string, unknown>;
     if (typeof id !== 'string' || !isRequestId(id) || typeof to !== 'string' || !isVersion(to)) return null;
-    if (feed === null || feed === undefined) return { id, to, feed: null };
+    if (awaitGo !== undefined && awaitGo !== true) return null;
+    const waits = awaitGo === true ? { awaitGo: true as const } : {};
+    if (feed === null || feed === undefined) return { id, to, feed: null, ...waits };
     const loopback = typeof feed === 'string' ? loopbackFeed(feed) : null;
-    return loopback === null ? null : { id, to, feed: loopback };
+    return loopback === null ? null : { id, to, feed: loopback, ...waits };
 }
 
 /** Where a request's answer is written: `<data>/update/desktop-<id>.json`. */
@@ -143,17 +175,26 @@ export function requestFile(data: string, id: string): string {
     return join(data, 'update', `desktop-${id}.json`);
 }
 
-/** A request's step while it is taken (`checking`, `downloading`), and its end: `installing`, `current` or `refused`. */
-export type RequestState = 'checking' | 'downloading' | 'installing' | 'current' | 'refused';
+/** Where the verb's go for a request that waits for it is made: `<data>/update/desktop-<id>.go`, beside the request's file. */
+export function goFile(data: string, id: string): string {
+    return join(data, 'update', `desktop-${id}.go`);
+}
+
+/**
+ * A request's step while it is taken (`checking`, `downloading`, and `downloaded` where it waits for the go), and its end:
+ * `installing`, `current` or `refused`.
+ */
+export type RequestState = 'checking' | 'downloading' | 'downloaded' | 'installing' | 'current' | 'refused';
 
 /** Why a request was refused: the updater's codes, and the ones a start decides before it reaches the updater. */
-export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'window_feed' | 'timed_out' | 'failed';
+export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'window_feed' | 'go_there' | 'timed_out' | 'failed';
 
 export const requestRefusals: readonly RequestRefusal[] = [
     'usage',
     'not_installed',
     'unsupported_platform',
     'window_feed',
+    'go_there',
     'updater_inactive',
     'busy',
     'version_rejected',
@@ -161,6 +202,7 @@ export const requestRefusals: readonly RequestRefusal[] = [
     'version_mismatch',
     'download_failed',
     'window_open',
+    'go_timed_out',
     'runtime_not_stopped',
     'keep_failed',
     'install_failed',
@@ -238,7 +280,7 @@ export function requestSupport(packaged: boolean, platform: NodeJS.Platform): 'n
 /** What the person at the terminal is told of a refusal. */
 export function refusalMessage(
     reason: RequestRefusal,
-    at: { to: string | null; from: string; offered: string | null; runtimeStopped: boolean; kept: string | null; menu: boolean; why?: string; runtime?: StoppedShort },
+    at: { to: string | null; from: string; offered: string | null; runtimeStopped: boolean; kept: string | null; menu: boolean; why?: string; runtime?: StoppedShort; limitMs?: number },
 ): string {
     const to = at.to ?? 'the version asked for';
     const stopped = at.runtimeStopped ? ' The runtime this application carries was stopped for the update: jason runtime start starts it again.' : '';
@@ -252,6 +294,10 @@ export function refusalMessage(
             return 'On this system Jason Desktop takes no update request from a terminal: update it from its own menu, or through the package it came in. Nothing was changed.';
         case 'window_feed':
             return 'Jason Desktop is open, and an open window updates from the releases alone, never from a feed a terminal names, so nothing was checked or downloaded. Quit Jason Desktop and run jason update apply again.';
+        case 'go_there':
+            return 'A go for this request was there before the request was taken, so it is no go: nothing was checked, downloaded or changed. Run jason update apply again.';
+        case 'go_timed_out':
+            return `Jason ${to} was downloaded, and jason update apply did not say go within ${goWaitMs / 60_000} minutes, so nothing was stopped, kept or installed. The download waits under the install item of Jason Desktop's menu; run jason update apply again.`;
         case 'updater_inactive':
             return 'Jason Desktop’s updater cannot replace the application where it is installed, so nothing was changed.';
         case 'busy':
@@ -285,7 +331,7 @@ export function refusalMessage(
         case 'install_failed':
             return `The installer stopped before Jason ${to} was installed.${stopped}${at.kept === null ? '' : ` A copy of this version is kept at ${at.kept}.`}`;
         case 'timed_out':
-            return `Jason Desktop did not finish the update within ${headlessLimitMs / 60_000} minutes and stopped waiting. If it had begun installing, the application may still be replaced once it has ended: jason --version says which version runs.`;
+            return `Jason Desktop did not finish the update within ${(at.limitMs ?? headlessLimitMs) / 60_000} minutes and stopped waiting. If it had begun installing, the application may still be replaced once it has ended: jason --version says which version runs.`;
         case 'failed':
             return 'Jason Desktop met an error it did not expect while it took the update request, and ended.';
     }
@@ -381,7 +427,32 @@ export interface TakeDeps {
     write?(file: string, record: RequestRecord): void;
     /** Makes the request's file with its first step; false when one was already there (`createRequestFile`). */
     create?(file: string, record: RequestRecord): boolean;
+    /** How a request that waits for the go looks for it: the file, `goWaitMs` and `goPollMs` unless a test says. */
+    go?: GoWait;
     now?(): Date;
+}
+
+/** How the go is waited for: whether its file is there, how long and how often it is looked for, and a pause. */
+export interface GoWait {
+    exists(file: string): boolean;
+    ms: number;
+    pollMs: number;
+    sleep(ms: number): Promise<void>;
+}
+
+const goWait: GoWait = { exists: existsSync, ms: goWaitMs, pollMs: goPollMs, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+
+/**
+ * Waits for the go file of a request: true once it is there, false when the wait ran out or `over` says the request
+ * ended meanwhile (its bound passed).
+ */
+export async function waitForGo(file: string, wait: GoWait, over: () => boolean): Promise<boolean> {
+    for (let waited = 0; waited < wait.ms; waited += wait.pollMs) {
+        if (over()) return false;
+        if (wait.exists(file)) return true;
+        await wait.sleep(wait.pollMs);
+    }
+    return !over() && wait.exists(file);
 }
 
 /**
@@ -429,6 +500,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
             kept: merged.kept,
             menu,
             ...(runtime === undefined ? {} : { runtime }),
+            ...(deps.limit === undefined ? {} : { limitMs: deps.limit.ms }),
         });
         return put({ ...at, state: 'refused', reason, message });
     };
@@ -459,6 +531,13 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         ended = true;
         return end(refuse(deps.unsupported));
     }
+    // A go that is there before the request was taken is none: the verb makes its go only once it has read `downloaded`.
+    const go = goFile(deps.data, request.id);
+    const waiting = deps.go ?? goWait;
+    if (request.awaitGo === true && waiting.exists(go)) {
+        ended = true;
+        return end(refuse('go_there'));
+    }
     let handle: unknown = null;
     if (deps.limit !== undefined) {
         const { limit } = deps;
@@ -476,6 +555,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         if (ended) return;
         if (step.step === 'checking') put({ state: 'checking' });
         else if (step.step === 'downloading') put({ state: 'downloading', offered: step.offered });
+        else if (step.step === 'downloaded') put({ state: 'downloaded', offered: request.to });
         else put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
     };
     const taken: TakenRequest = { to: request.to, feed: request.feed };
@@ -483,6 +563,8 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     try {
         outcome = await deps.updater().take(taken, {
             install: !window || deps.windowOpen === 'close',
+            // Only a request that names --await-go waits for the verb's go; every other request installs as before.
+            ...(request.awaitGo === true ? { go: () => waitForGo(go, waiting, () => ended) } : {}),
             late: () => {
                 if (ended && last.state !== 'installing') return;
                 ended = true;
