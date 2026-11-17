@@ -723,7 +723,7 @@ ends the install or the uninstall before a file is replaced, and a person is tol
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
 runtime, and an update goes on without a look. Once the files are in place, at every install and every update, silent
 or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
-waited for (`customInstall`): `jason` on this account's Path, the skills of every agent host found, and an older
+waited for (`customInstall`): `jason` on this account's Path, the skills for Claude Code and Codex where each is found, and an older
 command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
 done never fails the install. On macOS and Windows, Jason is one installation: the Jason Desktop application, which
 carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the

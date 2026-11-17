@@ -505,13 +505,15 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 
 Each script works out the platform and verifies the download's SHA-256 before it places anything. On macOS and
 Windows it installs Jason Desktop, its signature checked too, opens nothing, and has the `jason` the application
-carries put `jason` in the terminal, give every agent host it finds Jason's skills, retire an older command-line
+carries put `jason` in the terminal, give Claude Code and Codex Jason's skills where each is found, retire an older command-line
 install and deploy the role skills; it ends non-zero, saying which act failed, when `jason` is not in the terminal,
 and its last line is the full path of `jason`, which a shell already open, yours included, calls it by. On Linux it
 installs the executable under the person's own account, in `~/.local/bin`, and puts that directory on the `PATH`
 unless `--no-modify-path` is passed; then the executable it installed deploys the role skills from the release's
 package of them; where that fails, Jason is still installed, one line says so, and `jason status` names the line to
-run. Nothing needs administrator rights.
+run. Nothing needs administrator rights. Any other agent host, and on Linux every one, gets Jason's skills with
+`jason skills install --host <host>`, an act the install page marks "Ask first" unless it is the host of the agent the install prompt's
+three lines were given to.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
@@ -591,7 +593,7 @@ jason uninstall
 Show the dry run first: it prints exactly what would go and changes nothing.
 
 On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed — the terminal
-command, the skills of every agent host, Open Jason at Login — and an older command-line install, and deletes the
+command, the skills it recorded in agent hosts' folders, Open Jason at Login — and an older command-line install, and deletes the
 application last. It is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu on
 macOS. Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed:
 say so, and ask the person to quit Jason, rather than closing it yourself. The harness root is never touched.

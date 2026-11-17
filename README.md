@@ -65,10 +65,12 @@ means today.
 
 - **What you do:** paste one prompt into your agent. It guides you through the rest and asks only when it needs you.
 - **What it installs:** on macOS and Windows, one installation: [Jason Desktop](#jason-desktop) and the `jason` it
-  carries, with `jason` in your terminal and Jason's skills for every agent host it finds, Claude Code and Codex. It is
-  installed once, updated once and removed once. On Linux, one self-contained executable. Everything goes under your own
-  account: the install script checks the download's SHA-256, and on macOS and Windows its signature, before it places
-  anything, and ends by deploying the role skills. No admin rights, and no Docker, Python or Node for Jason itself.
+  carries, with `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is found. It is
+  installed once, updated once and removed once. On Linux, one self-contained executable. No admin rights and no
+  password: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`,
+  and the terminal command, the skills and Jason's data are your account's own; on Windows and Linux everything goes
+  under your own account. The install script checks the download's SHA-256, and on macOS and Windows its signature,
+  before it places anything, and ends by deploying the role skills. No Docker, Python or Node for Jason itself.
 - **How you know it worked:** `jason status --human` checks everything, and each failed check names the command that fixes it.
 - **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
 - **How you take it off:** `jason uninstall`. On macOS and Windows it takes Jason Desktop off with everything it placed,
@@ -95,8 +97,8 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-On macOS and Windows that installs Jason Desktop, with `jason` in your terminal and Jason's skills for every agent host
-it finds; on Linux, the `jason` executable. Either way the script ends by teaching it its role skills. In a new
+On macOS and Windows that installs Jason Desktop, with `jason` in your terminal and Jason's skills for Claude Code and
+Codex, where each is found; on Linux, the `jason` executable. Either way the script ends by teaching it its role skills. In a new
 terminal, start it and ask whether it can work; the first line is for when the script said it could not teach the role
 skills:
 
@@ -116,8 +118,9 @@ jason profile set-default claude-code
 ```
 
 Or open Jason Desktop in Live, with Claude Code or Codex connected there: it makes and names one for the agent its
-chat runs on. On Linux, give your agent
-Jason's skills with `jason skills install`, which prints every folder before it writes there. Then go back to your
+chat runs on. Where your agent is another host than Claude Code or Codex, or on Linux, give it Jason's skills with
+`jason skills install --host <your host>`, which prints the folder before it writes there; the host words are in the
+install guide. Then go back to your
 agent and ask it to start Jason's quick-start skill: it takes you to your first campaign.
 
 No administrator rights needed.
@@ -157,7 +160,7 @@ to.
 | **Deliverability and warm-up** | Deliverability modules ship with Jason: sending and LinkedIn guardrail skills (authentication, warm-up, pacing, bounces, recovery) and a Deliverability role that reads bounces, opt-outs and failures and can pause a campaign at once. Warm-up itself runs in the provider you connect: Reply, or TrulyInbox, Lemwarm, Warmy and others. Jason has no warm-up engine of its own. | [Deliverability](#deliverability-and-warm-up) |
 | **Human in the loop** | Until you say otherwise, every operation that reaches a real person waits for your approval, in Jason Desktop. You can let messages go automatically, separately for people who have not answered and for people who have: a critic reads each one first, and a doubted message, one to a person whose reply has not been judged yet, one written in the desktop's chat and anything past the day's limit still come to you. A named person can also pre-approve drafted replies to one category of reply in one campaign, with an optional expiry and ceiling. Only a person's recorded word lets a send go unasked, never a role's, and every such release is logged under that person's name. Nobody who asked not to be written to is written to again. Enrolment into a provider's sequence is approved once per person, and the provider then sends that sequence's steps. | [You choose how much it asks you](#you-choose-how-much-it-asks-you) |
 | **Integrations and CRM** | Any integration you can connect to Claude Code works: MCP server, CLI or API. Your agent connects it and uses it, with no Jason connector needed. HubSpot, Salesforce and Pipedrive sync two ways through Reply, or connect through the CRM's own MCP. Phone pushes go through ntfy. | [Any other integration](#any-other-integration) |
-| **Installation** | One prompt pasted into your agent, or one line in a shell. On macOS and Windows one installation, Jason Desktop and the `jason` it carries; on Linux one self-contained executable. Under your own account, with no admin rights and no Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
+| **Installation** | One prompt pasted into your agent, or one line in a shell. On macOS and Windows one installation, Jason Desktop and the `jason` it carries; on Linux one self-contained executable. No admin rights: on a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`, and the rest is your account's own; on Windows and Linux all of it is. No Docker, Python or Node for Jason itself. | [Quick start](#quick-start) · [Install guide](https://github.com/reply-team/jason-ai/blob/main/docs/INSTALL.md) |
 | **Documentation** | 21 guides, 30 operation contracts in Markdown and JSON with 984 test fixtures, a catalogue of 325 SDR operations, a page per skill, release notes, a self-check and a troubleshooting skill. | [Documentation](#documentation) |
 | **Extensibility** | Skills and roles are plain Markdown you can edit. Plugins are small JavaScript packages against published contracts, with no private path: Reply's uses the same door as yours. You can register new roles and build on the Runtime API. A plugin can also subscribe to the runtime's journal: it is handed the lines of the kinds you granted it, after they are written, and acts back through the Runtime API only as far as you granted. | [Make it yours](#make-it-yours) |
 | **Maturity** | Alpha. The runtime's source and the public history opened with 0.24.0 on 1 November 2026. The repository carries 1167 C# test files and a UI test suite, with CI on macOS, Linux and Windows. It ships 9 business skills, 9 runtime skills and 9 role skills: campaign planning, audience building, launch, inbox triage and the rest of the profession's practice, the skills that teach an agent to operate the runtime, and one skill per role. | [Releases](https://github.com/reply-team/jason-ai/releases) · [Skills](https://github.com/reply-team/jason-ai/blob/main/skills/README.md) |

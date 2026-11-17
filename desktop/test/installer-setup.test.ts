@@ -1,6 +1,6 @@
 // What the Windows installer does once the files are in place: it sets the machine up through the jason the application
 // carries, `jason install` with no flags, at every install and every update, silent or not. That routine puts jason in the
-// terminal, gives every agent host found its skills and retires an older command-line install; it writes nothing under
+// terminal, gives Claude Code and Codex, where each is found, their skills and retires an older command-line install; it writes nothing under
 // the data directory without --roles, so a person's first start still opens on the Demo, and it starts no process that
 // outlives it, so a script that waits for the installer's whole process tree is not held. Nothing here starts a runtime:
 // the caller that asked for an install starts one where the routine stopped one. The installer is not run here; these

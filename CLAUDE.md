@@ -200,7 +200,7 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
   the runtime neither performs nor is asked about; `jason install`, its other half, run by the jason the desktop
-  application carries, sets this machine up for it — the terminal command, the skills of every agent host found, an older
+  application carries, sets this machine up for it — the terminal command, the skills of Claude Code and Codex where each is found, an older
   command-line install retired — and of the runtime asks only to drain and stop one running from the executable it
   retires, and starts none; the `skills` and `update` nouns and the
   `jason ui install` and `jason plugin install` verbs change this installation's files — deploying skills,

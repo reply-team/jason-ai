@@ -894,8 +894,9 @@ public partial class PageClaimsTests
         // The page no longer offers Homebrew's formula for a new install on a Mac, so the section names no formula at all.
         Assert.DoesNotContain("Homebrew", agent, StringComparison.Ordinal);
         var script = agent.IndexOf("On macOS and Windows that is this release's install script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file", StringComparison.Ordinal);
-        // And an Intel Mac is refused by the script, as the package subsection says no build for one is published.
-        var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since no Jason Desktop for one is published: report that as it stands.", StringComparison.Ordinal);
+        // And an Intel Mac is refused by the script, which installs Jason Desktop on Apple silicon only; every release
+        // publishes the Intel image, so the section says nothing of what is published.
+        var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since it installs Jason Desktop on Apple silicon only: report that as it stands.", StringComparison.Ordinal);
         var byHand = agent.IndexOf("On Linux it is §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
         var person = agent.IndexOf("Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
 
@@ -915,7 +916,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("It installs Jason Desktop and opens nothing, puts `jason` in the terminal, deploys the skills of every agent host it finds and the role skills, and ends non-zero, saying which act failed, when `jason` is not in the terminal.", agent, StringComparison.Ordinal);
+        Assert.Contains("It installs Jason Desktop and opens nothing, puts `jason` in the terminal, deploys the skills for Claude Code and Codex where each is found and the role skills, and ends non-zero, saying which act failed, when `jason` is not in the terminal.", agent, StringComparison.Ordinal);
         Assert.Contains("Its last line is the full path of `jason`: call `jason` by that path for the rest of your session, which does not see the new PATH.", agent, StringComparison.Ordinal);
     }
 
@@ -2543,7 +2544,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:55fa584610e818b443b960637b4f187df6f7bd8f3a579519498b31d67e90ef9d";
+    private const string AgentSectionDigest = "sha256:06b4a79a18f51174da52ffed29305ad7de31f2ef5725677276c4545b719f34f8";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

@@ -3,8 +3,9 @@
 This page takes a machine with nothing on it to an installation that can start work, and then takes it off
 again. It is written to be followed by a person or by an agent, in order, without reading anything else first.
 
-Everything here is per-user. Nothing needs administrator rights, and nothing is installed for other people on
-the machine.
+Nothing here needs administrator rights or a password. On Windows and Linux everything is installed under your own
+account. On a Mac the application goes to `/Applications` where your account may write there, else `~/Applications`;
+the terminal command, the skills and Jason's data are your account's own.
 
 ---
 
@@ -78,14 +79,14 @@ An act this page marks **Ask first.** needs the word of the person you install f
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
 
-On macOS and Windows every install puts Jason's skills where every agent host it finds reads them, Claude Code and
-Codex, your own among them: the install script does it, nobody is asked, and the step below changes nothing there.
+On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too) reads them:
+nobody is asked, and where your own host is one of those the step below changes nothing there.
 If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
 agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
 [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.
 That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
-that line names only a host the install script did not find.
+that line names only a host the install script did not give its skills.
 
 This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
 
@@ -98,16 +99,16 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   package fails, or where it or your harness refuses it, say so once and take the next route. On macOS and Windows that is this release's install
   script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file (`sh <file>`;
   `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`). It installs Jason Desktop and opens nothing, puts
-  `jason` in the terminal, deploys the skills of every agent host it finds and the role skills, and ends non-zero,
+  `jason` in the terminal, deploys the skills for Claude Code and Codex where each is found and the role skills, and ends non-zero,
   saying which act failed, when `jason` is not in the terminal. On an Intel Mac it stops before it downloads anything,
-  since no Jason Desktop for one is published: report that as it stands. Its last line is the full path of `jason`: call
+  since it installs Jason Desktop on Apple silicon only: report that as it stands. Its last line is the full path of `jason`: call
   `jason` by that path for the rest of your session, which does not see the new PATH. On Linux it is §2 *By hand*:
   download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the
   two notice files beside the executable, and run `jason --version` by its full path. That is the next route, not a
   way around the refusal. Never pipe a download into a shell. Where your harness refuses the script or the route by
   hand, say so and give the person the one-liner to type themselves.
 - Write only what those steps write: on macOS and Windows what the install script writes — the application in its
-  place, the terminal command `jason install` places, and the skills of every agent host found; the executable and
+  place, the terminal command `jason install` places, and the skills for Claude Code and Codex where each is found; the executable and
   its install directory; this account's PATH entry for it;
   Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
   goes into; and the directory the executable unpacks its native libraries into when it first runs — under
@@ -168,8 +169,8 @@ your terminal and your agents use. It is installed once, updated once and remove
 **On macOS and Windows each script installs Jason Desktop**, with `jason` in the terminal, and opens nothing:
 
 - `install.sh` on a Mac reads the machine's architecture (`sysctl hw.optional.arm64`, which a shell running under
-  Rosetta does not change) and stops on an Intel Mac before it downloads anything, since no build for one is
-  published. On Apple silicon it downloads `jason-desktop-macos-arm64.zip` and `checksums.txt`, **verifies its
+  Rosetta does not change) and stops on an Intel Mac before it downloads anything, since it installs Jason Desktop on
+  Apple silicon only. On Apple silicon it downloads `jason-desktop-macos-arm64.zip` and `checksums.txt`, **verifies its
   SHA-256**, unpacks it with `ditto` into a folder beside its place, checks with `codesign --verify --deep --strict`
   that the application is whole and signed by a Developer ID certificate Apple issued to the team that signs Jason,
   and moves it into place by one rename: `/Applications` where your account may write
@@ -186,8 +187,7 @@ your terminal and your agents use. It is installed once, updated once and remove
   the line again.
 - Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
   put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
-  application's `resources\bundle` folder on your account's Path — the skills of every agent host it finds (Claude Code
-  and Codex), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
+  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
   runtime answered before the install and none answers after it, or the report says it stopped one, the script starts
   one again from the application's `jason`.
 - It ends non-zero, saying which act failed, when `jason` was not put in the terminal. Run again over the version
@@ -348,8 +348,8 @@ installation itself: one installation, Jason Desktop and the `jason` it carries,
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
 `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. The Windows installer, at
-every install and update, puts `jason` in the terminal and the skills where every agent host it finds reads them, as
-the script does (§2). The Windows and macOS packages are signed.
+every install and update, puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is
+found, as the script does (§2). The Windows and macOS packages are signed.
 
 On Linux, Jason Desktop is a separate download beside the command line: `jason-desktop-linux-x64.deb`
 (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or
@@ -685,7 +685,7 @@ jason uninstall
 
 On macOS and Windows this is the one uninstall: one installation, Jason Desktop and the `jason` it carries, is removed
 once. The same verb takes off the application, what `jason install` placed for it — the terminal command and the
-skills of every agent host — and an older command-line install, by the rules below and the steps
+skills it recorded in agent hosts' folders — and an older command-line install, by the rules below and the steps
 [release-and-update.md](release-and-update.md) §9 adds for the application. It is also reached from Installed apps in
 Settings on Windows and from **Uninstall Jason…** in the Jason menu on macOS (*Jason Desktop*, below). Run from a
 terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed: quit Jason first.

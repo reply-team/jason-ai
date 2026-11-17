@@ -179,9 +179,10 @@ every platform, built from this tree at the release's version.
 ## The installation
 
 Each install script works out your platform and verifies the download's SHA-256 before it places anything. On macOS
-and Windows it installs Jason Desktop under your own account, its signature checked too, opens nothing, and has the
-`jason` the application carries put `jason` in your terminal and Jason's skills where every agent host it finds reads
-them. On Linux it installs the executable under your own account, in `~/.local/bin`, with its licence and the
+and Windows it installs Jason Desktop, its signature checked too, with no administrator rights — on a Mac in
+`/Applications` where your account may write there, else `~/Applications` — opens nothing, and has the `jason` the
+application carries put `jason` in your terminal and Jason's skills for Claude Code and Codex, where each is found;
+another host gets them with `jason skills install --host <host>`. On Linux it installs the executable under your own account, in `~/.local/bin`, with its licence and the
 third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH
 unless you pass `--no-modify-path`. Nothing needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
 could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
