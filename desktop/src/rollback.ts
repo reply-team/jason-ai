@@ -154,7 +154,8 @@ async function copyOutside(source: string, target: string, data: string, copy: C
  * Copies the installed application under `<rollback>/<fromVersion>/` and records the update as pending; whatever copy an
  * earlier update left, kept or pending, is removed first, so one previous version is kept at most. Returns the copy. An
  * application that is one file, the AppImage, is copied as that file; a null one, the deb, is recorded with no copy. A
- * copy that fails leaves nothing of itself and records nothing: what it copied is removed, and its error is thrown.
+ * copy that fails leaves nothing of itself and records no copy: what it copied is removed, the record no longer names the
+ * earlier copy, which was removed before it, and its error is thrown.
  */
 export async function keepPrevious(
     rollback: string,
@@ -191,6 +192,14 @@ export async function keepPrevious(
             rmSync(join(rollback, fromVersion), { recursive: true, force: true });
         } catch {
             // The copy's own error is the one thrown; a folder that cannot be removed either is the next update's to remove.
+        }
+        // The earlier copy went before this one was made, so the record names none: kept, or pending from an earlier update.
+        if (state.kept !== undefined || (state.pending !== undefined && state.pending.directory !== null)) {
+            try {
+                writeRollback(rollback, { rejected: state.rejected });
+            } catch {
+                // A record that cannot be written is read as it was; the menu names a copy only while its folder is there.
+            }
         }
         throw error;
     }

@@ -163,12 +163,13 @@ export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: t
 
 /**
  * What the person is told when the application could not be kept aside, after its runtime was stopped or with none to
- * stop, and what they can do instead: install the new version from its release's own installer, which keeps no copy.
+ * stop, and what they can do instead: install the new version from its release's page as they installed this one, which
+ * keeps no copy.
  */
 export function keepRefusal(stopped: boolean, version: string): string {
     const why = 'The update was not installed, because a copy of this version could not be kept aside to go back to.';
     const left = stopped ? 'The runtime this application carries was stopped for the update: jason runtime start starts it again.' : 'Jason was left as it was.';
-    return `${why} ${left} You can install the new version yourself: download its installer from ${releasePage(version)} and run it.`;
+    return `${why} ${left} You can install the new version yourself: download it for your system from ${releasePage(version)} and install it as you installed this one.`;
 }
 
 /** What the person is told when the installer stopped before it finished, so Jason stayed open. */

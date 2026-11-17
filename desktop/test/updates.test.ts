@@ -364,30 +364,39 @@ test('a copy that cannot be kept aside says so, how to start a stopped runtime a
     }
     assert.equal(
         keepRefusal(false, '0.35.0'),
-        'The update was not installed, because a copy of this version could not be kept aside to go back to. Jason was left as it was. You can install the new version yourself: download its installer from https://get.jasonharness.ai/releases/tag/v0.35.0 and run it.',
+        'The update was not installed, because a copy of this version could not be kept aside to go back to. Jason was left as it was. You can install the new version yourself: download it for your system from https://get.jasonharness.ai/releases/tag/v0.35.0 and install it as you installed this one.',
     );
     assert.equal(
         keepRefusal(true, '0.35.0'),
-        'The update was not installed, because a copy of this version could not be kept aside to go back to. The runtime this application carries was stopped for the update: jason runtime start starts it again. You can install the new version yourself: download its installer from https://get.jasonharness.ai/releases/tag/v0.35.0 and run it.',
+        'The update was not installed, because a copy of this version could not be kept aside to go back to. The runtime this application carries was stopped for the update: jason runtime start starts it again. You can install the new version yourself: download it for your system from https://get.jasonharness.ai/releases/tag/v0.35.0 and install it as you installed this one.',
     );
 });
 
-test('a copy that fails part way leaves nothing of itself and records nothing; the earlier record stays as it was', async (t) => {
+test('a copy that fails part way leaves nothing of itself, and the record no longer names the earlier copy it replaced', async (t) => {
     for (const asFile of [false, true]) {
-        const s = scratch(t);
-        const application = asFile ? join(s.root, 'Jason.AppImage') : s.application;
-        if (asFile) writeFileSync(application, 'the AppImage 0.34.0');
-        const earlier = { pending: { fromVersion: '0.33.0', toVersion: '0.34.0', directory: join(s.rollback, '0.33.0', 'Jason') }, rejected: ['0.33.1'] };
-        writeRollback(s.rollback, earlier);
-        const failing = async (_source: string, target: string): Promise<void> => {
-            // Some of the copy is written before it fails, as a copy that runs out of room or meets a file it cannot read.
-            mkdirSync(join(target, 'resources'), { recursive: true });
-            writeFileSync(join(target, 'resources', 'app.asar'), 'half');
-            throw Object.assign(new Error('planted copy failure'), { code: 'ENOSPC' });
-        };
-        await assert.rejects(keepPrevious(s.rollback, application, '0.34.0', '0.35.0', failing), { code: 'ENOSPC' });
-        assert.deepEqual(readdirSync(s.rollback), ['state.json'], 'no part of the copy is left');
-        assert.deepEqual(readRollback(s.rollback), earlier, 'nothing is recorded');
+        for (const before of ['kept', 'pending', 'none'] as const) {
+            const s = scratch(t);
+            const application = asFile ? join(s.root, 'Jason.AppImage') : s.application;
+            if (asFile) writeFileSync(application, 'the AppImage 0.34.0');
+            const earlier = join(s.rollback, '0.33.0', 'Jason');
+            mkdirSync(earlier, { recursive: true });
+            writeFileSync(join(earlier, 'Jason.exe'), 'the application 0.33.0');
+            if (before === 'kept') writeRollback(s.rollback, { kept: { version: '0.33.0', directory: earlier }, rejected: ['0.33.1'] });
+            if (before === 'pending') writeRollback(s.rollback, { pending: { fromVersion: '0.33.0', toVersion: '0.34.0', directory: earlier }, rejected: ['0.33.1'] });
+            const failing = async (_source: string, target: string): Promise<void> => {
+                // Some of the copy is written before it fails, as a copy that runs out of room or meets a file it cannot read.
+                mkdirSync(join(target, 'resources'), { recursive: true });
+                writeFileSync(join(target, 'resources', 'app.asar'), 'half');
+                throw Object.assign(new Error('planted copy failure'), { code: 'ENOSPC' });
+            };
+            await assert.rejects(keepPrevious(s.rollback, application, '0.34.0', '0.35.0', failing), { code: 'ENOSPC' });
+            assert.deepEqual(readdirSync(s.rollback), before === 'none' ? [] : ['state.json'], `no part of either copy is left (${before})`);
+            const record = readRollback(s.rollback);
+            assert.equal(record.kept, undefined, `the record names no kept copy (${before})`);
+            assert.equal(record.pending, undefined, `nor a pending one (${before})`);
+            assert.deepEqual(record.rejected, before === 'none' ? [] : ['0.33.1'], 'what was refused stays refused');
+            assert.equal(keptLine(record, '0.34.0', existsSync), null);
+        }
     }
 });
 

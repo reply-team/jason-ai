@@ -959,7 +959,8 @@ only on your word again. The download is kept in the updater's cache under your 
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
-the package names.
+the package names. On Windows and macOS a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
+install 0.48.5 or later yourself once, and from then on the application's own update works.
 
 Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
 updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
@@ -977,8 +978,8 @@ started from another `jason` is never stopped.
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
 `<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
 application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
-installed and no part of a copy is left: Jason says so, and that the new version's installer can be downloaded from its
-release page and run instead. Nothing puts the kept copy back by itself, because the
+installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
+version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing puts the kept copy back by itself, because the
 runtime has no guard against a data directory a newer version migrated: if the new version does not start, the
 starting page says what went wrong and where the kept version is, and going back is quitting Jason and putting that
 folder back in the place of the installed application. That puts back the previous application and the Jason it carried;
