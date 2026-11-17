@@ -379,6 +379,25 @@ public static class PathEntry
     }
 
     /// <summary>
+    /// Whether the directory holds a character <c>install.sh</c> refuses to write into a profile's line, which reads the
+    /// directory inside double quotes: a line break, which ends the line (and the whole-line search would never find it
+    /// again), or <c>"</c>, <c>$</c>, a backtick or <c>\</c>, which the shell reads there as something else — code every
+    /// login would run. The backslash only where the machine's own separator is not one, as the desktop's rule reads it.
+    /// </summary>
+    public static bool UnsafeFolder(string directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        return directory.IndexOfAny(['"', '$', '`', '\n', '\r']) >= 0 || (Path.DirectorySeparatorChar != '\\' && directory.Contains('\\', StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The line a person adds by hand: <see cref="ExportLine(string)"/>, or for a directory that line cannot spell
+    /// (<see cref="UnsafeFolder"/>), the directory in single quotes, as the desktop's own rule gives it.
+    /// </summary>
+    public static string HandLine(string directory) =>
+        UnsafeFolder(directory) ? $"export PATH='{directory.Replace("'", @"'\''", StringComparison.Ordinal)}':\"$PATH\"" : ExportLine(directory);
+
+    /// <summary>
     /// The profiles <c>install.sh</c> puts the line into for this account, in its order: the <see cref="LoginProfile"/>, then
     /// the <see cref="InteractiveProfile"/> where the shell has one.
     /// </summary>

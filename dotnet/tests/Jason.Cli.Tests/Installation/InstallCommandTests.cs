@@ -561,6 +561,339 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Empty(processes.Runs);
     }
 
+    // --- the critic's rows: what must never happen ------------------------------------------------------------
+
+    /// <summary>
+    /// B1, macOS: where the wrapper cannot be written (a folder stands at ~/.local/bin/jason) or another program's file
+    /// stands there, the terminal command was not placed, so a command-line install elsewhere is not retired: its executable
+    /// and the notice that marks it Jason's stay, and it says why.
+    /// </summary>
+    [Theory]
+    [InlineData("folder")]
+    [InlineData("foreign")]
+    public async Task On_macos_nothing_is_retired_where_the_terminal_command_was_not_placed(string blocker)
+    {
+        var old = PlantElsewhere("jason");
+        var target = Path.Combine(Home, ".local", "bin", "jason");
+        if (blocker == "folder")
+        {
+            Directory.CreateDirectory(target);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllText(target, "#!/bin/sh\necho somebody else's\n");
+        }
+
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, old), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(old), "the old executable went though no terminal command replaced it");
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(old)!, "jason-LICENSE")), "the notice that marks the old file Jason's went");
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains($"{old} was not retired", StringComparison.Ordinal));
+    }
+
+    /// <summary>B1, Windows: a Path that cannot be written leaves the command-line install, its Path entry and the application's command files as they were.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_nothing_is_retired_or_taken_back_where_the_path_could_not_be_written()
+    {
+        using var key = ScratchKey.Create();
+        var folder = Path.Combine(LocalAppData, "Programs", "jason");
+        Directory.CreateDirectory(folder);
+        var old = Path.Combine(folder, "jason.exe");
+        File.WriteAllText(old, "old");
+        key.SetPath(folder, RegistryValueKind.ExpandString);
+        var executable = Carried("jason.exe");
+        var apps = Path.Combine(LocalAppData, "Microsoft", "WindowsApps");
+        Directory.CreateDirectory(apps);
+        var shim = Path.Combine(apps, "jason.cmd");
+        File.WriteAllText(shim, $"@echo off\r\n\"{executable}\" %*\r\n");
+        key.DenySetValue();
+        var (env, output) = Environment(WindowsPlaces(key.SubKey), executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(old), "jason.exe went though the bundle folder never reached the Path");
+        Assert.True(File.Exists(shim), "the application's command file went though nothing else answers jason");
+        Assert.Equal((folder, RegistryValueKind.ExpandString), key.ReadPath());
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.Equal(0, report.GetProperty("command").GetProperty("taken_back").GetArrayLength());
+    }
+
+    /// <summary>B2: on macOS the registration is moved on disk and takes effect at the next logon: no load, which would start a runtime now (RunAtLoad), and no unload.</summary>
+    [Fact]
+    public async Task On_macos_the_registration_is_moved_on_disk_and_nothing_is_loaded()
+    {
+        var old = PlantMacCommandLineInstall();
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs) { State = new AutostartState(true, [old, "runtime", "run", "--detached", "--data-dir", _data.Paths.Root], null) };
+        var executable = Carried();
+        var (env, output) = Environment(MacPlaces(), executable);
+        env = env with { Autostart = registrar };
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        var applied = Assert.Single(registrar.Applied);
+        Assert.Equal(executable, applied.Run[0]);
+        Assert.Empty(applied.Apply);
+        Assert.Empty(applied.Remove);
+        Assert.Contains("RunAtLoad", applied.Artifact, StringComparison.Ordinal);
+        Assert.Contains(Report(output).GetProperty("done").EnumerateArray(), said => said.GetString()!.Contains("next logon", StringComparison.Ordinal));
+    }
+
+    /// <summary>B3: <c>--retire</c> takes only a regular file named jason with a sign of its own that it is Jason's; anything else is named and left.</summary>
+    [Theory]
+    [InlineData("node", true)]
+    [InlineData("jason", false)]
+    public async Task Retire_leaves_a_file_that_is_not_a_jason_of_jasons(string name, bool notices)
+    {
+        var folder = Path.Combine(_tree.Paths.Root, "tools");
+        Directory.CreateDirectory(folder);
+        var named = Path.Combine(folder, name);
+        File.WriteAllBytes(named, new byte[1000]);
+        if (notices)
+        {
+            File.WriteAllText(Path.Combine(folder, "jason-LICENSE"), "MIT");
+        }
+
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, named), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(named), $"--retire deleted {named}");
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.StartsWith($"--retire names {named}", StringComparison.Ordinal));
+    }
+
+    /// <summary>B4: a folder install.sh refuses to spell inside double quotes takes no profile line; the hand line, in single quotes, is given.</summary>
+    [Theory]
+    [InlineData("ho$me")]
+    [InlineData("ho`me")]
+    public async Task A_folder_the_script_cannot_spell_takes_no_profile_line_and_the_hand_line_is_given(string homeName)
+    {
+        var home = Path.Combine(_tree.Paths.Root, homeName);
+        Directory.CreateDirectory(home);
+        var bin = Path.Combine(home, ".local", "bin");
+        var (env, output) = Environment(MacPlaces() with { Home = home }, Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(File.Exists(Path.Combine(home, ".zprofile")), "a line the shell reads as code was written");
+        Assert.False(File.Exists(Path.Combine(home, ".zshrc")), "a line the shell reads as code was written");
+        Assert.True(File.Exists(Path.Combine(bin, "jason")));
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains($"export PATH='{bin}':\"$PATH\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>B5: a Path of a kind that is not a string is not overwritten with the bundle folder alone; it is refused and said.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task A_path_value_of_another_kind_is_refused_and_left()
+    {
+        using var key = ScratchKey.Create();
+        key.SetMulti("Path", [@"C:\Tools", @"C:\More"]);
+        var (env, output) = Environment(WindowsPlaces(key.SubKey), Carried("jason.exe"));
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal([@"C:\Tools", @"C:\More"], key.ReadMulti("Path")!);
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("MultiString", StringComparison.Ordinal));
+    }
+
+    /// <summary>B6: skills a deployment wrote before it was cut off, with no record yet, equal the bundle's: they are Jason's, adopted and recorded.</summary>
+    [Fact]
+    public async Task Skills_an_interrupted_deployment_left_unrecorded_are_adopted_and_recorded()
+    {
+        PlantHosts(claude: true, codex: false);
+        var executable = Carried();
+        var (first, _) = Environment(MacPlaces(), executable);
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(first, new InstallOptions(false, false, null), Ct));
+        var root = Path.Combine(Home, ".claude", "skills");
+        File.Delete(Path.Combine(root, ".jason-skills.json"));
+        Assert.Null(SkillsRecord.Read(root));
+
+        var (env, output) = Environment(MacPlaces(), executable);
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var deployed = Assert.Single(Report(output).GetProperty("skills").EnumerateArray());
+        Assert.Equal(0, deployed.GetProperty("left_alone").GetArrayLength());
+        var recorded = SkillsRecord.Read(root)!.Packs.SelectMany(pack => pack.Files).Select(file => file.Path).ToList();
+        Assert.Contains(recorded, path => path.StartsWith("operating/", StringComparison.Ordinal));
+    }
+
+    /// <summary>Note 7: a stop that fails leaves the runtime resumed, not draining.</summary>
+    [Fact]
+    public async Task A_runtime_that_would_not_stop_is_resumed()
+    {
+        var old = PlantMacCommandLineInstall();
+        Directory.CreateDirectory(_data.Paths.Root);
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var asked = new List<string>();
+        var handler = new FakeHandler(request =>
+        {
+            var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+            asked.Add(operation);
+            return operation switch
+            {
+                Operations.SystemDrain => RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 0), JasonJson.Options)),
+                Operations.SystemShutdown => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD")),
+                _ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD")),
+            };
+        });
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { HttpHandler = handler, Processes = processes };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal("would_not_stop", Report(output).GetProperty("runtime").GetString());
+        Assert.Equal(Operations.SystemResume, asked[^1]);
+        Assert.True(File.Exists(old));
+    }
+
+    /// <summary>Note 7: a runtime whose descriptor names no image may run from the file, so the file is not retired, and the report says why.</summary>
+    [Fact]
+    public async Task A_runtime_that_names_no_image_keeps_the_file_it_may_run_from()
+    {
+        var old = PlantElsewhere("jason");
+        Directory.CreateDirectory(_data.Paths.Root);
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_ANON") with { InstalledImage = null });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { HttpHandler = RuntimeVerbs.NeverCalled(), Processes = processes };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, old), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.True(File.Exists(old), "the file a runtime may run from was retired under it");
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("does not name the executable it runs from", StringComparison.Ordinal));
+    }
+
+    /// <summary>Note 7: a registration that named no data directory is registered again naming none.</summary>
+    [Fact]
+    public async Task A_registration_without_a_data_directory_keeps_having_none()
+    {
+        var old = PlantMacCommandLineInstall();
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs) { State = new AutostartState(true, [old, "runtime", "run", "--detached"], null) };
+        var executable = Carried();
+        var (env, _) = Environment(MacPlaces(), executable);
+        env = env with { Autostart = registrar };
+
+        await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        var applied = Assert.Single(registrar.Applied);
+        Assert.Equal([executable, "runtime", "run", "--detached"], applied.Run);
+    }
+
+    /// <summary>Note 8: where retiring would stop a runtime or move a registration, a data directory of a newer layout refuses that part, with or without --roles.</summary>
+    [Fact]
+    public async Task A_newer_layout_keeps_its_runtime_and_registration_and_the_install_is_not_retired()
+    {
+        var old = PlantMacCommandLineInstall();
+        Directory.CreateDirectory(_data.Paths.Root);
+        File.WriteAllText(Path.Combine(_data.Paths.Root, "layout.json"), """{"layout":2,"written_by":"0.43.0","at":"2026-11-20T10:00:00Z"}""");
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var registrar = new RecordingRegistrar(AutostartPlatform.MacOs) { State = new AutostartState(true, [old, "runtime", "run", "--detached", "--data-dir", _data.Paths.Root], null) };
+        var (env, output) = Environment(MacPlaces(), Carried());
+        // The stamp is read when the paths are made, as at a real start.
+        env = env with { Paths = new Jason.Contracts.Discovery.JasonPaths(_data.Paths.Root), HttpHandler = RuntimeVerbs.NeverCalled(), Processes = processes, Autostart = registrar };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Empty(registrar.Applied);
+        Assert.True(File.Exists(old), "the command-line install was retired over a newer layout");
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("layout_newer", StringComparison.Ordinal));
+    }
+
+    /// <summary>Note 9: a failure no step expected (here the home cannot be read for agent hosts) still ends in the one document, the failure named.</summary>
+    [Fact]
+    public async Task An_unexpected_input_output_failure_still_prints_the_one_report()
+    {
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { Harnesses = new UnreadableHome() };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.False(report.GetProperty("completed").GetBoolean());
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("the disk went away", StringComparison.Ordinal));
+        Assert.True(File.Exists(Path.Combine(Home, ".local", "bin", "jason")), "the steps before the failure did not run");
+    }
+
+    private sealed class UnreadableHome : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() => throw new IOException("the disk went away");
+    }
+
+    /// <summary>Note 10: on macOS 0.48's jason-desktop wrapper of the application's is taken back, as the Windows command files are; another program's stays.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task On_macos_the_applications_jason_desktop_wrapper_is_taken_back(bool ours)
+    {
+        var bin = Path.Combine(Home, ".local", "bin");
+        Directory.CreateDirectory(bin);
+        var desktop = Path.Combine(bin, "jason-desktop");
+        File.WriteAllText(desktop, ours ? CommandFiles.Wrapper("/Applications/Jason.app/Contents/Resources/bundle/jason", null) : "#!/bin/sh\necho mine\n");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(!ours, File.Exists(desktop));
+        Assert.Equal(ours ? 1 : 0, Report(output).GetProperty("command").GetProperty("taken_back").GetArrayLength());
+    }
+
+    /// <summary>Note 11: a profile that is a link to a regular file is appended through; a link to anything else is refused with the hand line.</summary>
+    [Fact]
+    public async Task A_profile_link_is_followed_only_to_a_regular_file()
+    {
+        var dotfiles = Path.Combine(_tree.Paths.Root, "dotfiles");
+        Directory.CreateDirectory(dotfiles);
+        var real = Path.Combine(dotfiles, "zshrc");
+        File.WriteAllText(real, "# mine\n");
+        var zshrc = Path.Combine(Home, ".zshrc");
+        var zprofile = Path.Combine(Home, ".zprofile");
+        try
+        {
+            File.CreateSymbolicLink(zshrc, real);
+            Directory.CreateSymbolicLink(zprofile, dotfiles);
+        }
+        catch (Exception unsupported) when (unsupported is IOException or UnauthorizedAccessException)
+        {
+            Assert.Skip("This account cannot make symbolic links.");
+        }
+
+        var bin = Path.Combine(Home, ".local", "bin");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.NotNull(new FileInfo(zshrc).LinkTarget);
+        Assert.Equal($"# mine\n\n# added by jason install\nexport PATH=\"{bin}:$PATH\"\n", File.ReadAllText(real));
+        Assert.NotNull(new DirectoryInfo(zprofile).LinkTarget);
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains(zprofile, StringComparison.Ordinal) && said.GetString()!.Contains($"export PATH=\"{bin}:$PATH\"", StringComparison.Ordinal));
+    }
+
     // --- the verb itself -----------------------------------------------------------------------------------
 
     [Fact]
@@ -631,6 +964,17 @@ public sealed class InstallCommandTests : IDisposable
         }
 
         File.Delete(file);
+    }
+
+    /// <summary>A command-line install outside ~/.local/bin, with the notice that marks it Jason's.</summary>
+    private string PlantElsewhere(string name)
+    {
+        var folder = Path.Combine(_tree.Paths.Root, "opt", "jason");
+        Directory.CreateDirectory(folder);
+        var old = Path.Combine(folder, name);
+        File.WriteAllBytes(old, new byte[200_000]);
+        File.WriteAllText(Path.Combine(folder, "jason-LICENSE"), "MIT");
+        return old;
     }
 
     private string PlantMacCommandLineInstall()
@@ -706,6 +1050,30 @@ public sealed class InstallCommandTests : IDisposable
         {
             using var key = Registry.CurrentUser.CreateSubKey(SubKey);
             key.SetValue("Path", raw, kind);
+        }
+
+        public void SetMulti(string name, string[] values)
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(SubKey);
+            key.SetValue(name, values, RegistryValueKind.MultiString);
+        }
+
+        public string[]? ReadMulti(string name)
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(SubKey);
+            return key?.GetValue(name) as string[];
+        }
+
+        /// <summary>This account may no longer set a value on the key, as on a Path a policy locks; it may still delete the key.</summary>
+        public void DenySetValue()
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(SubKey, writable: true)!;
+            var security = key.GetAccessControl();
+            security.AddAccessRule(new System.Security.AccessControl.RegistryAccessRule(
+                System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+                System.Security.AccessControl.RegistryRights.SetValue,
+                System.Security.AccessControl.AccessControlType.Deny));
+            key.SetAccessControl(security);
         }
 
         public (string Raw, RegistryValueKind Kind)? ReadPath()

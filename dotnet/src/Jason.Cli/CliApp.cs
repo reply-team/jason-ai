@@ -105,7 +105,7 @@ namespace Jason.Cli;
 /// <para>
 /// Guards hold the list to these: the verb-map tests to the seven verbs, the three nouns, the <c>ui</c> group's three
 /// operations and <c>install</c>, the <c>plugin</c> group's two operations and <c>install</c>, and the <c>session</c>
-/// noun's one verb, <c>open</c>. A twelfth has to be added in the open rather than arriving as one more verb somebody
+/// noun's one verb, <c>open</c>. A thirteenth has to be added in the open rather than arriving as one more verb somebody
 /// thought was obviously fine.
 /// </para>
 /// </remarks>

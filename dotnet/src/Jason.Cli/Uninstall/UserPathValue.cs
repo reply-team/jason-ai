@@ -90,7 +90,8 @@ public sealed class UserPathValue(string subKey = UserPathValue.EnvironmentKey)
     /// <summary>
     /// Puts the directory on this account's Path where it is not there already, by <see cref="PathEntry.WithDirectory"/>:
     /// the value's kind kept, <c>REG_EXPAND_SZ</c> for a Path that does not exist yet, and every running program told.
-    /// Says whether it wrote anything; a second call writes nothing and tells nobody.
+    /// Says whether it wrote anything; a second call writes nothing and tells nobody. A Path of a kind that is not a string
+    /// is refused (<see cref="IOException"/>) and left as it is.
     /// </summary>
     /// <remarks>
     /// The C# twin of the statements <c>install.ps1</c> runs and <c>jason status</c> prints
@@ -100,6 +101,16 @@ public sealed class UserPathValue(string subKey = UserPathValue.EnvironmentKey)
     public bool Append(string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        // A Path of another kind (REG_MULTI_SZ, REG_BINARY) reads as none, and "none" would be written as this one folder
+        // alone over the person's whole Path. It is refused instead, and left as it is.
+        using (var key = Registry.CurrentUser.OpenSubKey(subKey))
+        {
+            if (key?.GetValue(Name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) is { } and not string)
+            {
+                throw new IOException($"this account's Path is stored as {key.GetValueKind(Name)}, not as a string, and a folder cannot be added to it without rewriting it whole, so it was left as it is");
+            }
+        }
 
         var stored = Read();
         var raw = stored?.Raw ?? string.Empty;

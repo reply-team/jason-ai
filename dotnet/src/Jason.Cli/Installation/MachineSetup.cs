@@ -122,15 +122,56 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(options);
 
         var run = new Run(env, carried, places, options);
-        var old = run.FindCommandLineInstall();
-        var runtime = old is null ? run.RuntimeOutside() : await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
-        var holding = runtime == RuntimeStates.WouldNotStop;
+        string? old = null;
+        var runtime = RuntimeStates.NotRunning;
+        var holding = false;
+        InstallCommandOutcome? command = null;
+        InstallRetired? retired = null;
+        IReadOnlyList<InstallSkillsOutcome> skills = [];
+        InstallSkillsOutcome? roles = null;
 
-        var command = places.Platform is SetupSystem.Windows ? run.WindowsCommand() : run.MacCommand(old, holding);
-        var retired = old is null || holding ? null : run.Retire(old);
+        // Each step in its own guard, so an input/output failure no step expected ends in the one document like any other
+        // problem, with every step before it reported.
+        await run.Step("Looking for a command-line install", async () =>
+        {
+            old = run.FindCommandLineInstall();
+            if (old is null)
+            {
+                runtime = run.RuntimeOutside();
+            }
+            else if (run.LayoutRefuses(old))
+            {
+                // Retiring stops a runtime and moves a registration: neither is done over a layout this jason does not run.
+                runtime = run.RuntimeOutside();
+                holding = true;
+            }
+            else
+            {
+                (runtime, holding) = await run.StopOldRuntimeAsync(old, cancellationToken).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
 
-        var skills = await run.HarnessSkillsAsync(cancellationToken).ConfigureAwait(false);
-        var roles = options.Roles ? await run.RoleSkillsAsync(cancellationToken).ConfigureAwait(false) : null;
+        await run.Step("Placing the terminal command", () =>
+        {
+            command = places.Platform is SetupSystem.Windows ? run.WindowsCommand() : run.MacCommand(old, holding);
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        if (old is not null && !holding)
+        {
+            await run.Step($"Retiring the command-line install at {old}", () =>
+            {
+                // Only once a new terminal finds this jason, as read back: otherwise the old one is what still answers.
+                retired = run.CommandPlaced ? run.Retire(old) : run.NotRetired(old);
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+
+        await run.Step("Deploying the harness skills", async () => skills = await run.HarnessSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        if (options.Roles)
+        {
+            await run.Step("Deploying the role skills", async () => roles = await run.RoleSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        }
 
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
@@ -158,6 +199,47 @@ public static class MachineSetup
 
         private StringComparison PathCase => Windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
+        /// <summary>
+        /// Whether the terminal command step left a command a new terminal finds, as read back: the Path entry on Windows; the
+        /// wrapper on macOS, with the profile lines in place or the folder on a terminal's PATH already.
+        /// </summary>
+        public bool CommandPlaced { get; private set; }
+
+        /// <summary>One step, its input/output failures said as a problem rather than thrown past the report.</summary>
+        public async Task Step(string what, Func<Task> step)
+        {
+            try
+            {
+                await step().ConfigureAwait(false);
+            }
+            catch (Exception failed) when (failed is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                Problems.Add($"{what} stopped part-way: {failed.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Whether this data directory's layout stamp refuses this jason, which then stops no runtime and moves no
+        /// registration: the gate the layout-gated verbs keep, kept here whenever retiring would touch either.
+        /// </summary>
+        public bool LayoutRefuses(string old)
+        {
+            if (LayoutStamp.Refusal(env.Paths, SkillsSource.BuildVersion(env)) is not { } refused)
+            {
+                return false;
+            }
+
+            Problems.Add($"{refused.Code}: {refused.Message} So the command-line install at {old} was not retired: its runtime and its logon registration were left as they are.");
+            return true;
+        }
+
+        /// <summary>The command-line install left, where the terminal command was not placed: the old one still answers.</summary>
+        public InstallRetired? NotRetired(string old)
+        {
+            Problems.Add($"{old} was not retired, since a new terminal would not find this jason in its place; it still answers as jason.");
+            return null;
+        }
+
         // --- the command-line install --------------------------------------------------------------------------
 
         /// <summary>
@@ -169,12 +251,14 @@ public static class MachineSetup
         /// </summary>
         public string? FindCommandLineInstall()
         {
+            var recorded = Recorded();
             if (options.Retire is { } named)
             {
                 var full = Path.GetFullPath(named);
-                if (!File.Exists(full))
+                var name = Windows ? "jason.exe" : "jason";
+                if (!IsRegularFile(full))
                 {
-                    Problems.Add($"--retire names {full}, and there is no file there, so nothing was retired.");
+                    Problems.Add($"--retire names {full}, and there is no regular file there (nothing, a folder or a link), so nothing was retired.");
                     return null;
                 }
 
@@ -184,10 +268,21 @@ public static class MachineSetup
                     return null;
                 }
 
+                if (!string.Equals(Path.GetFileName(full), name, PathCase) || IsWrapper(full))
+                {
+                    Problems.Add($"--retire names {full}, which is not a command-line install's {name}, so it was left as it is.");
+                    return null;
+                }
+
+                if (!Signed(full, recorded))
+                {
+                    Problems.Add($"--retire names {full}, and nothing says it is Jason's (no {string.Join(" or ", ReleaseAssets.Notices.Select(notice => Path.GetFileName(ReleaseAssets.NoticeBeside(full, notice))))} beside it, and it is neither the one the last `jason update apply` recorded nor the installer's own place), so it was left as it is.");
+                    return null;
+                }
+
                 return full;
             }
 
-            var recorded = Recorded();
             foreach (var candidate in new[] { recorded, places.DefaultCommandLineExecutable }.OfType<string>())
             {
                 var full = Path.GetFullPath(candidate);
@@ -196,10 +291,7 @@ public static class MachineSetup
                     continue;
                 }
 
-                var signed = string.Equals(full, recorded, PathCase)
-                    || ReleaseAssets.Notices.Any(notice => File.Exists(ReleaseAssets.NoticeBeside(full, notice)))
-                    || (Windows && string.Equals(full, Path.GetFullPath(places.DefaultCommandLineExecutable), PathCase));
-                if (signed)
+                if (Signed(full, recorded))
                 {
                     return full;
                 }
@@ -207,6 +299,15 @@ public static class MachineSetup
 
             return null;
         }
+
+        /// <summary>
+        /// Whether a file is Jason's by a sign of its own: the one the update ledger records, a notice file of Jason's beside
+        /// it, or on Windows the installer's own place.
+        /// </summary>
+        private bool Signed(string full, string? recorded) =>
+            string.Equals(full, recorded, PathCase)
+            || ReleaseAssets.Notices.Any(notice => File.Exists(ReleaseAssets.NoticeBeside(full, notice)))
+            || (Windows && string.Equals(full, Path.GetFullPath(places.DefaultCommandLineExecutable), PathCase));
 
         /// <summary>The install path the update ledger names, where there is a readable one; reading it writes nothing.</summary>
         private string? Recorded()
@@ -229,24 +330,34 @@ public static class MachineSetup
         /// A runtime running from the executable being retired is drained and stopped before its file is touched: its
         /// plugin hosts start from its own image, and a file replaced under it would start them from another version.
         /// </summary>
-        public async Task<string> StopOldRuntimeAsync(string old, CancellationToken cancellationToken)
+        /// <returns>The <c>runtime</c> member's word, and whether the old install is held: nothing of it may be retired.</returns>
+        public async Task<(string State, bool Holding)> StopOldRuntimeAsync(string old, CancellationToken cancellationToken)
         {
             var processes = env.Processes ?? RuntimeProcessControl.Instance;
             if (DescriptorProcess.Live(env.Paths, processes) is not { } descriptor)
             {
-                return RuntimeStates.NotRunning;
+                return (RuntimeStates.NotRunning, false);
             }
 
-            if (descriptor.InstalledImage is not { } image || !string.Equals(Path.GetFullPath(image), old, PathCase))
+            if (descriptor.InstalledImage is not { } image)
             {
-                Left.Add($"The runtime that runs on {env.Paths.Root} runs from {descriptor.InstalledImage ?? "an executable it does not name"}, not from {old}, so it was left running.");
-                return RuntimeStates.Running;
+                // Written before runtimes named their image, or run through the dotnet muxer: it may run from the old file,
+                // whose plugin hosts would then start from whatever replaced it.
+                Problems.Add($"The runtime that runs on {env.Paths.Root} does not name the executable it runs from, so {old}, which it may run from, was not retired and the runtime was left running. Stop it with `jason runtime stop` and run this again.");
+                return (RuntimeStates.Running, true);
+            }
+
+            if (!string.Equals(Path.GetFullPath(image), old, PathCase))
+            {
+                Left.Add($"The runtime that runs on {env.Paths.Root} runs from {image}, not from {old}, so it was left running.");
+                return (RuntimeStates.Running, false);
             }
 
             using var said = new StringWriter();
             var quiet = env with { Out = said };
             var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
-            if (drain is { IsSuccess: true })
+            var drained = drain is { IsSuccess: true };
+            if (drained)
             {
                 await WaitForAttemptsAsync(quiet, cancellationToken).ConfigureAwait(false);
             }
@@ -254,14 +365,16 @@ public static class MachineSetup
             var exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
             if (exit != ExitCodes.Success)
             {
+                // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
+                var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
-                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired. Stop it with `jason runtime stop` and run this again.");
-                return RuntimeStates.WouldNotStop;
+                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason system resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
+                return (RuntimeStates.WouldNotStop, true);
             }
 
             Done.Add($"Stopped the runtime that ran from {old}.");
             Left.Add($"No runtime was started: `jason runtime start` starts one from {carried.Executable}.");
-            return RuntimeStates.Stopped;
+            return (RuntimeStates.Stopped, false);
         }
 
         private async Task WaitForAttemptsAsync(CliEnvironment quiet, CancellationToken cancellationToken)
@@ -310,7 +423,7 @@ public static class MachineSetup
             if (!replaceable)
             {
                 Problems.Add(old is not null && holding && string.Equals(old, Path.GetFullPath(target), StringComparison.Ordinal)
-                    ? $"{target} was left as it is, since the runtime running from it would not stop."
+                    ? $"{target} was left as it is, since the command-line install there is not retired in this run."
                     : $"{target} is another program's, so it was left as it is and no jason was placed there.");
                 return null;
             }
@@ -338,25 +451,50 @@ public static class MachineSetup
                 }
             }
 
+            // Read back: the wrapper is what a new terminal runs, so it is there in the application's shape, or nothing counts.
+            var wrapperPlaced = File.Exists(target) && !IsLink(target) && string.Equals(ReadSmall(target), text, StringComparison.Ordinal);
+            if (!wrapperPlaced)
+            {
+                Problems.Add($"{target} does not read back as the wrapper that was written, so a new terminal may not find this jason.");
+            }
+
             var added = new List<string>();
+            var linesPlaced = true;
             if (PathEntry.OnPath(TerminalPath(), places.LocalBin))
             {
                 Done.Add($"{places.LocalBin} is on the PATH a terminal has already, so no profile was written.");
-                return new InstallCommandOutcome(target, target, changed, added, []);
             }
-
-            foreach (var profile in PathEntry.ProfileTargets(places.Home, places.Shell))
+            else if (PathEntry.UnsafeFolder(places.LocalBin))
             {
-                try
+                // install.sh's own refusal: the line reads the folder inside double quotes, where these are code.
+                linesPlaced = false;
+                Problems.Add($"{places.LocalBin} holds a line break, '\"', '$', a backtick or '\\', which the line install.sh writes would read as something else, so no profile was written. Add this line to your profile by hand: {PathEntry.HandLine(places.LocalBin)}");
+            }
+            else
+            {
+                foreach (var profile in PathEntry.ProfileTargets(places.Home, places.Shell))
                 {
-                    if (PathEntry.AddToProfile(profile, places.LocalBin))
+                    if (IsLink(profile) && !LinksToARegularFile(profile))
                     {
-                        added.Add(profile);
+                        // A link into a dotfiles folder is followed, as the script's >> follows it; a link to anything else
+                        // would be appended through to a file nobody meant, or made where it points.
+                        linesPlaced = false;
+                        Problems.Add($"{profile} is a link to something other than a file, so it was left as it is and a new terminal may not find jason. Add these two lines by hand to the file it stands for: {PathEntry.Marker} / {PathEntry.HandLine(places.LocalBin)}");
+                        continue;
                     }
-                }
-                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-                {
-                    Problems.Add($"{profile} could not be written ({refused.Message}), so a new terminal may not find jason. Add these two lines to it by hand: {PathEntry.Marker} / {PathEntry.ExportLine(places.LocalBin)}");
+
+                    try
+                    {
+                        if (PathEntry.AddToProfile(profile, places.LocalBin))
+                        {
+                            added.Add(profile);
+                        }
+                    }
+                    catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                    {
+                        linesPlaced = false;
+                        Problems.Add($"{profile} could not be written ({refused.Message}), so a new terminal may not find jason. Add these two lines to it by hand: {PathEntry.Marker} / {PathEntry.HandLine(places.LocalBin)}");
+                    }
                 }
             }
 
@@ -365,7 +503,27 @@ public static class MachineSetup
                 Done.Add($"Added {places.LocalBin} to the PATH in {string.Join(" and ", added)}.");
             }
 
-            return new InstallCommandOutcome(target, target, changed, added, []);
+            CommandPlaced = wrapperPlaced && linesPlaced;
+
+            // 0.48's application placed a jason-desktop wrapper beside a command-line jason; taken back as the Windows command
+            // files are, once this jason answers, and only where it is the application's shape.
+            var takenBack = new List<string>();
+            var desktop = Path.Combine(places.LocalBin, "jason-desktop");
+            if (CommandPlaced && IsWrapper(desktop))
+            {
+                try
+                {
+                    places.Delete(desktop);
+                    takenBack.Add(desktop);
+                    Done.Add($"Took back the command file Jason Desktop placed: {desktop}.");
+                }
+                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+                {
+                    Problems.Add($"{desktop}, which Jason Desktop placed, could not be removed: {refused.Message}");
+                }
+            }
+
+            return new InstallCommandOutcome(target, target, changed, added, takenBack);
         }
 
         /// <summary>
@@ -392,8 +550,19 @@ public static class MachineSetup
                 Problems.Add($"This account's Path could not be written ({refused.Message}), so a new terminal does not find jason: {carried.Executable} runs it by its full path.");
             }
 
+            // Read back: the entry is what a new terminal finds this jason by, so nothing else answering jason goes without it.
+            try
+            {
+                var stored = new UserPathValue(places.PathKey).Read();
+                CommandPlaced = stored is not null && PathEntry.Carries(stored.Raw, Bundle, PathEntry.ReadAs(stored.Kind != Microsoft.Win32.RegistryValueKind.String));
+            }
+            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                Problems.Add($"This account's Path could not be read back ({unread.Message}).");
+            }
+
             var takenBack = new List<string>();
-            foreach (var name in CommandFiles.Names)
+            foreach (var name in CommandPlaced ? CommandFiles.Names : [])
             {
                 foreach (var file in new[] { Path.Combine(places.WindowsApps, name + ".cmd"), Path.Combine(places.WindowsApps, name) })
                 {
@@ -620,13 +789,25 @@ public static class MachineSetup
                     return false;
                 }
 
-                if (RuntimeAutostartCommands.DataDirectoryIn(state.Run) is { } named && !string.Equals(Path.GetFullPath(named), env.Paths.Root, PathCase))
+                var named = RuntimeAutostartCommands.DataDirectoryIn(state.Run);
+                if (named is not null && !string.Equals(Path.GetFullPath(named), env.Paths.Root, PathCase))
                 {
                     Left.Add($"The logon registration names {old} with the data directory {named}, not this one, so it was left as it is.");
                     return false;
                 }
 
-                registrar.Apply(RuntimeAutostartCommands.Registration(env with { InstallPath = carried.Executable }, registrar.Platform));
+                // One that named no data directory ran on the default one, and keeps naming none.
+                var registration = RuntimeAutostartCommands.Registration(env with { InstallPath = carried.Executable }, registrar.Platform, namesDataDirectory: named is not null);
+                if (registrar.Platform is AutostartPlatform.MacOs)
+                {
+                    // The agent is RunAtLoad: loading it now would start a runtime, which this never does. The file is moved,
+                    // and launchd loads it at the next logon; nothing is unloaded either, since the runtime is already stopped.
+                    registrar.Apply(registration with { Apply = [], Remove = [] });
+                    Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}; it takes effect at the next logon, and nothing was started.");
+                    return true;
+                }
+
+                registrar.Apply(registration);
                 Done.Add($"Registered the runtime's logon start again, naming {carried.Executable}.");
                 return true;
             }
@@ -680,17 +861,36 @@ public static class MachineSetup
                 }
 
                 var plan = SkillsPlanner.Compose(staged, null, [root], SkillsPlanner.DocumentedCap, false, null);
-                var leftAlone = plan.Packs.SelectMany(pack => pack.Units)
+                var unrecorded = plan.Packs.SelectMany(pack => pack.Units)
                     .Where(unit => !recorded.Contains(unit.Name) && (Directory.Exists(unit.Unit) || File.Exists(unit.Unit)))
-                    .Select(unit => unit.Name)
-                    .Distinct(StringComparer.Ordinal)
                     .ToList();
+
+                // A deployment cut off before its record was written (the record goes last) left skills that equal the
+                // bundle's file for file: Jason's, adopted and recorded now, never mistaken for the person's own.
+                var adopted = unrecorded.Where(SameAsBundle).Select(unit => unit.Name).Distinct(StringComparer.Ordinal).ToList();
+                var leftAlone = unrecorded.Select(unit => unit.Name).Where(name => !adopted.Contains(name)).Distinct(StringComparer.Ordinal).ToList();
+                if (adopted.Count > 0)
+                {
+                    Done.Add($"Adopted {adopted.Count} skill(s) in {root.Directory} that an earlier deployment wrote without its record, each equal to this jason's: {string.Join(", ", adopted)}.");
+                }
                 plan = plan with { Packs = [.. plan.Packs.Select(pack => pack with { Units = [.. pack.Units.Where(unit => !leftAlone.Contains(unit.Name))] })] };
 
                 outcomes.Add(Deploy(plan, root.Directory, hosts, leftAlone));
             }
 
             return outcomes;
+        }
+
+        /// <summary>Whether a skill folder holds exactly the files the bundle would write there, byte for byte, and nothing else.</summary>
+        private static bool SameAsBundle(PlannedUnit unit)
+        {
+            if (!Directory.Exists(unit.Unit) || IsLink(unit.Unit))
+            {
+                return false;
+            }
+
+            return Directory.GetFiles(unit.Unit, "*", SearchOption.AllDirectories).Length == unit.Files.Count
+                && unit.Files.All(file => File.Exists(file.Target) && string.Equals(SkillsRecord.Digest(file.Target), file.Sha256, StringComparison.Ordinal));
         }
 
         /// <summary>The role skills, from the skills this jason carries, into the data directory: <c>--roles</c> alone.</summary>
@@ -804,6 +1004,19 @@ public static class MachineSetup
             try
             {
                 return new FileInfo(path).LinkTarget is not null;
+            }
+            catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>A link whose final target is a regular file: a profile kept in a dotfiles folder.</summary>
+        private static bool LinksToARegularFile(string path)
+        {
+            try
+            {
+                return File.ResolveLinkTarget(path, returnFinalTarget: true) is FileInfo { Exists: true } final && final.LinkTarget is null;
             }
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
             {

@@ -28,17 +28,22 @@ public static class InstallCommand
         Run by the jason Jason Desktop carries (a version.json beside the executable); any other jason is refused
         (install_not_carried), and so is a system other than macOS and Windows (install_unsupported). It is
         idempotent: a second run changes nothing and says so. It starts no process that outlives it, and prints
-        one JSON document (--human: lines).
+        one JSON document (--human: lines), always: a step that fails part-way is named under problems and the
+        steps after it still run.
 
         Done, in this order, each step reported:
           1. A command-line install of Jason, where one is found, has its runtime drained and stopped: the
              executable --retire names, else the one the last `jason update apply` recorded, else the
              installer's default place (~/.local/bin/jason on macOS, %LOCALAPPDATA%\Programs\jason\jason.exe
-             on Windows), only where it is Jason's: named by the flag or the record, a jason-LICENSE or
-             jason-THIRD-PARTY-NOTICES beside it, or on Windows that folder. Only a runtime running from that
-             executable is stopped, and no runtime is started: `jason runtime start` starts one from this
-             jason. Where nothing is to be retired, no runtime is asked anything. A
-             runtime that will not stop leaves that install as it is.
+             on Windows), only where it is Jason's: a jason-LICENSE or jason-THIRD-PARTY-NOTICES beside it,
+             the record, or on Windows that folder. --retire takes only a regular file named jason (jason.exe
+             on Windows) with one of those signs; anything else is named and left. Only a runtime running from
+             that executable is stopped, and no runtime is started: `jason runtime start` starts one from this
+             jason. Where nothing is to be retired, no runtime is asked anything. A runtime that will not stop
+             is resumed and leaves that install as it is, and so does a runtime that does not name the
+             executable it runs from. Where the data directory's layout.json names a layout newer than this
+             jason runs (layout_newer) or cannot be read (layout_unreadable), no runtime is stopped, no
+             registration moved and nothing of that install retired, with --roles or without.
           2. The terminal command.
              macOS: ~/.local/bin/jason, the application's own two-line sh wrapper running this jason (naming
              JASON_DATA_DIR where that is set), written over an earlier wrapper, the retired executable, or a
@@ -51,25 +56,33 @@ public static class InstallCommand
              each only where the line is not already a line of that file. The PATH a terminal has is the one
              --terminal-path names, and without it this process's own, which is a terminal's when a script
              runs this. --terminal-path with the empty value says the login shell gave no answer: the folder
-             counts as not there, and the lines are written.
+             counts as not there, and the lines are written. A home whose folder holds a line break, '"', '$',
+             a backtick or '\' takes no line, as install.sh refuses it; a profile that is a link is appended
+             through only to a regular file. Either is named with the line to add by hand. And 0.48's
+             ~/.local/bin/jason-desktop wrapper taken back, only where it is the application's shape.
              Windows: one entry in this account's Path naming this jason's folder, only where it is not there,
-             the value's kind kept and running programs told; and the jason and jason-desktop command files
-             Jason Desktop placed in %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is
-             one of the application's shapes.
+             the value's kind kept and running programs told (a Path of a kind that is not a string is
+             refused and left); and the jason and jason-desktop command files Jason Desktop placed in
+             %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is one of the application's
+             shapes.
+             The command files go, and step 3 runs, only once the terminal command reads back as placed: the
+             wrapper and its lines, or the Path entry. Otherwise the old install still answers, and stays.
              A terminal already open finds neither: it runs the path the document gives as open_shell.
           3. The rest of that command-line install: its logon registration, where it names that executable and
-             this data directory, registered again naming this jason; its notice files, and on Windows
-             jason.previous.exe, removed. Windows: the executable removed, or, while a running process holds
-             it, renamed into a jason-retired-<id> folder on its own volume and left there, with nothing
-             started to wait for that process; its Path entry taken off where its folder then holds nothing
-             but what install.ps1 writes; the folder once empty. macOS: the wrapper has replaced it at the
-             default place; an executable elsewhere is removed, with its profile block where its folder then
-             holds nothing but Jason.
+             this data directory, or no data directory (and then it names none again), registered again naming
+             this jason; on macOS the file is moved and launchd loads it at the next logon, so nothing starts
+             now. Its notice files, and on Windows jason.previous.exe, removed. Windows: the executable
+             removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
+             own volume and left there, with nothing started to wait for that process; its Path entry taken
+             off where its folder then holds nothing but what install.ps1 writes; the folder once empty.
+             macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
+             its profile block where its folder then holds nothing but Jason.
           4. The harness skills, both packs, from the skills beside this jason (read where they stand, nothing
              downloaded), into the folder of every agent host found by its home folder: Claude Code (~/.claude
              -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which Copilot, Cursor and Gemini
              CLIs read too), each recorded in .jason-skills.json. A skill folder there under a name Jason ships
-             that no record of Jason's names is yours: left as it is, and named.
+             that no record of Jason's names is yours: left as it is, and named; one whose files equal this
+             jason's, byte for byte, is one an earlier deployment wrote before its record, and is adopted.
           5. With --roles, the role skills into the data directory, as `jason skills install --roles-only`.
 
         Written under the data directory: nothing without --roles, so an application's first start still opens
