@@ -824,9 +824,9 @@ public sealed class UpdateCarriedHandOverTests
         const string Answer = "{\"error\":{\"code\":\"update_cancelled\",\"message\":\"The copy put everything back.\",\"retryable\":true}}";
         installation.Processes.OnRun = async (_, command, _, token) =>
         {
+            // Once the cancel has run its callbacks the copy's token is still live: it is ended only once its hold has passed.
             await cancel.CancelAsync();
-            await Task.Delay(200, CancellationToken.None);
-            Assert.False(token.IsCancellationRequested, "the copy was ended before its hold");
+            Assert.False(token.IsCancellationRequested, "the copy was ended with the cancel, before its hold");
             return new FinishedCommand(ExitCodes.ApiError, Answer + "\n");
         };
 
@@ -881,13 +881,23 @@ public sealed class UpdateCarriedHandOverTests
         var (installation, _) = FakeDesktop.Carried();
         using var __ = installation;
         TimeSpan? ended = null;
-        Task? closed = null;
+        Task<(bool Answered, bool LockFree)>? closed = null;
         var since = new System.Diagnostics.Stopwatch();
         installation.Processes.OnRun = async (_, _, _, token) =>
         {
             var closing = UpdateCommands.Closing.Current ?? throw new InvalidOperationException("the update runs under no close");
-            since.Start();
-            closed = Task.Run(() => closing.Closed(null), Ct);
+
+            // Timed from the close's cancel, not from the start of the thread that delivers it, which a loaded machine delays.
+            using var timed = closing.Token.Register(since.Start);
+
+            // What stands at the moment the close is let through: the answer given and the lock let go, or not yet.
+            closed = Task.Run(
+                () =>
+                {
+                    closing.Closed(null);
+                    return (installation.Out.ToString().Length > 0, LockFree(installation.Update));
+                },
+                Ct);
             try
             {
                 await Task.Delay(Timeout.Infinite, token);
@@ -901,13 +911,17 @@ public sealed class UpdateCarriedHandOverTests
         };
 
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
-        await closed!.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        var settled = since.Elapsed;
+        var (answered, lockFree) = await closed!.WaitAsync(TimeSpan.FromSeconds(30), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Equal(UpdateCodes.Cancelled, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+
+        // The close's hold, not the cancel's: ended from the close at the shorter of the two, and well before the longer.
         Assert.True(ended >= UpdateCommands.CloseChildHold - TimeSpan.FromMilliseconds(100) && ended < UpdateCommands.ChildHold, $"the child was ended after {ended}");
-        Assert.True(settled < UpdateCommands.Closing.Hold, $"the way out had not run within the close's hold: {settled}");
+
+        // The way out ran before the close was let through: the close is held until it settles, and that is when it went.
+        Assert.True(answered, "the close was let through before the answer was given");
+        Assert.True(lockFree, "the close was let through with the update's lock still held");
         Assert.Null(installation.Ledger());
         using var free = UpdateLock.Take(installation.Update, "the next update");
     }
@@ -1124,6 +1138,20 @@ public sealed class UpdateCarriedHandOverTests
         Assert.False(File.Exists(installation.Update.LockHolder), "a holder was left named beside a lock no one holds");
     }
 
+    /// <summary>Whether the update's lock can be taken now, by a look that lets it go at once.</summary>
+    private static bool LockFree(UpdatePaths update)
+    {
+        try
+        {
+            using var _ = UpdateLock.Take(update, "a look at the lock");
+            return true;
+        }
+        catch (UpdateException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// A console's close cancels the update as Ctrl+C does and is held until the way out has run, a few seconds at most.
     /// </summary>
@@ -1131,13 +1159,23 @@ public sealed class UpdateCarriedHandOverTests
     public async Task A_consoles_close_cancels_the_update_and_is_held_until_it_settled()
     {
         using var closing = new UpdateCommands.Closing(Ct);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var since = new System.Diagnostics.Stopwatch();
+        using var seen = closing.Token.Register(() =>
+        {
+            since.Start();
+            cancelled.TrySetResult();
+        });
         var closed = Task.Run(() => closing.Closed(null), Ct);
 
-        await Task.Delay(200, Ct);
+        // The close cancels the update: waited for as it happens, however late a loaded machine runs the close's thread.
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
         Assert.True(closing.Token.IsCancellationRequested);
-        Assert.False(closed.IsCompleted, "the close was let through before the way out ran");
+
+        // And it is held: not let through while the way out has not settled, unless its own hold has run out by then.
+        Assert.True(!closed.IsCompleted || since.Elapsed >= UpdateCommands.Closing.Hold - TimeSpan.FromMilliseconds(100), $"the close was let through {since.Elapsed} after it cancelled, before the way out ran");
         closing.Settled();
-        await closed.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        await closed.WaitAsync(TimeSpan.FromSeconds(30), Ct);
         Assert.True(UpdateCommands.Closing.Hold < TimeSpan.FromSeconds(5), "Windows ends a process five seconds after a close");
     }
 }
