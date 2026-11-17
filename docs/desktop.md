@@ -376,14 +376,17 @@ installed, and retires an older command-line install of Jason. Then it runs the 
 `jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
 skills deployments and the UI up to the version installed and starts no runtime; with an update a terminal's
 `jason update apply` handed to the application still in flight and the application now its version, it finishes that
-update, the runtime's start included. Neither is given a time limit. The version is recorded as done only when both
-succeeded, so a start after one that did not get there runs both again. Where another `jason` holds the update's lock, a
+update, the runtime's start included. Neither is given a time limit. On a new installation, the desktop's own records
+alone, the finishing step is not run, since there is nothing of an installation to bring up: a first start writes nothing
+more under the data directory and asks no network. The version is recorded as done only when both succeeded, so a start
+after one that did not get there runs both again; one that fails every time runs again at every start, which the Command
+Line item says in Live and only the desktop's log says in the Demo. Where another `jason` holds the update's lock, a
 `jason install` or an update, its finish or a rollback (`install_in_progress`, `update_in_progress`), nothing is set up and
 nothing recorded, the item says it is left for the next start, and it is no failure. The set-up writes nothing under your
 data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
 window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,
 and then goes on while it finishes; a runtime start an update in flight refused meanwhile is made again once the set-up
-has ended. The application never ends a run; one still running after five minutes is said in the Command Line item as
+has ended, the window saying meanwhile that it waits for the set-up to finish updating the installation. The application never ends a run; one still running after five minutes is said in the Command Line item as
 taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
 start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
 run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in
