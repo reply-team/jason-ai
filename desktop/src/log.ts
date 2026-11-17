@@ -160,6 +160,10 @@ export const templates = {
     bridge_refused: 'The browser bridge refused a request: {Why}, member {Member}',
     bridge_stream_closed: 'An event stream of the browser bridge was closed: {Why}',
     bridge_tab_refused: 'A browser tab could not be opened: {Why}',
+    // Never said by the desktop: jason uninstall's waiter writes it into the desktop's file of the day, which the desktop's
+    // writer opens and closes per line, so another writer's line lands beside its own. The waiter's copy of this template
+    // (dotnet/src/Jason.Cli/Uninstall/IInstallationRemover.cs, UninstallerHandOff.LogTemplate) is held to this one.
+    uninstaller_exited: 'The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {Exit}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it',
 } as const;
 
 export type TemplateName = keyof typeof templates;
