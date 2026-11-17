@@ -190,13 +190,15 @@ export async function whoseRuntime(deps: OwnRuntimeDeps): Promise<RuntimeLook> {
  * Stops the running runtime when it is this application's, and only then. A stop that says the runtime is gone (exit 0,
  * or exit 3 because there is no run file or nothing answers) is checked by a second look, which decides. A stop that
  * fails or does not finish in time leaves the runtime as it was, still running, and the caller goes no further.
+ * `startOwed` is a stop on an installer's behalf, `jason runtime stop --start-owed`, which leaves the note that a start is
+ * owed (`docs/release-and-update.md` §9); every other stop is a person's, which takes it back.
  */
-export async function stopOwnRuntime(deps: OwnRuntimeDeps): Promise<StopOutcome> {
+export async function stopOwnRuntime(deps: OwnRuntimeDeps, options: { startOwed?: boolean } = {}): Promise<StopOutcome> {
     const look = await whoseRuntime(deps);
     if (look.whose === 'none' || look.whose === 'another') return { kind: look.whose };
     if (look.whose === 'unanswered') return unanswered(deps, look);
 
-    const stop = await deps.cli.run(['runtime', 'stop'], { timeoutMs: stopLimitMs });
+    const stop = await deps.cli.run(options.startOwed === true ? ['runtime', 'stop', '--start-owed'] : ['runtime', 'stop'], { timeoutMs: stopLimitMs });
     const code = errorCode(stop);
     const gone = stop.exit === 0 || (stop.exit === 3 && (code === 'no_descriptor' || code === 'runtime_unreachable'));
     if (!gone) return { kind: 'failed', exit: stop.exit };

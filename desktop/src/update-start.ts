@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { cliAt } from './cli.ts';
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { loggedCli } from './installation.ts';
+import { runtimeDoor, startAgain } from './machine-setup.ts';
 import { keptAsideOf } from './linux-package.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
@@ -52,6 +53,18 @@ export interface RequestUpdaterDeps {
     /** A window's: brings back what `beforeInstall` let go when the installer stopped before it finished. */
     afterRefused?(): Promise<void>;
     changed?(state: UpdateState): void;
+}
+
+/**
+ * The start of the runtime the application carries, through the carried `jason`, for a request whose file could not be
+ * told the updater stopped it (`TakeDeps.startRuntime`): a start refused because one answers meanwhile is one answering.
+ */
+export function carriedRuntimeStart(data: string, log: Logger): () => Promise<'started' | 'answering' | 'not_started'> {
+    return async () => {
+        const executable = join(process.resourcesPath, 'bundle', process.platform === 'win32' ? 'jason.exe' : 'jason');
+        const cli = loggedCli(cliAt(executable, withPath(process.env, pathOf(process.env))), log);
+        return (await startAgain(runtimeDoor(cli, desktopPaths(data).runFile))).act;
+    };
 }
 
 /**
@@ -121,6 +134,7 @@ export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests)
                 updater: () => requestUpdater({ data, log }),
                 windowOpen: windowOpenUpdate,
                 log,
+                startRuntime: carriedRuntimeStart(data, log),
                 late: () => resolve(applyExits.answered),
                 limit: {
                     ms: headlessLimitOf(taken),
