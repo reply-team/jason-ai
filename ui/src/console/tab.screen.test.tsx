@@ -297,6 +297,33 @@ describe('A chat in a tab', () => {
         expect(calls(stand, 'chat.answer')).toEqual([]);
     });
 
+    it('keeps Stop in reach when the desktop widens the running chat past a tab, and gives the queued words back', async () => {
+        const { desktop, stand } = await shown();
+        const box = () => screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Your message' });
+        const blank = String.fromCharCode(10, 10);
+        fireEvent.change(box(), { target: { value: 'Go' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => expect(calls(stand, 'chat.send')).toHaveLength(1));
+        fireEvent.change(box(), { target: { value: 'Then this' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => screen.getByRole('group', { name: 'Queued message' }));
+        fireEvent.change(box(), { target: { value: 'Half typed' } });
+        // Jason Desktop's own window widens the chat to Full access, which lets the running turn finish.
+        flush(() => desktop.emit('conv_1', { kind: 'mode', mode: 'full_access' }));
+        await waitFor(() => expect(box().disabled).toBe(true));
+        // The box is out of reach, and the words in it cannot be queued: the round button is Stop, and it acts.
+        expect(screen.getByRole('button', { name: 'Stop' })).toHaveProperty('disabled', false);
+        expect(screen.queryByRole('button', { name: 'Send when this turn ends' })).toBeNull();
+        // The turn ends well: the queued words cannot go from a tab, and come back to the box, above what was typed.
+        flush(() => desktop.emit('conv_1', { kind: 'done', error: null }));
+        await waitFor(() => expect(box().value).toBe(['Then this', 'Half typed'].join(blank)));
+        expect(calls(stand, 'chat.send')).toHaveLength(1);
+        expect(screen.queryByRole('group', { name: 'Queued message' })).toBeNull();
+        expect(document.querySelector('.chat-error')?.textContent).toContain(
+            'This chat is in Full access. Send messages to it from Jason Desktop.',
+        );
+    });
+
     it('shows the mode as a label, not a control', async () => {
         await shown();
         expect(screen.queryByRole('button', { name: /^Access mode/ })).toBeNull();
