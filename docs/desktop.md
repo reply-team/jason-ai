@@ -908,8 +908,11 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   afterwards it says to open a new terminal, or, for a shell with no such second file, to sign out and back in. A
   profile that is a link, a folder or cannot be written takes nothing, nor does any other: the item names the file and
   the line to add by hand, and the wrapper is still placed. Removing the command, or Remove What Jason Placed, takes
-  those two lines back out of the files that carry them, once `~/.local/bin` holds no `jason` or `jason-desktop` of any
-  installation, and never a line the marker does not head. On Windows it is a `jason.cmd` shim and, beside it, an extensionless
+  those two lines back out of the files that carry them, and never a line the marker does not head, only where
+  `~/.local/bin` then holds nothing but what Jason's installer or the application writes there (`jason`,
+  `jason-desktop`, `jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`), the rule `jason uninstall` keeps: that folder is shared,
+  and where the line puts it on the PATH, the other programs in it are found through it too. While it holds anything
+  else, or another `jason`, the lines stay, and the item says why. On Windows it is a `jason.cmd` shim and, beside it, an extensionless
   `jason` for Git Bash (which finds a `.cmd` only by its full name) in `%LOCALAPPDATA%\Microsoft\WindowsApps`, placed only
   when that folder is on your PATH, since no PATH entry is ever written. It is placed and removed on your word, read back
   on every look, never rewritten silently, and never put in the place of a `jason` that is not ours: it is then named
@@ -1017,7 +1020,8 @@ data: the removal takes them off too.
      `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that is set) when its `Exec`
      line starts the AppImage file or the deb's executable.
   4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`. Once that
-     folder holds no `jason` or `jason-desktop`, take the line `# added by jason install` and the
+     folder holds no `jason` or `jason-desktop` and nothing else but Jason's `jason-LICENSE` and
+     `jason-THIRD-PARTY-NOTICES`, take the line `# added by jason install` and the
      `export PATH="…/.local/bin:$PATH"` line under it out of `~/.zprofile`, `~/.zshrc`, `~/.bash_profile`,
      `~/.bash_login`, `~/.profile` and `~/.bashrc`, wherever they are.
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.

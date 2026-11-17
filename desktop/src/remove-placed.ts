@@ -99,6 +99,9 @@ export function removalQuestion(scope: RemovalScope): Question {
         `The data directory, ${inert(scope.dataDirectory)}, with the campaigns, the journal, the settings and the logs`,
         `The harness root, ${inert(scope.harnessRoot)}, with your folders and memory files`,
         `The updater’s cache, ${inert(scope.updaterCache)}`,
+        ...(lines !== undefined && lines.kept.length > 0 && lines.held !== null
+            ? [`The lines that put ${inert(lines.folder)} on the PATH, in ${lines.kept.map((file) => inert(file)).join(' and ')}: that folder still holds ${lines.held === 'others' ? 'other programs' : 'another jason or jason-desktop'}, found through it`]
+            : []),
     ];
     return {
         message: 'Remove what Jason placed on this computer?',

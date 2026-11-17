@@ -14,13 +14,38 @@
  *   ever half-written, and the person is told which file and the line to add by hand.
  * - Taken back as the uninstall takes it back: the marker, the line under it and the blank line above them, out of the
  *   regular files among the six either rule may have written, every other byte as it was; a line no marker heads is
- *   the person's own and stays.
+ *   the person's own and stays. And only where the folder then holds nothing but what Jason's installer or this
+ *   application writes there, the rule `jason uninstall` keeps (`PathEntry.UnixInstallerFiles` in C#): `~/.local/bin`
+ *   is shared, and where the line is what puts it on the PATH, the other programs in it are found through it too.
  *
  * Nothing here starts a process, and nothing reads the person's own home: every function is given the home it works in.
  */
 
-import { accessSync, appendFileSync, chmodSync, constants, lstatSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, chmodSync, constants, lstatSync, readdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+
+/** What `install.sh` ever leaves in its folder: the executable and its two notices (`PathEntry.UnixInstallerFiles`). */
+export const installerFiles: readonly string[] = ['jason', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES'];
+
+/** What this application writes there: its command, under either name. */
+export const desktopFiles: readonly string[] = ['jason', 'jason-desktop'];
+
+/**
+ * What keeps the PATH lines in place at a removal, from what the folder holds once the removal's own files are gone: a
+ * `jason` or `jason-desktop` of any installation, which they still serve; anything Jason did not write, other programs
+ * found through them; or nothing, and they come out. A folder that cannot be read keeps them.
+ */
+export function heldBy(folder: string, removing: readonly string[]): 'jason' | 'others' | null {
+    let entries: string[];
+    try {
+        entries = readdirSync(folder);
+    } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? null : 'others';
+    }
+    const left = entries.filter((entry) => !removing.includes(entry));
+    if (left.some((entry) => desktopFiles.includes(entry))) return 'jason';
+    return left.every((entry) => installerFiles.includes(entry)) ? null : 'others';
+}
 
 /** The line `install.sh` writes above the one it appends. */
 export const profileMarker = '# added by jason install';
@@ -134,8 +159,11 @@ export interface PathLines {
     refused: string[];
     /** Whether the account's shell reads an interactive file: a new terminal finds the folder then, otherwise a new sign-in. */
     interactive: boolean;
-    /** The files a removal takes the marker and the line back out of; empty while the folder holds a jason it still serves. */
+    /** The files a removal takes the marker and the line back out of; empty while something keeps them (`held`). */
     take: string[];
+    /** The files that carry them and that a removal leaves, because of what the folder still holds (`heldBy`). */
+    kept: string[];
+    held: 'jason' | 'others' | null;
 }
 
 /** The account the lines are written for: its home, its shell as `SHELL` names it, and the PATH a new terminal of it has. */
@@ -170,14 +198,15 @@ export function markedIn(home: string, folder: string): string[] {
     });
 }
 
-/** What the lines stand at for that folder; `serves` says the folder still holds a jason after a removal. A look writes nothing. */
-export function pathLines(account: ProfileAccount, folder: string, serves: boolean): PathLines {
+/** What the lines stand at for that folder; `held` is what keeps them at a removal (`heldBy`). A look writes nothing. */
+export function pathLines(account: ProfileAccount, folder: string, held: 'jason' | 'others' | null): PathLines {
     const line = exportLine(folder);
     const interactive = interactiveProfile(account.home, account.shellNamed);
     const targets = [loginProfile(account.home, account.shellNamed), ...(interactive === null ? [] : [interactive])];
     const add = namesFolder(account.terminalPath(), folder) ? [] : targets.filter((file) => !carriesLine(bytesOf(file) ?? '', folder));
     const refused = add.flatMap((file) => refusal(file) ?? []);
-    return { folder, line, add, refused, interactive: interactive !== null, take: serves ? [] : markedIn(account.home, folder) };
+    const marked = markedIn(account.home, folder);
+    return { folder, line, add, refused, interactive: interactive !== null, take: held === null ? marked : [], kept: held === null ? [] : marked, held: marked.length > 0 ? held : null };
 }
 
 /** What an act did to the profiles: the files it added the lines to, or why it added them to none. */

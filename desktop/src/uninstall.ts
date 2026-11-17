@@ -21,8 +21,9 @@
  *    told to be this application's or not.
  * 4. The PATH command's files that are ours, by the same read-back the menu makes (`PathCommand.remove`), by the name
  *    they were put there with; a file of either name another program wrote stays, and is named. On macOS and Linux the
- *    PATH lines come back out of the shell profiles with them, the marker and the line the installer's rule writes, once
- *    the folder holds no jason or jason-desktop of any installation; while it holds one they stay, and are named.
+ *    PATH lines come back out of the shell profiles with them, the marker and the line the installer's rule writes, only
+ *    where the folder then holds nothing but what Jason's installer or this application writes there (`heldBy`); while
+ *    it holds another program or another jason they stay, and are named with why.
  * 5. For an AppImage, the copies of its jason under `<data>/desktop/bundle/`: only the real folders named as a version,
  *    and this desktop's temporaries, the one selection the removal of other versions' copies makes (`bundleEntries`);
  *    only when no process runs from them, read from `/proc` on resolved paths; never while a hand act above runs the
@@ -397,6 +398,8 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
         const files = commandFiles(deps.platform, deps.folder);
         const before = files.filter((file) => existsSync(file));
         const marked = deps.command.marked?.() ?? [];
+        const standing = deps.command.status();
+        const held = 'lines' in standing ? (standing.lines?.held ?? null) : null;
         let threw = false;
         try {
             deps.command.remove();
@@ -411,13 +414,14 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
             } else if (threw) failed.push(`${inert(file)}, which could not be taken off: deleting the file takes it off`);
             else left.push(`${inert(file)}, which another program wrote`);
         }
-        // The PATH lines, on macOS and Linux: taken back once the folder holds no jason of any installation.
+        // The PATH lines, on macOS and Linux: taken back only where the folder then holds nothing but what Jason's
+        // installer or this application writes there; other programs in it are found through them too.
         const still = deps.command.marked?.() ?? [];
         for (const profile of marked) {
             const where = `The line that put ${inert(deps.folder)} on the PATH, in ${inert(profile)}`;
             if (!still.includes(profile)) removed.push(where);
             else if (threw) failed.push(`${where}, which could not be taken out: deleting it and the line ${profileMarker} above it takes it out`);
-            else left.push(`${where}, which stays while that folder holds a jason or jason-desktop`);
+            else left.push(`${where}, which stays: that folder still holds ${held === 'others' ? 'other programs' : 'another jason or jason-desktop'}, found through it`);
         }
         if (before.length === 0) untouched.push('No jason command of this application’s was on the PATH');
         ended('command', threw ? 'failed' : took > 0 ? 'removed' : before.length > 0 ? 'another' : 'was_off');

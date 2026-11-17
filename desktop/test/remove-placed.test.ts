@@ -502,10 +502,13 @@ test('the confirmation names what will be taken off and what stays, on each plat
     assert.ok(removalQuestion(scope(none)).detail.includes('• The jason command on the PATH, if this application placed it'));
     // With the PATH lines the removal would take back, they are named with their files, after the command.
     const placed = scope(none);
-    const lines = { folder: '/h/.local/bin', line: 'export PATH="/h/.local/bin:$PATH"', add: [], refused: [], interactive: true, take: ['/h/.zprofile', '/h/.zshrc'] };
+    const lines = { folder: '/h/.local/bin', line: 'export PATH="/h/.local/bin:$PATH"', add: [], refused: [], interactive: true, take: ['/h/.zprofile', '/h/.zshrc'], kept: [] as string[], held: null };
     const withLines = removalQuestion({ ...placed, command: { state: 'placed', name: 'jason', files: ['/h/.local/bin/jason'], shadowedBy: null, executable: '/J/jason', lines } }).detail;
     assert.ok(withLines.includes('• The jason command on the PATH: /h/.local/bin/jason\n• The lines that put /h/.local/bin on the PATH, in /h/.zprofile and /h/.zshrc\n'), withLines);
     assert.equal(removalQuestion({ ...placed, command: { state: 'placed', name: 'jason', files: ['/h/.local/bin/jason'], shadowedBy: null, executable: '/J/jason', lines: { ...lines, take: [] } } }).detail.includes('The lines that put'), false);
+    // Kept because the folder holds other programs: named among what stays, with why.
+    const keptLines = removalQuestion({ ...placed, command: { state: 'placed', name: 'jason', files: ['/h/.local/bin/jason'], shadowedBy: null, executable: '/J/jason', lines: { ...lines, take: [], kept: ['/h/.zprofile'], held: 'others' } } }).detail;
+    assert.ok(keptLines.split('This leaves:')[1]?.includes('• The lines that put /h/.local/bin on the PATH, in /h/.zprofile: that folder still holds other programs, found through it'), keptLines);
 });
 
 test('a value a person or another program wrote is made inert in the dialogs: no line of its own, and no longer than the cap', async (t) => {

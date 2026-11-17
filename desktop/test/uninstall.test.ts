@@ -211,11 +211,20 @@ test('on Linux the removal takes the PATH lines back with the wrapper, and leave
     const kept = await uninstall(first.deps);
     assert.ok(kept.removed.includes(join(folder, 'jason')));
     for (const profile of ['.profile', '.bashrc']) {
-        assert.ok(kept.left.includes(`The line that put ${folder} on the PATH, in ${join(home, profile)}, which stays while that folder holds a jason or jason-desktop`), kept.left.join('\n'));
+        assert.ok(kept.left.includes(`The line that put ${folder} on the PATH, in ${join(home, profile)}, which stays: that folder still holds another jason or jason-desktop, found through it`), kept.left.join('\n'));
         assert.equal(readFileSync(join(home, profile), 'utf8'), `\n# added by jason install\n${line}\n`);
     }
 
     rmSync(join(folder, 'jason-desktop'));
+
+    // Another program in the folder: the lines stay, and the report says it is found through them.
+    const shared = linux(bench(t).deps);
+    writeFileSync(join(folder, 'uv'), '#!/bin/sh\n');
+    const sharing = await uninstall(shared.deps);
+    for (const profile of ['.profile', '.bashrc']) {
+        assert.ok(sharing.left.includes(`The line that put ${folder} on the PATH, in ${join(home, profile)}, which stays: that folder still holds other programs, found through it`), sharing.left.join('\n'));
+    }
+    rmSync(join(folder, 'uv'));
     const second = linux(bench(t).deps);
     second.command.place();
     const taken = await uninstall(second.deps);

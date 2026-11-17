@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { commandMenuOf, commandQuestion, PathCommand } from '../src/path-command.ts';
-import { addedWords, exportLine, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines } from '../src/path-profile.ts';
+import { addedWords, desktopFiles, exportLine, installerFiles, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines } from '../src/path-profile.ts';
 import { memoryLog } from './harness.ts';
 
 const script = readFileSync(join(import.meta.dirname, '..', '..', 'install', 'install.sh'), 'utf8');
@@ -175,7 +175,10 @@ test('the lines stay while the folder holds another jason or jason-desktop, and 
     writeFileSync(join(folder, 'jason-desktop'), '#!/bin/sh\nexec /usr/lib/other/jason "$@"\n');
     const placed = command.status();
     assert.deepEqual(placed.state === 'placed' ? placed.lines?.take : null, []);
-    assert.equal(commandQuestion('remove', placed).detail, `This removes ${join(folder, 'jason')}.`);
+    assert.equal(
+        commandQuestion('remove', placed).detail,
+        `This removes ${join(folder, 'jason')}.\n\nA removal leaves the line that puts ${folder} on the PATH in ${join(home, '.zprofile')} and ${join(home, '.zshrc')}: the folder still holds another jason or jason-desktop, found through it.`,
+    );
     command.remove();
     assert.equal(existsSync(join(folder, 'jason')), false);
     assert.equal(text(join(home, '.zprofile')), block(line), 'the line stays');
@@ -196,6 +199,52 @@ test('the lines stay while the folder holds another jason or jason-desktop, and 
     make().remove();
     assert.deepEqual(make().marked(), []);
     assert.equal(text(join(home, '.zprofile')), '');
+});
+
+test('the lines come out only where the folder then holds nothing but what Jason writes there, as jason uninstall rules', (t) => {
+    // Only Jason's files: the installer's two notices beside our wrapper. The removal takes the lines back.
+    const ours = desk(t);
+    ours.command.place();
+    for (const name of ['jason-LICENSE', 'jason-THIRD-PARTY-NOTICES']) writeFileSync(join(ours.folder, name), 'notice\n');
+    const before = ours.command.status();
+    assert.deepEqual(before.state === 'placed' ? before.lines?.take : null, [join(ours.home, '.zprofile'), join(ours.home, '.zshrc')]);
+    assert.equal(commandMenuOf(before).lines.some((line) => line.startsWith('A removal leaves')), false);
+    ours.command.remove();
+    assert.equal(text(join(ours.home, '.zprofile')), '');
+    assert.equal(text(join(ours.home, '.zshrc')), '');
+
+    // Another program in the folder, found through the line: the line stays, and the item and the confirmation say why.
+    const shared = desk(t);
+    shared.command.place();
+    writeFileSync(join(shared.folder, 'claude'), '#!/bin/sh\n');
+    const status = shared.command.status();
+    assert.deepEqual(status.state === 'placed' ? [status.lines?.take, status.lines?.kept, status.lines?.held] : null, [[], [join(shared.home, '.zprofile'), join(shared.home, '.zshrc')], 'others']);
+    const words = `A removal leaves the line that puts ${shared.folder} on the PATH in ${join(shared.home, '.zprofile')} and ${join(shared.home, '.zshrc')}: the folder still holds other programs, found through it.`;
+    assert.ok(commandMenuOf(status).lines.includes(words), commandMenuOf(status).lines.join('\n'));
+    assert.ok(commandQuestion('remove', status).detail.endsWith(`\n\n${words}`));
+    shared.command.remove();
+    assert.equal(existsSync(join(shared.folder, 'jason')), false, 'the wrapper is still removed');
+    assert.equal(text(join(shared.home, '.zprofile')), block(shared.line), 'the line stays');
+    assert.equal(text(join(shared.home, '.zshrc')), block(shared.line));
+    // Once the other program is gone, the desktop's own removal takes them back.
+    rmSync(join(shared.folder, 'claude'));
+    shared.make().remove();
+    assert.equal(text(join(shared.home, '.zprofile')), '');
+});
+
+test('the files Jason writes in the folder are the C# uninstall’s list, and the desktop’s two names', () => {
+    // PathEntry.UnixInstallerFiles is the executable and ReleaseAssets.Notices under ReleaseAssets.NoticeFileName.
+    const dotnet = join(import.meta.dirname, '..', '..', 'dotnet', 'src');
+    const entry = readFileSync(join(dotnet, 'Jason.Cli', 'Uninstall', 'PathEntry.cs'), 'utf8');
+    const assets = readFileSync(join(dotnet, 'Jason.Contracts', 'Update', 'ReleaseAssets.cs'), 'utf8');
+    assert.ok(entry.includes('UnixInstallerFiles { get; } =\n        ["jason", .. ReleaseAssets.Notices.Select(ReleaseAssets.NoticeFileName)];'), 'the C# list is the executable and the notices');
+    const notices = /public static IReadOnlyList<string> Notices \{ get; \} = \[([^\]]*)\];/.exec(assets)?.[1];
+    assert.ok(notices !== undefined);
+    const prefix = /public static string NoticeFileName\(string notice\) => "([^"]*)" \+ notice;/.exec(assets)?.[1];
+    assert.ok(prefix !== undefined);
+    const names = ['jason', ...[...notices.matchAll(/"([^"]+)"/g)].map((match) => `${prefix}${match[1]}`)];
+    assert.deepEqual([...installerFiles], names);
+    assert.deepEqual([...desktopFiles], ['jason', 'jason-desktop']);
 });
 
 test('a profile that is a link, a folder or cannot be written takes nothing, nor does any other; the wrapper is still placed and the line is given', (t) => {
@@ -289,7 +338,7 @@ test('the TypeScript copy is held to install.sh: the marker, the line, the appen
         assert.ok(line !== undefined, tail);
         return line.trim().replace(/^echo "(.*)"$/, '$1');
     };
-    const lines = (interactive: boolean) => ({ ...pathLines({ home: '/h', shellNamed: null, terminalPath: () => '' }, '/h/.local/bin', true), interactive });
+    const lines = (interactive: boolean) => ({ ...pathLines({ home: '/h', shellNamed: null, terminalPath: () => '' }, '/h/.local/bin', 'jason'), interactive });
     const fill = (words: string) => words.replace('$INSTALL_DIR', '/h/.local/bin').replace('$ADDED', '/h/.zprofile and /h/.zshrc').replace('$LINE', exportLine('/h/.local/bin'));
     assert.equal(addedWords(lines(true), ['/h/.zprofile', '/h/.zshrc']), fill(said('open a new terminal')));
     assert.equal(addedWords(lines(false), ['/h/.zprofile', '/h/.zshrc']), fill(said('sign out and back in')));
