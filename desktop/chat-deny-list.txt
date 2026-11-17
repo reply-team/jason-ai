@@ -26,7 +26,6 @@ subscription rewind
 #
 # The verbs that change the installation, follow it without end, or carry it off the machine:
 runtime
-system
 plugin install
 plugin reload
 profile

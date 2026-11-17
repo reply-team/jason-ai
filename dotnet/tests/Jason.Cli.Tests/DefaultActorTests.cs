@@ -331,8 +331,8 @@ public class DefaultActorTests
     internal static readonly string[][] Runs =
     [
         ["runtime", "status"],
-        ["system", "drain"],
-        ["system", "resume"],
+        ["runtime", "drain"],
+        ["runtime", "resume"],
         ["campaign", "create", "--name", "Spring outreach"],
         ["campaign", "get", "cmp_A"],
         ["campaign", "list"],

@@ -208,9 +208,9 @@ command (`campaign.list_contacts` is `jason campaign list-contacts`), and `--hel
   set one, which `preference.list` answers, and never a campaign's own, which `campaign.get` answers. `jason status`
   says it in its `send_modes` check.
 - `system.shutdown`: `jason runtime stop` sends it.
-- `system.drain`: stop claiming; what is running goes on to its end. `jason system drain` sends it, and so do
+- `system.drain`: stop claiming; what is running goes on to its end. `jason runtime drain` sends it, and so do
   `jason update apply` and `jason install` before they stop a runtime.
-- `system.resume`: claim again. `jason system resume` sends it, which is how a runtime an update or an install left
+- `system.resume`: claim again. `jason runtime resume` sends it, which is how a runtime an update or an install left
   draining, because it ended part-way, is given back its work; `jason install` sends it to a runtime it drained and
   could not stop.
 

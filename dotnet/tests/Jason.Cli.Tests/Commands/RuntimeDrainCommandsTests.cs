@@ -5,11 +5,11 @@ using Jason.Contracts.Api;
 namespace Jason.Cli.Tests.Commands;
 
 /// <summary>
-/// <c>jason system drain</c> and <c>jason system resume</c>: plain verbs of <c>system.drain</c> and <c>system.resume</c>,
+/// <c>jason runtime drain</c> and <c>jason runtime resume</c>: plain verbs of <c>system.drain</c> and <c>system.resume</c>,
 /// an empty body sent and the answer printed as it came, so a runtime a routine left draining is given back its work
 /// from the terminal.
 /// </summary>
-public class SystemCommandsTests
+public class RuntimeDrainCommandsTests
 {
     private const string Draining = "{\"state\":\"draining\",\"running_attempts\":2}";
     private const string Running = "{\"state\":\"running\",\"running_attempts\":0}";
@@ -21,7 +21,7 @@ public class SystemCommandsTests
     {
         using var cli = new CliRun(answer);
 
-        var exit = await cli.RunAsync("system", verb);
+        var exit = await cli.RunAsync("runtime", verb);
 
         Assert.Equal(ExitCodes.Success, exit);
         cli.AssertPosted(operation, "{}");
@@ -38,7 +38,7 @@ public class SystemCommandsTests
     {
         using var cli = new CliRun(answer);
 
-        var exit = await cli.RunAsync("system", verb, "--human");
+        var exit = await cli.RunAsync("runtime", verb, "--human");
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(said + Environment.NewLine, cli.Text);
@@ -51,12 +51,12 @@ public class SystemCommandsTests
         const string Refused = "{\"error\":{\"code\":\"internal_error\",\"message\":\"no\",\"retryable\":true}}";
         using var refused = new CliRun(Refused, status: HttpStatusCode.InternalServerError);
 
-        Assert.Equal(ExitCodes.ApiError, await refused.RunAsync("system", "resume"));
+        Assert.Equal(ExitCodes.ApiError, await refused.RunAsync("runtime", "resume"));
         Assert.Equal(Refused + Environment.NewLine, refused.Text);
 
         using var none = new CliRun(descriptor: false);
 
-        Assert.Equal(ExitCodes.RuntimeUnavailable, await none.RunAsync("system", "drain"));
+        Assert.Equal(ExitCodes.RuntimeUnavailable, await none.RunAsync("runtime", "drain"));
         Assert.Equal(0, none.Requests);
     }
 
@@ -68,7 +68,7 @@ public class SystemCommandsTests
     {
         using var cli = new CliRun();
 
-        var exit = await cli.RunAsync("system", verb, "--help");
+        var exit = await cli.RunAsync("runtime", verb, "--help");
 
         Assert.Equal(ExitCodes.Success, exit);
         var help = string.Join(' ', cli.Text.Split((char[])['\r', '\n', ' '], StringSplitOptions.RemoveEmptyEntries));

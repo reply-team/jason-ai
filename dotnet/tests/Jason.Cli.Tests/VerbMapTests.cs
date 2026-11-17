@@ -45,8 +45,7 @@ public class VerbMapTests
     private static readonly string[] Nouns =
     [
         "approval", "audience", "block", "campaign", "contact", "decision", "events", "journal", "operation", "plugin", "preference", "profile", "project",
-        "reply", "report", "role", "rolenote", "route", "runtime", "sender", "session", "skills", "subscription", "suppression", "system", "ui", "update",
-        "workitem",
+        "reply", "report", "role", "rolenote", "route", "runtime", "sender", "session", "skills", "subscription", "suppression", "ui", "update", "workitem",
     ];
 
     [Fact]
@@ -345,9 +344,8 @@ public class VerbMapTests
     {
         // The one noun the API spells differently. `jason runtime status` is `system.info` and
         // `jason runtime stop` is `system.shutdown`: the operations exist, under the name the runtime uses
-        // for itself rather than the one a person types. The dispatcher's drain and resume are spelt as the API
-        // spells them, `jason system drain` and `jason system resume`: they are about what the runtime claims, not
-        // about its process, which is what `runtime` starts, stops and reports on.
+        // for itself rather than the one a person types; so are `jason runtime drain` and `jason runtime resume`,
+        // `system.drain` and `system.resume`. One CLI spelling per API noun.
         "runtime" => "system",
         _ => noun,
     };

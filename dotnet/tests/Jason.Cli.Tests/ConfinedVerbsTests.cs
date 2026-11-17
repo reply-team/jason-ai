@@ -28,7 +28,6 @@ public class ConfinedVerbsTests
         ["report submit"] = ["report", "submit", "--effect", "email_sent", "--tool", "t", "--summary", "s"],
         ["subscription rewind"] = ["subscription", "rewind", "--kind", "campaign_created", "--since", "2026-10-12T00:00:00Z"],
         ["runtime"] = ["runtime", "status"],
-        ["system"] = ["system", "resume"],
         ["plugin install"] = ["plugin", "install", "fake-provider"],
         ["plugin reload"] = ["plugin", "reload"],
         ["profile"] = ["profile", "list"],

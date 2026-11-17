@@ -93,7 +93,7 @@ restart was their own request, and when the runtime looks idle: work can be clai
 the stop. What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing
 is cancelled, and a provider operation already under way may still act, ending at its own lease.
 
-`jason system drain` has the runtime claim no new work while it keeps running, and `jason system resume` has it claim
+`jason runtime drain` has the runtime claim no new work while it keeps running, and `jason runtime resume` has it claim
 again, the way back for a runtime whose dispatcher `jason runtime status` shows `draining` after an update or an install
 ended part-way; ask before a drain as before a stop.
 

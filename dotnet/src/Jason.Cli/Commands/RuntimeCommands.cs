@@ -10,7 +10,7 @@ public static class RuntimeCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var runtime = new Command("runtime", "Inspect and control the local runtime process.");
+        var runtime = new Command("runtime", "Inspect and control the local runtime process, and drain or resume its dispatcher.");
 
         runtime.Subcommands.Add(Verb(
             env,
@@ -39,6 +39,11 @@ public static class RuntimeCommands
             "Stop the running runtime, if any, and start a fresh one in the background. Beside an update stopped part-way from its swap on, or an update ledger it cannot read, it stops and starts nothing and says why.",
             actor,
             (human, cancellationToken) => RuntimeRestartCommand.RunAsync(env, human, cancellationToken)));
+
+        foreach (var verb in RuntimeDrainCommands.Build(env, actor))
+        {
+            runtime.Subcommands.Add(verb);
+        }
 
         runtime.Subcommands.Add(RuntimeAutostartCommands.Build(env, actor));
 
