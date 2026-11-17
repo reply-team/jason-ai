@@ -112,9 +112,12 @@ public static class InstallCommand
         problems (sentences); completed.
 
         One at a time with an update: where the data directory has an update folder, the setup holds the
-        update's lock, <data>/update/update.lock, while it runs, and while another jason holds it - an update,
-        its finish or a rollback - refuses with update_in_progress, having set nothing up: an update's own
-        finish sets the machine up itself. Where there is no update folder it takes no lock and makes none.
+        update's lock, <data>/update/update.lock, while it runs, and names itself beside it. While an update,
+        its finish or a rollback holds it, the setup refuses with update_in_progress, having set nothing up:
+        an update's own finish sets the machine up itself. While another jason install holds it, it refuses
+        with install_in_progress, and so does an update begun then. The lock is the open file, which a killed
+        holder lets go. Where there is no update folder, or no data directory at all, it takes no lock and
+        makes none.
 
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
@@ -183,7 +186,7 @@ public static class InstallCommand
         {
             try
             {
-                held = UpdateLock.Take(update, "the machine setup");
+                held = UpdateLock.Take(update, "the machine setup", holder: UpdateLock.Holder.Install);
             }
             catch (UpdateException refused)
             {
@@ -193,7 +196,8 @@ public static class InstallCommand
                     refused.Code,
                     refused.Code == UpdateCodes.InProgress
                         ? $"Another jason is updating this installation, or finishing or rolling back an update, and holds {update.Lock}, so nothing was set up: an update's own finish sets the machine up itself. Let that one end, then run `jason install` again; `jason update status` says where the update stands."
-                        : refused.Message);
+                        : refused.Message,
+                    refused.Retryable);
             }
         }
 
@@ -223,7 +227,7 @@ public static class InstallCommand
         return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
     }
 
-    private static int Refuse(CliEnvironment env, bool human, string code, string message)
+    private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)
     {
         if (human)
         {
@@ -231,7 +235,7 @@ public static class InstallCommand
         }
         else
         {
-            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
         }
 
         return ExitCodes.ApiError;

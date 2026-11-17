@@ -913,7 +913,7 @@ a code on its own tells nobody what to do next.
 | `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
 | `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform, or the manifest read for `--version` names another version. That last is said before the manifest's `min_upgrade_from` is read, since a manifest of another release says nothing about this one: no archive is downloaded and no update begins. The same code comes at `staged` when the manifest read again there names another version than the update in flight, which has already begun. Its notice files are taken where the archive holds them, and an archive without one is not refused |
-| `update_in_progress` | a *different* version is already in flight, or, run as the `jason` Jason Desktop carries, another `jason update apply` or `jason update rollback` of this data directory holds the update's lock, `<data>/update/update.lock`, which each part of an update takes while it acts and keeps while the next part runs as its child (below), and which `jason install` takes for its machine setup and refuses with this code while another holds it. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
+| `update_in_progress` | a *different* version is already in flight, or, run as the `jason` Jason Desktop carries, another `jason update apply` or `jason update rollback` of this data directory holds the update's lock, `<data>/update/update.lock`, which each part of an update takes while it acts and keeps while the next part runs as its child (below), and which `jason install` takes for its machine setup and refuses with this code while an update holds it; where `jason install` holds it, an update beside it and a second `jason install` refuse with `install_in_progress` instead. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
@@ -1157,13 +1157,22 @@ since a window takes the request at its own pace: a window that failed before it
 each wait is bounded — two minutes for the file to appear, 30 for what it waits for — and the refusal says so. One
 `jason update` of a data directory acts at a time: each part — the carried process's plan and hand-over, the copy's, the
 finish, a carried rollback — takes `<data>/update/update.lock`, and a second one beside it refuses with
-`update_in_progress`. The lock is never let go between two parts: a part that runs the next as a child it waits for keeps
-it, writes a nonce beside it (`update.lock.holder`) and hands that nonce to the child alone, in `JASON_UPDATE_LOCK`, which
-the child takes out of its own environment; a child whose nonce is the one written there goes on under the lock it was
-handed, and nothing else does. `jason install`'s machine setup takes the same lock where the data directory has an update
-folder, and refuses with `update_in_progress` while an update holds it: the installer runs `jason install` once its files
-are in place, which is when the verb's finish begins to set the machine up too, and the two never write the Path entry and
-the skills at once; the update's finish sets the machine up itself. At `refused`, and with no answer, it ends with `update_refused_by_desktop`
+`update_in_progress`. The lock is the file held open for that process alone, not the file's being there: the operating
+system lets it go when its holder ends, by a kill as much as by an exit, and a lock file a dead process left refuses nobody.
+Each holder names itself beside it in `update.lock.holder` — `update` or `install`, its process id and a nonce — and a
+refusal says by that line what holds the lock. The lock is never let go between two parts: a part that runs the next as a
+child it waits for keeps it and hands the nonce to the child alone, in `JASON_UPDATE_LOCK` — never on the command line,
+and taken out of the child's own environment once read, so nothing it starts, the runtime above all, carries it; a child
+whose nonce is the one written there goes on under the lock it was handed, and nothing else does. `jason install`'s
+machine setup takes the same lock where the data directory has an update folder, and refuses with `update_in_progress`
+while an update holds it: the installer runs `jason install` once its files are in place, which is when the verb's finish
+begins to set the machine up too, and the two never write the Path entry and the skills at once; the update's finish sets
+the machine up itself. While `jason install` holds it, an update, its finish and a rollback refuse with
+`install_in_progress` instead, retryable, naming the setup's process: the setup takes seconds. Two edges are known and
+left open: a child still running when the process that handed it the lock is killed goes on under a lock no one holds,
+the one moment a second update can begin beside it; and the lock is the data directory's, so an installer started from
+Jason Desktop's menu, which runs `jason install` on the default data directory, does not take the lock of a data
+directory named only in a terminal. At `refused`, and with no answer, it ends with `update_refused_by_desktop`
 or `update_desktop_unanswered`, puts back the record that stood, and leaves the runtime as it found it before the drain:
 a runtime that answers drained claims work again, and one that was running and is gone — the Desktop or the verb stopped
 it — is started again from the carried file. At `current` it goes on to `swapped`. At `installing` it waits up to ten
@@ -1542,9 +1551,15 @@ Run by the `jason` the desktop application carries (a `version.json` beside it),
 application: the terminal command, the skills of every agent host found, and an older command-line install retired. Any
 other `jason` is refused with `install_not_carried`, and a system other than macOS and Windows with
 `install_unsupported`, before anything is read or written. Where the data directory has an update folder it holds the
-update's lock, `<data>/update/update.lock`, while it runs, and while another `jason` holds it — an update, its finish or a
-rollback — it refuses with `update_in_progress` and sets nothing up, since an update's own finish sets the machine up
-itself; where there is no update folder it takes no lock and makes none. It is idempotent — a second run changes nothing and says so —
+update's lock, `<data>/update/update.lock`, while it runs, naming itself beside it as `install` (§7), and while another
+`jason` holds it — an update, its finish or a rollback — it refuses with `update_in_progress` and sets nothing up, since an
+update's own finish sets the machine up itself; while another `jason install` holds it, it refuses with
+`install_in_progress`, retryable, a sentence of its own naming that process. The lock is the open file, so one a killed
+holder left refuses nobody. Where there is no update folder, or no data directory at all, it takes no lock and makes
+none: no update can be in flight there, and a person's first start still writes nothing under it. `install.sh` and
+`install.ps1` print a refusal's sentence and end non-zero; the installer goes on whatever `jason install` answers. The two
+edges of §7 hold here too: a setup under a lock whose holder was killed, and an installer started from the menu, which
+takes the default data directory's lock and not that of a data directory named only in a terminal. It is idempotent — a second run changes nothing and says so —
 it starts no process that outlives it, and it prints one JSON document (`--human`: lines) always: a step that fails
 part-way is named under `problems`, and the steps after it still run. Its steps, in order:
 
