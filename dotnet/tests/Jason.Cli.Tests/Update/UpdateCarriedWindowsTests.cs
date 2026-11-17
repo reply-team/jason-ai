@@ -717,7 +717,9 @@ public sealed class UpdateCarriedWindowsTests
         using var applying = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(image)
         {
             ArgumentList = { "/d", "/k", "rem", "update", "apply" },
+            WorkingDirectory = dir.Paths.Root,
             RedirectStandardInput = true,
+            RedirectStandardError = true,
             CreateNoWindow = true,
             UseShellExecute = false,
         })!;
@@ -729,7 +731,7 @@ public sealed class UpdateCarriedWindowsTests
             var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
             while (!Found(none))
             {
-                Assert.False(applying.HasExited, $"the process the record names ended with {(applying.HasExited ? applying.ExitCode : 0)}");
+                Assert.False(applying.HasExited, $"the process the record names ended with {(applying.HasExited ? $"{applying.ExitCode}: {applying.StandardError.ReadToEnd()}" : string.Empty)}");
                 Assert.True(DateTime.UtcNow < deadline, "the installer's look did not find the process with no record");
                 Thread.Sleep(250);
             }
@@ -766,6 +768,7 @@ public sealed class UpdateCarriedWindowsTests
             var look = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
             {
                 ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", $"$ErrorActionPreference = 'Stop'; try {{ if (@({filter}).Count -gt 0) {{ exit 0 }} else {{ exit 1 }} }} catch {{ exit 2 }}" },
+                WorkingDirectory = dir.Paths.Root,
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
