@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dialog } from '../../layout/dialog';
+import { ReasonField } from '../../layout/reason-field';
 
 /** Where the work stands: an attempt running now, none ever made, or earlier attempts that ended. */
 export type Ran = 'running' | 'never' | 'before';
@@ -37,9 +38,8 @@ export function CancelDialog({ what, ran, onConfirm, onCancel }: Props) {
             <p>{said[ran]}</p>
             <div className="field">
                 <label htmlFor="cancel-reason">Reason (optional, kept in the journal)</label>
-                <textarea
+                <ReasonField
                     id="cancel-reason"
-                    className="textarea"
                     maxLength={2000}
                     value={reason}
                     onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}

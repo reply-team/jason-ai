@@ -1670,6 +1670,13 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Start' }));
         const start = await screen.findByRole('dialog', { name: `Start ${autumn.name}` });
         expect(start.textContent).toContain("Jason starts releasing this agent's work.");
+        // Its optional reason is one line, and the focus opens on Cancel, neither on the reason nor on Start: Enter as the
+        // dialog opens starts nothing.
+        const reason = within(start).getByRole('textbox', { name: 'Reason' });
+        expect(reason.getAttribute('rows')).toBe('1');
+        expect(document.activeElement).toBe(within(start).getByRole('button', { name: 'Cancel' }));
+        expect(document.activeElement).not.toBe(reason);
+        expect(document.activeElement).not.toBe(within(start).getByRole('button', { name: 'Start' }));
         // What starting lets go, read from the runtime as the dialog opens: the people it holds, and how messages go now,
         // in Settings' own words.
         const rule = await within(start).findByRole('region', { name: 'What starting releases' });
@@ -1756,6 +1763,9 @@ describe('What the panel does', () => {
         fireEvent.click(within(actions()).getByRole('button', { name: 'Add people' }));
         const dialog = await screen.findByRole('dialog', { name: 'Add people to Spring' });
         await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+        // The focus opens on finding a person, never on the optional reason, which is one line.
+        expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: /Find a person/ }));
+        expect(within(dialog).getByRole('textbox', { name: 'Reason' }).getAttribute('rows')).toBe('1');
         await choose(dialog, 'Zoe Example', 'zoe');
         await choose(dialog, 'Hal Example');
         fireEvent.input(within(dialog).getByRole('textbox', { name: 'Reason' }), {
