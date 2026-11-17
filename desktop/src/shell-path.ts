@@ -56,16 +56,31 @@ export function pathFromOutput(stdout: string): string | null {
  * The PATH every program the desktop starts is given. A program started from the Finder gets launchd's bare PATH, and one
  * started from a Linux session's menu gets the session's, which reads no `~/.bashrc`, where a version manager or npm's
  * own folder most often adds itself; on neither is an agent's command line found as a terminal finds it. The person's
- * login shell knows the real one, so on macOS and Linux it is asked once, before anything is started, and failing that
- * the usual places are added. On Windows the inherited PATH is the person's own and is used as it is.
+ * login shell knows the real one, so on macOS and Linux it is asked once (`shellPath`), before anything is started, the
+ * inherited PATH standing in where it answers nothing, and the usual places are added. On Windows the inherited PATH is
+ * the person's own and is used as it is.
  */
-export async function loginPath(inherited: string, home: string): Promise<string> {
+export async function loginPath(inherited: string, home: string, asked: Promise<string | null> = shellPath()): Promise<string> {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return inherited;
+    return withUsualPlaces((await asked) ?? inherited, home, process.platform);
+}
+
+/**
+ * The PATH the person's login shell itself has, or null where it printed none, or anywhere but macOS and Linux: what a
+ * new terminal finds programs by, before the desktop adds the usual places to its own (`withUsualPlaces`). Whether the
+ * PATH command's folder is on it decides whether placing the command also writes the PATH lines (`path-profile.ts`).
+ */
+export async function shellPath(): Promise<string | null> {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return null;
     const shell = loginShell(process.platform, process.env) ?? '/bin/sh';
-    const platform = process.platform;
     return new Promise((resolve) => {
         execFile(shell, ['-ilc', `printf '${marker}%s${closing}' "$PATH"`], loginShellOptions(process.env), (error, stdout) => {
-            resolve(withUsualPlaces((error ? null : pathFromOutput(String(stdout))) ?? inherited, home, platform));
+            resolve(error ? null : pathFromOutput(String(stdout)));
         });
     });
+}
+
+/** The account's shell as `SHELL` names it, or null where it names none: the PATH lines are chosen by it, as the installer chooses them. */
+export function accountShell(env: Readonly<Record<string, string | undefined>>): string | null {
+    return env['SHELL'] || null;
 }

@@ -84,11 +84,14 @@ export function removalQuestion(scope: RemovalScope): Question {
         scope.command.state === 'placed' || scope.command.state === 'elsewhere'
             ? `The ${scope.command.name} command on the PATH: ${scope.command.files.map((file) => inert(file)).join(' and ')}`
             : 'The jason command on the PATH, if this application placed it';
+    const lines = 'lines' in scope.command ? scope.command.lines : undefined;
+    const profiles = lines !== undefined && lines.take.length > 0 ? [`The lines that put ${inert(lines.folder)} on the PATH, in ${lines.take.map((file) => inert(file)).join(' and ')}`] : [];
     const off = [
         'The runtime this application carries, if it is running: it is stopped with jason runtime stop, and nothing else is taken off if it does not stop',
         'Open Jason at Login',
         'The runtime’s start at logon, if it starts this application’s jason',
         command,
+        ...profiles,
         ...(scope.bundles === null ? [] : [`The copies of jason in ${inert(scope.bundles)}, if nothing runs from them`]),
         ...(scope.demo === undefined ? [] : [`The demo, if it was ever opened: its data directory, ${inert(scope.demo.data)}, and its harness root, ${inert(scope.demo.harnessRoot)}, with the sample campaigns and folders in them, once its runtime is stopped`]),
     ];
@@ -96,6 +99,9 @@ export function removalQuestion(scope: RemovalScope): Question {
         `The data directory, ${inert(scope.dataDirectory)}, with the campaigns, the journal, the settings and the logs`,
         `The harness root, ${inert(scope.harnessRoot)}, with your folders and memory files`,
         `The updater’s cache, ${inert(scope.updaterCache)}`,
+        ...(lines !== undefined && lines.kept.length > 0 && lines.held !== null
+            ? [`The lines that put ${inert(lines.folder)} on the PATH, in ${lines.kept.map((file) => inert(file)).join(' and ')}: that folder still holds ${lines.held === 'others' ? 'other programs' : 'another jason or jason-desktop'}, found through it`]
+            : []),
     ];
     return {
         message: 'Remove what Jason placed on this computer?',
