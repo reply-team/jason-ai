@@ -304,6 +304,37 @@ public sealed class UninstallCarriedTests : IDisposable
         Assert.Contains(JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("start-owed.json", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// An uninstall run through the installer leaves no note that a start is owed: the installer's stop comes first, on the
+    /// installer's behalf (<c>runtime stop --start-owed</c>, which writes the note), and the uninstall routine after it takes
+    /// the note back where it keeps the data, or takes it with the data. Held through the routine's own seams: the stop
+    /// through the verb, the uninstall through <see cref="UninstallCommand"/> with the remover that really removes.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task An_uninstall_after_the_installers_stop_leaves_no_note_that_a_start_is_owed(bool purge, bool keepApplication)
+    {
+        var executable = MacApplication();
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stopping = new FakeHandler(_ =>
+        {
+            File.Delete(_dir.Paths.DescriptorFile);
+            return RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (env, output, _) = Environment(MacPlaces(), executable);
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], env with { HttpHandler = stopping }, Ct));
+        Assert.True(File.Exists(_dir.Paths.StartOwedFile), "the installer's stop wrote no note that a start is owed");
+
+        output.GetStringBuilder().Clear();
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, Yes: true, false, KeepApplication: keepApplication), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.Equal(!purge, Directory.Exists(_dir.Paths.Root));
+    }
+
     /// <summary>Plants every place the application's own state may be, as a file or a folder, and returns them in order.</summary>
     private IReadOnlyList<string> PlantLibrary()
     {

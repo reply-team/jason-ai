@@ -1538,6 +1538,11 @@ public class StatusCommandTests
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendModesInForce> SendModeAnswers = [];
 
+    /// <summary>The dispatcher the runtime's <c>system.info</c> answers with; without it, running with nothing in flight.</summary>
+    internal static void Dispatcher(TempPaths dir, DispatcherInfo dispatcher) => DispatcherAnswers[dir.Paths.Root] = dispatcher;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DispatcherInfo> DispatcherAnswers = [];
+
     /// <summary>
     /// A role of the person's own on the roster beside the seeded ones: not shipped, and with the entry command it was added
     /// with, where it was added with one.
@@ -1657,7 +1662,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root), Dispatcher = DispatcherAnswers.GetValueOrDefault(dir.Paths.Root) ?? Info(answers.Skills).Dispatcher }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

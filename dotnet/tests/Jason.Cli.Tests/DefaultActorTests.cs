@@ -331,6 +331,8 @@ public class DefaultActorTests
     internal static readonly string[][] Runs =
     [
         ["runtime", "status"],
+        ["runtime", "drain"],
+        ["runtime", "resume"],
         ["campaign", "create", "--name", "Spring outreach"],
         ["campaign", "get", "cmp_A"],
         ["campaign", "list"],
@@ -484,7 +486,8 @@ public class DefaultActorTests
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(string[] args, IReadOnlyDictionary<string, string>? variables = null)
+    internal static async Task<(int Exit, string Error, List<(string Operation, string Body)> Requests)> RunEachAsync(
+        string[] args, IReadOnlyDictionary<string, string>? variables = null, Process.FakeProcessControl? processes = null)
     {
         using var paths = new TempPaths();
         paths.WriteDescriptor(Live);
@@ -500,6 +503,7 @@ public class DefaultActorTests
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
             }),
             new StringReader("[{\"first_name\":\"Ada\"}]"),
+            Processes: processes,
             Variables: variables ?? new Dictionary<string, string>(),
             AccountName: Account);
 
