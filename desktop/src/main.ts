@@ -39,7 +39,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
+import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, readHead, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -664,7 +664,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         ...(command !== null
             ? { jason: () => command.onPath() }
             : machineSetup !== null && offers.command && carried.outlives
-              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: process.env['JASON_DATA_DIR'] || null, isProgram: (file) => isProgramFile(file, process.platform), read: readText }) }
+              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: process.env['JASON_DATA_DIR'] || null, isProgram: (file) => isProgramFile(file, process.platform), read: (file) => readHead(file) }) }
               : {}),
         icon: (path) => icons.icon(path),
         changeJason: {

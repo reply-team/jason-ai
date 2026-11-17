@@ -18,7 +18,7 @@
  *   not do. Never its JSON.
  */
 
-import { accessSync, constants, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, closeSync, constants, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { wrapperTarget } from './command-line.ts';
@@ -360,6 +360,24 @@ export function jasonOnPath(look: JasonLook): JasonOnPath {
     const text = look.read(found);
     const target = text === null ? null : wrapperTarget(text);
     return target !== null && target.executable === look.executable && target.dataDirectory === look.dataDirectory ? { found: 'this' } : { found: 'other' };
+}
+
+/**
+ * The first bytes of a file as text, or null where it cannot be read: a wrapper of ours is a few lines, and what the PATH
+ * finds may be an executable of many megabytes, which is never read whole.
+ */
+export function readHead(file: string, cap = 4096): string | null {
+    let descriptor: number | null = null;
+    try {
+        descriptor = openSync(file, 'r');
+        const buffer = Buffer.alloc(cap);
+        const read = readSync(descriptor, buffer, 0, cap, 0);
+        return buffer.subarray(0, read).toString('utf8');
+    } catch {
+        return null;
+    } finally {
+        if (descriptor !== null) closeSync(descriptor);
+    }
 }
 
 /** Whether this account may write a path, as `access(2)` answers. */

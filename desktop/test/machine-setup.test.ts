@@ -13,6 +13,7 @@ import {
     putBackLabel,
     putBackQuestion,
     putBackTold,
+    readHead,
     readSetupRecord,
     setupArguments,
     setupLimitMs,
@@ -372,4 +373,15 @@ test('nothing on macOS or Windows places the PATH command any more: the WindowsA
     const made = [...main.matchAll(/new PathCommand\(/g)].length;
     assert.equal(made, 2, 'the menu’s, behind !commandIsSetup, and Remove What Jason Placed’s, which only removes');
     assert.ok(main.includes('if (otherCopy !== null && command !== null) {'), 'a re-point needs the menu’s command, which macOS and Windows do not make');
+});
+
+test('the look reads only the head of what the PATH finds: a wrapper whole, an executable never', () => {
+    const at = folder();
+    const wrapper = join(at, 'jason');
+    writeFileSync(wrapper, wrapperScript(macExe));
+    assert.equal(readHead(wrapper), wrapperScript(macExe));
+    const big = join(at, 'big');
+    writeFileSync(big, Buffer.alloc(100_000, 0x41));
+    assert.equal(readHead(big)?.length, 4096);
+    assert.equal(readHead(join(at, 'missing')), null);
 });
