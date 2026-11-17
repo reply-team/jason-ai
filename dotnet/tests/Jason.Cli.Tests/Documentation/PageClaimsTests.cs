@@ -2036,11 +2036,7 @@ public partial class PageClaimsTests
         Assert.True(start >= 0 && create > start, $"Step 6 creates the provider's campaign at line {create} of its commands and starts Jason's campaign at line {start}.");
         Assert.NotEmpty(others);
         Assert.All(others, row => Assert.True(row.index > create, $"Step 6 runs this before the create: {row.line}"));
-        Assert.DoesNotContain(
-            FencedLines(page),
-            line => line.Contains("--kind provider_op", StringComparison.Ordinal)
-                && line.Contains("external_id", StringComparison.Ordinal)
-                && !line.Contains("--operation message.send ", StringComparison.Ordinal));
+        Assert.False(ProviderIdentifierOutsideSender(page), "A provider operation's line names a provider identifier outside message.send's sender.");
     }
 
     /// <summary>
@@ -2122,20 +2118,113 @@ public partial class PageClaimsTests
             Flat(Section(page, "## 8. ")),
             StringComparison.Ordinal);
 
-        // The section on a direct send is about a mailbox by its nature, so it is left out of this scan.
-        var direct = page.IndexOf("\n## A direct send\n", StringComparison.Ordinal);
-        var guarantees = page.IndexOf("\n## What this guarantees", StringComparison.Ordinal);
-        Assert.True(direct > 0 && guarantees > direct, "docs/golden-path.md no longer has \"A direct send\" followed by \"What this guarantees\".");
-        var scanned = string.Join("\n\n", page.Remove(direct, guarantees - direct).Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
-        var sender = Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+        var sender = SendingSideWords(page);
         Assert.False(sender.Success, $"docs/golden-path.md says something about the provider's sending side: '{sender.Value}' at offset {sender.Index} of the page without the paragraph on the provider's web app.");
 
+        var made = ScheduleWordsInSteps(page);
+        Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {made.Index}.");
+    }
+
+    /// <summary>
+    /// The page without its section on a direct send, from that section's heading to the next heading and no further:
+    /// the one place where a mailbox is the subject, since a direct send goes from one. Every other word of the page stays
+    /// under the bans the guards above and below hold.
+    /// </summary>
+    private static string WithoutDirectSend(string page)
+    {
+        var direct = Section(page, "## A direct send");
+        Assert.StartsWith("## A direct send\n", direct, StringComparison.Ordinal);
+        Assert.Contains(direct, page, StringComparison.Ordinal);
+        return page.Replace(direct, string.Empty, StringComparison.Ordinal);
+    }
+
+    private static Match SendingSideWords(string page)
+    {
+        var scanned = string.Join("\n\n", WithoutDirectSend(page).Split("\n\n").Where(block => Flat(block) != ProviderWebApp));
+        return Regex.Match(scanned, @"\b(?:mailbox(?:es)?|senders?|sending accounts?|email accounts?)\b", RegexOptions.IgnoreCase);
+    }
+
+    private static Match ScheduleWordsInSteps(string page)
+    {
         var from = page.IndexOf("\n## 6. ", StringComparison.Ordinal);
         var to = page.IndexOf("\n## A direct send\n", StringComparison.Ordinal);
         Assert.True(from > 0 && to > from, "docs/golden-path.md no longer has step 6 followed by \"A direct send\".");
         var made = Regex.Match(page[from..to], @"\b(?:schedules?|sending address(?:es)?|sends? from)\b", RegexOptions.IgnoreCase);
-        Assert.False(made.Success, $"Steps 6 to 8 say something about the provider's schedule or sending address: '{made.Value}' at offset {from + made.Index}.");
+        return made;
     }
+
+    /// <summary>
+    /// The section on a direct send says first what it is: a real send that cannot be undone, to the person's own address.
+    /// It reads the send mode before the item is made, makes the approval's preview be read before the approval is given,
+    /// and gives the approval in a named person's name; and it is the email channel's alone.
+    /// </summary>
+    [Fact]
+    public void The_direct_send_says_it_is_real_reads_the_approval_before_it_is_given_and_names_who_gives_it()
+    {
+        var section = Section(Page("docs", "golden-path.md"), "## A direct send");
+        var first = Flat(section.Split("\n\n")[1]);
+        Assert.StartsWith(
+            "This is a real send, and it cannot be undone: one email that arrives, from one of your mailboxes at the provider, to your own address",
+            first,
+            StringComparison.Ordinal);
+        Assert.Contains("It is run only when you ask for it.", first, StringComparison.Ordinal);
+
+        var lines = FencedLines(section);
+        var mode = lines.FindIndex(line => line.StartsWith("jason campaign get ", StringComparison.Ordinal));
+        var create = lines.FindIndex(line => line.StartsWith("jason workitem create ", StringComparison.Ordinal) && line.Contains("--operation message.send ", StringComparison.Ordinal));
+        var get = lines.FindIndex(line => line.StartsWith("jason approval get ", StringComparison.Ordinal));
+        var approve = lines.FindIndex(line => line.StartsWith("jason approval approve ", StringComparison.Ordinal));
+        Assert.True(mode >= 0 && create > mode, "the send mode is read after the item is made, or not at all.");
+        Assert.True(get > create && approve > get, "`approval get` does not stand between the item and `approval approve`.");
+        Assert.Contains(" --actor human:", lines[approve], StringComparison.Ordinal);
+        Assert.Contains("--channel email", lines.Single(line => line.Contains("--operation sender.list", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.Contains("--channel email", lines.Single(line => line.StartsWith("jason sender list ", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.Contains("`automatic`", section, StringComparison.Ordinal);
+        Assert.Contains("the yes comes before the item is made", Flat(section), StringComparison.Ordinal);
+        Assert.Contains("so there is none for LinkedIn.", Flat(section), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The exclusions above are exact. A banned word put into step 6, where the provider's campaign is made, is found
+    /// again; so is one put into the page's opening, and a provider identifier put into a provider operation's input. Only
+    /// the direct send's own section and its <c>sender</c> are let through.
+    /// </summary>
+    [Fact]
+    public void The_exclusions_for_the_direct_send_let_the_old_bans_bite_everywhere_else()
+    {
+        var page = Page("docs", "golden-path.md");
+        Assert.False(SendingSideWords(page).Success);
+        Assert.False(ScheduleWordsInSteps(page).Success);
+
+        var step6 = page.Replace("## 6. Create the work\n", "## 6. Create the work\n\nThe campaign has a mailbox and a schedule.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, step6);
+        Assert.True(SendingSideWords(step6).Success, "a mailbox named in step 6 is no longer found.");
+        Assert.True(ScheduleWordsInSteps(step6).Success, "a schedule named in step 6 is no longer found.");
+
+        var opening = page.Replace("# The wiring check\n", "# The wiring check\n\nThis page names a sender.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, opening);
+        Assert.True(SendingSideWords(opening).Success, "a sender named in the opening is no longer found.");
+
+        var guarantees = page.Replace("## What this guarantees\n", "## What this guarantees\n\nA mailbox is named here.\n", StringComparison.Ordinal);
+        Assert.NotEqual(page, guarantees);
+        Assert.True(SendingSideWords(guarantees).Success, "a mailbox named after the direct send's section is no longer found.");
+
+        Assert.True(ProviderIdentifierOutsideSender(page + "\n```\njason workitem create cmp_1 --kind provider_op --operation campaign.get --input '{\"external_id\":\"7\"}'\n```\n"));
+        Assert.True(ProviderIdentifierOutsideSender(
+            "```\njason workitem create cmp_1 --kind provider_op --operation message.send --input '{\"sender\":{\"x\":1},\"external_id\":\"7\"}'\n```\n"));
+        Assert.False(ProviderIdentifierOutsideSender(page));
+    }
+
+    /// <summary>
+    /// A provider operation's printed line carries no provider identifier, except inside <c>message.send</c>'s own
+    /// <c>sender</c>: the account a person chose from the list, which is no pin of a campaign the run made.
+    /// </summary>
+    private static bool ProviderIdentifierOutsideSender(string page) =>
+        FencedLines(page).Any(line =>
+            line.Contains("--kind provider_op", StringComparison.Ordinal)
+            && line.Contains("external_id", StringComparison.Ordinal)
+            && (!line.Contains("--operation message.send ", StringComparison.Ordinal)
+                || Regex.Replace(line, "\"sender\":\\{[^{}]*\\}", string.Empty).Contains("external_id", StringComparison.Ordinal)));
 
     /// <summary>
     /// The way back takes the person out of the provider's campaign, on their word, and then leaves the campaign where it
