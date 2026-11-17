@@ -219,6 +219,45 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
 
+      # A shape 0.48.2's own updater never makes, the setup run by hand: this build's setup run silently as an update over
+      # an open 0.48.2 window whose runtime runs. Then Installed apps takes it off again.
+      - name: Install this build by hand over an open 0.48.2 window and its runtime
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverOpenWindow -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-open-window-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-open-window-uninstall -Against before
+
+      # The next version, built as a test build the same way at this version and one, for the Desktop's own window-less
+      # update below; its updater feed is served from a folder of its own.
+      - name: Build the next version as a test build
+        shell: pwsh
+        working-directory: desktop
+        env:
+          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          JASON_DESKTOP_TEST_BUILD: '1'
+        run: |
+          ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version "$($env:VERSION).1" -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+          $next = Join-Path $env:GITHUB_WORKSPACE 'next'
+          New-Item -ItemType Directory -Force -Path $next | Out-Null
+          Copy-Item dist/jason-desktop-windows-x64-setup.exe, dist/jason-desktop-windows-x64-setup.exe.blockmap, dist/latest.yml $next
+          Get-Content (Join-Path $next 'latest.yml')
+
+      # Jason.exe --update-apply on a real install of this test build: to the next one with no window open, and refused by
+      # an open window, which takes no request naming a feed. The test build's updater checks no publisher, and the start
+      # is made directly, not through jason update apply.
+      - name: Update the test build with no window, through Jason Desktop's own start
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UpdateApply -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}" -Next (Join-Path $env:GITHUB_WORKSPACE 'next')
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-update-apply-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
+
       - name: Read the module path Windows PowerShell rebuilds from an empty one
         shell: pwsh
         run: ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
@@ -236,7 +275,7 @@ jobs:
           @(
             '### What this job does not prove',
             '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
-            '- The updater: this build''s updater checks no publisher, and no update is downloaded here. The release''s proof job updates a signed build to a signed next one.',
+            '- The updater''s publisher check and the command line''s hand-over: this build''s updater checks no publisher, and its window-less update is started directly, not by jason update apply; with a window open only the refusal of a request naming a feed is seen, not window_open.',
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -271,6 +310,22 @@ jobs:
       - uses: ./.github/actions/setup-dotnet
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}
+
+      # The requirement install.sh holds an application to, read from the script, against the application the latest
+      # release published, from its public downloads checked against its checksums.txt: every row elsewhere compares the
+      # line as a string, and only a real signature shows that it admits Jason's and refuses another team's.
+      - name: Hold install.sh's requirement against the latest published application
+        shell: bash
+        run: |
+          tag="$(curl -sS -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
+          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/published"
+          for name in checksums.txt jason-desktop-macos-arm64.zip; do
+            curl -fsSL -o "$RUNNER_TEMP/published/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          (cd "$RUNNER_TEMP/published" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
+          bash .github/scripts/test-installation-macos.sh requirement "$RUNNER_TEMP/published/jason-desktop-macos-arm64.zip"
+          echo "- install.sh's requirement admits the application $tag published, and refuses it named for another team" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package jason for osx-arm64 as a pull request does
         id: package
