@@ -1374,8 +1374,8 @@ object with the moment in it,
 (ISO-8601 UTC, to the second), written to a temporary file in the same folder and renamed into place. It is taken back
 where the runtime then does not stop (`would_not_stop`); nothing is written where no runtime is to be stopped, and so none
 where no data directory exists, since a runtime has run wherever one does. A runtime's own start removes it, once its
-endpoint descriptor is published; so does any stop through `jason runtime stop`, whoever runs it, and `jason uninstall`
-where it keeps the data, since with the installation taken off none is owed. So it stands from the stop until a runtime
+endpoint descriptor is published; so does any stop through `jason runtime stop` without `--start-owed` (below), whoever
+runs it, and `jason uninstall` where it keeps the data, since with the installation taken off none is owed. So it stands from the stop until a runtime
 runs on that data directory again — a routine killed or timed out during the stop's wait (up to thirty seconds) and a
 caller that quit or relaunched before it started one included, and the Demo case: the
 application's mode record says demo while a runtime a terminal started runs on that data directory, an install or the
@@ -1388,6 +1388,17 @@ script on macOS once the application is in place, with `--roles` and no `--termi
 this last ran for an older version, with `--terminal-path` naming the PATH its login shell printed — never the
 application's own, which it adds places to — or the empty value where the shell gave none; and the move of a command-line
 install, with `--retire` naming the executable it moves from. On Windows `--terminal-path` is read by nothing.
+
+**A stop on an installer's behalf: `jason runtime stop --start-owed`.** A stop made on behalf of an install or an update
+leaves the note; only a stop a person or an agent asks for takes it back. `--start-owed` is that stop. It writes the note,
+as above, just before it asks the runtime to shut down, prints the stop's own answer unchanged, and takes the note back
+where the runtime then does not stop, as `would_not_stop` does; where no runtime answers to the data directory, none
+running or no data directory at all, it stops nothing, writes nothing, makes no folder and leaves a note already
+standing as it is. A note it cannot write is said on standard error, and the stop's exit code is the stop's. Jason
+Desktop's own stop for its installer, `--stop-runtime`, which `desktop/installer/uninstall.nsh` runs before an install,
+an update and an uninstall alike, always passes it, since that start is only ever made on an installer's behalf. So an
+uninstall run through the installer leaves no note: its stop writes one, and `jason uninstall` after it takes it back
+where it keeps the data, or takes it with the data under `--purge-data`.
 
 The document carries `version` and `executable` (the carried file); `command` — `runs` (what a new terminal finds `jason`
 through: the wrapper on macOS, the folder on the Path on Windows), `placed` (whether a
