@@ -523,7 +523,7 @@ jason session open --setup --host codex
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
 system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
-follows it.
+follows it. Its **Notifications** section is [described below](#notifications-in-settings).
 
 **The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
 Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
@@ -551,12 +551,18 @@ One screen for what you have connected. **Provider** is the Reply connection of 
 the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
 the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
 box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
-acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+acts are the desktop's and offers none. The page writes no setting and adds no provider. The notification channels are not
+here: they are the **Notifications** section of Settings.
+
+## Notifications in Settings
+
+**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows, read only, what
+`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
-The page says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
+The section says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
 question is waiting, and how a channel is turned on or off: by asking the AI, and in Jason Desktop a provider's channel can also be connected or
-disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The page writes no setting and adds no provider.
+disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The section writes no setting.
 
 ## Inside Jason Desktop
 

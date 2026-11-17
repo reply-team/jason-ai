@@ -25,6 +25,7 @@ export const en = {
     'settings.group': 'Jason',
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
+    'settings.notifications': 'Notifications',
     'settings.theme.system': 'Same as the system',
     'settings.theme.light': 'Light',
     'settings.theme.dark': 'Dark',
