@@ -208,8 +208,13 @@ refuse-while-open)
     ;;
 
 uninstall-terminal)
-    placed="$(app)"
-    "$placed/Contents/Resources/bundle/jason" runtime start > "$OUT/runtime-start.txt" 2>&1 || { cat "$OUT/runtime-start.txt"; ps -axo pid,command | grep -i jason | grep -v grep || true; fail "no runtime could be started before the uninstall"; }
+    placed="$(app)"; carried="$placed/Contents/Resources/bundle/jason"
+    # A runtime for the uninstall to stop: the one the application's start left running, once it answers, else one started.
+    sleep 5
+    if ! "$carried" runtime status > /dev/null 2>&1; then
+        "$carried" runtime start > "$OUT/runtime-start.txt" 2>&1 || { cat "$OUT/runtime-start.txt"; ps -axo pid,command | grep -i jason | grep -v grep || true; fail "no runtime could be started before the uninstall"; }
+    fi
+    "$carried" runtime status > /dev/null 2>&1 || fail "no runtime answers before the uninstall"
     status=0
     fresh 'jason uninstall --purge-data --yes' > "$OUT/uninstall-terminal.json" || status=$?
     cat "$OUT/uninstall-terminal.json"
