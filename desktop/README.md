@@ -621,15 +621,18 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   page's sidebar, so the desktop puts a sheet of its own, of the user's origin, into the page's view (`demoMacSheet`):
   the page's sidebar (`.jc-console .side`, the page's own selector, which `test/demo-page.test.ts` holds the page to)
   takes those 26 pixels as padding at its top, so its contents start below the buttons and its ground runs on under
-  them; the page itself is not edited. The window is dragged by our band (`shell/demo-band.html`, no script): the
-  window's own contents, under the two views, whose body is a drag region over the window's top 26 pixels and its whole
-  width, but for a span of `demoGeometry.macCut` pixels at its right end, where our switch stands. Electron asks each of
-  them whether a point is in its drag region, the window's own contents first, whichever view is drawn over the point;
-  so the band's body alone drags, as high as `demoGeometry.macBand`, the document as a whole carries no drag region,
-  which would take every click meant for the page and the switch, and the span cut out of it leaves the switch its
-  clicks. The switch is drawn in the Mac's own font, which is not measured here, so the span is the switch's width as
-  measured in Segoe UI and a quarter of it again, with its padding and its shadow; the switch's own view keeps the rest
-  of the span a drag region. Under the page, the band is the page's own ground, the sidebar's colour over the left 284
+  them; the page itself is not edited. The page has two rules of its own for a Mac window, keyed on a class
+  (`html.desktop-mac`) the view never sets: that padding, which the sheet gives, and a drag region over the sidebar's
+  top 284 by 26 pixels (`#title-drag`), which it leaves out, since no drag region of the page is the window's and our
+  band drags those same pixels; `test/demo-page.test.ts` holds the page to exactly these two. The window is dragged by
+  our band (`shell/demo-band.html`, no script): the window's own contents, under the two views, whose body is a drag
+  region over the window's top 26 pixels, but for our switch's view's rectangle within them (`demoLayout`'s `cut`, from
+  the sidebar's right edge to the window's), so the band drags over the sidebar alone. Electron asks each of them
+  whether a point is in its drag region, the window's own contents first, whichever view is drawn over the point; so the
+  band's body alone drags, as high as `demoGeometry.macBand`, the document as a whole carries no drag region, which
+  would take every click meant for the page and the switch, and the band never drags over the switch's view. Inside its
+  own rectangle the switch's page decides what drags and what takes a click, as on Windows and Linux: all of it drags
+  but the switch itself. Under the page, the band is the page's own ground, the sidebar's colour over the left 284
   pixels and the page's white beyond, never the Demo strip's yellow. On Windows and Linux the views
   start at the top of the content, and the caption buttons stand over the right end of our switch's view, which
   Electron tells the free title bar area in the view's own coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of

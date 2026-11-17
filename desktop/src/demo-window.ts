@@ -6,8 +6,8 @@
  * under the two views, but on macOS, where they hold our band (`shell/demo-band.html`, no script), the window's drag
  * region over its top 26 pixels, under the page that starts at the window's top edge. Electron asks the window's own
  * contents first whether a point is in a drag region, whichever view is drawn over it, so the band's document drags
- * over the band's height alone, and not where our switch stands. The page's view also carries the desktop's link on the
- * repository's address in the page's note, and that address alone leaves it, to the person's browser
+ * over the band's height alone, and never over our switch's view. The page's view also carries the desktop's link on
+ * the repository's address in the page's note, and that address alone leaves it, to the person's browser
  * (`demoRepository`).
  */
 

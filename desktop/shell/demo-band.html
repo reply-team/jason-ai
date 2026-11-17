@@ -10,19 +10,19 @@ demoLayout). The page covers it whole, so nothing it paints is seen once the pag
 own ground, the sidebar's colour over the page's 284-pixel sidebar and the page's ground beyond, never the yellow of the
 Demo's strip. The page has no dark theme, so neither has the band. It holds no script and nothing to click.
 
-It is the window's drag region over the window's top 26 pixels (demoGeometry.macBand), its whole width, the window's
-title strip: over the sidebar the page leaves those pixels empty for the traffic lights (demoMacSheet), and right of it
-lie the page's strip's dot and words, which take no click. Electron asks the window's own contents first whether a
-point is in a drag region, whichever view is drawn there, so the body alone drags, exactly as high as the band, and the
-document as a whole carries no drag region: one would take every click meant for the page and the switch. The span at
-the band's right end where our switch stands (demoGeometry.macCut) is cut out of it, so the switch takes its clicks; the
-switch's own view keeps the rest of that span a drag region.
+It is the window's drag region over the window's top 26 pixels (demoGeometry.macBand), over the sidebar, where the
+page leaves those pixels empty for the traffic lights (demoMacSheet). Electron asks the window's own contents first
+whether a point is in a drag region, whichever view is drawn there, so the body alone drags, exactly as high as the
+band, and the document as a whole carries no drag region: one would take every click meant for the page and the
+switch. Our switch's view, from the sidebar's right edge (demoGeometry.sidebar) to the window's, is cut out of it
+(demoLayout's cut): the band never drags over that view, and inside it the switch's own page decides what drags and
+what takes a click.
 -->
 <style>
 :root { color-scheme: light; }
 html { margin: 0; height: 100%; overflow: hidden; background: linear-gradient(to right, #f3f5f9 0 284px, #fff 284px); }
 body { margin: 0; height: 26px; position: relative; -webkit-app-region: drag; }
-.cut { position: absolute; top: 0; right: 0; width: 150px; height: 26px; -webkit-app-region: no-drag; }
+.cut { position: absolute; top: 0; left: 284px; right: 0; height: 26px; -webkit-app-region: no-drag; }
 </style>
 </head>
 <body><div class="cut"></div></body>

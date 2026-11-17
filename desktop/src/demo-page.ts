@@ -547,42 +547,46 @@ export function demoLinkOpener(open: () => void, gestureAt: () => number | null,
  * over the left end of the page's sidebar. The page cannot know it is on a Mac and keeps nothing clear for them, so
  * there the desktop puts a sheet of its own into the page's view (`demoMacSheet`) that moves the sidebar's contents
  * down by the band's height, and the window is dragged by a band of ours under the views (`shell/demo-band.html`): the
- * window's own contents, whose body is the drag region over the window's top 26 pixels and its whole width, but for a
- * span at its right end (`macCut`), where our switch stands, so no click meant for the switch is taken for a drag. The
- * switch is drawn in the Mac's own font there, which is not measured here, so the span is our switch's width as
- * measured in Segoe UI and a quarter of it again, with its padding and its shadow; the switch's own view keeps the rest
- * of that span a drag region. On Windows and Linux the caption buttons stand over the strip's right end, as high as it,
- * and our switch's page leaves their width free, told it in its own view's coordinates.
+ * window's own contents, whose body is the drag region over the window's top 26 pixels, but for our switch's view's
+ * rectangle within them (`cut`), so the band drags from the window's left edge to the switch view's left edge, over
+ * the sidebar, and never over the switch's view. Inside its own rectangle the switch's page decides what drags and
+ * what takes a click, as on Windows and Linux: everything of it drags but the switch itself. On Windows and Linux the
+ * caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width free, told
+ * it in its own view's coordinates.
  */
-export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand, macCut: 150 } as const;
+export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
 
 export interface DemoLayout {
     page: Rectangle;
     switch: Rectangle;
     /** Our band on macOS, under the views: the window's drag region over its top `macBand` pixels; `null` elsewhere. */
     band: Rectangle | null;
-    /** The span at the band's right end that does not drag, where our switch stands; `null` where there is no band. */
+    /** The band's part that does not drag: our switch's view's rectangle within it; `null` where there is no band. */
     cut: Rectangle | null;
 }
 
 /** Pure: the Demo's views in a window's content area of this size, on this platform. */
 export function demoLayout(platform: NodeJS.Platform, width: number, height: number): DemoLayout {
     const mac = platform === 'darwin';
-    const cut = Math.min(width, demoGeometry.macCut);
+    const ours = { x: demoGeometry.sidebar, y: 0, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip };
+    const band = { x: 0, y: 0, width, height: demoGeometry.macBand };
     return {
         page: { x: 0, y: 0, width, height },
-        switch: { x: demoGeometry.sidebar, y: 0, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
-        band: mac ? { x: 0, y: 0, width, height: demoGeometry.macBand } : null,
-        cut: mac ? { x: width - cut, y: 0, width: cut, height: demoGeometry.macBand } : null,
+        switch: ours,
+        band: mac ? band : null,
+        // Our switch's view clipped to the band: the band never drags over it.
+        cut: mac ? { x: ours.x, y: ours.y, width: ours.width, height: Math.min(ours.height, band.height) } : null,
     };
 }
 
 /**
  * The page's sheet on macOS, of the user's origin and important, as every sheet the desktop puts into the page's view:
- * the page's sidebar (`.jc-console .side`, the page's own selector, which its own rule for a Mac window keys on a class
- * this view never sets) takes the band's height as padding at its top, so its contents start below the traffic lights
- * and its ground runs on under them. Nothing else of the page moves: its strip, right of the sidebar, starts at the
- * window's top edge.
+ * the page's sidebar (`.jc-console .side`, the page's own selector) takes the band's height as padding at its top, so
+ * its contents start below the traffic lights and its ground runs on under them. Nothing else of the page moves: its
+ * strip, right of the sidebar, starts at the window's top edge. The page has two rules of its own for a Mac window,
+ * keyed on a class (`html.desktop-mac`) this view never sets: this padding, which the sheet gives, and a drag region
+ * over the sidebar's top 284 by 26 pixels (`#title-drag`), which the sheet leaves out, since no drag region of the page
+ * is the window's (`noDragSheet`), and the band drags those same pixels.
  */
 export const demoMacSheet = `.jc-console .side { padding-top: ${demoGeometry.macBand}px !important; }`;
 
