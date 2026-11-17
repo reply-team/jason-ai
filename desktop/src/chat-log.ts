@@ -2,7 +2,7 @@
  * What the chat tells the desktop's log: that a turn started and on which host, how it ended in numbers, how each
  * permission request was settled and by whom, once that the application carries no instruction text, and each time a
  * memory file of the chat folder could not be written, by its name and the system's error code; each of the person's
- * memory files a host was started with, by its level (one of three) and the digest of what it was given. Of the conversations:
+ * memory files a host was started with, by its level (one of three) and one closed word: given, changed, gone or skipped. Of the conversations:
  * how many were read at the start and how many files were not records, each record that could not be written by the
  * system's error code, how many new campaigns a set-up turn found and whether it handed over, and why a turn started a
  * fresh session; how each naming run of a set-up chat ended, as one closed word; each change of a conversation's mode, by
@@ -35,7 +35,7 @@ export function loggedTurns(log: Logger): Required<Pick<ChatOptions, Logged>> {
                 : log.info('chat_request_decided', { Outcome: decided.outcome, By: decided.by, Mode: decided.mode }),
         instructionsMissing: () => log.warn('chat_instructions_missing', { File: instructionsFile }),
         instructionsUnwritten: (file, code) => log.warn('chat_instructions_unwritten', { File: file, Code: code }),
-        memoryGiven: (level, digest) => log.info('chat_memory_given', { Level: level, Digest: digest }),
+        memoryGiven: (level, how) => log.info('chat_memory_given', { Level: level, How: how }),
         conversationsRead: (kept, unreadable) => log.info('chat_conversations_read', { Conversations: kept, Unreadable: unreadable }),
         conversationUnwritten: (code) => log.warn('chat_conversation_unwritten', { Code: code }),
         setupEnded: (found, handedOver) => log.info('chat_setup_ended', { ListRead: found !== null, Found: found ?? 0, HandedOver: handedOver }),

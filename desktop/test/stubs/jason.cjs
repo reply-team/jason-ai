@@ -246,6 +246,8 @@ if (args[0] === 'status') {
         print(made);
     }
 } else if (verb === 'project get') {
+    // STUB_PROJECT_GET_FAILS=yes: the runtime does not answer, as when it is down for a moment.
+    if (process.env.STUB_PROJECT_GET_FAILS === 'yes') process.exit(3);
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
     // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.

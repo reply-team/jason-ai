@@ -1,38 +1,75 @@
 // The reading of the person's memory files the chat is given (`chat-memory.ts`): the `AGENTS.md` of each level that
 // applies, the client's for every chat and the project's and the campaign's for a campaign's chat, each in the folder the
 // runtime records for it (the harness root it reports as marked, the folder on the project and on the campaign), never a
-// folder worked out here. A level is skipped, saying nothing, where that folder is not an absolute path, is a link or no
-// folder, or does not carry the marker of that level and that id (`.jason/marker.json`, as the runtime writes it); and
-// where its file is a link or anything but a regular file, is empty, or is not UTF-8 text. No link is followed: the
-// folder, its `.jason` and the file are each looked at without following one, and the file read is the one looked at.
-// One bounded read: a file longer than `memoryFileLimit` gives its first bytes and says it was cut.
+// folder worked out here. A level has no read, and nothing is said of it, where that folder is not an absolute path, is a
+// link or no folder, or does not carry the marker of that level and that id (`.jason/marker.json`, as the runtime writes
+// it), or where its file cannot be looked at or opened this time. Its file is absent where the marked folder holds none,
+// or an empty one; the chat looks once more, a moment later, before it says so to a session that was given the file.
+// A file that is a link, or a name with more than one link (a hard link reaches a file kept anywhere else on the disk),
+// and one that is not UTF-8 text, are not given and are named to the agent, as is one that does not answer in time
+// (`readMemoryWithin`). No link is followed: the folder, its `.jason` and the file are each
+// looked at without following one, and the file read is the one looked at. One bounded read: a file longer than
+// `memoryFileLimit` gives its first bytes and says it was cut.
 
 import { createHash } from 'node:crypto';
 import { constants, type BigIntStats } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { posix, win32 } from 'node:path';
-import { memoryFileLimit, memoryFileName, type MemoryFile, type MemoryLevel, type MemoryPlace } from './chat-memory.ts';
+import { memoryFileLimit, memoryFileName, memoryReadLimitMs, type MemoryLevel, type MemoryPlace, type MemoryRead, type MemorySkip } from './chat-memory.ts';
 
 /** The most a marker file may hold; the runtime writes one line of a few dozen bytes. */
 const markerLimit = 4096;
 
 const markerKinds: Readonly<Record<MemoryLevel, string>> = { client: 'root', project: 'project', campaign: 'campaign' };
 
-/** The memory file a place holds, or null where it holds none the chat is given (the header says which reasons). */
-export async function readMemoryFile(place: MemoryPlace, platform: NodeJS.Platform = process.platform): Promise<MemoryFile | null> {
-    const paths = platform === 'win32' ? win32 : posix;
+const pathsFor = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix);
+
+/**
+ * A level's read, given the most time it may take: past `limitMs` the turn goes on without it, and it is said not to have
+ * answered (`slow`). The read itself cannot be stopped; what it finds later is dropped.
+ */
+export async function readMemoryWithin(
+    place: MemoryPlace,
+    limitMs: number = memoryReadLimitMs,
+    platform: NodeJS.Platform = process.platform,
+    reader: (place: MemoryPlace, platform: NodeJS.Platform) => Promise<MemoryRead | null> = readMemoryFile,
+): Promise<MemoryRead | null> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<'late'>((resolve) => {
+        timer = setTimeout(() => resolve('late'), limitMs);
+    });
+    try {
+        const read = await Promise.race([reader(place, platform).catch(() => null), late]);
+        if (read !== 'late') return read;
+        return { kind: 'skipped', level: place.level, path: pathsFor(platform).join(place.folder, memoryFileName), why: 'slow', digest: null };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** What a place's memory file comes to, or null where the level has no read (the header says which reasons). */
+export async function readMemoryFile(place: MemoryPlace, platform: NodeJS.Platform = process.platform): Promise<MemoryRead | null> {
+    const paths = pathsFor(platform);
     if (typeof place.folder !== 'string' || !paths.isAbsolute(place.folder)) return null;
     if (!(await isPlainFolder(place.folder))) return null;
     if (!(await isPlainFolder(paths.join(place.folder, '.jason')))) return null;
     const marker = await readNoFollow(paths.join(place.folder, '.jason', 'marker.json'), markerLimit);
-    if (marker === null || marker.more || !markerNames(marker.bytes, markerKinds[place.level], place.id)) return null;
+    if (typeof marker !== 'object' || marker === null || marker.more || !markerNames(marker.bytes, markerKinds[place.level], place.id)) return null;
     const path = paths.join(place.folder, memoryFileName);
     const read = await readNoFollow(path, memoryFileLimit);
     if (read === null) return null;
+    if (read === 'absent') return { kind: 'absent', level: place.level };
+    if (read === 'linked') return skipped(place.level, path, 'linked');
     const text = textOf(read.bytes, read.more);
-    if (text === null || text.trim() === '') return null;
+    if (text === null) return skipped(place.level, path, 'not_text');
+    if (text.trim() === '') return { kind: 'absent', level: place.level };
     const digest = `sha256:${createHash('sha256').update(`${place.level}\n${path}\n${read.more ? 'cut' : 'whole'}\n`).update(text, 'utf8').digest('hex')}`;
-    return { level: place.level, path, text, cut: read.more, digest };
+    return { kind: 'file', level: place.level, path, text, cut: read.more, digest };
+}
+
+/** A file not given, with what a record keeps of it: its level, its path and why, hashed, never a word of it. */
+function skipped(level: MemoryLevel, path: string, why: Exclude<MemorySkip, 'slow'>): MemoryRead {
+    return { kind: 'skipped', level, path, why, digest: `sha256:${createHash('sha256').update(`${level}\n${path}\nskipped ${why}\n`).digest('hex')}` };
 }
 
 /** Whether a path is a folder itself: not a link, a junction or anything else. */
@@ -60,18 +97,21 @@ function markerNames(bytes: Buffer, kind: string, id: string | undefined): boole
 }
 
 /**
- * A regular file's first bytes, up to `cap`, and whether it holds more; null where the path is a link or anything but a
- * regular file, or where what was opened is not what was looked at (a link or another file put in its place between the
- * two). Opened without following a link where the system can say so, and without waiting, so a pipe does not hold it.
+ * A regular file's first bytes, up to `cap`, and whether it holds more. `absent` where nothing is at the path; `linked`
+ * where the path is a link, or a file with more than one name, which may be a hard link to a file kept anywhere; null
+ * where it is anything else but a regular file, cannot be opened or read, or where what was opened is not what was looked
+ * at (another file put in its place between the two). Opened without following a link where the system can say so, and
+ * without waiting, so a pipe does not hold it.
  */
-export async function readNoFollow(path: string, cap: number): Promise<{ bytes: Buffer; more: boolean } | null> {
+export async function readNoFollow(path: string, cap: number): Promise<{ bytes: Buffer; more: boolean } | 'absent' | 'linked' | null> {
     let before: BigIntStats;
     try {
         before = await lstat(path, { bigint: true });
-    } catch {
-        return null;
+    } catch (error) {
+        return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT' ? 'absent' : null;
     }
-    if (!before.isFile() || before.isSymbolicLink()) return null;
+    if (before.isSymbolicLink()) return 'linked';
+    if (!before.isFile()) return null;
     let handle;
     try {
         handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
@@ -81,6 +121,7 @@ export async function readNoFollow(path: string, cap: number): Promise<{ bytes: 
     try {
         const opened = await handle.stat({ bigint: true });
         if (!opened.isFile() || opened.ino !== before.ino || opened.dev !== before.dev) return null;
+        if (opened.nlink !== 1n) return 'linked';
         // One byte more than the cap: a read that fills it says the file holds more.
         const buffer = Buffer.alloc(cap + 1);
         let length = 0;

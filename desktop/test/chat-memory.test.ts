@@ -1,18 +1,19 @@
 // The person's memory files the chat is given: read by the desktop from the folders the runtime records, each a regular
-// file in its own marked folder, never through a link, bounded; handed to a host session after the header once, and
-// again only when one changes; given on every host and in every mode; never added as a folder, never in the log or a
-// record but as a digest.
+// file of one name in its own marked folder, never through a link, bounded in size and in time; handed to a host session
+// after the header once, and again only when one changes; a level really absent said once, a level not read said
+// nothing of, a file the person can mend named; given on every host and in every mode; never added as a folder; in the
+// record as a digest and in the log as a closed word.
 
 import assert from 'node:assert/strict';
-import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Chat, type ChatEvent, type ChatOptions } from '../src/chat.ts';
 import { readFence } from '../src/chat-deny.ts';
 import { claudeTurnSettings, planTurnSettings } from '../src/chat-hosts.ts';
 import { loggedTurns } from '../src/chat-log.ts';
-import { digestShape, memoryBlock, memoryFileLimit, memoryToGive, type MemoryFile } from '../src/chat-memory.ts';
-import { readMemoryFile, readNoFollow } from '../src/chat-memory-files.ts';
+import { digestShape, memoryBlock, memoryFileLimit, memoryToGive, type MemoryFile, type MemoryRead } from '../src/chat-memory.ts';
+import { readMemoryFile, readMemoryWithin, readNoFollow } from '../src/chat-memory-files.ts';
 import { fileLogger } from '../src/log.ts';
 import { bench, outsideStandIn, placeSandboxFiles, type Bench } from './harness.ts';
 import { NamedChat } from './named-chat.ts';
@@ -32,6 +33,12 @@ function marked(folder: string, kind: 'root' | 'project' | 'campaign', id: strin
 const flagValue = (args: string[], flag: string) => args[args.indexOf(flag) + 1] ?? '';
 const added = (args: string[]) => args.flatMap((arg, i) => (args[i - 1] === '--add-dir' ? [arg] : []));
 const block = (stdin: string) => /<memory-files>\n([\s\S]*?)\n<\/memory-files>/.exec(stdin)?.[1] ?? null;
+const fileOf = (read: MemoryRead | null): MemoryFile | null => (read?.kind === 'file' ? read : null);
+const names = {
+    client: "The client's memory file, the person's standing rules for all of their work",
+    project: "The project's memory file, the person's standing rules for this campaign's project",
+    campaign: "The campaign's memory file, the person's standing rules for this campaign",
+};
 
 interface Rig {
     b: Bench;
@@ -44,6 +51,7 @@ interface Rig {
     turn(name: string, text: string, options: unknown): Promise<ChatEvent[]>;
     turnById(id: string, text: string, options: unknown): Promise<ChatEvent[]>;
     hosts(): ReturnType<Bench['record']>;
+    record(name: string): Record<string, { session: string; files: Record<string, string> }> | undefined;
 }
 
 /** A chat on stub hosts, with a harness root, a project and a campaign the runtime records, each marked and with its file. */
@@ -112,6 +120,9 @@ function rig(t: { after(fn: () => void | Promise<void>): void }, chatOptions: (b
         },
         turnById,
         hosts: () => b.record().filter((each) => (each.name === 'claude' || each.name === 'codex') && each.args[0] !== '--version' && each.args[0] !== 'sandbox'),
+        record: (name) =>
+            (JSON.parse(readFileSync(join(b.paths.conversations, `${named.idOf(name) as string}.json`), 'utf8')) as { memory_given?: Record<string, { session: string; files: Record<string, string> }> })
+                .memory_given,
     };
 }
 
@@ -122,57 +133,92 @@ const done = (events: ChatEvent[]) => events.at(-1);
 test('a level is read only from a regular file in a folder carrying the marker of that level and that id', async (t) => {
     const b = bench(t);
     const root = marked(join(b.root, 'root'), 'root', null, '# Mine\nAlways be brief.\n');
-    const read = await readMemoryFile({ level: 'client', folder: root });
+    const read = fileOf(await readMemoryFile({ level: 'client', folder: root }));
     assert.equal(read?.text, '# Mine\nAlways be brief.\n');
     assert.equal(read?.path, join(root, 'AGENTS.md'));
     assert.equal(read?.cut, false);
     assert.match(read?.digest ?? '', digestShape);
 
     const project = marked(join(b.root, 'project'), 'project', projectId, 'words');
-    assert.ok(await readMemoryFile({ level: 'project', folder: project, id: projectId }));
+    assert.ok(fileOf(await readMemoryFile({ level: 'project', folder: project, id: projectId })));
+    // A folder that is not the level's own has no read: nothing is said of it.
     assert.equal(await readMemoryFile({ level: 'project', folder: project, id: 'prj_01OTHER' }), null, 'a marker of another project');
     assert.equal(await readMemoryFile({ level: 'campaign', folder: project, id: projectId }), null, 'a marker of another level');
     assert.equal(await readMemoryFile({ level: 'client', folder: project }), null, 'a project folder is no root');
-
     const bare = join(b.root, 'bare');
     mkdirSync(bare, { recursive: true });
     writeFileSync(join(bare, 'AGENTS.md'), 'words');
     assert.equal(await readMemoryFile({ level: 'client', folder: bare }), null, 'a folder without a marker');
     assert.equal(await readMemoryFile({ level: 'client', folder: 'relative/root' }), null, 'a folder that is no absolute path');
     assert.equal(await readMemoryFile({ level: 'client', folder: join(b.root, 'not-there') }), null);
-
-    const empty = marked(join(b.root, 'empty'), 'root', null, ' \n\n');
-    assert.equal(await readMemoryFile({ level: 'client', folder: empty }), null, 'an empty file gives nothing');
-    const binary = marked(join(b.root, 'binary'), 'root', null, 'text\0more');
-    assert.equal(await readMemoryFile({ level: 'client', folder: binary }), null, 'a file that is no text gives nothing');
-    const notUtf8 = marked(join(b.root, 'latin'), 'root', null);
-    writeFileSync(join(notUtf8, 'AGENTS.md'), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
-    assert.equal(await readMemoryFile({ level: 'client', folder: notUtf8 }), null);
-    const folderAtName = marked(join(b.root, 'folder-at-name'), 'root', null);
-    mkdirSync(join(folderAtName, 'AGENTS.md'));
-    assert.equal(await readMemoryFile({ level: 'client', folder: folderAtName }), null, 'a folder at the file name');
     const badMarker = marked(join(b.root, 'bad-marker'), 'root', null, 'words');
     writeFileSync(join(badMarker, '.jason', 'marker.json'), '{"marker_version":2,"kind":"root"}');
     assert.equal(await readMemoryFile({ level: 'client', folder: badMarker }), null, 'a marker of another version');
+    const folderAtName = marked(join(b.root, 'folder-at-name'), 'root', null);
+    mkdirSync(join(folderAtName, 'AGENTS.md'));
+    assert.equal(await readMemoryFile({ level: 'client', folder: folderAtName }), null, 'a folder at the file name');
+
+    // The marked folder read, and its file empty or not there: a real absence.
+    const empty = marked(join(b.root, 'empty'), 'root', null, ' \n\n');
+    assert.deepEqual(await readMemoryFile({ level: 'client', folder: empty }), { kind: 'absent', level: 'client' }, 'an empty file');
+    const none = marked(join(b.root, 'none'), 'root', null);
+    assert.deepEqual(await readMemoryFile({ level: 'client', folder: none }), { kind: 'absent', level: 'client' }, 'no file');
+    // Not text: not given, and named so the person can mend it.
+    const binary = marked(join(b.root, 'binary'), 'root', null, 'text\0more');
+    assert.deepEqual(pick(await readMemoryFile({ level: 'client', folder: binary })), { kind: 'skipped', why: 'not_text' });
+    const notUtf8 = marked(join(b.root, 'utf16'), 'root', null);
+    writeFileSync(join(notUtf8, 'AGENTS.md'), Buffer.from('﻿Rules\n', 'utf16le'));
+    assert.deepEqual(pick(await readMemoryFile({ level: 'client', folder: notUtf8 })), { kind: 'skipped', why: 'not_text' });
 });
 
-test('no link is followed: a linked folder, a linked .jason or a linked file gives nothing', async (t) => {
+const pick = (read: MemoryRead | null) => (read?.kind === 'skipped' ? { kind: read.kind, why: read.why } : read);
+
+test('a file the session was given and is found absent is looked at again a moment later: an editor’s save is no absence', async (t) => {
+    let bare = 0;
+    const r = rig(t, () => ({
+        memoryReader: async (place, platform) => {
+            if (place.level !== 'client' || bare === 0) return readMemoryFile(place, platform);
+            bare--;
+            return { kind: 'absent', level: 'client' };
+        },
+    }));
+    await r.turn('c1', 'first', { host: 'claude', campaignId });
+    // The next turn's first look finds the name bare, its second the file as it was.
+    bare = 1;
+    await r.turn('c1', 'second', { host: 'claude' });
+    assert.equal(bare, 0, 'it was looked at');
+    assert.equal(block(r.hosts()[1]?.stdin ?? ''), null, 'neither said gone nor given again unchanged');
+    // Absent at both looks: gone.
+    bare = 2;
+    await r.turn('c1', 'third', { host: 'claude' });
+    assert.deepEqual((block(r.hosts()[2]?.stdin ?? '') ?? '').split('\n'), [`${names.client} is now empty or no longer there: what Jason gave of it earlier in this conversation no longer holds.`]);
+});
+
+test('no link is followed: a linked folder or .jason has no read, and a file that is a link or a hard link is named, not given', async (t) => {
     const b = bench(t);
     const real = marked(join(b.root, 'real'), 'root', null, 'words');
     // A junction needs no privilege on Windows; elsewhere it is a symbolic link to a folder.
     const linkedFolder = join(b.root, 'linked-folder');
     symlinkSync(real, linkedFolder, 'junction');
     assert.equal(await readMemoryFile({ level: 'client', folder: linkedFolder }), null, 'the folder is a link');
-
     const linkedMarker = join(b.root, 'linked-marker');
     mkdirSync(linkedMarker);
     symlinkSync(join(real, '.jason'), join(linkedMarker, '.jason'), 'junction');
     writeFileSync(join(linkedMarker, 'AGENTS.md'), 'words');
     assert.equal(await readMemoryFile({ level: 'client', folder: linkedMarker }), null, 'its .jason is a link');
 
-    // A file outside the marked folder, reached by a link at the file's name.
+    // A file kept outside the marked folder, reached by a second name inside it: a hard link is a regular file, of the
+    // same identity when opened, and is still not read.
     const outside = join(b.root, 'outside.md');
     writeFileSync(outside, 'words from elsewhere');
+    const hard = marked(join(b.root, 'hard-link'), 'root', null);
+    linkSync(outside, join(hard, 'AGENTS.md'));
+    const read = await readMemoryFile({ level: 'client', folder: hard });
+    assert.deepEqual(pick(read), { kind: 'skipped', why: 'linked' });
+    assert.equal(read?.kind === 'skipped' ? read.path : null, join(hard, 'AGENTS.md'));
+    assert.equal(await readNoFollow(join(hard, 'AGENTS.md'), 100), 'linked');
+    assert.equal(JSON.stringify(read).includes('words from elsewhere'), false);
+
     const linkedFile = marked(join(b.root, 'linked-file'), 'root', null);
     try {
         symlinkSync(outside, join(linkedFile, 'AGENTS.md'), 'file');
@@ -181,8 +227,8 @@ test('no link is followed: a linked folder, a linked .jason or a linked file giv
         if ((error as NodeJS.ErrnoException).code === 'EPERM') return t.skip('this account may not make a file link');
         throw error;
     }
-    assert.equal(await readMemoryFile({ level: 'client', folder: linkedFile }), null, 'the file is a link to one outside');
-    assert.equal(await readNoFollow(join(linkedFile, 'AGENTS.md'), 100), null);
+    assert.deepEqual(pick(await readMemoryFile({ level: 'client', folder: linkedFile })), { kind: 'skipped', why: 'linked' }, 'the file is a link to one outside');
+    assert.equal(await readNoFollow(join(linkedFile, 'AGENTS.md'), 100), 'linked');
 });
 
 test('a file over the limit gives its first 32 KiB, a character the cut split left out, and says it was cut', async (t) => {
@@ -190,33 +236,62 @@ test('a file over the limit gives its first 32 KiB, a character the cut split le
     // A three-byte character straddles the limit: 32767 bytes of a, then the character, then more.
     const text = `${'a'.repeat(memoryFileLimit - 1)}€ and the rest`;
     const root = marked(join(b.root, 'root'), 'root', null, text);
-    const read = await readMemoryFile({ level: 'client', folder: root });
+    const read = fileOf(await readMemoryFile({ level: 'client', folder: root }));
     assert.equal(read?.cut, true);
     assert.equal(read?.text, 'a'.repeat(memoryFileLimit - 1));
-    const shown = memoryBlock(read === null ? [] : [read]) ?? '';
-    assert.ok(shown.includes(`That file is longer than Jason gives: these are its first 32 KiB. The whole file is at ${JSON.stringify(join(root, 'AGENTS.md'))}.`), shown.slice(-300));
+    const shown = memoryBlock(read === null ? [] : [{ read }]) ?? '';
+    assert.ok(
+        shown.includes(`That file is longer than Jason gives: these are its first 32 KiB. The whole file is at ${JSON.stringify(join(root, 'AGENTS.md'))}; tell the person, who can shorten it.`),
+        shown.slice(-300),
+    );
     // Exactly at the limit is whole.
     writeFileSync(join(root, 'AGENTS.md'), 'b'.repeat(memoryFileLimit));
-    assert.equal((await readMemoryFile({ level: 'client', folder: root }))?.cut, false);
+    assert.equal(fileOf(await readMemoryFile({ level: 'client', folder: root }))?.cut, false);
+});
+
+test('a read that does not answer in time is said not to have answered, and the turn goes on', async () => {
+    const place = { level: 'project' as const, folder: join(import.meta.dirname, 'nowhere'), id: projectId };
+    const started = Date.now();
+    const read = await readMemoryWithin(place, 40, process.platform, () => new Promise(() => {}));
+    assert.ok(Date.now() - started < 2000);
+    assert.deepEqual(read, { kind: 'skipped', level: 'project', path: join(place.folder, 'AGENTS.md'), why: 'slow', digest: null });
+    assert.equal(await readMemoryWithin(place, 40, process.platform, async () => ({ kind: 'absent', level: 'project' })).then((each) => each?.kind), 'absent');
 });
 
 // ---- What a session is given ---------------------------------------------------------------------------------------
 
-test('a session is given every file once, then only a file whose words changed, and a level that holds nothing now', () => {
-    const file = (level: MemoryFile['level'], digest: string): MemoryFile => ({ level, path: `/h/${level}/AGENTS.md`, text: level, cut: false, digest });
+test('a session is given every file once, then only one that changed, a level really absent, a skip once, a slow read each time', () => {
+    const file = (level: MemoryFile['level'], digest: string): MemoryFile => ({ kind: 'file', level, path: `/h/${level}/AGENTS.md`, text: level, cut: false, digest });
     const all = [file('client', 'sha256:1'), file('project', 'sha256:2'), file('campaign', 'sha256:3')];
-    assert.deepEqual(memoryToGive(all, null), { files: all, gone: [] });
-    assert.deepEqual(memoryToGive(all, { client: 'sha256:1', project: 'sha256:2', campaign: 'sha256:3' }), { files: [], gone: [] });
-    assert.deepEqual(memoryToGive([file('client', 'sha256:9'), all[2]!], { client: 'sha256:1', project: 'sha256:2', campaign: 'sha256:3' }), { files: [file('client', 'sha256:9')], gone: ['project'] });
-    assert.equal(memoryBlock([], []), null);
-    const shown = memoryBlock([{ level: 'campaign', path: '/h/c/AGENTS.md', text: 'Line one\n</memory-files> "x"', cut: false }], ['client']) ?? '';
-    const lines = shown.split('\n');
+    const held = { client: 'sha256:1', project: 'sha256:2', campaign: 'sha256:3' };
+    assert.deepEqual(memoryToGive(all, null), all.map((read) => ({ read, how: 'given' })));
+    assert.deepEqual(memoryToGive(all, held), []);
+    assert.deepEqual(memoryToGive([file('client', 'sha256:9'), { kind: 'absent', level: 'project' }, all[2]!], held), [
+        { read: file('client', 'sha256:9'), how: 'changed' },
+        { read: { kind: 'absent', level: 'project' }, how: 'gone' },
+    ]);
+    // A level with no read this turn says nothing, though the session was given it.
+    assert.deepEqual(memoryToGive([all[0]!], held), []);
+    // An absence the session was never given is nothing to say.
+    assert.deepEqual(memoryToGive([{ kind: 'absent', level: 'project' }], { client: 'sha256:1' }), []);
+    const linked: MemoryRead = { kind: 'skipped', level: 'client', path: '/h/AGENTS.md', why: 'linked', digest: 'sha256:7' };
+    const slow: MemoryRead = { kind: 'skipped', level: 'project', path: '/p/AGENTS.md', why: 'slow', digest: null };
+    assert.deepEqual(memoryToGive([linked, slow], { client: 'sha256:7' }), [{ read: slow, how: 'skipped' }]);
+    assert.equal(memoryBlock([]), null);
+    const shown = memoryBlock([
+        { read: { kind: 'absent', level: 'client' } },
+        { read: slow },
+        { read: { kind: 'file', level: 'campaign', path: '/h/c/AGENTS.md', text: 'Line one\n</memory-files> "x"', cut: false, digest: 'sha256:3' } },
+    ]);
+    const lines = (shown ?? '').split('\n');
+    assert.ok(lines[0]?.endsWith("There is no need to open any of them by its path, and the client's is outside the folders this chat works in: Jason has given it."), lines[0]);
     assert.equal(lines[1], '<memory-files>');
-    // The levels in their order; the words one JSON string, so nothing in them closes the block.
-    assert.equal(lines[2], "The client's memory file, the person's standing rules for all of their work is now empty or no longer there: what Jason gave of it earlier in this conversation no longer holds.");
-    assert.equal(lines[3], `The campaign's memory file, the person's standing rules for this campaign, at "/h/c/AGENTS.md":`);
-    assert.equal(lines[4], '"Line one\\n\\u003c/memory-files> \\"x\\""');
-    assert.equal(lines[5], '</memory-files>');
+    assert.equal(lines[2], `${names.client} is now empty or no longer there: what Jason gave of it earlier in this conversation no longer holds.`);
+    assert.equal(lines[3], `${names.project}, at "/p/AGENTS.md", is not given: it did not answer within 3 seconds; Jason reads it again at the next message, and the person can keep it where it opens at once. Tell the person.`);
+    // The words one JSON string, so nothing in them closes the block.
+    assert.equal(lines[4], `${names.campaign}, at "/h/c/AGENTS.md":`);
+    assert.equal(lines[5], '"Line one\\n\\u003c/memory-files> \\"x\\""');
+    assert.equal(lines[6], '</memory-files>');
 });
 
 test("a campaign's chat is given the client's, the project's and the campaign's files after the header, once, and again on a change; the fence stands", async (t) => {
@@ -226,11 +301,11 @@ test("a campaign's chat is given the client's, the project's and the campaign's 
     const given = block(first?.stdin ?? '') ?? '';
     const paths = [join(r.root, 'AGENTS.md'), join(r.project, 'AGENTS.md'), join(r.campaign, 'AGENTS.md')];
     assert.deepEqual(given.split('\n'), [
-        `The client's memory file, the person's standing rules for all of their work, at ${JSON.stringify(paths[0])}:`,
+        `${names.client}, at ${JSON.stringify(paths[0])}:`,
         JSON.stringify('Client rule: sign every message as Sam.\n'),
-        `The project's memory file, the person's standing rules for this campaign's project, at ${JSON.stringify(paths[1])}:`,
+        `${names.project}, at ${JSON.stringify(paths[1])}:`,
         JSON.stringify('Project rule: mention the pilot.\n'),
-        `The campaign's memory file, the person's standing rules for this campaign, at ${JSON.stringify(paths[2])}:`,
+        `${names.campaign}, at ${JSON.stringify(paths[2])}:`,
         JSON.stringify('Campaign rule: Tuesday only.\n'),
     ]);
     const stdin = first?.stdin ?? '';
@@ -249,9 +324,9 @@ test("a campaign's chat is given the client's, the project's and the campaign's 
     writeFileSync(join(r.project, 'AGENTS.md'), '');
     await r.turn('c1', 'third', { host: 'claude' });
     assert.deepEqual((block(r.hosts()[2]?.stdin ?? '') ?? '').split('\n'), [
-        `The client's memory file, the person's standing rules for all of their work, at ${JSON.stringify(paths[0])}:`,
+        `${names.client}, at ${JSON.stringify(paths[0])}:`,
         JSON.stringify('Client rule: sign every message as Alex.\n'),
-        "The project's memory file, the person's standing rules for this campaign's project is now empty or no longer there: what Jason gave of it earlier in this conversation no longer holds.",
+        `${names.project} is now empty or no longer there: what Jason gave of it earlier in this conversation no longer holds.`,
     ]);
 
     // Start fresh: the next turn is a new session, given every file again.
@@ -260,17 +335,74 @@ test("a campaign's chat is given the client's, the project's and the campaign's 
     assert.ok(!r.hosts()[3]?.args.includes('--resume'));
     assert.deepEqual(
         (block(r.hosts()[3]?.stdin ?? '') ?? '').split('\n').filter((line) => !line.startsWith('"')),
-        [`The client's memory file, the person's standing rules for all of their work, at ${JSON.stringify(paths[0])}:`, `The campaign's memory file, the person's standing rules for this campaign, at ${JSON.stringify(paths[2])}:`],
+        [`${names.client}, at ${JSON.stringify(paths[0])}:`, `${names.campaign}, at ${JSON.stringify(paths[2])}:`],
     );
 
     // The record keeps a digest per level for the session, never the words.
     const record = readFileSync(join(r.b.paths.conversations, `${r.chat.idOf('c1') as string}.json`), 'utf8');
     for (const words of ['Client rule', 'Campaign rule', 'Project rule']) assert.equal(record.includes(words), false, words);
-    const kept = (JSON.parse(record) as { memory_given?: Record<string, { session: string; files: Record<string, string> }> }).memory_given;
+    const kept = r.record('c1');
     assert.deepEqual(Object.keys(kept ?? {}), ['claude']);
     assert.equal(kept?.claude?.session, 'stub-session-1');
     assert.deepEqual(Object.keys(kept?.claude?.files ?? {}), ['client', 'campaign']);
     for (const digest of Object.values(kept?.claude?.files ?? {})) assert.match(digest, digestShape);
+});
+
+test('a level the turn could not read says nothing, not "no longer holds", and is given again at the next turn that reads it', async (t) => {
+    const r = rig(t);
+    await r.turn('c1', 'first', { host: 'claude', campaignId });
+    // The runtime does not answer for the project: its folder is not known this turn.
+    r.b.env.STUB_PROJECT_GET_FAILS = 'yes';
+    await r.turn('c1', 'second', { host: 'claude' });
+    assert.equal(block(r.hosts()[1]?.stdin ?? ''), null, 'nothing is said of a level not read');
+    assert.deepEqual(Object.keys(r.record('c1')?.claude?.files ?? {}), ['client', 'campaign'], 'and no record keeps it');
+    delete r.b.env.STUB_PROJECT_GET_FAILS;
+    await r.turn('c1', 'third', { host: 'claude' });
+    assert.deepEqual((block(r.hosts()[2]?.stdin ?? '') ?? '').split('\n'), [`${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}:`, JSON.stringify('Project rule: mention the pilot.\n')]);
+    // The folder no longer marked as the project's: no read, so nothing said either.
+    rmSync(join(r.project, '.jason'), { recursive: true });
+    await r.turn('c1', 'fourth', { host: 'claude' });
+    assert.equal(block(r.hosts()[3]?.stdin ?? ''), null);
+});
+
+test('a read that does not answer in time is named to the agent each turn, and the file is given at the first turn that reads it', async (t) => {
+    let hang = true;
+    const r = rig(t, () => ({ memoryReadLimitMs: 50, memoryReader: (place, platform) => (place.level === 'project' && hang ? new Promise(() => {}) : readMemoryFile(place, platform)) }));
+    await r.turn('c1', 'first', { host: 'claude', campaignId });
+    const lines = (block(r.hosts()[0]?.stdin ?? '') ?? '').split('\n').filter((line) => !line.startsWith('"'));
+    assert.deepEqual(lines, [
+        `${names.client}, at ${JSON.stringify(join(r.root, 'AGENTS.md'))}:`,
+        `${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}, is not given: it did not answer within 3 seconds; Jason reads it again at the next message, and the person can keep it where it opens at once. Tell the person.`,
+        `${names.campaign}, at ${JSON.stringify(join(r.campaign, 'AGENTS.md'))}:`,
+    ]);
+    assert.equal(r.record('c1')?.claude?.files.project, undefined);
+    hang = false;
+    await r.turn('c1', 'second', { host: 'claude' });
+    assert.deepEqual((block(r.hosts()[1]?.stdin ?? '') ?? '').split('\n'), [`${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}:`, JSON.stringify('Project rule: mention the pilot.\n')]);
+});
+
+test('a file the person can mend is named once to the session, with what to do, and given once mended', async (t) => {
+    const r = rig(t);
+    const clientFile = join(r.root, 'AGENTS.md');
+    unlinkSync(clientFile);
+    const kept = join(r.b.root, 'kept-elsewhere.md');
+    writeFileSync(kept, 'Rules kept elsewhere.\n');
+    linkSync(kept, clientFile);
+    writeFileSync(join(r.campaign, 'AGENTS.md'), Buffer.from('﻿Campaign rule\n', 'utf16le'));
+    await r.turn('c1', 'first', { host: 'claude', campaignId });
+    const first = r.hosts()[0]?.stdin ?? '';
+    assert.deepEqual((block(first) ?? '').split('\n').filter((line) => !line.startsWith('"')), [
+        `${names.client}, at ${JSON.stringify(clientFile)}, is not given: it is a link, or a name with more than one link, and Jason reads no memory file through one; the person can put the file itself there. Tell the person.`,
+        `${names.project}, at ${JSON.stringify(join(r.project, 'AGENTS.md'))}:`,
+        `${names.campaign}, at ${JSON.stringify(join(r.campaign, 'AGENTS.md'))}, is not given: it is not UTF-8 text; the person can save it as UTF-8. Tell the person.`,
+    ]);
+    assert.equal(first.includes('Rules kept elsewhere'), false);
+    await r.turn('c1', 'second', { host: 'claude' });
+    assert.equal(block(r.hosts()[1]?.stdin ?? ''), null, 'named once to the session');
+    unlinkSync(clientFile);
+    writeFileSync(clientFile, 'Client rule, mended.\n');
+    await r.turn('c1', 'third', { host: 'claude' });
+    assert.deepEqual((block(r.hosts()[2]?.stdin ?? '') ?? '').split('\n'), [`${names.client}, at ${JSON.stringify(clientFile)}:`, JSON.stringify('Client rule, mended.\n')]);
 });
 
 test('a set-up chat and the Feed are given the client’s file alone', async (t) => {
@@ -324,15 +456,20 @@ test('the root the runtime does not report as marked gives no client file, and t
     assert.ok(shown.includes("The campaign's memory file"));
 });
 
-test('the log says a level was given and its digest, and never a word or a path of a file', async (t) => {
+test('the log says a level and how it stood, and never a word, a path or a digest of a file', async (t) => {
     const r = rig(t, (b) => ({ memoryGiven: loggedTurns(fileLogger(join(b.root, 'test-logs'))).memoryGiven }));
     writeFileSync(join(r.root, 'AGENTS.md'), 'planted-client-words\n');
     await r.turn('c1', 'hello', { host: 'claude', campaignId });
+    writeFileSync(join(r.root, 'AGENTS.md'), 'planted-client-words, changed\n');
+    writeFileSync(join(r.project, 'AGENTS.md'), '');
+    await r.turn('c1', 'again', { host: 'claude' });
     const logs = join(r.b.root, 'test-logs');
     const text = readdirSync(logs).map((name) => readFileSync(join(logs, name), 'utf8')).join('');
     const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
     const given = lines.filter((line) => line.EventName === 'chat_memory_given');
-    assert.deepEqual(given.map((line) => line.Level), ['client', 'project', 'campaign']);
-    for (const line of given) assert.match(String(line.Digest), digestShape);
-    for (const planted of ['planted-client-words', 'Project rule', 'Campaign rule', r.root, r.campaign, 'AGENTS.md']) assert.equal(text.includes(planted), false, planted);
+    assert.deepEqual(
+        given.map((line) => [line.Level, line.How]),
+        [['client', 'given'], ['project', 'given'], ['campaign', 'given'], ['client', 'changed'], ['project', 'gone']],
+    );
+    for (const planted of ['planted-client-words', 'Project rule', 'Campaign rule', r.root, r.campaign, 'AGENTS.md', 'sha256:']) assert.equal(text.includes(planted), false, planted);
 });

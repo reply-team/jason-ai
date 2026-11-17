@@ -54,8 +54,8 @@ import {
     type KeptEntry,
 } from './chat-conversations.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
-import { digestsOf, memoryBlock, memoryToGive, type MemoryFile, type MemoryLevel, type MemoryPlace } from './chat-memory.ts';
-import { readMemoryFile } from './chat-memory-files.ts';
+import { digestsOf, memoryBlock, memoryReadLimitMs, memorySecondLookMs, memoryToGive, type GivenDigests, type MemoryGiving, type MemoryLevel, type MemoryPlace, type MemoryRead } from './chat-memory.ts';
+import { readMemoryFile, readMemoryWithin } from './chat-memory-files.ts';
 import { currentModel, effortRefusal, haikuEffortFrom, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import {
     claudeNamingArguments,
@@ -277,10 +277,14 @@ export interface ChatOptions {
     /** Said each time a memory file cannot be written, at the start or before a turn, which is then refused. */
     instructionsUnwritten?(file: string, code: string): void;
     /**
-     * Said for each of the person's memory files a host was started with, by its level and its digest: never its path or
-     * a word of it (`chat-memory.ts`).
+     * Said for each level of the person's memory files a host was started with, by the level and how it stood (given,
+     * changed, gone or skipped): never its path, its digest or a word of it (`chat-memory.ts`).
      */
-    memoryGiven?(level: MemoryLevel, digest: string): void;
+    memoryGiven?(level: MemoryLevel, how: MemoryGiving): void;
+    /** How a level's memory file is read: `readMemoryFile` unless a test reads it otherwise. */
+    memoryReader?(place: MemoryPlace, platform: NodeJS.Platform): Promise<MemoryRead | null>;
+    /** The longest a level's read may take, in milliseconds: `memoryReadLimitMs` unless a test says otherwise. */
+    memoryReadLimitMs?: number;
     /** Said once at the start: how many conversations were read, and how many files there were not records. */
     conversationsRead?(kept: number, unreadable: number): void;
     /** Said each time a conversation's record could not be written or removed, by the system's error code. */
@@ -1706,12 +1710,23 @@ export class Chat {
 
     /**
      * The person's memory files that apply to a turn, in the order of the levels: the client's for every chat, and the
-     * project's and the campaign's for a campaign's. A level that holds none the chat is given is left out.
+     * project's and the campaign's for a campaign's. A level with no read is left out. A file found absent that the
+     * session was given (`given`) is looked at once more, a moment later, so an editor's save that leaves the name bare
+     * for an instant is not said to be gone.
      */
-    async #memoryFiles(places: readonly MemoryPlace[]): Promise<MemoryFile[]> {
+    async #memoryFiles(places: readonly MemoryPlace[], given: GivenDigests | null): Promise<MemoryRead[]> {
         const root = await this.#rootPlace();
-        const read = await Promise.all([...(root === null ? [] : [root]), ...places].map((place) => readMemoryFile(place, this.#platform)));
-        return read.filter((file): file is MemoryFile => file !== null);
+        const limit = this.#options.memoryReadLimitMs ?? memoryReadLimitMs;
+        const reader = this.#options.memoryReader ?? readMemoryFile;
+        const all = [...(root === null ? [] : [root]), ...places];
+        const read = await Promise.all(all.map((place) => readMemoryWithin(place, limit, this.#platform, reader)));
+        if (read.some((each) => each?.kind === 'absent' && given?.[each.level] !== undefined)) {
+            await new Promise((resolve) => setTimeout(resolve, memorySecondLookMs));
+            for (const [i, each] of read.entries()) {
+                if (each?.kind === 'absent' && given?.[each.level] !== undefined) read[i] = await readMemoryWithin(all[i]!, limit, this.#platform, reader);
+            }
+        }
+        return read.filter((each): each is MemoryRead => each !== null);
     }
 
     /** Every campaign of the installation, archived ones included, read page by page; null when any page was not. */
@@ -1822,14 +1837,13 @@ export class Chat {
         const earlier = recap(conversation.entries);
         const resume = conversation.sessions[resolved.host];
         // The person's memory files follow the header: all of them to a session that is new, and to one this conversation
-        // resumes only those that changed since it was given them, with the levels that hold nothing now.
-        const memory = await this.#memoryFiles(places);
+        // resumes only those that changed since it was given them, a level really absent now, and one that did not answer
+        // in time. A level not read this turn is kept by no record, so the next turn that reads it gives it again.
+        const memory = await this.#memoryFiles(places, memoryGivenTo(conversation, resolved.host, resume));
         const held = digestsOf(memory);
         const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
-        const headFor = (resumed: string | undefined): string => {
-            const { files, gone } = giving(resumed);
-            return [header(about), memoryBlock(files, gone), block].filter((part): part is string => part !== null).join('\n\n');
-        };
+        const headFor = (resumed: string | undefined): string =>
+            [header(about), memoryBlock(giving(resumed)), block].filter((part): part is string => part !== null).join('\n\n');
         // A Full access turn runs in its grant's own folder, and nothing else does; every other turn, and a Full access turn
         // with no grant to run in, in the chat folder.
         const grantId = running.mode === 'full_access' ? this.#grants.get(conversation.id) : undefined;
@@ -2101,7 +2115,7 @@ export class Chat {
             host = started;
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
-            for (const file of giving(resumed).files) this.#options.memoryGiven?.(file.level, file.digest);
+            for (const { read, how } of giving(resumed)) this.#options.memoryGiven?.(read.level, how);
             if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.
