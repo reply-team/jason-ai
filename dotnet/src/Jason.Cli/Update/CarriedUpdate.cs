@@ -412,6 +412,21 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             return Swapped(ledger);
         }
 
+        // An earlier run handed the installer this update: the record at `kept`, or the request it recorded given the go or
+        // answered `installing`. While that request is younger than the install's own wait the installer may still be
+        // landing it, so the Desktop is not asked again and nothing is touched; and whatever this run meets, it never puts
+        // back a record it did not begin, which would erase the record of an install as it lands.
+        var (earlier, since) = EarlierHanding(ledger);
+        if (earlier && since is { } handedAt && clock.GetUtcNow() - handedAt < InstallWait)
+        {
+            throw new UpdateException(
+                UpdateCodes.InProgress,
+                $"Jason Desktop's installer has {ledger.ToVersion}, handed to it by an earlier `jason update apply`, and the application is not {ledger.ToVersion} yet, so Jason Desktop was not asked again and nothing was changed. "
+                + $"Once the application is {ledger.ToVersion}, `jason update apply` finishes the update and starts the runtime; `jason status` names it until then. "
+                + $"Where the application is still not {ledger.ToVersion} {InstallWait.TotalMinutes:F0} minutes after it was handed over, `jason update apply` asks Jason Desktop again.");
+        }
+
+        _beganHanded = earlier;
         _wasLive = Live() is not null;
         _written = ledger;
         var id = NewRequest();
@@ -434,11 +449,12 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             var tail = await SettleOnTheWayOutAsync(ledger, waits: !cancelled).ConfigureAwait(false);
             if (cancelled)
             {
+                // Retried at once while the installer has the update, the apply is refused until it lands: not retryable then.
                 throw new UpdateException(
                     UpdateCodes.Cancelled,
                     $"The update to {ledger.ToVersion} was cancelled. {tail}",
                     error,
-                    retryable: true);
+                    retryable: !InstallerOwnsTheFolder);
             }
 
             if (error is UpdateException refused)
@@ -886,7 +902,10 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         }
 
         PutImageBack();
-        var nothingInstalled = _installingSince is null || CarriedExecutable.Of(carried.Executable) is { } still && SemanticVersion.TryParse(still.Version, out var named) && named == ledger.FromVersion;
+
+        // A record this run did not begin - an earlier run's, which handed the installer the update - is never put back.
+        var nothingInstalled = !_beganHanded
+            && (_installingSince is null || CarriedExecutable.Of(carried.Executable) is { } still && SemanticVersion.TryParse(still.Version, out var named) && named == ledger.FromVersion);
         if (nothingInstalled)
         {
             PutLedgerBack();
@@ -925,6 +944,51 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     private string? _goFile;
 
     private DateTimeOffset? _installingSince;
+
+    /// <summary>Whether an earlier run had handed the installer the update this run carries on.</summary>
+    private bool _beganHanded;
+
+    /// <summary>
+    /// Whether an earlier run handed the installer this update - the record at <c>kept</c> or later, or the request it recorded
+    /// given the go or answered <c>installing</c>, and not refused - and when, by the newest of that request's files.
+    /// </summary>
+    private (bool Handed, DateTimeOffset? Since) EarlierHanding(UpdateLedger ledger)
+    {
+        string? id;
+        try
+        {
+            id = File.Exists(update.DesktopRequest) ? File.ReadAllText(update.DesktopRequest).Trim() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            id = null;
+        }
+
+        var answer = id is { Length: > 0 } ? DesktopAnswer.Read(RequestFile(id), id) : null;
+        if (answer is { State: DesktopAnswer.Refused })
+        {
+            return (false, null);
+        }
+
+        var go = id is { Length: > 0 } && File.Exists(GoFile(id));
+        var handed = ledger.Step >= UpdateStep.Kept || answer is { State: DesktopAnswer.Installing } || go;
+        if (!handed || id is not { Length: > 0 })
+        {
+            return (handed, null);
+        }
+
+        DateTimeOffset? newest = null;
+        foreach (var file in new[] { update.DesktopRequest, RequestFile(id), GoFile(id) })
+        {
+            if (File.Exists(file))
+            {
+                var at = new DateTimeOffset(File.GetLastWriteTimeUtc(file), TimeSpan.Zero);
+                newest = newest is { } seen && seen > at ? seen : at;
+            }
+        }
+
+        return (true, newest);
+    }
 
     /// <summary>The last record of the ledger this update wrote.</summary>
     private UpdateLedger _written = null!;

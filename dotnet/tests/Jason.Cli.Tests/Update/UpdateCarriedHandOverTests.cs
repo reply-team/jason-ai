@@ -593,6 +593,130 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     /// <summary>
+    /// An apply typed right after a cancel while the installer has the update - the go given, or the record at <c>kept</c> -
+    /// and before the application is the new version: Jason Desktop is not asked again and nothing is touched, so the record
+    /// of the install as it lands stays, and the answer names the command that finishes it. Once the install lands, that
+    /// command finishes it.
+    /// </summary>
+    [Theory]
+    [InlineData("after_the_go")]
+    [InlineData("at_kept")]
+    public async Task An_apply_after_a_cancel_while_the_installer_has_the_update_asks_nothing_and_keeps_the_record(string where)
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        const string Id = "cli-cancelled";
+        var go = Path.Combine(installation.Update.Root, $"desktop-{Id}.go");
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        installation.OnHandOver = command =>
+        {
+            if (command[0] != copy)
+            {
+                return;
+            }
+
+            File.WriteAllText(installation.Update.DesktopRequest, Id);
+            var to = installation.To.ToString();
+            var ledger = installation.Ledger()!;
+            if (where == "at_kept")
+            {
+                ledger.At(UpdateStep.Kept).Write(installation.Update.Ledger);
+                desktop.Keep();
+                desktop.Write(Id, to, "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+            }
+            else
+            {
+                ledger.At(UpdateStep.Stopped).Write(installation.Update.Ledger);
+                desktop.Write(Id, to, "downloaded", offered: to);
+                File.WriteAllText(go, string.Empty);
+                desktop.StopRuntime();
+            }
+
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        };
+
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token));
+        Assert.Equal(UpdateCodes.Cancelled, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        var record = File.ReadAllText(installation.Update.Ledger);
+        var asked = desktop.Requests.Count;
+
+        // The agent's retry, at once.
+        installation.OnHandOver = null;
+        installation.Out.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.InProgress, refusal.Code);
+        Assert.Contains("handed to it by an earlier `jason update apply`", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop was not asked again and nothing was changed", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(record, File.ReadAllText(installation.Update.Ledger));
+        Assert.Equal(asked, desktop.Requests.Count);
+        Assert.Equal(Id, File.ReadAllText(installation.Update.DesktopRequest).Trim());
+        Assert.False(installation.Running);
+        Assert.Empty(installation.Processes.Launches);
+
+        // The installer lands it, and the command the answer named finishes the update.
+        desktop.Becomes(installation.To);
+        installation.Out.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+        Assert.Equal(UpdateStep.Complete, installation.Ledger()!.Step);
+        Assert.True(installation.Running);
+    }
+
+    /// <summary>
+    /// A run that carries on a record an earlier run handed the installer, once that earlier hand-over is older than the
+    /// install's wait, asks Jason Desktop again; and where it ends with nothing installed it never puts back the record it did
+    /// not begin.
+    /// </summary>
+    [Fact]
+    public async Task A_run_that_carries_on_an_earlier_hand_over_never_puts_its_record_back()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        const string Id = "cli-earlier";
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        installation.OnHandOver = command =>
+        {
+            if (command[0] != copy)
+            {
+                return;
+            }
+
+            File.WriteAllText(installation.Update.DesktopRequest, Id);
+            installation.Ledger()!.At(UpdateStep.Kept).Write(installation.Update.Ledger);
+            desktop.Keep();
+            desktop.Write(Id, installation.To.ToString(), "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        };
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token));
+
+        // The earlier hand-over is older than the install's wait: the installer did not land it.
+        var old = DateTime.UtcNow - TimeSpan.FromMinutes(11);
+        foreach (var file in Directory.EnumerateFiles(installation.Update.Root, "desktop-*"))
+        {
+            File.SetLastWriteTimeUtc(file, old);
+        }
+
+        // Asked again, the Desktop refuses: nothing was installed by this run, and the record it did not begin stays.
+        installation.OnHandOver = null;
+        desktop.Before = (id, to) =>
+        {
+            desktop.Write(id, to, "refused", reason: "version_mismatch", message: "The releases offer another version.", offered: "0.0.1");
+            return 1;
+        };
+        installation.Out.GetStringBuilder().Clear();
+        var asked = desktop.Requests.Count;
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+        Assert.Equal(asked + 1, desktop.Requests.Count);
+        Assert.NotEqual(UpdateCodes.InProgress, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        Assert.Equal(UpdateStep.Kept, installation.Ledger()!.Step);
+    }
+
+    /// <summary>
     /// After a cancel the copy is given its hold to run its own way out, since a terminal's Ctrl+C reaches it too: one that
     /// answers within it is passed on as it answered, and the carried process puts back and starts nothing of its own.
     /// </summary>
