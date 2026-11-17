@@ -898,8 +898,9 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 ## The command line, and the login items
 
 - **Command Line** places a `jason` that your terminal finds and that runs the executable the application carries. On
-  macOS and Linux it is a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder, the same
-  act puts it there by the installer's own rule: the line `# added by jason install` and under it
+  macOS and Linux it is a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
+  your login shell gave when the window started, or, where it gave none, taken as not holding it), the same act puts it
+  there by the installer's own rule: the line `# added by jason install` and under it
   `export PATH="$HOME/.local/bin:$PATH"` (with your home spelled out) go into the file a login shell of your account
   reads — `~/.zprofile` for zsh; for bash the first of `~/.bash_profile` and `~/.bash_login` that exists, else
   `~/.profile`; `~/.profile` for any other shell — and, for zsh and bash, into `~/.zshrc` or `~/.bashrc` as well, each

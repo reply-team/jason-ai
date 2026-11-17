@@ -28,14 +28,15 @@ function home(t: { after(fn: () => void): void }): string {
 }
 
 /** A Linux desk over that home: the account's shell, and the PATH a new terminal of it has. */
-function desk(t: { after(fn: () => void): void }, options: { shell?: string | null; terminal?: (folder: string) => string; at?: string } = {}) {
+function desk(t: { after(fn: () => void): void }, options: { shell?: string | null; terminal?: (folder: string) => string | null; desktop?: (folder: string) => string; at?: string } = {}) {
     const at = options.at ?? home(t);
     const folder = join(at, '.local', 'bin');
     const log = memoryLog();
     const terminal = options.terminal ?? (() => '/usr/bin:/bin');
+    const desktop = options.desktop ?? (() => '/usr/bin:/bin');
     const shellNamed = options.shell === undefined ? '/bin/zsh' : options.shell;
     const make = (executable = exe) =>
-        new PathCommand({ platform: 'linux', folder, executable, dataDirectory: null, path: () => '/usr/bin:/bin', isProgram: (file) => existsSync(file), account: { home: at, shellNamed, terminalPath: () => terminal(folder) }, log });
+        new PathCommand({ platform: 'linux', folder, executable, dataDirectory: null, path: () => desktop(folder), isProgram: (file) => existsSync(file), account: { home: at, shellNamed, terminalPath: () => terminal(folder) }, log });
     return { home: at, folder, command: make(), make, log, line: exportLine(folder) };
 }
 
@@ -75,6 +76,33 @@ test('each shell gets the files install.sh writes: its login profile, and its in
             if (!written.includes(file)) assert.equal(text(file), (each.files ?? []).includes(name) ? '# mine\n' : null, `${each.shell}: ${name} untouched`);
         }
     }
+});
+
+test('already on the PATH is the login shell’s own PATH: on it, nothing; only on the desktop’s, written; unknown, written', (t) => {
+    // On the shell's own PATH, as the desktop read it before adding its usual places: nothing is written.
+    const own = desk(t, { terminal: (folder) => `/usr/bin:${folder}`, desktop: (folder) => `/usr/bin:${folder}` });
+    assert.equal(own.command.place().said, null);
+    assert.deepEqual(['.zprofile', '.zshrc'].filter((name) => existsSync(join(own.home, name))), []);
+
+    // Only on the desktop's own PATH, where the usual places put it: a new terminal does not have it, so it is written.
+    const augmented = desk(t, { terminal: () => '/usr/bin:/bin', desktop: (folder) => `/usr/bin:/bin:${folder}` });
+    const status = augmented.command.status();
+    assert.equal(status.state === 'absent' && status.folderOnPath, true, 'the desktop’s PATH holds it');
+    assert.deepEqual(status.state === 'absent' ? status.lines?.add : null, [join(augmented.home, '.zprofile'), join(augmented.home, '.zshrc')]);
+    assert.equal(augmented.command.place().said?.added, true);
+    assert.equal(text(join(augmented.home, '.zprofile')), block(augmented.line));
+
+    // The shell gave no PATH: the folder is taken as not on it, and written; a second act still adds nothing.
+    const unknown = desk(t, { terminal: () => null, desktop: (folder) => `/usr/bin:/bin:${folder}` });
+    assert.equal(unknown.command.place().said?.added, true);
+    assert.equal(text(join(unknown.home, '.zshrc')), block(unknown.line));
+    assert.equal(unknown.make().place().said, null);
+    assert.equal(text(join(unknown.home, '.zshrc')), block(unknown.line));
+
+    // And the start hands the account the shell's own reading, with no stand-in where it gave none.
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('const terminalPath = await shellRead;'));
+    assert.ok(main.includes('terminalPath: () => terminalPath }'));
 });
 
 test('a folder a new terminal already has on its PATH gets no line, and the item says nothing about one', (t) => {

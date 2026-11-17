@@ -142,12 +142,17 @@ export interface PathLines {
 export interface ProfileAccount {
     home: string;
     shellNamed: string | null;
-    /** The PATH the account's login shell printed, before the desktop added the usual places to its own. */
-    terminalPath(): string;
+    /**
+     * The PATH the account's login shell printed, before the desktop added the usual places to its own; null where the
+     * shell gave none, and the folder is then taken as not on it: the line is harmless where the folder is there another
+     * way, the whole-line search keeps it from doubling, and the confirmation names what is written.
+     */
+    terminalPath(): string | null;
 }
 
 /** Whether a colon-separated PATH names the folder, a trailing slash aside. */
-export function namesFolder(path: string, folder: string): boolean {
+export function namesFolder(path: string | null, folder: string): boolean {
+    if (path === null) return false;
     const bare = (entry: string) => entry.trim().replace(/\/+$/, '');
     return path.split(':').some((entry) => entry.trim() !== '' && bare(entry) === bare(folder));
 }

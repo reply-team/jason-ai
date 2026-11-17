@@ -251,9 +251,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const shellRead = shellPath();
     const pathRead = loginPath(inherited, home, shellRead);
     process.env.PATH = await pathRead;
-    // What a new terminal has: the login shell's own PATH, before the usual places, or the inherited one where it said
-    // none. Placing the PATH command writes the PATH lines only where its folder is not on this one.
-    const terminalPath = (await shellRead) ?? inherited;
+    // What a new terminal has: the login shell's own PATH, before the usual places, never the PATH above. Placing the
+    // PATH command writes the PATH lines only where its folder is not on it, and where the shell said none, always.
+    const terminalPath = await shellRead;
     const form = linuxForm();
     // Every child gets the person's PATH and libraries: nothing of an AppImage's mount, which the AppRun put on them.
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));

@@ -87,7 +87,7 @@ export async function runUninstall(quiet: boolean): Promise<number> {
             pathext: process.env['PATHEXT'],
             isProgram: (file) => isProgramFile(file, process.platform),
             // Its PATH lines come back out of the profiles with it; a removal never asks a terminal's PATH.
-            account: { home, shellNamed: accountShell(process.env), terminalPath: () => process.env.PATH ?? '' },
+            account: { home, shellNamed: accountShell(process.env), terminalPath: () => null },
             log,
         }),
         login: new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead: Promise.resolve(), log }),
