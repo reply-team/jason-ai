@@ -6,6 +6,8 @@ import { href } from '../../router';
 import { clock, dayKey, dayLabel, relative, when } from '../../time/format';
 import { groupByDay } from '../../time/grouping';
 import { title } from '../attention/labels';
+import { asking } from '../attention/reasking';
+import { ASKING_MARK } from '../attention/reasking-model';
 import { entryLabel } from '../people/labels';
 import * as timeline from '../people/store';
 import { plannedNote, what } from '../workitems/labels';
@@ -131,7 +133,9 @@ export function CampaignTimeline({ campaign, me, now, zone, onWaiting }: Props) 
                                 <span className="what">
                                     <span className="name">{title(approval.operation, approval.contact_name)}</span>
                                     <span className="in">
-                                        waiting since {relative(new Date(approval.requested_at), now)}
+                                        {asking(approval.id) === undefined
+                                            ? `waiting since ${relative(new Date(approval.requested_at), now)}`
+                                            : ASKING_MARK}
                                     </span>
                                 </span>
                             </button>

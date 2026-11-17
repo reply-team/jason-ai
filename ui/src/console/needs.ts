@@ -14,6 +14,14 @@ import {
     wordsOf,
     type Words,
 } from '../screens/attention/message-edit';
+import { asking, changedSince, edits, noteEdit, withdrawn } from '../screens/attention/reasking';
+import {
+    ASKING_MARK,
+    DIFFERS_SENTENCE,
+    askedAfter,
+    stateSentence,
+    withWords,
+} from '../screens/attention/reasking-model';
 import { doubtWords } from '../screens/send-modes/model';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
@@ -37,14 +45,7 @@ import { clock, here } from './state';
 import { lookupFor, readSender, senderMark, senderReads } from './senders';
 import { SENDER_WHEN, senderAsked, senderLine, senderWords } from './senders-model';
 import { approveWhole, fillApprovals, keepWhole, wholeReads } from './waiting';
-import {
-    approvalGate,
-    readingSentence,
-    stillAsking,
-    unreadSentence,
-    type ApprovalGate,
-    type Reasked,
-} from './waiting-model';
+import { approvalGate, readingSentence, unreadSentence, type ApprovalGate } from './waiting-model';
 
 // Needs you: what waits on a person, in two panes. On the left every approval and question the runtime lists (and,
 // once read, every chat whose AI waits on a choice), under a filter and an agent; on the right the one chosen, whole,
@@ -111,9 +112,6 @@ interface Editing {
     saving: boolean;
 }
 const editing = signal<Editing | null>(null);
-
-/** The messages edited here, until the runtime has asked about each again. */
-export const reasked = signal<readonly Reasked[]>([]);
 
 /** What Needs you holds, as the pure model reads it: the runtime's two lists and, once read, the chats that wait. */
 export function needsInput(): NeedsInput {
@@ -282,7 +280,10 @@ function take(): void {
             unapproved.value = Object.fromEntries(Object.entries(unapproved.value).filter(([id]) => listedIds.has(id)));
         if (rejecting.value !== null && !listedIds.has(rejecting.value)) rejecting.value = null;
         if (editing.value !== null && !listedIds.has(editing.value.id)) editing.value = null;
-        reasked.value = stillAsking(reasked.value, attention.approvals.value);
+        // A message edited here that the runtime asked about again is the new approval, still the one chosen.
+        const now = chosen.value;
+        const asked = now?.kind === 'approval' ? askedAfter(edits.value, now.id) : null;
+        if (asked !== null && listedIds.has(asked)) chosen.value = { kind: 'approval', id: asked };
         if (agent.value !== null && !agentsOf(needsInput()).some((each) => each.id === agent.value)) agent.value = null;
         // An item that leaves while no act of the person's is under way left by someone else's hand: the pane says so.
         if (keepPlace() && acting.value === 0) left.value = true;
@@ -302,9 +303,12 @@ async function acted(work: () => Promise<unknown>): Promise<void> {
     if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
-/** Reads what waits again, every page the person had read, then each approval not read whole yet. */
-export async function reload(): Promise<void> {
-    await attention.load(here().api, false);
+/**
+ * Reads what waits again, every page the person had read, then each approval not read whole yet. `followed` says the
+ * journal's word asked for it, so a row edited here is read again only when a line named its work item.
+ */
+export async function reload(followed = false): Promise<void> {
+    await attention.load(here().api, false, followed);
     await fill();
 }
 
@@ -315,7 +319,6 @@ export function forgetNeeds(): void {
     chosen.value = null;
     rejecting.value = null;
     editing.value = null;
-    reasked.value = [];
     checking.value = new Set();
     unapproved.value = {};
     typed.clear();
@@ -463,7 +466,7 @@ define('needs.rejected', ([id], _, event) => {
 // they have not seen. Save writes them through the work item's update and approves nothing.
 define('needs.edit', ([id]) => {
     const whole = typeof id === 'string' ? reads.approvals.value[id] : undefined;
-    if (whole === undefined || checking.value.has(whole.id)) return;
+    if (whole === undefined || checking.value.has(whole.id) || withdrawn(whole.id) !== undefined) return;
     said(whole.id, null);
     checked(whole.id, true);
     readItem(here().api, whole.work_item_id)
@@ -509,12 +512,8 @@ define('needs.save', ([id], _, event) => {
     saveEdit(api, whole.operation, whole.work_item_id, subject, body, now.opened, NEEDS_EDIT_REASON)
         .then((item) => {
             editing.value = null;
-            // The runtime asks again only when the edit took the work out of waiting for this approval.
-            if (item.status !== 'awaiting_approval')
-                reasked.value = [
-                    ...reasked.value.filter((each) => each.workItemId !== whole.work_item_id),
-                    { workItemId: whole.work_item_id, approvalId: whole.id },
-                ];
+            // The row stays where it is, chosen, with the words saved, until the runtime has asked again (`reasking.ts`).
+            noteEdit(whole, item);
             return acted(() => attention.load(api, false));
         })
         .catch((error: unknown) => {
@@ -607,7 +606,9 @@ function listRow(item: WaitingItem, shown: WaitingItem | null, now: number): Htm
             <span class="needs-ic amber" aria-hidden="true">!</span>
             <span class="needs-row-b">
                 <span class="needs-row-t">${row.what} ${person(item.row, now)}</span>
-                <span class="needs-row-m">Approval · ${row.campaign}</span>
+                <span class="needs-row-m"
+                    >${asking(item.id) === undefined ? 'Approval' : ASKING_MARK} · ${row.campaign}</span
+                >
             </span>
             <span class="needs-row-a">${row.age}</span>
         </button>`;
@@ -640,7 +641,10 @@ const openChat = (campaignId: string, name: string): Html =>
 /** What the message says, whole (the pane never clamps it), and below it what the act is: its reach, reversibility and cost. */
 function words(whole: Approval | undefined): Html | null {
     if (whole === undefined) return null;
-    const detail = toApprovalDetail(whole.preview);
+    // A message edited here shows the words saved, which the runtime asks again with, never the withdrawn ones.
+    const edit = withdrawn(whole.id);
+    const read = toApprovalDetail(whole.preview);
+    const detail = edit === undefined ? read : withWords(read, edit.words);
     return html`<div class="needs-words">
             ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}
             ${
@@ -758,60 +762,65 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
     const why = unapproved.value[summary.id];
     const edit = editing.value?.id === summary.id ? editing.value : null;
     const asked = rejecting.value === summary.id;
-    const acts = edit
-        ? editBoxes(edit, summary.operation, busy)
-        : asked
-          ? html`<div
-                class="note am needs-reject"
-                role="alertdialog"
-                aria-label="Reject this?"
-                data-escape="needs.unreject"
-            >
-                <div>Reject this? It ends the work, and a rejection cannot be taken back.</div>
-                ${field(`${summary.id}:reason`, 'Reason (optional, kept in the journal)')}
-                <div class="ask-a">
-                    <button class="btn sm" type="button" ${act('needs.unreject')}>Cancel</button>
-                    <button
-                        class="btn sm no"
-                        type="button"
-                        ${busy ? html`disabled` : null}
-                        ${act('needs.rejected', summary.id)}
-                    >
-                        Reject
-                    </button>
-                </div>
-            </div>`
-          : html`<div class="ask-a">
-                <button
-                    class="btn sm p"
-                    type="button"
-                    ${busy || inCheck || !gate.live ? html`disabled` : null}
-                    ${act('needs.approve', summary.id)}
-                >
-                    Approve
-                </button>
-                ${
-                    whole !== undefined && gate.live && editable(whole)
-                        ? html`<button
-                              class="btn sm"
-                              type="button"
-                              ${busy || inCheck ? html`disabled` : null}
-                              ${act('needs.edit', summary.id)}
-                          >
-                              Edit
-                          </button>`
-                        : null
-                }
-                <button
-                    class="btn sm"
-                    type="button"
-                    ${busy || inCheck ? html`disabled` : null}
-                    ${act('needs.reject', summary.id)}
-                >
-                    Reject
-                </button>
-                ${openChat(summary.campaign_id, summary.campaign_name)}
-            </div>`;
+    // An approval an edit withdrew is acted on in no way: what it says is its state, and the agent's chat stays a way there.
+    const kept = withdrawn(summary.id);
+    const reasking = kept !== undefined;
+    const acts = reasking
+        ? html`<div class="ask-a">${openChat(summary.campaign_id, summary.campaign_name)}</div>`
+        : edit
+          ? editBoxes(edit, summary.operation, busy)
+          : asked
+            ? html`<div
+                  class="note am needs-reject"
+                  role="alertdialog"
+                  aria-label="Reject this?"
+                  data-escape="needs.unreject"
+              >
+                  <div>Reject this? It ends the work, and a rejection cannot be taken back.</div>
+                  ${field(`${summary.id}:reason`, 'Reason (optional, kept in the journal)')}
+                  <div class="ask-a">
+                      <button class="btn sm" type="button" ${act('needs.unreject')}>Cancel</button>
+                      <button
+                          class="btn sm no"
+                          type="button"
+                          ${busy ? html`disabled` : null}
+                          ${act('needs.rejected', summary.id)}
+                      >
+                          Reject
+                      </button>
+                  </div>
+              </div>`
+            : html`<div class="ask-a">
+                  <button
+                      class="btn sm p"
+                      type="button"
+                      ${busy || inCheck || !gate.live ? html`disabled` : null}
+                      ${act('needs.approve', summary.id)}
+                  >
+                      Approve
+                  </button>
+                  ${
+                      whole !== undefined && gate.live && editable(whole)
+                          ? html`<button
+                                class="btn sm"
+                                type="button"
+                                ${busy || inCheck ? html`disabled` : null}
+                                ${act('needs.edit', summary.id)}
+                            >
+                                Edit
+                            </button>`
+                          : null
+                  }
+                  <button
+                      class="btn sm"
+                      type="button"
+                      ${busy || inCheck ? html`disabled` : null}
+                      ${act('needs.reject', summary.id)}
+                  >
+                      Reject
+                  </button>
+                  ${openChat(summary.campaign_id, summary.campaign_name)}
+              </div>`;
     return html`<section class="needs-pane ask" data-id="${summary.id}" aria-label="${row.what}">
         <div class="ask-h">
             <span class="b amber">Waiting for you</span>
@@ -819,7 +828,14 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
         </div>
         <h2 class="needs-title">${row.what} ${person(summary, now)}</h2>
         <div class="ask-w">${reasonLabel(whole?.reason ?? summary.reason)}</div>
-        ${whole === undefined ? null : doubts(whole.preview)} ${words(whole)} ${heldNote(gate, summary.id)}
+        ${kept === undefined ? null : html`<div class="note needs-reasking" role="status">${stateSentence(kept)}</div>`}
+        ${
+            whole !== undefined && !reasking && changedSince(whole)
+                ? html`<div class="note am needs-reasking" role="alert">${DIFFERS_SENTENCE}</div>`
+                : null
+        }
+        ${whole === undefined || reasking ? null : doubts(whole.preview)} ${words(whole)}
+        ${reasking ? null : heldNote(gate, summary.id)}
         ${inCheck ? html`<div class="note" role="status">${checkingSentence}</div>` : null}
         ${why === undefined ? null : html`<div class="note am" role="status">${why}</div>`} ${acts}
     </section>`;
@@ -940,13 +956,6 @@ function panes(now: number, busy: boolean): Html {
     const { items, shown } = listed();
     const more = moreUnder(input, filter.value);
     return html`${bar(input)}
-        ${
-            reasked.value.length > 0
-                ? html`<div class="note needs-reasked" role="status">
-                      Jason asks again with the new text when it next takes this work.
-                  </div>`
-                : null
-        }
         <div class="needs-panes">
             <div class="needs-list" role="group" aria-label="Waiting">
                 ${

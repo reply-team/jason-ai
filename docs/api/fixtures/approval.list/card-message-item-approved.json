@@ -1,0 +1,15 @@
+{
+  "operation": "approval.list",
+  "case": "card-message-item-approved",
+  "request": {
+    "work_item_id": "wi_1",
+    "statuses": [
+      "pending"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

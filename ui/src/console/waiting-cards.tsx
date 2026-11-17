@@ -6,6 +6,8 @@ import { MessageEditor } from '../screens/attention/message-editor';
 import { SenderLine } from '../screens/attention/sender-line';
 import { repeated } from '../screens/attention/store';
 import { editable, readItem, sentence } from '../screens/attention/message-edit';
+import { changedSince, withdrawn } from '../screens/attention/reasking';
+import { DIFFERS_SENTENCE, stateSentence, withWords } from '../screens/attention/reasking-model';
 import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
 import { senderReads, type SenderReads } from './senders';
@@ -37,7 +39,11 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const api = useApi();
     const whole = waiting.approvals.value[row.id];
     const gate = approvalGate(whole, waiting.unread.value[row.id]);
-    const card = toApprovalCard(row, whole, clock.value);
+    // A message edited here stays as this card, with the words saved and no act, until the runtime has asked again; the
+    // approval the edit withdrew is never acted on again on this page.
+    const saved = withdrawn(row.id);
+    const read = toApprovalCard(row, whole, clock.value);
+    const card = saved === undefined ? read : withWords(read, saved.words);
     // An act of this chat's, on any card, holds every card's acts from its press until the lists read after it have
     // answered: a second click never lands on the card that moves up into the decided one's place.
     const busy = waiting.store.busy.value || waiting.store.acting.value > 0;
@@ -128,7 +134,7 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
             <SenderLine approval={whole} reads={senders} />
             <div className="ask-w">{card.why}</div>
             {/* Who doubted a send and why, below the sentence that says so and above the words, as the panel draws it. */}
-            {whole !== undefined && <Doubts preview={whole.preview} />}
+            {whole !== undefined && saved === undefined && <Doubts preview={whole.preview} />}
             {card.subject !== null && <div className="ask-s">{card.subject}</div>}
             {card.body !== null && (
                 <div ref={bodyBox} className={open ? 'ask-b open said waiting-body' : 'ask-b said waiting-body'}>
@@ -143,8 +149,18 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                 </div>
             )}
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
+            {saved !== undefined && (
+                <div className="note waiting-reasking" role="status">
+                    {stateSentence(saved)}
+                </div>
+            )}
+            {saved === undefined && whole !== undefined && changedSince(whole) && (
+                <div className="note am waiting-reasking" role="alert">
+                    {DIFFERS_SENTENCE}
+                </div>
+            )}
             {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}
-            {!gate.live && (
+            {saved === undefined && !gate.live && (
                 <div className="note am" role="status">
                     {'reading' in gate ? (
                         readingSentence('chat')
@@ -161,7 +177,13 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                     {problem}
                 </div>
             )}
-            {editing !== null && whole !== undefined ? (
+            {saved !== undefined ? (
+                <div className="ask-a">
+                    <button className="btn sm ghost lk" type="button" onClick={details}>
+                        Details
+                    </button>
+                </div>
+            ) : editing !== null && whole !== undefined ? (
                 <div className="waiting-edit">
                     <MessageEditor
                         approval={whole}
@@ -169,9 +191,9 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                         busy={busy}
                         startOpen
                         onMoved={setEditing}
-                        onSaved={() => {
+                        onSaved={(item) => {
                             setEditing(null);
-                            editedWaiting(api, waiting, whole);
+                            editedWaiting(api, waiting, whole, item);
                         }}
                         onClose={() => setEditing(null)}
                     />
@@ -359,7 +381,6 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const approvals = store.approvals.value;
     const questions = store.questions.value;
     const refused = waiting.refused.value;
-    const reasked = waiting.reasked.value;
     const approved = waiting.approved.value;
     // What the runtime refused, with its code: an act's refusal stays until the next act; a read that failed, until the
     // next read.
@@ -367,15 +388,8 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const said = refused ?? (failure === null ? null : { code: store.failureCode.value, message: failure });
     const more = store.approvalsCursor.value !== null || store.questionsCursor.value !== null;
     // The label is drawn only while something is shown that waits on the person: what was approved is not waiting.
-    const waits = approvals.length > 0 || questions.length > 0 || reasked.length > 0 || refused !== null;
-    if (
-        approvals.length === 0 &&
-        questions.length === 0 &&
-        reasked.length === 0 &&
-        approved.length === 0 &&
-        said === null
-    )
-        return null;
+    const waits = approvals.length > 0 || questions.length > 0 || refused !== null;
+    if (approvals.length === 0 && questions.length === 0 && approved.length === 0 && said === null) return null;
     return (
         <section
             className="chat-waiting-for"
@@ -398,11 +412,6 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
                     {approvedSentence(each)}
                 </div>
             ))}
-            {reasked.length > 0 && (
-                <div className="note chat-note" role="status">
-                    Jason asks again with the new text when it next takes this work.
-                </div>
-            )}
             {more && (
                 <button className="btn sm" type="button" onClick={() => void moreWaiting(api, waiting)}>
                     Show more
