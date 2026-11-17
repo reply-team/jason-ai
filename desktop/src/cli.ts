@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
 import { withoutSessionMarkers } from './session-markers.ts';
 
 /**
@@ -47,4 +48,20 @@ export function cliAt(file: string, env: Record<string, string>, prefix: readonl
             });
         },
     };
+}
+
+/**
+ * Starts the jason at `file` on its own: detached, its standard output and error to the file `output`, so it outlives this
+ * application, which quits at once. Uninstall Jason… alone starts one so (`uninstall-door.ts`): the verb waits for this
+ * process to end before it acts.
+ */
+export function startJasonAlone(file: string, args: readonly string[], env: Record<string, string>, output: string): void {
+    const handle = openSync(output, 'a');
+    try {
+        const child = spawn(file, [...args], { env: withoutSessionMarkers(env), detached: true, stdio: ['ignore', handle, handle], windowsHide: true });
+        child.on('error', () => undefined);
+        child.unref();
+    } finally {
+        closeSync(handle);
+    }
 }

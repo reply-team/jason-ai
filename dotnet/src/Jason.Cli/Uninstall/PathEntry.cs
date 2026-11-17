@@ -709,6 +709,34 @@ public static class PathEntry
         return entries.All(entry => names.Contains(Path.GetFileName(entry), comparer));
     }
 
+    /// <summary>
+    /// What the folder the application carries its jason in holds (<c>desktop/scripts/prepare.mjs</c>): the executable, the
+    /// licence, the notices, the skills and <c>version.json</c>.
+    /// </summary>
+    public static IReadOnlyList<string> BundleFiles(bool windows) =>
+        [windows ? "jason.exe" : "jason", "LICENSE", "THIRD-PARTY-NOTICES", "skills", Installation.CarriedExecutable.RecordName];
+
+    /// <summary>
+    /// Whether a directory is the application's carried folder and holds nothing but what the application puts there: the
+    /// rule the Path entry <c>jason install</c> writes on Windows is taken back by.
+    /// </summary>
+    public static bool CarriedBundle(string directory, bool windows)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        try
+        {
+            var names = BundleFiles(windows);
+            var comparer = windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            return Installation.CarriedExecutable.Of(System.IO.Path.Combine(directory, names[0])) is not null
+                && System.IO.Directory.EnumerateFileSystemEntries(directory).All(entry => names.Contains(System.IO.Path.GetFileName(entry), comparer));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Whether a directory is there and holds nothing but what that platform's installer writes.</summary>
     public static bool JasonsOwn(string directory, bool windows)
     {

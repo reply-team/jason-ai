@@ -15,7 +15,7 @@ import { RuntimeAutostart } from '../src/login-item.ts';
 import { PathCommand } from '../src/path-command.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
 import { demoMarkerName } from '../src/demo-folders.ts';
-import { harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
+import { carriedUninstallArgs, carriedUninstallExit, carriedUninstallOutcome, carriedUninstallText, harnessRoot, inside, runtimeRefusal, stopRuntimeCode, stopRuntimeFlag, stopRuntimeStart, uninstall, uninstallExit, uninstallStart, uninstallText, updaterCache, type UninstallDeps } from '../src/uninstall.ts';
 import { markedDemoFolder, memoryLog } from './harness.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -425,7 +425,7 @@ test('inside the application’s folder is decided by the platform’s own path 
     assert.ok(!inside('darwin', '/Applications/Jason.app', posix.join('/Applications/jason.app', 'Contents', 'jason')));
 });
 
-test('the nsis uninstaller starts the application before it removes the files, on a person’s uninstall only, and goes no further only when the start says so', () => {
+test('the nsis uninstaller starts the application before it removes the files, on a person’s uninstall only, not when jason uninstall ran it, and goes no further only when the start says so', () => {
     assert.equal(configuration({ version: '0.34.0' }).nsis.include, 'installer/uninstall.nsh');
     const script = readFileSync(join(desktop, 'installer', 'uninstall.nsh'), 'utf8');
     // From the uninstall's own macro on; the check that closes running programs comes before it, with rows of its own
@@ -435,6 +435,11 @@ test('the nsis uninstaller starts the application before it removes the files, o
         '!macro customUnInstall',
         '${ifNot} ${isUpdated}',
         '${GetParameters} $R0',
+        'ClearErrors',
+        // A terminal's jason uninstall has taken off what was placed already, and may have purged the data directory: the
+        // application is not started, so nothing of it is written there again.
+        '${GetOptions} $R0 "--uninstalled-by-jason" $R1',
+        '${if} ${Errors}',
         'ClearErrors',
         '${GetOptions} $R0 "/S" $R1',
         '${if} ${Errors}',
@@ -460,6 +465,7 @@ test('the nsis uninstaller starts the application before it removes the files, o
         '${if} $R2 != "0"',
         '${andIf} $R3 == ""',
         'MessageBox MB_OK|MB_ICONEXCLAMATION "Jason could not take off what it placed outside its folder, so the jason command on the PATH, Open Jason at login and the runtime\'s start at logon may be left. The uninstall goes on."',
+        '${endIf}',
         '${endIf}',
         '${endIf}',
         '!macroend',
@@ -519,11 +525,46 @@ test('the jason-desktop link registration is taken off when it names this applic
     assert.equal((await uninstall(bench(t).deps)).steps.some((each) => each.step === 'link'), false);
 });
 
-test('the uninstall start reads and takes off the registration as the start wrote it, with "--" before the address', () => {
+test('the uninstall start runs the one uninstall, the carried jason’s, and takes nothing off itself', () => {
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
-    assert.ok(start.includes('const written = linkRegistration(process.platform, app.isPackaged, process.execPath);'));
-    assert.ok(start.includes('registered: () => app.isDefaultProtocolClient(written.scheme, written.path, written.args),'));
-    assert.ok(start.includes('remove: () => app.removeAsDefaultProtocolClient(written.scheme, written.path, written.args),'));
+    const from = start.indexOf('export async function runUninstall(');
+    const run = start.slice(from, start.indexOf('\n}\n', from));
+    assert.ok(run.includes('const outcome = carriedUninstallOutcome(await cli.run(carriedUninstallArgs, { timeoutMs: carriedUninstallTimeoutMs }));'));
+    assert.ok(run.includes('return carriedUninstallExit(outcome);'));
+    // The link registration, the login item, the command files and the demo's folders are the carried jason's to take off now.
+    assert.doesNotMatch(start, /DefaultProtocolClient|LoginItem|PathCommand|uninstall\(\{/);
+    assert.deepEqual([...carriedUninstallArgs], ['uninstall', '--keep-application']);
+});
+
+test('the carried uninstall’s report is read for the uninstaller: a refusal stops it, a report lets it go on, and no report leaves the uninstaller to say what may be left', () => {
+    const report = { plan: {}, done: ['Stopped the runtime.', 'Removed C:\\Users\\a\\AppData\\Local\\Microsoft\\WindowsApps\\jason.cmd, which ran this jason as a terminal command.'], kept: ["The data directory at 'C:\\Users\\a\\.jason' is kept: it holds your database. --purge-data removes it.", 'The application at C:\\x is kept here: the uninstaller that asked for this removes it next.', 'No runtime was running.'], problems: ['C:\\y could not be removed: held.'], refusal_code: null, refusal: null };
+    const done = carriedUninstallOutcome({ exit: 1, stdout: JSON.stringify(report) });
+    assert.equal(done.kind, 'done');
+    assert.equal(carriedUninstallExit(done), 0, 'a problem is named, and the uninstall still goes on');
+    const shown = carriedUninstallText(done, 'C:\\Users\\a\\.jason', 'C:\\Users\\a\\Jason');
+    assert.ok(shown !== null);
+    assert.equal(shown.message, 'Jason is being removed from this computer.');
+    assert.ok(shown.detail.includes('Taken off:\n• Stopped the runtime.'));
+    assert.ok(shown.detail.includes('• C:\\y could not be removed: held.'));
+    assert.ok(shown.detail.includes('The data directory, C:\\Users\\a\\.jason, with the campaigns, the journal, the settings and the logs. Once Jason is removed, deleting the folder C:\\Users\\a\\.jason removes them'));
+    assert.equal(shown.detail.includes('jason uninstall'), false, 'the command this uninstall has just taken off is not offered');
+    assert.ok(shown.detail.includes('The harness root, C:\\Users\\a\\Jason, with your folders and memory files'));
+    assert.equal(shown.detail.includes('The application at'), false, 'the folder is the uninstaller’s, and the person is not told it is kept');
+    assert.equal(shown.detail.includes('The data directory at'), false, 'the data directory is said once, in the person’s terms');
+
+    const refused = carriedUninstallOutcome({ exit: 1, stdout: JSON.stringify({ ...report, refusal_code: 'runtime_still_running', refusal: 'The runtime, process 7, did not stop.' }) });
+    assert.deepEqual(refused, { kind: 'refused', said: 'The runtime, process 7, did not stop.' });
+    assert.equal(carriedUninstallExit(refused), 1, 'nothing of the folder is removed');
+    assert.deepEqual(carriedUninstallText(refused, 'd', 'r'), { message: 'Jason was not removed.', detail: 'The runtime, process 7, did not stop.' });
+    const envelope = carriedUninstallOutcome({ exit: 1, stdout: '{"error":{"code":"uninstall_refused","message":"No.","retryable":false}}' });
+    assert.deepEqual(envelope, { kind: 'refused', said: 'No.' });
+
+    for (const stdout of ['', 'not json', '{"done":"x"}', '[]']) {
+        const failed = carriedUninstallOutcome({ exit: -1, stdout });
+        assert.equal(failed.kind, 'failed', stdout);
+        assert.equal(carriedUninstallExit(failed), 2, stdout);
+        assert.equal(carriedUninstallText(failed, 'd', 'r'), null, 'the uninstaller says it');
+    }
 });
 
 // The demo's two folders: the data directory and the harness root of the second installation beside the person's. The

@@ -7,6 +7,11 @@
  *
  * In this order, each step logged by its name and outcome and never a path:
  *
+ * On Windows the uninstaller's start no longer takes these steps itself: it runs the one uninstall, the jason it carries
+ * as `jason uninstall --keep-application` (`carriedUninstallArgs`), which takes off what Jason and this application placed
+ * and leaves the folder to the uninstaller; this module reads its report (`carriedUninstallOutcome`) and says it. The
+ * steps below are Linux's, behind Remove What Jason Placed (`remove-placed.ts`).
+ *
  * 1. A runtime started from the jason executable this application carries is stopped through `jason runtime stop`
  *    (`own-runtime.ts`), since the uninstaller then removes that executable; on an AppImage, one started from any of the
  *    copies of its jason is this application's too (`stopFromAny`). Nothing is ever killed. One that does not stop, or a
@@ -620,4 +625,67 @@ export function uninstallText(report: UninstallReport): { message: string; detai
     const list = (lines: readonly string[]) => lines.map((line) => `• ${line}`).join('\n');
     const taken = report.removed.length === 0 ? 'Nothing was taken off.' : `Taken off:\n${list(report.removed)}`;
     return { message: 'Jason is being removed from this computer.', detail: `${taken}\n\nLeft in place:\n${list([...report.failed, ...report.left])}` };
+}
+
+/**
+ * The one uninstall as the Windows uninstaller's start runs it: the jason this application carries, which stops the
+ * runtime and takes off what Jason and Jason Desktop placed, the data directory kept, and leaves this application's own
+ * folder to the uninstaller, which removes it once the start has exited.
+ */
+export const carriedUninstallArgs = ['uninstall', '--keep-application'] as const;
+
+/** How long the start waits for it: a runtime's stop alone may take a minute. */
+export const carriedUninstallTimeoutMs = 300_000;
+
+/** What came of it: its report, a refusal (nothing further taken off), or a start that gave no report at all. */
+export type CarriedUninstall = { kind: 'done'; done: string[]; kept: string[]; problems: string[] } | { kind: 'refused'; said: string } | { kind: 'failed'; exit: number };
+
+const strings = (value: unknown): string[] | null => (Array.isArray(value) && value.every((one) => typeof one === 'string') ? (value as string[]) : null);
+
+/** The verb's one document read: the error envelope of a refusal before anything was read, or its report. */
+export function carriedUninstallOutcome(result: { exit: number; stdout: string }): CarriedUninstall {
+    let said: unknown;
+    try {
+        said = JSON.parse(result.stdout);
+    } catch {
+        return { kind: 'failed', exit: result.exit };
+    }
+    if (typeof said !== 'object' || said === null) return { kind: 'failed', exit: result.exit };
+    const record = said as { error?: { message?: unknown }; refusal_code?: unknown; refusal?: unknown; done?: unknown; kept?: unknown; problems?: unknown };
+    if (record.error !== undefined) return { kind: 'refused', said: typeof record.error.message === 'string' ? record.error.message : 'The uninstall refused.' };
+    if (typeof record.refusal_code === 'string') return { kind: 'refused', said: typeof record.refusal === 'string' ? record.refusal : record.refusal_code };
+    const done = strings(record.done);
+    const kept = strings(record.kept);
+    const problems = strings(record.problems);
+    return done === null || kept === null || problems === null ? { kind: 'failed', exit: result.exit } : { kind: 'done', done, kept, problems };
+}
+
+/**
+ * The start's exit, which the uninstaller acts on: 1 when the uninstall refused, a runtime that did not stop above all,
+ * so no file of the folder is removed; 0 when it ran, whatever it could not take off; 2 when it gave no report, which
+ * never blocks the uninstall and makes the uninstaller say what may be left.
+ */
+export function carriedUninstallExit(outcome: CarriedUninstall): number {
+    return outcome.kind === 'refused' ? 1 : outcome.kind === 'failed' ? 2 : 0;
+}
+
+/**
+ * What the person is shown, or null where the uninstaller says it itself (a start that gave no report). The data
+ * directory and the harness root are named as kept, with how the data directory is deleted by hand: the jason command
+ * that could remove it has just been taken off this computer.
+ */
+export function carriedUninstallText(outcome: CarriedUninstall, dataDirectory: string, root: string): { message: string; detail: string } | null {
+    if (outcome.kind === 'failed') return null;
+    if (outcome.kind === 'refused') return { message: 'Jason was not removed.', detail: inert(outcome.said) };
+    const list = (lines: readonly string[]) => lines.map((line) => `• ${inert(line)}`).join('\n');
+    // The application's folder and the data directory are said here in the person's terms, not in the verb's.
+    const kept = outcome.kept.filter((line) => !line.startsWith('The application at ') && !line.startsWith('The data directory at '));
+    const left = [
+        ...outcome.problems,
+        ...kept,
+        `The data directory, ${dataDirectory}, with the campaigns, the journal, the settings and the logs. Once Jason is removed, deleting the folder ${dataDirectory} removes them`,
+        `The harness root, ${root}, with your folders and memory files`,
+    ];
+    const taken = outcome.done.length === 0 ? 'Nothing was taken off.' : `Taken off:\n${list(outcome.done)}`;
+    return { message: 'Jason is being removed from this computer.', detail: `${taken}\n\nLeft in place:\n${list(left)}` };
 }
