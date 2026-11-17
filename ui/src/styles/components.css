@@ -315,17 +315,13 @@ details.fold pre {
 .dialog h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
 .dialog .btn-row { justify-content: flex-end; }
 
-/* The dialog's layer: the browser's modal dialog, in the top layer over everything the page paints, made the dimmed
-   ground of the whole window instead of the browser's own box; the browser's backdrop stays clear under it. */
+/* A dialog's layer: over every layer of the page (menus 20-30, the narrow sidebar 39-40, and anything that stacks by an
+   opacity or a transform), under the search palette (60), which may open over it. */
 .overlay {
-  position: fixed; inset: 0;
-  width: auto; height: auto; max-width: none; max-height: none;
-  margin: 0; padding: 0; border: 0;
-  color: inherit;
+  position: fixed; inset: 0; z-index: 50;
   background: rgba(9, 9, 11, .45);
   display: flex; align-items: center; justify-content: center;
 }
-.overlay::backdrop { background: transparent; }
 
 .options { display: flex; flex-direction: column; gap: 6px; }
 .option {
