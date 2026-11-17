@@ -22,9 +22,10 @@ export const allOffWords =
  * notifications are on, and for each channel whether it is on and what it did with the last notification — and a switch
  * per channel, which asks the runtime to turn that one channel on or off (`notification.enable`, `notification.disable`)
  * and shows the channels as its answer says them. There is no switch for every channel at once, and none for what the
- * operating system itself holds off: that stays words. A switch is inert in the Demo, while every notification is off, and
- * on a plugin channel that could not deliver, which says what is missing; a refused switch shows the runtime's sentence
- * and stays where it was.
+ * operating system itself holds off: that stays words. A switch is made in the paired person's name, as every write of the
+ * page is. A switch is inert in the Demo, while every notification is off, and on a plugin channel that is off and could
+ * not deliver; a plugin channel that could not deliver says what is missing, whether it is off or on, and one that is on
+ * can still be turned off. A refused switch shows the runtime's sentence and stays where it was.
  */
 export function NotificationsSection() {
     const api = useApi();
@@ -86,8 +87,12 @@ export function NotificationsSection() {
                         </thead>
                         <tbody>
                             {notifications.channels.map((channel) => {
-                                const missing = channel.on ? null : notReadyWords(channel);
-                                const inert = demo || busy !== null || !notifications.enabled || missing !== null;
+                                const missing = notReadyWords(channel);
+                                const inert =
+                                    demo ||
+                                    busy !== null ||
+                                    !notifications.enabled ||
+                                    (!channel.on && missing !== null);
                                 return (
                                     <tr key={channel.channel}>
                                         <td>
@@ -130,8 +135,8 @@ export function NotificationsSection() {
             <p className="hint">
                 This is how Jason tells you that an approval or a question is waiting for you. Turn one channel on or
                 off with its switch, or with jason notification enable or disable
-                {provider && '; a provider’s channel is connected or disconnected on the Connect panel'}. Every
-                notification at once is switched in the settings file.
+                {provider && '; a provider’s channel is connected or disconnected on the Connect panel'}. A switch is
+                made in your name. Every notification at once is switched in the settings file.
             </p>
         </section>
     );

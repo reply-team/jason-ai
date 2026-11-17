@@ -146,7 +146,7 @@ describe('Notifications in Settings in a browser', () => {
         await waitFor(() => screen.getByText('ntfy'));
         const text = words(notifications());
         expect(text).toContain(
-            'This is how Jason tells you that an approval or a question is waiting for you. Turn one channel on or off with its switch, or with jason notification enable or disable. Every notification at once is switched in the settings file.',
+            'This is how Jason tells you that an approval or a question is waiting for you. Turn one channel on or off with its switch, or with jason notification enable or disable. A switch is made in your name. Every notification at once is switched in the settings file.',
         );
         expect(text).not.toContain('Connect panel');
         const switches = within(notifications()).getAllByRole('switch');
@@ -213,7 +213,7 @@ describe('Notifications in Settings in a browser', () => {
         expect(after.disabled).toBe(false);
     });
 
-    it('draws a plugin channel that could not deliver with an inert switch and what is missing', async () => {
+    it('draws a plugin channel that could not deliver with what is missing, its switch inert while it is off', async () => {
         inBrowser(
             report([
                 channel({
@@ -231,7 +231,8 @@ describe('Notifications in Settings in a browser', () => {
             'off Cannot be turned on: its binding is not valid (/chat required).',
         );
         expect((within(rows[0] as HTMLElement).getByRole('switch') as HTMLButtonElement).disabled).toBe(true);
-        // One that is on can always be turned off.
+        // One that is on says it cannot deliver, by the same detail, and can always be turned off.
+        expect(words(rows[1]!.children[1]!)).toBe('on Cannot deliver: the plugin is unavailable (not loaded).');
         expect((within(rows[1] as HTMLElement).getByRole('switch') as HTMLButtonElement).disabled).toBe(false);
     });
 
@@ -321,7 +322,7 @@ describe('Notifications in Settings inside the desktop', () => {
         fireEvent.click(list.getByRole('button', { name: 'Notifications' }));
         await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
         expect(words(notifications())).toContain(
-            'Turn one channel on or off with its switch, or with jason notification enable or disable; a provider’s channel is connected or disconnected on the Connect panel. Every notification at once is switched in the settings file.',
+            'Turn one channel on or off with its switch, or with jason notification enable or disable; a provider’s channel is connected or disconnected on the Connect panel. A switch is made in your name. Every notification at once is switched in the settings file.',
         );
     });
 });

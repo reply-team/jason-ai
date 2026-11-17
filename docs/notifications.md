@@ -172,7 +172,7 @@ such a unit exists only while the person is signed in.
   `jason status` names session 0, what runs there — a service, an SSH session, a runtime 0.1.0's logon task started —
   and, for the last, the acts that end it, in order. A Linux runtime with `notify-send` and a session bus but no
   notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`,
-  `toast_failed`; `Notifications:Toast` set to `false` turns it off. A probe that cannot answer — it fails, or
+  `toast_failed`; `jason notification disable toast --actor human:<Name>` turns it off. A probe that cannot answer — it fails, or
   outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, each
   bounded at five seconds, fifteen in all, none of them on the scan.
 - **Each account has its own runtime and its own toasts.** One person's approvals are never shown on another's
@@ -379,8 +379,10 @@ switch per channel that does the same ([ui.md](ui.md)). Each is the operation of
 `notification.disable`), written through the runtime's one writer of the settings file, which keeps every other byte:
 off writes `false`, on takes that `false` away. It is in force when it answers, with no reload, and answers the
 `notifications` section of `jason runtime status` as it then stands; a change of the channel in force is journaled as
-`notification_channel_updated`, with the setting's path and whether the channel was on before and after. Taken by a
-role from inside a run, either is refused (`decided_inside_a_run`), and the desktop's chat never runs them.
+`notification_channel_updated`, with the setting's path and whether the channel was on before and after. Neither verb
+takes the CLI's default actor: whoever switches a channel is named, `--actor human:<Name>`, as for a grant, and the page
+switches in the paired person's name. Taken by a role from inside a run, either is refused (`decided_inside_a_run`), and
+the desktop's chat never runs them.
 
 - There is no verb for every notification at once: `Notifications:Enabled` is a line of the settings file. While it is
   `false`, turning a channel on is refused as `notifications_off`, which names that line; turning one off is still
