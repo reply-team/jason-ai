@@ -48,7 +48,9 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
   in Settings' Models, and it draws two groups.
   - **On this computer:** each program found is a card of its own, with its name, its version as a pill and **In use**
     on the program the agents' roles run on by default; what the program does is set apart from the how-to lines under
-    it. One row, **Model keys**, shows each provider whose key is set; with no key saved the row is absent.
+    it. One row, **Model keys**, shows each provider whose key is set; with no key saved the row is absent. Where a
+    program's sign-in line is drawn, it says the chat uses that sign-in for a program that drives the chat, and the
+    campaign work it runs uses it for one that does not.
   - **Add or change,** a tinted panel under it: the programs not found are named on one quiet line, those that can be
     installed first, each with its own **Install**. The model keys are one panel: a **Provider** select that says
     "key set" in the option of a provider that has one, an API key field with **Save key** for the provider shown, and,
@@ -56,6 +58,19 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
     no key, and a key typed and not saved is forgotten when another provider is chosen.
   - **The button that saves a typed key says Save key,** where it said Keep.
   - In Settings, the card's own "AI" heading is left out under the section's "Models" heading.
+
+- **A program on the Models card can be put in use.** A program found on this computer that drives the chat, is at the
+  version the chat needs and is not the one in use (Claude Code or Codex) has a **Use** button, which makes it the
+  program the agents' roles run on by default. After it the card's standing line says so, and one more line says that
+  work already running finishes on the program it started on and that open chats are unchanged: each chat's program is
+  chosen in its own model menu. Where the program has one enabled execution profile, Use names it the default; where it
+  has none, Use makes one first, as the desktop does for a first start. Where several are there and none is the
+  desktop's own, Use refuses, names them and says to name one with `jason profile set-default <name>`. Where the
+  desktop's own name is held by a profile that runs another program, Use refuses, makes none and says to make one under
+  another name with `jason profile create <name> --host <host> --program <program>`, then to name it with `jason profile
+  set-default <name>`. Where a `JASON_` environment variable sets the default, or a Roles section of the settings file
+  is one the runtime refuses, the runtime refuses and the card shows its words and nothing moves. A model key has no
+  Use.
 
 - **The Reply card says what Reply is for, and its button reads Sign in with Reply.** On the Reply card of Settings'
   Accounts and of the chat's Connect card, which are one control, the card shows the name "Reply" with a **Recommended**
