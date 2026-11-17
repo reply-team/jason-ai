@@ -6,8 +6,8 @@ using Jason.Contracts.Json;
 namespace Jason.Runtime.Hosting;
 
 /// <summary>
-/// The database holds a migration this build does not know: a newer Jason migrated it, so this runtime has not started and
-/// has written nothing (<see cref="Persistence.NewerDatabase"/>). It is said in the envelope, with the code, that
+/// The database holds a migration this build does not know: a newer Jason migrated it, so this runtime has not started, has
+/// added or removed no file and has left the database and its log as they were (<see cref="Persistence.NewerDatabase"/>). It is said in the envelope, with the code, that
 /// <c>jason runtime start</c> answers as its own.
 /// </summary>
 public sealed class DataNewerRefusalException(string message) : Exception(message)

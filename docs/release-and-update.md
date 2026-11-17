@@ -771,8 +771,9 @@ yourself, having decided that you want to.
 
 **A Jason does not start on a database a newer one migrated.** From 0.49.0 on, a runtime whose database holds a
 migration its build does not know refuses to start, with `data_newer` and a sentence that names its version and the
-data directory and says to update, before it takes the lock, writes a log or a backup, or runs a migration: nothing in
-the data directory is changed. `jason runtime start` and `restart` answer that refusal by its code, and a start at
+data directory and says to update, before it takes the lock, writes a log or a backup, or runs a migration: no file in
+the data directory is added or removed, and the database and its write-ahead log keep every byte; SQLite may
+rebuild `jason.db-shm`, its index of a log a runtime left behind. `jason runtime start` and `restart` answer that refusal by its code, and a start at
 logon refuses the same way and starts nothing. So a version from 0.49.0 on that a rollback put back, with the database
 left as it stands, starts no runtime until that database is put back by hand; the refusal says so instead of that it
 may refuse. A version before 0.49.0 has no such check, and EF Core passes over the history rows it has no migration

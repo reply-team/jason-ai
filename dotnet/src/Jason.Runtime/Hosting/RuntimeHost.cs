@@ -61,8 +61,8 @@ public static class RuntimeHost
 
         // Then, before the lock, the log, the folders and the migrator: a database a newer Jason migrated holds migrations this
         // build does not know, and EF Core would pass over them and run this build's model over that schema. Read through a
-        // read-only connection that is closed before it answers, so a refused start leaves every byte of the data directory as
-        // it was, as its sentence says.
+        // read-only connection that is closed before it answers, so a refused start adds and removes no file and leaves the
+        // database and its log as they were, as its sentence says; SQLite's index of a log a runtime left may be rebuilt.
         if (NewerDatabase.Refusal(paths, Contracts.JasonVersion.Current) is { } newer)
         {
             throw new DataNewerRefusalException(newer.Message);

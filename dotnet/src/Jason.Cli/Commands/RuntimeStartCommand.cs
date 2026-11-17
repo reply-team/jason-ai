@@ -435,7 +435,7 @@ public static class RuntimeStartCommand
     /// The sentence of a runtime that refused a database a newer Jason migrated, where what it said is that refusal's envelope
     /// and nothing else (<see cref="DataNewer"/>); null for anything else it said, which is heard after "It said:".
     /// </summary>
-    private static string? NewerData(string said)
+    internal static string? NewerData(string said)
     {
         try
         {

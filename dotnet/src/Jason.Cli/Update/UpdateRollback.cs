@@ -98,9 +98,11 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         var (restored, unsafeToRestore) = RestoreDatabase(ledger, chronicle);
         RestorePlugins(ledger);
 
-        // Whatever was decided about the database, the runtime comes back up on the version that is now
-        // installed. A refusal below is about the database and never about leaving a machine with nothing running.
-        await StartAsync(ledger, cancellationToken).ConfigureAwait(false);
+        // Whatever was decided about the database, the runtime is started on the version that is now installed, and a
+        // refusal below is about the database, never about the start. A version from DataNewer.FirstRefusing on does not
+        // start on a database the newer one migrated and that was left as it is: then nothing is running, its refusal is
+        // said as a step, and the database refusal below says how to go the rest of the way.
+        await StartAsync(ledger, refusesTheDatabase: unsafeToRestore is not null && RefusesNewerData(ledger.FromVersion), cancellationToken).ConfigureAwait(false);
 
         var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion, Plugins = [] };
         var record = Keep(back, restored);
@@ -448,9 +450,12 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// <c>data_newer</c>, so its runtime is not running after this rollback; an earlier one has no such check.
     /// </summary>
     internal static string OlderOnNewer(SemanticVersion from, SemanticVersion to) =>
-        from >= SemanticVersion.Parse(DataNewer.FirstRefusing)
-            ? $"{from} does not start on a database {to} migrated, and says so with {DataNewer.Code}; to go all the way back, "
+        RefusesNewerData(from)
+            ?$"{from} does not start on a database {to} migrated, and says so with {DataNewer.Code}; to go all the way back, "
             : $"{from} may refuse to open a database migrated by {to}; to go all the way back, ";
+
+    /// <summary>Whether <paramref name="version"/> refuses to start on a database a newer Jason migrated: from <see cref="DataNewer.FirstRefusing"/> on.</summary>
+    internal static bool RefusesNewerData(SemanticVersion version) => version >= SemanticVersion.Parse(DataNewer.FirstRefusing);
 
     /// <summary>
     /// The database half, which happens only where this update's own first start migrated and nothing has been
@@ -751,7 +756,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             : DateTimeOffset.MinValue;
     }
 
-    private async Task StartAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    private async Task StartAsync(UpdateLedger ledger, bool refusesTheDatabase, CancellationToken cancellationToken)
     {
         // A descriptor already there before the launch is the stopped runtime's, left behind when it could not remove
         // it, and is no sign that anything started. Only one naming another instance is, as `jason runtime start` reads it.
@@ -775,9 +780,19 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             {
                 // As the apply's own start reads it: the run is over, so is the wait, and what it said is the reason.
                 var said = child.Said;
+
+                // A start refused for the database a newer Jason migrated is not repaired by another start: it says so in
+                // its own sentence, and the database is what is put back.
+                if (RuntimeStartCommand.NewerData(said) is { } newer)
+                {
+                    Say($"{ledger.FromVersion} is back in place and its runtime did not start: it refused the database {ledger.ToVersion} migrated "
+                        + $"with {DataNewer.Code} ({newer}); it starts once that database is put back");
+                    return;
+                }
+
                 Say($"{ledger.FromVersion} is back in place but the runtime it started exited with code {child.ExitCode} before it answered"
                     + (said.Length > 0 ? $" (it said: {said})" : string.Empty)
-                    + "; start one with `jason runtime start`");
+                    + Repair(ledger, refusesTheDatabase));
                 return;
             }
 
@@ -785,8 +800,17 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             waited += poll;
         }
 
-        Say($"{ledger.FromVersion} is back in place but no runtime answered; start one with `jason runtime start`");
+        Say($"{ledger.FromVersion} is back in place but no runtime answered" + Repair(ledger, refusesTheDatabase));
     }
+
+    /// <summary>
+    /// The way on after a start of the version put back that did not answer: another start, unless that version refuses
+    /// the database the newer one migrated and that was left as it is, which another start would only refuse again.
+    /// </summary>
+    private static string Repair(UpdateLedger ledger, bool refusesTheDatabase) =>
+        refusesTheDatabase
+            ? $"; it does not start on the database {ledger.ToVersion} migrated ({DataNewer.Code}) until that database is put back"
+            : "; start one with `jason runtime start`";
 
     /// <summary>The descriptor of a runtime that may still be running; <see cref="DescriptorProcess.Live"/> decides.</summary>
     private RuntimeDescriptor? Live() => DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance);

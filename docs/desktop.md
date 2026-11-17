@@ -961,7 +961,7 @@ started from another `jason` is never stopped.
 version does not start, the starting page says what went wrong and where the kept version is, and going back is
 quitting Jason and putting that folder back in the place of the installed application. A version from 0.49.0 on does
 not start a runtime on a database a newer version migrated: the runtime refuses it with `data_newer` before it changes
-anything, and the starting page says so in `jason runtime start`'s own words, which say to update, and offers no going
+the database, and the starting page says so in `jason runtime start`'s own words, which say to update, and offers no going
 back. A kept version before 0.49.0 has no such check. That puts back the previous application and the Jason it carried;
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
 update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.

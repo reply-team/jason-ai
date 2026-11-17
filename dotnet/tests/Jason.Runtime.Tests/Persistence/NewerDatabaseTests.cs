@@ -11,8 +11,9 @@ namespace Jason.Runtime.Tests.Persistence;
 /// <summary>
 /// The guard against a database a newer Jason migrated: a start whose database holds an applied migration this build does
 /// not know refuses with <c>data_newer</c> before the migrator, the lock, the log or anything else touches the data
-/// directory, so "nothing was changed" is true of every byte in it. EF Core itself ignores history rows it has no class for
-/// and would run this build's model over the newer schema.
+/// directory, so "nothing was changed" is true of the data: no file is added or removed, and the database and its log keep
+/// every byte; where a runtime left a log, SQLite may rebuild its index of it (<c>jason.db-shm</c>), and that file alone
+/// moves. EF Core itself ignores history rows it has no class for and would run this build's model over the newer schema.
 /// </summary>
 public class NewerDatabaseTests
 {
@@ -121,6 +122,202 @@ public class NewerDatabaseTests
         Assert.True(new FileInfo(dir.Paths.DatabaseFile + "-wal").Length > 0, "the test's premise: the row is in the write-ahead log.");
         Assert.Equal([NewerMigration], NewerDatabase.Unknown(dir.Paths.DatabaseFile));
         Assert.Equal(files, Directory.EnumerateFileSystemEntries(dir.Paths.StateDirectory).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The commonest refusing state: a runtime killed by a shutdown, its database with the write-ahead log and the shared
+    /// memory it left, and no connection open. The guard's connection is then the only one and the last to close, which is
+    /// where SQLite checkpoints a log and deletes it. The guard reads the newer row in the log, and the database and the log
+    /// keep every byte and their last write, and no file is added or removed. The shared memory alone may be rebuilt, being
+    /// SQLite's index of the log: measured, it is (its bytes and last write change, its size does not).
+    /// </summary>
+    [Fact]
+    [Critical(Family.P2, "a killed newer runtime's database, log and shared memory are read and left as they were")]
+    public void A_killed_runtimes_log_and_shared_memory_are_read_and_left_as_they_were()
+    {
+        using var source = new TempDataDir();
+        using var crashed = new TempTree();
+        new DatabaseMigrator(source.Paths).Migrate();
+        var copy = Path.Combine(crashed.Root, "jason.db");
+        using (var writer = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = source.Paths.DatabaseFile, Pooling = false }.ToString()))
+        {
+            writer.Open();
+            using (var command = writer.CreateCommand())
+            {
+                command.CommandText = "PRAGMA wal_autocheckpoint=0;";
+                command.ExecuteNonQuery();
+            }
+
+            Insert(writer, NewerMigration);
+
+            // The three files as a writer that never closed leaves them: copied while it holds them.
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                using var from = new FileStream(source.Paths.DatabaseFile + suffix, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var to = File.Create(copy + suffix);
+                from.CopyTo(to);
+            }
+        }
+
+        Assert.True(new FileInfo(copy + "-wal").Length > 0, "the test's premise: the row is in the write-ahead log.");
+        Assert.True(File.Exists(copy + "-shm"), "the test's premise: the shared memory a killed writer leaves.");
+        var before = Snapshot(crashed.Root);
+
+        Assert.Equal([NewerMigration], NewerDatabase.Unknown(copy));
+        SqliteConnection.ClearAllPools();
+
+        var after = Snapshot(crashed.Root);
+        Assert.Equal(["jason.db", "jason.db-shm", "jason.db-wal"], after.Keys);
+        Assert.Equal(before.Keys, after.Keys);
+        Assert.Equal(before["jason.db"], after["jason.db"]);
+        Assert.Equal(before["jason.db-wal"], after["jason.db-wal"]);
+        Assert.Equal(before["jason.db-shm"].Split(' ')[0], after["jason.db-shm"].Split(' ')[0]);
+    }
+
+    /// <summary>
+    /// Every migration id a release has shipped, in order. A database an installation holds carries these in its history,
+    /// so a build that no longer knew one of them, by a squash, a rename or a delete, would refuse every installation with
+    /// a false "changed by a newer Jason". The list is only ever appended to, by the release that ships a new migration.
+    /// </summary>
+    private static readonly string[] Shipped =
+    [
+        "20260913233702_InitialCreate",
+        "20260914051837_CampaignsContactsJournal",
+        "20260914104855_WorkItemsAttemptsRoles",
+        "20260915234613_RoutingProvenanceExternalIds",
+        "20260917063114_Approvals",
+        "20260917203003_Reports",
+        "20260918040001_ExecutionProfiles",
+        "20260918074712_RoleNotes",
+        "20260919040652_CampaignManagerLoop",
+        "20260919064112_ManagerEscalation",
+        "20261005204228_IdempotencyKeys",
+        "20261006011312_InboundSync",
+        "20261016181342_UiTokens",
+        "20261018190303_EventStore",
+        "20261018230454_EventReads",
+        "20261019053859_LinkedInSlugKeys",
+        "20261019060108_EventBackfills",
+        "20261020003554_WorkItemsByFinish",
+        "20261020050039_LinkedInOneKey",
+        "20261020172838_JournalByPerson",
+        "20261022011335_ProjectsAndPreferences",
+        "20261023115917_CampaignPeopleIndexes",
+        "20261023172016_CampaignWorkByFinish",
+        "20261024123426_WorkItemWaits",
+        "20261024194108_ProviderBlocks",
+        "20261025010407_ProviderBlockClearedBy",
+        "20261025231527_ProviderBlockListingIndex",
+        "20261026142432_ProfileTools",
+        "20261029150321_SentFacts",
+        "20261102051342_ResponderWatermark",
+        "20261105002401_SubscriptionRunner",
+        "20261111143412_Audience",
+        "20261113000729_ChannelRoutes",
+        "20261113021003_JournalByThread",
+        "20261114031653_JournalVerdictsByThread",
+        "20261114050917_CampaignSendModes",
+        "20261114064450_WorkItemDoubtNotes",
+        "20261114084851_ApprovalsAutomaticByDay",
+        "20261114190252_ProviderBlockChannels",
+        "20261114215710_BounceStep",
+        "20261116022841_ProviderSends",
+        "20261116053811_DecisionThread",
+    ];
+
+    /// <summary>
+    /// Migration ids are append-only: this build knows every id a release shipped. And 0.49 adds no migration, so 0.48 runs
+    /// on 0.49's data with the same schema: the last migration this build knows is the last one 0.48 shipped. A release that
+    /// adds a migration appends its id to <see cref="Shipped"/>.
+    /// </summary>
+    [Fact]
+    [Critical(Family.P2, "every shipped migration id is still known, so no installation is refused as newer by mistake")]
+    public void Every_migration_a_release_shipped_is_known_and_none_was_added_since()
+    {
+        Assert.Subset(NewerDatabase.Known.ToHashSet(StringComparer.Ordinal), Shipped.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(Shipped.Order(StringComparer.Ordinal), Shipped);
+        Assert.Equal(Shipped[^1], NewerDatabase.Known.Max(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// A history row the guard cannot read, here a hand-made table whose id is NULL, is not a refusal and not a crash: the
+    /// start goes on as it did before the guard, and the migrator says what it says.
+    /// </summary>
+    [Fact]
+    public void A_history_row_it_cannot_read_is_left_to_the_start()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.StateDirectory);
+        using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString()))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE \"__EFMigrationsHistory\" (\"MigrationId\" TEXT, \"ProductVersion\" TEXT); "
+                + "INSERT INTO \"__EFMigrationsHistory\" VALUES (NULL, '99.0.0');";
+            command.ExecuteNonQuery();
+        }
+
+        Assert.Null(NewerDatabase.Unknown(dir.Paths.DatabaseFile));
+        Assert.Null(NewerDatabase.Refusal(dir.Paths, "0.49.0"));
+    }
+
+    /// <summary>
+    /// A build whose own migrations cannot be listed, as a type that fails to initialise would leave it, refuses nothing:
+    /// it cannot tell a newer row from its own.
+    /// </summary>
+    [Fact]
+    public void A_build_whose_migrations_cannot_be_listed_refuses_nothing()
+    {
+        using var dir = new TempDataDir();
+        new DatabaseMigrator(dir.Paths).Migrate();
+        Applied(dir.Paths.DatabaseFile, NewerMigration);
+
+        Assert.Null(NewerDatabase.Unknown(dir.Paths.DatabaseFile, () => throw new TypeInitializationException(typeof(NewerDatabase).FullName, null)));
+    }
+
+    /// <summary>
+    /// A path SQLite's address cannot be made from, as a Windows path that names the device namespace, is not a crash of the
+    /// start: the guard falls back, and the start goes on as it did before it.
+    /// </summary>
+    [Fact]
+    public void A_path_it_cannot_make_an_address_of_is_left_to_the_start()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only a Windows path can name the device namespace.");
+        using var dir = new TempDataDir();
+        new DatabaseMigrator(dir.Paths).Migrate();
+        Applied(dir.Paths.DatabaseFile, NewerMigration);
+        SqliteConnection.ClearAllPools();
+        var device = @"\\?\" + Path.GetFullPath(dir.Paths.DatabaseFile);
+        Assert.True(File.Exists(device), "the test's premise: the path names the database.");
+
+        Assert.Null(NewerDatabase.Unknown(device));
+        Assert.Equal(["jason.db"], Directory.EnumerateFileSystemEntries(dir.Paths.StateDirectory).Select(Path.GetFileName));
+    }
+
+    /// <summary>
+    /// A database another connection holds exclusively is busy: the guard does not wait the half minute a command waits by
+    /// default, and leaves it to the start, which the instance lock refuses where a runtime holds it.
+    /// </summary>
+    [Fact]
+    public void A_busy_database_is_left_to_the_start_without_waiting_long()
+    {
+        using var dir = new TempDataDir();
+        new DatabaseMigrator(dir.Paths).Migrate();
+        SqliteConnection.ClearAllPools();
+        using var holder =new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString());
+        holder.Open();
+        using (var command = holder.CreateCommand())
+        {
+            command.CommandText = "PRAGMA wal_autocheckpoint=0; PRAGMA locking_mode=EXCLUSIVE;";
+            command.ExecuteNonQuery();
+        }
+
+        Insert(holder, NewerMigration);
+        Assert.True(File.Exists(dir.Paths.DatabaseFile + "-wal"), "the test's premise: the database has a write-ahead log.");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Assert.Null(NewerDatabase.Unknown(dir.Paths.DatabaseFile));
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(10), $"the guard waited {clock.Elapsed} on a busy database.");
     }
 
     /// <summary>
