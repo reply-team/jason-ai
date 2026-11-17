@@ -44,7 +44,7 @@ import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './pa
 import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { demoBeforeReady } from './demo-page.ts';
+import { demoBeforeReady, demoRepository } from './demo-page.ts';
 import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
@@ -117,6 +117,18 @@ function isHttps(url: string): boolean {
     } catch {
         return false;
     }
+}
+
+/**
+ * The Demo's one way to the system browser: it takes no address and opens the repository's, the constant the page's note
+ * names (`demoRepository`). When it is opened is the page's view's to say (`demoLinkOpener`: a navigation to exactly that
+ * address, at most once in two seconds); what is opened is this constant alone.
+ */
+function openDemoRepository(log: Logger): void {
+    shell.openExternal(demoRepository).then(
+        () => log.info('demo_link_opened', {}),
+        () => log.warn('demo_link_open_failed', {}),
+    );
 }
 
 /** Shows the desktop's own page while the installation comes up, or why it did not. */
@@ -807,6 +819,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
             platform: process.platform,
             refused: (view, kind) => log.warn('demo_refused', { View: view, Kind: kind }),
             live: () => backToLive(modeDeps),
+            open: () => openDemoRepository(log),
             unshown: () => {
                 log.error('demo_unshown', {});
                 if (current !== null) void showStarting(current, unshown, true);

@@ -228,6 +228,8 @@ export interface SealDeps {
     refused(kind: DemoRefusal): void;
     /** A sheet of the desktop's own, of the user's origin, put into every document of the view (`demoStripSheets`). */
     sheet?: string | undefined;
+    /** A script of the desktop's own, run in every document of the view in a world of its own (`demoLinkWorld`), never the page's. */
+    script?: string | undefined;
     /**
      * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
      * answers true when it was one, which is then not told as a refusal.
@@ -343,10 +345,12 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
         if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
     });
     const sheets = [...(view.drags ? [] : [noDragSheet]), ...(deps.sheet === undefined ? [] : [deps.sheet])];
-    if (sheets.length > 0) {
+    const script = deps.script;
+    if (sheets.length > 0 || script !== undefined) {
         contents.on('dom-ready', () => {
-            // A document gone before a sheet lands refuses it; the next document gets its own.
+            // A document gone before a sheet or the script lands refuses it; the next document gets its own.
             for (const sheet of sheets) contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined);
+            if (script !== undefined) contents.executeJavaScriptInIsolatedWorld(demoLinkWorld, [{ code: script }]).catch(() => undefined);
         });
     }
     contents.setWindowOpenHandler(() => {
@@ -386,6 +390,107 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
 /** The person's choice, from a navigation the switch asked for: `jason-switch://switch/live` is Live; nothing else is one. */
 export function switchChoice(url: string): 'live' | null {
     return url === 'jason-switch://switch/live' ? 'live' : null;
+}
+
+/**
+ * The one address the Demo leads out to: the repository the page's note names ("get the code at
+ * github.com/reply-team/jason-ai"), as text. In the desktop's window that text is drawn as a link, and using it has the
+ * desktop open this address in the person's browser. The page itself stays as it was built and reaches nothing: the
+ * link is the desktop's own sheet and script, put into the page's view (`demoLinkSheet`, `demoLinkScript`), and the
+ * address leaves the view only through the view's own navigation guard, which refuses the navigation as it refuses every
+ * other and hands this address, compared whole, to the browser (`demoLinkOpener`). In a browser tab the page is the same
+ * file and the address stays text.
+ */
+export const demoRepository = 'https://github.com/reply-team/jason-ai';
+
+/** The words the note shows the address in: the address without its scheme. */
+export const demoRepositoryText = demoRepository.slice('https://'.length);
+
+/** The attribute the desktop's script marks the note's address with; nothing of the page carries it. */
+export const demoLinkMark = 'data-jason-link';
+
+/** The world the desktop's script runs in: one of its own beside the page's, sharing the document and nothing else. */
+export const demoLinkWorld = 1001;
+
+/** How long after the address was opened it is not opened again, so a page that asks for it again and again opens one tab. */
+export const demoLinkSpanMs = 2000;
+
+/**
+ * The link's look, of the user's origin and important: the colour of the page's own links (`--teal`), a pointer, and an
+ * underline on hover and on keyboard focus, as the page's own links in its note have.
+ */
+export const demoLinkSheet =
+    `[${demoLinkMark}] { color: var(--teal, #2f5be0) !important; cursor: pointer !important; text-decoration: none !important; } ` +
+    `[${demoLinkMark}]:hover, [${demoLinkMark}]:focus-visible { text-decoration: underline !important; text-underline-offset: 3px !important; }`;
+
+/**
+ * The script, run in every document of the page's view in a world of its own (`demoLinkWorld`). It marks the element
+ * whose whole text is the address, and keeps marking it as the page draws its note again; the mark makes it focusable,
+ * with the link role. A person's click on it, or Enter on it, asks for the address as a navigation of the view, which the
+ * view's guard refuses and reads (`demoLinkOpener`); nothing else of the page is touched, and nothing is asked on load.
+ */
+export const demoLinkScript = `(() => {
+    const text = ${JSON.stringify(demoRepositoryText)};
+    const address = ${JSON.stringify(demoRepository)};
+    const mark = ${JSON.stringify(demoLinkMark)};
+    const unmark = (element) => {
+        element.removeAttribute(mark);
+        element.removeAttribute('role');
+        element.removeAttribute('tabindex');
+    };
+    const markIn = (root) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.currentNode; node !== null; node = walker.nextNode()) {
+            if (node.nodeType !== Node.TEXT_NODE) continue;
+            const element = node.parentElement;
+            if (element === null) continue;
+            const whole = element.textContent === text;
+            if (whole && !element.hasAttribute(mark)) {
+                element.setAttribute(mark, '');
+                element.setAttribute('role', 'link');
+                element.setAttribute('tabindex', '0');
+            } else if (!whole && element.hasAttribute(mark)) unmark(element);
+        }
+    };
+    new MutationObserver((records) => {
+        for (const record of records) {
+            if (record.type === 'characterData') markIn(record.target);
+            else for (const node of record.addedNodes) markIn(node);
+        }
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+    const marked = (target) => {
+        const element = target instanceof Element ? target.closest('[' + mark + ']') : null;
+        return element !== null && element.textContent === text;
+    };
+    document.addEventListener('click', (event) => {
+        if (!event.isTrusted || event.button !== 0 || !marked(event.target)) return;
+        event.preventDefault();
+        location.href = address;
+    }, true);
+    document.addEventListener('keydown', (event) => {
+        if (!event.isTrusted || event.key !== 'Enter' || event.repeat || !marked(event.target)) return;
+        event.preventDefault();
+        location.href = address;
+    }, true);
+    markIn(document.documentElement);
+})();`;
+
+/**
+ * The page view's reader of a refused navigation: a navigation to the repository's address, compared whole, calls `open`,
+ * which opens that address and is handed none, at most once in `demoLinkSpanMs`, and is answered as the person's choice
+ * rather than a refusal; any other address is refused and opens nothing. Electron asks about one navigation of the main
+ * frame twice (`will-navigate`, `will-frame-navigate`); the span opens it once.
+ */
+export function demoLinkOpener(open: () => void, now: () => number = Date.now): (url: string) => boolean {
+    let last: number | null = null;
+    return (url) => {
+        if (url !== demoRepository) return false;
+        const at = now();
+        if (last !== null && at - last < demoLinkSpanMs) return true;
+        last = at;
+        open();
+        return true;
+    };
 }
 
 /**

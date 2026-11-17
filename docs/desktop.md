@@ -374,6 +374,14 @@ denied: the camera, the microphone, your location, notifications, reading the cl
 content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
 What you type into it stays in it. A file you drop onto it can be read by the page's script, which can send it nowhere.
 
+**The repository's address.** The page's note says where Jason's code is, github.com/reply-team/jason-ai, and in the
+desktop's window that address is drawn as a link, in the colour of the page's own links. Click it, or press Enter on it,
+and the desktop opens https://github.com/reply-team/jason-ai in your browser. The page itself still reaches nothing and
+opens no window: the link is the desktop's own, added to the page as it is shown, and the window refuses the page's
+navigation to the address as it refuses every other, then opens that one address, compared whole, at most once in two
+seconds. Any other address, the same one with a path or a query added included, opens nothing. In a browser tab the
+address is text.
+
 **In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
 with its own switch over the page's strip, while the desktop stays on your installation
 ([ui.md](ui.md#the-demo-in-a-browser-tab)).
