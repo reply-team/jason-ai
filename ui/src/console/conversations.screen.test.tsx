@@ -464,6 +464,46 @@ describe('the desktop’s conversations', () => {
         expect(chats.value[id]).toBeDefined();
     });
 
+    it('leaves the place of a chat alone when it is opened after another with fewer turns', async () => {
+        const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return this.classList.contains('chat-scroll') ? 900 : 0;
+            },
+        });
+        try {
+            const desktop = chatDesktop();
+            desktop.keep({
+                id: 'conv_01JDKEPT0000000000000000A1',
+                campaignId: 'cmp_1',
+                title: 'Spring',
+                entries: [{ kind: 'user', text: 'One turn only' }],
+            });
+            desktop.keep({
+                id: 'conv_01JDKEPT0000000000000000A2',
+                campaignId: 'cmp_2',
+                title: 'Autumn',
+                entries: [
+                    { kind: 'user', text: 'First' },
+                    { kind: 'user', text: 'Second' },
+                    { kind: 'user', text: 'Third' },
+                ],
+            });
+            renderConsole(desktop);
+            await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+            fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+            await waitFor(() => screen.getByText('One turn only'));
+            fireEvent.click(within(listed()).getByRole('button', { name: 'Autumn' }));
+            await waitFor(() => screen.getByText('Third'));
+            const box = screen.getByText('Third').closest<HTMLElement>('.chat-scroll')!;
+            expect(box.scrollTop).toBe(0);
+        } finally {
+            if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
+            else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+        }
+    });
+
     it('opens a conversation whose turn still runs as running, with Stop, and the turn’s events reach it', async () => {
         const desktop = chatDesktop();
         // A page loaded again while the desktop runs a turn of Spring's conversation.

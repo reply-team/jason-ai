@@ -37,6 +37,21 @@ describe('what a chat says of an approval its card approved', () => {
         );
     });
 
+    it('says a message whose work expired was not sent', () => {
+        expect(approvedSentence({ ...message, state: 'expired' })).toBe(
+            'You approved: Message to Ines Duarte. It was not sent: the work expired.',
+        );
+    });
+
+    it('says Jason is sending it only while the work is queued or running, and otherwise that it is not sent yet', () => {
+        expect(approvedSentence({ ...message, state: 'held', why: 'it is waiting' })).toBe(
+            'You approved: Message to Ines Duarte. It is not sent yet: it is waiting.',
+        );
+        expect(approvedSentence({ ...enrol, state: 'held', why: 'it is waiting' })).toBe(
+            'You approved: Add to sequence. It is not done yet: it is waiting.',
+        );
+    });
+
     it('says an act that is no message is done, not sent', () => {
         expect(approvedSentence({ ...enrol, state: 'approved' })).toBe(
             'You approved: Add to sequence. Jason is doing it.',
@@ -72,6 +87,37 @@ describe('following an approved act to the end of its work', () => {
             ['apr_2', 'approved'],
             ['apr_3', 'failed'],
         ]);
+    });
+
+    it('maps every state of the work item: queued or running, parked again, expired, and the three that end it', async () => {
+        const states = {
+            created: 'approved',
+            scheduled: 'approved',
+            processing: 'approved',
+            awaiting_approval: 'held',
+            waiting: 'held',
+            expired: 'expired',
+            succeeded: 'done',
+            failed: 'failed',
+            cancelled: 'cancelled',
+        };
+        for (const [status, state] of Object.entries(states)) {
+            const waiting = waitingOf(`cmp_map_${status}`);
+            waiting.approved.value = [message];
+            await followApproved(reading({ wi_1: status }), waiting);
+            expect(waiting.approved.value[0]!.state, status).toBe(state);
+        }
+    });
+
+    it('keeps following an act that parked or expired, since it may be queued again, and drops the why when it moves', async () => {
+        const waiting = waitingOf('cmp_follow_back');
+        waiting.approved.value = [message];
+        await followApproved(reading({ wi_1: 'waiting' }), waiting);
+        expect(waiting.approved.value[0]).toMatchObject({ state: 'held', why: 'it is waiting' });
+        await followApproved(reading({ wi_1: 'expired' }), waiting);
+        expect(waiting.approved.value[0]!.state).toBe('expired');
+        await followApproved(reading({ wi_1: 'succeeded' }), waiting);
+        expect(waiting.approved.value[0]).toMatchObject({ state: 'done', why: undefined });
     });
 
     it('reads an ended one no more, and keeps what it knew when a read fails', async () => {

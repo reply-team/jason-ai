@@ -252,26 +252,35 @@ export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
     await followApproved(api, waiting);
 }
 
-/** The work item states that end an approved act, and what each says of it. */
-const ended: Readonly<Record<string, Approved['state']>> = {
-    succeeded: 'done',
-    failed: 'failed',
-    cancelled: 'cancelled',
+/** What each work item state says of an approved act: the state it is shown in, and why it is held where it is. */
+const standing: Readonly<Record<string, Pick<Approved, 'state' | 'why'>>> = {
+    created: { state: 'approved' },
+    scheduled: { state: 'approved' },
+    processing: { state: 'approved' },
+    awaiting_approval: { state: 'held', why: 'it waits for a person to approve it again' },
+    waiting: { state: 'held', why: 'it is waiting' },
+    succeeded: { state: 'done' },
+    failed: { state: 'failed' },
+    cancelled: { state: 'cancelled' },
+    expired: { state: 'expired' },
 };
 
+/** The states a read can still move: an act that parked, or expired, may be queued again, so only these end the following. */
+const settled: ReadonlySet<Approved['state']> = new Set(['done', 'failed', 'cancelled']);
+
 /**
- * Reads again the work of each approval this chat approved that has not ended, and keeps how it stands. A read that
- * fails keeps what was known; the next read tries again.
+ * Reads again the work of each approval this chat approved that has not ended for good, and keeps how it stands. A read
+ * that fails keeps what was known; the next read tries again.
  */
 export async function followApproved(api: Api, waiting: Waiting): Promise<void> {
-    const open = waiting.approved.value.filter((each) => each.state === 'approved');
+    const open = waiting.approved.value.filter((each) => !settled.has(each.state));
     await Promise.all(
         open.map(async (each) => {
             try {
-                const state = ended[(await readItem(api, each.workItemId)).status];
-                if (state === undefined) return;
-                waiting.approved.value = waiting.approved.value.map((now) =>
-                    now.approvalId === each.approvalId ? { ...now, state } : now,
+                const now = standing[(await readItem(api, each.workItemId)).status];
+                if (now === undefined) return;
+                waiting.approved.value = waiting.approved.value.map((kept) =>
+                    kept.approvalId === each.approvalId ? { ...kept, state: now.state, why: now.why } : kept,
                 );
             } catch {
                 // Kept as it was: a later read says it.

@@ -821,6 +821,52 @@ describe('the console', () => {
         }
     });
 
+    it('scrolls to a new permission card even in the update that answers the one before it', async () => {
+        const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return this.classList.contains('chat-scroll') ? 900 : 0;
+            },
+        });
+        try {
+            const fake = pending(new FakeApi());
+            const { desktop } = renderConsole(fake);
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+            const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+            const box = () => document.querySelector<HTMLElement>('.chat-scroll')!;
+            flush(() =>
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: 'req_1',
+                    title: 'Run a command',
+                    detail: 'a',
+                    remember: null,
+                }),
+            );
+            await waitFor(() => expect(box().scrollTop).toBe(900));
+            box().scrollTop = 100;
+            // The first card ends and a second one arrives in one update: the count of open cards is the same.
+            flush(() => {
+                desktop.emit(id, { kind: 'permission_gone', request: 'req_1' });
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: 'req_2',
+                    title: 'Write a file',
+                    detail: 'b',
+                    remember: null,
+                });
+            });
+            await waitFor(() => expect(box().scrollTop).toBe(900));
+        } finally {
+            if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
+            else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+        }
+    });
+
     it('shows a failed sign-in in the host own words, with how to sign in under it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

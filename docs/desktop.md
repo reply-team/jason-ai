@@ -113,7 +113,16 @@ shows before anything is typed and what you send waits, while the window is open
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
   when the card is drawn, never from what the AI wrote, and not part of what you approve, so it changes no button. A
-  card leaves once the item is decided, there or anywhere else.
+  card leaves once the item is decided, there or anywhere else. An approval decided on its card stays in the chat as a
+  line, "You approved: Message to the person." and then how its work stands, read again as the journal moves: "Jason is
+  sending it." while the work is queued or running, "It is not sent yet:" and why if it parked again, "It was sent." once
+  the work succeeded, and "It was not sent:" with "the work failed", "was cancelled" or "expired" otherwise; an act that
+  is no message says "doing it", "not done yet", "is done" or "did not complete". The line is kept while the chat is
+  open; the "Waiting for you" label is drawn only over what waits.
+- While a turn runs, the line under the conversation says "Thinking…" with a spinner. While a permission card of that
+  turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
+  waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
+  conversation to its foot above the box; opening a chat leaves its place alone.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
