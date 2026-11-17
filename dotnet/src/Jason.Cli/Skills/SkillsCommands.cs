@@ -182,7 +182,10 @@ public static class SkillsCommands
                     members.Contains(roleRoot, StringComparer.OrdinalIgnoreCase))
                 .ConfigureAwait(false);
 
-            carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused));
+            // A deployment its record already names at the ref it was redeployed at, from a source read at a ref, is where it
+            // was: the files are that ref's either way, and only a directory, read where it stands, can have moved under it.
+            var unmoved = string.Equals(pin, reference, StringComparison.Ordinal) && !Directory.Exists(source);
+            carried.Add(new SkillsUpdateGroup(pack, members, deployed, $"{updating} {said}".TrimEnd(), refused, unmoved));
             progress.Entered = null;
             exit = exit == ExitCodes.Success ? deployed : exit;
         }
@@ -537,4 +540,8 @@ internal sealed class SkillsUpdateProgress
 /// The verb's own words for it: the pack, the roots, the source and ref and why, and what was written.
 /// </param>
 /// <param name="Refused">What it refused with, as stderr said it, or empty where it did not.</param>
-internal sealed record SkillsUpdateGroup(string Pack, IReadOnlyList<string> Roots, int Exit, string Line, string Refused);
+/// <param name="Unmoved">
+/// Whether its record named the ref it was redeployed at already, from a source read at a ref rather than a directory: a
+/// deployment that was where the run left it.
+/// </param>
+internal sealed record SkillsUpdateGroup(string Pack, IReadOnlyList<string> Roots, int Exit, string Line, string Refused, bool Unmoved = false);

@@ -97,8 +97,13 @@ public static class UninstallRunner
 
         try
         {
-            // 1. The registration, first.
-            if (Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
+            // 1. The registration, first — except on macOS, where it comes after the stop. There the registration is a
+            // job loaded in launchd, and taking it out (`launchctl unload`, `launchctl remove`) ends the process launchd
+            // started at login: the runtime itself, with no drain. The job has RunAtLoad and no KeepAlive, so launchd
+            // does not start a runtime that stopped, and a login of an account already logged in loads nothing again:
+            // between the stop and the take-out nothing starts it.
+            var registrationAfterTheStop = RuntimeAutostartCommands.Registrar(env).Platform is AutostartPlatform.MacOs;
+            if (!registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAt1)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
             }
@@ -112,9 +117,29 @@ public static class UninstallRunner
             }
 
             // 2. The runtime, and only then.
-            if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
+            if (await Step2StopRuntimeAsync(env, plan, options, registrationAfterTheStop, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
+            }
+
+            // On macOS the registration now, with the runtime stopped: its file is unloaded before it goes.
+            if (registrationAfterTheStop && Step1RemoveAutostart(env, plan, done, kept) is { } refusedAfterTheStop)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAfterTheStop.Code, refusedAfterTheStop.Message);
+            }
+
+            // The note that a start is owed, where the data is kept: with this installation taken off no start is owed, and a
+            // later install would otherwise start a runtime for an old jason install's stop. A purge takes it with the rest.
+            if (!purge && File.Exists(env.Paths.StartOwedFile))
+            {
+                if (Installation.StartOwed.Remove(env.Paths))
+                {
+                    done.Add($"Removed {env.Paths.StartOwedFile}, the note that a start was owed: with this installation taken off, none is.");
+                }
+                else
+                {
+                    problems.Add($"{env.Paths.StartOwedFile}, the note that a start is owed, could not be removed: delete it, or a later install of Jason Desktop starts a runtime at its first start.");
+                }
             }
 
             if (desktop is not null && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
@@ -929,6 +954,7 @@ public static class UninstallRunner
         CliEnvironment env,
         UninstallPlan plan,
         UninstallOptions options,
+        bool registrationAfterTheStop,
         List<string> done,
         List<string> kept,
         CancellationToken cancellationToken)
@@ -972,9 +998,11 @@ public static class UninstallRunner
                 ({ } pid, false) => string.Create(CultureInfo.InvariantCulture, $"The runtime may still be running — process {pid}, which its descriptor names, is — "),
                 _ => "The runtime did not stop, ",
             }
-            + "so nothing further was removed and this installation is as it was — "
-            + "except the logon registration, which had already been taken away and which "
-            + "'jason runtime autostart enable' puts back. "
+            + (registrationAfterTheStop
+                ? "so nothing further was removed and this installation is as it was, its logon registration included. "
+                : "so nothing further was removed and this installation is as it was — "
+                  + "except the logon registration, which had already been taken away and which "
+                  + "'jason runtime autostart enable' puts back. ")
             + (left.Identified
                 ? "Stop the runtime with 'jason runtime stop' — or, where it does not answer that either, end that process — and run this again. "
                 : "Stop the runtime with 'jason runtime stop' and run this again. ")

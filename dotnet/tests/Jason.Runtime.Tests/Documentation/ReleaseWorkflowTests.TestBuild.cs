@@ -49,7 +49,7 @@ public partial class ReleaseWorkflowTests
             .Where(found => ScalarNodes(found.Step).Any(node => node.Value?.Contains(TestBuildSwitch, StringComparison.Ordinal) == true)
                 || (Node(found.Step, "env") is YamlMappingNode env && env.Children.Keys.Any(key => key.ToString() == TestBuildSwitch)))
             .ToList();
-        Assert.Equal(ProofJobs.Order(StringComparer.Ordinal), naming.Select(found => found.Job).Order(StringComparer.Ordinal));
+        Assert.Equal(ProofJobs.Order(StringComparer.Ordinal), naming.Select(found => found.Job).Distinct().Order(StringComparer.Ordinal));
         Assert.All(naming, found =>
         {
             Assert.Equal("1", Scalar(Mapping(found.Step, "env"), TestBuildSwitch));

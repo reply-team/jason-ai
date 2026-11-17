@@ -7,6 +7,7 @@ import { CampaignPicker } from '../../pickers/campaign-picker';
 import * as store from './store';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
+import { ReasonField } from '../../layout/reason-field';
 
 type Props = { person: Contact; onClose: () => void };
 
@@ -73,9 +74,8 @@ export function AddDialog({ person, onClose }: Props) {
             </div>
             <div className="field">
                 <label htmlFor="add-reason">Reason (optional, kept in the journal)</label>
-                <textarea
+                <ReasonField
                     id="add-reason"
-                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}

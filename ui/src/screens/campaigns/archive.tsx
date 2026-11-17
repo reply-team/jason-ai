@@ -17,6 +17,7 @@ import { useCampaignChat } from './campaign-chat';
 import { unfinishedStatuses } from './kind';
 import { provider } from './pause-dialog';
 import * as store from './store';
+import { ReasonField } from '../../layout/reason-field';
 
 /** One page of each read, as large as a person's agent holds open; the reads page on until the runtime says no more. */
 const pageSize = 200;
@@ -270,9 +271,8 @@ export function ArchiveDialog({ campaign, onDone, onClose }: DialogProps) {
             )}
             <div className="field">
                 <label htmlFor="archive-reason">Reason (optional, kept in the journal)</label>
-                <textarea
+                <ReasonField
                     id="archive-reason"
-                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}

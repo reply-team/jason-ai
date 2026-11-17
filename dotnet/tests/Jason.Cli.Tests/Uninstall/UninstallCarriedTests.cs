@@ -154,35 +154,21 @@ public sealed class UninstallCarriedTests : IDisposable
 
     /// <summary>
     /// What the application of this bundle identifier leaves under <c>~/Library</c> goes with it, just before it, the
-    /// preferences through the preferences system first; Electron's default profile, which may hold the person's work, stays
-    /// without <c>--purge-data</c>, goes with it, and stays even then where it does not carry Chromium's mark.
+    /// preferences through the preferences system first. The two folders named after the application and not its identifier
+    /// hold nothing only Jason Desktop writes, so they are named and left, <c>--purge-data</c> or not.
     /// </summary>
     [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    public async Task On_macOS_the_applications_own_state_goes_with_it_and_the_persons_profile_only_on_the_purge(bool purge, bool marked)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task On_macOS_the_applications_own_state_goes_with_it_and_what_is_only_named_after_it_is_left(bool purge)
     {
         var executable = MacApplication();
         var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
-        var places = DesktopRemoval.ApplicationStatePlaces(Home);
-        foreach (var place in places)
+        var places = PlantLibrary();
+        var named = DesktopRemoval.ElectronNamedPlaces(Home);
+        foreach (var folder in named)
         {
-            if (place.EndsWith(".plist", StringComparison.Ordinal) || place.EndsWith(".binarycookies", StringComparison.Ordinal))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(place)!);
-                File.WriteAllText(place, "state");
-            }
-            else
-            {
-                Plant(place);
-            }
-        }
-
-        var profile = Plant(DesktopRemoval.ElectronDefaultProfile(Home));
-        if (marked)
-        {
-            File.WriteAllText(Path.Combine(profile, DesktopRemoval.ChromiumProfileMarker), "{}");
+            File.WriteAllText(Path.Combine(Plant(folder), "Local State"), "{}");
         }
 
         var (env, output, remover) = Environment(MacPlaces(), executable);
@@ -198,24 +184,198 @@ public sealed class UninstallCarriedTests : IDisposable
                 Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop"),
                 Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop.binarycookies"),
                 Path.Combine(Home, "Library", "WebKit", "ai.jasonharness.desktop"),
-                Path.Combine(Home, "Library", "Logs", "Jason"),
                 Path.Combine(Home, "Library", "Application Support", "ai.jasonharness.desktop"),
             ],
             places);
+        Assert.Equal([Path.Combine(Home, "Library", "Application Support", "Jason"), Path.Combine(Home, "Library", "Logs", "Jason")], named);
         foreach (var place in places)
         {
             Assert.False(File.Exists(place) || Directory.Exists(place), $"{place} is still there");
         }
 
-        Assert.True(Directory.Exists(profile) == !(purge && marked), $"Electron's default profile, purge {purge}, marked {marked}");
+        var desktop = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
+        Assert.Equal(places, desktop.GetProperty("application_state").EnumerateArray().Select(place => place.GetString()!));
+        foreach (var folder in named)
+        {
+            Assert.True(Directory.Exists(folder), $"{folder}, named after the application only, was removed (purge {purge})");
+            Assert.Contains(desktop.GetProperty("left").EnumerateArray(), line => line.GetString()!.StartsWith(folder, StringComparison.Ordinal)
+                && line.GetString()!.Contains("may be another application's", StringComparison.Ordinal));
+        }
+
         var preferences = remover.Calls.IndexOf("preferences.delete ai.jasonharness.desktop");
         Assert.True(preferences >= 0 && preferences < remover.Calls.IndexOf($"file.remove {places[0]}"), string.Join(" | ", remover.Calls));
         Assert.Equal($"tree.remove {application}", remover.Calls[^1]);
-        if (purge && !marked)
+    }
+
+    /// <summary>
+    /// The plan names each place under <c>~/Library</c> before anything goes: a dry run, and the plan a person is shown under
+    /// <c>--human</c>, list the application's own state and what is left.
+    /// </summary>
+    [Fact]
+    public async Task The_plan_names_the_applications_own_state_and_what_is_left_before_anything_goes()
+    {
+        var executable = MacApplication();
+        var places = PlantLibrary();
+        var named = Plant(DesktopRemoval.ElectronNamedPlaces(Home)[0]);
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(Human: true, DryRun: true, false, false, false), Ct));
+
+        var plan = output.ToString();
+        foreach (var place in places)
         {
-            var left = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop").GetProperty("left");
-            Assert.Contains(left.EnumerateArray(), line => line.GetString()!.Contains("Local State", StringComparison.Ordinal));
+            Assert.Contains($"the application's own state, {place}, just before the application", plan, StringComparison.Ordinal);
+            Assert.True(File.Exists(place) || Directory.Exists(place), $"a dry run removed {place}");
         }
+
+        Assert.Contains($"NOT touched: {named} is named after the application", plan, StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+
+        output.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false), Ct));
+        var desktop = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
+        Assert.Equal(places, desktop.GetProperty("application_state").EnumerateArray().Select(place => place.GetString()!));
+    }
+
+    /// <summary>
+    /// Where the home directory is <c>/</c>, whose Library is the system's, or is not the account's own, nothing under it is
+    /// looked at or removed, and the plan says why.
+    /// </summary>
+    [Theory]
+    [InlineData("root", true)]
+    [InlineData("another account's", true)]
+    [InlineData("the account's own", false)]
+    [InlineData("an account home that cannot be read", false)]
+    public void The_Library_steps_are_skipped_where_the_home_is_root_or_not_the_accounts_own(string row, bool skipped)
+    {
+        var (home, account) = row switch
+        {
+            "root" => ("/", "/"),
+            "another account's" => (Home, Path.Combine(_tree.Paths.Root, "someone-else")),
+            "the account's own" => (Home, Home),
+            _ => (Home, (string?)null),
+        };
+
+        Assert.Equal(skipped, DesktopRemoval.LibraryRefusal(home, account) is not null);
+    }
+
+    [Fact]
+    public async Task A_home_that_is_not_the_accounts_own_takes_nothing_under_its_Library()
+    {
+        var executable = MacApplication();
+        var places = PlantLibrary();
+        var other = Path.Combine(_tree.Paths.Root, "someone-else");
+        var (env, output, remover) = Environment(MacPlaces() with { AccountHome = () => other }, executable);
+
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct));
+
+        foreach (var place in places)
+        {
+            Assert.True(File.Exists(place) || Directory.Exists(place), $"{place} went under a home that is not the account's own");
+        }
+
+        var desktop = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop");
+        Assert.Empty(desktop.GetProperty("application_state").EnumerateArray());
+        Assert.Contains(desktop.GetProperty("left").EnumerateArray(), line => line.GetString()!.Contains("not this account's own", StringComparison.Ordinal));
+        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("preferences.delete", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An uninstall that keeps the data takes back the note that a start is owed: with the installation taken off none is,
+    /// and a later install would otherwise start a runtime for an old stop. A dry run leaves it.
+    /// </summary>
+    [Fact]
+    public async Task An_uninstall_that_keeps_the_data_takes_back_the_note_that_a_start_is_owed()
+    {
+        var executable = MacApplication();
+        Directory.CreateDirectory(_dir.Paths.RunDirectory);
+        File.WriteAllText(_dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        var (env, output, _) = Environment(MacPlaces(), executable);
+
+        Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env, new UninstallOptions(false, DryRun: true, false, false, false), Ct));
+        Assert.True(File.Exists(_dir.Paths.StartOwedFile), "a dry run took the note back");
+
+        output.GetStringBuilder().Clear();
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory went without the word");
+        Assert.Contains(JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains("start-owed.json", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An uninstall run through the installer leaves no note that a start is owed: the installer's stop comes first, on the
+    /// installer's behalf (<c>runtime stop --start-owed</c>, which writes the note), and the uninstall routine after it takes
+    /// the note back where it keeps the data, or takes it with the data. Held through the routine's own seams: the stop
+    /// through the verb, the uninstall through <see cref="UninstallCommand"/> with the remover that really removes.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task An_uninstall_after_the_installers_stop_leaves_no_note_that_a_start_is_owed(bool purge, bool keepApplication)
+    {
+        var executable = MacApplication();
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var stopping = new FakeHandler(_ =>
+        {
+            File.Delete(_dir.Paths.DescriptorFile);
+            return RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_LIVE"));
+        });
+        var (env, output, _) = Environment(MacPlaces(), executable);
+
+        Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["runtime", "stop", "--start-owed"], env with { HttpHandler = stopping }, Ct));
+        Assert.True(File.Exists(_dir.Paths.StartOwedFile), "the installer's stop wrote no note that a start is owed");
+
+        output.GetStringBuilder().Clear();
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, Yes: true, false, KeepApplication: keepApplication), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.False(File.Exists(_dir.Paths.StartOwedFile), "the note that a start is owed outlived the uninstall");
+        Assert.Equal(!purge, Directory.Exists(_dir.Paths.Root));
+    }
+
+    /// <summary>Plants every place the application's own state may be, as a file or a folder, and returns them in order.</summary>
+    private IReadOnlyList<string> PlantLibrary()
+    {
+        var places = DesktopRemoval.ApplicationStatePlaces(Home);
+        foreach (var place in places)
+        {
+            if (place.EndsWith(".plist", StringComparison.Ordinal) || place.EndsWith(".binarycookies", StringComparison.Ordinal))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(place)!);
+                File.WriteAllText(place, "state");
+            }
+            else
+            {
+                Plant(place);
+            }
+        }
+
+        return places;
+    }
+
+    /// <summary>
+    /// Under <c>--keep-application</c> Open at Login's file goes but its job is not unloaded, since the window kept may be
+    /// that job's own, and one line of the output says the job stays loaded until the next login.
+    /// </summary>
+    [Fact]
+    public async Task Keep_application_says_the_open_at_login_job_stays_loaded_until_the_next_login()
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var agent = DesktopRemoval.LaunchAgentFile(MacPlaces());
+        Directory.CreateDirectory(Path.GetDirectoryName(agent)!);
+        File.WriteAllText(agent, $"<plist><dict><key>ProgramArguments</key>\n<array>\n<string>{Path.Combine(application, "Contents", "MacOS", "Jason")}</string>\n<string>--opened-at-login</string></array></dict></plist>");
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.False(File.Exists(agent), "Open Jason at Login's file is still there");
+        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("launchagent.unload", StringComparison.Ordinal));
+        var done = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.Single(done, line => line.Contains("stays loaded until the next login", StringComparison.Ordinal) && line.Contains("ai.jasonharness.desktop", StringComparison.Ordinal));
     }
 
     /// <summary><c>--keep-application</c> keeps all of the application's state: it stays where the application stays.</summary>
@@ -918,7 +1078,7 @@ public sealed class UninstallCarriedTests : IDisposable
         return folder;
     }
 
-    private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root };
+    private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root, AccountHome = () => Home };
 
     /// <summary>
     /// Windows places whose registry keys are never made: a refusal reads them and finds nothing, and nothing writes under

@@ -62,6 +62,13 @@ public static class CliErrors
     /// </summary>
     public const string InstallNotCarried = "install_not_carried";
 
+    /// <summary>
+    /// <c>jason install</c> held the update's lock, <c>&lt;data&gt;/update/update.lock</c>, while it set the machine up, and
+    /// another <c>jason install</c>, an update, its finish or a rollback found it held: nothing was begun. Retryable: the
+    /// setup takes seconds.
+    /// </summary>
+    public const string InstallInProgress = "install_in_progress";
+
     /// <summary><c>jason install</c> on a system it does not set up — anything but macOS and Windows: nothing was read or written.</summary>
     public const string InstallUnsupported = "install_unsupported";
 

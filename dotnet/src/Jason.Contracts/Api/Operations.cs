@@ -12,8 +12,8 @@ namespace Jason.Contracts.Api;
 /// contract document, and goes looking for one that was never meant to exist.
 /// </para>
 /// <para>
-/// And not every name here has a command. <c>system.info</c> is reached through <c>jason runtime status</c>;
-/// there is no <c>system</c> noun in the CLI, so nothing types <c>jason system info</c>.
+/// And not every name here is a command of its own spelling. <c>system.info</c> is reached through
+/// <c>jason runtime status</c>; there is no <c>system</c> noun in the CLI, so nothing types <c>jason system info</c>.
 /// </para>
 /// </remarks>
 public static class Operations

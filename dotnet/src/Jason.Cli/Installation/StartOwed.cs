@@ -6,9 +6,12 @@ namespace Jason.Cli.Installation;
 
 /// <summary>
 /// The note that a start is owed, at <see cref="JasonPaths.StartOwedFile"/> (<c>run/start-owed.json</c> in the data
-/// directory). <c>jason install</c> writes it just before it stops this data directory's runtime, and takes it back only
-/// where the runtime then did not stop; a runtime's own start removes it. So it stands from the stop until a runtime runs
-/// on this data directory again, a routine that was killed part-way and a caller that quit before it started one included.
+/// directory). <c>jason install</c> writes it just before it drains and stops this data directory's runtime, and takes it
+/// back where the runtime then does not stop, and so does <c>jason runtime stop --start-owed</c>, a stop on an installer's
+/// behalf; a runtime's own start removes it, and so do any other stop through <c>jason runtime stop</c> and an uninstall
+/// that keeps the data. So it stands from the stop until a runtime runs on this
+/// data directory again, a routine killed or timed out during the stop's wait and a caller that quit before it started one
+/// included.
 /// </summary>
 /// <remarks>
 /// One JSON object, <c>{"stopped_at":"&lt;ISO-8601 UTC&gt;"}</c>, the moment the stop began. Its presence is what decides:
@@ -80,7 +83,7 @@ internal static class StartOwed
         }
     }
 
-    /// <summary>Takes the note back, where the runtime it was written for did not stop. True where none is left.</summary>
+    /// <summary>Takes the note back: a runtime that did not stop, a stop through the verb, an uninstall that keeps the data. True where none is left.</summary>
     public static bool Remove(JasonPaths paths)
     {
         ArgumentNullException.ThrowIfNull(paths);

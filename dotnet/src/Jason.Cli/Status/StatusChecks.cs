@@ -72,6 +72,9 @@ internal static partial class StatusChecks
 
         public const string Restart = "jason runtime restart";
 
+        /// <summary>The repair for a runtime left draining: it claims again, with nothing restarted.</summary>
+        public const string Resume = "jason runtime resume";
+
         /// <summary>
         /// The repair for an update that stopped part-way: the apply carries it on from the step its ledger names, starts the
         /// runtime itself and finishes what the update still owes. Never <see cref="Start"/>, which would run the new build
@@ -81,7 +84,8 @@ internal static partial class StatusChecks
 
         /// <summary>
         /// The repair for a runtime newer than this CLI: this jason brought up to the runtime, never the runtime restarted from
-        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason.
+        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason. On a jason Jason Desktop carries it
+        /// is the same command again, with no hop through the desktop's menu: there it hands the update to the application.
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 
@@ -270,6 +274,7 @@ internal static partial class StatusChecks
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
             checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
+            checks.Add(Dispatcher(info, unfinished));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
@@ -318,7 +323,13 @@ internal static partial class StatusChecks
         // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
         // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
         // fails the same way, with no repair this verb can name. Before that step nothing has been replaced, and the
-        // runtime check is the runtime's own; the optional update check names what is waiting.
+        // runtime check is the runtime's own; the optional update check names what is waiting. A carried update whose
+        // application is the new version already landed under a jason that never finished it: the finish is the one way on.
+        if (Landed(unfinished) is { } landed)
+        {
+            return new StatusCheck("runtime", true, CheckState.Failed, landed, Repair.FinishUpdate);
+        }
+
         if (unfinished is { Replacing: true })
         {
             return unfinished.Ledger is { } ledger
@@ -387,6 +398,7 @@ internal static partial class StatusChecks
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
             "update",
@@ -401,6 +413,19 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more
+    /// than its stop — that jason ended with the go given, by a kill or a closed console: the application names the new
+    /// version already, and <c>jason update apply</c> finishes the update and starts the runtime. Null for every other.
+    /// </summary>
+    private static string? Landed(Contracts.Update.UnfinishedUpdate? unfinished) =>
+        unfinished?.Ledger is { Step: < UpdateStep.Swapped } ledger
+        && CarriedExecutable.Of(ledger.InstallPath)?.Version is { } named
+        && SemanticVersion.TryParse(named, out var version)
+        && version == ledger.ToVersion
+            ? $"{unfinished.Said()}, and Jason Desktop's installer has put {ledger.ToVersion} in place already: `{Repair.FinishUpdate}` finishes it and starts the runtime."
+            : null;
 
     /// <summary>
     /// Whether the runtime answering is the build this CLI is. Required, because a binary can change under a running
@@ -438,6 +463,51 @@ internal static partial class StatusChecks
                 $"The runtime running is {info.RuntimeVersion}, newer than this CLI, {build}: a restart from this CLI would start the older build on data the newer one may have changed, so update this jason instead.",
                 Repair.UpdateThisJason)
             : new StatusCheck("runtime_version", true, CheckState.Failed, $"The runtime running is {info.RuntimeVersion}; this CLI is {build}.", Repair.Restart);
+    }
+
+    /// <summary>
+    /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
+    /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
+    /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
+    /// restarts nothing. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
+    /// of it is never offered: the check says the runtime is draining for the update and names the update's own repair. A
+    /// dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never failed; a runtime that
+    /// did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
+    /// </summary>
+    private static StatusCheck Dispatcher(SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
+    {
+        const string Name = "dispatcher";
+        if (info is null)
+        {
+            return new StatusCheck(Name, true, CheckState.Unknown, "The runtime did not answer, so whether it claims work was not asked.", Repair.Start);
+        }
+
+        var running = info.Dispatcher.RunningAttempts == 1
+            ? "1 attempt is still running"
+            : string.Create(CultureInfo.InvariantCulture, $"{info.Dispatcher.RunningAttempts} attempts are still running");
+        return info.Dispatcher.State switch
+        {
+            DispatcherState.Draining when unfinished is { Ledger: not null } => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining for the update: {char.ToLowerInvariant(unfinished.Said()[0])}{unfinished.Said()[1..]}, and `{Repair.FinishUpdate}` carries it on; {running}.",
+                Repair.FinishUpdate),
+            DispatcherState.Draining when unfinished is not null => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining, and an update may be under way: {unfinished.Said()}; {running}.",
+                null),
+            DispatcherState.Draining => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining: it claims no new work until `{Repair.Resume}` or a restart of the runtime; {running}.",
+                Repair.Resume),
+            DispatcherState.Disabled => new StatusCheck(Name, true, CheckState.Ok, "The dispatcher is turned off by the settings (Dispatcher:Enabled), so this runtime claims no work.", null),
+            _ => new StatusCheck(Name, true, CheckState.Ok, "The runtime claims work.", null),
+        };
     }
 
     private static StatusCheck Migrations(SystemInfoResponse? info)

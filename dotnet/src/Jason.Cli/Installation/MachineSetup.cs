@@ -177,6 +177,10 @@ public static class MachineSetup
             await run.Step("Deploying the role skills", async () => roles = await run.RoleSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        // The images earlier updates moved out of the application, taken away where nothing runs from them any more; quietly,
+        // and never while an update is in flight.
+        CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
+
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
 
@@ -294,9 +298,10 @@ public static class MachineSetup
                 return (RuntimeStates.Running, false);
             }
 
-            // The stop owes a start, and this routine starts none: the note says so from before the stop, so a routine killed
-            // part-way, or a caller that quits before it starts one, leaves it standing for the next to find. A runtime's own
-            // start removes it.
+            // The stop owes a start, and this routine starts none: the note says so from before the drain, so a routine killed
+            // or timed out during the stop's wait, or a caller that quits before it starts one, leaves it standing for the
+            // next to find. It is taken back where the runtime does not stop; a runtime's own start removes it, and so does a
+            // stop through `jason runtime stop`.
             string? unwritten = null;
             try
             {
@@ -325,7 +330,7 @@ public static class MachineSetup
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
                 var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
-                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason system resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
+                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason runtime resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
                 return (RuntimeStates.WouldNotStop, true);
             }
 

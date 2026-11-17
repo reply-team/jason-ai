@@ -51,6 +51,10 @@ this opens shows the demo, or, while something waits, one page that says Live Mo
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
 `jason decision` commands.
 
+Without Jason Desktop, then, that tab is not where a person watches their work. When they ask what happened, what is
+queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
+and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
+
 If it fails with `ui_not_installed`, no UI build is in place, and the message names the fix: `jason ui install` places
 this release's build as `ui/default`, which is also the repair `jason status` prints. Run it, then `jason ui open`
 again. A build from source has no published UI, and the command says so: then say that a build is made from `ui/` as
@@ -92,6 +96,10 @@ brought you to it, ask the person in words, say what a stop does, and run it onl
 restart was their own request, and when the runtime looks idle: work can be claimed between the status you read and
 the stop. What a stop does: new work stops being claimed, what is in flight gets up to ten seconds to finish, nothing
 is cancelled, and a provider operation already under way may still act, ending at its own lease.
+
+`jason runtime drain` has the runtime claim no new work while it keeps running, and `jason runtime resume` has it claim
+again, the way back for a runtime whose dispatcher `jason runtime status` shows `draining` after an update or an install
+ended part-way; ask before a drain as before a stop.
 
 `jason runtime run` keeps the runtime in the **foreground** instead, and it is **not** the normal way to run
 it — the normal way is `jason runtime start`. You would type `run` when something else owns the process: your

@@ -403,13 +403,15 @@ internal sealed class WindowsRegistrar(WindowsAccount account) : IAutostartRegis
 }
 
 /// <summary>A macOS LaunchAgent: a file under the account's own Library, loaded at login.</summary>
-internal sealed class LaunchAgentRegistrar : IAutostartRegistrar
+/// <param name="run">How launchctl is run when the job is taken out; a test's stub.</param>
+/// <param name="home">The home whose Library holds the file; a test's own.</param>
+internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home = null) : IAutostartRegistrar
 {
     public AutostartPlatform Platform => AutostartPlatform.MacOs;
 
     public AutostartState Read()
     {
-        var path = AutostartArtifacts.ArtifactPath(AutostartPlatform.MacOs, AutostartRegistrars.Home, string.Empty);
+        var path = AutostartArtifacts.ArtifactPath(AutostartPlatform.MacOs, home ?? AutostartRegistrars.Home, string.Empty);
         var held = AutostartRegistrars.Held(path);
         return held is null
             ? new AutostartState(false, [], null)
@@ -451,15 +453,10 @@ internal sealed class LaunchAgentRegistrar : IAutostartRegistrar
     {
         ArgumentNullException.ThrowIfNull(registration);
 
+        // The job goes out of launchd before its file goes, bounded, and by its label as well, which holds for a job whose
+        // file is gone already: a job left loaded with no plist is never this one's doing (LaunchdJobs).
         var registered = Read().Registered;
-        if (registered)
-        {
-            foreach (var command in registration.Remove)
-            {
-                AutostartRegistrars.Run(command);
-            }
-        }
-
+        LaunchdJobs.TakeOut(registered ? registration.Remove : [], registration.Name, run);
         AutostartRegistrars.Discard(registration.ArtifactPath);
         return new AutostartRemoval(registered, Legacy: false);
     }

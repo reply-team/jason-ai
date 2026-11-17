@@ -27,6 +27,8 @@ import {
     isStale,
     uncheckedSentence,
 } from './message-edit';
+import { asking, changedSince, noteAsked, noteEdit, withdrawn } from './reasking';
+import { DIFFERS_SENTENCE, stateSentence, withWords } from './reasking-model';
 
 type Props = {
     approval: Approval;
@@ -42,7 +44,7 @@ type Props = {
     onClose: () => void;
     /** Called with the new approval once the runtime has asked again under an edited text. */
     onReasked?: (approvalId: string) => void;
-    /** Called once a saved edit has withdrawn this approval, so a list showing it can be read again. */
+    /** Called once a saved edit has withdrawn this approval, so a list showing it can be read again and keep its row. */
     onSuperseded?: () => void;
     /** How the card waits for the new approval; the default is a poll a second apart for half a minute. */
     reaskPoll?: { tries?: number; delayMs?: number } | undefined;
@@ -71,12 +73,16 @@ export function ApprovalPanel({
     const watched = approval.status === 'pending' && isMessage(approval.operation);
     const [item, setItem] = useState<WorkItem | null>(null);
     const [unread, setUnread] = useState<string | null>(null);
-    const [savedHere, setSavedHere] = useState(false);
+    // A message edited on this page: its approval was withdrawn and the runtime asks again with the saved words. The
+    // panel shows those words and no act for as long as the page lives; while the runtime has not asked again it waits
+    // for the new approval (`reasking.ts`).
+    const edit = withdrawn(approval.id);
+    const inert = edit !== undefined;
+    const waits = asking(approval.id) !== undefined;
     useEffect(() => {
         setItem(null);
         setUnread(null);
-        setSavedHere(false);
-        if (!watched) return;
+        if (!watched || inert) return;
         let current = true;
         void checkMessage(api, approval).then((checked) => {
             if (!current || checked === null) return;
@@ -86,20 +92,24 @@ export function ApprovalPanel({
         return () => {
             current = false;
         };
-    }, [api, watched, approval.id, approval.work_item_id]);
-    const stale = watched && item !== null && isStale(approval, item);
-    // After a save the runtime asks again; the card waits for the new approval and hands it on when it arrives.
+    }, [api, watched, inert, approval.id, approval.work_item_id]);
+    const stale = watched && !inert && item !== null && isStale(approval, item);
+    // While the runtime has not asked again, the panel waits for the new approval and hands it on when it arrives.
     useEffect(() => {
-        if (!savedHere) return;
+        if (!waits) return;
         let current = true;
         awaitNewApproval(api, approval.work_item_id, approval.id, { ...reaskPoll, stopped: () => !current }).then(
-            (id) => current && id && onReasked?.(id),
+            (id) => {
+                if (!current || !id) return;
+                noteAsked(approval.work_item_id, id);
+                onReasked?.(id);
+            },
             () => {},
         );
         return () => {
             current = false;
         };
-    }, [api, savedHere, approval.id, approval.work_item_id]);
+    }, [api, waits, approval.id, approval.work_item_id]);
 
     async function approveChecked() {
         if (!watched) return onApprove();
@@ -112,23 +122,13 @@ export function ApprovalPanel({
     const preview = approval.preview as { intent?: unknown; contact?: { name?: string; value?: string } };
     const intent = typeof preview.intent === 'string' ? preview.intent : null;
     const person = preview.contact?.name ?? approval.contact_name;
-    const detail = toApprovalDetail(approval.preview);
+    // An edited message shows the words saved, which the runtime asks again with, never the withdrawn ones.
+    const read = toApprovalDetail(approval.preview);
+    const detail = edit === undefined ? read : withWords(read, edit.words);
     const { from, channel } = detail;
-    const pending = approval.status === 'pending';
+    // No act is offered on an approval an edit withdrew: Approve and Reject come back with the approval asked again.
+    const pending = approval.status === 'pending' && edit === undefined;
     const heading = title(approval.operation, approval.contact_name);
-    // A saved edit withdrew this approval: the card is gone, and the sentence says what happens next. The poll above
-    // shows the new approval when it comes; if it never does, the sentence stays true and the screen's refresh shows it.
-    if (savedHere)
-        return (
-            <div className="panel">
-                <PanelHeader title={heading} sub={<>in {approval.campaign_name}</>} onClose={onClose} />
-                <div className="panel-body">
-                    <p className="notice" role="status">
-                        Jason asks again with the new text when it next takes this work.
-                    </p>
-                </div>
-            </div>
-        );
     return (
         <div className="panel">
             <PanelHeader
@@ -166,6 +166,16 @@ export function ApprovalPanel({
                 )}
             </ActionsRow>
             <div className="panel-body">
+                {edit !== undefined && (
+                    <p className="notice reasking" role="status">
+                        {stateSentence(edit)}
+                    </p>
+                )}
+                {pending && changedSince(approval) && (
+                    <p className="notice reasking" role="alert">
+                        {DIFFERS_SENTENCE}
+                    </p>
+                )}
                 {stale && (
                     <p className="notice" role="status">
                         {STALE_SENTENCE}
@@ -228,7 +238,7 @@ export function ApprovalPanel({
                     )}
                 </dl>
                 <MessageCard detail={detail} reply={approval.operation === REPLIES} />
-                {watched && item && editable(approval) && (
+                {pending && watched && item && editable(approval) && (
                     <MessageEditor
                         approval={approval}
                         item={item}
@@ -236,7 +246,7 @@ export function ApprovalPanel({
                         onMoved={setItem}
                         onSaved={(saved) => {
                             setItem(saved);
-                            setSavedHere(true);
+                            noteEdit(approval, saved);
                             onSuperseded?.();
                         }}
                     />
@@ -248,7 +258,7 @@ export function ApprovalPanel({
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
                 </details>
             </div>
-            {pending && (
+            {(pending || inert) && (
                 <div className="panel-footer">
                     <span className="next">{remaining}</span>
                     <span className="spacer" />

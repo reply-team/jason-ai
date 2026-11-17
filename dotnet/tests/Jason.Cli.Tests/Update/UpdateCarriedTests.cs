@@ -11,10 +11,11 @@ using Jason.Runtime.Tests;
 namespace Jason.Cli.Tests.Update;
 
 /// <summary>
-/// <c>jason update apply</c> and <c>jason update rollback</c> run as a jason the desktop application carries. The file is
-/// the application's: replacing it changes a signed application on macOS and a file the installer owns on Windows, and
-/// the desktop's own update replaces the application and the jason inside it together. So both verbs refuse, before
-/// anything is staged, drained or stopped, and point to the desktop's Check for Updates.
+/// <c>jason update apply</c> and <c>jason update rollback</c> run as a jason the desktop application carries where there is
+/// no Jason Desktop to hand the update to: on Linux, where the machine has no setup places, or where the application is not
+/// where its jason says. The file is the application's, and the desktop's own update replaces the application and the jason
+/// inside it together, so both verbs refuse there, before anything is staged, drained or stopped, and point to the desktop's
+/// Check for Updates. <see cref="UpdateCarriedHandOverTests"/> holds the hand-over itself.
 /// </summary>
 public sealed class UpdateCarriedTests
 {
@@ -138,7 +139,8 @@ public sealed class UpdateCarriedTests
         Assert.Equal([true], installation.StartsHandedOver);
         Assert.True(installation.Running, "the runtime the older build stopped was not started again");
 
-        // Once that update is complete the file is still carried, and the new build refuses the next one.
+        // Once that update is complete the file is still carried, and with no Jason Desktop to hand the next one to, the new
+        // build refuses it.
         installation.Out.GetStringBuilder().Clear();
         var again = await UpdateCommands.ApplyAsync(installation.Env, feed, null, 0, human: false, Ct);
         Assert.Equal(ExitCodes.ApiError, again);

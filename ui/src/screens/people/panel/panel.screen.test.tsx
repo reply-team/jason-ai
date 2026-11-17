@@ -236,6 +236,10 @@ describe('Saving the person', () => {
             .answer('workitem.create', 'workitem.create/provider-contact-update');
         open(api, ingrid.id, 'details');
         fireEvent.click(await within(await shown()).findByRole('button', { name: 'Edit' }));
+        // The form's optional reason is one line, and opening the form puts no focus on it.
+        const reasonBox = within(panel()).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' });
+        expect(reasonBox.getAttribute('rows')).toBe('1');
+        expect(document.activeElement).not.toBe(reasonBox);
         expect(field('Title').value).toBe('Head of Revenue');
         type('Title', 'VP Revenue');
         reason('Promoted in October.');
