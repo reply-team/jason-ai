@@ -122,7 +122,7 @@ public sealed class NotificationsCheckTests
     }
 
     [Theory]
-    [InlineData("disabled_for_application", "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).")]
+    [InlineData("disabled_for_application", "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.")]
     [InlineData("disabled_for_user", "Windows has notifications switched off for every app.")]
     [InlineData("disabled_by_group_policy", "A group policy on this machine switches Windows' notifications off; an administrator sets it.")]
     [InlineData("disabled_by_manifest", "Windows says this program's own manifest switches its notifications off.")]
@@ -279,7 +279,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy()], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; none has reached you yet. "
-            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).");
+            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
 
     /// <summary>A toast switched off beside a plugin that delivers still reaches the person, through the plugin.</summary>
     [Fact]
@@ -288,7 +288,7 @@ public sealed class NotificationsCheckTests
             await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application"), Ntfy("delivered")], "ntf_01K", NineOhSix)),
             CheckState.Ok,
             "Notifications reach you by ntfy; the last one was delivered at 2026-10-01 09:06 UTC. "
-            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).");
+            + "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
 
     /// <summary>An optional check never fails readiness, whatever its state.</summary>
     [Fact]
@@ -365,7 +365,42 @@ public sealed class NotificationsCheckTests
         }
     }
 
-    /// <summary>Only the sentence that names the runtime's entry says which of the two entries named Jason is meant.</summary>
+    /// <summary>
+    /// A failure is never hidden by a switch: where the last toast failed, or was not attempted, and a switch is off now,
+    /// the check stays failed with the failure's own sentence first, and the switch off now follows in the same answer.
+    /// </summary>
+    [Theory]
+    [InlineData(ToastSwitch.OffForJason, OffForJasonNow)]
+    [InlineData(ToastSwitch.OffForEveryApp, OffForEveryAppNow)]
+    [InlineData(ToastSwitch.OffByPolicy, OffByPolicyNow)]
+    public async Task A_failed_toast_stays_failed_first_and_the_switch_off_now_follows(ToastSwitch now, string fact)
+    {
+        var failed = new NotificationChannelInfo("toast", "toast", true, "failed", null, "toast_show_failed", "permanent", "0x80070005", NineOhSix, "available", null);
+        Is(
+            await CheckAsync(new NotificationsInfo(true, [failed], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(now)),
+            CheckState.Failed,
+            "toast: toast_show_failed (permanent) at 2026-10-01 09:06 UTC: 0x80070005. " + fact);
+
+        var notAttempted = new NotificationChannelInfo("toast", "toast", true, "not_attempted", "rate_limited", null, null, null, NineOhSix, "available", null);
+        Is(
+            await CheckAsync(new NotificationsInfo(true, [notAttempted], "ntf_01K", NineOhSix), toastSetting: new FakeToastSetting(now)),
+            CheckState.Failed,
+            "toast was not attempted at 2026-10-01 09:06 UTC: rate_limited. " + fact);
+
+        // With no switch off now, or none read, the failure is said alone, as it was.
+        foreach (var reader in new IToastSetting?[] { new FakeToastSetting(ToastSwitch.NotOff), new FakeToastSetting(null), null })
+        {
+            Is(
+                await CheckAsync(new NotificationsInfo(true, [failed], "ntf_01K", NineOhSix), toastSetting: reader),
+                CheckState.Failed,
+                "toast: toast_show_failed (permanent) at 2026-10-01 09:06 UTC: 0x80070005.");
+        }
+    }
+
+    /// <summary>
+    /// The sentences that send the person to the entry named Jason say which of the two entries of that name is meant; the
+    /// others send nobody there and do not.
+    /// </summary>
     [Fact]
     public void Only_the_entry_s_sentence_says_which_entry_named_jason_is_meant()
     {
@@ -431,7 +466,7 @@ public sealed class NotificationsCheckTests
             Is(
                 await CheckAsync(new NotificationsInfo(true, [Toast("silenced", "disabled_for_application")], "ntf_01K", NineOhSix), toastSetting: reader),
                 CheckState.Absent,
-                "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).");
+                "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.");
             Is(
                 await CheckAsync(new NotificationsInfo(true, [Toast("delivered")], "ntf_01K", NineOhSix), toastSetting: reader),
                 CheckState.Ok,
