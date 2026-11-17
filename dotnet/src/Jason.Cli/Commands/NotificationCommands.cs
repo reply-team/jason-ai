@@ -42,7 +42,7 @@ public static class NotificationCommands
     /// <summary>Enable and disable take the same things and differ only in which operation they call.</summary>
     private static Command Switch(CliEnvironment env, Option<string?> actor, string verb, string description, string operation)
     {
-        var command = new Command(verb, description + Channels + ActorOption.ChangesJasonInsideARun);
+        var command = new Command(verb, description + Channels + ActorOption.NoDefaultForAnAct + " " + ActorOption.ChangesJasonInsideARun);
         var channel = new Argument<string>("channel") { Description = "toast, or the id of a notification plugin — for example ntfy." };
         var reason = VerbOptions.Reason();
         var human = VerbOptions.Human();
@@ -55,7 +55,12 @@ public static class NotificationCommands
             var body = RequestBody.Empty()
                 .Set("channel", parseResult.GetValue(channel))
                 .Set("reason", parseResult.GetValue(reason))
-                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()), env);
+                .SetActor(ActorOption.Parse(parseResult.GetValue(actor), env.AttemptFromEnvironment()));
+            ActorOption.Named(
+                body,
+                $"notification {verb}",
+                "the CLI will not put this account's name on a change of how Jason tells a person that something waits for them",
+                $"name who does it, e.g. {ActorOption.Name} human:<Name>");
 
             return OperationRunner.RunAsync(
                 env, operation, body, new RunOptions(parseResult.GetValue(human), NotificationRenderers.Channels), cancellationToken);

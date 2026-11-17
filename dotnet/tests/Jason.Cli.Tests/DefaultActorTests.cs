@@ -319,13 +319,17 @@ public class DefaultActorTests
         ["role", "set-profile", "researcher", "--execution-profile", "local-claude"],
         ["plugin", "grant", "fake-provider", "--http", "api.example.com"],
         ["plugin", "revoke", "fake-provider", "--env", "FAKE_TOKEN"],
+        ["notification", "enable", "toast"],
+        ["notification", "disable", "toast"],
     ];
 
     /// <summary>
     /// Of those, the acts the runtime takes from any caller: lifting someone's opt-out, moving which account acts for a
-    /// campaign, and changing which agent host runs a role. The CLI alone asks who does them.
+    /// campaign, changing which agent host runs a role, granting a plugin something, and turning a notification channel on or
+    /// off. The CLI alone asks who does them.
     /// </summary>
-    internal static readonly string[] RuntimeTakesFromAnyone = ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke"];
+    internal static readonly string[] RuntimeTakesFromAnyone =
+        ["suppression remove", "route set", "route unset", "role set-profile", "plugin grant", "plugin revoke", "notification enable", "notification disable"];
 
     /// <summary>One invocation of every other verb that reaches the runtime.</summary>
     internal static readonly string[][] Runs =
@@ -382,8 +386,6 @@ public class DefaultActorTests
         ["profile", "enable", "local-codex"],
         ["profile", "set-default", "local-codex"],
         ["profile", "unset-default"],
-        ["notification", "enable", "toast"],
-        ["notification", "disable", "toast"],
         ["approval", "list"],
         ["approval", "get", "apr_A"],
         ["approval", "list-standing", "cmp_A"],

@@ -28,8 +28,8 @@ public sealed class NotificationsCheckTests
     private static NotificationChannelInfo Toast(string? outcome = null, string? reason = null, string? detail = null, bool on = true, string presence = "available", string? presenceDetail = null) =>
         new("toast", "toast", on, outcome, reason, null, null, detail, outcome is null ? null : NineOhSix, presence, presenceDetail);
 
-    private static NotificationChannelInfo Ntfy(string? outcome = null, string? reason = null, string? code = null, string? @class = null, string? detail = null) =>
-        new("ntfy", "plugin", true, outcome, reason, code, @class, detail, outcome is null ? null : NineOhSix);
+    private static NotificationChannelInfo Ntfy(string? outcome = null, string? reason = null, string? code = null, string? @class = null, string? detail = null, string? readiness = null, string? readinessDetail = null) =>
+        new("ntfy", "plugin", true, outcome, reason, code, @class, detail, outcome is null ? null : NineOhSix, Readiness: readiness, ReadinessDetail: readinessDetail);
 
     /// <summary>A runtime started an hour after the outcomes the tests write: everything it reports is an earlier runtime's.</summary>
     private static readonly DateTimeOffset AnHourLater = NineOhSix.AddHours(1);
@@ -54,6 +54,30 @@ public sealed class NotificationsCheckTests
 
     private static void Is(StatusCheck check, CheckState state, string fact) =>
         Assert.Equal((state, fact), (check.State, check.Fact));
+
+    /// <summary>
+    /// A plugin channel that is on but could not deliver now is not counted as reaching the person, though its last
+    /// outcome was a delivery: what it would do next is what the person is told, and the toast beside it still counts.
+    /// </summary>
+    [Fact]
+    public async Task A_channel_that_is_on_and_cannot_deliver_is_not_counted_as_reaching_the_person()
+    {
+        var check = await CheckAsync(new NotificationsInfo(
+            true,
+            [Toast("delivered"), Ntfy("delivered", readiness: "binding_invalid", readinessDetail: "/topic: required")],
+            "ntf_01K",
+            NineOhSix));
+
+        Is(check, CheckState.Failed, "ntfy is on but cannot deliver: binding_invalid: /topic: required.");
+    }
+
+    /// <summary>A plugin channel the runtime says is ready is read by its outcome, as before.</summary>
+    [Fact]
+    public async Task A_channel_that_is_ready_is_read_by_its_outcome() =>
+        Is(
+            await CheckAsync(new NotificationsInfo(true, [Toast("delivered"), Ntfy("delivered", readiness: "ready")], "ntf_01K", NineOhSix)),
+            CheckState.Ok,
+            "Notifications reach you by toast and ntfy; the last one was delivered at 2026-10-01 09:06 UTC.");
 
     [Fact]
     public async Task A_runtime_that_did_not_answer_is_not_known() =>
@@ -110,12 +134,12 @@ public sealed class NotificationsCheckTests
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "no session bus", presence: "no_desktop", presenceDetail: "no session bus")], "ntf_01K", NineOhSix)),
             CheckState.Absent,
-            "No desktop for this runtime to show a notification on (no session bus). `Notifications:Toast` set to `false` turns the toast off.");
+            "No desktop for this runtime to show a notification on (no session bus). `jason notification disable toast --actor human:<Name>` turns the toast off.");
 
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast(presence: "no_desktop", presenceDetail: "no notification program")], null, null)),
             CheckState.Absent,
-            "No desktop for this runtime to show a notification on (no notification program). `Notifications:Toast` set to `false` turns the toast off.");
+            "No desktop for this runtime to show a notification on (no notification program). `jason notification disable toast --actor human:<Name>` turns the toast off.");
     }
 
     [Theory]
@@ -212,7 +236,7 @@ public sealed class NotificationsCheckTests
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "no notification daemon")], "ntf_01K", NineOhSix)),
             CheckState.Absent,
-            "No desktop for this runtime to show a notification on (no notification daemon). `Notifications:Toast` set to `false` turns the toast off.");
+            "No desktop for this runtime to show a notification on (no notification daemon). `jason notification disable toast --actor human:<Name>` turns the toast off.");
 
     /// <summary>
     /// A toast the person turned off, then on again: the last line still says it was off, which was their own choice,
@@ -257,7 +281,7 @@ public sealed class NotificationsCheckTests
         Is(
             await CheckAsync(new NotificationsInfo(true, [Toast("not_attempted", "no_desktop", "no notification daemon")], "ntf_01K", NineOhSix), startedAt: NineOhSix),
             CheckState.Absent,
-            "No desktop for this runtime to show a notification on (no notification daemon). `Notifications:Toast` set to `false` turns the toast off.");
+            "No desktop for this runtime to show a notification on (no notification daemon). `jason notification disable toast --actor human:<Name>` turns the toast off.");
 
     /// <summary>And the other way: a runtime in session 0 fails whatever the last line it inherited said.</summary>
     [Fact]

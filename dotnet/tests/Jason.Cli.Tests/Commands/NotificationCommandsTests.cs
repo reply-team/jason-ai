@@ -41,6 +41,25 @@ public class NotificationCommandsTests
         Assert.Equal(ExitCodes.Usage, await cli.RunAsync("notification", verb));
     }
 
+    /// <summary>
+    /// Whoever switches a channel is named, as for a grant: the account's name is not put on it by itself, and a verb
+    /// that names nobody is refused before anything is sent, saying how to name who does it.
+    /// </summary>
+    [Theory]
+    [InlineData("enable")]
+    [InlineData("disable")]
+    public async Task A_verb_that_names_nobody_is_refused_before_anything_is_sent(string verb)
+    {
+        using var cli = new CliRun(Report, accountName: "ada");
+
+        var exit = await cli.RunAsync("notification", verb, "toast");
+
+        Assert.Equal(ExitCodes.Usage, exit);
+        Assert.Equal(0, cli.Requests);
+        Assert.Contains($"notification {verb} needs --actor", cli.Error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("--actor human:<Name>", cli.Error.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A refusal is the runtime's answer, printed as it came, and an understood refusal is exit 1.</summary>
     [Fact]
     public async Task A_refusal_is_printed_as_the_runtime_said_it()
@@ -49,7 +68,7 @@ public class NotificationCommandsTests
             "{\"error\":{\"code\":\"notifications_off\",\"message\":\"Every notification is off: Notifications:Enabled is false in the settings file.\",\"retryable\":false}}",
             status: System.Net.HttpStatusCode.Conflict);
 
-        var exit = await cli.RunAsync("notification", "enable", "toast");
+        var exit = await cli.RunAsync("notification", "enable", "toast", "--actor", "human:person-1");
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.Contains("notifications_off", cli.Text, StringComparison.Ordinal);
@@ -64,7 +83,7 @@ public class NotificationCommandsTests
     {
         using var cli = new CliRun(Report);
 
-        var exit = await cli.RunAsync("notification", "disable", "ntfy", "--human");
+        var exit = await cli.RunAsync("notification", "disable", "ntfy", "--human", "--actor", "human:person-1");
 
         Assert.Equal(ExitCodes.Success, exit);
         var lines = cli.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Trim().Split('\n');
@@ -82,7 +101,7 @@ public class NotificationCommandsTests
     {
         using var cli = new CliRun(Report.Replace("{\"enabled\":true", "{\"enabled\":false", StringComparison.Ordinal));
 
-        var exit = await cli.RunAsync("notification", "disable", "toast", "--human");
+        var exit = await cli.RunAsync("notification", "disable", "toast", "--human", "--actor", "human:person-1");
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.StartsWith("Notifications: off (Notifications:Enabled is false in the settings file)", cli.Text, StringComparison.Ordinal);
@@ -107,5 +126,6 @@ public class NotificationCommandsTests
         Assert.Contains("jason runtime status --human", help, StringComparison.Ordinal);
         Assert.Contains("Notifications:Enabled", help, StringComparison.Ordinal);
         Assert.Contains("not here", help, StringComparison.Ordinal);
+        Assert.Contains("The CLI's default actor does not apply here", help, StringComparison.Ordinal);
     }
 }
