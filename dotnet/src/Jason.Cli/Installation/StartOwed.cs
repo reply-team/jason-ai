@@ -6,13 +6,14 @@ namespace Jason.Cli.Installation;
 
 /// <summary>
 /// The note that a start is owed, at <see cref="JasonPaths.StartOwedFile"/> (<c>run/start-owed.json</c> in the data
-/// directory). <c>jason install</c> writes it once it has stopped this data directory's runtime; a runtime's own start
-/// removes it, and so do a person's own <c>jason runtime stop</c> and an uninstall that keeps the data. So it stands from the
-/// stop until a runtime runs on this data directory again, a routine killed after the stop and a caller that quit before it
-/// started one included.
+/// directory). <c>jason install</c> writes it just before it drains and stops this data directory's runtime, and takes it
+/// back where the runtime then does not stop; a runtime's own start removes it, and so do any stop through
+/// <c>jason runtime stop</c> and an uninstall that keeps the data. So it stands from the stop until a runtime runs on this
+/// data directory again, a routine killed or timed out during the stop's wait and a caller that quit before it started one
+/// included.
 /// </summary>
 /// <remarks>
-/// One JSON object, <c>{"stopped_at":"&lt;ISO-8601 UTC&gt;"}</c>, the moment the runtime was found stopped. Its presence is what decides:
+/// One JSON object, <c>{"stopped_at":"&lt;ISO-8601 UTC&gt;"}</c>, the moment the stop began. Its presence is what decides:
 /// <c>jason status</c> names it while no runtime answers, with <c>jason runtime start</c>, and Jason Desktop starts a
 /// runtime when it finds it standing with none answering. A note that cannot be read still stands.
 /// </remarks>
@@ -81,7 +82,7 @@ internal static class StartOwed
         }
     }
 
-    /// <summary>Takes the note back: a person's own stop, or an uninstall that keeps the data. True where none is left.</summary>
+    /// <summary>Takes the note back: a runtime that did not stop, a stop through the verb, an uninstall that keeps the data. True where none is left.</summary>
     public static bool Remove(JasonPaths paths)
     {
         ArgumentNullException.ThrowIfNull(paths);

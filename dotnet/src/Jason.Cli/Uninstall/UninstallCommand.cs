@@ -41,7 +41,9 @@ public static class UninstallCommand
         $"""
         Removed, in this order, each step reported:
           1. the logon registration, first, so a logon part-way through cannot start what is going: this
-             account's, on Windows including the task an earlier version registered as Jason
+             account's, on Windows including the task an earlier version registered as Jason. On macOS it
+             comes just after step 2: taking the job out of launchd ends the runtime launchd started, with
+             no drain, and the job starts no runtime that stopped
           2. the runtime — and if it will not stop, nothing further is removed
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
              two entries Windows made for it, and the jason: link registration where its command names this
@@ -98,7 +100,9 @@ public static class UninstallCommand
             call of an agent host opened by hand. The application's uninstaller removes nothing while one
             does. The runtime this stops, and every process it started (its plugin hosts, its agents' calls),
             are not counted.
-          - with the logon registration: Open Jason at Login, where it starts this application.
+          - with the logon registration: Open Jason at Login, where it starts this application. On macOS,
+            with --keep-application, its file goes and its job is not unloaded, since the application kept
+            may be that job's own window: the output says the job stays loaded until the next login.
           - with the runtime: the runtime an earlier version's demo left running on its own data directory.
           - with the jason: link: the jason-desktop link registration, where it starts this application.
           - in place of steps 5 and 6: the terminal command jason install placed, by the rules it placed it by:

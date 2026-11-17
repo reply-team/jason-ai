@@ -20,9 +20,9 @@ public static class RuntimeStopCommand
     private static readonly TimeSpan DefaultPoll = TimeSpan.FromMilliseconds(200);
 
     /// <summary>
-    /// The verb a person types: the stop, and on success the note that a start is owed taken back, since a runtime this
-    /// person stopped is not one any start owes them (<see cref="Installation.StartOwed"/>). The routines that stop a runtime
-    /// on their own account call <see cref="RunAsync"/>, which leaves it.
+    /// The verb: the stop, and on success the note that a start is owed taken back, whoever typed it
+    /// (<see cref="Installation.StartOwed"/>). The routines that stop a runtime on their own account call
+    /// <see cref="RunAsync"/>, which leaves it.
     /// </summary>
     public static async Task<int> RunAsDeliberateAsync(CliEnvironment env, bool human, CancellationToken cancellationToken)
     {

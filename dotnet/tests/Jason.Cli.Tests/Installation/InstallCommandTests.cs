@@ -396,36 +396,35 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Contains(report.GetProperty("left").EnumerateArray(), line => line.GetString()!.Contains("`jason runtime start`", StringComparison.Ordinal)
             && line.GetString()!.Contains(_data.Paths.StartOwedFile, StringComparison.Ordinal));
 
-        // The stop owes a start, and the note says so from the moment the runtime is gone until one starts.
-        Assert.False(owedAtTheStop, "the note was written before the runtime had stopped");
+        // The stop owes a start, and the note says so from before the drain until one starts.
+        Assert.True(owedAtTheStop, "the note that a start is owed was not on disk when the runtime was asked to stop");
         Assert.Equal(Path.Combine(_data.Paths.Root, "run", "start-owed.json"), _data.Paths.StartOwedFile);
         Assert.Equal("{\"stopped_at\":\"2026-11-17T15:05:35Z\"}", File.ReadAllText(_data.Paths.StartOwedFile));
         Assert.Equal((true, (DateTimeOffset?)clock.GetUtcNow()), StartOwed.Read(_data.Paths));
     }
 
     /// <summary>
-    /// A routine killed after the stop leaves on disk what it had written by then: the note stands from the moment the
-    /// runtime is found gone, before anything of the routine could start one. The routine is held at its next act after the
-    /// stop (the logon registration's read), the disk read, and then let go with its token cancelled, as an abandoned one;
-    /// nothing it does after takes the note back.
+    /// A routine killed or timed out during the stop's wait (its caller gives up while the runtime, which has acknowledged
+    /// the shutdown, is still going) has started nothing and ends with the stop unfinished; the note written before the drain
+    /// stands, for the next to find. The seam is the routine's own cancellation, taken while it polls for the runtime's exit,
+    /// which the routine says as a problem of an incomplete report; a kill that ends the process says nothing, and leaves the
+    /// same note.
     /// </summary>
     [Fact]
-    public async Task A_routine_killed_after_the_stop_leaves_the_start_owed()
+    public async Task A_routine_killed_during_the_stops_wait_leaves_the_start_owed()
     {
         var old = PlantMacCommandLineInstall();
         Directory.CreateDirectory(_data.Paths.Root);
         _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
         var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
         using var killed = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        using var letGo = new ManualResetEventSlim();
-        var held = new HeldRegistrar(letGo, Ct);
         var handler = new FakeHandler(request =>
         {
             var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
             if (operation == Operations.SystemShutdown)
             {
-                File.Delete(_data.Paths.DescriptorFile);
-                processes.RunningPids.Clear();
+                // Acknowledged, and still running: the routine now waits for the exit, and is killed there.
+                killed.CancelAfter(TimeSpan.FromMilliseconds(300));
                 return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD"));
             }
 
@@ -433,51 +432,22 @@ public sealed class InstallCommandTests : IDisposable
                 ? RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 0), JasonJson.Options))
                 : RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD"));
         });
-        var (env, _) = Environment(MacPlaces(), Carried());
-        env = env with { HttpHandler = handler, Processes = processes, Autostart = held };
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { HttpHandler = handler, Processes = processes };
 
-        var routine = Task.Run(() => InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), killed.Token), Ct);
-        await held.Reached.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        var exit = await InstallCommand.RunAsync(
+            env,
+            new InstallOptions(false, false, null, StopTimeout: TimeSpan.FromSeconds(30), StopPoll: RuntimeVerbs.Poll),
+            killed.Token);
 
-        // What a kill here leaves: the runtime gone, the note on disk, and no runtime started.
-        Assert.Empty(processes.RunningPids);
-        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "the note that a start is owed was not on disk once the runtime had stopped");
+        Assert.True(killed.IsCancellationRequested, "the routine ended before it was killed, so this row tested nothing");
+        Assert.NotEqual(ExitCodes.Success, exit);
+        var report = Report(output);
+        Assert.False(report.GetProperty("completed").GetBoolean());
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains("stopped part-way", StringComparison.Ordinal));
+        Assert.Contains(RuntimeVerbs.Pid, processes.RunningPids);
+        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "a routine killed during the stop's wait left no note that a start is owed");
         Assert.Empty(processes.Launches);
-
-        killed.Cancel();
-        letGo.Set();
-        try
-        {
-            await routine;
-        }
-        catch (OperationCanceledException)
-        {
-            // An abandoned routine may end either way.
-        }
-
-        Assert.True(StartOwed.Read(_data.Paths).Stands, "the note that a start is owed was taken back with no runtime started");
-        Assert.Empty(processes.Launches);
-    }
-
-    /// <summary>A logon registrar that holds whoever reads it until it is let go: the routine's next act after the stop.</summary>
-    private sealed class HeldRegistrar(ManualResetEventSlim letGo, CancellationToken cancellation) : IAutostartRegistrar
-    {
-        public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public AutostartPlatform Platform => AutostartPlatform.MacOs;
-
-        public AutostartState Read()
-        {
-            Reached.TrySetResult();
-            letGo.Wait(cancellation);
-            return new AutostartState(false, [], null);
-        }
-
-        public void Apply(AutostartRegistration registration)
-        {
-        }
-
-        public AutostartRemoval Remove(AutostartRegistration registration) => new(false, false);
     }
 
     /// <summary>

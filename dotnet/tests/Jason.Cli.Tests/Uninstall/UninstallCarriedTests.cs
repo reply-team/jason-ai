@@ -324,6 +324,29 @@ public sealed class UninstallCarriedTests : IDisposable
         return places;
     }
 
+    /// <summary>
+    /// Under <c>--keep-application</c> Open at Login's file goes but its job is not unloaded, since the window kept may be
+    /// that job's own, and one line of the output says the job stays loaded until the next login.
+    /// </summary>
+    [Fact]
+    public async Task Keep_application_says_the_open_at_login_job_stays_loaded_until_the_next_login()
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var agent = DesktopRemoval.LaunchAgentFile(MacPlaces());
+        Directory.CreateDirectory(Path.GetDirectoryName(agent)!);
+        File.WriteAllText(agent, $"<plist><dict><key>ProgramArguments</key>\n<array>\n<string>{Path.Combine(application, "Contents", "MacOS", "Jason")}</string>\n<string>--opened-at-login</string></array></dict></plist>");
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.False(File.Exists(agent), "Open Jason at Login's file is still there");
+        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("launchagent.unload", StringComparison.Ordinal));
+        var done = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("done").EnumerateArray().Select(line => line.GetString()!).ToList();
+        Assert.Single(done, line => line.Contains("stays loaded until the next login", StringComparison.Ordinal) && line.Contains("ai.jasonharness.desktop", StringComparison.Ordinal));
+    }
+
     /// <summary><c>--keep-application</c> keeps all of the application's state: it stays where the application stays.</summary>
     [Fact]
     public async Task Keep_application_keeps_the_applications_own_state()

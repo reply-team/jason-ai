@@ -652,9 +652,13 @@ public static partial class DesktopRemoval
                     if (plan.ApplicationFate == ApplicationFates.Deleted)
                     {
                         env.Removes!.UnloadLaunchAgent(item, Identifier);
+                        env.Removes!.RemoveFile(item);
                     }
-
-                    env.Removes!.RemoveFile(item);
+                    else
+                    {
+                        env.Removes!.RemoveFile(item);
+                        done.Add($"Open Jason at Login's job, {Identifier}, stays loaded until the next login: its file is gone, and the application kept here may be that job's own window, which an unload would end.");
+                    }
                 }
                 else if (OperatingSystem.IsWindows())
                 {

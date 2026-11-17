@@ -39,12 +39,13 @@ public static class InstallCommand
              the record, or on Windows that folder. --retire takes only a regular file named jason (jason.exe
              on Windows) with one of those signs; anything else is named and left. Only a runtime running from
              that executable is stopped, and no runtime is started: `jason runtime start` starts one from this
-             jason. Once it has stopped one it writes run/start-owed.json in the data directory, the moment
-             in it, {"stopped_at":"<ISO-8601 UTC>"}: a start is owed. A runtime's own start removes it, and so
-             do a person's own jason runtime stop and an uninstall that keeps the data; jason status names it
-             while no runtime answers, and Jason Desktop starts one when it finds it standing; a run killed
-             after the stop leaves it standing. Where nothing is to be retired, no runtime is asked anything.
-             A runtime that will not stop is resumed, with no note written, and leaves that install as it is, and so does a runtime that does not name the executable it runs from. Where the data
+             jason. Just before it drains and stops one it writes run/start-owed.json in the data directory,
+             the moment in it, {"stopped_at":"<ISO-8601 UTC>"}: a start is owed. A runtime's own start removes
+             it, and so do any stop through jason runtime stop and an uninstall that keeps the data; jason
+             status names it while no runtime answers, and Jason Desktop starts one when it finds it standing;
+             a run killed or timed out during the stop's wait leaves it standing. Where nothing is to be
+             retired, no runtime is asked anything. A runtime that will not stop is resumed, its note taken
+             back, and leaves that install as it is, and so does a runtime that does not name the executable it runs from. Where the data
              directory's layout.json names a layout newer than this jason runs (layout_newer) or cannot be
              read (layout_unreadable), no runtime is stopped, no registration moved and nothing of that
              install retired, with --roles or without.
