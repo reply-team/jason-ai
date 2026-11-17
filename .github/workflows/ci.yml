@@ -2000,25 +2000,38 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
 
-      # The next version, built as a test build the same way at this version and one, for the Desktop's own window-less
-      # update below; its updater feed is served from a folder of its own.
+      # The next version, packaged and built as a test build the same way at this version and one: its own jason, its
+      # setup, its update feed and a manifest naming it, in a folder of its own that the update below reads.
+      - name: Package jason at the next version
+        id: next
+        uses: ./.github/actions/package
+        with:
+          rid: win-x64
+          version: ${{ env.VERSION }}.1
+          artifact: ci-union-win-x64-next
+          retention-days: 3
+
       - name: Build the next version as a test build
         shell: pwsh
         working-directory: desktop
         env:
-          EXECUTABLE: ${{ steps.package.outputs.executable }}
+          EXECUTABLE: ${{ steps.next.outputs.executable }}
+          NEXT: ${{ env.VERSION }}.1
           JASON_DESKTOP_TEST_BUILD: '1'
         run: |
-          ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version "$($env:VERSION).1" -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+          ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version $env:NEXT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
           $next = Join-Path $env:GITHUB_WORKSPACE 'next'
           New-Item -ItemType Directory -Force -Path $next | Out-Null
+          Copy-Item ../artifacts/release/jason-win-x64.zip, ../artifacts/release/jason-win-x64.zip.sha256, ../artifacts/release/jason-win-x64.fragment.json $next
           Copy-Item dist/jason-desktop-windows-x64-setup.exe, dist/jason-desktop-windows-x64-setup.exe.blockmap, dist/latest.yml $next
-          Get-Content (Join-Path $next 'latest.yml')
+          Copy-Item (Join-Path $env:FEED 'jason-skills.zip') $next
+          ../.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory $next -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
+          Get-Content (Join-Path $next 'manifest.json')
 
-      # Jason.exe --update-apply on a real install of this test build: to the next one with no window open, and refused by
-      # an open window, which takes no request naming a feed. The test build's updater checks no publisher, and the start
-      # is made directly, not through jason update apply.
-      - name: Update the test build with no window, through Jason Desktop's own start
+      # The carried jason update apply on a real install of this test build: to the next one with no window open, handed to
+      # Jason Desktop and finished by the new jason, not refused as elevated on this runner; then refused by an open window,
+      # which takes no request naming a feed. The test build's updater checks no publisher.
+      - name: Update the test build from a terminal with jason update apply
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
@@ -2044,7 +2057,7 @@ jobs:
           @(
             '### What this job does not prove',
             '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
-            '- The updater''s publisher check and the command line''s hand-over: this build''s updater checks no publisher, and its window-less update is started directly, not by jason update apply; with a window open only the refusal of a request naming a feed is seen, not window_open.',
+            '- The updater''s publisher check, and window_open: this build''s updater checks no publisher, and with a window open only the refusal of a request naming a feed is seen.',
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY

@@ -575,11 +575,12 @@ switch ($Step) {
     }
 
     'UpdateApply' {
-        # The Desktop's own window-less update (Jason.exe --update-apply, docs/release-and-update.md "Handing the update to
-        # Jason Desktop"), on a real install of this test build, to a next test build served on the loopback: no window
-        # open, then again with one open, which refuses a request naming a feed. The test build's updater checks no
-        # publisher, so this says nothing of the signature check; and it starts the application directly, not through
-        # jason update apply.
+        # The carried jason update apply on a real install of this test build, to a next test build - its own jason, its
+        # setup and its feed - served on the loopback (docs/release-and-update.md, "Handing the update to Jason Desktop"):
+        # with no window open, the verb hands the update to Jason Desktop, which installs it with --updated /S, and the new
+        # carried jason finishes it; this runner's administrator has no split token, so the verb is not refused with
+        # update_elevated. Then with a window open, which refuses a request naming a feed (window_feed). The test build's
+        # updater checks no publisher, so this says nothing of the signature check.
         if (-not $Feed -or -not $Version -or -not $Script -or -not $Next) { Fail '-Feed, -Version, -Script and -Next are needed.' }
         $nextVersion = "$Version.1"
         $installed = Invoke-InstallScript $Script
@@ -590,40 +591,29 @@ switch ($Step) {
 
         $server = Start-Process python -ArgumentList '-m', 'http.server', '8098', '--bind', '127.0.0.1', '--directory', $Next -PassThru -NoNewWindow
         try {
-            Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/latest.yml' -UseBasicParsing).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
-            $desktop = Join-Path $app 'Jason.exe'
-            $feedAddress = 'http://127.0.0.1:8098/'
+            Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/manifest.json' -UseBasicParsing).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
+            $feedAddress = 'http://127.0.0.1:8098/manifest.json'
 
-            # No window open: the start takes the request itself, stops the runtime, keeps the application aside and runs the
-            # installer --updated /S, with no start of the application after it.
-            $id = 'ci-no-window'
-            $exit = Wait-Program $desktop @('--update-apply', '--to', $nextVersion, '--request', $id, '--feed', $feedAddress)
-            $file = Join-Path $data "updatedesktop-$id.json"
-            if (-not (Test-Path -LiteralPath $file)) { Fail "the window-less start (exit $exit) wrote no request file at $file" }
-            $answer = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
-            Write-Host (Get-Content -LiteralPath $file -Raw)
-            if ($answer.state -cne 'installing') { Fail "the window-less request ended '$($answer.state)' ($($answer.reason): $($answer.message)), not installing" }
-            if ($answer.window -ne $false) { Fail 'a window took the window-less request' }
-            if ($answer.runtime_stopped -ne $true) { Fail 'the runtime the application carries was not stopped for the update' }
-            if (-not $answer.kept -or -not (Test-Path -LiteralPath $answer.kept)) { Fail "no copy of the application was kept aside: '$($answer.kept)'" }
-            Wait-Until { (Read-Version $carried) -eq $nextVersion } 180 "the installer putting $nextVersion in place"
-            Start-Sleep -Seconds 5
-            if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -ne 0) { Fail 'the application was started after a window-less update' }
-            if ((Invoke-Program $carried @('runtime', 'status')).Exit -eq 0) { Fail 'a runtime answers after the window-less update, which starts none' }
-            Say "Jason.exe --update-apply with no window (exit $exit): the runtime stopped, the application kept aside, $nextVersion installed by --updated /S, nothing started after it"
+            # No window open: the update goes through.
+            $applied = Invoke-Program $carried @('update', 'apply', '--feed', $feedAddress, '--drain-seconds', '0')
+            $applied.Said | ForEach-Object { Write-Host $_ }
+            if ($applied.Flat.Contains('update_elevated')) { Fail 'the carried jason update apply was refused with update_elevated on a runner whose administrator has no split token' }
+            if ($applied.Exit -ne 0) { Fail "the carried jason update apply exited with $($applied.Exit)" }
+            Wait-Until { (Read-Version $carried) -eq $nextVersion } 180 "the application's version.json naming $nextVersion"
+            if (((Read-Version $carried) -split '\+')[0] -ne $nextVersion) { Fail "after the update the application is $(Read-Version $carried)" }
+            $said = (Invoke-Program $carried @('--version')).Said
+            if ((("$said".Trim()) -split '\+')[0] -ne $nextVersion) { Fail "after the update the carried jason says '$said', not $nextVersion" }
+            if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { Fail 'no runtime answers after the update, which starts one again' }
+            if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -ne 0) { Fail 'a window was started by an update asked for from a terminal' }
+            Say "the carried jason update apply, not refused as elevated, handed $nextVersion to Jason Desktop with no window; the application and its jason say $nextVersion and the runtime answers again"
 
-            # A window open: the request goes to it, and it refuses a request that names a feed before it checks anything.
+            # A window open: the Desktop refuses a request that names a feed, and the verb says so.
             $opened = Open-Window
-            $id = 'ci-window'
-            $exit = Wait-Program $desktop @('--update-apply', '--to', $nextVersion, '--request', $id, '--feed', $feedAddress)
-            if ($exit -ne 3) { Fail "the start with a window open exited with $exit, not 3, which says the window took the request" }
-            $file = Join-Path $data "updatedesktop-$id.json"
-            Wait-Until { Test-Path -LiteralPath $file } 30 'the window''s answer to the request'
-            Wait-Until { (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).state -cne 'checking' } 30 'the window''s answer reaching its end'
-            $answer = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
-            Write-Host (Get-Content -LiteralPath $file -Raw)
-            if ($answer.state -cne 'refused' -or $answer.reason -cne 'window_feed' -or $answer.window -ne $true) { Fail "the open window answered '$($answer.state)' ($($answer.reason)), not refused for window_feed" }
-            Say 'with a window open the start handed the request to it (exit 3), and the window refused a request naming a feed, window_feed'
+            $refused = Invoke-Program $carried @('update', 'apply', '--feed', $feedAddress, '--drain-seconds', '0')
+            $refused.Said | ForEach-Object { Write-Host $_ }
+            if ($refused.Exit -ne 1 -or -not $refused.Flat.Contains('update_refused_by_desktop') -or -not $refused.Flat.Contains('window_feed')) { Fail "with a window open the update was not refused as update_refused_by_desktop, window_feed (exit $($refused.Exit))" }
+            if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) { Fail 'the refused update left no runtime answering' }
+            Say 'with a window open the carried jason update apply was refused by the window, update_refused_by_desktop for window_feed, and the runtime is as it was'
             $opened | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
             Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
         } finally {
