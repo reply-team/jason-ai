@@ -333,6 +333,38 @@ public class ConfinedVerbsTests
         Assert.NotEmpty(run.Requests);
     }
 
+    /// <summary>
+    /// The notification noun is confined verb by verb, as the plugin noun is, not as a whole: so every verb the CLI
+    /// registers under it is covered by an entry, and a verb added there later is a difference in this row before it is a
+    /// switch the chat could run.
+    /// </summary>
+    [Fact]
+    public void Every_verb_the_cli_registers_under_the_notification_noun_is_confined()
+    {
+        using var paths = new TempPaths();
+        var root = CliApp.BuildRootCommand(new CliEnvironment(TextWriter.Null, TextWriter.Null, paths.Paths));
+        var noun = Assert.Single(root.Subcommands, command => command.Name == "notification");
+
+        Assert.NotEmpty(noun.Subcommands);
+        var open = noun.Subcommands.Select(verb => $"notification {verb.Name}").Where(verb => ConfinedVerbs.Covering(verb) is null).ToList();
+        Assert.True(open.Count == 0, $"Not confined: {string.Join(", ", open)}");
+    }
+
+    /// <summary>
+    /// The noun alone, and its help, run no verb: confined, each sends nothing. The bare noun is a usage error, as it is
+    /// unconfined; its help names the two verbs, whose own help states the rule.
+    /// </summary>
+    [Theory]
+    [InlineData(ExitCodes.Usage, "notification")]
+    [InlineData(ExitCodes.Success, "notification", "--help")]
+    public async Task Confined_the_notification_noun_alone_sends_nothing(int exit, params string[] args)
+    {
+        var run = await DefaultActorTests.RunEachAsync(args, new Dictionary<string, string> { [Variable] = "1" });
+
+        Assert.Equal(exit, run.Exit);
+        Assert.Empty(run.Requests);
+    }
+
     /// <summary>Help is not a run of the verb: a refused command still shows its help, and the help states the rule.</summary>
     [Theory]
     [MemberData(nameof(Entries))]

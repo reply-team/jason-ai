@@ -308,6 +308,21 @@ public class DesktopDenyListTests
         Assert.Empty(allowed.Where(verb => DefaultActorTests.NoDefaultActor.Select(DefaultActorTests.VerbOf).Contains(verb)).ToList());
     }
 
+    /// <summary>
+    /// A noun the deny list refuses verb by verb is named by nothing on the allow list: so its bare noun, its help and a
+    /// verb added under it later are never let through by the host, and go to the person's card unless refused outright.
+    /// </summary>
+    [Fact]
+    public void The_allow_list_names_nothing_under_the_notification_noun()
+    {
+        var file = Path.Combine(RepositoryRoot(), "desktop", "chat-allow-list.txt");
+        var allowed = File.ReadAllLines(file).Select(line => line.Trim()).Where(line => line.Length > 0 && !line.StartsWith('#'));
+
+        Assert.DoesNotContain(allowed, verb => verb == "notification" || verb.StartsWith("notification ", StringComparison.Ordinal));
+        Assert.Contains("notification enable", DenyList());
+        Assert.Contains("notification disable", DenyList());
+    }
+
     [Fact]
     public void The_deny_list_holds_every_verb_that_takes_no_default_actor()
     {
