@@ -78,17 +78,34 @@ function Count-Entry([string] $folder) {
     @((Get-UserPath).Entries | Where-Object { [Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $folder.TrimEnd('\') }).Count
 }
 
-# A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
 # A program run to its own end, and not its children's, and its exit code: Start-Process -Wait also waits for every
 # process the program started, and an installer run with --force-run starts the application, which never ends by itself.
-function Wait-Program([string] $file, [string[]] $arguments, [int] $seconds = 600) {
+# A program that has not ended by the bound is described before the step fails: every process it started, and every
+# process of the application's folder and of jason, with its command line, so that the run says what it waited on.
+function Wait-Program([string] $file, [string[]] $arguments, [int] $seconds = 300) {
     $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
     # The handle, taken now, keeps the exit code readable once the process has ended.
     $null = $process.Handle
-    if (-not $process.WaitForExit($seconds * 1000)) { Fail "$file $($arguments -join ' ') had not ended after $seconds seconds" }
+    if (-not $process.WaitForExit($seconds * 1000)) {
+        $all = @(Get-CimInstance -ClassName Win32_Process)
+        $ids = @($process.Id)
+        Write-Host "$file $($arguments -join ' ') (process $($process.Id)) had not ended after $seconds seconds; the processes it started:"
+        for ($at = 0; $at -lt $ids.Count; $at++) {
+            foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) {
+                $ids += $child.ProcessId
+                Write-Host "  $($child.ProcessId), started by $($child.ParentProcessId): $($child.CommandLine)"
+            }
+        }
+        Write-Host 'every process of the application folder and of jason:'
+        foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
+            Write-Host "  $($running.ProcessId), started by $($running.ParentProcessId): $($running.CommandLine)"
+        }
+        Fail "$file $($arguments -join ' ') had not ended after $seconds seconds"
+    }
     return $process.ExitCode
 }
 
+# A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
 function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}) {
     $saved = @{}
     foreach ($name in $environment.Keys) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $environment[$name]) }
