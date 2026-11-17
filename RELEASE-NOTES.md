@@ -19,43 +19,26 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.48.1
+# Jason 0.48.2
 
-## What is new since 0.48.0
+## Fixed since 0.48.1
 
-This patch release is about the first minutes with Jason: the install page offers its two ways side by side, Jason
-Desktop's chat says when it waits for you and what became of what you approved, and the chat is given your memory files.
+- **Jason Desktop's Command Line item puts `jason` where a terminal finds it, on macOS and Linux.** The item placed
+  the command in `~/.local/bin` and said nothing more, and where that folder was not on the PATH, as on a fresh Mac, a
+  terminal did not find `jason`. Now, when the folder is not on your login shell's PATH, the item also adds it there
+  by the install script's own rule: your login profile for your shell, and `~/.zshrc` or `~/.bashrc` for zsh and bash,
+  one marked line each, never twice. The confirmation names every file it will write and the line, and afterwards it
+  says where the line went and to open a new terminal. A profile file it cannot write is named, with the line to add
+  by hand. **Remove jason from the PATH…** and the desktop's own removal take back only the line they wrote, and only
+  where the folder then holds nothing but what Jason placed there; where other programs live in it, the line stays and
+  the item says so. Windows is unchanged.
 
-- **Two ways to install, neither ranked.** Given only Jason's address, an agent asks before it installs, and now offers
-  both ways, each said by whom it suits: the command line with your own agent, if you are at home in a terminal or an
-  editor, or Jason Desktop, if you want a desktop application, signed on Windows and macOS, with the terminal open to
-  you later. With no preference, it offers Jason Desktop. Given the three lines under Quick start, it installs the
-  command line as before and names Jason Desktop once when it hands over. The README, the install page, the Desktop's
-  own page and the `operating-the-installation` skill say the same.
-- **The chat says when it waits for you.** While a card under the conversation asks for your permission, the line under
-  the thread reads "Waiting for your answer on the card above." instead of "Thinking...".
-- **A message you send stays in view.** A message you send, and a card that asks you something, scroll the conversation
-  to its foot, above the box you type in. Opening a conversation or moving between them keeps its place.
-- **What you approved stays in the chat.** An approval you give on a card under the chat is kept as "You approved: ...",
-  followed to the end of its work: "Jason will send it." while it is queued, "Jason is sending it." while it runs, "It
-  was sent." once it succeeded, and a plain line when it did not, or when it is held again.
-- **A card's heading matches its body.** The card that lists what waits for your decision is headed "Your decisions"
-  when nothing waits, and "Waiting for you" is drawn only over something that does.
-- **The chat is given your memory files.** Jason Desktop reads your `AGENTS.md` files itself and gives them to the
-  agent at the start of a conversation: the client's to every chat, the Feed and set-up chats included, and the
-  project's and the campaign's as well in a campaign's chat. A file is given again only when it changes, and all of
-  them again after Start fresh. The chat does not write these files: when you state a standing rule, it says the exact
-  line and the file it belongs in. Only folders the runtime records are read; a file reached through a link, over
-  32 KiB, or that does not answer in time is named to the agent, so the chat can tell you. What the chat may read and
-  write on your computer is unchanged, and the desktop's log and conversation record keep that a file was given, never
-  its words.
-
-## Upgrading from 0.48.0
+## Upgrading from 0.48.1
 
 Nothing stops, no setting is renamed and no migration runs.
 
-- **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
-  console's changes.
-- **The desktop is a separate install:** `jason update` does not install it. Download the installer, the disk image or
-  the Linux package for your machine from this release, or let an installed desktop offer the update.
-- **From 0.47.2 or earlier,** the notes of each release in between apply as well.
+- **The desktop:** update it from this release's installers or the update an installed desktop offers. Where an
+  earlier desktop placed the command, the updated one offers **Put jason on the PATH…** once more, and that act writes
+  only the profile lines.
+- **The executable:** `jason update apply`, or run the install line again; nothing in it changed for this fix.
+- **From 0.48.0 or earlier,** the notes of each release in between apply as well.
