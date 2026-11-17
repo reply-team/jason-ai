@@ -88,10 +88,11 @@ public static class InstallCommand
           4. The harness skills, both packs, from the skills beside this jason (read where they stand, nothing
              downloaded), into the folder of each of two hosts found by its home folder, and of no other:
              Claude Code (~/.claude -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which
-             Copilot, Cursor and Gemini CLI read too); another host's are `jason skills install --host`'s.
-             Each is recorded in .jason-skills.json. A skill folder there under a name Jason ships
-             that no record of Jason's names is yours: left as it is, and named; one whose files equal this
-             jason's, byte for byte, is one an earlier deployment wrote before its record, and is adopted.
+             Copilot, Cursor and Gemini CLI read too); another host takes them from
+             `jason skills install --host <host>`. Each is recorded in .jason-skills.json. A skill folder
+             there under a name Jason ships that no record of Jason's names is yours: left as it is, and
+             named; one whose files equal this jason's, byte for byte, is one an earlier deployment wrote
+             before its record, and is adopted.
           5. With --roles, the role skills into the data directory, as `jason skills install --roles-only`.
 
         Written under the data directory: nothing without --roles, so an application's first start still opens
