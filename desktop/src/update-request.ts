@@ -168,6 +168,13 @@ export function asksForWindow(argv: readonly string[], data: unknown, atLogin: (
     return requestOf(data) === null && updateStart(argv) === null && !atLogin(argv);
 }
 
+/** What the window-less start shows once, to a person who opened Jason Desktop while it holds the lock. */
+export const updatingWords = {
+    message: 'Jason is updating.',
+    // Where the update installs a new version nothing opens it after the installer: that is said, not promised away.
+    detail: 'Jason Desktop opens once the update is done; where it installs a new version, that version opens the next time you start Jason.',
+};
+
 /** Pure: whether the window-less start opens the application as it exits: a window was asked for, and nothing was installed. */
 export function openAfterRequest(windowAsked: boolean, code: number | null): boolean {
     return windowAsked && code !== null;

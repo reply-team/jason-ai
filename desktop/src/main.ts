@@ -35,12 +35,12 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
-import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
+import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
 import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
-import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
+import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed, UpdateBusy } from './installation.ts';
+import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, startPastUpdate, StillUpdating, stillUpdatingSentence, updateHolds, updateWaitMs, updateWaitSentence, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -731,25 +731,40 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     try {
         // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
-        // refuses a runtime's start until that step has started one (`startAfterSetup`).
-        const started = await startAfterSetup(
+        // refuses a runtime's start until that step has started one (`startAfterSetup`). Where an update still holds the
+        // start, the set-up's or a terminal's, it is asked again, bounded, and never settled as a failed start
+        // (`startPastUpdate`).
+        const started = await startPastUpdate(
             () =>
-                startInstallation({
-                    cli,
-                    paths,
-                    log,
-                    programs,
-                    bundle,
-                    bundleVersion: version,
-                    gate: skillsGate,
-                    settings,
-                    saveSettings(next) {
-                        settings = next;
-                        writeSettings(paths.settings, next);
-                    },
-                }),
-            machineSetup,
-            () => showStarting(window, finishWaitSentence, false),
+                startAfterSetup(
+                    () =>
+                        startInstallation({
+                            cli,
+                            paths,
+                            log,
+                            programs,
+                            bundle,
+                            bundleVersion: version,
+                            gate: skillsGate,
+                            settings,
+                            saveSettings(next) {
+                                settings = next;
+                                writeSettings(paths.settings, next);
+                            },
+                        }),
+                    machineSetup,
+                    () => showStarting(window, finishWaitSentence, false),
+                ),
+            {
+                holds: (error) =>
+                    updateHolds(error, machineSetup?.state ?? null, {
+                        busy: (failed) => failed instanceof UpdateBusy,
+                        refusedData: (failed) => failed instanceof LayoutRefused || failed instanceof DataNewerRefused,
+                    }),
+                waiting: () => showStarting(window, updateWaitSentence, false),
+                sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+                now: () => Date.now(),
+            },
         );
         runtimeVersion = started.runtimeVersion;
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
@@ -788,19 +803,26 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
-        // offered, since an older version knows that directory no better.
-        const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
-        const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
-        const said = error instanceof Error ? error.message : String(error);
-        const notice = failedStartNotice(
-            said,
-            layoutRefused,
-            kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
-            aside ?? applicationFolder(process.platform, process.execPath),
-            process.platform,
-        );
-        if (current !== null) await showStarting(current, notice, true);
+        // An update that still held the start past the bound settles nothing: the version is neither kept nor refused, and
+        // the next start decides.
+        if (error instanceof StillUpdating) {
+            log.warn('start_left_to_update', { Seconds: updateWaitMs / 1000 });
+            if (current !== null) await showStarting(current, stillUpdatingSentence, true);
+        } else {
+            // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
+            // offered, since an older version knows that directory no better.
+            const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
+            const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
+            const said = error instanceof Error ? error.message : String(error);
+            const notice = failedStartNotice(
+                said,
+                layoutRefused,
+                kept === null ? null : kept.directory === null ? { release: previousRelease(kept.fromVersion), file: debFile } : { copy: kept.directory },
+                aside ?? applicationFolder(process.platform, process.execPath),
+                process.platform,
+            );
+            if (current !== null) await showStarting(current, notice, true);
+        }
     }
     if (otherCopy !== null && version !== null) {
         const named = async (): Promise<readonly string[] | null> => {
@@ -1206,7 +1228,10 @@ function startUpdate(updating: UpdateStart): void {
     app.on('second-instance', (_event, argv, _directory, data) => {
         const other = requestOf(data);
         if (other !== null) return requests.arrived(other);
-        if (asksForWindow(argv, data, openedAtLogin)) windowAsked = true;
+        if (!asksForWindow(argv, data, openedAtLogin)) return;
+        // Said once, with no window of its own to stand on and nothing waited for: the update goes on meanwhile.
+        if (!windowAsked) void dialog.showMessageBox({ type: 'info', title: windowTitle, ...updatingWords, buttons: ['OK'] }).catch(() => undefined);
+        windowAsked = true;
     });
     const exit = (code: number): void => {
         if (openAfterRequest(windowAsked, code)) {

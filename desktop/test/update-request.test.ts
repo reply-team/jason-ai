@@ -32,6 +32,7 @@ import {
     takeRequest,
     UpdateRequests,
     updateStart,
+    updatingWords,
     usageRecord,
     waitForGo,
     windowOpenUpdate,
@@ -777,7 +778,13 @@ test('a person who opens Jason Desktop while a window-less request holds the loc
     // main: the window-less start remembers it on second-instance and relaunches only on its own exit path.
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const start = main.slice(main.indexOf('function startUpdate('), main.indexOf('\n}\n', main.indexOf('function startUpdate(')));
-    assert.ok(start.includes('if (asksForWindow(argv, data, openedAtLogin)) windowAsked = true;'));
+    assert.ok(start.includes('if (!asksForWindow(argv, data, openedAtLogin)) return;'));
+    // (f) The holding start says once that Jason is updating, waits for no answer, and promises no window after an install.
+    const said = start.indexOf("if (!windowAsked) void dialog.showMessageBox({ type: 'info', title: windowTitle, ...updatingWords, buttons: ['OK'] }).catch(() => undefined);");
+    assert.ok(said > 0 && said < start.indexOf('windowAsked = true;'));
+    assert.equal(start.split('showMessageBox(').length - 1, 1);
+    assert.equal(updatingWords.message, 'Jason is updating.');
+    assert.match(updatingWords.detail, /^Jason Desktop opens once the update is done; where it installs a new version, that version opens the next time you start Jason\.$/);
     assert.ok(start.includes('if (openAfterRequest(windowAsked, code)) {'));
     assert.ok(start.indexOf('app.relaunch(') < start.indexOf('app.exit(code);'));
     assert.equal(start.split('app.relaunch(').length - 1, 1);

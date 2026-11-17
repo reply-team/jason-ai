@@ -564,6 +564,62 @@ export async function startAfterSetup<T>(start: () => Promise<T>, setup: { reado
     }
 }
 
+/** How long Live's start waits, at most, for an update that holds the runtime's start, and how often it asks again. */
+export const updateWaitMs = 10 * 60_000;
+export const updatePollMs = 5_000;
+
+/** Live's start, past the bound of an update that still held it: no failed start, and nothing settled. */
+export class StillUpdating extends Error {
+    constructor() {
+        super(stillUpdatingSentence);
+    }
+}
+
+/** What the page says while Live's start waits for an update that holds it. */
+export const updateWaitSentence = 'An update of this installation is still being finished; Jason starts the runtime once it has ended…';
+
+/** What the page says where the wait passed its bound. */
+export const stillUpdatingSentence =
+    'An update of this installation is still being finished, so Jason did not start the runtime. Start Jason again once it has ended; jason update status says where it stands.';
+
+/**
+ * Pure but for what it is given: whether a failure of Live's start is an update holding it, which is waited for and never
+ * settles a first start as failed: `jason runtime start` refused `update_in_progress` or `install_in_progress`, or any
+ * failure but a refused layout or database where the set-up met the update's lock and answered `later`.
+ */
+export function updateHolds(error: unknown, setup: SetupState | null, kinds: { busy(error: unknown): boolean; refusedData(error: unknown): boolean }): boolean {
+    if (kinds.busy(error)) return true;
+    if (kinds.refusedData(error) || setup === null) return false;
+    return setup.state === 'later' || (setup.state === 'reported' && setup.later !== undefined);
+}
+
+/**
+ * Live's bringing up of the installation where an update holds it (`updateHolds`): tried again every `pollMs` until it
+ * starts or fails otherwise, the page saying once what it waits for. Past `boundMs` with the update still holding it,
+ * `StillUpdating` is thrown, which settles nothing: the version is neither kept nor refused, and the next start decides.
+ * The lock itself is never touched: it is asked about only by the start being refused.
+ */
+export async function startPastUpdate<T>(
+    start: () => Promise<T>,
+    deps: { holds(error: unknown): boolean; waiting(): Promise<void>; sleep(ms: number): Promise<void>; now(): number; boundMs?: number; pollMs?: number },
+): Promise<T> {
+    const deadline = deps.now() + (deps.boundMs ?? updateWaitMs);
+    let said = false;
+    for (;;) {
+        try {
+            return await start();
+        } catch (error) {
+            if (!deps.holds(error)) throw error;
+            if (deps.now() >= deadline) throw new StillUpdating();
+            if (!said) {
+                said = true;
+                await deps.waiting().catch(() => undefined);
+            }
+            await deps.sleep(deps.pollMs ?? updatePollMs);
+        }
+    }
+}
+
 /** What the page says while Live waits for the set-up's finishing step before it starts the runtime again. */
 export const finishWaitSentence = 'Waiting for the set-up to finish updating this installation, which starts the runtime; Jason opens once it has.';
 

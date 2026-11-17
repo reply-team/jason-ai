@@ -391,7 +391,11 @@ nothing recorded, the item says it is left for the next start, and it is no fail
 data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
 window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,
 and then goes on while it finishes; a runtime start an update in flight refused meanwhile is made again once the set-up
-has ended, the window saying meanwhile that it waits for the set-up to finish updating the installation. The application never ends a run; one still running after five minutes is said in the Command Line item as
+has ended, the window saying meanwhile that it waits for the set-up to finish updating the installation. A start that
+finds an update still holding the runtime's start, its own set-up's or a terminal's `jason update apply`
+(`update_in_progress`, `install_in_progress`, or a set-up left for later), asks again every five seconds for up to ten
+minutes and is never counted as a failed first start of the version; past that the window says the update is still being
+finished, nothing is recorded of that start, and the next start decides. The application never ends a run; one still running after five minutes is said in the Command Line item as
 taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
 start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
 run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in
@@ -1028,8 +1032,8 @@ update to Jason Desktop"). The download is kept in the updater's cache under you
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
 also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. While such
 a request runs with no window it holds the application's single-instance lock, for up to forty-five minutes where it
-waits for the command's go: opening Jason Desktop meanwhile shows nothing at once, and the application opens as the
-request ends, unless the request installed the update, after which the new version opens at your next start. Where a
+waits for the command's go: opening Jason Desktop meanwhile shows one message that Jason is updating, and the application
+opens as the request ends, unless the request installed the update, after which the new version opens at your next start. Where a
 window takes the request and may close for it, the menu's install refuses while the request is under way, since the
 request installs itself. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer

@@ -377,7 +377,7 @@ test('a windowed start runs the routine before the Demo or Live run goes on, and
     const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
     const waited = run.indexOf('await machineSetup?.settledWithin(liveWaitMs);');
     assert.equal(run.includes('await machineSetup?.settled();\n\n    try {'), false, 'never the whole run');
-    assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startAfterSetup('), 'the window is up first, and the installation after the routine');
+    assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startPastUpdate('), 'the window is up first, and the installation after the routine');
     // The Demo's run itself still makes no jason and touches no set-up: the one start a Demo start may make, of a runtime the
     // routine left down, is the set-up's own, through the door the factory gives it on the person's descriptor.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
@@ -690,7 +690,7 @@ test('Live’s start is tried once more after the set-up ends where it failed wh
     }, { state: { state: 'running' }, settled: async () => void (said.push('settled'), (settledNow = true)) }, async () => void said.push('said'));
     assert.deepEqual(said, ['said', 'settled']);
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    assert.ok(main.includes('            machineSetup,\n            () => showStarting(window, finishWaitSentence, false),\n        );'));
+    assert.ok(main.includes('                    machineSetup,\n                    () => showStarting(window, finishWaitSentence, false),\n                ),'));
     assert.match(finishWaitSentence, /^Waiting for the set-up to finish updating this installation/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, { state: { state: 'idle' }, settled: async () => undefined }), /refused/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, null), /refused/);
