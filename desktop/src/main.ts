@@ -9,7 +9,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeThem
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
 import { fenceRefusal, readFence, type ChatFence } from './chat-deny.ts';
@@ -17,7 +17,7 @@ import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
-import { cliAt, type Cli } from './cli.ts';
+import { cliAt, startJasonAlone, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
@@ -61,6 +61,7 @@ import { codexAsker, ModelLists } from './model-lists.ts';
 import { accountShell, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
@@ -428,8 +429,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     }
     const keptCopy = () => keptLine(readRollback(rollback), app.getVersion(), existsSync);
-    // Remove What Jason Placed, on macOS and Linux: the uninstall's own steps, over the same items the menu sets. Offered
-    // in Live alone (`offersOf`).
+    // Remove What Jason Placed, on Linux: the uninstall's own steps, over the same items the menu sets. Offered in Live
+    // alone (`offersOf`). On macOS, Uninstall Jason…: the one uninstall, the carried jason's, started on its own once the
+    // person says so, waiting for this process to quit.
     const removal = offers.removal && removalOffered(process.platform)
         ? placedRemoval({
               platform: process.platform,
@@ -454,7 +456,19 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
     // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
     const modeDeps = modeSwitch(log, form);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps) });
+    const uninstall = offers.removal && uninstallOffered(process.platform) && version !== null && carried.outlives
+        ? {
+              scope: () => ({
+                  application: applicationFolder(process.platform, process.execPath),
+                  dataDirectory: paths.data,
+                  harnessRoot: harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile),
+                  output: uninstallOutput(tmpdir(), new Date()),
+              }),
+              start: (args: string[], output: string) => startJasonAlone(executable, args, env, output),
+              pid: process.pid,
+          }
+        : null;
+    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, uninstall, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {

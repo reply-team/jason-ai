@@ -139,7 +139,8 @@ test('the update, the installer’s stop and the uninstall stop a runtime an ear
     for (const gone of ['prepareDemo(', 'openDemoDirectory', 'writeDemoSettings(', 'placeDemoPlugin(']) assert.equal(main.includes(gone), false, gone);
     const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
     assert.ok(start.includes('stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime('));
-    assert.ok(start.includes('runtime: { stop: () => stopWithDemo(() => stopOwnRuntime(own), () => stopDemo()) },'));
+    // The uninstall's own stop is the carried jason's now: it stops the demo's runtime before it takes the demo's folders.
+    assert.ok(start.includes('carriedUninstallArgs'));
     const placed = readFileSync(join(desktop, 'src', 'remove-placed.ts'), 'utf8');
     assert.ok(placed.includes('stopWithDemo(() => stopFromAny(candidates(), (executable) => input.stopAs(executable)), () => input.stopDemo())'));
 });

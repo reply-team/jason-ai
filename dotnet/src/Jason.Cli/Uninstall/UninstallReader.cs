@@ -14,7 +14,7 @@ namespace Jason.Cli.Uninstall;
 /// </summary>
 public static class UninstallReader
 {
-    public static UninstallPlan Read(CliEnvironment env, bool purgeData)
+    public static UninstallPlan Read(CliEnvironment env, bool purgeData, DesktopPlan? desktop = null)
     {
         ArgumentNullException.ThrowIfNull(env);
 
@@ -66,7 +66,10 @@ public static class UninstallReader
         // And a file a package manager installed is the manager's, with its directory and the PATH entry that reaches
         // it: none of the three is planned for removal, and the plan names them as left to the manager instead.
         var owner = PackageOwner.Of(env);
-        var executable = owner is null ? env.InstallPath ?? SelfExecutable.InstalledImage : null;
+        //
+        // And the jason the application carries is the application's: the application's own step takes it, with the rest of
+        // the application, so it is never planned as an executable of its own.
+        var executable = owner is null && desktop is null ? env.InstallPath ?? SelfExecutable.InstalledImage : null;
 
         var directory = executable is null ? null : Path.GetDirectoryName(executable);
         var descriptor = new DescriptorReader(env.Paths).Read();
@@ -96,7 +99,8 @@ public static class UninstallReader
             others,
             othersLeft,
             link,
-            linkUnreadable);
+            linkUnreadable,
+            desktop);
     }
 
     /// <summary>
