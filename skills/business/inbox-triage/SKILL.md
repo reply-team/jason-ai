@@ -90,6 +90,17 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
+**Asked whether somebody has answered, look now.** Do not say "nothing yet" and wait for Jason's next read: Jason
+notices a reply only at its own read of the campaign, which can be minutes away (by default 600 seconds for a plugin
+that reads events, `Dispatcher:EventsCadenceSeconds`, and 900 for the inbound scan, `Inbound:SyncSeconds`; the person's
+settings may differ). Read the provider at this moment, say what it shows, and say that such a read records nothing, so
+Jason has not noticed that reply and no responder has been raised for it yet.
+
+```
+jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
+```
+
 ## Planning guidance
 
 Agree the scope before opening anything: everything, or a slice — one campaign, one meaning,
