@@ -726,7 +726,7 @@ public static class MachineSetup
             return Path.Combine(Path.GetDirectoryName(folder) ?? folder, "." + name);
         }
 
-        /// <summary>The old folder's Path entry, by the uninstall's rule: only where the folder holds nothing but what <c>install.ps1</c> writes.</summary>
+        /// <summary>The old folder's Path entry, by the uninstall's rule: only where the folder holds nothing but what <c>install.ps1</c> wrote there before 0.49.</summary>
         private void TakePathEntry(string directory, List<string> removed)
         {
             if (!OperatingSystem.IsWindows())

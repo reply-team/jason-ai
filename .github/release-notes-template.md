@@ -201,7 +201,7 @@ is issued to, which begins `CN=ReplyApp Inc.`; `signtool verify /pa /v`, where t
 and prints the timestamp. An archive a browser downloaded carries the mark of the web, and
 SmartScreen looks at the executable unpacked from it the first time it runs. SmartScreen's reputation for a new
 publisher builds over downloads, so in the first weeks of signed releases a download may still show its dialog;
-`install.ps1` clears that mark from what it unpacks.
+`install.ps1` clears that mark from the installer it downloads, after checking its signer.
 
 The Linux executable is not signed, and nothing else a release carries is either, apart from the desktop's installer
 and Mac packages, as "Desktop" above says.

@@ -80,7 +80,9 @@ If the person gave you those three lines, they are also the person's yes to putt
 agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
 [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.
 That yes covers your own host and nothing else this page marks **Ask first.** Where this machine has other agent hosts, skills for them
-are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands.
+are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows the
+install script has already put Jason's skills where every agent host it found reads them, your own among them, as every
+install there does: the step changes nothing, and the line about other hosts names only one it did not find.
 
 This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
 
@@ -89,12 +91,19 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   §7 takes the installation off again. Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
   already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
-  harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
-  check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run
-  `jason --version` by its full path. That is the next route, not a way around the refusal. Never pipe a download
-  into a shell. The install scripts are the person's: where your harness refuses even the route by hand, say so and
-  give the person the one-liner to type themselves.
-- Write only what those steps write: the executable and its install directory; this account's PATH entry for it;
+  harness refuses it, say so once and take the next route. On macOS and Windows that is this release's install
+  script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file (`sh <file>`;
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`). It installs Jason Desktop and opens nothing, puts
+  `jason` in the terminal, deploys the skills of every agent host it finds and the role skills, and ends non-zero,
+  saying which act failed, when `jason` is not in the terminal. Its last line is the full path of `jason`: call
+  `jason` by that path for the rest of your session, which does not see the new PATH. On Linux it is §2 *By hand*:
+  download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the
+  two notice files beside the executable, and run `jason --version` by its full path. That is the next route, not a
+  way around the refusal. Never pipe a download into a shell. Where your harness refuses the script or the route by
+  hand, say so and give the person the one-liner to type themselves.
+- Write only what those steps write: on macOS and Windows what the install script writes — the application in its
+  place, the terminal command `jason install` places, and the skills of every agent host found; the executable and
+  its install directory; this account's PATH entry for it;
   Jason's data directory, which is where the role skills go; the system's temporary directory, which the download
   goes into; and the directory the executable unpacks its native libraries into when it first runs — under
   the temporary directory on Windows, under `~/.net` in this home directory on macOS and Linux. Nothing in your
@@ -147,7 +156,34 @@ Both lines install the **latest release**. If either answers 404, the release co
 address or on GitHub — and that is not a failure of your machine: report it as it stands rather than run the line
 again, and build nothing instead.
 
-Each script works out your platform, downloads the archive for it, **verifies its SHA-256 before unpacking**,
+**On macOS and Windows each script installs Jason Desktop**, with `jason` in the terminal, and opens nothing:
+
+- `install.sh` on a Mac reads the machine's architecture (`sysctl hw.optional.arm64`, which a shell running under
+  Rosetta does not change), downloads that architecture's `jason-desktop-macos-arm64.zip` or
+  `jason-desktop-macos-x64.zip` and `checksums.txt`, **verifies its SHA-256**, unpacks it with `ditto` into a folder
+  beside its place, checks the application's signature with `codesign --verify --deep --strict` and that it is signed
+  by the team that signs Jason, and moves it into place by one rename: `/Applications` where your account may write
+  there, else `~/Applications`, so that its own updates never ask for a password. A `Jason.app` already in either
+  folder is never renamed, replaced or deleted from a terminal: one of 0.49.0 or later is kept as it is and set up, the
+  last line naming `jason update apply` where it is older than the release; an earlier one is left as it is, and the
+  script ends non-zero saying to update it from its own menu (Check for Updates) and run the line again.
+- `install.ps1` downloads `jason-desktop-windows-x64-setup.exe` and `checksums.txt`, **verifies its SHA-256** and its
+  signature, ReplyApp Inc.'s, runs it silently with `Start-Process -Wait` into `%LOCALAPPDATA%\Programs\jason-desktop`,
+  and reads its exit code. The installer sets the machine up itself, at every install and update. A later version
+  already installed is kept as it is; an earlier one is installed over, as its own update does, but never while
+  Jason Desktop is open, which a silent installer would close without asking: the script says to close it and run
+  the line again.
+- Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
+  put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
+  application's `resources\bundle` folder on your account's Path — the skills of every agent host it finds (Claude Code
+  and Codex), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
+  runtime answered before the install and none answers after it, or the report says it stopped one, the script starts
+  one again from the application's `jason`.
+- It ends non-zero, saying which act failed, when `jason` was not put in the terminal. Run again over the version
+  already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in
+  place. Its last line is the full path of `jason`, to type in the terminal it ran in, which does not see the new PATH.
+
+**On Linux**, `install.sh` downloads the archive for the machine, **verifies its SHA-256 before unpacking**,
 installs the executable under your own account — with its licence and the third-party notices beside it, as
 `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES` — and puts that directory on your PATH. Run again over the version
 already installed, it downloads nothing and says so, unless a licence file is missing beside the executable: then
@@ -157,8 +193,8 @@ Then it teaches the executable it installed its role skills: it runs that execut
 `jason skills install --roles-only` (§4), which takes the skills from the release's `jason-skills.zip` and writes them
 into Jason's data directory and nowhere else, and what it prints is shown. Where that fails — no network, say — Jason
 is still installed and the run still succeeds: one line says the role skills were not deployed and what to run, and
-`jason status` names the same line. A script pointed at a feed in a directory, with `--feed` or `-Feed`, leaves this
-step out and says what to run instead, because the skills verb reads no directory.
+`jason status` names the same line. Pointed at a feed in a directory, with `--feed`, it leaves this step out and says
+what to run instead, because the skills verb reads no directory.
 
 On macOS and Linux the PATH line goes into the profile a login shell of yours reads, and for `bash` and `zsh` into
 `~/.bashrc` or `~/.zshrc` as well: the terminal a desktop opens — GNOME's, for one — is not a login shell, reads
@@ -190,30 +226,26 @@ those memory files, never runs `git` there and never writes a `.gitignore`. `git
 it gives the folder a history, and lets Codex — which reads the `AGENTS.md` files from the top of a repository down
 to the folder it starts in — read the root's and the project's with a campaign's.
 
-On Windows, `install.ps1` waits up to 10 seconds for a file another program holds open — a virus scanner reading
-the executable it has just unpacked or run — before it gives up and names the file, or the directory it was unpacking into. And if the new `jason.exe`
-cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never
-leaves you without the version you started with.
-
-| Default install directory | Platform |
+| Where it goes | Platform |
 |---|---|
-| `~/.local/bin/jason` | macOS, Linux |
-| `%LOCALAPPDATA%\Programs\jason\jason.exe` | Windows |
+| `/Applications/Jason.app`, or `~/Applications/Jason.app`; `jason` at `~/.local/bin/jason` | macOS |
+| `%LOCALAPPDATA%\Programs\jason-desktop\`; `jason.exe` in its `resources\bundle` | Windows |
+| `~/.local/bin/jason` | Linux |
 
-Three flags matter — spelled `--version`, `--install-dir` and `--no-modify-path` for `install.sh`, and
-`-Version`, `-InstallDir` and `-NoModifyPath` for `install.ps1`:
+Three flags matter on Linux — spelled `--version`, `--install-dir` and `--no-modify-path`. On macOS and Windows
+`--version` (`-Version` for `install.ps1`) is the one taken, from 0.49.0: `--install-dir` and `--no-modify-path`
+(`-InstallDir`, `-NoModifyPath`) are refused there before anything is read or written, since the application has its
+place and every install puts `jason` in the terminal:
 
 - `--version X.Y.Z` installs a particular release instead of the latest. The script checks that the manifest
   it gets back is the release you asked for, rather than trusting the feed to have answered the question you
   put to it.
 - `--install-dir <path>` installs somewhere else — into a directory of its own, for the reason below. A directory
-  whose name holds the character that separates the entries of PATH, `;` on Windows and `:` elsewhere, is refused
-  before anything is written, with `--no-modify-path` too: no PATH entry can name it, so neither you nor the agents
-  Jason starts could reach that `jason` by name. Where the script writes the PATH entry itself, it also refuses a name
-  that entry cannot carry — on Windows a `%NAME%` of a variable, which Windows can read in your `Path` as that
-  variable's value; on macOS and Linux a `"`, `$`, backtick, backslash or line break, which the profile line reads
-  inside double quotes — and says the two ways on: another directory, or `--no-modify-path` and the entry put on the
-  PATH your own way.
+  whose name holds `:`, the character that separates the entries of PATH, is refused before anything is written, with
+  `--no-modify-path` too: no PATH entry can name it, so neither you nor the agents Jason starts could reach that
+  `jason` by name. Where the script writes the PATH entry itself, it also refuses a name that entry cannot carry — a
+  `"`, `$`, backtick, backslash or line break, which the profile line reads inside double quotes — and says the two
+  ways on: another directory, or `--no-modify-path` and the entry put on the PATH your own way.
 - `--no-modify-path` leaves your PATH alone. Then `jason` is only typeable by its full path until you put it
   on the PATH yourself, as below.
 
@@ -230,8 +262,8 @@ curl -fsSL https://get.jasonharness.ai/releases/download/v0.49.0/install.sh | sh
 These install 0.49.0 with 0.49.0's own script: a pinned install fetches the script from the release it installs.
 
 **A directory of its own.** `jason uninstall` takes a directory's PATH entry off only where the directory holds
-nothing but Jason. Installed into a directory other programs share — on Windows, the `WindowsApps` folder every
-account's Path already names — the entry stays, and so does everything else it puts on the PATH.
+nothing but Jason. Installed into a directory other programs share, the entry stays, and so does everything else it
+puts on the PATH.
 
 **Putting it on the PATH yourself.** With `--no-modify-path` nothing did this for you.
 
@@ -255,9 +287,10 @@ Confirm what landed:
 jason --version
 ```
 
-On Windows the PowerShell you installed from is told about the new PATH entry. On macOS and Linux the script ran
-in a shell of its own, so the one you typed it into has not heard: open a new terminal — or sign out and back in, where
-the script said so — or type it by its full path — `~/.local/bin/jason --version`.
+The terminal you typed the install into has not heard of the new PATH entry: open a new terminal — or sign out and
+back in, where the script said so — or type `jason` by the full path the script's last line gives:
+`~/.local/bin/jason --version` on macOS and Linux, and on Windows
+`& "$env:LOCALAPPDATA\Programs\jason-desktop\resources\bundle\jason.exe" --version`.
 
 A started runtime asks the release feed whether a newer version exists five minutes after it starts, and once a
 day after that, at the default settings: one `GET`, carrying nothing about you or your work — it identifies only
