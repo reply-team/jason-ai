@@ -145,9 +145,10 @@ tier on every platform. Of the other checks the ruleset on `main` requires, an u
 rule, and the suite under a release's version, the executable on a Windows older than 24H2 and the install script on
 Windows skip by their own condition, which reports success as well; all four run on `main` after the merge. Each test
 job's summary says how many minutes its tests took. After the squash, `main` passes over the hotfix's record of the tree
-it tested, so the push the squash makes is decided as one no run recorded, and a change to code runs every check there,
-the whole suite on every platform included. That run blocks nothing: whoever leads the release watches it, and starts
-every check by hand where the push ran less, and a check red there is the next hotfix. Then the merge is tagged and the
+it tested, so the push the squash makes is decided as one no run recorded and runs every check there, the whole suite on
+every platform included, with one exception: a hotfix that changes documentation alone gets the version check alone
+there, as any such push to `main` does, and whoever leads the release starts every check by hand. That run blocks
+nothing: whoever leads the release watches it, and a check red there is the next hotfix. Then the merge is tagged and the
 release runs. No dry run comes before the tag, since a hotfix touches nothing of building or packaging, and a release
 run that fails costs a version number — the version pull request moves `main` to the next one, and the fix is released
 under it — and never moves a tag.
@@ -173,8 +174,8 @@ characters within one name.
   `desktop/src/login-item*.ts`
 - the build and what it depends on: `**/*.csproj`, `**/*.props`, `**/*.targets`, `**/*.slnx`, `**/*.manifest`,
   `**/*.entitlements`, `global.json`, `**/dotnet-tools.json`, `**/package.json`, `**/package-lock.json`,
-  `desktop/electron-builder.config.mjs`, `desktop/electron-builder.config.d.mts`, `desktop/scripts/**`, `ui/scripts/**`,
-  `**/THIRD-PARTY-NOTICES`
+  `**/tsconfig.json`, `desktop/electron-builder.config.mjs`, `desktop/electron-builder.config.d.mts`,
+  `desktop/scripts/**`, `ui/scripts/**`, `ui/vite.config.ts`, `**/THIRD-PARTY-NOTICES`
 
 `RELEASE-NOTES.md` and the recorded exchanges under `docs/api/fixtures/` are a hotfix's to change; whether a change adds
 or alters a CLI verb or the Runtime API is the reviewer's to read, not a path's. The check is a rail for the lane's honest

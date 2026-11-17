@@ -967,7 +967,7 @@ public class CiRunsTests
 
     // Critical: main never skips its checks on a record of the critical tier alone, but the version pull request's.
     public static TheoryData<string> CriticalKindsOfRunForTheRecord() =>
-        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["marking a pull request into a release branch ready"] or ["marking a hotfix's pull request into main ready"]);
+        CriticalRows.Mark(KindsOfRun(), Family.B7, data => data is ["marking a pull request into a release branch ready"]);
 
     /// <summary>
     /// A run that keeps a record of the tree it tested ran the whole suite on it, but for the version pull request, whose
@@ -1050,6 +1050,10 @@ public class CiRunsTests
     [InlineData("dotnet/src/Jason.App/jason.entitlements", "the build and what it depends on")]
     [InlineData("dotnet-tools.json", "the build and what it depends on")]
     [InlineData("ui/scripts/package.mjs", "the build and what it depends on")]
+    [InlineData("ui/vite.config.ts", "the build and what it depends on")]
+    [InlineData("ui/tsconfig.json", "the build and what it depends on")]
+    [InlineData("desktop/tsconfig.json", "the build and what it depends on")]
+    [InlineData("desktop/test/tsconfig.json", "the build and what it depends on")]
     [InlineData("ui/package.json", "the build and what it depends on")]
     [InlineData("get/package.json", "the build and what it depends on")]
     [InlineData("desktop/package-lock.json", "the build and what it depends on")]
@@ -1142,7 +1146,8 @@ public class CiRunsTests
     /// the gate does not open on doubt.
     /// </summary>
     [Theory]
-    [InlineData("false")]
+    // Critical: a hotfix whose change against its base cannot be listed is refused, never let through on doubt.
+    [InlineData("false", Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B7)])]
     [InlineData("true")]
     public void A_hotfix_whose_change_cannot_be_read_fails_the_version_check(string draft)
     {
@@ -1214,7 +1219,8 @@ public class CiRunsTests
     /// pull request whose head repository is gone.
     /// </summary>
     [Theory]
-    [InlineData(AFork)]
+    // Critical: a fork's branch named as a hotfix's never gets the hotfix set, and its paths are not judged.
+    [InlineData(AFork, Traits = ["Category", "Critical", "CriticalFamily", nameof(Family.B7)])]
     [InlineData("")]
     public void A_fork_s_branch_named_as_a_hotfix_s_is_any_other_pull_request(string headRepository)
     {
