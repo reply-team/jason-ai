@@ -575,7 +575,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Refused when this jason is the one the desktop application carries, or when the update recorded is that jason's.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 

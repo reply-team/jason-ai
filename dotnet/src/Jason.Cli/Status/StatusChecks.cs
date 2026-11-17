@@ -81,7 +81,8 @@ internal static partial class StatusChecks
 
         /// <summary>
         /// The repair for a runtime newer than this CLI: this jason brought up to the runtime, never the runtime restarted from
-        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason.
+        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason. On a jason Jason Desktop carries it
+        /// is the same command again, with no hop through the desktop's menu: there it hands the update to the application.
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 

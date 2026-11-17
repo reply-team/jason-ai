@@ -23,6 +23,7 @@ public class UpdateLedgerTests
             BackupFile = @"C:\data\state\backups\jason-20260919T120100Z-before-X.db",
             NewlyApplied = ["20260919T000000_Something"],
             ChronicleId = "jrn_01M2XVJ84TFRG54VKC291A53F2",
+            KeptApplication = @"C:\data\desktop\rollback\0.1.0",
         };
 
         var read = UpdateLedger.Read(written.ToJson());
@@ -34,6 +35,7 @@ public class UpdateLedgerTests
         Assert.Equal(written.BackupFile, read.BackupFile);
         Assert.Equal(written.NewlyApplied, read.NewlyApplied);
         Assert.Equal(written.ChronicleId, read.ChronicleId);
+        Assert.Equal(written.KeptApplication, read.KeptApplication);
         Assert.Equal(written.InstallPath, read.InstallPath);
         Assert.Equal(written.StagedPath, read.StagedPath);
         Assert.Equal(written.PreviousPath, read.PreviousPath);
@@ -54,6 +56,25 @@ public class UpdateLedgerTests
         Assert.Null(read.BackupFile);
         Assert.Empty(read.NewlyApplied);
         Assert.Null(read.ChronicleId);
+        Assert.Null(read.KeptApplication);
+    }
+
+    /// <summary>
+    /// The copy of the application Jason Desktop kept for an update a carried jason handed it is one optional member, which a
+    /// build that does not know it passes over: a ledger is read by the members it names, so an older Jason reads this one.
+    /// </summary>
+    [Fact]
+    public void The_application_a_desktop_kept_is_optional_and_a_member_a_reader_does_not_know_is_passed_over()
+    {
+        var json = (Ledger() with { KeptApplication = "/data/desktop/rollback/0.1.0" }).ToJson();
+        Assert.Contains("\"kept_application\": \"/data/desktop/rollback/0.1.0\"", json, StringComparison.Ordinal);
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        node.Remove("kept_application");
+        node["a_member_of_a_later_build"] = "anything";
+        var read = UpdateLedger.Read(node.ToJsonString());
+        Assert.Null(read.KeptApplication);
+        Assert.Equal(UpdateStep.Staged, read.Step);
     }
 
     /// <summary>Every step has a name on the wire, and the names are the ones an update's messages use.</summary>
