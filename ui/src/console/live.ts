@@ -101,7 +101,10 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
 export interface ApprovalDetail {
     intent: string | null;
     to: string | null;
-    /** The account the message goes from, as the preview highlights it: its address, else its identifier. */
+    /**
+     * The account the message goes from, as the preview highlights it: its address, else its identifier. A reply in a
+     * thread names none, because the provider answers from the account the conversation is in, so it is those words.
+     */
     from: string | null;
     /** The channel it goes on, in words. */
     channel: string | null;
@@ -158,6 +161,8 @@ export function toApprovalDetail(preview: Record<string, unknown>, operation: st
     const highlights = record(preview['highlights']);
     const message = record(highlights?.['/args/message']);
     const sender = record(highlights?.['/args/sender']);
+    // A reply names the thread it answers and no account: it goes from the one the conversation is in.
+    const inThread = record(highlights?.['/args/thread']) !== null && highlights?.['/args/sender'] === undefined;
     const channel = text(highlights?.['/args/channel']);
     const contact = record(preview['contact']);
     const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
@@ -170,7 +175,10 @@ export function toApprovalDetail(preview: Record<string, unknown>, operation: st
     return {
         intent: text(preview['intent']),
         to: value ? (name ? `${name}, ${value}` : value) : null,
-        from: text(sender?.['address']) ?? text(sender?.['external_id']),
+        from:
+            text(sender?.['address']) ??
+            text(sender?.['external_id']) ??
+            (inThread ? t('approval.from.conversation') : null),
         channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']) ?? text(highlights?.['/args/body']),

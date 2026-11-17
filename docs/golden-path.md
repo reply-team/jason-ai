@@ -324,6 +324,74 @@ pause is Jason's own, `jason campaign start` undoes it, and step 8's chronicle i
 finish because work in a paused campaign waits too, the stop's included; and whatever you later do with the
 provider's campaign, no read of Jason's fails over it.
 
+## A direct send
+
+This is a real send, and it cannot be undone: one email that arrives, from one of your mailboxes at the provider, to
+your own address — the address you stated for `contacts.json` in step 6, never one taken from the account or guessed.
+It is the check for a message sent on its own, outside any provider campaign (`message.send`), as steps 6 to 8 are
+the check for an enrolment. It is run only when you ask for it. An agent proposes it, says what it will do, and runs
+nothing until you say yes.
+
+Three things happen that you cannot take back. The message arrives. It counts against the allowance of the mailbox it
+goes from. And the provider may create you as a contact of its own, if it holds nobody under your address.
+
+The way back above paused Jason's campaign, and work in a paused campaign waits: start it again first, then read the
+two routes this send depends on, which are separate. The send's own is the route for `message.send` on `email`; the
+list of mailboxes has its own, for `sender.list` on the same channel ([routing.md](routing.md), "A read on request").
+A route that resolves to nothing says so, with the reason, and [routing.md](routing.md), section 7, lists every reason
+and what to change.
+
+```
+jason campaign start cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation message.send --channel email
+jason route resolve --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --operation sender.list --channel email
+jason sender list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --owners own --channel email
+jason campaign get cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+`sender list` lists your own mailboxes. You choose which one the message goes from, and the send names it by the
+identifier and the address the list gives, as in `sender` below; a send whose address is not the one
+held for that identifier fails `sender_mismatch`, and nothing is sent. Where the list is empty, there is nothing to send
+from, and the check ends here.
+
+The `campaign get` above says one more thing, which decides what the next command does: `send_modes_in_force`. Where its
+`cold` mode, the one for a person who has not answered in the campaign, is `every_message`, which is what an unset mode
+is, the send waits for a person, as below. Where it is `automatic`, set by a named person for the installation or for
+this campaign, the item is released when it is claimed and nothing asks anybody, unless something else puts it to a
+person first ([work-execution.md](work-execution.md), "The send mode at the claim"). That is why the yes comes
+before the item is made, and why the mode is read before it is.
+
+**Ask first.** Show the person the mailbox and the text, and create the item only on their yes:
+
+```
+jason workitem create cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind provider_op --operation message.send --contact cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --input '{"channel":"email","sender":{"external_id":"12","address":"you@example.com"},"message":{"format":"email","subject":"A wiring check","body":"This message checks that a direct send works."}}' --idempotency-key wiring-check-send
+jason approval list
+jason approval get apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Under `every_message` the item parks as `awaiting_approval`, and nothing is sent: a send is decided one message at a
+time, and no dispatcher runs it on its own. `approval get` shows the preview, which carries the exact text, the
+address it goes to and the mailbox it goes from. Read it with the person, and approve only on their yes, in their name:
+
+```
+jason approval approve apr_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --actor human:ada --reason "checked the message"
+jason workitem get wi_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
+```
+
+Read the item until its `status` is `succeeded`. Its result holds one item, which says `sent` where the provider sent
+the message inside the call and `accepted` where it took it to send later, and the message is in your inbox when it
+has gone.
+
+The key makes a repeat safe. The same command again, with the same key, answers with the item the first one made and
+sends nothing, even when a month has passed ([work-execution.md](work-execution.md), "Creating work twice"). A request
+that differs, a new subject say, under the same key is refused as `idempotency_key_reused`. So a second check that
+sends a second message is a new request under a key of its own, such as `wiring-check-send-2`, and it asks the
+person again. A send that ended without knowing whether it went out is not made again under a new key before a person
+has looked: the first one may have arrived.
+
+This check is the email channel's. No other channel has a recipient of its own to check with, so there is none for
+LinkedIn.
+
 ## What this guarantees
 
 Three things are proven by tests that start and kill real processes, rather than by this page.
@@ -344,6 +412,10 @@ than a second enrolment.
 any child process starts, the provider is never asked, and nothing falls back to whichever plugin happens to be
 installed. An edit whose binding the package's own schema refuses is rejected whole, and the routes that were
 working keep working.
+
+The direct send above is not one of the three: no test sends a real message. A test holds its `--input` to the
+arguments `message.send`'s own document accepts, so the page cannot drift from the contract, and what the send does
+at the provider is the contract's to say ([`message.send`](contracts/operations/message.send.md)).
 
 ## Where to go next
 

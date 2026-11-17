@@ -453,6 +453,28 @@ describe('Needs you', () => {
         expect(words(pane())).not.toMatch(/From|Channel|unknown/);
     });
 
+    it('says a reply in a thread goes from the account the conversation is in, names none, and reads no sending name', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/needs-inbox')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply');
+        await renderConsole(fake);
+        await waitFor(() => expect(row('apr_2')).toBeTruthy());
+        // The message beside it still names the mailbox it goes from, with the sending name under it.
+        await choose('apr_1');
+        await waitFor(() => expect(words(pane().querySelector('.needs-from')!)).toBe('From owner@example.test'));
+        await choose('apr_2');
+        await waitFor(() => within(pane()).getByText('Thanks Kai, Thursday at ten works for me.'));
+        expect(words(pane().querySelector('.needs-from')!)).toBe('From the account this conversation is in');
+        expect(pane().querySelector('.needs-from')!.nextElementSibling?.classList.contains('sender-line')).not.toBe(
+            true,
+        );
+        expect(pane().querySelector('.sender-line')).toBeNull();
+        const asked = fake.calls.filter((each) => each.operation === 'sender.list').length;
+        await settle();
+        expect(fake.calls.filter((each) => each.operation === 'sender.list').length).toBe(asked);
+    });
+
     it('draws a hostile sender, channel and recipient as text', async () => {
         await renderConsole(messages());
         await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
