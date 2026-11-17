@@ -90,12 +90,15 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
   §7 takes the installation off again. Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
-  already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
+  already on this machine, use it (*With a package manager*). On macOS, Homebrew's formula is not that package for a
+  new install: it installs the command line alone, without Jason Desktop, so on a Mac the route is the install script
+  even where Homebrew is there. Where it is not, where it fails, or where it or your
   harness refuses it, say so once and take the next route. On macOS and Windows that is this release's install
   script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file (`sh <file>`;
   `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`). It installs Jason Desktop and opens nothing, puts
   `jason` in the terminal, deploys the skills of every agent host it finds and the role skills, and ends non-zero,
-  saying which act failed, when `jason` is not in the terminal. Its last line is the full path of `jason`: call
+  saying which act failed, when `jason` is not in the terminal. On an Intel Mac it stops before it downloads anything,
+  since no Jason Desktop for one is published: report that as it stands. Its last line is the full path of `jason`: call
   `jason` by that path for the rest of your session, which does not see the new PATH. On Linux it is §2 *By hand*:
   download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the
   two notice files beside the executable, and run `jason --version` by its full path. That is the next route, not a
@@ -159,12 +162,14 @@ again, and build nothing instead.
 **On macOS and Windows each script installs Jason Desktop**, with `jason` in the terminal, and opens nothing:
 
 - `install.sh` on a Mac reads the machine's architecture (`sysctl hw.optional.arm64`, which a shell running under
-  Rosetta does not change), downloads that architecture's `jason-desktop-macos-arm64.zip` or
-  `jason-desktop-macos-x64.zip` and `checksums.txt`, **verifies its SHA-256**, unpacks it with `ditto` into a folder
-  beside its place, checks the application's signature with `codesign --verify --deep --strict` and that it is signed
-  by the team that signs Jason, and moves it into place by one rename: `/Applications` where your account may write
+  Rosetta does not change) and stops on an Intel Mac before it downloads anything, since no build for one is
+  published. On Apple silicon it downloads `jason-desktop-macos-arm64.zip` and `checksums.txt`, **verifies its
+  SHA-256**, unpacks it with `ditto` into a folder beside its place, checks with `codesign --verify --deep --strict`
+  that the application is whole and signed by a Developer ID certificate Apple issued to the team that signs Jason,
+  and moves it into place by one rename: `/Applications` where your account may write
   there, else `~/Applications`, so that its own updates never ask for a password. A `Jason.app` already in either
-  folder is never renamed, replaced or deleted from a terminal: one of 0.49.0 or later is kept as it is and set up, the
+  folder is never renamed, replaced or deleted from a terminal: one of 0.49.0 or later is kept as it is and set up, once
+  its signature passes the same check, the
   last line naming `jason update apply` where it is older than the release; an earlier one is left as it is, and the
   script ends non-zero saying to update it from its own menu (Check for Updates) and run the line again.
 - `install.ps1` downloads `jason-desktop-windows-x64-setup.exe` and `checksums.txt`, **verifies its SHA-256** and its
