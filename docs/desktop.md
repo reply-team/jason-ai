@@ -592,6 +592,30 @@ starts a fresh one with a recap of the last words. The conversation is no bounda
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
+### Your memory files in the chat
+
+The `AGENTS.md` files you keep for all of your work, for a project and for a campaign ([projects.md](projects.md)) are
+handed to the chat by the desktop, as Jason's roles read them by path: every chat is given the client's, the one at the
+harness root, and a campaign's conversation the project's and the campaign's as well, in that order, on every host and
+in every access mode. A Claude Code turn cannot open the client's file itself, since no folder outside the ones it works
+in is readable to it, and the root is never added: the desktop reads the files and puts them after its first paragraph,
+each under a line naming its level and its path, its words quoted. A file is read only from the folder the runtime
+records, the root it reports as marked and the folder on the project and on the campaign, and only where that folder
+carries the marker of that level and that id; a level whose folder is not that, or a link, or whose `.jason` is a link,
+says nothing. A file that is itself a link, or a name with more than one link (a hard link), one that is not UTF-8
+text, and one that does not answer within three seconds, as on a share that hangs, are not given: the chat is told on
+one line why, so it can tell you, and a file over 32 KiB is given its first 32 KiB with a line saying so. A host session
+is given the files once, when it is new, and again only a file that changed since, or a line saying that one is now
+empty or gone, said only where its folder was read and the file was not there or empty at two looks a moment apart; a
+level the desktop could not read this time, the runtime not answering say, is said nothing of and given again at the
+next turn that reads it. **Start conversation fresh** gives them all again. The desktop's own record of the conversation
+keeps a digest of what each session was given and its log only the level and whether it was given, changed, gone or not
+given, never a word or a path of a file; the host keeps the turn's input, these words with it, in its own transcript, as
+it keeps every turn's.
+
+The chat does not write these files. When you state a rule that should hold beyond one message, it says the line to add
+and the file it belongs in, by its path; the file is yours to edit, at that path or in its folder from Open in.
+
 ### The Feed
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above

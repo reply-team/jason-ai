@@ -55,4 +55,18 @@ public partial class InteractiveSkillTests
         Assert.Contains("In the chat of Jason Desktop you neither ask for these two nor set them: the person sets them there in Settings, under \"Your name and tone\". Where the sender has no value, say so once and where to click, and go on with the parts of the plan that write to nobody; until it has one, nothing that writes to anybody is agreed or created. A tone with no value is said once, as one they may add, and holds nothing back. In a person's own session, ask for them and set them as above.", skill, StringComparison.Ordinal);
         Assert.Contains("set it under their own name as the actor:", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The desktop hands the chat the person's memory files, the client's among them, which no folder that chat works
+    /// in holds; without these sentences the managed path sends it to read a file it cannot reach, and the planner to
+    /// write a rule into a file the chat never writes.
+    /// </summary>
+    [Fact]
+    public void The_memory_files_are_given_in_the_desktop_chat_and_written_by_the_person_alone()
+    {
+        var managed = Flattened("managed-campaign-work");
+        Assert.Contains("So read by path every one of the three you were not given. In the chat of Jason Desktop you are given them instead, at the top of a message, and the client's is outside the folders that chat works in: keep to what Jason gave you.", managed, StringComparison.Ordinal);
+        var planner = Flattened("planner-in-session");
+        Assert.Contains("In the chat of Jason Desktop you write none of these files: say the exact line and the file it belongs in, by the path Jason gave you, and the person adds it there themselves.", planner, StringComparison.Ordinal);
+    }
 }

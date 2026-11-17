@@ -268,7 +268,9 @@ Their confirmation is of the words; a send still goes to its own claim, where a 
 What they say about it that holds beyond this one message is a standing rule, such as "always include one proof
 point". Write it, in their words, into their memory file at the level it belongs to: the client's when it holds for
 all of their work, the project's when it holds for this product, the campaign's when it holds for this campaign
-alone; when that is not plain, ask. Where what they say changes how the company sounds, it is the preference again,
+alone; when that is not plain, ask. In the chat of Jason Desktop you write none of these files: say the exact line
+and the file it belongs in, by the path Jason gave you, and the person adds it there themselves. Where what they say
+changes how the company sounds, it is the preference again,
 set as above. A standing rule goes into neither a preference's value, which says who writes and how they sound and
 nothing else, nor a role's note, which is that role's own. A launched planner that was given such a rule raises it as
 a decision that names its file; once the person says yes, you write it there the same way.

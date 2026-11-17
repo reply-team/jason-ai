@@ -39,7 +39,9 @@ if (args[0] === 'status') {
     writeFileSync(runFile, JSON.stringify({ api_version: 'v1', base_url: origin, token: 'planted-run-token-77', pid: 1 }));
     print({ started: true });
 } else if (verb === 'runtime status') {
-    print({ runtime_version: process.env.STUB_RUNTIME_VERSION || '0.34.0-rc.1' });
+    // STUB_HARNESS_ROOT names the harness root the runtime reports, in the state STUB_HARNESS_STATE says (else marked).
+    const harness = process.env.STUB_HARNESS_ROOT ? { harness: { root: process.env.STUB_HARNESS_ROOT, root_state: process.env.STUB_HARNESS_STATE || 'marked' } } : {};
+    print({ runtime_version: process.env.STUB_RUNTIME_VERSION || '0.34.0-rc.1', ...harness });
 } else if (verb === 'runtime autostart') {
     // The real verb registers with the machine; the stub only answers as if it had, and registers nothing.
     const registered = args[2] === 'enable' ? true : args[2] === 'disable' ? false : process.env.STUB_AUTOSTART === 'yes';
@@ -244,6 +246,8 @@ if (args[0] === 'status') {
         print(made);
     }
 } else if (verb === 'project get') {
+    // STUB_PROJECT_GET_FAILS=yes: the runtime does not answer, as when it is down for a moment.
+    if (process.env.STUB_PROJECT_GET_FAILS === 'yes') process.exit(3);
     print({ id: args[2], name: 'Default', slug: 'default', default: true, folder_path: process.env.STUB_PROJECT_FOLDER || null });
 } else if (verb === 'skills install' && args.includes('--root')) {
     // As the CLI deploys: into the very directory --root names, a record of the deployment and one folder per skill.
