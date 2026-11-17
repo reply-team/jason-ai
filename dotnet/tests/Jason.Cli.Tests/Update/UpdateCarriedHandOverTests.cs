@@ -310,6 +310,8 @@ public sealed class UpdateCarriedHandOverTests
 
         Assert.Equal(UpdateCodes.DesktopNotInstalled, refused.Code);
         Assert.Contains($"names {installation.From}", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Nothing was installed. The likely cause is a Jason Desktop that is running, one of another data directory included", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("quit it, then run `jason update apply` again.", refused.Message, StringComparison.Ordinal);
         Assert.Contains($"was started again from {installation.InstallPath}", refused.Message, StringComparison.Ordinal);
         Assert.True(installation.Running);
         Assert.Null(installation.Ledger());

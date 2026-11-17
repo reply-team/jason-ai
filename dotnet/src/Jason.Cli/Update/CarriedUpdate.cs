@@ -637,7 +637,12 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
                 $"Jason Desktop handed {ledger.ToVersion} to its installer, and after {InstallWait.TotalMinutes:F0} minutes the application's "
                 + $"{CarriedExecutable.RecordName} at {carried.Record} names {named ?? "no version"}."
                 + (shipIt is null ? string.Empty : $" ShipIt said: {shipIt}")
-                + (named is null ? $" Run `jason update apply` again, from {Moved ?? Copy} if jason does not answer." : " Run `jason update apply` again."),
+                + (named is null
+                    ? $" Run `jason update apply` again, from {Moved ?? Copy} if jason does not answer."
+                    : SemanticVersion.TryParse(named, out var still) && still == ledger.FromVersion
+                        ? " Nothing was installed. The likely cause is a Jason Desktop that is running, one of another data directory included, "
+                          + "whose application its installer does not replace while it runs: quit it, then run `jason update apply` again."
+                        : " Run `jason update apply` again."),
                 null,
                 retryable: true);
         }
