@@ -108,13 +108,15 @@
 .search { width: 240px; color: var(--text-muted); display: inline-flex; align-items: center; }
 .textarea { height: auto; min-height: 72px; padding: var(--space-2); width: 100%; resize: vertical; }
 /* An optional reason: one line at rest, as high as a field of one line, growing with what is typed to about six lines,
-   then scrolling. A browser without field-sizing keeps it one line, and it scrolls. */
+   then scrolling; it grows by itself, so it has no handle. A browser without field-sizing keeps it one line, and it
+   scrolls. */
 .textarea.reason {
   min-height: var(--control-h);
   max-height: calc(6lh + 2 * var(--space-1) + 2px);
   padding: var(--space-1) var(--space-2);
   field-sizing: content;
   overflow-y: auto;
+  resize: none;
 }
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--bg); }
