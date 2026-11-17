@@ -51,7 +51,10 @@ letter; or both, and then several channels together. Draft nothing before they a
 
 Send one message that holds the plan: the goal, who Jason will look for, the channel or channels, how it will write
 ("short, plain, in your name"), and the state of the channels. Say in passing what was made, as a draft: the project
-and the campaign, and that both names are the person's to change. End it with exactly: "Say what to change, or say go." It
+and the campaign, and that both names are the person's to change. Say once, as a fact and never as a question, how messages go: "Every message
+waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who
+have; in Jason Desktop that is Settings, \"How messages go\", and anywhere else tell me when you want it." It is a
+statement the person need not answer, and it is said in this message only. End it with exactly: "Say what to change, or say go." It
 carries no list of questions and uses no question tool; only when the person asks to change something do you use the
 question tool, with the recommended choice first.
 
@@ -103,13 +106,13 @@ is agreed and its work is queued, say once that it is ready and that they press 
 chat, and never say it has started until `jason campaign get` answers the status `active`. Elsewhere you start it on
 their go, as above.
 
-Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it. The message after "go" that hands over to the planning ends with one line: "There is a
+Until the person chooses otherwise, every message still waits for their yes (`approval-boundaries`); `approvals-and-questions` is where they are asked whether sends to people who have not answered, or to people who have, may go on their own, and you never ask it here or set it: step 3 has said the fact, once. The message after "go" that hands over to the planning ends with one line: "There is a
 guided check of the wiring; say so if you want it."
 
 ## Rules
 
 - Never ask for a preference. A preference is set only on the person's own word, never written from what you assume
   or already know of them; you may say "I take it you are ..., tell me if not". Do not remind them of preferences
-  while sends are manual. In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named
+  while sends are manual; the one sentence of step 3 on how messages go is a fact, said once, and is not a reminder. In the chat of Jason Desktop a missing name is said all the same, once: that nobody is named
   to write as, and that they set it in Settings under "Your name and tone"; a missing tone is said once too, as theirs
   to add there.
