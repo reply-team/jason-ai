@@ -200,7 +200,7 @@ public partial class PageClaimsTests
     [Theory]
     [InlineData("docs/handbook.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
     [InlineData("docs/INSTALL.md", "It is one of twelve names in this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and `session open`")]
-    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations with **twelve declared exceptions**")]
+    [InlineData("CLAUDE.md", "The verb map is one-to-one with API operations, held both ways — every operation is sent by a verb, as a guard reads off what the verbs post, or declared with its reason as sent by none — with **twelve declared exceptions**")]
     public void No_page_counts_fewer_names_without_an_operation_than_the_code_declares(string page, string said)
     {
         var text = Flat(Page(page.Split('/')));

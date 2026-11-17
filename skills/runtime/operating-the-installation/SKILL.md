@@ -100,7 +100,10 @@ is cancelled, and a provider operation already under way may still act, ending a
 
 `jason runtime drain` has the runtime claim no new work while it keeps running, and `jason runtime resume` has it claim
 again, the way back for a runtime whose dispatcher `jason runtime status` shows `draining` after an update or an install
-ended part-way; ask before a drain as before a stop.
+ended part-way; ask before a drain as before a stop. `jason status` names a drain in its `dispatcher` check, a
+required one, so `ready` is false while the runtime drains. Its repair is `jason runtime resume`; while an update stands
+unfinished the drain is the update's, and the repair is `jason update apply`, never a resume in the middle of it. Where
+an update may be under way and the check names no repair, ask the person rather than resume.
 
 `jason runtime run` keeps the runtime in the **foreground** instead, and it is **not** the normal way to run
 it — the normal way is `jason runtime start`. You would type `run` when something else owns the process: your

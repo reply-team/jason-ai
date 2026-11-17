@@ -62,4 +62,20 @@ public partial class InteractiveSkillTests
         Assert.Contains($"Run from a terminal while Jason Desktop is open, it refuses with `{CliErrors.DesktopRunning}` before anything is removed", skill, StringComparison.Ordinal);
         Assert.Contains("The harness root is never touched.", skill, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A drain is said by <c>jason status</c> in its required <c>dispatcher</c> check. The operating skill names the check
+    /// beside the drain and resume verbs, once, with its two repairs as the check gives them: the resume, and the update's
+    /// own apply while an update stands unfinished, never a resume in the middle of it.
+    /// </summary>
+    [Fact]
+    public void The_operating_skill_names_the_dispatcher_check_and_its_repairs_once()
+    {
+        var skill = Flattened("operating-the-installation");
+
+        Assert.Contains("`jason status` names a drain in its `dispatcher` check, a required one, so `ready` is false while the runtime drains.", skill, StringComparison.Ordinal);
+        Assert.Contains("Its repair is `jason runtime resume`; while an update stands unfinished the drain is the update's, and the repair is `jason update apply`, never a resume in the middle of it.", skill, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(skill, Regex.Escape("`jason runtime drain` has the runtime claim no new work")));
+        Assert.Single(Regex.Matches(skill, Regex.Escape("`dispatcher` check")));
+    }
 }
