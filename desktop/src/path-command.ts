@@ -413,7 +413,7 @@ function linesLine(name: Name, lines: PathLines | undefined): string | null {
     const where = lines.add.join(' and ');
     return lines.refused.length === 0
         ? `${lines.folder} is not on a new terminal’s PATH yet; putting ${name} on the PATH adds it in ${where}.`
-        : `${lines.folder} is not on a new terminal’s PATH, and ${lines.refused.join('; ')}: add ${lines.line} to ${where} by hand.`;
+        : `${lines.folder} is not on a new terminal’s PATH, and ${lines.refused.join('; ')}: add ${lines.byHand} to ${where} by hand.`;
 }
 
 /** What the item says a removal leaves of the PATH lines, and why, or null where it leaves none it found. */
@@ -485,7 +485,7 @@ export function commandQuestion(act: 'place' | 'remove', status: CommandStatus):
             parts.push(
                 lines.refused.length === 0
                     ? `To put ${lines.folder} on the PATH, it adds these two lines to ${where}:\n${block(lines.line)}`
-                    : `${lines.refused.join('; ')}, so it changes no profile: add this line to ${where} by hand for a new terminal to find ${name}:\n${lines.line}`,
+                    : `${lines.refused.join('; ')}, so it changes no profile: add this line to ${where} by hand for a new terminal to find ${name}:\n${lines.byHand}`,
             );
         }
         return { message: `Put the ${name} command on the PATH?`, detail: parts.join('\n\n'), button: 'Place It' };

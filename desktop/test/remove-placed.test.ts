@@ -502,7 +502,7 @@ test('the confirmation names what will be taken off and what stays, on each plat
     assert.ok(removalQuestion(scope(none)).detail.includes('• The jason command on the PATH, if this application placed it'));
     // With the PATH lines the removal would take back, they are named with their files, after the command.
     const placed = scope(none);
-    const lines = { folder: '/h/.local/bin', line: 'export PATH="/h/.local/bin:$PATH"', add: [], refused: [], interactive: true, take: ['/h/.zprofile', '/h/.zshrc'], kept: [] as string[], held: null };
+    const lines = { folder: '/h/.local/bin', line: 'export PATH="/h/.local/bin:$PATH"', byHand: 'export PATH="/h/.local/bin:$PATH"', add: [], refused: [], interactive: true, take: ['/h/.zprofile', '/h/.zshrc'], kept: [] as string[], held: null };
     const withLines = removalQuestion({ ...placed, command: { state: 'placed', name: 'jason', files: ['/h/.local/bin/jason'], shadowedBy: null, executable: '/J/jason', lines } }).detail;
     assert.ok(withLines.includes('• The jason command on the PATH: /h/.local/bin/jason\n• The lines that put /h/.local/bin on the PATH, in /h/.zprofile and /h/.zshrc\n'), withLines);
     assert.equal(removalQuestion({ ...placed, command: { state: 'placed', name: 'jason', files: ['/h/.local/bin/jason'], shadowedBy: null, executable: '/J/jason', lines: { ...lines, take: [] } } }).detail.includes('The lines that put'), false);

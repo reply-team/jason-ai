@@ -559,11 +559,13 @@ public partial class ReleaseWorkflowTests
         var steps = JobSteps(job).ToList();
         var names = steps.Select(step => Scalar(step, "name") ?? Scalar(step, "uses")).ToList();
         Assert.Equal(
-            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
+            ["actions/checkout@v7", "actions/setup-node@v5", "Install", "Check (types)", "Install zsh", "Node tests", "The download address's tests", "./.github/actions/setup-dotnet", "Package the Linux desktop as a release does"],
             names);
-        Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[6], "with"), "sdk-version"));
-        var with = Mapping(steps[7], "with");
-        Assert.Equal("./.github/actions/package", Scalar(steps[7], "uses"));
+        // zsh, the Mac's own shell, before the node tests: its real login shell row fails under CI without it.
+        Assert.Contains("install -y --no-install-recommends zsh", Scalar(steps[4], "run"), StringComparison.Ordinal);
+        Assert.Equal("${{ needs.version.outputs.sdk }}", Scalar(Mapping(steps[7], "with"), "sdk-version"));
+        var with = Mapping(steps[8], "with");
+        Assert.Equal("./.github/actions/package", Scalar(steps[8], "uses"));
         Assert.Equal("linux-x64", Scalar(with, "rid"));
         Assert.Equal("${{ needs.version.outputs.release }}-ci.${{ github.run_number }}", Scalar(with, "version"));
         Assert.Equal("true", Scalar(with, "desktop"));

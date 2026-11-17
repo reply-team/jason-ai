@@ -22,7 +22,7 @@
  */
 
 import { accessSync, appendFileSync, chmodSync, constants, lstatSync, readdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 
 /** What `install.sh` ever leaves in its folder: the executable and its two notices (`PathEntry.UnixInstallerFiles`). */
 export const installerFiles: readonly string[] = ['jason', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES'];
@@ -114,19 +114,34 @@ export function carriesLine(text: string, folder: string): boolean {
  * the blank line above them where there is one — or the same string when it carries none. Every other byte stays.
  */
 export function withoutLines(text: string, folder: string): string {
-    const line = asBytes(exportLine(folder));
-    if (!text.includes(line)) return text;
-    const lines = text.split('\n');
-    let removed = false;
-    for (let index = lines.length - 1; index > 0; index--) {
-        if ((lines[index] ?? '').trimEnd() !== line || (lines[index - 1] ?? '').trim() !== profileMarker) continue;
-        let first = index - 1;
-        if (first > 0 && (lines[first - 1] ?? '').trim() === '') first--;
-        lines.splice(first, index - first + 1);
-        removed = true;
-        index = first;
+    // Exactly what the append wrote, `\n<marker>\n<line>\n`, ending the file or a line of it: taking it out leaves every
+    // other byte as it was, a last line the profile ended without a newline among them.
+    const block = `\n${profileMarker}\n${asBytes(exportLine(folder))}`;
+    let out = text;
+    let from = 0;
+    for (;;) {
+        const at = out.indexOf(block, from);
+        if (at < 0) break;
+        const end = at + block.length;
+        if (end === out.length) out = out.slice(0, at);
+        else if (out[end] === '\n') out = out.slice(0, at) + out.slice(end + 1);
+        else from = at + 1;
     }
-    return removed ? lines.join('\n') : text;
+    return out === text ? text : out;
+}
+
+/**
+ * Whether the folder holds a character the shell reads inside the line's double quotes — `"`, `$`, a backtick or a
+ * backslash — which would make the line code every login runs, or a line it cannot parse. The machine's own separator
+ * is a separator, not a character of a name: on macOS and Linux it is `/`, so a backslash is always one of them there.
+ */
+export function unsafeFolder(folder: string): boolean {
+    return /["$`]/.test(folder) || (sep !== '\\' && folder.includes('\\'));
+}
+
+/** The line to add by hand: the script's own, or for a folder it cannot spell, the folder in single quotes. */
+export function handLine(folder: string): string {
+    return unsafeFolder(folder) ? `export PATH='${folder.replaceAll("'", "'\\''")}':"$PATH"` : exportLine(folder);
 }
 
 /** Why a profile file cannot take the lines, or null where it can. */
@@ -153,6 +168,8 @@ export interface PathLines {
     folder: string;
     /** `export PATH="<folder>:$PATH"`, which goes under the marker. */
     line: string;
+    /** The line the words give to add by hand: `line`, or the folder in single quotes where it holds a character `line` cannot carry. */
+    byHand: string;
     /** The files the act writes the marker and the line into, in order; empty where a new terminal finds the folder already, or every file holds the line. */
     add: string[];
     /** Why a file of `add` cannot take them: then no profile is written, and the line is to be added by hand. */
@@ -204,9 +221,10 @@ export function pathLines(account: ProfileAccount, folder: string, held: 'jason'
     const interactive = interactiveProfile(account.home, account.shellNamed);
     const targets = [loginProfile(account.home, account.shellNamed), ...(interactive === null ? [] : [interactive])];
     const add = namesFolder(account.terminalPath(), folder) ? [] : targets.filter((file) => !carriesLine(bytesOf(file) ?? '', folder));
-    const refused = add.flatMap((file) => refusal(file) ?? []);
+    const unsafe = add.length > 0 && unsafeFolder(folder) ? [`${folder} holds a character the shell would read as code in that line`] : [];
+    const refused = [...unsafe, ...add.flatMap((file) => refusal(file) ?? [])];
     const marked = markedIn(account.home, folder);
-    return { folder, line, add, refused, interactive: interactive !== null, take: held === null ? marked : [], kept: held === null ? [] : marked, held: marked.length > 0 ? held : null };
+    return { folder, line, byHand: handLine(folder), add, refused, interactive: interactive !== null, take: held === null ? marked : [], kept: held === null ? [] : marked, held: marked.length > 0 ? held : null };
 }
 
 /** What an act did to the profiles: the files it added the lines to, or why it added them to none. */
@@ -271,13 +289,16 @@ export function takeLines(lines: PathLines): string[] {
         }
         const without = withoutLines(text, lines.folder);
         if (without === text) continue;
+        // Made exclusively: whatever stands at that name already, a link among them, is never written through or removed.
         const temporary = `${file}.jason-desktop.tmp`;
+        let made = false;
         try {
-            writeFileSync(temporary, Buffer.from(without, 'latin1'), { mode });
+            writeFileSync(temporary, Buffer.from(without, 'latin1'), { mode, flag: 'wx' });
+            made = true;
             chmodSync(temporary, mode);
             renameSync(temporary, file);
         } catch {
-            rmSync(temporary, { force: true });
+            if (made) rmSync(temporary, { force: true });
             failed.push(file);
         }
     }
@@ -294,5 +315,5 @@ export function addedWords(lines: PathLines, added: readonly string[]): string {
 
 /** The words where no profile took the lines: which file, why, and the line to add by hand. */
 export function byHandWords(lines: PathLines, refused: readonly string[]): string {
-    return `${refused.join('; ')}, so no profile was changed and ${lines.folder} is not on the PATH yet. Add this line to ${lines.add.join(' and ')} by hand: ${lines.line}`;
+    return `${refused.join('; ')}, so no profile was changed and ${lines.folder} is not on the PATH yet. Add this line to ${lines.add.join(' and ')} by hand: ${lines.byHand}`;
 }

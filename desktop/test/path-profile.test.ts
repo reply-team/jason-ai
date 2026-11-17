@@ -247,6 +247,63 @@ test('the files Jason writes in the folder are the C# uninstall’s list, and th
     assert.deepEqual([...desktopFiles], ['jason', 'jason-desktop']);
 });
 
+test('a removal leaves every other byte of the profile as it was, a last line without its newline among them', (t) => {
+    const { home, folder, command, line } = desk(t);
+    const before = { '.zprofile': '# mine, no newline at the end', '.zshrc': 'alias a=b\r\n\n\n# kept\t ' };
+    for (const [name, body] of Object.entries(before)) writeFileSync(join(home, name), body);
+    command.place();
+    assert.equal(text(join(home, '.zprofile')), `# mine, no newline at the end${block(line)}`);
+    command.remove();
+    for (const [name, body] of Object.entries(before)) assert.equal(text(join(home, name)), body, name);
+    // Two blocks, one in the middle, both come out; a marker over another folder's line stays.
+    const other = exportLine('/elsewhere/bin');
+    const middle = `a${block(line)}b\n${block(other)}${block(line)}`;
+    assert.equal(withoutLines(middle, folder), `ab\n${block(other)}`);
+});
+
+test('a folder holding a character the shell reads in double quotes gets no line: the line to add by hand quotes it', (t) => {
+    // `$` and a backtick on every system; `"` and `\\` too where the file system takes them in a name.
+    const odd = process.platform === 'win32' ? 'a$b`c' : 'a$b`c"d\\e\'f';
+    const at = join(home(t), odd);
+    mkdirSync(at);
+    const { folder, command } = desk(t, { at });
+    const status = command.status();
+    const lines = status.state === 'absent' ? status.lines : undefined;
+    assert.deepEqual(lines?.refused, [`${folder} holds a character the shell would read as code in that line`]);
+    assert.ok(lines?.byHand.startsWith("export PATH='") && lines.byHand.endsWith("':\"$PATH\""), lines?.byHand);
+    assert.ok(commandMenuOf(status).lines.some((each) => each.includes(lines?.byHand ?? '?') && each.includes('by hand')));
+    assert.ok(commandQuestion('place', status).detail.endsWith(`\n${lines?.byHand}`));
+    const placed = command.place();
+    assert.equal(placed.status.state, 'placed', 'the wrapper is still placed');
+    assert.equal(placed.said?.added, false);
+    assert.ok(placed.said?.words.endsWith(`by hand: ${lines?.byHand}`));
+    assert.deepEqual(['.profile', '.zprofile', '.zshrc'].filter((name) => existsSync(join(at, name))), [], 'nothing is written');
+    // The line given by hand puts the folder on the PATH, its characters as they are, and runs nothing.
+    if (process.platform !== 'win32') {
+        const run = spawnSync('sh', ['-c', `${lines?.byHand ?? ''}; printf '%s' "$PATH"`], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+        assert.equal(run.stdout, `${folder}:/usr/bin:/bin`, run.stderr);
+    }
+});
+
+test('the temporary file beside a profile is made exclusively: a link standing at its name is never written through', (t) => {
+    const { home, command, line } = desk(t);
+    command.place();
+    const profile = join(home, '.zprofile');
+    const target = join(home, 'not-a-profile');
+    writeFileSync(target, 'kept\n');
+    try {
+        symlinkSync(target, `${profile}.jason-desktop.tmp`, 'file');
+    } catch {
+        t.diagnostic('this account cannot make a link to a file here');
+        return;
+    }
+    assert.throws(() => command.remove(), (error: Error) => error.message.includes(profile) && error.message.includes('by hand'));
+    assert.equal(readFileSync(target, 'utf8'), 'kept\n', 'nothing written through the link');
+    assert.equal(lstatSync(`${profile}.jason-desktop.tmp`).isSymbolicLink(), true, 'the link is left where it stood');
+    assert.equal(text(profile), block(line), 'the profile is as it was');
+    assert.equal(text(join(home, '.zshrc')), '', 'the other profile is still rewritten');
+});
+
 test('a profile that is a link, a folder or cannot be written takes nothing, nor does any other; the wrapper is still placed and the line is given', (t) => {
     const refusals: [string, (file: string, home: string) => boolean, RegExp][] = [
         ['a link', (file, home) => {
@@ -344,7 +401,7 @@ test('the TypeScript copy is held to install.sh: the marker, the line, the appen
     assert.equal(addedWords(lines(false), ['/h/.zprofile', '/h/.zshrc']), fill(said('sign out and back in')));
     // The removal is the uninstall's: the blank line, the marker and the line come out, and a line nobody marked stays.
     assert.equal(withoutLines(`# mine\n${block(exportLine('/h'))}`, '/h'), '# mine\n');
-    assert.equal(withoutLines(`# mine${block(exportLine('/h'))}`, '/h'), '# mine\n');
+    assert.equal(withoutLines(`# mine${block(exportLine('/h'))}`, '/h'), '# mine', 'a profile that ended without a newline gets none');
     assert.equal(withoutLines(`a\n${exportLine('/h')}\n`, '/h'), `a\n${exportLine('/h')}\n`);
 });
 
@@ -391,6 +448,8 @@ test('after the act a real login shell of a scratch home finds jason: bash, and 
     for (const shell of ['bash', 'zsh']) {
         const found = spawnSync('sh', ['-c', `command -v ${shell}`], { encoding: 'utf8' }).stdout.trim();
         if (found === '') {
+            // The desktop's CI job installs zsh, the Mac's own shell: there, a machine without it is a failure.
+            if (process.env['CI']) assert.fail(`${shell} is not on this machine, and CI installs it`);
             t.diagnostic(`${shell} is not on this machine`);
             continue;
         }
