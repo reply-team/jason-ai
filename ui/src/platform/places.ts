@@ -29,7 +29,7 @@ export type PlaceKind = 'window' | 'tab' | 'none';
 
 /**
  * Whether a page in a place of this kind draws the console. The desktop's own window does, and so does a tab the desktop
- * opened; a tab with no desktop draws one page of text and the Demo | Live switch. The one place that says so.
+ * opened; a tab with no desktop draws the demo, or one page of text and the Demo | Live switch. The one place that says so.
  */
 export const showsConsole = (kind: PlaceKind = placeKind()): boolean => kind !== 'none';
 

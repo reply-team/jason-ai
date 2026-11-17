@@ -525,6 +525,7 @@ describe('a choice’s members', () => {
             'Don\u00b4t allow',
             'Answer',
             'Connect',
+            'Use key',
             'Approve.',
         ])
             expect(failure(read(choice({ options: [{ label }, { label: 'Not yet' }] }))), label).toBe(schema('choice'));
@@ -604,6 +605,7 @@ describe('a choice’s members', () => {
                 'Approve and run',
                 'Answer',
                 'Connect',
+                'Use key',
                 'Plan only',
                 'Default effort',
                 'Send',

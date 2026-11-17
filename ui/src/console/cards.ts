@@ -87,6 +87,7 @@ export const controlWords: readonly string[] = [
     'Make the link',
     'Set',
     'Save key',
+    'Use key',
     'Install',
     'Update',
     'Remove the key',

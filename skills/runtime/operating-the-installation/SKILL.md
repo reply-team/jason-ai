@@ -47,8 +47,8 @@ jason ui revoke <token-id>
 prints the link alone, which is what you want from a session: hand the person the `url` and say it works once, within
 a minute. After that pairing, a bookmark of the page keeps working. `--approval <id>` and `--question <id>` open at the
 address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
-this opens shows one page that says Live Mode is only available in Jason Desktop, where to download it, and what waits
-and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
+this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
+where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
 `jason decision` commands.
 
 If it fails with `ui_not_installed`, no UI build is in place, and the message names the fix: `jason ui install` places

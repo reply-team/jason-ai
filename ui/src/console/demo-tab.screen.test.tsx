@@ -2,6 +2,7 @@ import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } fro
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
+import { opening } from '../platform/tab-choice';
 import { demoFrame, demoPage } from '../platform/demo-frame';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { noDesktop, setPlace, tabDesktop, type PlaceKind } from '../platform/places';
@@ -70,6 +71,8 @@ async function renderIn(kind: PlaceKind, hash = '') {
 }
 
 beforeEach(() => {
+    opening.done = false;
+    sessionStorage.clear();
     present = true;
     demoPage.present = () => Promise.resolve(present);
     chats.value = {};

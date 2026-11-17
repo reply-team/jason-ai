@@ -27,17 +27,19 @@ export function AccountsScreen() {
                 />
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 <div className="sys">
-                    <section className="card wide">
-                        <h2>Provider</h2>
-                        {provider ? (
+                    {provider ? (
+                        <section className="wide provider">
                             <Painted className="painted" view={provider.view} onGone={provider.gone} />
-                        ) : (
+                        </section>
+                    ) : (
+                        <section className="card wide">
+                            <h2>Provider</h2>
                             <p className="empty">
                                 Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason
                                 Desktop; a browser cannot do them.
                             </p>
-                        )}
-                    </section>
+                        </section>
+                    )}
 
                     <section className="card wide">
                         <h2>
@@ -90,9 +92,11 @@ export function AccountsScreen() {
                             </p>
                         )}
                         <p className="hint">
-                            These are changed under <code>Notifications:*</code> in the installation’s settings file,{' '}
-                            {provider && 'on the Connect panel, '}or by asking your AI, whose operating-the-installation
-                            skill covers them; this page only shows them.
+                            This is how Jason tells you that an approval or a question is waiting for you. To turn a
+                            channel on or off, ask your AI
+                            {provider &&
+                                '; a provider’s channel can also be connected or disconnected on the Connect panel'}
+                            .
                         </p>
                     </section>
                 </div>

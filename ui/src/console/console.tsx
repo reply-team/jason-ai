@@ -767,7 +767,7 @@ export function Console({
     // A browser tab shows the demo as a view of its own, the console put away; the window's demo is the desktop's.
     if (route.value.screen === 'demo' && placeKind() !== 'window') return <DemoView />;
     if (!session.paired.value) return <PairAgain />;
-    // A tab with no desktop draws one page, never the console.
+    // A tab with no desktop draws the demo or one page, never the console.
     if (!showsConsole()) return <NoDesktopPage api={client} />;
     return (
         <ApiProvider api={client}>
