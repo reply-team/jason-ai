@@ -310,6 +310,8 @@ public sealed class UpdateCarriedHandOverTests
 
         Assert.Equal(UpdateCodes.DesktopNotInstalled, refused.Code);
         Assert.Contains($"names {installation.From}", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Nothing was installed. The likely cause is a Jason Desktop that is running, one of another data directory included", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("quit it, then run `jason update apply` again.", refused.Message, StringComparison.Ordinal);
         Assert.Contains($"was started again from {installation.InstallPath}", refused.Message, StringComparison.Ordinal);
         Assert.True(installation.Running);
         Assert.Null(installation.Ledger());
@@ -453,6 +455,36 @@ public sealed class UpdateCarriedHandOverTests
         var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
         Assert.Equal(code, refusal.Code);
         Assert.Contains("stands at 'stopped'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
+        Assert.Empty(desktop.Starts);
+    }
+
+    /// <summary>
+    /// A carried rollback at kept, where the installer never landed the new version and the application is still the version
+    /// the update left: nothing the command line changed stands and the application is already that version, so it refuses
+    /// with nothing_to_roll_back, advises no step by hand that would put that version back over itself, and leaves the
+    /// record as it stood.
+    /// </summary>
+    [Fact]
+    public async Task A_carried_rollback_at_kept_with_the_application_still_the_old_version_is_refused()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        // The Desktop kept the application and handed the update to its installer, which did not put the new one in place.
+        installation.Killed(UpdateStep.Stopped).At(UpdateStep.Kept).Write(installation.Update.Ledger);
+        desktop.Keep();
+        Assert.Equal(installation.From.ToString(), installation.Installed());
+        var before = File.ReadAllText(installation.Update.Ledger);
+
+        var exit = await CliApp.RunAsync(["update", "rollback"], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.NothingToRollBack, refusal.Code);
+        Assert.Contains("stands at 'kept'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"is {installation.From} already", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("by hand", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
         Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
         Assert.Empty(desktop.Starts);
@@ -714,6 +746,69 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Equal(asked + 1, desktop.Requests.Count);
         Assert.NotEqual(UpdateCodes.InProgress, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
         Assert.Equal(UpdateStep.Kept, installation.Ledger()!.Step);
+    }
+
+    /// <summary>
+    /// An earlier hand-over whose files were written in the future - the clock stepped back since - is treated as aged, so
+    /// the refusal that waits for an installer holds nobody for longer than the install's own wait: Jason Desktop is asked
+    /// again at once. And the files of the earlier request, which nothing reads once a newer request is recorded, are swept
+    /// when the newer one is: only the newer request's answer is left in the update folder.
+    /// </summary>
+    [Fact]
+    public async Task A_hand_over_written_in_the_future_is_aged_and_an_earlier_requests_files_are_swept()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        const string Id = "cli-earlier";
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        installation.OnHandOver = command =>
+        {
+            if (command[0] != copy)
+            {
+                return;
+            }
+
+            File.WriteAllText(installation.Update.DesktopRequest, Id);
+            installation.Ledger()!.At(UpdateStep.Kept).Write(installation.Update.Ledger);
+            desktop.Keep();
+            desktop.Write(Id, installation.To.ToString(), "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+            File.WriteAllText(Path.Combine(installation.Update.Root, $"desktop-{Id}.go"), string.Empty);
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
+        };
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token));
+
+        // Older requests still lying about from runs before that one.
+        File.WriteAllText(Path.Combine(installation.Update.Root, "desktop-cli-older.json"), "{}");
+        File.WriteAllText(Path.Combine(installation.Update.Root, "desktop-cli-older.go"), string.Empty);
+
+        // The clock stepped back three hours after the hand-over: its files are written in the future.
+        var ahead = DateTime.UtcNow + TimeSpan.FromHours(3);
+        foreach (var file in Directory.EnumerateFiles(installation.Update.Root, "desktop-*"))
+        {
+            File.SetLastWriteTimeUtc(file, ahead);
+        }
+
+        installation.OnHandOver = null;
+        desktop.Before = (id, to) =>
+        {
+            desktop.Write(id, to, "refused", reason: "version_mismatch", message: "The releases offer another version.", offered: "0.0.1");
+            return 1;
+        };
+        installation.Out.GetStringBuilder().Clear();
+        var asked = desktop.Requests.Count;
+        Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+
+        Assert.Equal(asked + 1, desktop.Requests.Count);
+        Assert.NotEqual(UpdateCodes.InProgress, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        var newer = desktop.Requests[^1][desktop.Requests[^1].ToList().IndexOf("--request") + 1];
+        Assert.NotEqual(Id, newer);
+        var left = Directory.EnumerateFiles(installation.Update.Root, "desktop-*")
+            .Select(Path.GetFileName)
+            .Where(name => name!.EndsWith(".json", StringComparison.Ordinal) || name.EndsWith(".go", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal);
+        Assert.Equal([$"desktop-{newer}.json"], left);
     }
 
     /// <summary>

@@ -54,9 +54,32 @@ public sealed class UninstallCarriedTests : IDisposable
         var refusal = RuntimeVerbs.Envelope(output.ToString());
         Assert.Equal("uninstall_carried_by_desktop", refusal.Code);
         Assert.Contains(executable, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(UninstallCommand.RemovingTheApplication, refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Trash", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Installed apps", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(executable), "the application's executable was removed");
         Assert.True(Directory.Exists(_dir.Paths.Root), "the data directory was removed");
+    }
+
+    /// <summary>
+    /// The refusal above is reached only where no system's places are known, so the way it names is Linux's: on a real machine
+    /// the places are known on Windows and on macOS, where this verb is the application's one uninstall, and unknown elsewhere.
+    /// </summary>
+    [Fact]
+    public void A_systems_places_are_known_on_Windows_and_macOS_and_nowhere_else()
+    {
+        var places = SetupPlaces.ForThisMachine();
+
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            Assert.NotNull(places);
+            Assert.Equal(OperatingSystem.IsWindows() ? SetupSystem.Windows : SetupSystem.MacOs, places.Platform);
+        }
+        else
+        {
+            Assert.Null(places);
+        }
     }
 
     // --- macOS -----------------------------------------------------------------------------------------------------
