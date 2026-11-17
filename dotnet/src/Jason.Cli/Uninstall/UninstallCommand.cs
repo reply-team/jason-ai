@@ -204,7 +204,7 @@ public static class UninstallCommand
                 options.Human,
                 CliErrors.UninstallCarriedByDesktop,
                 $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason uninstall` "
-                + $"would delete it out of the application. Nothing was read or removed. {RemovingTheApplication()} "
+                + $"would delete it out of the application. Nothing was read or removed. {RemovingTheApplication}"
                 + $"The data directory at '{env.Paths.Root}' is kept either way.");
         }
 
@@ -639,12 +639,13 @@ public static class UninstallCommand
               + ", then run this again. Nothing was removed; the data directory is kept either way unless --purge-data says otherwise.";
     }
 
-    private static string RemovingTheApplication() =>
-        OperatingSystem.IsWindows()
-            ? "Uninstall Jason from Installed apps in Settings: its uninstaller stops the runtime the application carries and takes off what it placed."
-            : OperatingSystem.IsMacOS()
-                ? "Take off what the application placed from its Jason menu, quit it, then move Jason.app to the Trash."
-                : "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
+    /// <summary>
+    /// How the application is removed where the refusal that names it is reached: only where no system's places are known, and
+    /// on a real machine they are known on Windows and macOS (<see cref="SetupPlaces.ForThisMachine"/>), where this verb is the
+    /// application's one uninstall. So it is Linux's way, and the sentence names no other system's.
+    /// </summary>
+    internal const string RemovingTheApplication =
+        "Take off what the application placed from its Jason menu, quit it, then remove the package it was installed from, or delete the AppImage.";
 
     /// <summary>
     /// The one shape a refusal takes: the error envelope on stdout by default, a sentence on stderr under
