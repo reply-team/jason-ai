@@ -4,12 +4,14 @@
 // electron-builder's own check does that where PowerShell is not available, and where it is, closes every program whose
 // path merely begins with the installation folder, the runtime this application carries among them. These rows hold the
 // check that replaces it to the one file it may close, the application's own executable by its exact path, and to the
-// one it looks for and never closes, the carried jason executable by its exact path, of whichever data directory;
-// neither the installer nor the uninstaller is run here.
+// one it looks for and never closes, the carried jason executable by its exact path, of whichever data directory, passing
+// over only the one process a carried `jason update apply` records while it waits for the installer; neither the installer
+// nor the uninstaller is run here.
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { copyFileSync, linkSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -160,6 +162,12 @@ test('the whole include runs only the commands these rows name, stops only the a
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
     ]);
+    // The record of the one process the runtime's filter passes over is named once, beside the carried executable, and
+    // read by that filter alone.
+    assert.deepEqual(naming('JASON_DESKTOP_UPDATING'), [
+        `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+    ]);
     assert.deepEqual(naming('JASON_OWN_RUNTIME'), [
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
         `nsExec::Exec \`${runtimeLook}\``,
@@ -180,11 +188,12 @@ test('the carried jason executable is looked for by its exact path, in a filter 
     assert.deepEqual([...script.matchAll(/\$INSTDIR\\resources/gi)].map((found) => script.slice(script.lastIndexOf('\n', found.index) + 1, script.indexOf('\n', found.index)).trim()), [
         `!define JASON_RUNTIME_STILL "${define('JASON_RUNTIME_STILL')}"`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
     ]);
     assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
         'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
     ]);
-    assert.equal(filter('JASON_OWN_RUNTIME'), 'Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) }');
+    assert.equal(filter('JASON_OWN_RUNTIME'), "& { $skip = -1; try { $named = @((Get-Content -LiteralPath $env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $found = Get-Process -Id ([int]$named[0]) -ErrorAction Stop; if ($found.StartTime.ToFileTimeUtc() -eq [long]$named[1]) { $skip = $found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $skip } }");
     const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_OWN_RUNTIME}'));
     assert.deepEqual(looks, Array(3).fill(runtimeLook));
 });
@@ -286,5 +295,57 @@ test('the filters find a running program by its exact path, whatever the case, a
         assert.equal(running(self.slice(0, -1)), false, name);
         assert.equal(running(`${self}.old`), false, name);
         assert.equal(running(join(dirname(self), 'jason', basename(self))), false, name);
+    }
+});
+
+test('the runtime filter passes over the one process the record names by its id and its start, and no other', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, async () => {
+    // A process of the test's own, from a path no other process runs from, so that what the filter finds is that process
+    // alone: node itself, linked under a folder of the test's own, waiting until it is ended.
+    const folder = mkdtempSync(join(tmpdir(), 'jason-update-pid-'));
+    const image = join(folder, 'jason.exe');
+    try {
+        linkSync(process.execPath, image);
+    } catch {
+        copyFileSync(process.execPath, image);
+    }
+    const child = spawn(image, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true });
+    try {
+        await new Promise<void>((resolve, reject) => {
+            child.once('spawn', () => resolve());
+            child.once('error', reject);
+        });
+        const record = join(folder, 'jason-update.pid');
+        const found = (updating: string) => {
+            try {
+                execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `if (@(${filter('JASON_OWN_RUNTIME')}).Count -gt 0) { exit 0 } else { exit 1 }`], {
+                    env: { ...process.env, JASON_DESKTOP_RUNTIME: image, JASON_DESKTOP_UPDATING: updating },
+                    stdio: 'ignore',
+                    windowsHide: true,
+                });
+                return true;
+            } catch {
+                return false;
+            }
+        };
+        // The process's start as Windows reads it, which is what the carried jason writes (Process.StartTime, as file time).
+        const started = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${child.pid}).StartTime.ToFileTimeUtc()`], { encoding: 'utf8', windowsHide: true }).trim();
+        assert.match(started, /^\d+$/);
+
+        // No record, an empty one, a malformed one: nothing is passed over, and the process is found.
+        assert.equal(found(join(folder, 'none.pid')), true);
+        writeFileSync(record, '');
+        assert.equal(found(record), true);
+        writeFileSync(record, 'not a pid');
+        assert.equal(found(record), true);
+        // A start that is not the process's: a record left behind, its id since given to another process.
+        writeFileSync(record, `${child.pid} ${BigInt(started) - 1n}`);
+        assert.equal(found(record), true, 'a record whose start does not match passed a process over');
+        // The process the record names, by its id and its start, is passed over.
+        writeFileSync(record, `${child.pid} ${started}`);
+        assert.equal(found(record), false, 'the process the record names was not passed over');
+    } finally {
+        child.kill();
+        await new Promise<void>((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve() : child.once('exit', () => resolve())));
+        rmSync(folder, { recursive: true, force: true });
     }
 });
