@@ -599,7 +599,10 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   constant. It does so only within a second (`demoLinkGestureMs`) of a person's left click let go or Enter pressed in the
   page's view, which the main process sees as input reaching the view (`watchDemoGestures`, by `input-event` and
   `before-input-event`), so a page that asks for the address on load or on its own opens nothing; and at most once in two
-  seconds (`demoLinkSpanMs`), so a person clicking again and again opens one tab. Any other address opens nothing. The view's pop-ups stay denied, the policy is
+  seconds (`demoLinkSpanMs`), so a person clicking again and again opens one tab. Said plainly: any real click or Enter
+  in the page, on the link or anywhere else, gives the page one second in which that one address may open, at most one
+  tab per act. Both moments are read from a monotonic clock (`performance.now()`), and a moment before the gesture is
+  refused. Any other address opens nothing. The view's pop-ups stay denied, the policy is
   unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
   `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at

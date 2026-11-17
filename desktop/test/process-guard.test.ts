@@ -170,7 +170,7 @@ test('outside the navigation lock only the Demo’s opener reaches the system br
     assert.ok(main.includes(`${demoOpener.definition}\n    ${demoOpener.call}.then(`), 'the Demo’s opener takes no address and opens the constant');
     assert.match(main, /open: \(\) => openDemoRepository\(log\),/);
     assert.deepEqual(processViolations('src/main.ts', main), []);
-    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\nimport { demoRepository } from './demo-page.ts';\n";
     const opener = (body: string) => `${demoOpener.definition}\n${body}\n}\n`;
     const called = '            open: () => openDemoRepository(log),\n';
     assert.deepEqual(processViolations('src/main.ts', lock + opener(`    ${demoOpener.call}.then(() => 0);`) + called), []);
@@ -203,6 +203,12 @@ test('the Demo’s opener has one caller, the Demo window’s open, and main.ts 
     ]) {
         assert.notDeepEqual(processViolations('src/main.ts', defined + planted), [], planted);
     }
+    // Without the import, a binding the patterns do not read (an array's or a parameter's) could stand for the address.
+    const unimported = defined.replace("import { demoBeforeReady, demoRepository } from './demo-page.ts';\n", '');
+    for (const planted of ['', 'const [demoRepository] = ["https://example.com/"];\n', 'function at(demoRepository) {}\n']) {
+        assert.ok(processViolations('src/main.ts', unimported + called + planted).some((line) => /without importing demoRepository/.test(line)), planted);
+    }
+    assert.notDeepEqual(processViolations('src/main.ts', defined.replace("from './demo-page.ts'", "from './other.ts'") + called), []);
     // A comment names the opener and calls nothing; any other module naming it fires the rule.
     assert.deepEqual(processViolations('src/main.ts', `${defined}${called}// openDemoRepository opens the repository.\n`), []);
     assert.notDeepEqual(processViolations('src/demo-window.ts', 'void openDemoRepository(log);\n'), []);

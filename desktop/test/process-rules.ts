@@ -143,6 +143,9 @@ const demoOpenerCall = 'open: () => openDemoRepository(log),';
 /** A name in main.ts that could stand for the address the opener opens: only the import from demo-page.ts may name it. */
 const demoRepositoryBound = /\bdemoRepository\s*=(?!=)|\bas\s+demoRepository\b|\bdemoRepository\s*:|:\s*demoRepository\b/g;
 
+/** main.ts's import of the address from the page's module, the one place the opener's constant may come from. */
+const demoRepositoryImport = /^import \{[^}]*\bdemoRepository\b[^}]*\} from '\.\/demo-page\.ts';$/m;
+
 /** The body of main.ts's Demo opener, or null. */
 function demoOpenerBody(text: string): { start: number; end: number } | null {
     const start = text.indexOf(demoOpener.definition);
@@ -295,6 +298,8 @@ export function processViolations(path: string, text: string): string[] {
     }
     if (path === 'src/main.ts') {
         for (const match of text.matchAll(demoRepositoryBound)) found.push(`${path} binds a name of its own to the repository's address: ${match[0].trim()}`);
+        // The name the opener opens is the import from demo-page.ts, so no binding the patterns above miss can stand for it.
+        if (text.includes(demoOpener.definition) && !demoRepositoryImport.test(text)) found.push(`${path} defines the Demo's opener without importing demoRepository from './demo-page.ts'`);
     }
     const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
     if (path !== 'src/browser-bridge.ts') {

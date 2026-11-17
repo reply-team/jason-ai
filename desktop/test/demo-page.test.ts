@@ -965,6 +965,21 @@ test('a click or Enter opens the address within the gesture’s second, and afte
     assert.equal(demoLinkGestureMs, 1000);
 });
 
+test('a moment before the gesture opens nothing, and both moments are read from a monotonic clock', async () => {
+    const view = await sealedPage();
+    view.click();
+    view.clock.now -= 1;
+    assert.ok(navigate(view, 'will-navigate', demoRepository));
+    assert.deepEqual(view.opened, [], 'a clock that stepped back keeps the gate shut');
+    assert.deepEqual(view.refused, ['navigation']);
+    // Without a clock given, the watch and the opener read performance.now(), which no step of the system's clock moves.
+    const source = readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8');
+    assert.match(source, /const monotonic = \(\): number => performance\.now\(\);/);
+    assert.match(source, /export function watchDemoGestures\(contents: Pick<WebContents, 'on'>, now: \(\) => number = monotonic\)/);
+    assert.match(source, /export function demoLinkOpener\(open: \(\) => void, gestureAt: \(\) => number \| null, now: \(\) => number = monotonic\)/);
+    assert.ok(!/Date\.now/.test(source.slice(source.indexOf('export const demoLinkGestureMs'))), 'no wall clock in the gate');
+});
+
 test('the same address again within the span opens nothing, a gesture before it or not; after the span a new gesture opens it again', async () => {
     const view = await sealedPage();
     view.click();

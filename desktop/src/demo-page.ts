@@ -483,6 +483,9 @@ export const demoLinkScript = `(() => {
  */
 export const demoLinkGestureMs = 1000;
 
+/** The gesture watch's and the opener's clock: monotonic, so a step of the system's clock neither opens nor closes the second. */
+const monotonic = (): number => performance.now();
+
 /** What the gesture watch reads of an input event that reached the view: its type, and a key's name or a mouse button. */
 export interface DemoInput {
     type: string;
@@ -501,7 +504,7 @@ export function isDemoLinkGesture(input: DemoInput): boolean {
  * Watches the input that reaches the page's view, a mouse button's by `input-event` and a key's by `before-input-event`,
  * and answers when the last person's act on a link (`isDemoLinkGesture`) reached it, or null before any.
  */
-export function watchDemoGestures(contents: Pick<WebContents, 'on'>, now: () => number = Date.now): () => number | null {
+export function watchDemoGestures(contents: Pick<WebContents, 'on'>, now: () => number = monotonic): () => number | null {
     let last: number | null = null;
     const seen = (input: DemoInput) => {
         if (isDemoLinkGesture(input)) last = now();
@@ -518,13 +521,14 @@ export function watchDemoGestures(contents: Pick<WebContents, 'on'>, now: () => 
  * than a refusal. The address with no such act before it, and any other address, are refused and open nothing. Electron
  * asks about one navigation of the main frame twice (`will-navigate`, `will-frame-navigate`); the span opens it once.
  */
-export function demoLinkOpener(open: () => void, gestureAt: () => number | null, now: () => number = Date.now): (url: string) => boolean {
+export function demoLinkOpener(open: () => void, gestureAt: () => number | null, now: () => number = monotonic): (url: string) => boolean {
     let last: number | null = null;
     return (url) => {
         if (url !== demoRepository) return false;
         const at = now();
         const gesture = gestureAt();
-        if (gesture === null || at - gesture > demoLinkGestureMs) return false;
+        // A moment before the gesture is a clock gone wrong, not a moment within its second.
+        if (gesture === null || at < gesture || at - gesture > demoLinkGestureMs) return false;
         if (last !== null && at - last < demoLinkSpanMs) return true;
         last = at;
         open();

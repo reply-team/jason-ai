@@ -379,7 +379,9 @@ desktop's window that address is drawn as a link, in the colour of the page's ow
 and the desktop opens https://github.com/reply-team/jason-ai in your browser. The page itself still reaches nothing and
 opens no window: the link is the desktop's own, added to the page as it is shown, and the window refuses the page's
 navigation to the address as it refuses every other, then opens that one address, compared whole, only within a second
-of your own click or Enter in the page and at most once in two seconds, so the page cannot open it by itself. Any other
+of your own click or Enter in the page and at most once in two seconds, so the page cannot open it by itself. Said
+plainly: the link opens only right after a click or Enter of yours in the demo, so any real click or Enter in the page
+gives the page one second in which that one address may open, at most one tab per act. Any other
 address, the same one with a path, a query, a fragment or another scheme included, opens nothing. In a browser tab the
 address is text.
 
