@@ -54,7 +54,8 @@ The console reaches the desktop only through the seam typed in
   console is not drawn there: `showsConsole()` in `src/platform/places.ts` is the one place that says which places draw it, and a
   tab with no desktop gets one page (`src/console/no-desktop.tsx`) that says Live Mode is only available in Jason
   Desktop, links to where to get it, and, while something waits, says what and where to decide; the Demo | Live switch
-  is the only control.
+  is the only control. The tab opens on the demo when nothing waits (`src/platform/tab-choice.ts` keeps the person's own
+  choice of Demo or Live in the tab's session storage, over a reload).
 
 The page asks one question before it draws or does anything a place may not, `can(member)`, and draws what the place
 cannot do off, in its place, with one sentence. In a browser the pairing is read first, to learn whether the tab holds a

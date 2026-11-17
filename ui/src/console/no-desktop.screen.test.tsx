@@ -1,9 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Unpaired, type Api } from '../api/client';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
+import { opening } from '../platform/tab-choice';
 import { loadMode, mode } from '../platform/mode';
+import { choose, chosen } from '../platform/tab-choice';
 import { noDesktop, releasesPage, setPlace, tabDesktop, type PlaceKind } from '../platform/places';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -19,7 +21,7 @@ import { Console } from './console';
 const page = () => document.querySelector<HTMLElement>('.no-desktop');
 const consoleDrawn = () => document.querySelector('.side') !== null;
 
-async function renderIn(kind: PlaceKind, hash = '', fake?: FakeApi | Api) {
+async function renderIn(kind: PlaceKind, hash = '', fake?: FakeApi | Api, keepChoice = false) {
     const desktop = chatDesktop({ ...setupFound });
     const stand = standInBridge(desktop);
     const object =
@@ -45,6 +47,7 @@ async function renderIn(kind: PlaceKind, hash = '', fake?: FakeApi | Api) {
     if (api instanceof FakeApi) watch(api);
     activatePlugins(browserPlugins);
     localStorage.clear();
+    if (!keepChoice) sessionStorage.clear();
     history.replaceState(null, '', '/ui/' + hash);
     route.value = hash === '' ? { screen: 'attention' } : parseRoute(hash);
     session.clear();
@@ -57,6 +60,7 @@ async function renderIn(kind: PlaceKind, hash = '', fake?: FakeApi | Api) {
 }
 
 beforeEach(() => {
+    opening.done = false;
     mode.value = 'live';
 });
 
@@ -134,7 +138,7 @@ describe('the line under the words', () => {
         );
     });
 
-    it('is not drawn when nothing waits', async () => {
+    it('is not drawn when nothing waits: the tab opens on the Demo instead', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/empty')
             .answer('decision.list', 'decision.list/empty');
@@ -142,7 +146,8 @@ describe('the line under the words', () => {
         await waitFor(() =>
             expect(fake.calls.map((each) => each.operation).sort()).toEqual(['approval.list', 'decision.list']),
         );
-        await waitFor(() => expect(page()).not.toBeNull());
+        await waitFor(() => expect(document.querySelector('.demo-view')).not.toBeNull());
+        expect(page()).toBeNull();
         expect(line()).toBeNull();
     });
 
@@ -169,5 +174,100 @@ describe('the places that draw the console', () => {
         await renderIn(kind);
         await waitFor(() => expect(consoleDrawn()).toBe(true));
         expect(page()).toBeNull();
+    });
+});
+
+const empty = () =>
+    new FakeApi().answer('approval.list', 'approval.list/empty').answer('decision.list', 'decision.list/empty');
+const demoView = () => document.querySelector('.demo-view');
+
+describe('what a tab opens on', () => {
+    it('is the Demo when nothing waits, by a replaced address, and the person has chosen nothing yet', async () => {
+        const before = history.length;
+        await renderIn('none', '', empty());
+        await waitFor(() => expect(demoView()).not.toBeNull());
+        expect(location.hash).toBe('#/demo');
+        expect(history.length).toBe(before);
+        expect(chosen()).toBeNull();
+    });
+
+    it('is the Live page with its line when something waits', async () => {
+        await renderIn('none');
+        await waitFor(() => expect(document.querySelector('.no-desktop-waiting')).not.toBeNull());
+        expect(demoView()).toBeNull();
+    });
+
+    it('draws only the switch until the read answers, neither page and neither side pressed', async () => {
+        let answer: (value: unknown) => void = () => undefined;
+        const slow = {
+            call: () => new Promise((done) => (answer = done)),
+        } as unknown as Api;
+        await renderIn('none', '', slow);
+        await waitFor(() => expect(page()).not.toBeNull());
+        expect(page()!.querySelector('main')).toBeNull();
+        expect(demoView()).toBeNull();
+        expect(page()!.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(0);
+        answer({ items: [], next_cursor: null });
+    });
+
+    it('is the Live page when the read fails', async () => {
+        await renderIn('none', '', { call: () => Promise.reject(new Error('down')) } as unknown as Api);
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        expect(demoView()).toBeNull();
+    });
+
+    it('keeps the person’s Live over a reload of the tab, though nothing waits', async () => {
+        choose('live');
+        await renderIn('none', '', empty(), true);
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        await new Promise((done) => setTimeout(done, 20));
+        expect(demoView()).toBeNull();
+    });
+
+    it('keeps the person’s Demo over a reload of the tab, though something waits', async () => {
+        choose('demo');
+        await renderIn('none', '', undefined, true);
+        await waitFor(() => expect(demoView()).not.toBeNull());
+    });
+
+    it('still means the Demo for #/demo in the address, whatever was chosen', async () => {
+        choose('live');
+        await renderIn('none', '#/demo', undefined, true);
+        await waitFor(() => expect(demoView()).not.toBeNull());
+    });
+
+    it('lets Live from the default Demo show the Live page and stay, and remembers it', async () => {
+        await renderIn('none', '', empty());
+        await waitFor(() => expect(demoView()).not.toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        await new Promise((done) => setTimeout(done, 30));
+        expect(demoView()).toBeNull();
+        expect(chosen()).toBe('live');
+    });
+
+    it('remembers a press of Demo from the page', async () => {
+        await renderIn('none');
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'Demo' }));
+        await waitFor(() => expect(demoView()).not.toBeNull());
+        expect(chosen()).toBe('demo');
+    });
+
+    it('changes nothing when the browser refuses the storage', async () => {
+        vi.stubGlobal('sessionStorage', {
+            getItem: () => {
+                throw new Error('refused');
+            },
+            setItem: () => {
+                throw new Error('refused');
+            },
+        });
+        try {
+            expect(chosen()).toBeNull();
+            expect(() => choose('live')).not.toThrow();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });

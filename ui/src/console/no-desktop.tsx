@@ -3,6 +3,8 @@ import { Unpaired, type Api } from '../api/client';
 import { session } from '../api/session';
 import type { ApprovalSummary, DecisionSummary, Page } from '../api/types';
 import { showDemo } from '../platform/demo-frame';
+import { choose, chosen, opening } from '../platform/tab-choice';
+import { replace } from '../router';
 import { t } from '../platform/i18n';
 import { releasesPage } from '../platform/places';
 
@@ -60,7 +62,11 @@ export function waitingLine(waiting: Waiting | null): string | null {
  * is. Under the words a quiet line says what waits, only while something does.
  */
 export function NoDesktopPage({ api }: { api: Api }) {
-    const [waiting, setWaiting] = useState<Waiting | null>(null);
+    // undefined: the read has not answered; null: it failed.
+    const [waiting, setWaiting] = useState<Waiting | null | undefined>(undefined);
+    // What the tab opens on is decided once per load (see `opening`); the person's own choice outranks what waits.
+    const [first] = useState(() => !opening.done);
+    const own = first ? chosen() : 'live';
     useEffect(() => {
         let live = true;
         void readWaiting(api).then((found) => {
@@ -70,7 +76,21 @@ export function NoDesktopPage({ api }: { api: Api }) {
             live = false;
         };
     }, [api]);
-    const line = waitingLine(waiting);
+    // With no choice made, nothing waiting opens the Demo, as a press of Demo does, though it is not the person's choice
+    // and it replaces the address, so Back leaves the Demo for where the tab came from.
+    const toDemo =
+        own === 'demo' || (own === null && waiting !== undefined && waiting !== null && waitingLine(waiting) === null);
+    useEffect(() => {
+        if (toDemo) {
+            opening.done = true;
+            replace({ screen: 'demo' });
+        }
+    }, [toDemo]);
+    const settled = own === 'live' || (waiting !== undefined && !toDemo);
+    useEffect(() => {
+        if (settled) opening.done = true;
+    }, [settled]);
+    const line = waitingLine(waiting ?? null);
     const [before, after] = t('noDesktop.download').split('{link}');
     return (
         <div className="jc-console no-desktop">
@@ -79,23 +99,30 @@ export function NoDesktopPage({ api }: { api: Api }) {
                     <button type="button" aria-pressed="false" title={t('demo.show')} onClick={showDemo}>
                         {t('mode.switch.demo')}
                     </button>
-                    <button type="button" className="on" aria-pressed="true">
+                    <button
+                        type="button"
+                        className={settled ? 'on' : undefined}
+                        aria-pressed={settled ? 'true' : 'false'}
+                        onClick={() => choose('live')}
+                    >
                         {t('mode.switch.live')}
                     </button>
                 </div>
             </div>
-            <main className="no-desktop-page">
-                <h1>{t('noDesktop.title')}</h1>
-                <p>
-                    {before}
-                    <a href={releasesPage} target="_blank" rel="noopener noreferrer">
-                        {t('noDesktop.link')}
-                    </a>
-                    {after}
-                </p>
-                <p>{t('noDesktop.alternative')}</p>
-                {line !== null && <p className="no-desktop-waiting">{line}</p>}
-            </main>
+            {settled && (
+                <main className="no-desktop-page">
+                    <h1>{t('noDesktop.title')}</h1>
+                    <p>
+                        {before}
+                        <a href={releasesPage} target="_blank" rel="noopener noreferrer">
+                            {t('noDesktop.link')}
+                        </a>
+                        {after}
+                    </p>
+                    <p>{t('noDesktop.alternative')}</p>
+                    {line !== null && <p className="no-desktop-waiting">{line}</p>}
+                </main>
+            )}
         </div>
     );
 }

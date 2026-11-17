@@ -17,7 +17,7 @@ test('the build serves the desktop’s demo page as it is, under the sealed set'
     expect(answer.headers()['content-security-policy']).toMatch(/; frame-ancestors 'self'; sandbox allow-scripts$/);
 });
 
-test('the demo shows in the tab’s frame, asks for nothing but its own page, and Live brings the console back', async ({
+test('the demo opens in the tab’s frame by itself, asks for nothing but its own page, and Live brings the page back', async ({
     page,
     jason,
 }) => {
@@ -34,10 +34,7 @@ test('the demo shows in the tab’s frame, asks for nothing but its own page, an
 
     const { url } = await jason.uiOpen();
     await page.goto(url);
-    // No desktop: one page, never the console, with the switch that shows the demo.
-    await expect(page.locator('.jc-console.no-desktop')).toBeVisible();
-    await page.getByRole('group', { name: 'Data' }).getByRole('button', { name: 'Demo' }).click();
-
+    // No desktop and nothing waiting: the tab opens on the Demo by itself.
     await expect(page).toHaveURL(/#\/demo$/);
     const frame = page.locator('iframe.demo-frame');
     await expect(frame).toBeVisible();

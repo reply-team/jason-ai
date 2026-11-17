@@ -2,6 +2,7 @@ import { effect } from '@preact/signals-react';
 import { useEffect, useRef, useState } from 'react';
 import { href, navigate, route, type Route } from '../router';
 import { demoFrame, demoStrip } from './demo-page';
+import { choose, opening } from './tab-choice';
 import { t } from './i18n';
 
 export { demoFrame, demoStrip };
@@ -42,14 +43,18 @@ effect(() => {
     inDemo = now;
 });
 
-/** Shows the demo in this tab: the address moves to it, so Back leaves it. */
+/** Shows the demo in this tab, as the person's own choice: the address moves to it, so Back leaves it. */
 export function showDemo(): void {
+    choose('demo');
+    opening.done = true;
     if (route.value.screen !== 'demo') before = href(route.value);
     navigate({ screen: 'demo' });
 }
 
-/** Leaves the demo for the console, where it was before, or the address the console opens at. */
+/** Leaves the demo for the console, where it was before, or the address the console opens at; the person's own choice. */
 export function leaveDemo(): void {
+    choose('live');
+    opening.done = true;
     const to = before;
     before = null;
     if (to !== null && to !== href({ screen: 'demo' })) {
