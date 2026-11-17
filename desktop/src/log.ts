@@ -62,6 +62,9 @@ export const templates = {
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
     path_lines_set: 'The PATH lines were set to {On} on {Platform}: {Files} profiles written, {Refused} refused',
+    // The machine set-up, macOS and Windows: jason install at a start of a new version, or put back from the menu.
+    machine_setup_ran: 'jason install ran at {Why} and exited {Exit}; completed {Completed}',
+    machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
     // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',

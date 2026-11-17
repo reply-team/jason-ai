@@ -70,6 +70,9 @@ test('a data directory that holds only the desktop’s own mode record, or that 
     // The request an earlier version's start over left: a file of that name, whatever it holds.
     writeFileSync(desktopPaths(person).demoStartOver, '4242');
     assert.equal(isNewInstallation(person), true, 'the record and the request');
+    // The record of where jason install last ran, which a first start writes before the person chooses Live.
+    writeFileSync(desktopPaths(person).machineSetup, '{"ran_for":"0.49.0"}');
+    assert.equal(isNewInstallation(person), true, 'the record of the machine set-up');
     // Anything else of an installation in the desktop's folder, or beside it, makes it one that has been used.
     writeFileSync(desktopPaths(person).settings, '{}');
     assert.equal(isNewInstallation(person), false, 'the desktop’s settings');

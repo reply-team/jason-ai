@@ -68,6 +68,11 @@ export interface DesktopPaths {
      * of the UI token the window's page holds now, never the token (`window-pairing.ts`).
      */
     windowPairing: string;
+    /**
+     * `<data>/desktop/machine-setup.json`: the version `jason install` last completed for at a start or from the menu, and
+     * its report, on macOS and Windows (`machine-setup.ts`); one of the desktop's own records (`isNewInstallation`).
+     */
+    machineSetup: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
     // The installation's settings file is not here: it is one of the parts a layout places, answered by `dataLayout`.
@@ -106,6 +111,7 @@ export function desktopPaths(data: string): DesktopPaths {
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         windowPairing: join(desktop, 'window-pairing.json'),
+        machineSetup: join(desktop, 'machine-setup.json'),
         logs: join(data, 'logs'),
         runFile: join(data, 'run', 'runtime.json'),
     };

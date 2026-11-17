@@ -16,7 +16,8 @@ export const darkBackground = '#1b1b1a';
 /**
  * Whether no earlier use of this installation left anything in its data directory: it is absent, empty, or holds only the
  * desktop's own records that a start writes before the installation is made: the mode, a request to start the demo over
- * that a version of 0.44 or earlier left (`demoStartOver`, which nothing writes now), Electron's own profile (`desktop/electron/`) and the desktop's own log files
+ * that a version of 0.44 or earlier left (`demoStartOver`, which nothing writes now), the record of where `jason install` last
+ * ran (`machineSetup`, which a first start writes before the person chooses), Electron's own profile (`desktop/electron/`) and the desktop's own log files
  * (`logs/desktop-*.jsonl`), which a Demo run writes and nothing else. A new installation's first start opens on the demo
  * and writes the first, so the person's own installation is still new when they first choose Live.
  */
@@ -31,7 +32,7 @@ export function isNewInstallation(dataDirectory: string, list: (directory: strin
     const desktop = desktopPaths(dataDirectory);
     const logs = basename(desktop.logs);
     if (!entries.every((name) => name === basename(desktop.desktop) || name === logs)) return false;
-    const records = [basename(desktop.mode), basename(desktop.demoStartOver), basename(desktop.electron)];
+    const records = [basename(desktop.mode), basename(desktop.demoStartOver), basename(desktop.machineSetup), basename(desktop.electron)];
     try {
         // Each is listed, so a file where a folder of these would be is no record of the desktop's.
         const own = entries.includes(basename(desktop.desktop)) ? list(desktop.desktop) : [];
