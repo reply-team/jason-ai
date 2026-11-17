@@ -723,9 +723,20 @@ public sealed class UpdateCarriedWindowsTests
         })!;
         try
         {
+            // First the look finds the process where no record names it, waited for while a machine under load lists it, so
+            // that its passing over below is the record's doing and not a process the look could not see.
+            var none = Path.Combine(dir.Paths.Root, "no-record.pid");
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+            while (!Found(none))
+            {
+                Assert.False(applying.HasExited, $"the process the record names ended with {(applying.HasExited ? applying.ExitCode : 0)}");
+                Assert.True(DateTime.UtcNow < deadline, "the installer's look did not find the process with no record");
+                Thread.Sleep(250);
+            }
+
             File.WriteAllText(record, CarriedUpdate.PidRecord(applying.Id, applying.StartTime.ToFileTimeUtc()));
             Assert.False(Found(record), "the installer's look found the process the record this jason writes names");
-            Assert.True(Found(Path.Combine(dir.Paths.Root, "no-record.pid")), "the installer's look did not find the process with no record");
+            Assert.True(Found(none), "the installer's look did not find the process with no record");
         }
         finally
         {
@@ -733,11 +744,28 @@ public sealed class UpdateCarriedWindowsTests
             applying.WaitForExit();
         }
 
+        // The installer's own command around the filter, with one difference: a query the system failed to answer, which a
+        // machine under load meets, exits 2 and is asked again rather than read as nothing found.
         bool Found(string updating)
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                var exit = Look(updating);
+                if (exit != 2 || attempt == 20)
+                {
+                    Assert.True(exit is 0 or 1, $"PowerShell ended with {exit}");
+                    return exit == 0;
+                }
+
+                Thread.Sleep(250);
+            }
+        }
+
+        int Look(string updating)
         {
             var look = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
             {
-                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", $"if (@({filter}).Count -gt 0) {{ exit 0 }} else {{ exit 1 }}" },
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", $"$ErrorActionPreference = 'Stop'; try {{ if (@({filter}).Count -gt 0) {{ exit 0 }} else {{ exit 1 }} }} catch {{ exit 2 }}" },
                 CreateNoWindow = true,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -749,8 +777,7 @@ public sealed class UpdateCarriedWindowsTests
             run.StandardOutput.ReadToEnd();
             run.StandardError.ReadToEnd();
             run.WaitForExit();
-            Assert.True(run.ExitCode is 0 or 1, $"PowerShell ended with {run.ExitCode}");
-            return run.ExitCode == 0;
+            return run.ExitCode;
         }
     }
 
