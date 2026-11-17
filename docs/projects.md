@@ -264,7 +264,9 @@ print mode it drops, without asking, an import of a file outside the folder it s
 campaign's folder is given the
 campaign's file and neither the project's nor the client's (measured with Claude Code 2.1.309; its documentation says
 an interactive session asks once whether to allow such imports). The session skills therefore read the root's and the project's files by path,
-and a role the runtime launches reads all three by the paths its launch envelope gives. A memory file is the person's
+and a role the runtime launches reads all three by the paths its launch envelope gives. The chat of Jason Desktop is
+handed them instead, read by the desktop from the folders the runtime records ([desktop.md](desktop.md#your-memory-files-in-the-chat)),
+and writes none of them. A memory file is the person's
 guidance, never a fact the runtime holds: the runtime never reads one, and where one disagrees with what the runtime
 records, the record wins.
 

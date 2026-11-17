@@ -582,6 +582,24 @@ starts a fresh one with a recap of the last words. The conversation is no bounda
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
+### Your memory files in the chat
+
+The `AGENTS.md` files you keep for all of your work, for a project and for a campaign ([projects.md](projects.md)) are
+handed to the chat by the desktop, as Jason's roles read them by path: every chat is given the client's, the one at the
+harness root, and a campaign's conversation the project's and the campaign's as well, in that order, on every host and
+in every access mode. A Claude Code turn cannot open the client's file itself, since no folder outside the ones it works
+in is readable to it, and the root is never added: the desktop reads the files and puts them after its first paragraph,
+each under a line naming its level and its path, its words quoted. A file is read only from the folder the runtime
+records, the root it reports as marked and the folder on the project and on the campaign, and only where that folder
+carries the marker of that level and that id; a folder, a `.jason` or a file that is a link, a file that is not text or
+is empty, gives nothing, and says nothing. The first 32 KiB of a file are given, with a line saying so when it is
+longer. A host session is given the files once, when it is new, and again only a file that changed since, or a line
+saying that one is now empty or gone; **Start conversation fresh** gives them all again. The conversation's record keeps
+a digest of what each session was given, never the words, and the log says only that a level was given and its digest.
+
+The chat does not write these files. When you state a rule that should hold beyond one message, it says the line to add
+and the file it belongs in, by its path; the file is yours to edit, at that path or in its folder from Open in.
+
 ### The Feed
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above

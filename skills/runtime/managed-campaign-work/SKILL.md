@@ -86,9 +86,10 @@ jason project get prj_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 Your host may have given you some of those files when this session started, and only some. Claude Code in print
 mode, started in a campaign's folder, keeps that folder's file and drops, without asking, the ones that lie outside
 it, the project's and the client's; Codex, by its documentation and not by a measurement, outside a git repository
-reads only its own folder's file of these. So read by path every one of the three you were not given. They are the
-person's standing guidance, not facts: where one disagrees with what the runtime records, the record is right, and no
-role's note outranks them.
+reads only its own folder's file of these. So read by path every one of the three you were not given. In the chat of
+Jason Desktop you are given them instead, at the top of a message, and the client's cannot be read there by its path:
+keep to what Jason gave you. They are the person's standing guidance, not facts: where one disagrees with what the
+runtime records, the record is right, and no role's note outranks them.
 
 ## The work itself
 

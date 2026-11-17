@@ -43,8 +43,10 @@ import {
     ConversationUnwritten,
     type Chosen,
     type ContinuableHost,
+    memoryGivenTo,
     nameSession,
     newConversationId,
+    noteMemoryGiven,
     readConversations,
     removeConversation,
     writeConversation,
@@ -52,6 +54,8 @@ import {
     type KeptEntry,
 } from './chat-conversations.ts';
 import { feedBlock, givenTitle, header, nameOf, recap, titleOf, turnInput, type About } from './chat-header.ts';
+import { digestsOf, memoryBlock, memoryToGive, type MemoryFile, type MemoryLevel, type MemoryPlace } from './chat-memory.ts';
+import { readMemoryFile } from './chat-memory-files.ts';
 import { currentModel, effortRefusal, haikuEffortFrom, isEffort, modelRefusal, modelShape, type Effort, type KeptLists } from './chat-models.ts';
 import {
     claudeNamingArguments,
@@ -272,6 +276,11 @@ export interface ChatOptions {
     instructionsMissing?(): void;
     /** Said each time a memory file cannot be written, at the start or before a turn, which is then refused. */
     instructionsUnwritten?(file: string, code: string): void;
+    /**
+     * Said for each of the person's memory files a host was started with, by its level and its digest: never its path or
+     * a word of it (`chat-memory.ts`).
+     */
+    memoryGiven?(level: MemoryLevel, digest: string): void;
     /** Said once at the start: how many conversations were read, and how many files there were not records. */
     conversationsRead?(kept: number, unreadable: number): void;
     /** Said each time a conversation's record could not be written or removed, by the system's error code. */
@@ -383,10 +392,14 @@ export function makePrivate(label: string, parent: string, folder: string): void
     }
 }
 
-/** A campaign as a turn reads it: what the header says, and the folders a Claude Code turn adds. */
+/**
+ * A campaign as a turn reads it: what the header says, the folders a Claude Code turn adds, and where the campaign's and
+ * its project's memory files are, as the runtime records their folders, for a turn on any host.
+ */
 interface CampaignRead {
     about: About;
     added: string[];
+    memory: MemoryPlace[];
 }
 
 /** A campaign in `jason campaign list`: when it was created, in milliseconds, and its name. */
@@ -1151,6 +1164,8 @@ export class Chat {
         if (this.#running.has(conversation.id)) throw new ChatRefused(stillAnswering('start it fresh'));
         conversation.sessions = {};
         delete conversation.plain_sessions;
+        // A fresh session is given the memory files again.
+        delete conversation.memory_given;
         // A plan the host no longer remembers is no card to approve.
         unmarkPlans(conversation.entries);
         // A chat in Full access started fresh goes back to Ask first; Plan only stays, as on its record, and so does
@@ -1659,19 +1674,44 @@ export class Chat {
      * The campaign as the runtime answers it: its name and status for the header, its folder and its project's, as
      * the runtime recorded them and only when they are on this disk, for a Claude Code turn to add.
      */
-    async #readCampaign(campaignId: string, withProject: boolean): Promise<CampaignRead> {
+    async #readCampaign(campaignId: string, withProject: boolean, withMemory = false): Promise<CampaignRead> {
         const campaign = await this.#readJson(['campaign', 'get', campaignId]);
-        if (campaign === null) return { about: { campaign: { id: campaignId, name: null, status: null, folder: null } }, added: [] };
+        if (campaign === null) return { about: { campaign: { id: campaignId, name: null, status: null, folder: null } }, added: [], memory: [] };
         const own = folderThere(campaign.folder_path);
         const added: string[] = own === null ? [] : [own];
-        if (withProject && typeof campaign.project_id === 'string' && /^prj_[0-9A-Za-z]{1,64}$/.test(campaign.project_id)) {
-            const project = await this.#readJson(['project', 'get', campaign.project_id]);
-            const theirs = folderThere(project?.folder_path);
-            if (theirs !== null && !added.includes(theirs)) added.push(theirs);
-        }
+        // A turn reads the project on every host, for its memory file; its folder is added to a Claude Code turn alone.
+        const project = typeof campaign.project_id === 'string' && /^prj_[0-9A-Za-z]{1,64}$/.test(campaign.project_id) ? campaign.project_id : null;
+        const projectRead = project === null || !(withProject || withMemory) ? null : await this.#readJson(['project', 'get', project]);
+        const theirs = folderThere(projectRead?.folder_path);
+        if (withProject && theirs !== null && !added.includes(theirs)) added.push(theirs);
+        const memory: MemoryPlace[] = [];
+        if (project !== null && typeof projectRead?.folder_path === 'string') memory.push({ level: 'project', folder: projectRead.folder_path, id: project });
+        if (withMemory && typeof campaign.folder_path === 'string') memory.push({ level: 'campaign', folder: campaign.folder_path, id: campaignId });
         const name = typeof campaign.name === 'string' ? campaign.name : '';
         const status = typeof campaign.status === 'string' ? campaign.status : null;
-        return { about: { campaign: { id: campaignId, name, status, folder: own } }, added: withProject ? added : [] };
+        return { about: { campaign: { id: campaignId, name, status, folder: own } }, added: withProject ? added : [], memory };
+    }
+
+    /**
+     * The harness root as the runtime reports it, when it reports it marked: where the client's memory file is. Never a
+     * root worked out here; null when the runtime does not answer, names none or names one that is not marked.
+     */
+    async #rootPlace(): Promise<MemoryPlace | null> {
+        const status = await this.#readJson(['runtime', 'status']);
+        const harness = status?.harness;
+        if (harness === null || typeof harness !== 'object' || Array.isArray(harness)) return null;
+        const { root, root_state: state } = harness as Record<string, unknown>;
+        return typeof root === 'string' && state === 'marked' ? { level: 'client', folder: root } : null;
+    }
+
+    /**
+     * The person's memory files that apply to a turn, in the order of the levels: the client's for every chat, and the
+     * project's and the campaign's for a campaign's. A level that holds none the chat is given is left out.
+     */
+    async #memoryFiles(places: readonly MemoryPlace[]): Promise<MemoryFile[]> {
+        const root = await this.#rootPlace();
+        const read = await Promise.all([...(root === null ? [] : [root]), ...places].map((place) => readMemoryFile(place, this.#platform)));
+        return read.filter((file): file is MemoryFile => file !== null);
     }
 
     /** Every campaign of the installation, archived ones included, read page by page; null when any page was not. */
@@ -1758,12 +1798,14 @@ export class Chat {
         const setup = conversation.campaign_id === null && !main;
         let about: About = main ? { main: true, campaign: null } : { campaign: null };
         let added: string[] = [];
+        let places: MemoryPlace[] = [];
         let before: Listed | null = null;
         let since = 0;
         if (conversation.campaign_id !== null) {
-            const read = await this.#readCampaign(conversation.campaign_id, resolved.program === 'claude');
+            const read = await this.#readCampaign(conversation.campaign_id, resolved.program === 'claude', true);
             about = read.about;
             added = this.#addable(read.added, replyTo);
+            places = read.memory;
             const name = read.about.campaign?.name;
             if (name && conversation.named_by_person !== true) conversation.title = nameOf(name) || conversation.title;
         } else if (setup) {
@@ -1776,10 +1818,18 @@ export class Chat {
         // the next turn, whatever its journal id.
         const given = main ? linesWaiting(conversation.entries) : null;
         const block = given === null ? null : feedBlock(given.lines, given.more);
-        const head = block === null ? header(about) : `${header(about)}\n\n${block}`;
         // The recap is of what came before this turn; the person's words of this turn follow it.
         const earlier = recap(conversation.entries);
         const resume = conversation.sessions[resolved.host];
+        // The person's memory files follow the header: all of them to a session that is new, and to one this conversation
+        // resumes only those that changed since it was given them, with the levels that hold nothing now.
+        const memory = await this.#memoryFiles(places);
+        const held = digestsOf(memory);
+        const giving = (resumed: string | undefined) => memoryToGive(memory, memoryGivenTo(conversation, resolved.host, resumed));
+        const headFor = (resumed: string | undefined): string => {
+            const { files, gone } = giving(resumed);
+            return [header(about), memoryBlock(files, gone), block].filter((part): part is string => part !== null).join('\n\n');
+        };
         // A Full access turn runs in its grant's own folder, and nothing else does; every other turn, and a Full access turn
         // with no grant to run in, in the chat folder.
         const grantId = running.mode === 'full_access' ? this.#grants.get(conversation.id) : undefined;
@@ -1950,8 +2000,10 @@ export class Chat {
             let host: HostProcess | null = null;
             // Beside the session the record keeps whether this turn was plain: the person's own login, outside Full access.
             // Only such a session is one a terminal may continue (`continuableOf`).
+            // The session this start was given the memory files in holds, from then on, the files read for this turn.
             const name = (session: string) => {
-                if (nameSession(conversation, resolved.host, session, !resolved.keyed && running.mode !== 'full_access')) this.#keep(conversation);
+                const named = nameSession(conversation, resolved.host, session, !resolved.keyed && running.mode !== 'full_access');
+                if (noteMemoryGiven(conversation, resolved.host, session, held) || named) this.#keep(conversation);
             };
             const stopFor = (sentence: string) => {
                 stoppedFor = sentence;
@@ -2035,7 +2087,7 @@ export class Chat {
                 started = (this.#options.startHost ?? startHost)(launch, argsFor(resumed), {
                     cwd: folder,
                     env,
-                    stdin: turnInput(head, recapped ? earlier : null, text),
+                    stdin: turnInput(headFor(resumed), recapped ? earlier : null, text),
                     onLine: (line) => {
                         for (const each of resolved.program === 'claude' ? claudeLine(line) : codexLine(line, seen)) said(each);
                     },
@@ -2049,6 +2101,7 @@ export class Chat {
             host = started;
             running.process = started;
             this.#options.started?.(resolved.host, resumed !== undefined, running.mode);
+            for (const file of giving(resumed).files) this.#options.memoryGiven?.(file.level, file.digest);
             if (running.stopped || stoppedFor !== null) started.stop();
             const exit = await started.exited;
             // The lines this turn was given count as given once its host ran: a start the system refused gave none.

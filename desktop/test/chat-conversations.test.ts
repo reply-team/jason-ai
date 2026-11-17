@@ -12,7 +12,9 @@ import {
     ConversationUnwritten,
     cutMark,
     keptTextLimit,
+    memoryGivenTo,
     newConversationId,
+    noteMemoryGiven,
     parseConversation,
     readConversations,
     recordLimit,
@@ -269,4 +271,32 @@ test('the moment the agent\'s words were kept is kept with them, read back only 
     const long = bounded(record({ entries: [{ kind: 'text', text: 'p'.repeat(recordLimit) + 'END', at }] })).entries[0];
     assert.ok(long?.kind === 'text' && long.text.endsWith('END'));
     assert.equal(long.at, at);
+});
+
+test('a record keeps the digest of each memory file a host session was given, under that very session, and nothing out of shape', () => {
+    const a = `sha256:${'a'.repeat(64)}`;
+    const b = `sha256:${'b'.repeat(64)}`;
+    const conversation = record({ sessions: { claude: 'stub-session-1', codex: 'thread-2' } });
+    assert.equal(noteMemoryGiven(conversation, 'claude', 'stub-session-1', { client: a, campaign: b }), true);
+    assert.equal(noteMemoryGiven(conversation, 'claude', 'stub-session-1', { client: a, campaign: b }), false, 'the same again changes nothing');
+    const read = parseConversation(serialize(conversation), conversation.id);
+    assert.deepEqual(read?.memory_given, { claude: { session: 'stub-session-1', files: { client: a, campaign: b } } });
+    assert.deepEqual(memoryGivenTo(read!, 'claude', 'stub-session-1'), { client: a, campaign: b });
+    assert.equal(memoryGivenTo(read!, 'claude', 'another-session'), null, 'another session was given nothing');
+    assert.equal(memoryGivenTo(read!, 'claude', undefined), null, 'a new session was given nothing');
+    assert.equal(memoryGivenTo(read!, 'codex', 'thread-2'), null);
+
+    // A session the record no longer keeps, a host out of shape and a digest out of shape are nothing given.
+    const raw = JSON.parse(serialize(conversation)) as Record<string, unknown>;
+    raw.memory_given = {
+        claude: { session: 'old-session', files: { client: a } },
+        codex: { session: 'thread-2', files: { client: 'planted words', project: b, other: a } },
+        'Bad Host': { session: 'thread-2', files: { client: a } },
+    };
+    assert.deepEqual(parseConversation(JSON.stringify(raw), conversation.id)?.memory_given, { codex: { session: 'thread-2', files: { project: b } } });
+    raw.memory_given = 'planted';
+    const plain = parseConversation(JSON.stringify(raw), conversation.id);
+    assert.ok(plain !== null, 'a value out of shape is no reason to refuse the record');
+    assert.equal(plain?.memory_given, undefined);
+    assert.equal('memory_given' in JSON.parse(serialize(plain!)), false);
 });
