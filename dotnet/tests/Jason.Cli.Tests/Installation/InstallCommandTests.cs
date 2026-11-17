@@ -76,6 +76,50 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
     }
 
+    /// <summary>
+    /// One at a time with an update: while another jason holds the update's lock - an update whose finish sets the machine up
+    /// itself, or the installer's own run beside it - the setup refuses with update_in_progress and sets nothing up; once the
+    /// lock is let go it runs, and takes the lock while it does.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I3, "jason install and an update's finish never set the machine up at once")]
+    public async Task While_an_update_holds_its_lock_the_setup_refuses_and_sets_nothing_up()
+    {
+        var executable = Carried();
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        var (env, output) = Environment(MacPlaces(), executable);
+
+        using (Jason.Cli.Update.UpdateLock.Take(update, "a test's update"))
+        {
+            var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            var refusal = RuntimeVerbs.Envelope(output.ToString());
+            Assert.Equal(Jason.Cli.Update.UpdateCodes.InProgress, refusal.Code);
+            Assert.Contains("an update's own finish sets the machine up itself", refusal.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
+        }
+
+        var (again, said) = Environment(MacPlaces(), executable);
+        var setting = Task.Run(() => InstallCommand.RunAsync(again, new InstallOptions(false, false, null), Ct), Ct);
+        Assert.Equal(ExitCodes.Success, await setting);
+        Assert.True(Report(said).GetProperty("completed").GetBoolean());
+        using var free = Jason.Cli.Update.UpdateLock.Take(update, "the next update");
+    }
+
+    /// <summary>A data directory with no update folder: the setup takes no lock and makes none.</summary>
+    [Fact]
+    public async Task With_no_update_folder_the_setup_makes_no_lock()
+    {
+        Directory.CreateDirectory(_data.Paths.Root);
+        var (env, _) = Environment(MacPlaces(), Carried());
+
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct));
+
+        Assert.False(Directory.Exists(new Jason.Cli.Update.UpdatePaths(_data.Paths).Root), "the setup made an update folder");
+    }
+
     // --- macOS: the wrapper and the profile lines ---------------------------------------------------------
 
     [Fact]

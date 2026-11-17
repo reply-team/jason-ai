@@ -63,6 +63,16 @@ public interface IRuntimeProcessControl
     /// </remarks>
     Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// <see cref="RunAsync(JasonPaths, IReadOnlyList{string}, TextWriter, CancellationToken)"/> for the part of an update that
+    /// goes on under the lock this process holds: the lock's nonce handed to the child in <see cref="Jason.Cli.Update.UpdateLock.Variable"/>,
+    /// and to that child alone. A seam that cannot hand it refuses rather than run a child that would find the lock held.
+    /// </summary>
+    Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, string? updateLock, CancellationToken cancellationToken) =>
+        updateLock is null
+            ? RunAsync(paths, command, error, cancellationToken)
+            : throw new NotSupportedException("This process control cannot hand a child the update's lock.");
+
     bool IsRunning(int pid);
 
     /// <summary>
@@ -134,7 +144,9 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         }
 
         // The confinement is the call's that started this runtime, never the runtime's: a runtime lives on past that call.
+        // Nor is an update's lock ever handed to a runtime.
         startInfo.Environment.Remove(Confinement.Variable);
+        startInfo.Environment.Remove(Jason.Cli.Update.UpdateLock.Variable);
 
         return startInfo;
     }
@@ -170,7 +182,7 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
     /// What <see cref="RunAsync"/> hands the operating system: the command and the data directory, and never the update's
     /// mark or the confinement of the call that runs it, since the command starts a runtime.
     /// </summary>
-    public static ProcessStartInfo RunStart(JasonPaths paths, IReadOnlyList<string> command)
+    public static ProcessStartInfo RunStart(JasonPaths paths, IReadOnlyList<string> command, string? updateLock = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(command);
@@ -190,13 +202,27 @@ public sealed class RuntimeProcessControl : IRuntimeProcessControl
         startInfo.Environment[JasonPaths.DataDirectoryVariable] = paths.Root;
         startInfo.Environment.Remove(UpdateLaunch.Variable);
         startInfo.Environment.Remove(Confinement.Variable);
+
+        // The update's lock goes to the one child that goes on under it, and to no other.
+        if (updateLock is { Length: > 0 })
+        {
+            startInfo.Environment[Jason.Cli.Update.UpdateLock.Variable] = updateLock;
+        }
+        else
+        {
+            startInfo.Environment.Remove(Jason.Cli.Update.UpdateLock.Variable);
+        }
+
         return startInfo;
     }
 
-    public async Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken) =>
+        RunAsync(paths, command, error, null, cancellationToken);
+
+    public async Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, string? updateLock, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(error);
-        var startInfo = RunStart(paths, command);
+        var startInfo = RunStart(paths, command, updateLock);
 
         // The child starts a runtime, which outlives it: neither may hold the streams of whoever is reading this process.
         StandardStreams.KeepOutOfChildren();

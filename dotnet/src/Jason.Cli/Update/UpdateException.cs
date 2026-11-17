@@ -99,6 +99,13 @@ public static class UpdateCodes
     /// </summary>
     public const string Cancelled = "update_cancelled";
 
+    /// <summary>
+    /// A carried <c>jason update apply</c> run elevated - an administrator's elevated terminal on Windows, root on macOS - is
+    /// refused before anything is read, staged or asked: Jason Desktop, its installer and the runtime it starts again would
+    /// run elevated, or install into another account's profile. The message names an ordinary terminal and the Desktop's menu.
+    /// </summary>
+    public const string Elevated = "update_elevated";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -121,6 +128,7 @@ public static class UpdateCodes
         DesktopUnanswered,
         DesktopNotInstalled,
         Cancelled,
+        Elevated,
     ];
 }
 

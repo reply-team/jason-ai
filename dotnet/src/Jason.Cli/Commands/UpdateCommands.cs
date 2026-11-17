@@ -167,6 +167,7 @@ public static class UpdateCommands
                     human,
                     (why, cause) => NotFinished(env, ledger, why, cause),
                     recover: null,
+                    updateLock: null,
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -210,6 +211,12 @@ public static class UpdateCommands
     /// is refused as <c>update_not_healthy</c>, with the step the ledger stands at: the new build is in place, typing
     /// <c>jason update apply</c> runs it and finishes, and <c>jason update rollback</c> puts the old one back.
     /// </para>
+    /// <para>
+    /// A carried update's child — the copy on macOS, the new carried jason's finish — goes on under the lock this process holds
+    /// (<paramref name="updateLock"/>), and is given <see cref="ChildHold"/> after a cancel to run its own way out, since a
+    /// terminal's Ctrl+C or hang-up reaches it too, or, where it has no console, to end the step it is in; only then is it ended
+    /// and this process's own way out run. A child that answered within the hold is passed on as it answered.
+    /// </para>
     /// </remarks>
     private static async Task<int> HandOverAsync(
         CliEnvironment env,
@@ -218,17 +225,20 @@ public static class UpdateCommands
         bool human,
         Func<string, Exception?, UpdateException> unfinished,
         Func<bool, Task<string>>? recover,
+        string? updateLock,
         CancellationToken cancellationToken)
     {
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         FinishedCommand finished;
+        using var hold = new CancellationTokenSource();
+        using var held = recover is null ? default : cancellationToken.Register(() => hold.CancelAfter(ChildHold));
         try
         {
-            finished = await processes.RunAsync(env.Paths, command, env.Error, cancellationToken).ConfigureAwait(false);
+            finished = await processes.RunAsync(env.Paths, command, env.Error, updateLock, recover is null ? cancellationToken : hold.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException cancelled) when (recover is not null && cancellationToken.IsCancellationRequested)
         {
-            // The child was ended with the cancel: what it began is put back as far as it can be, and the runtime launched
+            // The child was ended past its hold: what it began is put back as far as it can be, and the runtime launched
             // without a wait, so the answer comes before the process is ended too.
             var said = await recover(false).ConfigureAwait(false);
             throw new UpdateException(UpdateCodes.Cancelled, $"The update was cancelled while {command[0]} carried it. {said}", cancelled, retryable: true);
@@ -249,7 +259,7 @@ public static class UpdateCommands
             // Whoever asked for a runtime's stop starts one again: a hand-over that ended with no answer may have left none.
             if (recover is not null)
             {
-                await recover(true).ConfigureAwait(false);
+                await recover(!cancellationToken.IsCancellationRequested).ConfigureAwait(false);
             }
 
             throw unfinished(
@@ -268,6 +278,12 @@ public static class UpdateCommands
         env.Out.Write(finished.StandardOutput);
         return finished.ExitCode;
     }
+
+    /// <summary>
+    /// How long a carried update's child is given, after a cancel, to end by itself before it is ended: within the ten seconds
+    /// a cancelled verb is held (<c>CliApp</c>), with room left for this process's own way out.
+    /// </summary>
+    internal static TimeSpan ChildHold { get; } = TimeSpan.FromSeconds(6);
 
     /// <summary>
     /// The refusal for a hand-over that did not finish the update: the new build is in place, and the step the ledger stands
@@ -448,6 +464,18 @@ public static class UpdateCommands
         UpdatePaths paths,
         CancellationToken cancellationToken)
     {
+        // The lock the process that started this one holds and hands it, read once and taken out of this process's
+        // environment, so nothing this process starts carries it on.
+        var handed = UpdateLock.Handed(env.Variables);
+
+        // An elevated terminal would start Jason Desktop, its installer and the runtime elevated, or under another account's
+        // profile: refused before anything is read, staged or asked.
+        if (env.Setup is { Elevated: true } elevated)
+        {
+            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.Elevated, Elevated(elevated.Platform), retryable: false));
+            return ExitCodes.ApiError;
+        }
+
         var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform)
         {
             // On Windows the carried process itself carries the update, its own image moved out of the application's folder.
@@ -474,7 +502,7 @@ public static class UpdateCommands
             UpdateLock held;
             try
             {
-                held = UpdateLock.Take(paths, "the finishing step");
+                held = UpdateLock.Take(paths, "the finishing step", handed);
             }
             catch (UpdateException refused)
             {
@@ -531,16 +559,13 @@ public static class UpdateCommands
             {
                 if (continuing)
                 {
-                    UpdateLedger swapped;
-                    using (UpdateLock.Take(paths, "the update"))
-                    {
-                        swapped = inFlight.Step >= UpdateStep.Swapped ? inFlight : handing.Swapped(inFlight);
-                    }
-
-                    return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+                    using var continued = UpdateLock.Take(paths, "the update", handed);
+                    var nonce = continued.HandOver();
+                    var swapped = inFlight.Step >= UpdateStep.Swapped ? inFlight : handing.Swapped(inFlight);
+                    return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, nonce, cancellationToken).ConfigureAwait(false);
                 }
 
-                using (UpdateLock.Take(paths, "the finishing step"))
+                using (UpdateLock.Take(paths, "the finishing step", handed))
                 {
                     return await FinishAsync(env, handing, inFlight, request, human, wasLive, cancellationToken).ConfigureAwait(false);
                 }
@@ -556,37 +581,29 @@ public static class UpdateCommands
 
             if (continuing)
             {
-                UpdateLedger installed;
-                using (UpdateLock.Take(paths, "the update"))
-                {
-                    installed = await handing.InstallAsync(inFlight!, request, cancellationToken).ConfigureAwait(false);
-                }
-
-                return await HandToFinishAsync(env, handing, installed, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+                using var continued = UpdateLock.Take(paths, "the update", handed);
+                var nonce = continued.HandOver();
+                var installed = await handing.InstallAsync(inFlight!, request, cancellationToken).ConfigureAwait(false);
+                return await HandToFinishAsync(env, handing, installed, request, human, wasLive, nonce, cancellationToken).ConfigureAwait(false);
             }
 
             // Windows: this process carries the update itself, the Desktop asked first and its image moved out of the folder
-            // at the download, and hands the new jason the rest as a child it waits for, the lock let go for it.
+            // at the download, and hands the new jason the rest as a child it waits for, under the lock it keeps.
             if (handing.MovesItself)
             {
-                UpdateLedger swapped;
-                using (UpdateLock.Take(paths, "the update"))
-                {
-                    var planning = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
-                    swapped = await handing.InstallAsync(planning, request, cancellationToken).ConfigureAwait(false);
-                }
-
-                return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+                using var held = UpdateLock.Take(paths, "the update", handed);
+                var nonce = held.HandOver();
+                var plan = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+                var swapped = await handing.InstallAsync(plan, request, cancellationToken).ConfigureAwait(false);
+                return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, nonce, cancellationToken).ConfigureAwait(false);
             }
 
-            // macOS: this jason plans and puts its copy aside under the lock, and ends its part there: the copy takes the lock,
-            // asks the Desktop, drains and waits.
-            UpdateLedger planned;
-            using (UpdateLock.Take(paths, "the update"))
-            {
-                planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
-                handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
-            }
+            // macOS: this jason plans and puts its copy aside under the lock, and waits for the copy, which goes on under the
+            // same lock: it asks the Desktop, drains and waits.
+            using var planning = UpdateLock.Take(paths, "the update", handed);
+            var handedOn = planning.HandOver();
+            var planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+            handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
 
             return await HandOverAsync(
                 env,
@@ -599,6 +616,7 @@ public static class UpdateCommands
                     await handing.RecoverAsync(wasLive, waits).ConfigureAwait(false);
                     return handing.RuntimeSaid();
                 },
+                handedOn,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (UpdateException error)
@@ -627,7 +645,7 @@ public static class UpdateCommands
     /// The copy's part ends at <c>swapped</c>: the new carried jason, the application's own file now, takes the rest with
     /// <c>--finish</c>, and its document is this one with the copy's lines in front.
     /// </summary>
-    private static Task<int> HandToFinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger swapped, UpdateRequest request, bool human, bool wasLive, CancellationToken cancellationToken) =>
+    private static Task<int> HandToFinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger swapped, UpdateRequest request, bool human, bool wasLive, string updateLock, CancellationToken cancellationToken) =>
         HandOverAsync(
             env,
             handing.Steps,
@@ -639,6 +657,7 @@ public static class UpdateCommands
                 await handing.RecoverAsync(wasLive, waits).ConfigureAwait(false);
                 return $"The application is {swapped.ToVersion}, and {handing.RuntimeSaid()} `jason update apply` finishes the update.";
             },
+            updateLock,
             cancellationToken);
 
     /// <summary>
@@ -717,6 +736,20 @@ public static class UpdateCommands
             : $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason update {verb}` "
               + "would change a file inside the application. The application and the jason it carries are updated together: "
               + "choose Check for Updates in the desktop's Jason menu, or in the menu of its icon in the tray.";
+
+    /// <summary>
+    /// Why a carried update is not begun from an elevated process: the Desktop, its installer and the runtime it starts again
+    /// would run elevated, or install under another account's profile, and the installer's look could not read the verb it
+    /// would have to pass over.
+    /// </summary>
+    private static string Elevated(SetupSystem platform) =>
+        (platform is SetupSystem.Windows
+            ? "This jason runs as an administrator, elevated"
+            : "This jason runs as root")
+        + ", and an update begun from here would start Jason Desktop, its installer and the runtime the same way, or install into another account's profile, so nothing was read, staged or asked. "
+        + (platform is SetupSystem.Windows
+            ? "Run `jason update apply` from an ordinary terminal that is not run as an administrator, or choose Check for Updates in Jason Desktop's menu."
+            : "Run `jason update apply` from an ordinary terminal, without sudo, or choose Check for Updates in Jason Desktop's menu.");
 
     /// <summary>The refusal for a copy that ended with no answer: the update stands at the step it reached, and is carried on.</summary>
     private static UpdateException CopyNotFinished(CliEnvironment env, CarriedUpdate handing, UpdateLedger ledger, string why, Exception? cause)

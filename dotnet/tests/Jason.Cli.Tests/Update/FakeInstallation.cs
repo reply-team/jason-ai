@@ -103,7 +103,7 @@ public sealed class FakeInstallation : HttpMessageHandler
             // What the executable at the install path does when an update hands it the rest: `jason update apply` typed
             // into it, against the data directory it was given. Here that program is this build, which is the build
             // under test; what a real one is made of is the update job's to prove.
-            OnRun = async (paths, command, error, cancellationToken) =>
+            OnRunUnder = async (paths, command, error, updateLock, cancellationToken) =>
             {
                 // The application, where Jason Desktop carries this installation: its own start, never `jason`.
                 if (Desktop is { } desktop && desktop.IsStartOf(command))
@@ -121,8 +121,9 @@ public sealed class FakeInstallation : HttpMessageHandler
                 {
                     // The program run is the one the command names: the new build at the install path, or the copy of a carried
                     // jason under the data directory, which reads where it runs from as itself.
+                    // The child is handed the update's lock in its environment, and in that alone, as a real child is.
                     var exit = await UpdateCommands.ApplyAsync(
-                        (Machine ?? Env!) with { Out = said, Error = error, Paths = paths, InstallPath = command[0] },
+                        (Machine ?? Env!) with { Out = said, Error = error, Paths = paths, InstallPath = command[0], Variables = Handed((Machine ?? Env!).Variables, updateLock) },
                         feed,
                         null,
                         drain,
@@ -144,6 +145,22 @@ public sealed class FakeInstallation : HttpMessageHandler
         // would work out the test host, and replace it. And where its agent harnesses are: a home directory of its
         // own, with none in it, so the skills an update redeploys are only ever ones a test put there.
         Env = new CliEnvironment(Out, Error, Paths, this, null, Processes, InstallPath, Harnesses: HarnessLocators.ForHome(Path.Combine(_tree.Root, "home")));
+    }
+
+    /// <summary>
+    /// The variables a child run with the update's lock is handed: the environment's own, the lock's variable taken out, and
+    /// put back with the nonce where one was handed.
+    /// </summary>
+    private static Dictionary<string, string> Handed(IReadOnlyDictionary<string, string>? variables, string? updateLock)
+    {
+        var handed = variables is null ? new Dictionary<string, string>() : new Dictionary<string, string>(variables);
+        handed.Remove(UpdateLock.Variable);
+        if (updateLock is not null)
+        {
+            handed[UpdateLock.Variable] = updateLock;
+        }
+
+        return handed;
     }
 
     public SemanticVersion From { get; }

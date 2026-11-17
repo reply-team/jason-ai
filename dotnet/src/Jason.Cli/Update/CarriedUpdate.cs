@@ -184,6 +184,12 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// <summary>How this process's image is moved out of the folder; a test makes one that copies and leaves the source.</summary>
     internal Action<string, string> Mover { get; init; } = (from, to) => File.Move(from, to);
 
+    /// <summary>
+    /// How long the look for other processes at the carried path, after the runtimes were stopped, waits for the ones still
+    /// ending — a stopped runtime's plugin hosts — before it refuses.
+    /// </summary>
+    internal TimeSpan OthersEnd { get; init; } = TimeSpan.FromSeconds(15);
+
     /// <summary>How long a runtime started again is waited for to answer.</summary>
     internal TimeSpan StartWait { get; init; } = TimeSpan.FromSeconds(60);
 
@@ -420,6 +426,10 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         {
             // The caller's cancel is the reason whatever it surfaced as: a wait it ended, or a start of the Desktop's it ended.
             var cancelled = cancellationToken.IsCancellationRequested;
+
+            // After the go the Desktop may have written `installing` since the verb last read: read once more, so a way out
+            // in that moment neither ends an installer's start nor copies into its folder.
+            ReadInstallingOnce();
             await EndTheDesktopStartAsync(desktop).ConfigureAwait(false);
             var tail = await SettleOnTheWayOutAsync(ledger, waits: !cancelled).ConfigureAwait(false);
             if (cancelled)
@@ -451,6 +461,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             if (!InstallerOwnsTheFolder)
             {
                 PutImageBack();
+                TryDelete(update.DesktopRequest);
             }
             else
             {
@@ -484,6 +495,22 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
     private Task<(FinishedCommand? Finished, string? Why)>? _run;
 
+    /// <summary>The request this update made of the Desktop, once made.</summary>
+    private string? _request;
+
+    /// <summary>
+    /// Once the go was given and no answer of <c>installing</c> was read yet: the request's file read once more, and an
+    /// <c>installing</c> there taken as the answer, from now.
+    /// </summary>
+    private void ReadInstallingOnce()
+    {
+        if (_stage == Stage.Gone && _installingSince is null && _request is { } id && DesktopAnswer.Read(RequestFile(id), id) is { State: DesktopAnswer.Installing })
+        {
+            _installingSince = clock.GetUtcNow();
+            Say(UpdateStep.Kept, $"Jason Desktop handed {_written.ToVersion} to its installer");
+        }
+    }
+
     private async Task<UpdateLedger> HandShakeAsync(UpdateLedger ledger, UpdateRequest request, string id, CancellationToken desktop, CancellationToken cancellationToken)
     {
         var file = RequestFile(id);
@@ -494,7 +521,10 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         if (MovesItself)
         {
             SameVolume(id);
-            if (!_wasLive)
+
+            // A Demo runtime, and its plugin hosts, run from the carried file too, and are stopped at the download: the look
+            // waits for that where one runs.
+            if (!_wasLive && !DemoRuntimeRuns())
             {
                 NoOtherAtTheCarriedPath();
             }
@@ -508,6 +538,11 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
                 null,
                 retryable: true);
         }
+
+        // The request's id beside the ledger before the Desktop is asked, so that a carried process waiting on this one, which
+        // may end this one past its hold, reads by it whether the Desktop has the update.
+        OnDisk("recording the request made of Jason Desktop", update.DesktopRequest, () => File.WriteAllText(update.DesktopRequest, id));
+        _request = id;
 
         List<string> command = [Application!, "--update-apply", "--to", ledger.ToVersion.ToString(), "--request", id, "--await-go"];
         if (DesktopFeed(request.Feed) is { } feed)
@@ -635,7 +670,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
                 await StopDemoRuntimeAsync(linked.Token).ConfigureAwait(false);
                 linked.Token.ThrowIfCancellationRequested();
                 Record(ledger);
-                NoOtherAtTheCarriedPath();
+                await NoOtherOnceTheyEndedAsync(linked.Token).ConfigureAwait(false);
                 StepOut(id);
             }
 
@@ -686,6 +721,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         ArgumentNullException.ThrowIfNull(ledger);
         var swapped = ledger.At(UpdateStep.Swapped);
         Record(swapped);
+        TryDelete(update.DesktopRequest);
         try
         {
             File.Delete(Before);
@@ -732,10 +768,15 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     }
 
     /// <summary>
-    /// After a hand-over to the copy that did not complete: before <c>kept</c> the record that stood is put back where the
-    /// application is still the version the update began from; a runtime that answers drained is resumed, and where one was
-    /// running before and none answers now, one is started from whichever executable is whole: the carried one where its
-    /// record names a version, else the copy of this jason. A cancel waits for nothing: the start is launched and said.
+    /// After a hand-over to the copy or to the new jason that did not complete, by the rule the carried process keeps on
+    /// Windows. While the installer has the update — the ledger at <c>kept</c>, or the go given to a Desktop that has not
+    /// refused, and the application not yet the new version — the folder is the installer's: nothing is put back and no
+    /// runtime is started, since one started now would be the old build under the installer, and the answer names the
+    /// finish. Once the application is the new version, the runtime is started from the carried file, which is that version.
+    /// Otherwise nothing was installed: the record that stood is put back, and a runtime that answers drained is resumed, or
+    /// where one was running before and none answers now, one is started from whichever executable is whole: the carried one
+    /// where its record names a version, else the copy of this jason. A cancel waits for nothing: the start is launched and
+    /// said.
     /// </summary>
     public async Task RecoverAsync(bool wasLive, bool waits = true)
     {
@@ -749,14 +790,65 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             ledger = null;
         }
 
-        if (ledger is { Step: < UpdateStep.Kept } && !Names(ledger.ToVersion))
+        _wasLive = wasLive;
+        if (ledger is { Step: < UpdateStep.Complete } inFlight && !Names(inFlight.ToVersion))
         {
-            PutLedgerBack();
+            var (installerHasIt, refused) = InstallerHas(inFlight);
+            if (installerHasIt)
+            {
+                _runtime = $"Jason Desktop's installer has {inFlight.ToVersion}, so no record was put back and no runtime was started under it: the runtime stays stopped until the update is finished. "
+                    + $"Once the application is {inFlight.ToVersion}, `jason update apply` finishes the update and starts the runtime, and `jason status` names it until then.";
+                Say("left", $"the application to the installer; once it is {inFlight.ToVersion}, `jason update apply` finishes the update and starts the runtime");
+                return;
+            }
+
+            if (inFlight.Step < UpdateStep.Kept || refused)
+            {
+                PutLedgerBack();
+            }
         }
 
         var whole = CarriedExecutable.Of(carried.Executable) is not null && File.Exists(carried.Executable) ? carried.Executable : Moved ?? Copy;
-        _wasLive = wasLive;
         await StartAgainAsync(whole, ledger, waits).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether the installer has the update, as the process that waited on the one carrying it reads it: the ledger at
+    /// <c>kept</c>, or the request that process recorded given the go and not refused; and whether the Desktop refused it.
+    /// </summary>
+    private (bool InstallerHasIt, bool Refused) InstallerHas(UpdateLedger ledger)
+    {
+        string? id;
+        try
+        {
+            id = File.Exists(update.DesktopRequest) ? File.ReadAllText(update.DesktopRequest).Trim() : null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            id = null;
+        }
+
+        var answer = id is { Length: > 0 } ? DesktopAnswer.Read(RequestFile(id), id) : null;
+        var refused = answer is { State: DesktopAnswer.Refused };
+        if (refused)
+        {
+            TryDelete(GoFile(id!));
+            TryDelete(update.DesktopRequest);
+            return (false, true);
+        }
+
+        if (ledger.Step >= UpdateStep.Kept || answer is { State: DesktopAnswer.Installing })
+        {
+            return (true, false);
+        }
+
+        if (id is { Length: > 0 } && File.Exists(GoFile(id)))
+        {
+            return (true, false);
+        }
+
+        TryDelete(update.DesktopRequest);
+        return (false, false);
     }
 
     /// <summary>What the runtime and the update are now, after a way out: one sentence for the answer to end with.</summary>
@@ -922,6 +1014,40 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
                 null,
                 retryable: true);
         }
+    }
+
+    /// <summary>
+    /// Windows, after this data directory's runtime and a Demo runtime were stopped: the look for other processes at the
+    /// carried path, which waits up to <see cref="OthersEnd"/> for the ones still ending — a stopped runtime's plugin hosts —
+    /// before it refuses, naming them.
+    /// </summary>
+    private async Task NoOtherOnceTheyEndedAsync(CancellationToken cancellationToken)
+    {
+        var deadline = clock.GetUtcNow() + OthersEnd;
+        while (true)
+        {
+            try
+            {
+                NoOtherAtTheCarriedPath();
+                return;
+            }
+            catch (UpdateException) when (clock.GetUtcNow() < deadline)
+            {
+                await Task.Delay(Poll, clock, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>Windows: whether a runtime an earlier version's demo left running answers on a Demo folder beside this installation's.</summary>
+    private bool DemoRuntimeRuns()
+    {
+        if (env.Setup is not { } places)
+        {
+            return false;
+        }
+
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        return Uninstall.DesktopRemoval.DemoFolders(env, places).Any(folder => DescriptorProcess.Live(new JasonPaths(folder), processes) is not null);
     }
 
     /// <summary>

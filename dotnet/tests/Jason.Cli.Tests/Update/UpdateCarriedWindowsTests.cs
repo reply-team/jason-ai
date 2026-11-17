@@ -49,9 +49,20 @@ public sealed class UpdateCarriedWindowsTests
             return desktop.Install(id, to);
         };
 
+        // While the new jason finishes, the lock is the verb's still: a second update, or a rollback, finds it held.
+        string? beside = null;
+        installation.OnHandOver = command =>
+        {
+            Assert.Contains("--finish", command);
+            beside = Assert.Throws<UpdateException>(() => UpdateLock.Take(installation.Update, "a second update").Dispose()).Code;
+        };
+
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
 
         Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(UpdateCodes.InProgress, beside);
+        Assert.NotNull(installation.Processes.RunLocks.Single(handed => handed is not null));
+        Assert.False(File.Exists(installation.Update.LockHolder), "the nonce outlived the lock");
         var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.Equal("complete", answer.Step);
         var order = new[] { "staged:", "asked:", "drained:", "stopped: the runtime is gone", "moved:", "stopped: Jason Desktop told to go", "kept:", "swapped:", "plugins:", "started:", "healthy:", "complete:", "install:", "settle:" };
@@ -358,6 +369,101 @@ public sealed class UpdateCarriedWindowsTests
         Assert.Equal(UpdateStep.Kept, installation.Ledger()!.Step);
         Assert.False(installation.Running);
         Assert.Empty(installation.Processes.Launches);
+    }
+
+    /// <summary>
+    /// A cancel in the moment between the Desktop writing <c>installing</c> and the verb reading it: the request's file is read
+    /// once more on the way out, so the installer's start is not ended, nothing is copied into its folder, no record is put
+    /// back and no runtime started there, and the answer names the finish.
+    /// </summary>
+    [Fact]
+    public async Task A_cancel_after_the_go_reads_installing_once_more_and_leaves_the_folder_to_the_installer()
+    {
+        var (installation, desktop, _) = Windows();
+        using var __ = installation;
+        using var ___ = desktop;
+        var carried = Handing(installation, id => Path.Combine(installation.Root, "store", id, ReleaseAssets.ExecutableName), installWait: TimeSpan.FromMinutes(5));
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        desktop.Answer = (id, to) =>
+        {
+            // The Desktop hands the update to its installer, and the cancel comes before the verb reads the answer.
+            desktop.Keep();
+            desktop.Write(id, to, "installing", kept: desktop.Kept);
+            cancel.Cancel();
+            return 0;
+        };
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => carried.InstallAsync(ledger, Request(installation), cancel.Token));
+
+        Assert.Equal(UpdateCodes.Cancelled, refused.Code);
+        Assert.Contains("`jason update apply` finishes the update and starts the runtime", refused.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(installation.InstallPath), "a jason was copied into the folder the installer has");
+        Assert.Equal(UpdateStep.Stopped, installation.Ledger()!.Step);
+        Assert.False(installation.Running);
+        Assert.Empty(installation.Processes.Launches);
+    }
+
+    /// <summary>
+    /// A Demo runtime an earlier version left running, with no runtime of this installation up, is no other process to refuse
+    /// before the Desktop is asked: it runs the carried file as this installation's runtime would, and is stopped at the
+    /// download. Here it will not stop, so that refusal is the one met, after the Desktop was asked.
+    /// </summary>
+    [Fact]
+    public async Task A_demo_runtime_with_none_of_this_installations_up_is_not_refused_before_the_desktop_is_asked()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, system: SetupSystem.Windows);
+        using var _ = installation;
+        using var __ = desktop;
+        var demo = Path.TrimEndingDirectorySeparator(installation.Paths.Root) + "-demo";
+        var demoPaths = new JasonPaths(demo);
+        Directory.CreateDirectory(demoPaths.RunDirectory);
+        File.WriteAllText(Path.Combine(demo, Jason.Cli.Uninstall.DesktopRemoval.DemoMarkerName), Jason.Cli.Uninstall.DesktopRemoval.DemoMarkerText);
+        const int DemoPid = 48_485;
+        File.WriteAllText(
+            demoPaths.DescriptorFile,
+            JsonSerializer.Serialize(new RuntimeDescriptor("v1", installation.From.ToString(), "demo", DemoPid, "http://127.0.0.1:5001", "the-demo-token", DateTimeOffset.UnixEpoch), JasonJson.Options));
+        installation.Processes.RunningPids.Add(DemoPid);
+        var remover = new Uninstall.RecordingRemover();
+        remover.Running[installation.InstallPath] = [DemoPid];
+        installation.Machine = installation.Machine! with { Removes = remover };
+        var carried = Handing(installation, id => Path.Combine(installation.Root, "store", id, ReleaseAssets.ExecutableName));
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => carried.InstallAsync(ledger, Request(installation), Ct));
+
+        Assert.Single(desktop.Requests);
+        Assert.Equal(UpdateCodes.RuntimeUnreachable, refused.Code);
+        Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"process {DemoPid}, on {demo}, did not stop"), refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Other processes run the jason at", refused.Message, StringComparison.Ordinal);
+        Assert.True(File.Exists(installation.InstallPath));
+        Assert.Null(installation.Ledger());
+    }
+
+    /// <summary>
+    /// After the runtime was stopped, a process of its still ending at the carried path — a plugin host — is waited out, not
+    /// refused: the look asks again until it is gone, and the update goes on.
+    /// </summary>
+    [Fact]
+    public async Task A_process_of_the_stopped_runtime_still_ending_is_waited_out()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: true, system: SetupSystem.Windows);
+        using var _ = installation;
+        using var __ = desktop;
+        var remover = new Uninstall.RecordingRemover
+        {
+            // A plugin host of the runtime that was stopped, at the carried path for the first two looks after the stop.
+            Looks = (executable, look) => look < 2 ? [5151] : [],
+        };
+        installation.Machine = installation.Machine! with { Removes = remover };
+        var carried = Handing(installation, id => Path.Combine(installation.Root, "store", id, ReleaseAssets.ExecutableName), othersEnd: TimeSpan.FromSeconds(10));
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var swapped = await carried.InstallAsync(ledger, Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Swapped, swapped.Step);
+        Assert.True(remover.Reads.Count >= 3, "the look did not ask again once the process had ended");
+        Assert.Single(desktop.Seen);
     }
 
     /// <summary>A record at <c>kept</c> that cannot be written stops nothing: the installer has the update, and it lands.</summary>
@@ -872,7 +978,8 @@ public sealed class UpdateCarriedWindowsTests
         TimeSpan? goBound = null,
         Action<UpdateLedger>? writes = null,
         Action<string, string>? mover = null,
-        TimeSpan? installWait = null) =>
+        TimeSpan? installWait = null,
+        TimeSpan? othersEnd = null) =>
         new(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.Windows)
         {
             MovesItself = true,
@@ -882,6 +989,7 @@ public sealed class UpdateCarriedWindowsTests
             Writes = writes,
             Mover = mover ?? ((from, to) => File.Move(from, to)),
             InstallWait = installWait ?? TimeSpan.FromMilliseconds(200),
+            OthersEnd = othersEnd ?? TimeSpan.FromMilliseconds(100),
             DesktopWait = TimeSpan.FromMilliseconds(600),
             WindowAnswers = TimeSpan.FromMilliseconds(100),
             WindowWait = TimeSpan.FromMilliseconds(300),

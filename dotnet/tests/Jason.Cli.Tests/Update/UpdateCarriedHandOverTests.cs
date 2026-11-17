@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Jason.Cli.Commands;
 using Jason.Cli.Installation;
+using Jason.Cli.Process;
 using Jason.Cli.Tests.Commands;
 using Jason.Cli.Update;
 using Jason.Contracts.Api;
@@ -483,28 +484,72 @@ public sealed class UpdateCarriedHandOverTests
     private static UpdateRequest Request(FakeInstallation installation) => new(installation.Feed, null, TimeSpan.Zero);
 
     /// <summary>
-    /// A cancel while the copy carries the update: the copy is ended with it, and the carried jason, which asked for the stop,
-    /// puts back the record that stood and launches the runtime from the application's file without a wait, saying so.
+    /// A cancel while the copy carries the update, the copy ended with it past its hold, read by the carried process that
+    /// waited on it by the rule the carried process keeps on Windows. Before the go nothing was installed: the record that
+    /// stood is put back and the runtime as it was found, resumed where it answers drained, launched without a wait where it
+    /// is gone. With the go given, or the installer handed the update (<c>kept</c>), and the application not yet the new
+    /// version, the application is the installer's: nothing is put back and no runtime is started, the old build under the
+    /// installer least of all, and the answer names the finish; once the install lands, `jason update apply` finishes it and
+    /// starts the runtime from the new build. A Desktop that refused after the go installed nothing, and is put back from.
     /// </summary>
-    [Fact]
-    [Critical(Family.I2, "a cancel on macOS puts back the record and launches the runtime")]
-    public async Task A_cancel_while_the_copy_carries_the_update_puts_back_the_record_and_launches_the_runtime()
+    [Theory]
+    [Critical(Family.I2, "a cancel on macOS puts back only what the installer does not have")]
+    [InlineData("before_the_go_drained")]
+    [InlineData("before_the_go_gone")]
+    [InlineData("after_the_go")]
+    [InlineData("at_kept")]
+    [InlineData("refused_after_the_go")]
+    public async Task A_cancel_while_the_copy_carries_the_update_puts_back_only_what_the_installer_does_not_have(string where)
     {
         var (installation, desktop) = FakeDesktop.Carried();
         using var _ = installation;
         var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        const string Id = "cli-cancelled";
+        var go = Path.Combine(installation.Update.Root, $"desktop-{Id}.go");
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         installation.OnHandOver = command =>
         {
-            if (command[0] == copy)
+            if (command[0] != copy)
             {
-                // The copy drained and asked, the Desktop stopped the runtime at the go, and the copy is ended with the cancel.
-                var ledger = installation.Ledger()!.At(UpdateStep.Stopped);
-                ledger.Write(installation.Update.Ledger);
-                desktop.StopRuntime();
-                cancel.Cancel();
-                throw new OperationCanceledException(cancel.Token);
+                return;
             }
+
+            // What the copy left when it was ended: its request recorded, the Desktop's answer, the go where it was given,
+            // the ledger at the step it reached, and the runtime drained or stopped.
+            File.WriteAllText(installation.Update.DesktopRequest, Id);
+            var to = installation.To.ToString();
+            var ledger = installation.Ledger()!;
+            switch (where)
+            {
+                case "before_the_go_drained":
+                    ledger.At(UpdateStep.Drained).Write(installation.Update.Ledger);
+                    desktop.Write(Id, to, "downloaded", offered: to);
+                    break;
+                case "before_the_go_gone":
+                    ledger.At(UpdateStep.Stopped).Write(installation.Update.Ledger);
+                    desktop.Write(Id, to, "downloaded", offered: to);
+                    desktop.StopRuntime();
+                    break;
+                case "after_the_go":
+                    ledger.At(UpdateStep.Stopped).Write(installation.Update.Ledger);
+                    desktop.Write(Id, to, "downloaded", offered: to);
+                    File.WriteAllText(go, string.Empty);
+                    desktop.StopRuntime();
+                    break;
+                case "at_kept":
+                    ledger.At(UpdateStep.Kept).Write(installation.Update.Ledger);
+                    desktop.Keep();
+                    desktop.Write(Id, to, "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+                    break;
+                default:
+                    ledger.At(UpdateStep.Stopped).Write(installation.Update.Ledger);
+                    File.WriteAllText(go, string.Empty);
+                    desktop.Write(Id, to, "refused", reason: "keep_failed", message: "The application could not be kept.", runtimeStopped: desktop.StopRuntime());
+                    break;
+            }
+
+            cancel.Cancel();
+            throw new OperationCanceledException(cancel.Token);
         };
 
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token);
@@ -512,10 +557,164 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Equal(ExitCodes.ApiError, exit);
         var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
         Assert.Equal(UpdateCodes.Cancelled, refusal.Code);
-        Assert.Contains("and not waited for", refusal.Message, StringComparison.Ordinal);
-        Assert.True(installation.Running);
-        Assert.Equal([installation.InstallPath], installation.Processes.Executables.Single());
+        if (where is "after_the_go" or "at_kept")
+        {
+            Assert.Contains("no runtime was started under it: the runtime stays stopped until the update is finished", refusal.Message, StringComparison.Ordinal);
+            Assert.Contains("`jason update apply` finishes the update and starts the runtime", refusal.Message, StringComparison.Ordinal);
+            Assert.False(installation.Running);
+            Assert.Empty(installation.Processes.Launches);
+            Assert.Equal(where == "at_kept" ? UpdateStep.Kept : UpdateStep.Stopped, installation.Ledger()!.Step);
+
+            // The installer lands the update, and the command the answer named finishes it and starts the runtime from the
+            // new build.
+            desktop.Becomes(installation.To);
+            installation.Out.GetStringBuilder().Clear();
+            Assert.Equal(ExitCodes.Success, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+            Assert.Equal(UpdateStep.Complete, installation.Ledger()!.Step);
+            Assert.True(installation.Running);
+            Assert.Equal([installation.InstallPath], installation.Processes.Executables.Single());
+            return;
+        }
+
         Assert.Null(installation.Ledger());
+        Assert.False(File.Exists(installation.Update.DesktopRequest), "the request was left recorded");
+        Assert.False(File.Exists(go), "a go was left for a Desktop that refused");
+        Assert.True(installation.Running);
+        if (where == "before_the_go_drained")
+        {
+            Assert.Equal("system.resume", installation.Operations.Last());
+            Assert.Empty(installation.Processes.Launches);
+        }
+        else
+        {
+            Assert.Contains("and not waited for", refusal.Message, StringComparison.Ordinal);
+            Assert.Equal([installation.InstallPath], installation.Processes.Executables.Single());
+        }
+    }
+
+    /// <summary>
+    /// After a cancel the copy is given its hold to run its own way out, since a terminal's Ctrl+C reaches it too: one that
+    /// answers within it is passed on as it answered, and the carried process puts back and starts nothing of its own.
+    /// </summary>
+    [Fact]
+    public async Task A_copy_that_answers_within_its_hold_after_a_cancel_is_passed_on()
+    {
+        var (installation, _) = FakeDesktop.Carried();
+        using var __ = installation;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        const string Answer = "{\"error\":{\"code\":\"update_cancelled\",\"message\":\"The copy put everything back.\",\"retryable\":true}}";
+        installation.Processes.OnRun = async (_, command, _, token) =>
+        {
+            await cancel.CancelAsync();
+            await Task.Delay(200, CancellationToken.None);
+            Assert.False(token.IsCancellationRequested, "the copy was ended before its hold");
+            return new FinishedCommand(ExitCodes.ApiError, Answer + "\n");
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal("The copy put everything back.", RuntimeVerbs.Envelope(installation.Out.ToString()).Message);
+        Assert.Empty(installation.Processes.Launches);
+        Assert.Equal(UpdateStep.Staged, installation.Ledger()!.Step);
+    }
+
+    /// <summary>A copy that has not ended when its hold has passed is ended then, and the carried process's own way out runs.</summary>
+    [Fact]
+    public async Task A_copy_that_does_not_end_within_its_hold_is_ended_and_the_way_out_runs()
+    {
+        var (installation, _) = FakeDesktop.Carried();
+        using var __ = installation;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        TimeSpan? ended = null;
+        installation.Processes.OnRun = async (_, _, _, token) =>
+        {
+            await cancel.CancelAsync();
+            var since = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, token);
+            }
+            finally
+            {
+                ended = since.Elapsed;
+            }
+
+            throw new InvalidOperationException("unreachable");
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(UpdateCodes.Cancelled, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        Assert.True(ended >= UpdateCommands.ChildHold - TimeSpan.FromMilliseconds(100), $"the copy was ended after {ended}, before its hold");
+        Assert.Null(installation.Ledger());
+    }
+
+    /// <summary>
+    /// The lock is never let go between the parts of an update: the carried process keeps it while its copy runs, the copy
+    /// while the new jason finishes, and each child goes on under the one nonce it was handed. A second apply, a finishing
+    /// step and a rollback beside any part find it held; the nonce goes with the lock.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I2, "the update's lock is never let go between its parts")]
+    public async Task The_lock_is_never_let_go_between_the_parts_of_an_update()
+    {
+        var (installation, _) = FakeDesktop.Carried();
+        using var _ = installation;
+        var beside = new List<(string Part, string Code)>();
+        installation.OnHandOver = command =>
+        {
+            var part = command.Contains("--finish") ? "finish" : "copy";
+            beside.Add((part, Assert.Throws<UpdateException>(() => UpdateLock.Take(installation.Update, "a second update").Dispose()).Code));
+            var second = new StringWriter();
+            var exit = UpdateCommands.ApplyAsync(installation.Machine! with { Out = second }, installation.Feed.AbsoluteUri, null, 0, human: false, Ct).GetAwaiter().GetResult();
+            beside.Add((part + " apply", exit == ExitCodes.ApiError ? RuntimeVerbs.Envelope(second.ToString()).Code : "ran"));
+            var rollback = new StringWriter();
+            CliApp.RunAsync(["update", "rollback"], installation.Machine! with { Out = rollback }, Ct).GetAwaiter().GetResult();
+            beside.Add((part + " rollback", RuntimeVerbs.Envelope(rollback.ToString()).Code));
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(UpdateStep.Complete, installation.Ledger()!.Step);
+        Assert.All(beside, seen => Assert.Equal(UpdateCodes.InProgress, seen.Code));
+        Assert.Equal(["copy", "copy apply", "copy rollback", "finish", "finish apply", "finish rollback"], beside.Select(seen => seen.Part));
+        var handed = installation.Processes.RunLocks.Where(nonce => nonce is not null).Distinct().ToList();
+        Assert.Single(handed);
+        Assert.Equal(2, installation.Processes.RunLocks.Count(nonce => nonce == handed[0]));
+        Assert.False(File.Exists(installation.Update.LockHolder), "the nonce outlived the lock");
+        using var free = UpdateLock.Take(installation.Update, "the next update");
+    }
+
+    /// <summary>
+    /// A carried update run elevated - an administrator's elevated terminal, root - is refused before anything is read, staged
+    /// or asked, in one sentence that names an ordinary terminal and the Desktop's menu.
+    /// </summary>
+    [Theory]
+    [InlineData(SetupSystem.MacOs, false)]
+    [InlineData(SetupSystem.MacOs, true)]
+    [InlineData(SetupSystem.Windows, false)]
+    public async Task An_elevated_update_is_refused_before_anything_is_begun(SetupSystem system, bool finish)
+    {
+        var (installation, desktop) = FakeDesktop.Carried(system: system);
+        using var _ = installation;
+        using var __ = desktop;
+        installation.Machine = installation.Machine! with { Setup = installation.Machine.Setup! with { Elevated = true } };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine, installation.Feed.AbsoluteUri, null, 0, human: false, finish, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.Elevated, refusal.Code);
+        Assert.Contains(system is SetupSystem.Windows ? "as an administrator" : "as root", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("ordinary terminal", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Check for Updates in Jason Desktop's menu", refusal.Message, StringComparison.Ordinal);
+        Assert.Null(installation.Ledger());
+        Assert.Empty(desktop.Starts);
+        Assert.Empty(installation.Operations);
+        Assert.Empty(installation.Processes.Runs);
     }
 
     /// <summary>On macOS an install that did not land carries the end of ShipIt's own log, where ShipIt says why.</summary>

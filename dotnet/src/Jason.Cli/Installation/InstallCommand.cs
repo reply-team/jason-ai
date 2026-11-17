@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Update;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Installation;
@@ -105,6 +106,11 @@ public static class InstallCommand
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.
 
+        One at a time with an update: where the data directory has an update folder, the setup holds the
+        update's lock, <data>/update/update.lock, while it runs, and while another jason holds it - an update,
+        its finish or a rollback - refuses with update_in_progress, having set nothing up: an update's own
+        finish sets the machine up itself. Where there is no update folder it takes no lock and makes none.
+
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
         """;
@@ -163,7 +169,35 @@ public static class InstallCommand
                 + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
         }
 
-        var report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`
+        // can run while it does. The lock is taken only where an update could hold it, so none is made under a data directory
+        // a first start must still find without one.
+        var update = new UpdatePaths(env.Paths);
+        UpdateLock? held = null;
+        if (Directory.Exists(update.Root))
+        {
+            try
+            {
+                held = UpdateLock.Take(update, "the machine setup");
+            }
+            catch (UpdateException refused)
+            {
+                return Refuse(
+                    env,
+                    options.Human,
+                    refused.Code,
+                    refused.Code == UpdateCodes.InProgress
+                        ? $"Another jason is updating this installation, or finishing or rolling back an update, and holds {update.Lock}, so nothing was set up: an update's own finish sets the machine up itself. Let that one end, then run `jason install` again; `jason update status` says where the update stands."
+                        : refused.Message);
+            }
+        }
+
+        InstallReport report;
+        using (held)
+        {
+            report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        }
+
         if (options.Human)
         {
             foreach (var line in report.Done.Concat(report.Left))
