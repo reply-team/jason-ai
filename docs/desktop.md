@@ -786,7 +786,9 @@ Claude Code turns are held by two lines, the host's own rules and the desktop's 
   the documentation of the hosts and of Reply (below), subagents and the task list; of `reply` exactly `reply auth status`
   and `reply account list`; and one rule for each `jason` verb in [chat-allow-list.txt](../desktop/chat-allow-list.txt),
   which is the CLI's verbs less the deny list and less `jason doctor`, which writes its bundle to any path and so asks
-  every time, held to the real tree by a test.
+  every time, held to the real tree by a test; and, for each noun with a verb on that list, its help, exactly
+  `jason <noun> --help`, which prints and changes nothing. The chat's instructions name those nouns, and `jason --help`
+  itself stays refused, as is every `jason` that starts with an option.
 - **Refused, with no card.** The verbs in [chat-deny-list.txt](../desktop/chat-deny-list.txt), in any letter case:
   everything the CLI reserves for a person (approving and rejecting, answering a decision, a standing approval, a
   preference, a campaign's send mode, clearing a block, resuming work, reviewing a send, a report, rewinding a

@@ -8,7 +8,7 @@ import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
-import { readFence } from '../src/chat-deny.ts';
+import { helpNouns, readFence } from '../src/chat-deny.ts';
 import { chatRules, claudeAllowedTools, claudeArguments, claudeLine, claudeTurnSettings, fullAccessSettings, planTurnSettings } from '../src/chat-hosts.ts';
 import { chatModes, codexAutoEdit, codexFullAccess, feedAutoEdit, fullAccessDialog, fullAccessFloor, fullAccessOffered, fullAccessSentence, isChatMode, powerShellRunsInFullAccess, planExitRefusal, planModeMoved, planRefusal, unguardedSentence, unguardedStandingSentence } from '../src/chat-modes.ts';
 import { PermissionBroker, type BrokerEvent, type Decided } from '../src/chat-permission-broker.ts';
@@ -191,6 +191,7 @@ async function wired(t: { after: (fn: () => void | Promise<void>) => void }, mod
         protectedFiles: [...settingsFilesOf(paths.data), paths.runFile],
         denied: fence.commands,
         deniedOperations: fence.operations,
+        help: helpNouns(fence.allowed, fence.reads),
         real: realPathOf,
     };
     const id = newTurnId();
@@ -662,4 +663,31 @@ test('Plan only says the AI how it is left, the plan card included, and a go app
     assert.equal(declared === null ? null : JSON.parse(declared[1]!), planModeMoved, 'the page declares the sentence the desktop refuses with');
     assert.ok(readFileSync(join(page, 'test', 'desktop.ts'), 'utf8').includes(JSON.stringify(planModeMoved)), 'and its stub desktop refuses with it');
     assert.equal(planRefusal, 'Plan only is on: nothing is changed. Say what you would do; the person switches the mode to act.', 'unchanged');
+});
+
+test('a noun\'s help runs with no card in Plan only, Ask first, Auto-edit and Full access, and root help and the other forms are refused as before', async (t) => {
+    const nouns = helpNouns(fence.allowed, fence.reads);
+    for (const mode of ['plan_only', 'ask_first', 'auto_edit', 'full_access'] as const) {
+        const w = await wired(t, mode);
+        for (const noun of nouns) {
+            const command = `jason ${noun} --help`;
+            assert.equal((await w.broker.ask(w.id, 'Bash', { command })).behavior, 'allow', `${mode}: ${command}`);
+            if (mode === 'full_access') assert.equal(await hooked(w, 'Bash', { command }), null, `${mode} hook: ${command}`);
+        }
+        assert.deepEqual(w.cards, [], mode);
+        const root = await w.broker.ask(w.id, 'Bash', { command: 'jason --help' });
+        assert.equal(root.behavior, 'deny', mode);
+        assert.match(root.behavior === 'deny' ? root.message : '', /run `jason <noun> --help`/, mode);
+        assert.equal((await w.broker.ask(w.id, 'Bash', { command: 'jason approval approve --help' })).behavior, 'deny', mode);
+        if (mode === 'full_access') {
+            assert.match((await hooked(w, 'Bash', { command: 'jason --help' })) ?? 'not refused', /run `jason <noun> --help`/);
+            assert.match((await hooked(w, 'Bash', { command: 'jason -h' })) ?? 'not refused', /person's own act/);
+        }
+    }
+    // In Plan only a form that is not exactly a noun's help is refused, as any jason command off the plan list is.
+    const plan = await wired(t, 'plan_only');
+    for (const command of ['jason campaign --help extra', 'jason campaign -h', 'jason -h']) {
+        assert.equal((await plan.broker.ask(plan.id, 'Bash', { command })).behavior, 'deny', command);
+    }
+    assert.deepEqual(plan.cards, []);
 });

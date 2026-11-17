@@ -39,6 +39,11 @@ export interface ChatScope {
     denied: readonly string[];
     /** The deny list's operations: a command whose text names one is refused, however it would reach the runtime. */
     deniedOperations: readonly string[];
+    /**
+     * The nouns whose help runs with no card (`helpNouns`): exactly `jason <noun> --help`, the host's own help rules.
+     * Absent, none.
+     */
+    help?: readonly string[] | undefined;
     /** The real path of an existing path, links, junctions and short names followed; null when nothing is there. */
     real: (path: string) => string | null;
     /**
@@ -171,6 +176,7 @@ const lengthRefusal = 'That path is longer than the system takes: the chat neith
 const pathLimit = (platform: Platform) => (platform === 'win32' ? 32_767 : 4_096);
 const replyRefusal = 'The chat runs only reply auth status and reply account list of reply: provider work goes through jason, and the connection is made on the Connect card. Nothing was run.';
 const commandRefusal = 'That command is a person\'s own act or changes the installation, so the chat never runs it: the person runs it themselves. Nothing was run.';
+const rootHelpRefusal = 'That command starts jason with an option, which the chat never runs, so nothing was run: to read a noun\'s verbs and options, run `jason <noun> --help`, such as `jason campaign --help`.';
 const confinedRefusal = 'That command names JASON_CONFINED, which confines the jason the chat runs: the chat never reads, sets or clears it. Nothing was run.';
 const attemptRefusal = 'That command names JASON_ATTEMPT_ID, which tells jason it runs inside a role\'s attempt: the chat is never an attempt, so it never reads, sets or clears it. Nothing was run.';
 const lookupRefusal = 'That command changes where the shell finds a program, so the jason it would start may not be the desktop\'s: the chat never runs it. Nothing was run.';
@@ -650,23 +656,43 @@ function holdsEntry(words: readonly string[], entry: string): boolean {
 /**
  * What the text holds of jason: `deny` when any jason command inside it, in any part, form or nesting, starts with an
  * option, carries a word that begins with `@` (a file of words), or holds a deny-list entry, or when the text names a
- * denied operation however it would reach the runtime; `jason` when it runs jason otherwise; null when it does not.
+ * denied operation however it would reach the runtime; `help` when no such command or operation is there but a jason
+ * command starts with `--help`, which is refused as `deny` is, by a sentence that names the help the chat runs instead;
+ * `jason` when it runs jason otherwise; null when it does not.
  */
-function jasonIn(command: string, scope: ChatScope): 'deny' | 'jason' | null {
+function jasonIn(command: string, scope: ChatScope): 'deny' | 'help' | 'jason' | null {
     let found: 'jason' | null = null;
+    let help = false;
     for (const part of command.split(/&&|\|\||\$\(|[;|&`\n\r<>(){}]/)) {
         const tokens = part.trim().split(/\s+/).map(unquoted).filter((token) => token !== '');
         for (const [at, token] of tokens.entries()) {
             if (programOf(scope.platform, token) !== 'jason') continue;
             found = 'jason';
             const words = tokens.slice(at + 1);
-            if (words[0]?.startsWith('-') || words.some((word) => word.startsWith('@'))) return 'deny';
+            if (words.some((word) => word.startsWith('@'))) return 'deny';
+            if (words[0]?.toLowerCase() === '--help') help = true;
+            else if (words[0]?.startsWith('-')) return 'deny';
             if (scope.denied.some((entry) => holdsEntry(words, entry))) return 'deny';
         }
     }
     const text = command.toLowerCase();
     if (scope.deniedOperations.some((operation) => new RegExp(`(?<![a-z0-9_])${operation.replace('.', '\\.')}(?![a-z0-9_])`).test(text))) return 'deny';
-    return found;
+    return help ? 'help' : found;
+}
+
+/** The refusal of what `jasonIn` found, or null where it found nothing refused. */
+function jasonRefusal(found: ReturnType<typeof jasonIn>): string | null {
+    return found === 'deny' ? commandRefusal : found === 'help' ? rootHelpRefusal : null;
+}
+
+/**
+ * True when the command is exactly `jason <noun> --help` for a noun whose help runs (`ChatScope.help`): one command,
+ * those three words and no other, as the host's help rule names it.
+ */
+function isNounHelp(command: string, scope: ChatScope): boolean {
+    if (isCompound(command)) return false;
+    const words = command.trim().split(/\s+/);
+    return words.length === 3 && words[0] === 'jason' && words[2] === '--help' && (scope.help ?? []).includes(words[1] as string);
 }
 
 /** True when a token names reply: the program itself, or its package `reply-cli`, with or without a version. */
@@ -1039,7 +1065,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (namesPersonsOwn(command, scope) || wordNamesPersonsOwn(places, scope)) return { verdict: 'deny', message: personsRefusal };
     if (namesDataVariable(command, scope) || namesData(command, scope) || wordNamesData(places, scope)) return { verdict: 'deny', message: dataRefusal };
     const jason = jasonIn(command, scope);
-    if (jason === 'deny') return { verdict: 'deny', message: commandRefusal };
+    const jasonRefused = jasonRefusal(jason);
+    if (jasonRefused !== null) return { verdict: 'deny', message: jasonRefused };
     const respelled = respelledRefusal(command, scope);
     if (respelled !== null) return { verdict: 'deny', message: respelled };
     const own = chatsOwnPlace(places, scope);
@@ -1056,6 +1083,8 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     const guarded = guardedPlace(places, scope);
     if (guarded !== undefined) return { verdict: 'ask', title: guarded.title, detail: shorten(command), remember: null };
     if (namesLocalJason(command, scope)) return { verdict: 'ask', title: jasonFileTitle, detail: shorten(command), remember: null };
+    // A noun's help, exactly as the host's help rule names it, runs here too: it prints and changes nothing.
+    if (isNounHelp(command, scope)) return allow;
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };
@@ -1243,7 +1272,7 @@ function programLaunches(words: readonly string[]): boolean {
  * environment around a jason.
  */
 function textRefused(text: string, scope: ChatScope): boolean {
-    if (namesConfinedVariable(text) || namesAttemptVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonIn(text, scope) === 'deny') return true;
+    if (namesConfinedVariable(text) || namesAttemptVariable(text) || namesDataVariable(text, scope) || namesData(text, scope) || namesPersonsOwn(text, scope) || jasonRefusal(jasonIn(text, scope)) !== null) return true;
     return respelledRefusal(text, scope) !== null;
 }
 
@@ -1412,7 +1441,8 @@ function respelledRefusal(text: string, scope: ChatScope): string | null {
         if (namesAttemptVariable(plain)) return attemptRefusal;
         if (namesPersonsOwn(plain, scope)) return personsRefusal;
         if (namesDataVariable(plain, scope) || namesData(plain, scope)) return dataRefusal;
-        if (jasonIn(plain, scope) === 'deny') return commandRefusal;
+        const jasonRefused = jasonRefusal(jasonIn(plain, scope));
+        if (jasonRefused !== null) return jasonRefused;
     }
     return null;
 }
@@ -1633,7 +1663,8 @@ function refusalOver(text: string, places: readonly string[], scope: ChatScope):
     if (remote !== null) return remote;
     if (namesPersonsOwn(text, scope) || wordNamesPersonsOwn(places, scope)) return personsRefusal;
     if (namesDataVariable(text, scope) || namesData(text, scope) || wordNamesData(places, scope)) return dataRefusal;
-    if (jasonIn(text, scope) === 'deny') return commandRefusal;
+    const jasonRefused = jasonRefusal(jasonIn(text, scope));
+    if (jasonRefused !== null) return jasonRefused;
     const own = chatsOwnPlace(places, scope);
     if (own !== null) return own;
     // reply with words other than `auth status` or `account list` is refused here as in Ask first: Full access is never
