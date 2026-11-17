@@ -32,7 +32,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'ModulePath')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -79,6 +79,16 @@ function Count-Entry([string] $folder) {
 }
 
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
+# A program run to its own end, and not its children's, and its exit code: Start-Process -Wait also waits for every
+# process the program started, and an installer run with --force-run starts the application, which never ends by itself.
+function Wait-Program([string] $file, [string[]] $arguments, [int] $seconds = 600) {
+    $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
+    # The handle, taken now, keeps the exit code readable once the process has ended.
+    $null = $process.Handle
+    if (-not $process.WaitForExit($seconds * 1000)) { Fail "$file $($arguments -join ' ') had not ended after $seconds seconds" }
+    return $process.ExitCode
+}
+
 function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $environment = @{}) {
     $saved = @{}
     foreach ($name in $environment.Keys) { $saved[$name] = [Environment]::GetEnvironmentVariable($name); [Environment]::SetEnvironmentVariable($name, $environment[$name]) }
@@ -192,7 +202,18 @@ switch ($Step) {
         Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
         $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
         Say "$Name against ${Against}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
-        if ($gone.Count -gt 0 -or $left.Count -gt 0) { Fail "the machine after '$Name' is not the machine before '$Against': see $diff" }
+        # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
+        # the end fails the job on any divergence recorded.
+        if ($gone.Count -gt 0 -or $left.Count -gt 0) {
+            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $(($gone | ForEach-Object { "- $_" }) + ($left | ForEach-Object { "+ $_" }) -join '; ')"
+            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$Name against ${Against}: see $diff"
+        }
+    }
+
+    'Held' {
+        $divergent = Join-Path $Out 'divergent.txt'
+        if (Test-Path -LiteralPath $divergent) { Fail "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
+        Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
     }
 
     'Install' {
@@ -288,8 +309,8 @@ switch ($Step) {
         $old = Join-Path $Previous 'jason-desktop-windows-x64-setup.exe'
         $setup = Get-AuthenticodeSignature -LiteralPath $old
         if ($setup.Status -ne 'Valid' -or $setup.SignerCertificate.GetNameInfo('SimpleName', $false) -cne 'ReplyApp Inc.') { Fail "the previous release's setup is not signed by ReplyApp Inc.: $($setup.Status)" }
-        $installed = Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
-        if ($installed.ExitCode -ne 0) { Fail "the previous release's setup exited with $($installed.ExitCode)" }
+        $installed = Wait-Program $old @('/S')
+        if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
         $previousVersion = Read-Version $carried
         Say "the previous release's Jason Desktop $previousVersion installed by its own setup /S"
 
@@ -300,8 +321,8 @@ switch ($Step) {
         $opened = @(Get-OwnProcesses $app | ForEach-Object { $_.ProcessId })
 
         # This build's setup, as its updater runs it.
-        $new = Start-Process -FilePath (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') -ArgumentList '--updated', '/S', '--force-run' -Wait -PassThru
-        if ($new.ExitCode -ne 0) { Fail "this build's setup run as an update exited with $($new.ExitCode)" }
+        $new = Wait-Program (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') @('--updated', '/S', '--force-run')
+        if ($new -ne 0) { Fail "this build's setup run as an update exited with $new" }
         if ((Read-Version $carried) -ne $Version) { Fail "after the update the application is $(Read-Version $carried), not $Version" }
         $stillOpen = @($opened | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
         if ($stillOpen.Count -ne 0) { Fail "the previous window's processes $($stillOpen -join ', ') outlived the update's installer" }
@@ -324,8 +345,8 @@ switch ($Step) {
         if ($entry.Count -ne 1) { Fail "Installed apps lists $($entry.Count) Jason entries, not one" }
         $quiet = [string]$entry[0].QuietUninstallString
         if ($quiet -notmatch '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') { Fail "QuietUninstallString is not a quoted program and its arguments: $quiet" }
-        $removal = Start-Process -FilePath $Matches['file'] -ArgumentList $Matches['arguments'] -Wait -PassThru
-        if ($removal.ExitCode -ne 0) { Fail "the uninstall Installed apps runs exited with $($removal.ExitCode)" }
+        $removal = Wait-Program $Matches['file'] @($Matches['arguments'])
+        if ($removal -ne 0) { Fail "the uninstall Installed apps runs exited with $removal" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 60 "the application's folder going"
         if (@(Get-JasonUninstallEntries).Count -ne 0) { Fail 'the Installed apps entry is left' }
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left: the uninstaller did not run jason uninstall --keep-application' }

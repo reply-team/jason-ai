@@ -24,6 +24,13 @@
 #   from-previous <previous> <feed> <version>
 #                                  the previous release's command-line Jason, installed by its own script, with a runtime
 #                                  and a logon registration, updated by its own jason update apply from a served feed
+#   held                           fails when any compare above found the machine after an uninstall not the one before
+#   assess                         Gatekeeper's assessment of the placed application at its final path: accepted, as a
+#                                  notarized Developer ID application (the release's packages alone)
+#   quarantine <feed> <copy>       a copy of the feed whose desktop archives carry the quarantine attribute a browser
+#                                  writes on what it downloads
+#   intel <zip> <version>          the x64 application put in place by plain steps, as install.sh refuses an Intel Mac:
+#                                  its signature, Gatekeeper's assessment, its jason and runtime, its window, its uninstall
 set -euo pipefail
 
 OUT="${OUT:-$RUNNER_TEMP/installation}"
@@ -139,7 +146,17 @@ compare)
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
-    [ -z "$left" ] && [ -z "$went" ] || fail "the machine after '$1' is not the machine before '$2': see $diffed"
+    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the held step at the
+    # end fails the job on any divergence recorded.
+    if [ -n "$left" ] || [ -n "$went" ]; then
+        echo "::error title=Uninstall::the machine after '$1' is not the machine before '$2': $(cat "$diffed" | tr '\n' ' ')"
+        echo "$1 against $2: see $diffed" >> "$OUT/divergent.txt"
+    fi
+    ;;
+
+held)
+    [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"
+    say "the machine after every uninstall was the machine before it, the data directory and the harness root aside"
     ;;
 
 install)
@@ -271,8 +288,66 @@ from-previous)
     "$WRAPPER" uninstall > "$OUT/uninstall-previous.json" || fail "jason uninstall of the updated command-line install failed: $(cat "$OUT/uninstall-previous.json")"
     ;;
 
+assess)
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app in /Applications or ~/Applications"
+    status=0
+    said="$(spctl --assess --type execute --verbose=4 "$placed" 2>&1)" || status=$?
+    echo "$said"
+    [ "$status" -eq 0 ] || fail "Gatekeeper refuses $placed at its final path: $said"
+    printf '%s\n' "$said" | grep -q 'source=Notarized Developer ID' || fail "Gatekeeper accepts $placed, but not as a notarized Developer ID application: $said"
+    quarantined="$(xattr -p com.apple.quarantine "$placed" 2>/dev/null || echo none)"
+    say "Gatekeeper accepts $placed at its final path as a notarized Developer ID application; its quarantine attribute: $quarantined"
+    ;;
+
+quarantine)
+    feed="$1"; copy="$2"
+    rm -rf "$copy"
+    cp -R "$feed" "$copy"
+    # The attribute as a browser writes it: downloaded (0x0001), not yet approved by a person (no 0x0040), the moment, the
+    # agent and an id of the download.
+    value="$(printf '0081;%08x;Safari;%s' "$(date +%s)" "$(uuidgen)")"
+    for archive in "$copy"/jason-desktop-macos-*.zip; do
+        xattr -w com.apple.quarantine "$value" "$archive"
+        [ "$(xattr -p com.apple.quarantine "$archive")" = "$value" ] || fail "$archive does not carry the quarantine attribute"
+    done
+    say "the copy of the feed at $copy carries its desktop archives as a browser leaves what it downloads: com.apple.quarantine $value"
+    ;;
+
+intel)
+    zip="$1"; version="$2"
+    [ "$(uname -m)" = x86_64 ] || fail "this leg is the Intel Mac's, and this machine is $(uname -m)"
+    place=/Applications
+    [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
+    # The plain steps a person takes with the archive, since install.sh refuses an Intel Mac: unpacked where applications
+    # are kept, by ditto, which keeps the links, the signature and its ticket.
+    ditto -x -k "$zip" "$place" || fail "$zip could not be unpacked into $place"
+    placed="$place/Jason.app"
+    carried="$placed/Contents/Resources/bundle/jason"
+    codesign --verify --deep --strict --verbose=2 "$placed" || fail "the signature of $placed does not verify"
+    file "$carried" | grep -q 'x86_64' || fail "the jason $placed carries is not an x86_64 program: $(file "$carried")"
+    bash "$0" assess
+    [ "$("$carried" --version | cut -d+ -f1)" = "$version" ] || fail "the carried jason does not say $version"
+    "$carried" runtime start > "$OUT/intel-runtime-start.txt" 2>&1 || fail "the carried jason could not start a runtime: $(cat "$OUT/intel-runtime-start.txt")"
+    "$carried" runtime status > "$OUT/intel-runtime-status.json" || fail "no runtime answers on the Intel Mac"
+    grep -q '"applied_migrations":\["' "$OUT/intel-runtime-status.json" || fail "the runtime reported no applied migrations: $(cat "$OUT/intel-runtime-status.json")"
+    say "the x64 application's jason says $version on an Intel Mac, and its runtime started, migrated and answered"
+
+    "$placed/Contents/MacOS/Jason" > "$OUT/intel-window.log" 2>&1 &
+    window=$!
+    sleep 10
+    kill -0 "$window" 2>/dev/null || fail "Jason Desktop did not stay running on the Intel Mac: $(tail -n 20 "$OUT/intel-window.log")"
+    kill "$window" 2>/dev/null || true
+    wait "$window" 2>/dev/null || true
+    say "Jason Desktop ran on the Intel Mac until it was told to quit"
+
+    "$carried" uninstall --purge-data --yes > "$OUT/intel-uninstall.json" 2>&1 || fail "jason uninstall on the Intel Mac failed: $(cat "$OUT/intel-uninstall.json")"
+    wait_until 30 "$placed going" test ! -e "$placed" || fail "$placed is still there after the uninstall"
+    say "jason uninstall took the x64 application and everything it placed off the Intel Mac"
+    ;;
+
 *)
-    echo "usage: test-installation-macos.sh listing|compare|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac

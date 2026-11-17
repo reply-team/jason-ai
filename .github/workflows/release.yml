@@ -3,7 +3,8 @@
 # published, the Linux one first running the critical tier at the tag and then building the desktop's Linux packages,
 # the macOS one, in a job of its own that runs no test, signing and notarizing its executable, and the Windows one, in a
 # job of its own that runs no test either, signing its executable through Artifact Signing, and one job that archives
-# the plugins' packages from the tag's tree; then the release job — the only one that may write to this repository — assembles the manifest and the
+# the plugins' packages from the tag's tree; three proof jobs that install, update and uninstall the signed packages on
+# Windows, an Apple silicon Mac and an Intel Mac; then the release job — the only one that may write to this repository — assembles the manifest and the
 # checksums and publishes the release at once, with its notes and its assets, and a last job asks the Homebrew tap to
 # bump its formula. The release pull request into main, and its run on every platform, come before the tag: the tag is
 # that merge.
@@ -786,15 +787,333 @@ jobs:
           path: artifacts/release/jason-skills.zip
           if-no-files-found: error
 
+  # Jason as one installation, proven on what this release publishes before the release job may publish it, as ci.yml's
+  # union jobs prove it on a test build: the signed packages the platform's job uploaded, installed by the install scripts
+  # as this release publishes them, unchanged; uninstalled by each door, every leg compared with a listing taken before
+  # anything was installed; the previous release's Jason Desktop updated by this release's setup as its updater runs it;
+  # and the previous release's command-line Jason updated by its own update apply. The three proof jobs hold no secret
+  # and no environment, and their token reads the repository for the checkout alone: the previous release is read from
+  # its public downloads. What they keep is named outside jason-*, which the release job's download takes, and the
+  # release job needs all three. The scripts are .github/scripts/Test-InstallationWindows.ps1 and
+  # test-installation-macos.sh, the ones ci.yml's jobs run.
+  #
+  # THE UPDATER, END TO END, is a named place in both platform jobs, for the unit that has jason update apply hand an
+  # update to Jason Desktop: a next build at this version and one, signed as this one is, served on the loopback feed and
+  # applied by jason update apply with no window, and again with a window open, which refuses. Until it lands, each job's
+  # summary says that this is not proven here.
+  proof-windows:
+    name: The proof on win-x64
+    needs: [version, windows, skills]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OUT: ${{ github.workspace }}\installation
+      FEED: ${{ github.workspace }}\feed
+      PREVIOUS: ${{ github.workspace }}\previous
+    steps:
+      - uses: actions/checkout@v7
+
+      # The archive, the desktop's installer, its block map and update feed, and the skills' package, as the win-x64 job
+      # and the skills' job uploaded them, with the manifest and the checksums written over them for win-x64 alone.
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-win-x64
+          path: feed
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-desktop-win-x64
+          path: feed
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-skills
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid win-x64 -Version $env:VERSION -Directory $env:FEED
+
+      - name: The machine before anything is installed
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.claude'), (Join-Path $env:USERPROFILE '.codex'), (Join-Path $env:USERPROFILE '.agents\skills\quick-start') | Out-Null
+          [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.agents\skills\quick-start\SKILL.md'), "a person's own skill`n")
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name before
+
+      # install.ps1 as this release publishes it, unchanged: it holds the setup to the release's signer.
+      - name: Install as an agent does, with the released install.ps1
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script (Join-Path $env:GITHUB_WORKSPACE 'install\install.ps1')
+
+      - name: Uninstall from a new terminal
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
+
+      # The previous release: the latest published one, read from where the public releases' latest lands, and its files
+      # from its public downloads, each checked against its checksums.txt. A fix to an older line, published while a newer
+      # release is the latest, has no previous release to update from: the legs that need one say so and are skipped.
+      - name: Fetch the previous release
+        id: previous
+        shell: pwsh
+        run: |
+          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
+          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
+          if ([semver]$tag.Substring(1) -ge [semver]$env:VERSION) {
+            Write-Host "::notice title=Previous release::The latest published release is $tag, not older than $env:VERSION: the legs that update from a previous release are skipped."
+            exit 0
+          }
+          New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
+          foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
+            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing
+          }
+          foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
+            $hash, $name = $line -split '  ', 2
+            $file = Join-Path $env:PREVIOUS $name
+            if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
+          }
+          Write-Host "the previous release is $tag"
+          "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Install this release over the previous release's Jason Desktop, as its updater runs an installer
+        if: steps.previous.outputs.tag != ''
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+
+      - name: Uninstall from Installed apps
+        if: steps.previous.outputs.tag != ''
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
+
+      - name: Update the previous release's command-line Jason with its own update apply
+        if: steps.previous.outputs.tag != ''
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
+
+      - name: Read the module path Windows PowerShell rebuilds from an empty one
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
+
+      - name: The machine after every uninstall is the machine before
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
+
+      - name: Say what this job does not prove
+        if: always()
+        shell: pwsh
+        run: |
+          @(
+            '### What this job does not prove',
+            '- The updater, end to end: no next build is made, so jason update apply handing an update to Jason Desktop, with no window and with one open, is not proven here.',
+            '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
+            '- The previous release''s own Desktop updater reaching this release: it reads only the published releases; this job runs this release''s installer as that updater would.'
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Keep the listings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-windows-listings
+          path: installation
+          if-no-files-found: ignore
+
+  proof-macos:
+    name: The proof on osx-arm64
+    needs: [version, macos, skills]
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OUT: ${{ github.workspace }}/installation
+      FEED: ${{ github.workspace }}/feed
+      PREVIOUS: ${{ github.workspace }}/previous
+    steps:
+      - uses: actions/checkout@v7
+
+      # The archive, the desktop's Mac packages and update feed, and the skills' package, as the osx-arm64 job and the
+      # skills' job uploaded them, with the manifest and the checksums written over them for osx-arm64 alone.
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-osx-arm64
+          path: feed
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-desktop-osx-x64
+          path: feed
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-skills
+          path: feed
+
+      - name: Assemble the feed the way a release is assembled
+        shell: pwsh
+        run: ./.github/scripts/Write-ProofFeed.ps1 -Rid osx-arm64 -Version $env:VERSION -Directory $env:FEED
+
+      - name: The machine before anything is installed
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills/quick-start"
+          printf "a person's own skill" > "$HOME/.agents/skills/quick-start/SKILL.md"
+          bash .github/scripts/test-installation-macos.sh listing before
+
+      # install.sh as this release publishes it, unchanged: it holds the application to the release's requirement. Then
+      # Gatekeeper's own assessment of the application where it was put.
+      - name: Install as an agent does, with the released install.sh, and assess it where it was put
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "$GITHUB_WORKSPACE/install/install.sh"
+          bash .github/scripts/test-installation-macos.sh assess
+
+      - name: Uninstall from a new terminal, refused first while the application runs
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh refuse-while-open
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-terminal-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-terminal-uninstall before
+
+      # The application's archive as a browser leaves what it downloads, quarantined, installed by the same script, assessed
+      # and started; then the uninstall the application's Uninstall Jason item starts.
+      - name: Install from a quarantined download, and uninstall from the application's Uninstall Jason item
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh quarantine "$FEED" "$RUNNER_TEMP/feed-quarantined"
+          bash .github/scripts/test-installation-macos.sh install "$RUNNER_TEMP/feed-quarantined" "$VERSION" "$GITHUB_WORKSPACE/install/install.sh"
+          bash .github/scripts/test-installation-macos.sh assess
+          bash .github/scripts/test-installation-macos.sh uninstall-menu
+          bash .github/scripts/test-installation-macos.sh listing after-menu-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
+
+      - name: Fetch the previous release
+        id: previous
+        shell: bash
+        run: |
+          tag="$(curl -sS -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
+          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
+          newest="$(printf '%s\n%s\n' "${tag#v}" "${VERSION%%-*}" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)"
+          if [ "${tag#v}" = "${VERSION%%-*}" ] || [ "$newest" = "${tag#v}" ]; then
+            echo "::notice title=Previous release::The latest published release is $tag, not older than $VERSION: the legs that update from a previous release are skipped."
+            exit 0
+          fi
+          mkdir -p "$PREVIOUS"
+          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json; do
+            curl -fsSL -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
+          echo "the previous release is $tag"
+          echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Update the previous release's command-line Jason with its own update apply
+        if: steps.previous.outputs.tag != ''
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before
+
+      - name: The machine after every uninstall is the machine before
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh held
+
+      - name: Say what this job does not prove
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### What this job does not prove'
+            echo "- The updater, end to end: no next build is made, so jason update apply handing an update to Jason Desktop, with no window and with one open, is not proven here."
+            echo "- The 0.48 Jason Desktop's own updater on a Mac reaching this release: it reads only the published releases, and this release ships without that proof."
+            echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
+            echo "- Each account of a shared Mac: the runner has one account."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the listings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-macos-listings
+          path: installation
+          if-no-files-found: ignore
+
+  # The x64 application on an Intel Mac: put in place by the plain steps a person takes with the archive, since install.sh
+  # refuses an Intel Mac, then its signature, Gatekeeper's assessment, its jason and runtime, its window and its
+  # uninstall, compared with the machine before. Nothing here announces Intel Macs.
+  proof-macos-intel:
+    name: The proof on an Intel Mac
+    needs: [version, macos]
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      OUT: ${{ github.workspace }}/installation
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: jason-desktop-osx-x64
+          path: feed
+
+      - name: The machine before anything is installed
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh listing before
+
+      - name: Put the x64 application in place, run it and uninstall it
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh intel "$GITHUB_WORKSPACE/feed/jason-desktop-macos-x64.zip" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh listing after-intel-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-intel-uninstall before
+          bash .github/scripts/test-installation-macos.sh held
+
+      - name: Keep the listings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-macos-intel-listings
+          path: installation
+          if-no-files-found: ignore
+
   release:
     name: Assemble and publish
-    needs: [version, build, macos, windows, plugin, ui, skills]
+    needs: [version, build, macos, windows, plugin, ui, skills, proof-windows, proof-macos, proof-macos-intel]
     runs-on: ubuntu-latest
     # The only job that may write to this repository, and what it writes is the release. It builds and runs nothing
     # that was built, so a test on a matrix runner cannot publish anything, and nothing is published when a platform's
-    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures before this job
-    # starts. It writes with this run's own token, handed to the one step that publishes, and only outside a dry run in
-    # reply-team/jason-ai; anywhere else it assembles the release and says that it publishes nothing there. No action
+    # job or a package's job failed: the macOS and Windows jobs verified their archived signatures, and the three
+    # proof jobs installed, updated and uninstalled the packages, before this job starts. It writes with this run's own
+    # token, handed to the one step that publishes, and only outside a dry run in reply-team/jason-ai; anywhere else it assembles the release and says that it publishes nothing there. No action
     # runs here but the checkout and the artifacts' download and upload: an action is handed the token whatever it is
     # for, so any other would publish as surely as that step does, and would hold to the same two conditions. It runs in
     # the signing environment, which only release tags and release branches may run in.

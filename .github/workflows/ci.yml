@@ -1807,6 +1807,8 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
+    timeout-minutes: 45
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -1989,6 +1991,12 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
 
+      # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there and read here,
+      # so that one run reads every leg before the job fails.
+      - name: The machine after every uninstall is the machine before
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
+
       - name: Say what this job does not prove
         if: always()
         shell: pwsh
@@ -2021,6 +2029,8 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
+    timeout-minutes: 45
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2137,6 +2147,12 @@ jobs:
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before
+
+      # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there and read here,
+      # so that one run reads every leg before the job fails.
+      - name: The machine after every uninstall is the machine before
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh held
 
       - name: Say what this job does not prove
         if: always()
