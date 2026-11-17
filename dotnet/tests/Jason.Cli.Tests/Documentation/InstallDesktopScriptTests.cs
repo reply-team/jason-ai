@@ -98,8 +98,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
     }
 
     /// <summary>
-    /// install.sh's --help says what is true of a Mac on this release: an Intel Mac is refused, and the script, not
-    /// Homebrew's formula, installs Jason Desktop.
+    /// install.sh's --help says what is true of a Mac on this release: the script installs Jason Desktop on Apple silicon
+    /// only and refuses an Intel Mac, by its own choice and not for want of a build (every release publishes the Intel
+    /// image), and the script, not Homebrew's formula, installs Jason Desktop.
     /// </summary>
     [Fact]
     public void The_shell_script_s_help_says_an_intel_mac_is_refused_and_homebrew_is_the_command_line_alone()
@@ -108,7 +109,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
         var start = sh.IndexOf("usage() {", StringComparison.Ordinal);
         var help = Regex.Replace(sh[start..sh.IndexOf("\nEOF\n", start, StringComparison.Ordinal)], @"\s+", " ");
 
-        Assert.Contains("Jason Desktop for macOS is built for Apple silicon: on an Intel Mac it stops before it downloads anything, since no build for one is published.", help, StringComparison.Ordinal);
+        Assert.Contains("This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("build for one is published", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("Intel Mac is not published", help, StringComparison.Ordinal);
         Assert.Contains("On a Mac this script is the way to install Jason; Homebrew's formula is the command line alone, without Jason Desktop.", help, StringComparison.Ordinal);
     }
 
@@ -520,8 +523,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
     }
 
     /// <summary>
-    /// No Jason Desktop for an Intel Mac is published, as the install page says, so the script refuses one before it
-    /// downloads anything, naming the platforms there are builds for.
+    /// The script installs Jason Desktop on Apple silicon only, as the install page says, so it refuses an Intel Mac before
+    /// it downloads anything. It gives that reason and no other: every release publishes the Intel image, so it says nothing
+    /// of what is published, and it points nowhere else.
     /// </summary>
     [Fact]
     public void Macos_an_intel_mac_is_refused_before_anything_is_downloaded()
@@ -532,8 +536,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
         var run = mac.Run(mac.Feed(arch: "x64"));
 
         Assert.NotEqual(0, run.Exit);
-        Assert.Contains("this is an Intel Mac, for which no build is published; nothing was installed.", run.Stderr, StringComparison.Ordinal);
-        Assert.Contains("Linux x64, Windows x64 and Apple silicon Macs", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("This script installs Jason Desktop on Apple silicon Macs only, and this is an Intel Mac; nothing was installed.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("published", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("The releases are built for", run.Stderr, StringComparison.Ordinal);
         Assert.DoesNotContain("Downloading", run.Stdout, StringComparison.Ordinal);
         Assert.Empty(mac.Calls());
         Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));

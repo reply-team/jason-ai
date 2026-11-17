@@ -158,15 +158,19 @@ application by hand, which leaves the data directory as the newer version left i
 keeps there is the AppImage file itself, and a deb update keeps nothing: going back from a deb is installing the
 previous release's `jason-desktop-linux-x64.deb` with `sudo apt install`.
 
-**Taking the desktop off** is in two steps, what it placed and then the application, and the data directory, the
-harness root and the updater's cache stay either way. On Windows the uninstaller does both: it stops the runtime the
-application carries, removes nothing when that runtime does not stop, and takes off the PATH command's files that are
-its own, Open Jason at Login and the runtime's logon start when that start names the application's own `jason`, and the demo's data directory and harness root. On
-macOS and on Linux no installer starts the application to clean up, so choose Remove What Jason Placed… in the Jason menu
-(or the tray's) first: it takes the same steps, stops a runtime started from any copy of an AppImage's `jason`, removes
-those copies once nothing runs from them, says what came of each step and what to do by hand for one that failed, and
-says what removes the application itself: moving Jason.app to the Trash, `sudo apt remove jason-desktop` for the deb, or
-deleting the AppImage file. [desktop.md](desktop.md) lists the same steps for a Jason that will not start.
+**Taking the desktop off.** On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
+carried `jason uninstall` (§9), from a terminal on both systems, from Installed apps on Windows and from Uninstall
+Jason… in the Jason menu on macOS: what Jason placed, then the application; the data directory stays unless the person
+says otherwise, and the harness root always. On Linux it is in two steps, what it placed and then the application, and
+the data directory, the harness root and the updater's cache stay: no installer starts the application to clean up, so
+choose Remove What Jason Placed… in the Jason menu (or the tray's) first: it stops the runtime the application carries,
+removes nothing when that runtime does not stop, takes off the PATH command's files that are its own, Open Jason at
+Login and the runtime's logon start when that start names the application's own `jason`, and the demo's data directory
+and harness root, stops a runtime started from any copy of an AppImage's `jason`, removes those copies once nothing runs
+from them, says what came of each step and what to do by hand for one that failed, and says what removes the
+application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. [desktop.md](desktop.md)
+lists the same steps for a Jason that will not start.
 
 ## 3. The manifest
 
@@ -410,20 +414,30 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,
-installs the executable with its licence and the third-party notices beside it, as `jason-LICENSE` and
-`jason-THIRD-PARTY-NOTICES`, and adds its directory to your PATH behind a marker line it will recognise next time.
-Pass `--no-modify-path` to leave your PATH alone, and `--version X.Y.Z` to install a particular release.
+Each script works out your platform. `--version X.Y.Z` installs a particular release.
 
-Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
+your terminal and your agents use. It is installed once, updated once and removed once. There the script downloads the
+application's package, **verifies its SHA-256** and its signature, puts it in its place — on a Mac `/Applications`
+where this account may write there, else `~/Applications`; on Windows the installer, run silently, into
+`%LOCALAPPDATA%\Programs\jason-desktop` — and opens nothing. Then the `jason` the application carries runs
+`jason install --roles` (§9): `jason` in the terminal, the skills for Claude Code and Codex where each is found, an older command-line
+install retired, and the role skills. [`docs/INSTALL.md`](INSTALL.md) §2 says what each script does, step by step.
+
+On Linux the script downloads the archive, **verifies the SHA-256 before unpacking**, installs the executable with its
+licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and adds its
+directory to your PATH behind a marker line it will recognise next time. Pass `--no-modify-path` to leave your PATH
+alone. Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
 `jason skills install --roles-only`, which deploys them from the release's `jason-skills.zip`. Where that fails, the
 executable is still installed and the run still succeeds, one line says the role skills were not deployed and what
 to run, and `jason status` names the same line. A script pointed at a feed in a directory leaves the step out and
 says what to run instead, because the skills verb reads no directory.
 
-The default install directories are `~/.local/bin/jason` on macOS and Linux, and
-`%LOCALAPPDATA%\Programs\jason\jason.exe` on Windows. Both are per-user: nothing here needs administrator
-rights, and nothing is installed for other people on the machine.
+The terminal's `jason` is `~/.local/bin/jason` on macOS and Linux, on a Mac the wrapper that runs the application's
+own, and on Windows the application's `resources\bundle\jason.exe`, its folder on this account's Path. Nothing here
+needs administrator rights or a password. On Windows and Linux everything is installed for this account alone; on a Mac
+the application goes to `/Applications` where this account may write there, else `~/Applications`, and the terminal
+command, the skills and the data are this account's own.
 
 They resolve to the latest release, so where none has been published they answer 404 and there is nothing to
 install from — build from source until one has. [`docs/INSTALL.md`](INSTALL.md) is the whole path either way,
@@ -1549,7 +1563,7 @@ jason install --terminal-path <PATH>
 ```
 
 Run by the `jason` the desktop application carries (a `version.json` beside it), it sets this machine up for the
-application: the terminal command, the skills of every agent host found, and an older command-line install retired. Any
+application: the terminal command, the skills for Claude Code and Codex where each is found, and an older command-line install retired. Any
 other `jason` is refused with `install_not_carried`, and a system other than macOS and Windows with
 `install_unsupported`, before anything is read or written. Where the data directory has an update folder it holds the
 update's lock, `<data>/update/update.lock`, while it runs, naming itself beside it as `install` (§7), and while another
@@ -1571,7 +1585,7 @@ part-way is named under `problems`, and the steps after it still run. Its steps,
 | a command-line install's runtime | where an older command-line install is found — the executable `--retire` names, else the one the last `jason update apply` recorded, else the installer's default place (`~/.local/bin/jason`, `%LOCALAPPDATA%\Programs\jason\jason.exe`), each only where it is Jason's: a `jason-LICENSE` or `jason-THIRD-PARTY-NOTICES` beside it, the record, or on Windows that folder, and `--retire` only a regular file named `jason` (`jason.exe` on Windows) with one of those signs, anything else named and left — a runtime running from that executable is drained and stopped. **No runtime is ever started**: the report says `stopped`, and `jason runtime start` starts one from the carried file; a caller that goes on to use Jason runs it. Just before it drains and stops the runtime, it writes the note that a start is owed (below), and takes it back where the runtime then does not stop. Where nothing is to be retired, no runtime is asked anything. A runtime that will not stop is resumed and leaves that install as it is, and so does one that does not name the executable it runs from. Where the data directory's `layout.json` refuses this `jason` (`layout_newer`, `layout_unreadable`), no runtime is stopped, no registration moved and nothing of that install retired, with `--roles` or without |
 | the terminal command | macOS: `~/.local/bin/jason`, the application's own two-line `sh` wrapper running the carried file (naming `JASON_DATA_DIR` where that is set), written over an earlier wrapper, the retired executable or a link to an application's `jason`, and over no other file; then, only where the PATH a terminal has does not name `~/.local/bin` already — `install.sh`'s own test, `case ":$PATH:" in *":$INSTALL_DIR:"*)` — `install.sh`'s marker and line, `export PATH="<home>/.local/bin:$PATH"`, appended to the login profile and to `~/.zshrc` or `~/.bashrc`, each only where the line is not already a line of that file — the rule `install.sh` appends by, held to it word for word. The PATH a terminal has is the one `--terminal-path` names, and without it the routine's own, which is a terminal's when a script runs it; `--terminal-path ""`, the empty value, says the login shell gave no answer, and the folder counts as not there. A home whose folder holds a line break, `"`, `$`, a backtick or `\` takes no line, as `install.sh` refuses it, and a profile that is a link is appended through only to a regular file; either is named with the line to add by hand. A home whose folder holds `:`, which separates PATH's entries, takes no line either, since no line could name it. And the application's 0.48 `~/.local/bin/jason-desktop` wrapper is taken back, only where it is the application's shape. Windows: one entry in this account's Path naming the carried file's folder, `resources\bundle`, only where it is not there, the value's kind kept and running programs told, as `install.ps1` wrote its own before 0.49, and a Path of a kind that is not a string refused and left; and the `jason`/`jason-desktop` command files the application placed in `%LOCALAPPDATA%\Microsoft\WindowsApps` taken back, each only where it is one of the application's shapes. The command files go, and the next step runs, only once the terminal command reads back as placed — the wrapper and its lines, or the Path entry — since otherwise the old install stays: where it sat at `~/.local/bin/jason` the wrapper has already taken its executable's place, and elsewhere it is what still answers `jason`. A shell already open finds neither, and runs the path the report gives as `open_shell` |
 | the rest of the retired install | its logon registration, where it names that executable and this data directory, or no data directory (and then it names none again), registered again naming the carried file — on macOS the file is moved and launchd loads it at the next logon, so nothing starts now, and until that login the old job stays loaded and idle; its notice files, and on Windows `jason.previous.exe`, removed. Windows: the executable removed, or, while a running process holds it, renamed into a `jason-retired-<id>` folder on its own volume and left there, with nothing started to wait for that process; its Path entry taken off where its folder then holds nothing but what `install.ps1` wrote there before 0.49; the folder once empty. macOS: the wrapper has taken its place at the default path; one elsewhere is removed, with its profile block by §9's rule |
-| the harness skills | both packs, from the skills beside the carried file, read where they stand, into the folder of every agent host found by its home folder: Claude Code (`~/.claude` → `~/.claude/skills`) and Codex (`~/.codex` → `~/.agents/skills`, which other hosts read too), recorded as `jason skills install` records them. A skill folder there under a name Jason ships that no record of Jason's names is the person's own: left as it is, and named under `left_alone`; one whose files equal the carried skills byte for byte is what an earlier deployment wrote before its record, and is adopted and recorded |
+| the harness skills | both packs, from the skills beside the carried file, read where they stand, into the folder of each of these two hosts found by its home folder, and of no other: Claude Code (`~/.claude` → `~/.claude/skills`) and Codex (`~/.codex` → `~/.agents/skills`, which other hosts read too), recorded as `jason skills install` records them. A skill folder there under a name Jason ships that no record of Jason's names is the person's own: left as it is, and named under `left_alone`; one whose files equal the carried skills byte for byte is what an earlier deployment wrote before its record, and is adopted and recorded |
 | the role skills | with `--roles` only, into the data directory, as `jason skills install --roles-only` deploys them |
 
 Without `--roles` it writes nothing under the data directory, so the application's first start still opens on the Demo;
