@@ -11,8 +11,9 @@ export { demoFrame, demoStrip };
 // in Demo, carried by the UI's build under `sealed/` and served by the runtime unable to act; here it is shown in a frame
 // sandboxed without the same origin, so it holds no storage of the runtime's origin, the UI's token among it, and reaches
 // no address. The Demo | Live switch is drawn over the right end of the page's own top strip, where the desktop draws its
-// own, so one page serves the window and the tab and a person sees one strip. The choice lives in the address (`#/demo`):
-// nothing is kept, nothing is asked of the desktop, and the installation is unchanged.
+// own, so one page serves the window and the tab and a person sees one strip. The view lives in the address (`#/demo`), and
+// the tab alone remembers the person's last press of Demo or Live in its session storage (`tab-choice.ts`); nothing is
+// asked of the desktop, and the installation is unchanged.
 
 /**
  * Whether the build the runtime serves carries the page: one read of it, as the frame would read it, stopped once its
@@ -72,6 +73,10 @@ export function leaveDemo(): void {
 export function DemoView() {
     const [present, setPresent] = useState<boolean | null>(null);
     const view = useRef<HTMLDivElement>(null);
+    // A load that starts at the Demo has opened: coming back to the page later in it is the person leaving the Demo.
+    useEffect(() => {
+        opening.done = true;
+    }, []);
     useEffect(() => {
         let live = true;
         void demoPage.present().then((found) => {

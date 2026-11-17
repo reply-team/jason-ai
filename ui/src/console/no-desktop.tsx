@@ -57,16 +57,18 @@ export function waitingLine(waiting: Waiting | null): string | null {
 }
 
 /**
- * A browser tab with no desktop: one page of text, centred, and the console's Demo | Live switch at the top right. The
- * console is never drawn here, whatever the installation holds and whatever the address names; the address is left as it
- * is. Under the words a quiet line says what waits, only while something does.
+ * A browser tab with no desktop: it opens on the Demo, or, while something waits, on one page of text, centred, with the
+ * console's Demo | Live switch at the top right. The console is never drawn here, whatever the installation holds and
+ * whatever the address names. Under the words a quiet line says what waits, only while something does.
  */
 export function NoDesktopPage({ api }: { api: Api }) {
     // undefined: the read has not answered; null: it failed.
     const [waiting, setWaiting] = useState<Waiting | null | undefined>(undefined);
     // What the tab opens on is decided once per load (see `opening`); the person's own choice outranks what waits.
     const [first] = useState(() => !opening.done);
-    const own = first ? chosen() : 'live';
+    // A press of Live while the read is pending is held here, so the page is drawn at once, answered or not.
+    const [pressed, setPressed] = useState(false);
+    const own = pressed ? 'live' : first ? chosen() : 'live';
     useEffect(() => {
         let live = true;
         void readWaiting(api).then((found) => {
@@ -103,7 +105,10 @@ export function NoDesktopPage({ api }: { api: Api }) {
                         type="button"
                         className={settled ? 'on' : undefined}
                         aria-pressed={settled ? 'true' : 'false'}
-                        onClick={() => choose('live')}
+                        onClick={() => {
+                            choose('live');
+                            setPressed(true);
+                        }}
                     >
                         {t('mode.switch.live')}
                     </button>

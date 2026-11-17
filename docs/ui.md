@@ -542,7 +542,8 @@ waiting it opens on the demo, as a press of Demo does (until the read answers, o
 under the words counts what waits and says where to decide: in Jason Desktop, or ask your agent what Jason is waiting
 for, or run `jason approval list` and `jason decision list`, as the toast's pointer does; when the read fails there is no
 line. Once you press Live or Demo, that tab keeps your choice over a reload, and `#/demo` in the address still means the
-demo. The switch's Demo shows the demo in that tab alone, and its Live shows the page and stays. The runtime starts no AI and no process for a screen, in either case.
+demo. The switch's Demo shows the demo in that tab alone, and its Live shows the page and stays. The default Demo takes the
+address's place, so the address a person came with is not kept once they press Live; the page ignores an address anyway. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 

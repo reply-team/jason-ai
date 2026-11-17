@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Unpaired, type Api } from '../api/client';
 import { session } from '../api/session';
@@ -252,6 +252,51 @@ describe('what a tab opens on', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Demo' }));
         await waitFor(() => expect(demoView()).not.toBeNull());
         expect(chosen()).toBe('demo');
+    });
+
+    it('lets a load that starts at the Demo go Back to the page without sending it to the Demo again', async () => {
+        choose('demo');
+        await renderIn('none', '#/demo', undefined, true);
+        await waitFor(() => expect(demoView()).not.toBeNull());
+        act(() => {
+            location.hash = '#/attention';
+            dispatchEvent(new HashChangeEvent('hashchange'));
+        });
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        await new Promise((done) => setTimeout(done, 30));
+        expect(demoView()).toBeNull();
+        expect(location.hash).toBe('#/attention');
+    });
+
+    it('draws the Live page at once on a press of Live while the read has not answered', async () => {
+        const never = { call: () => new Promise(() => undefined) } as unknown as Api;
+        await renderIn('none', '', never);
+        await waitFor(() => expect(page()).not.toBeNull());
+        expect(page()!.querySelector('main')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+        await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+        expect(screen.getByRole('button', { name: 'Live' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('stays on the page after Live from the default Demo when the storage is refused', async () => {
+        await renderIn('none', '', empty());
+        await waitFor(() => expect(demoView()).not.toBeNull());
+        vi.stubGlobal('sessionStorage', {
+            getItem: () => {
+                throw new Error('refused');
+            },
+            setItem: () => {
+                throw new Error('refused');
+            },
+        });
+        try {
+            fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+            await waitFor(() => expect(page()!.querySelector('main')).not.toBeNull());
+            await new Promise((done) => setTimeout(done, 30));
+            expect(demoView()).toBeNull();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it('changes nothing when the browser refuses the storage', async () => {
