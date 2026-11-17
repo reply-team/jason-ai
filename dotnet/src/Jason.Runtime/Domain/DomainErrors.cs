@@ -242,8 +242,8 @@ public static class DomainErrors
             StatusCodes.Status409Conflict,
             Plugins.Manifest.ProblemCodes.SettingsFileUnreadable,
             failure.Place() is { } place
-                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then run the command again."
-                : "The settings file could not be read, so nothing was written; fix it, then run the command again.",
+                ? $"The settings file could not be read ({place}), so nothing was written; fix it, then try again."
+                : "The settings file could not be read, so nothing was written; fix it, then try again.",
             retryable: false);
 
     /// <summary>
@@ -273,7 +273,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_changed",
-            "The settings file kept changing while this wrote it, so nothing was written; run the command again.",
+            "The settings file kept changing while this wrote it, so nothing was written; try again.",
             retryable: true);
 
     /// <summary>Another program held the settings file open, so it could not be read or replaced; nothing was written.</summary>
@@ -281,7 +281,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_busy",
-            "Another program holds the settings file open, so nothing was written; close it, then run the command again.",
+            "Another program holds the settings file open, so nothing was written; close it, then try again.",
             retryable: true);
 
     /// <summary>
@@ -292,7 +292,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "settings_file_not_writable",
-            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then run the command again.",
+            "The settings file cannot be written: it or its folder is read-only, this user may not write it, or the disk is full, so nothing was written; mend that, then try again.",
             retryable: false);
 
     /// <summary>
@@ -440,15 +440,28 @@ public static class DomainErrors
             $"No notification channel is called {channel}: a channel is the toast, or a notification plugin installed in this data directory, by its id. jason runtime status --human says each on its Notify: line.");
 
     /// <summary>
-    /// An installed plugin nothing names under <c>Notifications:Plugins</c>: no channel, and no binding saying where it would
-    /// deliver, which a switch cannot write. Not retryable: the channel is set up first.
+    /// An installed plugin nothing names under <c>Notifications:Plugins</c>, said by what the plugin is: a notification
+    /// plugin is no channel until it is named with the binding that says where it delivers, which a switch cannot write; a
+    /// plugin of another kind never is one, so naming it would only be refused again; and one that is not loaded cannot be
+    /// told apart until it is. The word under the field <c>channel</c> is <c>not_named</c>, <c>not_declared</c> or
+    /// <c>unavailable</c>, as the readiness of a named channel would say. Not retryable: something else changes first.
     /// </summary>
-    public static DomainException NotificationChannelNotNamed(string channel) =>
-        new(
-            StatusCodes.Status409Conflict,
-            "notification_channel_not_configured",
-            $"The plugin {channel} is not a notification channel: nothing names it under Notifications:Plugins:{channel} in the settings file, with the binding that says where it delivers. Set it up there, or on the Connect panel of Jason Desktop, then run the command again.",
-            details: [new ErrorDetail("channel", "not_named", "Nothing names the plugin under Notifications:Plugins.")]);
+    public static DomainException NotificationChannelNotNamed(string channel, string reason, string? detail)
+    {
+        var (message, said) = reason switch
+        {
+            Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
+                $"The plugin {channel} is not a notification plugin ({detail}), so it is no notification channel, and naming it in the settings file would not make it one.",
+                detail ?? reason),
+            Contracts.Notifications.NotAttemptedReasons.Unavailable => (
+                $"The plugin {channel} is installed but is not loaded, or cannot run on this machine ({detail}), so it is no notification channel yet; the list of plugins says why. Once it is loaded, a notification plugin becomes a channel when Notifications:Plugins:{channel} in the settings file names it with its binding.",
+                detail ?? reason),
+            _ => (
+                $"The plugin {channel} is a notification plugin, but nothing names it under Notifications:Plugins:{channel} in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
+                "Nothing names the plugin under Notifications:Plugins."),
+        };
+        return new(StatusCodes.Status409Conflict, "notification_channel_not_configured", message, details: [new ErrorDetail("channel", reason, said)]);
+    }
 
     /// <summary>
     /// A channel named in the settings that a notification would not be tried on, for a reason decided before anything is
@@ -458,17 +471,23 @@ public static class DomainErrors
     /// </summary>
     public static DomainException NotificationChannelNotConfigured(string channel, string reason, string? detail)
     {
-        var why = reason switch
+        var (why, remedy) = reason switch
         {
-            Contracts.Notifications.NotAttemptedReasons.Unavailable => "its plugin is not loaded, or cannot run on this machine",
-            Contracts.Notifications.NotAttemptedReasons.NotDeclared => "its plugin does not declare the delivery contract",
-            _ => "its binding does not satisfy the plugin's own schema",
+            Contracts.Notifications.NotAttemptedReasons.Unavailable => (
+                "its plugin is not loaded, or cannot run on this machine",
+                "No setting of the channel changes that: the list of plugins says why the plugin is not loaded; once it is, try again."),
+            Contracts.Notifications.NotAttemptedReasons.NotDeclared => (
+                "its plugin is not a notification plugin",
+                $"No setting makes it one: Notifications:Plugins:{channel} in the settings file names a plugin that cannot deliver a notification."),
+            _ => (
+                "its binding does not satisfy the plugin's own schema",
+                $"Mend Notifications:Plugins:{channel}:Binding in the settings file, then try again."),
         };
         var said = detail is null ? why : $"{why} ({detail})";
         return new DomainException(
             StatusCodes.Status409Conflict,
             "notification_channel_not_configured",
-            $"The notification channel {channel} cannot be turned on: {said}. Mend Notifications:Plugins:{channel} in the settings file, or set it up again on the Connect panel of Jason Desktop, then run the command again.",
+            $"The notification channel {channel} cannot be turned on: {said}. {remedy}",
             details: [new ErrorDetail("channel", reason, said)]);
     }
 
@@ -491,7 +510,7 @@ public static class DomainErrors
         new(
             StatusCodes.Status409Conflict,
             "setting_not_in_force",
-            $"{setting} cannot be put in force: the {section} settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the {section} section, then run the command again.",
+            $"{setting} cannot be put in force: the {section} settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the {section} section, then try again.",
             retryable: false);
 
     /// <summary>

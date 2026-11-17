@@ -2,13 +2,13 @@
   "operation": "notification.enable",
   "case": "not-named",
   "request": {
-    "channel": "fake-provider"
+    "channel": "pager"
   },
   "status": 409,
   "response": {
     "error": {
       "code": "notification_channel_not_configured",
-      "message": "The plugin fake-provider is not a notification channel: nothing names it under Notifications:Plugins:fake-provider in the settings file, with the binding that says where it delivers. Set it up there, or on the Connect panel of Jason Desktop, then run the command again.",
+      "message": "The plugin pager is a notification plugin, but nothing names it under Notifications:Plugins:pager in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
       "retryable": false,
       "details": [
         {

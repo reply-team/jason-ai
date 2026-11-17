@@ -30,8 +30,11 @@ public class NotificationSwitchTests
     /// <summary>A plugin that speaks the delivery contract and needs a binding naming a chat.</summary>
     private const string Chat = "chat-room";
 
-    /// <summary>A provider plugin: installed, and no channel at all.</summary>
+    /// <summary>A provider plugin installed whose executable is missing here, so it is not loaded as valid: no channel yet.</summary>
     private const string Provider = "fake-provider";
+
+    /// <summary>A provider plugin installed and loaded: never a channel, since it declares no delivery contract.</summary>
+    private const string Other = "crm";
 
     /// <summary>The settings file the runtime starts from: layout, a comment and a setting of the same section the writer must keep.</summary>
     private const string Original =
@@ -64,7 +67,7 @@ public class NotificationSwitchTests
     /// <summary>Every notification held off as a whole, and nothing else said of them.</summary>
     private const string AllOffAlone = "{\n    \"Dispatcher\": { \"Enabled\": false },\n    \"Notifications\": { \"Enabled\": false }\n}\n";
 
-    private static readonly object Ada =new { type = "human", id = "ada" };
+    private static readonly object Ada = new { type = "human", id = "ada" };
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -146,8 +149,8 @@ public class NotificationSwitchTests
     }
 
     /// <summary>
-    /// An installed plugin that is not named under <c>Notifications:Plugins</c> is no channel: it has no binding, and the
-    /// switch cannot make one. Both acts refuse it and say what is missing; nothing is written.
+    /// An installed notification plugin that is not named under <c>Notifications:Plugins</c> is no channel: it has no
+    /// binding, and the switch cannot make one. Both acts refuse it and say what is missing; nothing is written.
     /// </summary>
     [Theory]
     [InlineData(Operations.NotificationEnable)]
@@ -162,12 +165,52 @@ public class NotificationSwitchTests
         Assert.Equal("notification_channel_not_configured", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            $"The plugin {Ready} is not a notification channel: nothing names it under Notifications:Plugins:{Ready} in the settings file, with the binding that says where it delivers. Set it up there, or on the Connect panel of Jason Desktop, then run the command again.",
+            $"The plugin {Ready} is a notification plugin, but nothing names it under Notifications:Plugins:{Ready} in the settings file with the binding that says where it delivers, and a switch does not write one. Name it there with its binding, then try again.",
             error.Message);
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("channel", "not_named"), (detail.Field, detail.Code));
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
         Assert.Empty((await LinesAsync(api)).Items);
+    }
+
+    /// <summary>
+    /// An installed plugin nobody named that is not a notification plugin is told so rather than advised to be named: one
+    /// of another kind would only be refused again as declaring no delivery contract, and one that is not loaded cannot be
+    /// told apart until it is, which no setting of a channel changes.
+    /// </summary>
+    [Theory]
+    [InlineData(Operations.NotificationEnable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
+    [InlineData(Operations.NotificationDisable, Other, NotAttemptedReasons.NotDeclared, "The plugin crm is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract), so it is no notification channel, and naming it in the settings file would not make it one.")]
+    [InlineData(Operations.NotificationEnable, Provider, NotAttemptedReasons.Unavailable, "The plugin fake-provider is installed but is not loaded, or cannot run on this machine (executable_missing), so it is no notification channel yet; the list of plugins says why. Once it is loaded, a notification plugin becomes a channel when Notifications:Plugins:fake-provider in the settings file names it with its binding.")]
+    public async Task An_installed_plugin_that_is_no_notification_plugin_is_told_why_not_how_to_name_it(string operation, string channel, string reason, string message)
+    {
+        await using var api = await StartAsync();
+
+        var error = await api.PostErrorAsync(operation, new { channel }, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal("notification_channel_not_configured", error.Code);
+        Assert.Equal(message, error.Message);
+        var detail = Assert.Single(error.Details!);
+        Assert.Equal(("channel", reason), (detail.Field, detail.Code));
+    }
+
+    /// <summary>
+    /// A named channel that cannot be turned on says what would change that, by its reason: a plugin that is not loaded is
+    /// no setting's to mend, a plugin of another kind no setting makes a channel, and a binding is mended where it is written.
+    /// Each ends without naming how it was asked, since the page asks too.
+    /// </summary>
+    [Theory]
+    [InlineData("gone", "The notification channel gone cannot be turned on: its plugin is not loaded, or cannot run on this machine (not loaded). No setting of the channel changes that: the list of plugins says why the plugin is not loaded; once it is, try again.")]
+    [InlineData(Other, "The notification channel crm cannot be turned on: its plugin is not a notification plugin (a provider plugin declaring no version 1 of the delivery contract). No setting makes it one: Notifications:Plugins:crm in the settings file names a plugin that cannot deliver a notification.")]
+    public async Task A_named_channel_that_cannot_be_turned_on_says_what_would_change_that(string channel, string message)
+    {
+        var settings = $"{{\n    \"Dispatcher\": {{ \"Enabled\": false }},\n    \"Notifications\": {{ \"Plugins\": {{ \"{channel}\": {{ \"Enabled\": false }} }} }}\n}}\n";
+        await using var api = await StartAsync(settings);
+
+        var error = await api.PostErrorAsync(Operations.NotificationEnable, new { channel }, HttpStatusCode.Conflict, Ct);
+
+        Assert.Equal(message, error.Message);
+        Assert.DoesNotContain("command", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -186,6 +229,7 @@ public class NotificationSwitchTests
         Assert.Equal("notification_channel_not_configured", error.Code);
         Assert.StartsWith($"The notification channel {Chat} cannot be turned on: its binding does not satisfy the plugin's own schema (", error.Message, StringComparison.Ordinal);
         Assert.Contains("/chat", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith($"Mend Notifications:Plugins:{Chat}:Binding in the settings file, then try again.", error.Message, StringComparison.Ordinal);
         var detail = Assert.Single(error.Details!);
         Assert.Equal(("channel", NotAttemptedReasons.BindingInvalid), (detail.Field, detail.Code));
         Assert.Equal(bytes, File.ReadAllBytes(api.Paths.UserSettingsFile));
@@ -323,7 +367,7 @@ public class NotificationSwitchTests
 
         Assert.Equal("setting_not_in_force", error.Code);
         Assert.Equal(
-            "Notifications:Toast cannot be put in force: the Notifications settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the Notifications section, then run the command again.",
+            "Notifications:Toast cannot be put in force: the Notifications settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the Notifications section, then try again.",
             error.Message);
         var last = error.Details![^1];
         Assert.Equal(("settings.json", "settings_file_put_back"), (last.Field, last.Code));
@@ -361,8 +405,10 @@ public class NotificationSwitchTests
         await api.RecordAsync<NotificationsInfo>(Operations.NotificationEnable, "toast", new { channel = "toast" }, Ct);
         await api.RecordAsync<NotificationsInfo>(Operations.NotificationDisable, "plugin", new { channel = Ready }, Ct);
         await api.RecordErrorAsync(Operations.NotificationEnable, "not-configured", new { channel = Chat }, HttpStatusCode.Conflict, Ct);
-        await api.RecordErrorAsync(Operations.NotificationEnable, "not-named", new { channel = Provider }, HttpStatusCode.Conflict, Ct);
         await api.RecordErrorAsync(Operations.NotificationEnable, "unknown-channel", new { channel = "nobody-installed-this" }, HttpStatusCode.NotFound, Ct);
+
+        await using var unnamed = await StartAsync();
+        await unnamed.RecordErrorAsync(Operations.NotificationEnable, "not-named", new { channel = Ready }, HttpStatusCode.Conflict, Ct);
 
         await using var off = await StartAsync(AllOffAlone, allOn: false);
         await off.RecordErrorAsync(Operations.NotificationEnable, "notifications-off", new { channel = "toast" }, HttpStatusCode.Conflict, Ct);
@@ -390,6 +436,7 @@ public class NotificationSwitchTests
             {
                 File.WriteAllText(paths.UserSettingsFile, settings, new UTF8Encoding(false));
                 TestPlugins.InstallFakeProvider(paths);
+                TestPlugins.Write(paths, Other, TestPlugins.Manifest(Other), Delivers);
                 TestPlugins.Write(paths, Ready, Notifier(Ready, string.Empty), Delivers);
                 TestPlugins.Write(
                     paths,

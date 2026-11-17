@@ -161,9 +161,18 @@ public sealed class NotificationSwitch(
     {
         if (channel != Toast && !options.Plugins.ContainsKey(channel))
         {
-            throw registry.Snapshot.Find(channel) is not null || Directory.Exists(paths.PluginPackageDirectory(channel))
-                ? DomainErrors.NotificationChannelNotNamed(channel)
-                : DomainErrors.NotificationChannelNotFound(channel);
+            if (registry.Snapshot.Find(channel) is null && !Directory.Exists(paths.PluginPackageDirectory(channel)))
+            {
+                throw DomainErrors.NotificationChannelNotFound(channel);
+            }
+
+            // What the plugin is, read by the same check a named channel's readiness is, with nothing named: a plugin
+            // that could be a channel reads ready or binding_invalid, and is told to be named; any other is told why not.
+            var (what, said) = NotificationStatus.Readiness(channel, new NotificationPluginEntry(), registry.Snapshot);
+            throw DomainErrors.NotificationChannelNotNamed(
+                channel,
+                what is NotAttemptedReasons.Unavailable or NotAttemptedReasons.NotDeclared ? what : "not_named",
+                said);
         }
 
         if (!on)
