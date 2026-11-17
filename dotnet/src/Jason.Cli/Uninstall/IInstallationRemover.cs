@@ -169,10 +169,34 @@ public interface IInstallationRemover
     IReadOnlyList<int> RunningFrom(string executable) => [];
 
     /// <summary>
+    /// Windows: the processes running <paramref name="executable"/> in every session, compared by the image's path alone, as
+    /// the application's uninstaller looks (<c>installer/uninstall.nsh</c>: every process whose image it can read). One in
+    /// this session whose image cannot be read, under that file's name, is counted, as <see cref="RunningFrom"/> counts it;
+    /// one in another session only where its image is read. Elsewhere what <see cref="RunningFrom"/> answers.
+    /// </summary>
+    IReadOnlyList<int> RunningFromInAnySession(string executable) => RunningFrom(executable);
+
+    /// <summary>
+    /// Windows: the process that started process <paramref name="pid"/>, where it is still that one, having started no later
+    /// than <paramref name="pid"/> did; a number another process took since is not its parent. Null where that cannot be
+    /// told, where either is gone, and on every other system.
+    /// </summary>
+    int? ParentOf(int pid) => null;
+
+    /// <summary>
     /// macOS: unloads the LaunchAgent at <paramref name="file"/> from this login session before the file goes, so it is not
     /// left loaded until the person logs out. One not loaded is not an error.
     /// </summary>
     void UnloadLaunchAgent(string file)
+    {
+    }
+
+    /// <summary>
+    /// macOS: deletes the preferences domain <paramref name="domain"/> through the preferences system
+    /// (<c>defaults delete</c>, "Removes all default information for domain"), so a copy it holds is not written back over
+    /// the file's removal. A domain that is not there is not an error. Nothing elsewhere.
+    /// </summary>
+    void DeletePreferences(string domain)
     {
     }
 
@@ -658,7 +682,13 @@ public static class InstallationRemovers
             }
         }
 
-        public IReadOnlyList<int> RunningFrom(string executable)
+        public IReadOnlyList<int> RunningFrom(string executable) => Running(executable, everySession: false);
+
+        public IReadOnlyList<int> RunningFromInAnySession(string executable) => Running(executable, everySession: true);
+
+        public int? ParentOf(int pid) => OperatingSystem.IsWindows() ? WindowsProcessTree.ParentOf(pid) : null;
+
+        private static IReadOnlyList<int> Running(string executable, bool everySession)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(executable);
 
@@ -674,15 +704,17 @@ public static class InstallationRemovers
             {
                 using (process)
                 {
+                    bool? here = windows ? null : true;
                     try
                     {
-                        if (windows && process.SessionId != session)
+                        here ??= process.SessionId == session;
+                        if (!everySession && here == false)
                         {
                             continue;
                         }
 
-                        if (process.MainModule?.FileName is { } image
-                            && string.Equals(Path.GetFullPath(image), Path.GetFullPath(executable), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        if (ImageOf(process) is { } image
+                            && string.Equals(Path.GetFullPath(image), Path.GetFullPath(executable), windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }
@@ -690,8 +722,9 @@ public static class InstallationRemovers
                     catch (Exception unread) when (unread is Win32Exception or InvalidOperationException or NotSupportedException)
                     {
                         // Its image cannot be read: under the application's own name, spelled as it is, it may be the
-                        // application, and an uninstall does not remove a running application from under it.
-                        if (string.Equals(SafeName(process), name, StringComparison.Ordinal))
+                        // application, and an uninstall does not remove a running application from under it. In another
+                        // session, or one not known, it may be another account's, which the uninstaller cannot read either.
+                        if ((everySession ? here == true : here != false) && string.Equals(SafeName(process), name, StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }
@@ -701,6 +734,13 @@ public static class InstallationRemovers
 
             return found;
         }
+
+        /// <summary>
+        /// The file a process runs: on Windows by the least right there is to ask (<c>QueryFullProcessImageName</c>), which
+        /// a process of this account's in another session or at another integrity level grants, else its main module.
+        /// </summary>
+        private static string? ImageOf(System.Diagnostics.Process process) =>
+            (OperatingSystem.IsWindows() ? WindowsProcessTree.ImageOf(process.Id) : null) ?? process.MainModule?.FileName;
 
         private static string? SafeName(System.Diagnostics.Process process)
         {
@@ -756,6 +796,28 @@ public static class InstallationRemovers
             }
         }
 
+        public void DeletePreferences(string domain)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return;
+            }
+
+            // Its answer is not read: a domain with nothing in it is the ordinary case, and the file goes either way.
+            try
+            {
+                Jason.Cli.Autostart.AutostartRegistrars.Run(["/usr/bin/defaults", "delete", domain], LaunchctlLimit);
+            }
+            catch (Jason.Cli.Autostart.AutostartException)
+            {
+                // defaults could not be started, or did not answer in time; the file is removed all the same.
+            }
+        }
+
+        /// <summary>How long <c>launchctl unload</c> is waited for before the uninstall goes on without its answer.</summary>
+        internal static readonly TimeSpan LaunchctlLimit = TimeSpan.FromSeconds(10);
+
         public void UnloadLaunchAgent(string file)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(file);
@@ -766,14 +828,16 @@ public static class InstallationRemovers
 
             // Without -w, which marks the label disabled for good ("Overrides the Disabled key and sets it to ... true for
             // the ... unload subcommand"), and would keep a later Open at Login from starting it. Its answer is not read: a
-            // job that is not loaded is the ordinary case, and the file goes either way.
+            // job that is not loaded is the ordinary case, and the file goes either way. Waited for ten seconds at most,
+            // so a launchctl that does not answer does not hold the uninstall.
             try
             {
-                Jason.Cli.Autostart.AutostartRegistrars.Run(["/bin/launchctl", "unload", file]);
+                Jason.Cli.Autostart.AutostartRegistrars.Run(["/bin/launchctl", "unload", file], LaunchctlLimit);
             }
             catch (Jason.Cli.Autostart.AutostartException)
             {
-                // launchctl could not be started; the file still goes, and the job with the login session.
+                // launchctl could not be started, or did not answer in time; the file still goes, and the job with the
+                // login session.
             }
         }
 

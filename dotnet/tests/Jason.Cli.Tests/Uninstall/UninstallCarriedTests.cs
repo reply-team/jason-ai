@@ -115,6 +115,128 @@ public sealed class UninstallCarriedTests : IDisposable
         Assert.DoesNotContain(remover.Calls, call => call.StartsWith("executable.remove", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A profile file goes with Jason's lines only where <c>jason install</c> recorded that it created it and nothing but
+    /// whitespace is left once the lines are out; a file it found, one the person has written into since, and any where
+    /// there is no record stay, without Jason's lines.
+    /// </summary>
+    [Theory]
+    [InlineData("created and still empty", true, true, "", false)]
+    [InlineData("created and written into by the person", true, true, "export EDITOR=vi\n", true)]
+    [InlineData("there before", true, false, "", true)]
+    [InlineData("no record", false, false, "", true)]
+    public async Task A_profile_goes_only_where_jason_install_created_it_and_nothing_else_is_left(string row, bool record, bool recorded, string persons, bool stays)
+    {
+        var executable = MacApplication();
+        var bin = Path.Combine(Home, ".local", "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllText(Path.Combine(bin, "jason"), CommandFiles.Wrapper(executable, null));
+        var zprofile = Path.Combine(Home, ".zprofile");
+        PathEntry.AddToProfile(zprofile, bin);
+        File.AppendAllText(zprofile, persons);
+        if (record)
+        {
+            CreatedProfiles.Add(Home, recorded ? zprofile : Path.Combine(Home, ".zshrc"));
+        }
+
+        var (env, output, _) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"{row}: {output}");
+        Assert.True(File.Exists(zprofile) == stays, $"{row}: the profile {(stays ? "went" : "stayed")}");
+        if (stays)
+        {
+            Assert.DoesNotContain(PathEntry.Marker, File.ReadAllText(zprofile), StringComparison.Ordinal);
+            Assert.Equal(persons, File.ReadAllText(zprofile).Trim('\n') + (persons.Length > 0 ? "\n" : string.Empty));
+        }
+    }
+
+    /// <summary>
+    /// What the application of this bundle identifier leaves under <c>~/Library</c> goes with it, just before it, the
+    /// preferences through the preferences system first; Electron's default profile, which may hold the person's work, stays
+    /// without <c>--purge-data</c>, goes with it, and stays even then where it does not carry Chromium's mark.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task On_macOS_the_applications_own_state_goes_with_it_and_the_persons_profile_only_on_the_purge(bool purge, bool marked)
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var places = DesktopRemoval.ApplicationStatePlaces(Home);
+        foreach (var place in places)
+        {
+            if (place.EndsWith(".plist", StringComparison.Ordinal) || place.EndsWith(".binarycookies", StringComparison.Ordinal))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(place)!);
+                File.WriteAllText(place, "state");
+            }
+            else
+            {
+                Plant(place);
+            }
+        }
+
+        var profile = Plant(DesktopRemoval.ElectronDefaultProfile(Home));
+        if (marked)
+        {
+            File.WriteAllText(Path.Combine(profile, DesktopRemoval.ChromiumProfileMarker), "{}");
+        }
+
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, Yes: true, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.Equal(
+            [
+                Path.Combine(Home, "Library", "Preferences", "ai.jasonharness.desktop.plist"),
+                Path.Combine(Home, "Library", "Saved Application State", "ai.jasonharness.desktop.savedState"),
+                Path.Combine(Home, "Library", "Caches", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop.binarycookies"),
+                Path.Combine(Home, "Library", "WebKit", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "Logs", "Jason"),
+                Path.Combine(Home, "Library", "Application Support", "ai.jasonharness.desktop"),
+            ],
+            places);
+        foreach (var place in places)
+        {
+            Assert.False(File.Exists(place) || Directory.Exists(place), $"{place} is still there");
+        }
+
+        Assert.True(Directory.Exists(profile) == !(purge && marked), $"Electron's default profile, purge {purge}, marked {marked}");
+        var preferences = remover.Calls.IndexOf("preferences.delete ai.jasonharness.desktop");
+        Assert.True(preferences >= 0 && preferences < remover.Calls.IndexOf($"file.remove {places[0]}"), string.Join(" | ", remover.Calls));
+        Assert.Equal($"tree.remove {application}", remover.Calls[^1]);
+        if (purge && !marked)
+        {
+            var left = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop").GetProperty("left");
+            Assert.Contains(left.EnumerateArray(), line => line.GetString()!.Contains("Local State", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary><c>--keep-application</c> keeps all of the application's state: it stays where the application stays.</summary>
+    [Fact]
+    public async Task Keep_application_keeps_the_applications_own_state()
+    {
+        var executable = MacApplication();
+        var preferences = DesktopRemoval.PreferencesFile(Home);
+        Directory.CreateDirectory(Path.GetDirectoryName(preferences)!);
+        File.WriteAllText(preferences, "state");
+        var saved = Plant(Path.Combine(Home, "Library", "Saved Application State", "ai.jasonharness.desktop.savedState"));
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.True(File.Exists(preferences));
+        Assert.True(Directory.Exists(saved));
+        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("preferences.delete", StringComparison.Ordinal));
+    }
+
     [Fact]
     [Critical(Family.I3, "a purge runs before the application goes, never after it from inside it")]
     public async Task The_data_directory_goes_on_the_word_before_the_application_and_the_harness_root_never()
@@ -278,7 +400,9 @@ public sealed class UninstallCarriedTests : IDisposable
         var problems = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("problems").EnumerateArray().Select(line => line.GetString()!).ToList();
         var problem = Assert.Single(problems);
         Assert.Contains($"{application} is still there", problem, StringComparison.Ordinal);
-        Assert.Contains("Move Jason from Applications to the Bin", problem, StringComparison.Ordinal);
+        // The bundle where it is, which need not be /Applications: the test's own folder here.
+        Assert.Contains($"Move {application} to the Bin (the Trash) in the Finder", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("from Applications", problem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -446,6 +570,130 @@ public sealed class UninstallCarriedTests : IDisposable
         // A dry run removes nothing and is never refused for it; nor is the uninstaller's own call, which leaves the folder.
         output.GetStringBuilder().Clear();
         Assert.Equal(ExitCodes.Success, await UninstallCommand.RunAsync(env with { Processes = processes }, new UninstallOptions(false, DryRun: true, false, false, false), Ct));
+    }
+
+    /// <summary>
+    /// The runtime this uninstall stops is busy: its plugin hosts and an agent's <c>jason</c> calls for its work run the
+    /// carried jason as its children and grandchildren, and its stop ends them, so they are not counted. A jason nothing of
+    /// this data directory started (its parent cannot be told, or is another process) is, and the refusal names those alone
+    /// and says what they are not.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_Windows_what_the_stopped_runtime_started_is_not_counted_and_what_it_did_not_start_is_named()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The application's uninstaller and its look are Windows'.");
+        var executable = WindowsApplication();
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (env, output, remover) = Environment(AbsentKeysPlaces(), executable);
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        remover.RunningInAnySession[executable] = [System.Environment.ProcessId, RuntimeVerbs.Pid, 9002, 9003, 9001, 9004];
+        remover.Parents[9002] = RuntimeVerbs.Pid; // a plugin host
+        remover.Parents[8000] = RuntimeVerbs.Pid; // an agent host the runtime launched for a work item...
+        remover.Parents[9003] = 8000; // ...and the jason it calls
+        remover.Parents[9004] = 777; // a jason another program started
+
+        var exit = await UninstallCommand.RunAsync(env with { Processes = processes }, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal("jason_running", refusal.Code);
+        Assert.Contains("(process 9001, 9004)", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"It is neither the runtime of {_dir.Paths.Root}, which this would stop, nor anything that runtime started.", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"any-session {executable}", remover.Reads);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// The application's uninstaller looks in every session by the image's path, so a carried jason in another session of
+    /// this account (a task that runs whether the person is signed in or not) is refused here, up front, where this
+    /// session's look alone would not have seen it and the uninstaller would have quit with nothing said.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_Windows_a_jason_in_another_session_is_refused_up_front()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The application's uninstaller and its look are Windows'.");
+        var executable = WindowsApplication();
+        var (env, output, remover) = Environment(AbsentKeysPlaces(), executable);
+        remover.Running[executable] = [];
+        remover.RunningInAnySession[executable] = [9005];
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal("jason_running", refusal.Code);
+        Assert.Contains("(process 9005)", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("in another session", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// The look itself, on any system: only descendants of the runtime being stopped, at any depth, leave nothing to refuse
+    /// for; a chain whose parent cannot be told, or that runs in a circle, is counted, and the look still ends.
+    /// </summary>
+    [Fact]
+    public void The_look_leaves_out_every_descendant_of_the_runtime_it_stops_and_nothing_else()
+    {
+        var executable = MacApplication();
+        var carried = CarriedExecutable.Of(executable)!;
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
+        var (env, _, remover) = Environment(null, executable);
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        env = env with { Processes = processes };
+        var plan = new DesktopPlan(null, ApplicationFates.AfterExit, [], null, [], string.Empty, null, [], [], []);
+        remover.RunningInAnySession[carried.Executable] = [RuntimeVerbs.Pid, 9002, 9003];
+        remover.Parents[9002] = RuntimeVerbs.Pid;
+        remover.Parents[9003] = 8000;
+        remover.Parents[8000] = 8001;
+        remover.Parents[8001] = RuntimeVerbs.Pid;
+
+        Assert.Empty(DesktopRemoval.OthersRunningTheCarriedJason(env, carried, plan));
+
+        remover.Parents[8001] = 8000; // a circle that never reaches the runtime
+        Assert.Equal([9003], DesktopRemoval.OthersRunningTheCarriedJason(env, carried, plan));
+    }
+
+    /// <summary>
+    /// The real look, on Windows, against a child of this test's own: an image placed under a name of the test's own, so no
+    /// other process on the machine answers to it, is found running in any session, and its parent is this process.
+    /// </summary>
+    [Fact]
+    public void On_Windows_the_real_look_finds_a_child_by_its_image_and_its_parent()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The every-session look and the parent are read on Windows.");
+
+        var folder = Path.Combine(_tree.Paths.Root, "Look");
+        Directory.CreateDirectory(folder);
+        var image = Path.Combine(folder, $"jason-look-{Guid.NewGuid():N}.exe");
+        File.Copy(Path.Combine(System.Environment.SystemDirectory, "PING.EXE"), image);
+        var start = new System.Diagnostics.ProcessStartInfo(image)
+        {
+            ArgumentList = { "-n", "120", "127.0.0.1" },
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var child = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var remover = InstallationRemovers.ForThisMachine();
+
+            Assert.Contains(child.Id, remover.RunningFromInAnySession(image));
+            Assert.Contains(child.Id, remover.RunningFrom(image));
+            Assert.Equal(System.Environment.ProcessId, remover.ParentOf(child.Id));
+            Assert.DoesNotContain(child.Id, remover.RunningFromInAnySession(Path.Combine(folder, "elsewhere", Path.GetFileName(image))));
+        }
+        finally
+        {
+            child.Kill();
+            child.WaitForExit();
+        }
     }
 
     [Fact]
@@ -671,6 +919,22 @@ public sealed class UninstallCarriedTests : IDisposable
     }
 
     private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root };
+
+    /// <summary>
+    /// Windows places whose registry keys are never made: a refusal reads them and finds nothing, and nothing writes under
+    /// this account's registry.
+    /// </summary>
+    private SetupPlaces AbsentKeysPlaces()
+    {
+        var absent = $@"Software\jason-tests\absent-{Guid.NewGuid():N}";
+        return new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, $@"{absent}\Environment", null)
+        {
+            Temporary = _tree.Paths.Root,
+            RunKey = $@"{absent}\Run",
+            StartupApprovedKey = $@"{absent}\StartupApproved",
+            ClassesKey = $@"{absent}\Classes",
+        };
+    }
 
     private (CliEnvironment Env, StringWriter Output, RecordingRemover Remover) Environment(SetupPlaces? places, string executable)
     {
