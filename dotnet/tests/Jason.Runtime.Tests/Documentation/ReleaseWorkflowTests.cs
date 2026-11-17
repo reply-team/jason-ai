@@ -511,14 +511,22 @@ public partial class ReleaseWorkflowTests
             "The stamp is checked after the tests have already run under it.");
 
         // Every other job keeps the -dev version, and nothing stamps VersionPrefix itself: that would leave the suffix behind.
-        // The one exception is the desktop job's Linux packages, which are never built at a -dev version: they carry the
-        // release with a ci word and the run's number, a candidate's shape no release ever has, on that one line.
+        // The exceptions are the desktop job's Linux packages and the two proof jobs' test builds, which are never built at a
+        // -dev version: they carry the release with a ci word and the run's number, a candidate's shape no release ever has,
+        // on that one line.
         foreach (var name in jobs.Children.Keys.Select(key => key.ToString()).Where(name => name is not "version" and not "release-stamp"))
         {
             var text = Job(ci, name);
             if (name == "desktop")
             {
                 const string candidate = "version: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}";
+                Assert.Equal(1, Regex.Count(text, Regex.Escape(candidate)));
+                text = text.Replace(candidate, string.Empty, StringComparison.Ordinal);
+            }
+
+            if (name is "union-windows" or "union-macos")
+            {
+                const string candidate = "VERSION: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}";
                 Assert.Equal(1, Regex.Count(text, Regex.Escape(candidate)));
                 text = text.Replace(candidate, string.Empty, StringComparison.Ordinal);
             }
@@ -630,6 +638,9 @@ public partial class ReleaseWorkflowTests
             "osx-arm64 tests: Runtime 4 of 6",
             "osx-arm64 tests: Runtime 5 of 6",
             "osx-arm64 tests: Runtime 6 of 6",
+            // The macOS half of the proof of one installation, beside install.ps1 on windows, which the ruleset requires
+            // since it was the Windows install job's name.
+            "install.sh on macos",
         ];
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");

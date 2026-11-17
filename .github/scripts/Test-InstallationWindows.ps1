@@ -252,7 +252,7 @@ switch ($Step) {
         if (Test-Path -LiteralPath $fresh) { Remove-Item -LiteralPath $fresh -Recurse -Force }
         $start = Invoke-Program $carried @('install') @{ JASON_DATA_DIR = $fresh; JASON_Harness__Root = (Join-Path $env:RUNNER_TEMP 'person-start-root') }
         if ($start.Exit -ne 0) { Fail "jason install, as an application's start runs it, exited with $($start.Exit)" }
-        $written = if (Test-Path -LiteralPath $fresh) { @(Get-ChildItem -LiteralPath $fresh -Recurse -Force) } else { @() }
+        $written = @(if (Test-Path -LiteralPath $fresh) { Get-ChildItem -LiteralPath $fresh -Recurse -Force })
         if ($written.Count -ne 0) { Fail "jason install with no flags wrote under the data directory: $($written.FullName -join ', ')" }
         Say 'jason install with no flags, as an application start and the installer run it, writes no entry under the data directory'
     }
@@ -272,7 +272,7 @@ switch ($Step) {
 
         # The waiter hands the folder to the uninstaller once the verb has ended, and the folder goes whole.
         Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
-        Wait-Until { (Get-JasonUninstallEntries).Count -eq 0 } 30 "the Installed apps entry going"
+        Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 "the Installed apps entry going"
         Start-Sleep -Seconds 5
         if (Test-Path -LiteralPath $data) { Fail "$data was written again after the purge: the uninstaller started the application although jason uninstall had done it all" }
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left' }
@@ -325,7 +325,7 @@ switch ($Step) {
         $removal = Start-Process -FilePath $Matches['file'] -ArgumentList $Matches['arguments'] -Wait -PassThru
         if ($removal.ExitCode -ne 0) { Fail "the uninstall Installed apps runs exited with $($removal.ExitCode)" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 60 "the application's folder going"
-        if ((Get-JasonUninstallEntries).Count -ne 0) { Fail 'the Installed apps entry is left' }
+        if (@(Get-JasonUninstallEntries).Count -ne 0) { Fail 'the Installed apps entry is left' }
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left: the uninstaller did not run jason uninstall --keep-application' }
         foreach ($root in @('.claude\skills', '.agents\skills')) { if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE "$root\.jason-skills.json")) { Fail "the skills record in $root is left" } }
         if (-not (Test-Path -LiteralPath $data)) { Fail "the data directory $data went, which only --purge-data takes" }

@@ -229,7 +229,7 @@ public class CiRunsTests
         ["not-the-release"] = (TheLinuxSet, ["win-x64", "osx-arm64", "an update on win-x64"]),
         [VersionOnly] = (["The version this tree carries", "linux-x64"], ["win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
         ["tested"] = (["The version this tree carries"], ["linux-x64", "win-x64", "osx-arm64", "an update on linux-x64", "an update on win-x64"]),
-        ["everything"] = (Required, []),
+        ["everything"] = ([.. Required, "install.sh on macos"], []),
         ["none"] = (["The version this tree carries"], []),
     };
 
