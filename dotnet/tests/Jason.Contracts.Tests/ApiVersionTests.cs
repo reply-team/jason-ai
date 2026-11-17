@@ -22,3 +22,5 @@ public class ApiVersionTests
     public void Build_version_starts_with_the_version_this_tree_carries() =>
         Assert.StartsWith(TreeVersion.Prefix(), JasonVersion.Current, StringComparison.Ordinal);
 }
+
+// A trial of the hotfix lane: this line is never merged.
