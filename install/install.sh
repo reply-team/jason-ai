@@ -81,7 +81,7 @@ done
 # Git Bash answers MINGW64_NT-… here and MSYS answers MSYS_NT-…. Neither is a Linux, and a Linux binary is the
 # one thing this script must never put on Windows; the Windows release is install.ps1's.
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) fail "this is a Windows shell; run install.ps1 in PowerShell instead, which installs jason-win-x64.zip" ;;
+    MINGW*|MSYS*|CYGWIN*) fail "this is a Windows shell; run install.ps1 in PowerShell instead, which installs Jason Desktop for Windows" ;;
 esac
 
 # A Mac of either architecture installs Jason Desktop, whose architecture is read further down; Linux the archive.
