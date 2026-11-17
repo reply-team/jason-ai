@@ -167,6 +167,7 @@ test('the whole include runs only the commands these rows name, stops only the a
     assert.deepEqual(naming('JASON_DESKTOP_UPDATING'), [
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", i 0)'`,
     ]);
     assert.deepEqual(naming('JASON_OWN_RUNTIME'), [
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
@@ -362,6 +363,11 @@ test('the runtime filter passes over only the live jason update apply the record
         // Every other process at the path is still found while the record passes the one over.
         writeFileSync(record, `${applying.pid} ${started}`);
         assert.equal(found(record), true, 'a second process at the carried path was passed over with the first');
+
+        // A record that names a process that has ended passes nothing over: the other process is still found.
+        applying.kill();
+        await new Promise<void>((resolve) => (applying.exitCode !== null || applying.signalCode !== null ? resolve() : applying.once('exit', () => resolve())));
+        assert.equal(found(record), true, 'a record naming a process that has ended passed a process over');
     } finally {
         for (const child of children) {
             child.kill();
@@ -369,6 +375,23 @@ test('the runtime filter passes over only the live jason update apply the record
         }
         rmSync(folder, { recursive: true, force: true });
     }
+});
+
+test('only the update’s own installer and the uninstaller it runs read the record; a person’s install or uninstall reads none, whatever it was started with', () => {
+    const check = macro('customCheckAppRunning');
+    // electron-builder runs this check in a person's install and uninstall too (`CHECK_APP_RUNNING`), and passes --updated
+    // to the old uninstaller an update runs (installUtil.nsh, uninstallOldVersion): only those pass a process over.
+    const naming = check.slice(0, check.indexOf('!insertmacro IS_POWERSHELL_AVAILABLE'));
+    const underUpdate = naming.indexOf('${if} ${isUpdated}');
+    assert.ok(underUpdate >= 0, 'the record is named outside the update’s own word');
+    assert.deepEqual(codeLines(naming.slice(underUpdate)), [
+        '${if} ${isUpdated}',
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        '${else}',
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", i 0)'`,
+        '${endIf}',
+    ]);
+    assert.ok(!naming.slice(0, underUpdate).includes('JASON_DESKTOP_UPDATING'), 'the record is named before the update’s own word');
 });
 
 test('the record the runtime filter reads is named once, inside the installation folder, and read by that filter alone', () => {
