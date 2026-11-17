@@ -4,21 +4,26 @@
 <meta charset="utf-8">
 <title>Jason</title>
 <!--
-The band above the demo page on macOS, where the traffic lights stand once the title bar is hidden: the Demo window's own
-contents, seen in the window's top 26 pixels over its whole width, above the page's view and our switch's, which start
-below it (src/demo-page.ts, demoLayout). It is the sidebar's colour over the page's 284-pixel sidebar and the page's
-own ground beyond, never the yellow of the Demo's strip: the strip under it stays exactly as high as its own line, and
-the band reads as the window's title strip. The page has no dark theme, so neither has the band. It holds no script and
-nothing to click. The document itself fills the whole window, under the two
-views, and Electron asks the window's own contents first whether a point is in a drag region, whichever view is drawn
-there. So the body alone drags, exactly as high as the band (demoGeometry.macBand), and the document as a whole carries
-no drag region: one would take every click meant for the page and the switch.
+The band of the Demo window on macOS, where the traffic lights stand once the title bar is hidden: the window's own
+contents, under the page's view and our switch's, which both start at the window's top edge (src/demo-page.ts,
+demoLayout). The page covers it whole, so nothing it paints is seen once the page is shown; until then it is the page's
+own ground, the sidebar's colour over the page's 284-pixel sidebar and the page's ground beyond, never the yellow of the
+Demo's strip. The page has no dark theme, so neither has the band. It holds no script and nothing to click.
+
+It is the window's drag region over the window's top 26 pixels (demoGeometry.macBand), its whole width, the window's
+title strip: over the sidebar the page leaves those pixels empty for the traffic lights (demoMacSheet), and right of it
+lie the page's strip's dot and words, which take no click. Electron asks the window's own contents first whether a
+point is in a drag region, whichever view is drawn there, so the body alone drags, exactly as high as the band, and the
+document as a whole carries no drag region: one would take every click meant for the page and the switch. The span at
+the band's right end where our switch stands (demoGeometry.macCut) is cut out of it, so the switch takes its clicks; the
+switch's own view keeps the rest of that span a drag region.
 -->
 <style>
 :root { color-scheme: light; }
 html { margin: 0; height: 100%; overflow: hidden; background: linear-gradient(to right, #f3f5f9 0 284px, #fff 284px); }
-body { margin: 0; height: 26px; -webkit-app-region: drag; }
+body { margin: 0; height: 26px; position: relative; -webkit-app-region: drag; }
+.cut { position: absolute; top: 0; right: 0; width: 150px; height: 26px; -webkit-app-region: no-drag; }
 </style>
 </head>
-<body></body>
+<body><div class="cut"></div></body>
 </html>

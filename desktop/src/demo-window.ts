@@ -1,12 +1,14 @@
 /**
  * The Demo in the window: the page the application carries, in a view of its own sealed by `demo-page.ts`, and over it
  * the desktop's own Demo | Live switch, a second view added after it, so it is drawn on top, over the strip whose right
- * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an installation is here: no jason, no runtime, no chat, no
- * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
- * above the page (`shell/demo-band.html`, no script). Electron asks the window's own contents first whether a point is in
- * a drag region, whichever view is drawn over it, so the band's document drags over the band's height alone. The page's
- * view also carries the desktop's link on the repository's address in the page's note, and that address alone leaves it,
- * to the person's browser (`demoRepository`).
+ * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an
+ * installation is here: no jason, no runtime, no chat, no bridge, no folder made. The window's own contents are empty
+ * under the two views, but on macOS, where they hold our band (`shell/demo-band.html`, no script), the window's drag
+ * region over its top 26 pixels, under the page that starts at the window's top edge. Electron asks the window's own
+ * contents first whether a point is in a drag region, whichever view is drawn over it, so the band's document drags
+ * over the band's height alone, and not where our switch stands. The page's view also carries the desktop's link on the
+ * repository's address in the page's note, and that address alone leaves it, to the person's browser
+ * (`demoRepository`).
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
@@ -16,8 +18,8 @@ import {
     demoLayout,
     demoLinkOpener,
     demoLinkScript,
-    demoLinkSheet,
     demoPage,
+    demoPageSheet,
     demoStripSheets,
     demoSwitch,
     demoViewPreferences,
@@ -68,13 +70,14 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     }
     const page = new WebContentsView({ webPreferences: demoViewPreferences(demoPage) });
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
-    // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS nothing.
+    // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS the sidebar moved
+    // below the traffic lights (`demoMacSheet`).
     const sheets = demoStripSheets(deps.platform);
     // The note's repository address drawn as a link, and the one address the page's view hands to the browser.
     await sealView(page.webContents, demoPage, {
         read: fileOf(pageFile),
         refused: onceEach((kind) => deps.refused('page', kind)),
-        sheet: sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`,
+        sheet: demoPageSheet(deps.platform),
         script: demoLinkScript,
         asked: demoLinkOpener(deps.open, watchDemoGestures(page.webContents)),
     });
@@ -107,7 +110,7 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     };
     window.on('closed', close);
     try {
-        // The band is the window's own contents, which on macOS show above the views; elsewhere they stay empty.
+        // On macOS the band, the window's own contents under the views, drags the window; elsewhere they stay empty.
         if (deps.platform === 'darwin') await window.webContents.loadFile(bandFile);
         await Promise.all([page.webContents.loadURL(demoPage.url), ours.webContents.loadURL(demoSwitch.url)]);
     } catch {

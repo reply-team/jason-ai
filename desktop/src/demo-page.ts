@@ -537,33 +537,54 @@ export function demoLinkOpener(open: () => void, gestureAt: () => number | null,
 }
 
 /**
- * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of it
- * its top strip is 38 high (the strip and its one-pixel border), with its own dot and words at its left and its right end
- * left free for a switch. Our view lies over that strip whole, from the sidebar to the window's right edge, the window's
- * drag region; it is transparent, so the page's words show through, and draws the switch alone at the right end. On macOS the window's title bar is hidden,
- * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
- * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
- * Windows and Linux the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
- * free, told it in its own view's coordinates.
+ * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of
+ * it its top strip is 38 high (the strip and its one-pixel border), with its own dot and words at its left and its
+ * right end left free for a switch. Our view lies over that strip whole, from the sidebar to the window's right edge,
+ * the window's drag region; it is transparent, so the page's words show through, and draws the switch alone at the
+ * right end. The page and our switch start at the content's top edge on every system.
+ *
+ * On macOS the window's title bar is hidden, so the traffic lights stand in the window's top 26 pixels (`macBand`),
+ * over the left end of the page's sidebar. The page cannot know it is on a Mac and keeps nothing clear for them, so
+ * there the desktop puts a sheet of its own into the page's view (`demoMacSheet`) that moves the sidebar's contents
+ * down by the band's height, and the window is dragged by a band of ours under the views (`shell/demo-band.html`): the
+ * window's own contents, whose body is the drag region over the window's top 26 pixels and its whole width, but for a
+ * span at its right end (`macCut`), where our switch stands, so no click meant for the switch is taken for a drag. The
+ * switch is drawn in the Mac's own font there, which is not measured here, so the span is our switch's width as
+ * measured in Segoe UI and a quarter of it again, with its padding and its shadow; the switch's own view keeps the rest
+ * of that span a drag region. On Windows and Linux the caption buttons stand over the strip's right end, as high as it,
+ * and our switch's page leaves their width free, told it in its own view's coordinates.
  */
-export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
+export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand, macCut: 150 } as const;
 
 export interface DemoLayout {
     page: Rectangle;
     switch: Rectangle;
-    /** Our band above the page, on macOS; `null` elsewhere. */
+    /** Our band on macOS, under the views: the window's drag region over its top `macBand` pixels; `null` elsewhere. */
     band: Rectangle | null;
+    /** The span at the band's right end that does not drag, where our switch stands; `null` where there is no band. */
+    cut: Rectangle | null;
 }
 
 /** Pure: the Demo's views in a window's content area of this size, on this platform. */
 export function demoLayout(platform: NodeJS.Platform, width: number, height: number): DemoLayout {
-    const top = platform === 'darwin' ? demoGeometry.macBand : 0;
+    const mac = platform === 'darwin';
+    const cut = Math.min(width, demoGeometry.macCut);
     return {
-        page: { x: 0, y: top, width, height: Math.max(0, height - top) },
-        switch: { x: demoGeometry.sidebar, y: top, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
-        band: top === 0 ? null : { x: 0, y: 0, width, height: top },
+        page: { x: 0, y: 0, width, height },
+        switch: { x: demoGeometry.sidebar, y: 0, width: Math.max(0, width - demoGeometry.sidebar), height: demoGeometry.strip },
+        band: mac ? { x: 0, y: 0, width, height: demoGeometry.macBand } : null,
+        cut: mac ? { x: width - cut, y: 0, width: cut, height: demoGeometry.macBand } : null,
     };
 }
+
+/**
+ * The page's sheet on macOS, of the user's origin and important, as every sheet the desktop puts into the page's view:
+ * the page's sidebar (`.jc-console .side`, the page's own selector, which its own rule for a Mac window keys on a class
+ * this view never sets) takes the band's height as padding at its top, so its contents start below the traffic lights
+ * and its ground runs on under them. Nothing else of the page moves: its strip, right of the sidebar, starts at the
+ * window's top edge.
+ */
+export const demoMacSheet = `.jc-console .side { padding-top: ${demoGeometry.macBand}px !important; }`;
 
 /**
  * The page's strip on Windows and Linux. The caption buttons stand over the strip's right end, and the page cannot know
@@ -622,6 +643,17 @@ export function demoStripSheets(platform: NodeJS.Platform): { page: string; swit
             'body { container: jason-switch / inline-size !important; } ' +
             `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
     };
+}
+
+/**
+ * The whole sheet put into the page's view on `platform`: on macOS the sidebar moved below the traffic lights
+ * (`demoMacSheet`), on Windows and Linux the strip kept clear of the caption buttons (`demoStripSheets`), and
+ * everywhere the note's repository address drawn as a link (`demoLinkSheet`).
+ */
+export function demoPageSheet(platform: NodeJS.Platform): string {
+    if (platform === 'darwin') return `${demoMacSheet} ${demoLinkSheet}`;
+    const sheets = demoStripSheets(platform);
+    return sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`;
 }
 
 /** What the strip shows at a window width: which sentence and switch, where the sentence ends and where the switch begins. */

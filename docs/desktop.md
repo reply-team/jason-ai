@@ -370,8 +370,9 @@ own: the minimize, maximize and close buttons stand at the strip's right end, th
 moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
 window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
 a little tighter. On macOS the window has no title bar
-of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
-strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
+of its own: the page starts at the window's top edge, the window's buttons stand over the top of the page's sidebar,
+whose contents start below them, and the window's top strip moves the window, but where the switch stands. No part of
+the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
 the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
