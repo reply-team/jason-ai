@@ -676,8 +676,12 @@ describe('Needs you', () => {
             await settle();
             fireEvent.click(within(pane()).getByRole('button', { name: 'Reject' }));
             const asked = await waitFor(() => within(pane()).getByRole('alertdialog', { name: 'Reject this?' }));
-            // The question takes the keyboard, on its reason.
-            expect(document.activeElement).toBe(within(asked).getByRole('textbox'));
+            // The question takes the keyboard on Cancel, neither on its optional reason, a field of one line, nor on
+            // Reject: Enter as it opens rejects nothing.
+            expect(within(asked).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' }).tagName).toBe(
+                'INPUT',
+            );
+            expect(document.activeElement).toBe(within(asked).getByRole('button', { name: 'Cancel' }));
             fake.answer('approval.list', 'approval.list/needs-after-edit');
             await line(journal, 'jrn_needs_4');
             await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));

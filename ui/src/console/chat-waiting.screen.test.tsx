@@ -816,8 +816,15 @@ describe('what waits in an agent’s chat', () => {
         const pane = await openChat('Spring');
         const enroll = await drawn(pane, 'apr_2');
         fireEvent.click(within(enroll).getByRole('button', { name: 'Reject' }));
-        // The question: Cancel asks nothing of the runtime.
+        // The question takes the keyboard on Cancel, neither on its optional reason, a field of one line, nor on Reject:
+        // Enter as it opens rejects nothing. Cancel asks nothing of the runtime.
         let asking = within(enroll).getByRole('alertdialog', { name: 'Reject Enroll Oli Example?' });
+        const reason = within(asking).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' });
+        expect(reason.tagName).toBe('INPUT');
+        await waitFor(() =>
+            expect(document.activeElement).toBe(within(asking).getByRole('button', { name: 'Cancel' })),
+        );
+        expect(document.activeElement).not.toBe(within(asking).getByRole('button', { name: 'Reject' }));
         fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));
         expect(within(enroll).queryByRole('alertdialog')).toBeNull();
         expect(sent(fake, 'approval.reject')).toEqual([]);

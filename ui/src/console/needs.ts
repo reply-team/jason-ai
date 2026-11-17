@@ -437,11 +437,12 @@ define('needs.approve', ([id], _, event) => {
 });
 
 // Reject asks first, in a dialog that takes the keyboard and gives it back to Reject when it closes without rejecting.
+// It takes the keyboard on Cancel: the reason is optional, and Enter as it opens rejects nothing.
 define('needs.reject', ([id]) => {
     if (typeof id !== 'string') return;
     typed.delete(`${id}:reason`);
     rejecting.value = id;
-    focusPane('.needs-reject .inp');
+    focusPane('.needs-reject [data-action="needs.unreject"]');
 });
 
 define('needs.unreject', () => {

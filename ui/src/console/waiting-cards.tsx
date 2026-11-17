@@ -46,12 +46,13 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const [editing, setEditing] = useState<WorkItem | null>(null);
     const [checking, setChecking] = useState(false);
     const [problem, setProblem] = useState<string | null>(null);
-    const reasonBox = useRef<HTMLInputElement>(null);
+    const cancelButton = useRef<HTMLButtonElement>(null);
     const rejectButton = useRef<HTMLButtonElement>(null);
     const wasRejecting = useRef(false);
-    // The question takes focus as it opens, and gives it back to Reject once it closes without rejecting.
+    // The question takes focus as it opens, on Cancel: the reason is optional, and Enter as it opens rejects nothing. It
+    // gives the focus back to Reject once it closes without rejecting.
     useEffect(() => {
-        if (rejecting) reasonBox.current?.focus();
+        if (rejecting) cancelButton.current?.focus();
         else if (wasRejecting.current) rejectButton.current?.focus();
         wasRejecting.current = rejecting;
     }, [rejecting]);
@@ -187,7 +188,6 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                 >
                     <div>Reject {card.title}?</div>
                     <input
-                        ref={reasonBox}
                         className="inp"
                         aria-label="Reason (optional, kept in the journal)"
                         placeholder="Reason (optional, kept in the journal)"
@@ -196,7 +196,7 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
                         onChange={(event) => setReason(event.target.value)}
                     />
                     <div className="crow">
-                        <button className="btn sm" type="button" onClick={() => setRejecting(false)}>
+                        <button ref={cancelButton} className="btn sm" type="button" onClick={() => setRejecting(false)}>
                             Cancel
                         </button>
                         <button

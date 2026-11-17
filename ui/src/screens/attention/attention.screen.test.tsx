@@ -130,6 +130,11 @@ describe('Attention', () => {
         await waitFor(() => screen.getByRole('button', { name: 'Reject' }));
         fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
         const dialog = await screen.findByRole('dialog');
+        // A dialog whose only field is its optional reason opens on Cancel: neither on the reason, which is one line, nor
+        // on Reject, so Enter as it opens rejects nothing.
+        const reason = within(dialog).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' });
+        expect(reason.getAttribute('rows')).toBe('1');
+        expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' }));
         fireEvent.input(within(dialog).getByLabelText(/reason/i), { target: { value: 'not this quarter' } });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }));
         await waitFor(() => expect(fake.sent('approval.reject')).toBeTruthy());
@@ -146,6 +151,10 @@ describe('Attention', () => {
         await waitFor(() => screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         fireEvent.click(screen.getByText('Pause outreach to Vireo Labs until their funding news?'));
         await waitFor(() => screen.getByText('Pause until the news'));
+        // The question's optional why is a field of one line, and the question puts no focus on it as it opens.
+        const why = screen.getByRole('textbox', { name: 'Why (optional, kept in the journal)' });
+        expect(why.tagName).toBe('INPUT');
+        expect(document.activeElement).not.toBe(why);
         fireEvent.click(screen.getByText('Pause until the news'));
         fireEvent.input(screen.getByLabelText(/why/i), { target: { value: 'their CFO is leaving' } });
         fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
