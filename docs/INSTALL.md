@@ -176,8 +176,9 @@ again, and build nothing instead.
   signature, ReplyApp Inc.'s, runs it silently with `Start-Process -Wait` into `%LOCALAPPDATA%\Programs\jason-desktop`,
   and reads its exit code. The installer sets the machine up itself, at every install and update. A later version
   already installed is kept as it is; an earlier one is installed over, as its own update does, but never while
-  Jason Desktop is open, which a silent installer would close without asking: the script says to close it and run
-  the line again.
+  Jason Desktop is running, in its window or in the tray: the script says to quit it and run the line again. The
+  silent installer never closes it either: finding it running, it changes nothing and ends with exit code 3, which the
+  script says in the same words.
 - Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
   put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
   application's `resources\bundle` folder on your account's Path — the skills of every agent host it finds (Claude Code

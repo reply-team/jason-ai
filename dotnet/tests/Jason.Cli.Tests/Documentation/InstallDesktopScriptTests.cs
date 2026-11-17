@@ -41,6 +41,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
     private const string Setup = "jason-desktop-windows-x64-setup.exe";
 
+    /// <summary>What install.ps1 says where Jason Desktop runs: its own look before the setup, and the setup's exit 3.</summary>
+    private const string DesktopRunning = "Jason Desktop is running, in its window or in the tray, so nothing was installed: quit it - Quit in its tray menu - and run this line again.";
+
     /// <summary>The line the published script's signature check opens with, and the test build's in its place.</summary>
     private const string SignatureCheck = "    function Assert-Signed([string] $file) {";
 
@@ -121,7 +124,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
     {
         var code = Code("install.ps1");
         var setup = code.IndexOf("$installer = Start-Process -FilePath $setup", StringComparison.Ordinal);
-        var look = code.LastIndexOf("if (Test-WindowOpen) {", setup, StringComparison.Ordinal);
+        var look = code.LastIndexOf("if (Test-DesktopRunning) {", setup, StringComparison.Ordinal);
         Assert.True(setup > 0 && look > 0, "install.ps1 does not look for the window before the setup.");
         var between = code[look..setup];
         foreach (var step in new[] { "Fetch ", "Get-FileHash", "Assert-Signed", "Unblock-File" })
@@ -129,7 +132,33 @@ public sealed class InstallDesktopScriptTests : IDisposable
             Assert.DoesNotContain(step, between, StringComparison.Ordinal);
         }
 
-        Assert.Equal(2, Count(code, "if (Test-WindowOpen) {"));
+        Assert.Equal(2, Count(code, "if (Test-DesktopRunning) {"));
+    }
+
+    /// <summary>
+    /// install.ps1 and the installer agree on what a running Jason Desktop is and on what is said of it. The script looks for
+    /// the process of the application's own executable by its exact path, as the installer does, never for a window, so a
+    /// Desktop left in the tray, which has no window, is found; the installer run silently closes no application and ends
+    /// with 3, said only there; and the script says that exit in the same sentence as its own look's.
+    /// </summary>
+    [Fact]
+    public void Windows_the_script_and_the_installer_agree_on_a_running_desktop_and_say_its_exit_3_in_one_sentence()
+    {
+        var code = Code("install.ps1");
+        var look = code[code.IndexOf("function Test-DesktopRunning {", StringComparison.Ordinal)..];
+        look = look[..(look.IndexOf("\n    }\n", StringComparison.Ordinal) + 6)];
+        Assert.Contains("Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $application, [StringComparison]::OrdinalIgnoreCase) }", look, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex("MainWindow|Get-Process|WindowTitle", RegexOptions.IgnoreCase), look);
+        Assert.Contains($"$desktopRunning = '{DesktopRunning}'", code, StringComparison.Ordinal);
+        Assert.Equal(2, Count(code, "if (Test-DesktopRunning) {\n                throw $desktopRunning\n            }"));
+        Assert.Contains("                3 { throw $desktopRunning }", code, StringComparison.Ordinal);
+        Assert.Equal(4, Count(code, "$desktopRunning"));
+
+        var include = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "installer", "uninstall.nsh")).ReplaceLineEndings("\n");
+        // The installer's filter for the application is the same exact-path look, by the path the environment hands it.
+        Assert.Contains("[string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase)", include, StringComparison.Ordinal);
+        Assert.Matches(new Regex(@"\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}"), include);
+        Assert.Equal(1, Count(include, "SetErrorLevel 3"));
     }
 
     /// <summary>
@@ -148,9 +177,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.Contains("sysctl -n hw.optional.arm64", sh, StringComparison.Ordinal);
         Assert.Contains("ditto -x -k", sh, StringComparison.Ordinal);
         var ps1 = Code("install.ps1");
-        // The application's own executable is named once, to look for its window, and never started.
+        // The application's own executable is named once, to look for its process, and never started.
         Assert.Equal(1, Count(ps1, "Jason.exe"));
-        Assert.DoesNotMatch(new Regex(@"(Start-Process|Invoke-Item|&)\s+(-FilePath\s+)?\$window"), ps1);
+        Assert.DoesNotMatch(new Regex(@"(Start-Process|Invoke-Item|&)\s+(-FilePath\s+)?\$application"), ps1);
         Assert.DoesNotContain("--force-run", ps1, StringComparison.Ordinal);
         Assert.Contains("Start-Process -FilePath $setup -ArgumentList \"/S /D=$app\" -Wait -PassThru", ps1, StringComparison.Ordinal);
     }
@@ -240,7 +269,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             var run = windows.Run(windows.Feed("0.49.1"));
 
             Assert.Equal(1, run.Exit);
-            AssertSaid("Close Jason Desktop and run this line again.", run.Stderr);
+            AssertSaid(DesktopRunning, run.Stderr);
             Assert.DoesNotContain(windows.Calls(), call => call.StartsWith("setup", StringComparison.Ordinal));
             Assert.Contains(Version, File.ReadAllText(Path.Combine(windows.App, "resources", "bundle", "version.json")), StringComparison.Ordinal);
         }
@@ -289,7 +318,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
 
             Assert.True(open is not null, "the script never reached its signature check: " + run.Stdout + run.Stderr);
             Assert.Equal(1, run.Exit);
-            AssertSaid("Close Jason Desktop and run this line again.", run.Stderr);
+            AssertSaid(DesktopRunning, run.Stderr);
             Assert.DoesNotContain(windows.Calls(), call => call.StartsWith("setup", StringComparison.Ordinal));
             Assert.Contains(Version, File.ReadAllText(Path.Combine(windows.App, "resources", "bundle", "version.json")), StringComparison.Ordinal);
         }
@@ -475,6 +504,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
     [Theory]
     [InlineData(1, "a Jason process runs from")]
     [InlineData(2, "another install of Jason ran at the same time")]
+    [InlineData(3, DesktopRunning)]
     [InlineData(5, "The installer exited with 5")]
     public void Windows_an_installer_that_stopped_is_said_in_words_and_nothing_is_set_up(int code, string said)
     {
