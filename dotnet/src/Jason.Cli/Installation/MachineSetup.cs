@@ -130,7 +130,7 @@ public static class MachineSetup
         IReadOnlyList<InstallSkillsOutcome> skills = [];
         InstallSkillsOutcome? roles = null;
 
-        // Each step in its own guard, so an input/output failure no step expected ends in the one document like any other
+        // Each step in its own guard, so a failure of any kind no step expected ends in the one document like any other
         // problem, with every step before it reported.
         await run.Step("Looking for a command-line install", async () =>
         {
@@ -205,14 +205,17 @@ public static class MachineSetup
         /// </summary>
         public bool CommandPlaced { get; private set; }
 
-        /// <summary>One step, its input/output failures said as a problem rather than thrown past the report.</summary>
+        /// <summary>
+        /// One step, any failure it did not expect said as a problem rather than thrown past the report: an argument, a JSON
+        /// or a cancelled wait as much as an input/output failure, since the callers read the one document, always.
+        /// </summary>
         public async Task Step(string what, Func<Task> step)
         {
             try
             {
                 await step().ConfigureAwait(false);
             }
-            catch (Exception failed) when (failed is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            catch (Exception failed)
             {
                 Problems.Add($"{what} stopped part-way: {failed.Message}");
             }
@@ -233,9 +236,20 @@ public static class MachineSetup
             return true;
         }
 
-        /// <summary>The command-line install left, where the terminal command was not placed: the old one still answers.</summary>
+        /// <summary>
+        /// The command-line install left, where the terminal command was not placed whole. Where it sat at
+        /// <c>~/.local/bin/jason</c> the wrapper has already taken that file's place, and the report says so; elsewhere the old
+        /// executable is what still answers.
+        /// </summary>
         public InstallRetired? NotRetired(string old)
         {
+            var target = Path.Combine(places.LocalBin, "jason");
+            if (!Windows && string.Equals(old, Path.GetFullPath(target), StringComparison.Ordinal) && IsWrapper(target))
+            {
+                Problems.Add($"The wrapper that runs {carried.Executable} has taken the place of the command-line install's executable at {old}, but a new terminal may not find {places.LocalBin} on its PATH (said above), so the rest of that install was not retired: its notice files and its logon registration were left as they are, and a registration naming {old} now starts this jason through the wrapper.");
+                return null;
+            }
+
             Problems.Add($"{old} was not retired, since a new terminal would not find this jason in its place; it still answers as jason.");
             return null;
         }
@@ -463,6 +477,12 @@ public static class MachineSetup
             if (PathEntry.OnPath(TerminalPath(), places.LocalBin))
             {
                 Done.Add($"{places.LocalBin} is on the PATH a terminal has already, so no profile was written.");
+            }
+            else if (PathEntry.SplitsPath(places.LocalBin))
+            {
+                // install.sh refuses a folder holding PATH's own separator: PATH would read the line as two other folders.
+                linesPlaced = false;
+                Problems.Add($"{places.LocalBin} holds ':', which separates PATH's entries, so no line can put it on PATH and no profile was written. A new terminal finds this jason only by its full path, {target}.");
             }
             else if (PathEntry.UnsafeFolder(places.LocalBin))
             {

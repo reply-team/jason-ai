@@ -838,9 +838,81 @@ public sealed class InstallCommandTests : IDisposable
         Assert.True(File.Exists(Path.Combine(Home, ".local", "bin", "jason")), "the steps before the failure did not run");
     }
 
+    /// <summary>
+    /// One report always: a failure of any kind a step did not expect, an argument or a JSON one as much as an input/output
+    /// one, still ends in the one document with <c>completed</c> false, the failure named and the steps before it run.
+    /// </summary>
+    [Theory]
+    [InlineData("argument")]
+    [InlineData("json")]
+    public async Task A_failure_of_any_kind_still_prints_the_one_report(string kind)
+    {
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { Harnesses = new FailingHome(kind == "json" ? new JsonException("a record that is not JSON") : new ArgumentException("a name that is not a path")) };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.False(report.GetProperty("completed").GetBoolean());
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains(kind == "json" ? "a record that is not JSON" : "a name that is not a path", StringComparison.Ordinal));
+        Assert.True(File.Exists(Path.Combine(Home, ".local", "bin", "jason")), "the steps before the failure did not run");
+    }
+
+    /// <summary>
+    /// Where the command-line install sat at ~/.local/bin/jason, the wrapper has taken its place even when the profile lines
+    /// could not be written: the report says so, and never that the old jason still answers.
+    /// </summary>
+    [Fact]
+    public async Task Where_the_wrapper_took_the_old_place_the_report_says_so_and_not_that_the_old_jason_answers()
+    {
+        var old = PlantMacCommandLineInstall();
+        // A folder where the login profile would be: the lines cannot be appended, so the command is not placed whole.
+        Directory.CreateDirectory(Path.Combine(Home, ".zprofile"));
+        var executable = Carried();
+        var (env, output) = Environment(MacPlaces(), executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: "/usr/bin:/bin"), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(CommandFiles.Wrapper(executable, null), File.ReadAllText(old));
+        var report = Report(output);
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
+        var problems = report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()!).ToList();
+        Assert.DoesNotContain(problems, said => said.Contains("still answers", StringComparison.Ordinal));
+        Assert.Contains(problems, said => said.Contains($"The wrapper that runs {executable} has taken the place of the command-line install's executable at {old}", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A colon in the folder's name joins the refused set: it splits PATH's entries, so the line would never resolve. No
+    /// profile is written, the old install is not retired, and the report says why. A folder name with a colon is a POSIX
+    /// one; Windows cannot make it.
+    /// </summary>
+    [Fact]
+    public async Task A_folder_with_a_colon_takes_no_profile_line()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A folder whose name holds a colon cannot be made on Windows.");
+        var home = Path.Combine(_tree.Paths.Root, "ho:me");
+        Directory.CreateDirectory(home);
+        var bin = Path.Combine(home, ".local", "bin");
+        var (env, output) = Environment(MacPlaces() with { Home = home }, Carried());
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: "/usr/bin:/bin"), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.False(File.Exists(Path.Combine(home, ".zprofile")), "a line PATH splits in two was written");
+        Assert.False(File.Exists(Path.Combine(home, ".zshrc")), "a line PATH splits in two was written");
+        Assert.Contains(Report(output).GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains($"{bin} holds ':'", StringComparison.Ordinal));
+    }
+
     private sealed class UnreadableHome : IHarnessLocator
     {
         public IReadOnlyList<HarnessRoot> Detect() => throw new IOException("the disk went away");
+    }
+
+    private sealed class FailingHome(Exception failure) : IHarnessLocator
+    {
+        public IReadOnlyList<HarnessRoot> Detect() => throw failure;
     }
 
     /// <summary>Note 10: on macOS 0.48's jason-desktop wrapper of the application's is taken back, as the Windows command files are; another program's stays.</summary>
@@ -905,7 +977,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }

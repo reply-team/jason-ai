@@ -391,6 +391,17 @@ public static class PathEntry
     }
 
     /// <summary>
+    /// Whether the directory holds a colon past its root: the colon separates PATH's entries, so a profile line naming the
+    /// directory would put two folders on PATH, neither of them this one, and never resolve. A drive's colon on Windows is part
+    /// of the root and is not one.
+    /// </summary>
+    public static bool SplitsPath(string directory)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+        return directory.AsSpan((Path.GetPathRoot(directory) ?? string.Empty).Length).Contains(':');
+    }
+
+    /// <summary>
     /// The line a person adds by hand: <see cref="ExportLine(string)"/>, or for a directory that line cannot spell
     /// (<see cref="UnsafeFolder"/>), the directory in single quotes, as the desktop's own rule gives it.
     /// </summary>

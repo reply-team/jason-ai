@@ -478,6 +478,24 @@ public class UninstallPathEntryTests
     }
 
     /// <summary>
+    /// A colon in a folder's name splits PATH's entries, so no profile line can name the folder: refused wherever it stands
+    /// past the path's root, and a drive's own colon, which is part of the root, is not one.
+    /// </summary>
+    [Theory]
+    [InlineData("/Users/a:b/.local/bin", true)]
+    [InlineData("/Users/a/.local:x/bin", true)]
+    [InlineData("/Users/a b/.local/bin", false)]
+    [InlineData("/Users/a/.local/bin", false)]
+    public void A_colon_in_the_folder_splits_the_path(string directory, bool splits)
+    {
+        Assert.Equal(splits, PathEntry.SplitsPath(directory));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.False(PathEntry.SplitsPath(@"C:\Users\a\.local\bin"));
+        }
+    }
+
+    /// <summary>
     /// And the two writers leave the same bytes: the script's function run in <c>sh</c> on one copy of each case, the C# on
     /// another — no file, an empty one, one with the line, one with the line commented out, one ending without a newline,
     /// one with a CRLF line — twice each, so a second run is held too.

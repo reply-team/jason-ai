@@ -58,7 +58,8 @@ public static class InstallCommand
              runs this. --terminal-path with the empty value says the login shell gave no answer: the folder
              counts as not there, and the lines are written. A home whose folder holds a line break, '"', '$',
              a backtick or '\' takes no line, as install.sh refuses it; a profile that is a link is appended
-             through only to a regular file. Either is named with the line to add by hand. And 0.48's
+             through only to a regular file. Either is named with the line to add by hand. A home whose folder
+             holds ':', which separates PATH's entries, takes no line either, since none could name it. And 0.48's
              ~/.local/bin/jason-desktop wrapper taken back, only where it is the application's shape.
              Windows: one entry in this account's Path naming this jason's folder, only where it is not there,
              the value's kind kept and running programs told (a Path of a kind that is not a string is
@@ -66,13 +67,14 @@ public static class InstallCommand
              %LOCALAPPDATA%\Microsoft\WindowsApps taken back, each only where it is one of the application's
              shapes.
              The command files go, and step 3 runs, only once the terminal command reads back as placed: the
-             wrapper and its lines, or the Path entry. Otherwise the old install still answers, and stays.
+             wrapper and its lines, or the Path entry. Otherwise the old install stays: where it sat at
+             ~/.local/bin/jason the wrapper has taken its executable's place, and elsewhere it still answers.
              A terminal already open finds neither: it runs the path the document gives as open_shell.
           3. The rest of that command-line install: its logon registration, where it names that executable and
              this data directory, or no data directory (and then it names none again), registered again naming
              this jason; on macOS the file is moved and launchd loads it at the next logon, so nothing starts
-             now. Its notice files, and on Windows jason.previous.exe, removed. Windows: the executable
-             removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
+             now, and until then the old job stays loaded and idle. Its notice files, and on Windows
+             jason.previous.exe, removed. Windows: the executable removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
              own volume and left there, with nothing started to wait for that process; its Path entry taken
              off where its folder then holds nothing but what install.ps1 writes; the folder once empty.
              macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
