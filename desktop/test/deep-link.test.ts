@@ -219,7 +219,8 @@ test('the desktop\'s scheme is jason-desktop on every platform, and the runtime\
         .filter((line) => !/^\s*(?:\*|\/\/|\/\*)/.test(line))
         .join('\n');
     const calls = code.match(/app\.(?:set|remove)AsDefaultProtocolClient\([^)]*\)|app\.isDefaultProtocolClient\([^)]*\)/g) ?? [];
-    assert.equal(calls.length, 3, calls.join(' | '));
+    // The start's registration; the uninstall's look and removal are the carried jason's now (`DesktopRemoval.cs`).
+    assert.equal(calls.length, 1, calls.join(' | '));
     for (const call of calls) {
         assert.match(call, /\((?:registration|written)\.scheme, (?:registration|written)\.path, (?:registration|written)\.args\)/, call);
     }
