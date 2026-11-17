@@ -231,7 +231,11 @@ public static class UpdateCommands
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         FinishedCommand finished;
         using var hold = new CancellationTokenSource();
-        using var held = recover is null ? default : cancellationToken.Register(() => hold.CancelAfter(ChildHold));
+
+        // A console's close leaves this process only the close's hold: the child is given the shorter hold then, so that this
+        // process's own way out runs within it, and the lock is let go by a process that put back what it began.
+        var closing = Closing.Current;
+        using var held = recover is null ? default : cancellationToken.Register(() => hold.CancelAfter(closing is { ByClose: true } ? CloseChildHold : ChildHold));
         try
         {
             finished = await processes.RunAsync(env.Paths, command, env.Error, updateLock, recover is null ? cancellationToken : hold.Token).ConfigureAwait(false);
@@ -284,6 +288,12 @@ public static class UpdateCommands
     /// a cancelled verb is held (<c>CliApp</c>), with room left for this process's own way out.
     /// </summary>
     internal static TimeSpan ChildHold { get; } = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// The child's hold after a console's close, which leaves this process <see cref="Closing.Hold"/> before Windows ends it:
+    /// short enough that this process's own way out, which launches a runtime without waiting for it, runs within it.
+    /// </summary>
+    internal static TimeSpan CloseChildHold { get; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// The refusal for a hand-over that did not finish the update: the new build is in place, and the step the ledger stands
@@ -408,10 +418,13 @@ public static class UpdateCommands
         private readonly CancellationTokenSource _cancel;
         private readonly ManualResetEventSlim _settled = new(false);
         private readonly System.Runtime.InteropServices.PosixSignalRegistration? _registration;
+        private static readonly AsyncLocal<Closing?> CurrentOne = new();
+        private volatile bool _byClose;
 
         public Closing(CancellationToken outer)
         {
             _cancel = CancellationTokenSource.CreateLinkedTokenSource(outer);
+            CurrentOne.Value = this;
             try
             {
                 _registration = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGHUP, Closed);
@@ -425,6 +438,12 @@ public static class UpdateCommands
         /// <summary>The update's token: the caller's, and the console's close.</summary>
         public CancellationToken Token => _cancel.Token;
 
+        /// <summary>The close of the update this flow runs, where one is: a hand-over reads by it how long its child is held.</summary>
+        public static Closing? Current => CurrentOne.Value;
+
+        /// <summary>Whether the update was cancelled by a console's close, rather than by Ctrl+C or a caller.</summary>
+        public bool ByClose => _byClose;
+
         /// <summary>How long the close is held for the way out: under the five seconds Windows gives a close handler.</summary>
         public static TimeSpan Hold { get; } = TimeSpan.FromSeconds(4);
 
@@ -436,6 +455,7 @@ public static class UpdateCommands
                 context.Cancel = true;
             }
 
+            _byClose = true;
             _cancel.Cancel();
             _settled.Wait(Hold);
         }
@@ -445,6 +465,11 @@ public static class UpdateCommands
 
         public void Dispose()
         {
+            if (CurrentOne.Value == this)
+            {
+                CurrentOne.Value = null;
+            }
+
             _registration?.Dispose();
             _settled.Set();
             _cancel.Dispose();

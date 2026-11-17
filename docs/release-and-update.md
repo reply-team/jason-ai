@@ -1123,7 +1123,8 @@ puts back the record that stood where nothing was installed, and starts again th
 
 A cancel is held: the verb lets ten seconds pass for its way out before the process ends, and a closed console four, of
 the five Windows gives it. A child the verb waits on — the copy on macOS, the new `jason`'s finish on either system — is
-given six seconds of that after a cancel to end by itself, since a terminal's Ctrl+C or hang-up reaches the copy too, and
+given six seconds of that after a cancel to end by itself — two after a console's close, so that the verb's own way out
+still runs within the close's four — since a terminal's Ctrl+C or hang-up reaches the copy too, and
 the finish, which has no console, may end the step it is in; a child that answered within them is passed on as it
 answered. Only then is it ended, and the carried process runs the same way out by the same rule: the application the
 installer has is left to it, so with the go given, or the ledger at `kept`, and the application not yet the new version,

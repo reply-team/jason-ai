@@ -776,6 +776,48 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     /// <summary>
+    /// A console's close leaves the carried process only the close's hold before Windows ends it: its child is given the
+    /// shorter hold then, and the process's own way out has run, the answer given and the lock let go, before the hold ends.
+    /// </summary>
+    [Fact]
+    public async Task After_a_consoles_close_the_child_and_the_way_out_fit_inside_the_closes_hold()
+    {
+        Assert.True(UpdateCommands.CloseChildHold < UpdateCommands.Closing.Hold - TimeSpan.FromSeconds(1), "the close's hold leaves the way out no time");
+        var (installation, _) = FakeDesktop.Carried();
+        using var __ = installation;
+        TimeSpan? ended = null;
+        Task? closed = null;
+        var since = new System.Diagnostics.Stopwatch();
+        installation.Processes.OnRun = async (_, _, _, token) =>
+        {
+            var closing = UpdateCommands.Closing.Current ?? throw new InvalidOperationException("the update runs under no close");
+            since.Start();
+            closed = Task.Run(() => closing.Closed(null), Ct);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, token);
+            }
+            finally
+            {
+                ended = since.Elapsed;
+            }
+
+            throw new InvalidOperationException("unreachable");
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
+        await closed!.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        var settled = since.Elapsed;
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(UpdateCodes.Cancelled, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        Assert.True(ended >= UpdateCommands.CloseChildHold - TimeSpan.FromMilliseconds(100) && ended < UpdateCommands.ChildHold, $"the child was ended after {ended}");
+        Assert.True(settled < UpdateCommands.Closing.Hold, $"the way out had not run within the close's hold: {settled}");
+        Assert.Null(installation.Ledger());
+        using var free = UpdateLock.Take(installation.Update, "the next update");
+    }
+
+    /// <summary>
     /// The lock is never let go between the parts of an update: the carried process keeps it while its copy runs, the copy
     /// while the new jason finishes, and each child goes on under the one nonce it was handed. A second apply, a finishing
     /// step and a rollback beside any part find it held; the nonce goes with the lock.
