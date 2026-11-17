@@ -162,13 +162,15 @@ describe('Accounts in a browser', () => {
         await waitFor(() => screen.getByText('This runtime does not report its notification channels.'));
     });
 
-    it('says where the channels are changed, names Notifications:* and the skill, and writes nothing', async () => {
+    it('says what the channels are for and how they are turned on or off, in a browser by asking the AI, and writes nothing', async () => {
         const fake = inBrowser(report([channel({ channel: 'ntfy' })]));
         await waitFor(() => screen.getByText('ntfy'));
         const text = words(notifications());
-        expect(text).toContain('Notifications:*');
-        expect(text).toContain('settings file');
-        expect(text).toContain('operating-the-installation');
+        expect(text).toContain(
+            'This is how Jason tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your AI.',
+        );
+        expect(text).not.toContain('Connect panel');
+        expect(text).not.toContain('Notifications:*');
         expect(within(notifications()).queryAllByRole('button')).toEqual([]);
         expect(within(notifications()).queryAllByRole('textbox')).toEqual([]);
         expect(fake.calls.filter((call) => call.kind === 'write')).toEqual([]);
@@ -220,6 +222,7 @@ describe('Accounts inside the desktop', () => {
         expect(words(page)).not.toContain('a browser cannot do them');
         // The notification half is the same as in a browser.
         await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
+        expect(words(notifications())).toContain('To turn a channel on or off, use the Connect panel or ask your AI.');
     });
 
     it('asks the desktop for a Pause by the account id, and the desktop answers it', async () => {

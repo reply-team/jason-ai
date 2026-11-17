@@ -90,9 +90,8 @@ export function AccountsScreen() {
                             </p>
                         )}
                         <p className="hint">
-                            These are changed under <code>Notifications:*</code> in the installation’s settings file,{' '}
-                            {provider && 'on the Connect panel, '}or by asking your AI, whose operating-the-installation
-                            skill covers them; this page only shows them.
+                            This is how Jason tells you that an approval or a question is waiting for you. To turn a
+                            channel on or off, {provider ? 'use the Connect panel or ask your AI.' : 'ask your AI.'}
                         </p>
                     </section>
                 </div>
