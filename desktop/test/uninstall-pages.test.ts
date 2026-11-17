@@ -31,10 +31,14 @@ function between(text: string, start: string, ends: string[]): string {
     return text.slice(from, to).replace(/\s+/g, ' ');
 }
 
-const platforms: { platform: NodeJS.Platform; bullet: string; install: string }[] = [
-    { platform: 'win32', bullet: '- **Windows.**', install: 'On macOS and Windows the application goes' },
-    { platform: 'darwin', bullet: '- **macOS.**', install: 'On macOS and Windows the application goes' },
-    { platform: 'linux', bullet: '- **Linux.**', install: 'On Linux the desktop is taken off its own way' },
+/** The install page's two paragraphs under §7's "Jason Desktop", by their opening words. */
+const oneUninstallParagraph = 'On macOS and Windows the application goes';
+const linuxParagraph = 'On Linux the desktop is taken off its own way';
+
+const platforms: { platform: NodeJS.Platform; bullet: string }[] = [
+    { platform: 'win32', bullet: '- **Windows.**' },
+    { platform: 'darwin', bullet: '- **macOS.**' },
+    { platform: 'linux', bullet: '- **Linux.**' },
 ];
 
 /** The desktop page's paragraph for a platform under "Taking it off". */
@@ -49,7 +53,7 @@ function installPage(start: string): string {
     return between(section, start, ['\n']);
 }
 
-for (const { platform, bullet, install } of platforms) {
+for (const { platform, bullet } of platforms) {
     test(`the desktop page names the door offered on ${platform} and not the other`, () => {
         const text = desktopPage(bullet);
         assert.equal(text.includes(uninstallLabel), uninstallOffered(platform), `${bullet} and ${uninstallLabel}`);
@@ -59,13 +63,13 @@ for (const { platform, bullet, install } of platforms) {
 }
 
 test('the install page names Uninstall Jason… for macOS and Remove What Jason Placed… for Linux, as the code offers them', () => {
-    const oneUninstall = installPage(platforms[0].install);
+    const oneUninstall = installPage(oneUninstallParagraph);
     assert.ok(uninstallOffered('darwin') && !removalOffered('darwin'));
     assert.ok(oneUninstall.includes(`${uninstallLabel}** in the Jason menu on macOS`), oneUninstall);
     assert.ok(oneUninstall.includes('Installed apps in Settings on Windows'), oneUninstall);
     assert.ok(!oneUninstall.includes(removeLabel), oneUninstall);
 
-    const linux = installPage(platforms[2].install);
+    const linux = installPage(linuxParagraph);
     assert.ok(removalOffered('linux') && !uninstallOffered('linux'));
     assert.ok(linux.includes(`choose ${removeLabel} in the Jason menu first`), linux);
     assert.ok(!linux.includes(uninstallLabel), linux);
