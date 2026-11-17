@@ -63,7 +63,7 @@ public static class UpdateCommands
             "apply",
             "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. "
             + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window, and this command still ends with one JSON document and its exit code: it starts the application with --update-apply --await-go, and once the update is downloaded drains the runtime, stops it, steps out of the application's folder (on Windows it moves its own file out and keeps running, on macOS a copy of it under the data directory goes on) and gives the Desktop its go last, then waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
-            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found; a cancel (Ctrl+C, a closed console) before the installer has the update ends with update_cancelled, the record put back and the runtime launched without a wait. One update of a data directory acts at a time, its lock kept from one part to the next: another beside it, or `jason install` beside it, is refused with update_in_progress. Run elevated (an administrator's elevated terminal, root) it is refused with update_elevated before anything is begun: run it from an ordinary terminal. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
+            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found; a cancel (Ctrl+C, a closed console) before the installer has the update ends with update_cancelled, the record put back and the runtime launched without a wait. One update of a data directory acts at a time, its lock kept from one part to the next: another beside it, or `jason install` beside it, is refused with update_in_progress, and while `jason install` holds it the update is refused with install_in_progress. Run elevated (an administrator's elevated terminal under User Account Control, another account than the session's, root) it is refused with update_elevated before anything is begun: run it from an ordinary terminal. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -744,11 +744,11 @@ public static class UpdateCommands
     /// </summary>
     private static string Elevated(SetupSystem platform) =>
         (platform is SetupSystem.Windows
-            ? "This jason runs as an administrator, elevated"
+            ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
             : "This jason runs as root")
         + ", and an update begun from here would start Jason Desktop, its installer and the runtime the same way, or install into another account's profile, so nothing was read, staged or asked. "
         + (platform is SetupSystem.Windows
-            ? "Run `jason update apply` from an ordinary terminal that is not run as an administrator, or choose Check for Updates in Jason Desktop's menu."
+            ? "Run `jason update apply` from an ordinary terminal of the account signed in here, not run as an administrator, or choose Check for Updates in Jason Desktop's menu."
             : "Run `jason update apply` from an ordinary terminal, without sudo, or choose Check for Updates in Jason Desktop's menu.");
 
     /// <summary>The refusal for a copy that ended with no answer: the update stands at the step it reached, and is carried on.</summary>
