@@ -566,7 +566,10 @@ test('a window’s run takes requests with its own updater; the Demo makes one f
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const live = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
     assert.ok(live.includes('serveRequests(log, paths.data, updates !== null, () => updates ?? requestUpdater({ data: paths.data, log }));'));
-    assert.ok(main.includes('takeRequest(request, { data, from: app.getVersion(), where: { window: { menu } }, unsupported: requestSupport(app.isPackaged, process.platform), updater, windowOpen: windowOpenUpdate, log })'));
+    const served = main.slice(main.indexOf('function serveRequests('), main.indexOf('\n}\n', main.indexOf('function serveRequests(')));
+    for (const member of ['data,', 'where: { window: { menu } },', 'unsupported: requestSupport(app.isPackaged, process.platform),', 'updater,', 'windowOpen: windowOpenUpdate,', 'log,']) {
+        assert.ok(served.includes(member), member);
+    }
     assert.equal(existsSync(new URL('../src/update-start.ts', import.meta.url)), true);
 });
 
@@ -972,4 +975,45 @@ test('`downloaded` that cannot be written: refused at once, no go waited for, no
     assert.equal(existsSync(join(data, 'desktop', 'rollback', '0.49.0')), false, 'nothing kept');
     assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')));
     assert.equal(wait.looked(), 1);
+});
+
+test('R1: the runtime the updater stopped is started again by the desktop where the file could be told nothing, and left to the verb where `failed` was written', async (t) => {
+    // Neither `installing` nor the refusal written: the verb never learns the runtime was stopped, so the desktop starts it.
+    const data = scratch(t);
+    const { updater, calls } = realUpdater(data);
+    const starts: string[] = [];
+    const { all, log } = deps(data, () => updater, {
+        write: unwritable(['installing', 'refused'], []),
+        startRuntime: async () => (starts.push('runtime start'), 'started'),
+    });
+    await takeRequest(request, all);
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')));
+    assert.deepEqual(starts, ['runtime start'], 'started again at once, once');
+    assert.ok(log.lines.some((line) => line.name === 'update_request_runtime_started' && line.fields['Outcome'] === 'started'));
+    // The refusal written, `runtime_stopped` in it: the verb is told, and restarting it stays the verb's.
+    const told = scratch(t);
+    const second = realUpdater(told);
+    const none: string[] = [];
+    const end = await taken(request, deps(told, () => second.updater, {
+        write: unwritable(['installing'], []),
+        startRuntime: async () => (none.push('runtime start'), 'started'),
+    }).all);
+    assert.equal(end.runtime_stopped, true);
+    assert.deepEqual(none, [], 'the desktop starts nothing where the verb was told');
+    // Nothing stopped, nothing to start: a `downloaded` it could not write stops nothing.
+    const early = scratch(t);
+    const third = realUpdater(early);
+    const nothing: string[] = [];
+    await takeRequest(waits, deps(early, () => third.updater, {
+        go: goWaitOf(100),
+        write: unwritable(['downloaded', 'refused'], []),
+        startRuntime: async () => (nothing.push('runtime start'), 'started'),
+    }).all);
+    assert.deepEqual(nothing, []);
+    // Both doors give it the carried jason's start: a window's requests and a window-less start's.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = readFileSync(new URL('../src/update-start.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes('startRuntime: carriedRuntimeStart(data, log),'));
+    assert.ok(start.includes('startRuntime: carriedRuntimeStart(data, log),'));
+    assert.ok(start.includes('return (await startAgain(runtimeDoor(cli, desktopPaths(data).runFile))).act;'));
 });

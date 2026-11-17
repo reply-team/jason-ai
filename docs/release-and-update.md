@@ -1022,7 +1022,8 @@ the next poll reading it whole; the rename stays the normal way, and on macOS it
 verb acts on, `downloaded`, after which it gives the go, and `installing`, before which it lets the installer have the
 application, and neither is passed over unwritten: where one is written neither way, the Desktop goes no further, waits
 for no go and starts no installer, and ends the request `failed` where that can still be written, else with the file at
-the step before and the verb given no answer. A lost `checking` or `downloading` only says less. The verb makes a fresh id for each request and reads a file that was there before it started the
+the step before and the verb given no answer; and where the runtime was stopped for it, which the verb then never learns,
+the Desktop starts it again itself at once, as it leaves that to the verb wherever the file says `runtime_stopped`. A lost `checking` or `downloading` only says less. The verb makes a fresh id for each request and reads a file that was there before it started the
 application as no answer. Every member is always there:
 
 | Member | What it holds |

@@ -381,9 +381,11 @@ installed, and retires an older command-line install of Jason. Then it runs the 
 `jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
 skills deployments and the UI up to the version installed and starts no runtime; with an update a terminal's
 `jason update apply` handed to the application still in flight and the application now its version, it finishes that
-update, the runtime's start included. Neither is given a time limit. On a new installation, the desktop's own records
-alone, the finishing step is not run, since there is nothing of an installation to bring up: a first start writes nothing
-more under the data directory and asks no network. The version is recorded as done only when both succeeded, so a start
+update, the runtime's start included. Neither is given a time limit. Whether an installation is there is the command
+line's to say, by one definition, and the desktop reads its answer (`installation_found`): where the data directory holds
+nothing but the desktop's own, as at a new installation's first start, the finishing step reads no release and makes
+nothing, and that is done with nothing left to say, so a first start writes nothing more under the data directory and asks
+no network; a data directory it could not list is not done, and runs again at the next start. The version is recorded as done only when both succeeded, so a start
 after one that did not get there runs both again; one that fails every time runs again at every start, which the Command
 Line item says in Live and only the desktop's log says in the Demo. Where another `jason` holds the update's lock, a
 `jason install` or an update, its finish or a rollback (`install_in_progress`, `update_in_progress`), nothing is set up and
@@ -395,7 +397,8 @@ has ended, the window saying meanwhile that it waits for the set-up to finish up
 finds an update still holding the runtime's start, its own set-up's or a terminal's `jason update apply`
 (`update_in_progress`, `install_in_progress`, or a set-up left for later), asks again every five seconds for up to ten
 minutes and is never counted as a failed first start of the version; past that the window says the update is still being
-finished, nothing is recorded of that start, and the next start decides. The application never ends a run; one still running after five minutes is said in the Command Line item as
+finished, nothing is recorded of that start, and the next start decides; where the last refusal was not the update's own
+code but counted as one because the set-up was left for later, the window says the start's own last sentence beside it. The application never ends a run; one still running after five minutes is said in the Command Line item as
 taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
 start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
 run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in

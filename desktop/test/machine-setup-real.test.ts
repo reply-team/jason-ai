@@ -118,7 +118,6 @@ test('L1: a fresh machine’s first start, with the real carried jason, writes n
         runtime: runtimeDoor(watched, desktopPaths(data).runFile),
         log,
         finishingStep: async () => finishingOf(await watched.run(finishArguments, { timeoutMs: noLimit })),
-        isNew: () => isNewInstallation(data),
         startOwed: desktopPaths(data).startOwed,
     });
     await setup.atStart();
@@ -126,9 +125,11 @@ test('L1: a fresh machine’s first start, with the real carried jason, writes n
     assert.deepEqual(listing(data), ['desktop', 'desktop/machine-setup.json', 'desktop/mode'], 'the set-up’s record alone is added');
     assert.equal(isNewInstallation(data), true, 'the next start still opens on the demo');
     assert.equal(proxy.connections(), counted, 'no request was made');
-    assert.equal(calls.some((call) => call.startsWith('update apply')), false, 'no finishing step on a new installation');
-    assert.ok(log.lines.some((line) => line.name === 'machine_setup_finish_new'));
+    // The finishing step ran, and the command line, the one definition of an installation, found none: done, nothing said.
+    assert.ok(calls.includes(finishArguments.join(' ')), 'the finishing step ran');
+    assert.ok(log.lines.some((line) => line.name === 'machine_setup_finished' && line.fields['Completed'] === true));
     assert.equal(setup.state.state, 'reported');
+    assert.deepEqual(setup.state.state === 'reported' ? setup.state.report.problems : null, []);
 });
 
 test('L1, the command line’s half: the real finishing step on a data directory holding the desktop’s records alone makes nothing and asks no network', { skip }, async (t) => {
@@ -139,12 +140,13 @@ test('L1, the command line’s half: the real finishing step on a data directory
     assert.equal(finished.exit, 0, finished.stdout + finished.stderr);
     assert.deepEqual(listing(data), ['desktop', 'desktop/mode']);
     assert.equal(proxy.connections(), 0, 'no request was made');
-    // The command line's answer as release/49 states it: found, nothing done, each part naming the Desktop's own records.
-    const answer = JSON.parse(finished.stdout) as { data_dir_found: boolean; complete: boolean; parts: { part: string; state: string; reason: string }[] };
+    // The command line's answer: found, no installation, nothing done, each part naming the Desktop's own records.
+    const answer = JSON.parse(finished.stdout) as { data_dir_found: boolean; installation_found: boolean; complete: boolean; parts: { part: string; state: string; reason: string }[] };
     assert.equal(answer.data_dir_found, true);
+    assert.equal(answer.installation_found, false);
     assert.equal(answer.complete, false);
     assert.deepEqual(answer.parts.map((part) => [part.part, part.state]), [['plugins', 'not_done'], ['skills', 'not_done'], ['ui', 'not_done']]);
     for (const part of answer.parts) assert.match(part.reason, /holds nothing of an installation but Jason Desktop's own/);
-    // The Desktop never asks it where the installation is new (the row above); were it asked, it would read three problems.
-    assert.equal(finishingOf(finished).completed, false);
+    // The Desktop reads the mark: nothing is left to finish, and no problem is said.
+    assert.deepEqual(finishingOf(finished), { completed: true, problems: [] });
 });

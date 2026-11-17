@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataNewerRefused, LayoutRefused, StartFailed, UpdateBusy, updateBusyIn } from '../src/installation.ts';
-import { startPastUpdate, StillUpdating, stillUpdatingSentence, updateHolds, updatePollMs, updateWaitMs, updateWaitSentence, type SetupState } from '../src/machine-setup.ts';
+import { ownWords, startPastUpdate, StillUpdating, stillUpdatingSentence, updateHolds, updatePollMs, updateWaitMs, updateWaitSentence, type SetupState } from '../src/machine-setup.ts';
 import { isRejected, readRollback, settleFailedStart, settleStart, writeRollback } from '../src/rollback.ts';
 import { memoryLog } from './harness.ts';
 
@@ -84,7 +84,7 @@ test('W: an update that holds the start past the bound leaves the version unsett
     const still = caught.indexOf('if (error instanceof StillUpdating) {');
     assert.ok(still > 0 && still < caught.indexOf('settleFailedStart('), 'decided before anything is settled');
     const branch = caught.slice(still, caught.indexOf('} else {', still));
-    assert.ok(branch.includes('await showStarting(current, stillUpdatingSentence, true);'));
+    assert.ok(branch.includes('await showStarting(current, error.message, true);'));
     assert.equal(branch.includes('settle'), false);
     assert.ok(main.includes('busy: (failed) => failed instanceof UpdateBusy,'));
     assert.match(stillUpdatingSentence, /still being finished, so Jason did not start the runtime/);
@@ -112,4 +112,33 @@ test('W: an ordinary failed first start still lands in rejected as before, and a
     assert.equal(updateHolds(new LayoutRefused({ exit: 1, stdout: '', stderr: '' }, 'layout_newer', 'Newer.'), later, kinds), false);
     assert.equal(updateHolds(new DataNewerRefused({ exit: 1, stdout: '', stderr: '' }, 'Newer.'), later, kinds), false);
     assert.equal(updateHolds(plain, null, kinds), false);
+});
+
+test('W1: at the bound, where the last failure was the start’s own and not an update’s code, the page says the start’s own sentence too', async () => {
+    const later: SetupState = { state: 'later', why: 'Another jason holds the update.' };
+    const own = new StartFailed('runtime start', { exit: 1, stdout: '', stderr: '' }, 'The port 17345 is taken by another program.');
+    const failures: Error[] = [busy(), own];
+    let tries = 0;
+    const time = clock();
+    const thrown = await startPastUpdate(
+        async () => {
+            throw failures[Math.min(tries++, failures.length - 1)];
+        },
+        { holds: (error) => updateHolds(error, later, kinds), busy: kinds.busy, waiting: async () => undefined, ...time },
+    ).catch((error: unknown) => error);
+    // Still waited for and never settled: the set-up met the lock, so the failure is counted as the update holding the start.
+    assert.ok(thrown instanceof StillUpdating);
+    assert.ok(time.now() >= updateWaitMs);
+    assert.equal(thrown.own, 'The port 17345 is taken by another program.');
+    assert.equal(thrown.message, `${stillUpdatingSentence} ${ownWords}The port 17345 is taken by another program.`);
+    // Where the last failure was the update's own code, the page says the update's sentence alone, as before.
+    const held = await startPastUpdate(
+        async () => {
+            throw busy();
+        },
+        { holds: (error) => updateHolds(error, later, kinds), busy: kinds.busy, waiting: async () => undefined, ...clock() },
+    ).catch((error: unknown) => error);
+    assert.ok(held instanceof StillUpdating);
+    assert.equal(held.own, null);
+    assert.equal(held.message, stillUpdatingSentence);
 });

@@ -320,11 +320,6 @@ export interface MachineSetupDeps {
      * answers, one is started from the carried file (`payOwedStart`). Absent, no note is read.
      */
     startOwed?: string;
-    /**
-     * Whether the installation is new (`isNewInstallation`): its data directory absent, empty, or holding the desktop's
-     * own records alone. Read just before the finishing step, which is not run where it answers true. Absent, never new.
-     */
-    isNew?(): boolean;
     /** Whether a path is there; `existsSync` unless a test names another. */
     exists?(path: string): boolean;
 }
@@ -345,8 +340,10 @@ export const finishArguments: readonly string[] = ['update', 'apply', '--finish'
 
 /**
  * Pure: the finishing step's answer from what `jason update apply --finish` gave back. Two documents are a success: with
- * no update in flight, the finishing step's own (`version`, `data_dir`, `data_dir_found`, `complete`, `parts`), done where
- * `complete` says so, a part `not_done` said by its reason; with an update in flight past the swap, or the application at
+ * no update in flight, the finishing step's own (`version`, `data_dir`, `data_dir_found`, `installation_found`, `complete`,
+ * `parts`), done where `complete` says so, a part `not_done` said by its reason, and done with nothing to say where
+ * `installation_found` is false: the command line's is the one definition of an installation being there, and where none is,
+ * as on a fresh machine's first start, it read and made nothing and nothing is left to finish; with an update in flight past the swap, or the application at
  * its version, the update's (`from`, `to`, `step`, `steps`), done where it reached `complete`. A refusal by `laterCodes`
  * is `later`; any other refusal, a usage error and no document are not done.
  */
@@ -360,8 +357,8 @@ export function finishingOf(result: CliResult): FinishingStep {
     } catch {
         parsed = null;
     }
-    // No installation to bring up is nothing left undone.
-    if (result.exit === 0 && isObject(parsed) && parsed.data_dir_found === false && Array.isArray(parsed.parts)) return { completed: true, problems: [] };
+    // No installation to bring up is nothing left undone. A data directory it could not list is a refusal, above: not done.
+    if (result.exit === 0 && isObject(parsed) && parsed.installation_found === false && Array.isArray(parsed.parts)) return { completed: true, problems: [] };
     if (result.exit === 0 && isObject(parsed) && typeof parsed.complete === 'boolean' && Array.isArray(parsed.parts)) {
         const problems = parsed.parts.flatMap((part: unknown) =>
             isObject(part) && part.state === 'not_done' ? [`${isText(part.part) ? part.part : 'a part'}: ${isText(part.reason) ? part.reason : 'not done'}`] : [],
@@ -517,12 +514,7 @@ export class MachineSetup {
             return { state: 'later', why: answer.later };
         }
         let finishing: FinishingStep | null = null;
-        if (this.#deps.finishingStep !== undefined && this.#deps.isNew?.() === true) {
-            // A new installation, the desktop's own records alone, has nothing for the finishing step to bring up, and a
-            // first start writes nothing more under the data directory and asks no network: it is not run, and is done.
-            finishing = { completed: true, problems: [] };
-            log.info('machine_setup_finish_new', { Why: why });
-        } else if (this.#deps.finishingStep !== undefined) {
+        if (this.#deps.finishingStep !== undefined) {
             finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${messageOf(error)}`] }));
             log.info('machine_setup_finished', { Why: why, Completed: finishing.completed, Later: finishing.later !== undefined });
         }
@@ -568,12 +560,23 @@ export async function startAfterSetup<T>(start: () => Promise<T>, setup: { reado
 export const updateWaitMs = 10 * 60_000;
 export const updatePollMs = 5_000;
 
-/** Live's start, past the bound of an update that still held it: no failed start, and nothing settled. */
+/**
+ * Live's start, past the bound of an update that still held it: no failed start, and nothing settled. Its message is what
+ * the page says: `stillUpdatingSentence`, and where the last failure was not an update's code but was counted as the
+ * update holding the start (the set-up answered `later`), the start's own last sentence after it, so the truth is on the
+ * screen too.
+ */
 export class StillUpdating extends Error {
-    constructor() {
-        super(stillUpdatingSentence);
+    /** The start's own last sentence, where its last failure was not an update's code; null where it was. */
+    readonly own: string | null;
+    constructor(own: string | null = null) {
+        super(own === null ? stillUpdatingSentence : `${stillUpdatingSentence} ${ownWords}${own}`);
+        this.own = own;
     }
 }
+
+/** What leads the start's own last sentence where the page says it beside `stillUpdatingSentence`. */
+export const ownWords = 'The last start of the runtime said: ';
 
 /** What the page says while Live's start waits for an update that holds it. */
 export const updateWaitSentence = 'An update of this installation is still being finished; Jason starts the runtime once it has ended…';
@@ -601,7 +604,16 @@ export function updateHolds(error: unknown, setup: SetupState | null, kinds: { b
  */
 export async function startPastUpdate<T>(
     start: () => Promise<T>,
-    deps: { holds(error: unknown): boolean; waiting(): Promise<void>; sleep(ms: number): Promise<void>; now(): number; boundMs?: number; pollMs?: number },
+    deps: {
+        holds(error: unknown): boolean;
+        /** Whether the failure is an update's own code (`update_in_progress`, `install_in_progress`); absent, every one is. */
+        busy?(error: unknown): boolean;
+        waiting(): Promise<void>;
+        sleep(ms: number): Promise<void>;
+        now(): number;
+        boundMs?: number;
+        pollMs?: number;
+    },
 ): Promise<T> {
     const deadline = deps.now() + (deps.boundMs ?? updateWaitMs);
     let said = false;
@@ -610,7 +622,7 @@ export async function startPastUpdate<T>(
             return await start();
         } catch (error) {
             if (!deps.holds(error)) throw error;
-            if (deps.now() >= deadline) throw new StillUpdating();
+            if (deps.now() >= deadline) throw new StillUpdating(deps.busy === undefined || deps.busy(error) ? null : messageOf(error));
             if (!said) {
                 said = true;
                 await deps.waiting().catch(() => undefined);

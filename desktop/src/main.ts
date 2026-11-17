@@ -36,11 +36,11 @@ import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackV
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
 import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, updatingWords, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
-import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
+import { carriedRuntimeStart, refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed, UpdateBusy } from './installation.ts';
-import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, startPastUpdate, StillUpdating, stillUpdatingSentence, updateHolds, updateWaitMs, updateWaitSentence, writable } from './machine-setup.ts';
+import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, startPastUpdate, StillUpdating, updateHolds, updateWaitMs, updateWaitSentence, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -219,7 +219,16 @@ let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0]
  */
 function serveRequests(log: Logger, data: string, menu: boolean, updater: () => Pick<Updater, 'take'>): void {
     windowRequests?.serve((request) =>
-        takeRequest(request, { data, from: app.getVersion(), where: { window: { menu } }, unsupported: requestSupport(app.isPackaged, process.platform), updater, windowOpen: windowOpenUpdate, log }),
+        takeRequest(request, {
+            data,
+            from: app.getVersion(),
+            where: { window: { menu } },
+            unsupported: requestSupport(app.isPackaged, process.platform),
+            updater,
+            windowOpen: windowOpenUpdate,
+            log,
+            startRuntime: carriedRuntimeStart(data, log),
+        }),
     );
 }
 
@@ -761,6 +770,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                         busy: (failed) => failed instanceof UpdateBusy,
                         refusedData: (failed) => failed instanceof LayoutRefused || failed instanceof DataNewerRefused,
                     }),
+                busy: (failed) => failed instanceof UpdateBusy,
                 waiting: () => showStarting(window, updateWaitSentence, false),
                 sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
                 now: () => Date.now(),
@@ -807,7 +817,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         // the next start decides.
         if (error instanceof StillUpdating) {
             log.warn('start_left_to_update', { Seconds: updateWaitMs / 1000 });
-            if (current !== null) await showStarting(current, stillUpdatingSentence, true);
+            if (current !== null) await showStarting(current, error.message, true);
         } else {
             // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
             // offered, since an older version knows that directory no better.
@@ -1027,8 +1037,6 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
         // The command line's finishing step after the routine, with no time limit: with a carried update in flight and the
         // application at its version it finishes that update, the runtime's start included (`docs/release-and-update.md` §7).
         finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),
-        // Not on a new installation, whose first start writes nothing more under the data directory and asks no network.
-        isNew: () => isNewInstallation(runOn.person),
         // The note that a start is owed, read at every start of a window, Demo or Live; the desktop writes none.
         startOwed: desktopPaths(runOn.person).startOwed,
     });

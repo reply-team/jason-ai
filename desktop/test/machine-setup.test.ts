@@ -428,7 +428,7 @@ test('the look reads only the head of what the PATH finds: a wrapper whole, an e
 
 /** A `jason update apply --finish` document with nothing in flight, `complete` and its parts as a test lays them. */
 function finishDoc(complete: boolean, parts: { part: string; state: string; reason?: string | null }[] = []): Record<string, unknown> {
-    return { version: '0.49.0', data_dir: '/Users/a/.jason', data_dir_found: true, complete, parts: parts.map((part) => ({ reason: null, lines: [], ...part })) };
+    return { version: '0.49.0', data_dir: '/Users/a/.jason', data_dir_found: true, installation_found: true, complete, parts: parts.map((part) => ({ reason: null, lines: [], ...part })) };
 }
 
 /**
@@ -952,19 +952,40 @@ test('the mode switch’s relaunch waits for the set-up’s run up to the bound,
     assert.equal(main.split('modeSwitch(log, form, () => current)').length - 1, 2, 'Live’s run and the Demo’s');
 });
 
-test('L1: on a new installation the finishing step is not run and counts as done; on one that is not new it runs; main asks the desktop’s own test of new', async () => {
-    for (const isNew of [true, false]) {
+test('L1: the finishing step runs at every first start, and where the command line finds no installation it is done with nothing to say; a directory it cannot list is not done and runs again', async () => {
+    const nothing = (reason: string, dataDirFound: boolean) => ({
+        ...finishDoc(false, ['plugins', 'skills', 'ui'].map((part) => ({ part, state: 'not_done', reason }))),
+        data_dir_found: dataDirFound,
+        installation_found: false,
+    });
+    for (const answer of [nothing('Holds nothing of an installation but Jason Desktop’s own.', true), nothing('No data directory.', false)]) {
         const data = join(folder(), '.jason');
-        const cli = installationCli({ up: false, inFlight: false });
-        const { setup, log } = wiredOn(data, cli, { isNew: () => isNew });
+        const cli = installationCli({ up: false, inFlight: false, finish: () => printed(answer) });
+        const { setup, log } = wiredOn(data, cli);
         await setup.atStart();
-        assert.deepEqual(cli.calls, isNew ? ['install --terminal-path /usr/bin:/bin'] : ['install --terminal-path /usr/bin:/bin', 'update apply --finish'], String(isNew));
-        assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
-        assert.equal(log.lines.some((line) => line.name === 'machine_setup_finish_new'), isNew);
+        // The command line's is the one definition of an installation being there: the desktop asks it, and no test of its own.
+        assert.deepEqual(cli.calls.slice(0, 2), ['install --terminal-path /usr/bin:/bin', 'update apply --finish']);
+        assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0', 'done: the record is written');
+        assert.deepEqual(setup.state.state === 'reported' ? setup.state.report.problems : 'not reported', [], 'no problem said');
+        assert.equal(setup.state.state === 'reported' ? setup.state.report.completed : null, true);
+        assert.ok(log.lines.some((line) => line.name === 'machine_setup_finished' && line.fields['Completed'] === true));
     }
-    // A finishing step that found no installation to bring up left nothing undone.
-    assert.deepEqual(finishingOf(printed({ ...finishDoc(false, [{ part: 'plugins', state: 'not_done', reason: 'No data directory.' }]), data_dir_found: false })), { completed: true, problems: [] });
+    assert.deepEqual(finishingOf(printed(nothing('x', true))), { completed: true, problems: [] });
+    // Only the mark says it: a document with nothing done and no mark of no installation is not done, part by part.
+    const { installation_found: _, ...unmarked } = nothing('Not brought up.', true);
+    assert.equal(finishingOf(printed({ ...unmarked, installation_found: true })).completed, false);
+    // A data directory the command line could not list is a refusal: not done, no record, and the next start runs it again.
+    const data = join(folder(), '.jason');
+    const unreadable = printed({ error: { code: 'data_dir_unreadable', message: 'The data directory could not be listed.', retryable: true } }, 1);
+    assert.deepEqual(finishingOf(unreadable), { completed: false, problems: ['The data directory could not be listed.'] });
+    const cli = installationCli({ up: false, inFlight: false, finish: () => unreadable });
+    const { setup } = wiredOn(data, cli);
+    await setup.atStart();
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false, 'not recorded as done');
+    assert.ok(setup.state.state === 'reported' && setup.state.report.problems.includes('The data directory could not be listed.'));
+    // main gives the set-up no test of new of its own; isNewInstallation answers the Demo's first run alone.
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
     const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('\n}\n', main.indexOf('function makeMachineSetup(')));
-    assert.ok(factory.includes('isNew: () => isNewInstallation(runOn.person),'));
+    assert.doesNotMatch(factory, /\bisNew\b/);
+    assert.doesNotMatch(readFileSync(new URL('../src/machine-setup.ts', import.meta.url), 'utf8'), /\bisNew\b/);
 });

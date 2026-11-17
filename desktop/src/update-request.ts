@@ -504,6 +504,13 @@ export interface TakeDeps {
     /** How a request that waits for the go looks for it: the file, `goWaitMs` and `goPollMs` unless a test says. */
     go?: GoWait;
     now?(): Date;
+    /**
+     * Starts the runtime the application carries again (`jason runtime start`), and says what came of it. Asked only where
+     * the updater stopped the runtime and the request's file was then told nothing of it, the refusal unwritten: the verb,
+     * whose part restarting it is, never learns it was stopped, so the desktop does it at once. Where the refusal with
+     * `runtime_stopped` was written, it stays the verb's.
+     */
+    startRuntime?(): Promise<'started' | 'answering' | 'not_started'>;
 }
 
 /**
@@ -703,7 +710,14 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     if (outcome.state === 'current') return end(put({ state: 'current' }));
     // A go older than `downloaded` stopped the request where no go would have: nothing was stopped, kept or installed.
     const reason = early && outcome.reason === 'go_timed_out' ? 'go_there' : outcome.reason === 'step_unwritten' ? 'failed' : outcome.reason;
-    return end(refuse(reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
+    const record = refuse(reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime);
+    // One rule, answered before and not after: a runtime the updater stopped is started again by whoever is told it was. The
+    // verb is told by the file; where the file could be told nothing, the desktop is the only one that knows, and does it.
+    if (!written && outcome.runtimeStopped && deps.startRuntime !== undefined) {
+        const started = await deps.startRuntime().catch(() => 'not_started' as const);
+        deps.log.warn('update_request_runtime_started', { Outcome: started });
+    }
+    return end(record);
 }
 
 /**
