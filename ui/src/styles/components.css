@@ -304,8 +304,10 @@ details.fold pre {
 .dialog h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
 .dialog .btn-row { justify-content: flex-end; }
 
+/* A dialog's layer: over every layer of the page (menus 20-30, the narrow sidebar 39-40, and anything that stacks by an
+   opacity or a transform), under the search palette (60), which may open over it. */
 .overlay {
-  position: fixed; inset: 0;
+  position: fixed; inset: 0; z-index: 50;
   background: rgba(9, 9, 11, .45);
   display: flex; align-items: center; justify-content: center;
 }

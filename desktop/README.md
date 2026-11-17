@@ -618,8 +618,8 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
   Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
   pixels) and both views start below that band, which they leave to the window's own contents: our band
-  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, where the
-  traffic lights stand, and a drag region over those 26 pixels alone. The band's document fills the whole window under
+  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the page's own ground beyond, never
+  the Demo strip's yellow, so the strip under it is as high as its own line; there the traffic lights stand, and a drag region over those 26 pixels alone. The band's document fills the whole window under
   the two views, and Electron asks each of them whether a point is in its drag region, the window's own contents first,
   whichever view is drawn over the point; so the band's body alone drags, as high as `demoGeometry.macBand`, and the
   document as a whole carries no drag region, which would take every click meant for the page and the switch. The
