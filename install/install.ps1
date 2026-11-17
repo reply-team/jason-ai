@@ -144,15 +144,16 @@ function Install-Jason {
 
     # Whether Jason Desktop is running: a program running from its own executable, found by its exact path, as its
     # installer looks for it - the process, not a window, so a Desktop left in the tray, which has no window, is found as
-    # surely as one whose window is open. A silent installer never closes it: it ends with 3 instead, said in the same
-    # sentence as this look's.
+    # surely as one whose window is open. A query that fails here reads as not running; the installer's own look fails
+    # closed instead. A silent installer never closes it: where it finds it, or cannot look, it ends with 3, said in the
+    # same sentence as this look's, which names both.
     function Test-DesktopRunning {
         $application = Join-Path $app 'Jason.exe'
         if (-not (Test-Path -LiteralPath $application -PathType Leaf)) { return $false }
         $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $application, [StringComparison]::OrdinalIgnoreCase) })
         return $running.Count -gt 0
     }
-    $desktopRunning = 'Jason Desktop is running, in its window or in the tray, so nothing was installed: quit it - Quit in its tray menu - and run this line again.'
+    $desktopRunning = 'Jason Desktop is running, in its window or in the tray, or Jason could not tell whether it is, so nothing was installed: quit it - Quit in its tray menu - and run this line again.'
 
     # The installer is run only when it carries a valid Authenticode signature whose signer is the release's publisher,
     # by the simple name of the certificate the file's own signature names, in full and in the same case: a valid

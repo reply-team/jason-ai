@@ -42,7 +42,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
     private const string Setup = "jason-desktop-windows-x64-setup.exe";
 
     /// <summary>What install.ps1 says where Jason Desktop runs: its own look before the setup, and the setup's exit 3.</summary>
-    private const string DesktopRunning = "Jason Desktop is running, in its window or in the tray, so nothing was installed: quit it - Quit in its tray menu - and run this line again.";
+    private const string DesktopRunning = "Jason Desktop is running, in its window or in the tray, or Jason could not tell whether it is, so nothing was installed: quit it - Quit in its tray menu - and run this line again.";
 
     /// <summary>The line the published script's signature check opens with, and the test build's in its place.</summary>
     private const string SignatureCheck = "    function Assert-Signed([string] $file) {";
@@ -160,8 +160,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
         var include = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "installer", "uninstall.nsh")).ReplaceLineEndings("\n");
         // The installer's filter for the application is the same exact-path look, by the path the environment hands it.
         Assert.Contains("[string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase)", include, StringComparison.Ordinal);
-        Assert.Matches(new Regex(@"\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}"), include);
-        Assert.Equal(1, Count(include, "SetErrorLevel 3"));
+        // Said where the application is found or its look failed, and where no look can be made at all: in a silent run only.
+        Assert.Equal(2, new Regex(@"\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}").Matches(include).Count);
+        Assert.Equal(2, Count(include, "SetErrorLevel 3"));
     }
 
     /// <summary>
