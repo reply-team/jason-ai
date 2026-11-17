@@ -45,6 +45,18 @@ test('a held shell command is named by the reason it was held for', () => {
     }
 });
 
+test('a trap, a hash and an alias are held as a built-in, and the page says the built-in changes the shell itself', () => {
+    for (const command of ['trap \'echo x\' EXIT', 'hash -p /tmp/x ls', 'alias ls=rm']) {
+        assert.deepEqual(whyOf('Bash', { command }), { reason: 'command.builtin' }, command);
+    }
+    const locale = readFileSync(new URL('../../ui/src/locale/en.ts', import.meta.url), 'utf8');
+    const said = /'fullAccess\.why\.command\.builtin':\s*"([^"]*)"/.exec(locale)?.[1] ?? '';
+    assert.equal(
+        said,
+        'This command uses a shell built-in that changes the shell itself (aliases, variables, options, traps, modules or the programs its names run), or reaches a function, an alias or a variable by its provider\'s name, so Jason cannot read plainly what the rest would do.',
+    );
+});
+
 test('any other held request is named by Ask first\'s card for it, and a tool by its name alone', () => {
     assert.deepEqual(whyOf('Write', { file_path: '/Users/someone/work/.claude/settings.json', content: 'x' }), { reason: 'request.settings' });
     assert.deepEqual(whyOf('mcp__someones_server__do_it', { anything: 'at all' }), { reason: 'request.own_tool' });

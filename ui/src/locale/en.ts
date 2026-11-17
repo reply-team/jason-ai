@@ -447,7 +447,7 @@ export const en = {
     'fullAccess.why.command.runner':
         'This command starts another program to run something, and Jason does not read what that program would run.',
     'fullAccess.why.command.builtin':
-        "This command uses a shell built-in that sets aliases, variables, options or modules, or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
+        "This command uses a shell built-in that changes the shell itself (aliases, variables, options, traps, modules or the programs its names run), or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
     'fullAccess.why.command.servers':
         'This command would change the MCP servers or plugins an AI loads, or sign a server in.',
     'fullAccess.why.command.directory_change':

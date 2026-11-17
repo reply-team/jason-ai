@@ -102,7 +102,7 @@ const rows: [DesktopFullAccessWhy['reason'], string][] = [
     ],
     [
         'command.builtin',
-        "This command uses a shell built-in that sets aliases, variables, options or modules, or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
+        "This command uses a shell built-in that changes the shell itself (aliases, variables, options, traps, modules or the programs its names run), or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
     ],
     ['command.servers', 'This command would change the MCP servers or plugins an AI loads, or sign a server in.'],
     [
