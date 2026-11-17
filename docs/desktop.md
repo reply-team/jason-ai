@@ -372,15 +372,40 @@ updated from an earlier version open where they did.
 **The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed runs the
 application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
 you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
-installed, and retires an older command-line install of Jason. It writes nothing under your data directory but the
-desktop's record of it, so the demo still opens first. It never keeps the window from you: the window says what is being
-done, and in Live the start waits for it at most thirty seconds before it brings the runtime up, and then goes on while it
-finishes. The application never ends a run; one still running after five minutes is said in the Command Line item as
+installed, and retires an older command-line install of Jason. Then it runs the command line's finishing step,
+`jason update apply --finish` (§7, "The finishing step"): with no update in flight it brings the plugin packages, the
+skills deployments and the UI up to the version installed and starts no runtime; with an update a terminal's
+`jason update apply` handed to the application still in flight and the application now its version, it finishes that
+update, the runtime's start included. Neither is given a time limit. The version is recorded as done only when both
+succeeded, so a start after one that did not get there runs both again. Where another `jason` holds the update's lock, a
+`jason install` or an update, its finish or a rollback (`install_in_progress`, `update_in_progress`), nothing is set up and
+nothing recorded, the item says it is left for the next start, and it is no failure. The set-up writes nothing under your
+data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
+window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,
+and then goes on while it finishes; a runtime start an update in flight refused meanwhile is made again once the set-up
+has ended. The application never ends a run; one still running after five minutes is said in the Command Line item as
 taking long. A run that fails is said in that item, which offers to put it back, and it is tried again only at the next
 start. Retiring an older install stops that install's runtime: where a runtime answered on your data directory before the
 run and none answers after it, whatever the run reported, the application starts one at once from its own `jason`, in
-Demo as in Live and after a put back too, and the item says so. That runtime is your installation's, with your campaigns;
-the demo goes on showing its samples.
+Demo as in Live and after a put back too, and the item says so; a start that is refused while a runtime answers again
+is said as a runtime answering, never as a failure. That runtime is your installation's, with your campaigns; the demo
+goes on showing its samples.
+
+**The start that is owed.** An install, an update or a set-up that stops your runtime leaves a note,
+`<data>/run/start-owed.json`, which stands until a runtime starts on that data directory again (§9). At every start of its
+own, Demo or Live, the application starts a runtime from the `jason` it carries where it finds the note standing and none
+answering: on macOS and Windows after the set-up where one runs, and on its own where none does; on Linux a Live start
+brings the runtime up anyway, and a Demo start starts one from the deb's `jason`, or from the AppImage's copy a Live start
+made. The application writes no note of its own and removes none: the runtime's own start takes it away. A runtime you
+stop yourself while the set-up runs is started again too, since one answered before the set-up and none after it. A start
+that fails is in the desktop's log, and in the Demo it is tried again at the next start, through the same note.
+
+**A missing `jason.exe` put back.** On Windows, a `jason update apply` moves its own file out of the application's folder
+while the installer replaces it, into the updater's store (`%LOCALAPPDATA%\jason-desktop-updater\jason-carried\<request>\`),
+with `jason.version` beside it naming the version it came from. Where the installer then installed nothing, a start of
+the application that finds `resources\bundle\jason.exe` missing, and a stored file whose `jason.version` names the version
+the application still is, copies that file back before anything else is started, and says so in its log. A stored file of
+another version is never put back.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
 for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
@@ -392,7 +417,10 @@ of its own: a band of the page's colours above the page holds the window's butto
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
-the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
+the same. Your own installation's top bar carries the same switch, with **Demo** to come back. Where the machine set-up
+is still running when the switch is chosen, the window says so and the new start waits for it at most thirty seconds, so
+`jason install` is not cut off mid-write; past that the switch goes on and the set-up finishes on its own. Quit is never
+held.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
@@ -987,7 +1015,12 @@ the skills, sets the terminal command up and places the UI ([release and update]
 update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
-also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. A build that is not installed says "Updates Come to an Installed Build", and where
+also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. While such
+a request runs with no window it holds the application's single-instance lock, for up to forty-five minutes where it
+waits for the command's go: opening Jason Desktop meanwhile shows nothing at once, and the application opens as the
+request ends, unless the request installed the update, after which the new version opens at your next start. Where a
+window takes the request and may close for it, the menu's install refuses while the request is under way, since the
+request installs itself. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
 the package names.
 
@@ -1036,7 +1069,9 @@ data: the removal takes them off too.
   nothing when it does not stop, then takes off Open Jason at Login, the `jason-desktop://` link registration when it
   names this application, the `jason` command and the skills `jason install` placed, an older command-line install, an
   earlier demo's marked folders and the updater's cache, and names what it leaves; then the application's folder goes.
-  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays.
+  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays. The uninstaller's
+  start of the application holds its single-instance lock while it runs; where Jason Desktop is still open, or an update
+  of it is under way, it says so, takes nothing off, and the uninstaller removes nothing.
 - **macOS.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal with
   Jason quit. The menu item asks first, with a box for deleting the data directory too, quits Jason and runs the same
   uninstall, which deletes Jason.app last and writes what it did to the file the dialog names.

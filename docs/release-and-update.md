@@ -1236,6 +1236,13 @@ what became of each part:
 
 With `--human` it prints one line a part, its state and any reason, and the part's lines under it.
 
+Jason Desktop's start on macOS and Windows runs it right after `jason install`, at the first start of a version, and
+records that version as done only where both succeeded ([desktop.md](desktop.md), "The machine set-up at a start"). Where
+a carried update is in flight past `swapped`, or the application is already the version it names, the same call finishes
+that update and starts the runtime, the third door above, and prints the update's own document; the Desktop takes it as
+done where its `step` is `complete`. To that start `install_in_progress` and `update_in_progress` mean later: nothing is
+recorded, it is no failure, and the next start runs both again.
+
 
 **`--update-settle`** records the update that installed the version it runs as kept, as a window's first start would:
 the copy stays at `kept` until the next update, and the version is not refused. It settles only that update and only

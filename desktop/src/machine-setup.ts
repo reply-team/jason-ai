@@ -1,22 +1,27 @@
 /**
  * The machine set-up at a start, on macOS and Windows: the carried `jason install` (`docs/release-and-update.md` §9), which
  * puts `jason` where a new terminal finds it, deploys Jason's skills for every agent host found and retires an older
- * command-line install. The desktop runs it at a start where it has not yet run for the version the application carries,
- * before the window's Demo or Live run goes on, and again on the person's word from the Command Line item, which shows what
- * its report said. On Linux none of this is offered: the Command Line item there is the PATH command (`path-command.ts`).
+ * command-line install; then the command line's finishing step, `jason update apply --finish` (§7), which brings the
+ * plugin packages, the skills deployments and the UI up to the installed version, or finishes a carried update in flight
+ * with the application at its version, the runtime's start included. The desktop runs both at a start where they have not
+ * yet completed for the version the application carries, before the window's Demo or Live run goes on, and again on the
+ * person's word from the Command Line item, which shows what the report said. On Linux none of this is offered: the
+ * Command Line item there is the PATH command (`path-command.ts`).
  *
  * - **Nothing under the data directory but a record of the desktop's own.** It is run with no `--roles`, so the routine
  *   writes nothing there; where it ran is `<data>/desktop/machine-setup.json`, which `isNewInstallation` counts among the
  *   desktop's own records, so a new installation's first start still opens on the Demo. The record is written only when
- *   the routine reported that it completed, so a run that did not get there runs again at the next start.
+ *   both completed, so a run that did not get there runs again at the next start; `install_in_progress` and
+ *   `update_in_progress`, another jason holding the update's lock, are `later`: no record, no failure.
  * - **Never between the person and the window.** A start runs it once. Live waits for it at most `liveWaitMs` and then
  *   goes on; the run is never ended by the desktop, and one past `setupLongMs` is said in the item as taking long. A
  *   failure is said in the item, which offers to put it back, and nothing is tried again in a loop.
  * - **A runtime it stops is started again.** Before the routine, whether a runtime answers on the data directory is read
  *   by a read that writes nothing (`jason runtime status`; none where there is no descriptor). After any outcome, a
  *   report, a refusal, no report or a run that ended after Live went on, where one answered before and none answers now,
- *   one is started from the carried file (`jason runtime start`): in Demo as in Live, and on Put Back alike, since
- *   whoever asked for the stop starts a runtime again.
+ *   or the note that a start is owed stands (`<data>/run/start-owed.json`, §9), one is started from the carried file
+ *   (`jason runtime start`): in Demo as in Live, and on Put Back alike, since whoever asked for the stop starts a runtime
+ *   again. A start that runs no routine pays the note alone (`payOwedStart`); the desktop never writes one.
  * - **The PATH it is told** is the login shell's own, as that shell printed it, or the empty value where it gave none, on
  *   macOS; never the desktop's, which adds places to it. Windows reads none.
  * - **Its report is shown as facts**: where a new terminal finds `jason`, only where the routine read it back as placed,
