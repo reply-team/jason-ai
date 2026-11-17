@@ -5,11 +5,12 @@
 # release, or from the one --version names, checked against checksums.txt, unpacked with ditto into a staging folder
 # beside its place, its signature verified as a Developer ID signature of the team that signs Jason, and moved into place
 # by one rename - /Applications where this account may write there, else ~/Applications. Nothing is opened, and no
-# password is asked. An Intel Mac is refused before anything is downloaded: no build for one is published.
+# password is asked. An Intel Mac is refused before anything is downloaded: this script installs Jason Desktop on Apple
+# silicon only.
 # A Jason.app already in either folder is never renamed, replaced or deleted: one of 0.49.0 or later is kept as it is,
 # once its signature verifies the same way, and an earlier one is left for its own Check for Updates, and the script ends
 # non-zero saying so. Then the jason the application carries sets the machine up, `jason install --roles`:
-# the wrapper ~/.local/bin/jason and the PATH lines in the profiles, the skills for every agent host found, an older
+# the wrapper ~/.local/bin/jason and the PATH lines in the profiles, the skills for Claude Code and Codex where each is found, an older
 # command-line install retired, and the role skills in Jason's data directory. Where a runtime answered before and none
 # answers after, or the report says it stopped one, a runtime is started again from the application's jason. It ends
 # non-zero, saying which act failed, when jason was not put in the terminal; on success its last line is the full path
@@ -57,8 +58,8 @@ Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL] [--install-dir DIR
 On macOS it installs Jason Desktop into /Applications, or ~/Applications where this account may not write to
 /Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
 already in either folder is kept as it is, never replaced; one before 0.49.0 is updated from its own menu first.
-Jason Desktop for macOS is built for Apple silicon: on an Intel Mac it stops before it downloads anything, since no
-build for one is published. On a Mac this script is the way to install Jason; Homebrew's formula is the command line
+This script installs Jason Desktop on Apple silicon Macs only: on an Intel Mac it stops before it downloads anything.
+On a Mac this script is the way to install Jason; Homebrew's formula is the command line
 alone, without Jason Desktop.
 EOF
 }
@@ -324,8 +325,8 @@ install_desktop() {
     trap 'exit 143' TERM
     # The architecture of the machine, not of this shell: under Rosetta uname answers x86_64 on Apple silicon.
     if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || true)" = 1 ]; then ARCH="arm64"; else ARCH="x64"; fi
-    # Jason Desktop for an Intel Mac is not published yet; this one line is what lets it through once it is.
-    [ "$ARCH" = arm64 ] || fail "Jason Desktop for macOS is built for Apple silicon, and this is an Intel Mac, for which no build is published; nothing was installed. The releases are built for Linux x64, Windows x64 and Apple silicon Macs."
+    # This script installs Jason Desktop on Apple silicon only, and this line is where an Intel Mac is refused.
+    [ "$ARCH" = arm64 ] || fail "This script installs Jason Desktop on Apple silicon Macs only, and this is an Intel Mac; nothing was installed."
     ASSET="jason-desktop-macos-$ARCH.zip"
     ANSWERED=""
     CARRIED=""
