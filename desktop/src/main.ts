@@ -770,7 +770,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); on
+        // The window's own frame: on macOS no title bar, its buttons over the page's sidebar (`demo-window.ts`); on
         // Windows and Linux none either, the caption buttons over the strip's right end, drawn light as the page is.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         show: !atLogin || conduct.atLogin === 'minimized',
