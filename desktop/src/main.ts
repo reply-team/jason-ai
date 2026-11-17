@@ -33,7 +33,7 @@ import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, Updater } from './updates.ts';
+import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -41,7 +41,7 @@ import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistra
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
 import { demoBeforeReady } from './demo-page.ts';
@@ -260,8 +260,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // On macOS and Windows no title bar: the page leaves the window's buttons their room and marks where it is dragged
-        // by; on Windows the caption buttons are drawn in the theme in force.
+        // No title bar: the page leaves the window's buttons their room and marks where it is dragged by; on Windows and
+        // Linux the caption buttons are drawn in the theme in force.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
@@ -286,12 +286,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
     keepWindowTitle(window);
-    // With no title bar on macOS and Windows, every page the window shows is given a band to drag the window by.
+    // With no title bar, every page the window shows is given a band to drag the window by.
     keepMovable(window, process.platform);
-    // On Windows the caption buttons follow each change of the theme in force while the window is open.
+    // On Windows and Linux the caption buttons follow each change of the theme in force while the window is open.
     followTheme(window, nativeTheme, process.platform);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
-    window.setMenuBarVisibility(conduct.menuBar);
+    window.setMenuBarVisibility(false);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
     // closing the window quits; the runtime keeps running either way.
     let quitting = false;
@@ -371,6 +371,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
+    // The update item's key, where the item can act: the page and the versions-differ sentence name it only then.
+    const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);
     const commandDeps: PathCommandDeps = {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
@@ -458,6 +460,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'updates.key', origin, updateKey, refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -485,6 +488,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundleVersion: version ?? 'unprepared',
         runtimeVersion: () => runtimeVersion,
         runtimeIsOurs: () => runtimeIsOurs,
+        updateKey,
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
         saveSettings: (next) => {
@@ -747,7 +751,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minHeight: 600,
         title: windowTitle,
         // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); on
-        // Windows none either, the caption buttons over the strip's right end, drawn light as the page is; on Linux the system's.
+        // Windows and Linux none either, the caption buttons over the strip's right end, drawn light as the page is.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: lightBackground,
@@ -768,7 +772,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     });
     keepWindowTitle(window);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
-    window.setMenuBarVisibility(conduct.menuBar);
+    window.setMenuBarVisibility(false);
     // The tray keeps the application, as in Live: closing the window hides it; on Linux closing it quits.
     let quitting = false;
     app.on('before-quit', () => {
@@ -795,7 +799,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     desk.open();
     showWindow = () => desk.show();
 
-    const unshown = 'The demo could not be shown. Choose Back to Your Own Installation in the Jason menu or the tray.';
+    const unshown = demoUnshownSentence(process.platform);
     try {
         views = await openDemo(window, {
             appPath: app.getAppPath(),

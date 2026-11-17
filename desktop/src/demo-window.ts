@@ -50,7 +50,7 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     }
     const page = new WebContentsView({ webPreferences: demoViewPreferences(demoPage) });
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
-    // On Windows, the strip kept clear of the caption buttons (`demoStripSheets`); elsewhere nothing.
+    // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS nothing.
     const sheets = demoStripSheets(deps.platform);
     await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)), sheet: sheets?.page });
     await sealView(ours.webContents, demoSwitch, {
