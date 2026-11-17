@@ -61,6 +61,7 @@ export const templates = {
     autostart_set: 'Start the runtime at logon was set to {On}: jason runtime autostart exited {Exit}',
     // The PATH command.
     path_command_set: 'The {Name} command on the PATH was set to {On} on {Platform}',
+    path_lines_set: 'The PATH lines were set to {On} on {Platform}: {Files} profiles written, {Refused} refused',
     // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',

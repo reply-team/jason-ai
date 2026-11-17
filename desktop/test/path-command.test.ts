@@ -57,7 +57,7 @@ test('on Windows, with the folder on the PATH and no jason anywhere, the shim is
 
 test('placing the shim writes one line that runs the bundled executable by its full path with every argument, and reads back as placed', (t) => {
     const { folder, command, log } = windows(t);
-    assert.deepEqual(command.place(), { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], shadowedBy: null, executable: windowsExe });
+    assert.deepEqual(command.place(), { said: null, status: { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], shadowedBy: null, executable: windowsExe } });
     assert.deepEqual(readdirSync(folder).sort(), ['jason', 'jason.cmd']);
     assert.equal(readFileSync(join(folder, 'jason.cmd'), 'utf8'), `@echo off\r\n"${windowsExe}" %*\r\n`);
     assert.deepEqual(command.status(), { state: 'placed', name: 'jason', files: [join(folder, 'jason.cmd'), join(folder, 'jason')], shadowedBy: null, executable: windowsExe });

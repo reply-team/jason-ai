@@ -2123,6 +2123,13 @@ jobs:
       - name: Check (types)
         run: npm run check
 
+      # zsh, the Mac's own shell, for the PATH command's row that runs a real login shell after the act: under CI that
+      # row fails where zsh is absent, so the shell the Mac starts is never skipped unseen.
+      - name: Install zsh
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends zsh
+
       - name: Node tests
         run: npm test
 

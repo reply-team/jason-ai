@@ -7,7 +7,14 @@
  *   the app-alias machinery there manages its own zero-byte alias files and ignores files it did not make. The two files
  *   are placed only when that folder is on the PATH, so no PATH entry is ever written, and they are removed by deleting
  *   them.
- * - On macOS and Linux it is a wrapper script in `~/.local/bin/`.
+ * - On macOS and Linux it is a wrapper script in `~/.local/bin/`, and where a new terminal's PATH does not hold that
+ *   folder, the same act puts it there as `install/install.sh` does, by the script's own rule (`path-profile.ts`): the
+ *   script's marker and `export PATH="<folder>:$PATH"` in the account's login profile and, for zsh and bash, its
+ *   interactive file, each only where the whole line is not there already. The confirmation names those files and the
+ *   line; a profile that is a link, a folder, or cannot be written takes nothing, nor does any other, and the person is
+ *   told the line to add by hand while the wrapper is still placed. A removal takes those lines back only where the
+ *   folder then holds nothing but what Jason's installer or this application writes there (`heldBy`), the rule
+ *   `jason uninstall` keeps; otherwise they stay, and the item says why.
  *
  * The files of a command are placed and removed together, only on the person's word, and read back together on every
  * look: a command of ours with any file that runs another executable, names another data directory than the desktop
@@ -17,21 +24,25 @@
  */
 
 import { accessSync, chmodSync, constants, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, posix, win32 } from 'node:path';
+import { basename, join, posix, win32 } from 'node:path';
 import { gitBashWrapper, planCommand, shimTarget, windowsShim, wrapperScript, wrapperTarget } from './command-line.ts';
 import type { Logger } from './log.ts';
+import { addedWords, addLines, byHandWords, heldBy, markedIn, pathLines, profileMarker, takeLines, type PathLines, type ProfileAccount } from './path-profile.ts';
 import { findOnPath } from './program-path.ts';
 
 type Name = 'jason' | 'jason-desktop';
 
 export type CommandStatus =
     | { state: 'unsupported'; executable: string }
-    /** Not placed: `name` and `files` are what placing it would write; `shadows` the other `jason` that made it jason-desktop. */
-    | { state: 'absent'; name: Name; files: readonly string[]; folderOnPath: boolean; shadows: string | null; executable: string }
+    /**
+     * Not placed: `name` and `files` are what placing it would write; `shadows` the other `jason` that made it
+     * jason-desktop. `lines`, on macOS and Linux, is what the act writes into the shell profiles, and a removal takes back.
+     */
+    | { state: 'absent'; name: Name; files: readonly string[]; folderOnPath: boolean; shadows: string | null; executable: string; lines?: PathLines }
     /** Placed and read back; `shadowedBy` is what the PATH finds first for the name when that is not ours. */
-    | { state: 'placed'; name: Name; files: readonly string[]; shadowedBy: string | null; executable: string }
+    | { state: 'placed'; name: Name; files: readonly string[]; shadowedBy: string | null; executable: string; lines?: PathLines }
     /** A command of ours one of whose files differs: `why` says which and how. */
-    | { state: 'elsewhere'; name: Name; files: readonly string[]; why: string; executable: string }
+    | { state: 'elsewhere'; name: Name; files: readonly string[]; why: string; executable: string; lines?: PathLines }
     /** Both names are taken in the folder by files the desktop did not write. */
     | { state: 'taken'; files: readonly string[]; executable: string };
 
@@ -116,7 +127,19 @@ export interface PathCommandDeps {
     path(): string;
     pathext?: string | undefined;
     isProgram(file: string): boolean;
+    /**
+     * macOS and Linux: the account whose shell profiles put the folder on a new terminal's PATH; injected, so a test
+     * never names the person's own home. Absent, no profile is read or written.
+     */
+    account?: ProfileAccount;
     log: Logger;
+}
+
+/** What an act said beyond the command itself: the profiles it put the folder on the PATH in, or the line to add by hand. */
+export interface Placed {
+    status: CommandStatus;
+    /** Null where no profile was to be written. */
+    said: { added: boolean; words: string } | null;
 }
 
 /** One file of a command: where it goes, what it holds, and the executable a file of ours there must run. */
@@ -205,8 +228,10 @@ export class PathCommand {
                 return { state: 'elsewhere', name, files, why: named === null ? `${otherData.file} names no data directory` : `${otherData.file} names the data directory ${named}`, executable };
             }
             const missing = looks.find((look) => !look.exists);
-            if (missing) return { state: 'elsewhere', name, files, why: `${missing.file} is missing`, executable };
-            return { state: 'placed', name, files, shadowedBy: this.shadowing(name, files), executable };
+            // A removal takes off the files of ours under this name, and judges the lines by what the folder holds then.
+            const removing = looks.filter((look) => look.target !== null).map((look) => basename(look.file));
+            if (missing) return { state: 'elsewhere', name, files, why: `${missing.file} is missing`, executable, ...this.linesOf(removing) };
+            return { state: 'placed', name, files, shadowedBy: this.shadowing(name, files), executable, ...this.linesOf(removing) };
         }
         // No command of ours is placed, so whatever `jason` the PATH or the folder holds is another program's.
         const inFolder = this.looksOf('jason').find((look) => look.exists)?.file ?? null;
@@ -215,15 +240,34 @@ export class PathCommand {
         const looks = this.looksOf(plan.name);
         const files = looks.map((look) => look.file);
         if (looks.some((look) => look.exists)) return { state: 'taken', files, executable };
-        return { state: 'absent', name: plan.name, files, folderOnPath: this.folderOnPath(), shadows: plan.shadows ?? null, executable };
+        const lines = this.linesOf([]);
+        return { state: 'absent', name: plan.name, files, folderOnPath: this.folderOnPath(), shadows: plan.shadows ?? null, executable, ...lines };
     }
 
-    /** Places the command, or places it again over a command of ours that points elsewhere: only on the person's word. */
-    place(): CommandStatus {
+    /**
+     * The PATH lines on macOS and Linux, where an account is given: what the act would write, and what a removal that
+     * takes off the files named `removing` would take back: only where the folder then holds nothing but what Jason's
+     * installer or this application writes there (`heldBy`). Nothing on Windows.
+     */
+    private linesOf(removing: readonly string[]): { lines?: PathLines } {
+        const { account, folder, platform } = this.deps;
+        if (platform === 'win32' || account === undefined || folder === null) return {};
+        return { lines: pathLines(account, folder, heldBy(folder, removing)) };
+    }
+
+    /**
+     * Places the command, or places it again over a command of ours that points elsewhere: only on the person's word. On
+     * macOS and Linux the same act puts the folder on a new terminal's PATH where it is not (`PathLines`), a command
+     * already placed included; a profile that cannot take the line leaves the command placed, and the words say so.
+     */
+    place(): Placed {
         const status = this.status();
         if (status.state === 'unsupported') throw new Error('The PATH command is offered on Windows, macOS and Linux only.');
         if (status.state === 'taken') throw new Error(`${status.files.join(' and ')} are there and are not the desktop’s; nothing was placed.`);
-        if (status.state === 'placed') return status;
+        if (status.state === 'placed') {
+            const said = this.putOnPath(status.lines);
+            return { status: said === null ? status : this.status(), said };
+        }
         if (status.state === 'absent' && this.deps.platform === 'win32' && !status.folderOnPath) {
             throw new Error(`${this.deps.folder} is not on the PATH, so a command placed there would not be found; nothing was placed.`);
         }
@@ -232,7 +276,23 @@ export class PathCommand {
         if (foreign) throw new Error(`${foreign.file} is there and is not the desktop’s; nothing was placed.`);
         this.write(status.name);
         this.deps.log.info('path_command_set', { On: true, Name: status.name, Platform: this.deps.platform });
-        return this.status();
+        const said = this.putOnPath(status.lines);
+        return { status: this.status(), said };
+    }
+
+    /** Writes the PATH lines the look found wanting, and says what came of it in the script's own words. */
+    private putOnPath(lines: PathLines | undefined): Placed['said'] {
+        if (lines === undefined || lines.add.length === 0) return null;
+        const written = addLines(lines);
+        this.deps.log.info('path_lines_set', { On: true, Files: written.added.length, Refused: written.refused.length, Platform: this.deps.platform });
+        return written.added.length > 0 ? { added: true, words: addedWords(lines, written.added) } : { added: false, words: byHandWords(lines, written.refused) };
+    }
+
+    /** The profiles that carry the script's marker and line for the folder; none on Windows, or with no account given. */
+    marked(): string[] {
+        const { account, folder, platform } = this.deps;
+        if (platform === 'win32' || account === undefined || folder === null) return [];
+        return markedIn(account.home, folder);
     }
 
     /**
@@ -314,12 +374,23 @@ export class PathCommand {
         }
     }
 
-    /** Removes every file of the command that is ours, whatever it points at; a file the desktop did not write stays. */
+    /**
+     * Removes every file of the command that is ours, whatever it points at; a file the desktop did not write stays. Then,
+     * on macOS and Linux, the PATH lines come back out of the profiles that carry them, only where the folder then holds
+     * nothing but what Jason writes there (`heldBy`); a profile that cannot be rewritten is named, with the line to take out by hand.
+     */
     remove(): CommandStatus {
         const status = this.status();
         if (status.state === 'placed' || status.state === 'elsewhere') {
             for (const look of this.looksOf(status.name)) if (look.target !== null) rmSync(look.file, { force: true });
             this.deps.log.info('path_command_set', { On: false, Name: status.name, Platform: this.deps.platform });
+        }
+        const after = this.status();
+        const lines = 'lines' in after ? after.lines : undefined;
+        if (lines !== undefined && lines.take.length > 0) {
+            const failed = takeLines(lines);
+            this.deps.log.info('path_lines_set', { On: false, Files: lines.take.length - failed.length, Refused: failed.length, Platform: this.deps.platform });
+            if (failed.length > 0) throw new Error(`${failed.join(' and ')} could not be rewritten: take the line ${lines.line} and the line ${profileMarker} above it out by hand.`);
         }
         return this.status();
     }
@@ -333,6 +404,25 @@ export interface CommandMenu {
 
 const isWindows = (files: readonly string[]) => files.some((file) => file.endsWith('.cmd'));
 
+/** Whether the act would write PATH lines: the folder is off a new terminal's PATH and a profile wants the line. */
+const wanting = (lines: PathLines | undefined): lines is PathLines => lines !== undefined && lines.add.length > 0;
+
+/** What the item says the act will do to the profiles, or null where it will do nothing to them. */
+function linesLine(name: Name, lines: PathLines | undefined): string | null {
+    if (!wanting(lines)) return null;
+    const where = lines.add.join(' and ');
+    return lines.refused.length === 0
+        ? `${lines.folder} is not on a new terminal’s PATH yet; putting ${name} on the PATH adds it in ${where}.`
+        : `${lines.folder} is not on a new terminal’s PATH, and ${lines.refused.join('; ')}: add ${lines.byHand} to ${where} by hand.`;
+}
+
+/** What the item says a removal leaves of the PATH lines, and why, or null where it leaves none it found. */
+export function keptLine(lines: PathLines | undefined): string | null {
+    if (lines === undefined || lines.kept.length === 0 || lines.held === null) return null;
+    const why = lines.held === 'others' ? 'the folder still holds other programs, found through it' : 'the folder still holds another jason or jason-desktop, found through it';
+    return `A removal leaves the line that puts ${lines.folder} on the PATH in ${lines.kept.join(' and ')}: ${why}.`;
+}
+
 /** The PATH command's part of the Jason menu: what it shows and the acts the state allows. */
 export function commandMenuOf(status: CommandStatus): CommandMenu {
     const runs = `The jason executable: ${status.executable}`;
@@ -345,34 +435,62 @@ export function commandMenuOf(status: CommandStatus): CommandMenu {
             const shells = isWindows(status.files) ? ' in Command Prompt, PowerShell and Git Bash' : '';
             const lines = [runs, `${status.name} on the PATH runs it${shells}: ${status.files.join(' and ')}`];
             if (status.shadowedBy !== null) lines.push(`Another ${status.name} earlier on the PATH is found first: ${status.shadowedBy}.`);
-            return { lines, acts: [{ label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
+            const profiles = linesLine(status.name, status.lines);
+            if (profiles !== null) lines.push(profiles);
+            const kept = keptLine(status.lines);
+            if (kept !== null) lines.push(kept);
+            // A command an earlier version placed without the lines: the act that puts it on the PATH writes them alone.
+            const put = wanting(status.lines) && status.lines.refused.length === 0 ? [{ label: actLabel(status.name === 'jason' ? 'put_jason' : 'put_jason_desktop'), act: 'place' as const }] : [];
+            return { lines, acts: [...put, { label: `Remove ${status.name} from the PATH…`, act: 'remove' }] };
         }
-        case 'elsewhere':
+        case 'elsewhere': {
+            const profiles = linesLine(status.name, status.lines);
             return {
-                lines: [runs, `${status.name} on the PATH points elsewhere: ${status.why}`],
+                lines: [runs, `${status.name} on the PATH points elsewhere: ${status.why}`, ...[profiles, keptLine(status.lines)].filter((line): line is string => line !== null)],
                 acts: [
                     { label: actLabel(status.name === 'jason' ? 'point_jason' : 'point_jason_desktop'), act: 'place' },
                     { label: `Remove ${status.name} from the PATH…`, act: 'remove' },
                 ],
             };
+        }
         case 'absent': {
             const lines = [runs];
             if (status.shadows !== null) lines.push(`Another jason is on the PATH (${status.shadows}); this one would be ${status.name}.`);
             const windows = isWindows(status.files);
-            if (!status.folderOnPath) {
+            if (windows && !status.folderOnPath) {
                 const folder = (status.files[0] ?? '').replace(/[\\/][^\\/]*$/, '');
-                lines.push(windows ? `${folder} is not on the PATH, so nothing is placed; run the executable by its full path.` : `${folder} is not on the PATH yet; a terminal finds ${status.name} once it is.`);
+                lines.push(`${folder} is not on the PATH, so nothing is placed; run the executable by its full path.`);
             }
+            const profiles = linesLine(status.name, status.lines);
+            if (profiles !== null) lines.push(profiles);
             const placeable = status.folderOnPath || !windows;
             return { lines, acts: placeable ? [{ label: actLabel(status.name === 'jason' ? 'put_jason' : 'put_jason_desktop'), act: 'place' }] : [] };
         }
     }
 }
 
-/** The confirmation an act asks for: the command by its name, and every file the act writes or removes. */
+/**
+ * The confirmation an act asks for: the command by its name, and every file the act writes or removes, the shell
+ * profiles and the two lines among them on macOS and Linux.
+ */
 export function commandQuestion(act: 'place' | 'remove', status: CommandStatus): { message: string; detail: string; button: string } {
     const name = 'name' in status ? status.name : 'jason';
     const files = 'files' in status ? status.files.join(' and ') : '';
-    if (act === 'place') return { message: `Put the ${name} command on the PATH?`, detail: `This writes ${files}, which run ${status.executable}.`, button: 'Place It' };
-    return { message: `Remove the ${name} command from the PATH?`, detail: `This removes ${files}.`, button: 'Remove It' };
+    const lines = 'lines' in status ? status.lines : undefined;
+    const block = (line: string) => `${profileMarker}\n${line}`;
+    if (act === 'place') {
+        const parts = status.state === 'placed' ? [] : [`This writes ${files}, which run ${status.executable}.`];
+        if (wanting(lines)) {
+            const where = lines.add.join(' and ');
+            parts.push(
+                lines.refused.length === 0
+                    ? `To put ${lines.folder} on the PATH, it adds these two lines to ${where}:\n${block(lines.line)}`
+                    : `${lines.refused.join('; ')}, so it changes no profile: add this line to ${where} by hand for a new terminal to find ${name}:\n${lines.byHand}`,
+            );
+        }
+        return { message: `Put the ${name} command on the PATH?`, detail: parts.join('\n\n'), button: 'Place It' };
+    }
+    const takes = lines !== undefined && lines.take.length > 0 ? `\n\nIt also takes these two lines back out of ${lines.take.join(' and ')}:\n${block(lines.line)}` : '';
+    const kept = keptLine(lines);
+    return { message: `Remove the ${name} command from the PATH?`, detail: `This removes ${files}.${takes}${kept === null ? '' : `\n\n${kept}`}`, button: 'Remove It' };
 }

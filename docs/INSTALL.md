@@ -316,7 +316,9 @@ or `jason-desktop-linux-x64.AppImage`; `https://get.jasonharness.ai/desktop/wind
 `jason` and works on this same installation. The Command Line item of its menu puts a command in the terminal: `jason`,
 or `jason-desktop` where another `jason` already stands, so beside a command-line install the terminal's `jason` stays
 that install's and the desktop's is `jason-desktop`; on Windows it is placed only where the PATH holds the folder it
-uses ([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Windows and macOS packages are signed; the
+uses, and on macOS and Linux the same act puts `~/.local/bin` on your terminal's PATH where it is not yet, with the
+lines and in the files the installer itself writes (§2), naming them before it writes
+([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Windows and macOS packages are signed; the
 Linux packages are not, and are built so, not yet seen on a real machine.
 
 An agent that installs Jason never needs the desktop: the steps of this page are its way. When the person takes the
