@@ -108,6 +108,15 @@ import approvalListCardMessageAllAfterEdit from '../../../docs/api/fixtures/appr
 import approvalListCardMessageAllReasked from '../../../docs/api/fixtures/approval.list/card-message-all-reasked.json';
 import approvalListCardMessageItemAfterEdit from '../../../docs/api/fixtures/approval.list/card-message-item-after-edit.json';
 import approvalListCardMessageItemReasked from '../../../docs/api/fixtures/approval.list/card-message-item-reasked.json';
+import approvalListCardMessageItemAllAfterEdit from '../../../docs/api/fixtures/approval.list/card-message-item-all-after-edit.json';
+import approvalListCardMessageItemAllReasked from '../../../docs/api/fixtures/approval.list/card-message-item-all-reasked.json';
+import approvalListCardMessageItemAllApproved from '../../../docs/api/fixtures/approval.list/card-message-item-all-approved.json';
+import workitemGetCardMessageApproved from '../../../docs/api/fixtures/workitem.get/card-message-approved.json';
+import approvalListNeedsMessageAllAfterEdit from '../../../docs/api/fixtures/approval.list/needs-message-all-after-edit.json';
+import approvalListNeedsMessageAllCancelled from '../../../docs/api/fixtures/approval.list/needs-message-all-cancelled.json';
+import workitemGetNeedsMessageCancelled from '../../../docs/api/fixtures/workitem.get/needs-message-cancelled.json';
+import approvalListCardMessageAllApproved from '../../../docs/api/fixtures/approval.list/card-message-all-approved.json';
+import approvalListCardMessageItemApproved from '../../../docs/api/fixtures/approval.list/card-message-item-approved.json';
 import workitemGetCardMessageRequeued from '../../../docs/api/fixtures/workitem.get/card-message-requeued.json';
 import workitemGetNeedsMessageRequeued from '../../../docs/api/fixtures/workitem.get/needs-message-requeued.json';
 import workitemGetCardMessageReparked from '../../../docs/api/fixtures/workitem.get/card-message-reparked.json';
@@ -675,6 +684,42 @@ export const fixtures = {
         Page<ApprovalSummary>
     >,
     'approval.list/card-message-item-reasked': approvalListCardMessageItemReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-item-all-after-edit': approvalListCardMessageItemAllAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-item-all-reasked': approvalListCardMessageItemAllReasked satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-item-all-approved': approvalListCardMessageItemAllApproved satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'workitem.get/card-message-approved': workitemGetCardMessageApproved satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'approval.list/needs-message-all-after-edit': approvalListNeedsMessageAllAfterEdit satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/needs-message-all-cancelled': approvalListNeedsMessageAllCancelled satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'workitem.get/needs-message-cancelled': workitemGetNeedsMessageCancelled satisfies Exchange<
+        { work_item_id: string },
+        WorkItem
+    >,
+    'approval.list/card-message-all-approved': approvalListCardMessageAllApproved satisfies Exchange<
+        ApprovalListRequest,
+        Page<ApprovalSummary>
+    >,
+    'approval.list/card-message-item-approved': approvalListCardMessageItemApproved satisfies Exchange<
         ApprovalListRequest,
         Page<ApprovalSummary>
     >,

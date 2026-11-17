@@ -5,7 +5,7 @@ import { ApiProvider } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { fixtures } from '../../test/fixtures';
 import { ApprovalPanel } from './approval-panel';
-import { ASKING_SENTENCE } from './reasking-model';
+import { QUEUED_SENTENCE } from './reasking-model';
 
 /** An Api whose work item is held here, so a test can change it from outside between a render and a press. */
 class Held implements Api {
@@ -169,7 +169,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'New subject' } });
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body\nline two' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(QUEUED_SENTENCE)).toBeTruthy());
         const update = held.calls.find((c) => c.operation === 'workitem.update')!;
         expect(update.body).toEqual({
             work_item_id: 'wi_1',
@@ -200,7 +200,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByText('The subject must be one line.')).toBeTruthy());
         expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe('Typed but refused');
-        expect(screen.queryByText(ASKING_SENTENCE)).toBeNull();
+        expect(screen.queryByText(QUEUED_SENTENCE)).toBeNull();
     });
 
     it('refuses to write over text that changed while the editor was open, and keeps what was typed', async () => {
@@ -239,7 +239,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Shall we talk next week?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => screen.getByText(ASKING_SENTENCE));
+        await waitFor(() => screen.getByText(QUEUED_SENTENCE));
         expect(approveButton()).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
@@ -248,7 +248,7 @@ describe('editing a message before it is approved', () => {
         await waitFor(() => expect(held.calls.filter((c) => c.operation === 'approval.list')).toHaveLength(2));
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(onReasked).not.toHaveBeenCalled();
-        expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy();
+        expect(screen.getByText(QUEUED_SENTENCE)).toBeTruthy();
     });
 
     it('hands on the new approval once the runtime has asked again, and not before', async () => {
@@ -260,7 +260,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => screen.getByText(ASKING_SENTENCE));
+        await waitFor(() => screen.getByText(QUEUED_SENTENCE));
         expect(onReasked).not.toHaveBeenCalled();
         held.pending = ['apr_9'];
         await waitFor(() => expect(onReasked).toHaveBeenCalledWith('apr_9'), { timeout: 3000 });
@@ -277,7 +277,7 @@ describe('editing a message before it is approved', () => {
         expect(screen.queryByLabelText('Subject')).toBeNull();
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Thursday is better.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(QUEUED_SENTENCE)).toBeTruthy());
         expect(held.calls.find((c) => c.operation === 'workitem.update')!.body).toEqual({
             work_item_id: 'wi_1',
             set: { input: { ...input, body: 'Thursday is better.' } },

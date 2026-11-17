@@ -103,12 +103,16 @@ public partial class CardExchangesTests
         var queued = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-requeued", new { work_item_id = item }, Ct);
         Assert.Equal(WorkItemStatus.Created, queued.Status);
         Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-after-edit", new { work_item_id = item, statuses = new[] { "pending" } }, Ct)).Items);
+        // Every approval of the item, in every status: the withdrawn one alone, superseded.
+        var history = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-all-after-edit", new { work_item_id = item, statuses = AllApprovalStatuses }, Ct);
+        Assert.Equal([(row.Id, ApprovalStatus.Superseded)], history.Items.Select(a => (a.Id, a.Status)));
         await scene.ClaimAsync();
         var reasked = Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-reasked", new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
         Assert.Equal(item, reasked.WorkItemId);
         Assert.NotEqual(row.Id, reasked.Id);
         Assert.Equal([reasked.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-all-reasked", new { }, Ct)).Items.Select(a => a.Id));
         Assert.Equal([reasked.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-reasked", new { work_item_id = item, statuses = new[] { "pending" } }, Ct)).Items.Select(a => a.Id));
+        Assert.Equal([row.Id, reasked.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-all-reasked", new { work_item_id = item, statuses = AllApprovalStatuses }, Ct)).Items.Select(a => a.Id).Order());
         var again = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-message-reasked", new { approval_id = reasked.Id }, Ct);
         Assert.True(JsonNode.DeepEquals(edited, again.Subject["input"]!["args"]), "the re-asked approval holds the edited text");
         var reparked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-reparked", new { work_item_id = item }, Ct);
@@ -117,7 +121,18 @@ public partial class CardExchangesTests
         // The new approval approved: the edited text is what goes.
         var approved = await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "card-message-reasked", new { approval_id = reasked.Id, actor = Ada }, Ct);
         Assert.Equal(ApprovalStatus.Approved, approved.Status);
+        // What a list that never held the new approval reads of the edited row after it was approved: the item out of
+        // waiting, and the approval asked again decided.
+        Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-all-approved", new { }, Ct)).Items);
+        Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-approved", new { work_item_id = item, statuses = new[] { "pending" } }, Ct)).Items);
+        var released = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-approved", new { work_item_id = item }, Ct);
+        Assert.NotEqual(WorkItemStatus.AwaitingApproval, released.Status);
+        var decided = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-all-approved", new { work_item_id = item, statuses = AllApprovalStatuses }, Ct);
+        Assert.Contains(decided.Items, a => a.Id == reasked.Id && a.Status == ApprovalStatus.Approved);
+        Assert.Contains(decided.Items, a => a.Id == row.Id && a.Status == ApprovalStatus.Superseded);
     }
+
+    private static readonly string[] AllApprovalStatuses = ["pending", "approved", "rejected", "superseded", "cancelled"];
 
     /// <summary>A LinkedIn invitation waiting on a person: the list row, the approval whole and the item behind it.</summary>
     [Fact]

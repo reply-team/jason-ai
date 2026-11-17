@@ -6,16 +6,23 @@ import {
     askedAfter,
     askedIn,
     askingOf,
+    differs,
     editOf,
     placeRows,
     rowNow,
+    stateSentence,
     withWords,
+    withdrawnOf,
     type Edited,
 } from './reasking-model';
 
 const withdrawn = fixtures['approval.list/card-message-pending'].response.items[0] as ApprovalSummary;
 const asked = fixtures['approval.list/card-message-reasked'].response.items[0] as ApprovalSummary;
 const others = fixtures['approval.list/needs-first-page'].response.items as ApprovalSummary[];
+// Every approval of the edited item, in every status, as the runtime listed them at each step of the recorded story.
+const afterEdit = fixtures['approval.list/card-message-item-all-after-edit'].response.items as ApprovalSummary[];
+const reasked = fixtures['approval.list/card-message-item-all-reasked'].response.items as ApprovalSummary[];
+const approved = fixtures['approval.list/card-message-item-all-approved'].response.items as ApprovalSummary[];
 const row = (id: string, workItemId = `wi_of_${id}`): ApprovalSummary => ({
     ...others[0]!,
     id,
@@ -28,6 +35,8 @@ const edit: Edited = {
     operation: 'message.send',
     words: { subject: 'Notes from the meetup', body: 'Hi Ines, shall we talk next week?', compose: null },
     asked: null,
+    ended: null,
+    read: 'queued',
 };
 const ids = (rows: readonly ApprovalSummary[]) => rows.map((each) => each.id);
 
@@ -53,40 +62,93 @@ describe('an edited message’s row, matched by its work item alone', () => {
         expect(editOf([now], 'apr_other')).toBeUndefined();
     });
 
+    it('keeps the approval it withdrew withdrawn after it was asked again, and after its work ended', () => {
+        expect(withdrawnOf([edit], withdrawn.id)).toBe(edit);
+        const now = { ...edit, asked: asked.id };
+        expect(withdrawnOf([now], withdrawn.id)).toBe(now);
+        // The approval asked again is not withdrawn: it is the one acted on.
+        expect(withdrawnOf([now], asked.id)).toBeUndefined();
+        const ended = { ...edit, ended: 'cancelled' };
+        expect(withdrawnOf([ended], withdrawn.id)).toBe(ended);
+        expect(askingOf([ended], withdrawn.id)).toBeUndefined();
+    });
+
     it('shows the words saved, keeping what the edit did not write', () => {
         const read = { subject: 'old subject', body: 'old body', to: 'Ines' };
         expect(withWords(read, edit.words)).toEqual({ ...read, subject: edit.words.subject, body: edit.words.body });
         // A reply has no subject of its own: the one read stays.
         expect(withWords(read, { subject: null, body: 'new', compose: null })).toEqual({ ...read, body: 'new' });
     });
+
+    it('says whether the approval asked again carries other words than the ones saved', () => {
+        expect(differs(edit, { ...edit.words })).toBe(false);
+        expect(differs(edit, { ...edit.words, body: 'Hi Ines, an agent wrote this.' })).toBe(true);
+        expect(differs(edit, { ...edit.words, subject: 'Another subject' })).toBe(true);
+        // A reply's edit wrote no subject: the subject is not compared.
+        const reply = { ...edit, words: { ...edit.words, subject: null } };
+        expect(differs(reply, { ...edit.words, subject: 'x' })).toBe(false);
+    });
+});
+
+describe('what the row of an edited message says', () => {
+    it('promises only that the text is saved and that Jason asks again when it next takes the work', () => {
+        expect(stateSentence(edit)).toBe(
+            'Your new text is saved. Jason asks again with it when it next takes this work; Approve and Reject come back then.',
+        );
+    });
+
+    it('says a read that failed as not read, never as asking', () => {
+        expect(stateSentence({ ...edit, read: 'unread' })).toMatch(/could not be read just now/);
+        expect(stateSentence({ ...edit, read: 'unread' })).not.toMatch(/asks again with it/);
+    });
+
+    it('says how the work ended, and that nothing on it can be approved', () => {
+        expect(stateSentence({ ...edit, ended: 'cancelled' })).toMatch(
+            /ended before Jason asked again: it was cancelled\./,
+        );
+        expect(stateSentence({ ...edit, ended: 'gone' })).toMatch(/it is no longer there/);
+        expect(stateSentence({ ...edit, ended: 'failed' })).toMatch(/Nothing here can be approved\.$/);
+    });
+
+    it('says the approval it withdrew cannot be approved once Jason asked again', () => {
+        expect(stateSentence({ ...edit, asked: asked.id })).toMatch(/withdrawn by your edit and cannot be approved/);
+    });
 });
 
 describe('what a kept row becomes at a read of its list', () => {
     it('becomes the approval asked again when the list holds it', () => {
-        expect(rowNow(edit, withdrawn, [asked])).toEqual({ asked });
+        expect(rowNow(edit, [asked])).toEqual({ asked });
+        expect(rowNow({ ...edit, asked: asked.id }, [asked])).toEqual({ asked });
     });
 
-    it('needs a read of its work item while the list does not hold one', () => {
-        expect(rowNow(edit, withdrawn, [])).toBe('read');
-        // Asked elsewhere, but this list still drew the withdrawn row: only the read says where it is.
-        expect(rowNow({ ...edit, asked: asked.id }, withdrawn, [])).toBe('read');
+    it('needs a read of its work item while it is not asked and the list does not hold one', () => {
+        expect(rowNow(edit, [])).toBe('read');
     });
 
-    it('goes once the approval asked again, drawn here, has left the list: it was decided', () => {
-        expect(rowNow({ ...edit, asked: asked.id }, asked, [])).toBe('gone');
+    it('goes once it was asked, here or by another list, and the list does not hold the approval asked', () => {
+        expect(rowNow({ ...edit, asked: asked.id }, [])).toBe('gone');
+        expect(rowNow({ ...edit, asked: asked.id }, others)).toBe('gone');
     });
 
-    it('is still asking while its work is queued or running, and ended once the work ended another way', () => {
-        for (const status of ['created', 'scheduled', 'processing', 'waiting'])
-            expect(afterRead(edit, status)).toBe('asking');
+    it('goes once its work ended another way', () => {
+        expect(rowNow({ ...edit, ended: 'cancelled' }, [])).toBe('gone');
+    });
+
+    it('is queued while its work is, and ended once the work ended another way or is not there', () => {
+        for (const status of ['created', 'scheduled', 'processing', 'waiting', 'awaiting_approval'])
+            expect(afterRead(edit, status, afterEdit)).toBe('queued');
         for (const status of ['succeeded', 'failed', 'cancelled', 'expired'])
-            expect(afterRead(edit, status)).toBe('ended');
+            expect(afterRead(edit, status, afterEdit)).toEqual({ ended: status });
+        expect(afterRead(edit, null, [])).toEqual({ ended: 'gone' });
     });
 
-    it('is asked once its work waits for an approval again and that approval is among the item’s pending ones', () => {
-        expect(afterRead(edit, 'awaiting_approval', [asked])).toEqual({ asked });
-        expect(afterRead(edit, 'awaiting_approval', [])).toBe('asking');
-        expect(afterRead(edit, 'awaiting_approval', [withdrawn])).toBe('asking');
+    it('is asked once an approval of its work item other than the withdrawn one is pending', () => {
+        expect(afterRead(edit, 'awaiting_approval', reasked)).toEqual({ asked });
+    });
+
+    it('was decided elsewhere once the approval asked again is decided, whatever the work does now', () => {
+        for (const status of ['created', 'scheduled', 'processing'])
+            expect(afterRead(edit, status, approved)).toEqual({ decided: asked.id });
     });
 });
 

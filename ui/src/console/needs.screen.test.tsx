@@ -12,7 +12,7 @@ import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
-import { ASKING_MARK, ASKING_SENTENCE } from '../screens/attention/reasking-model';
+import { ASKING_MARK, QUEUED_SENTENCE } from '../screens/attention/reasking-model';
 import { noteEdit } from '../screens/attention/reasking';
 import { here } from './state';
 import * as consoleCampaigns from './campaigns';
@@ -912,7 +912,11 @@ describe('Needs you', () => {
                 within(pane()).getByRole('textbox', { name: 'Body' }),
                 'Hi Ines, thanks for the talk at the meetup. Shall we talk next week?',
             );
-            fake.answer('approval.list', 'approval.list/needs-after-edit');
+            fake.answer(
+                'approval.list',
+                'approval.list/needs-after-edit',
+                'approval.list/needs-message-all-after-edit',
+            );
             fireEvent.click(within(pane()).getByRole('button', { name: 'Save' }));
             await waitFor(() =>
                 expect(sent(fake, 'workitem.update')).toEqual([
@@ -920,7 +924,7 @@ describe('Needs you', () => {
                 ]),
             );
             // The runtime lists the reply alone now; the edited row stays first, chosen, and says where it stands.
-            await waitFor(() => within(pane()).getByText(ASKING_SENTENCE));
+            await waitFor(() => within(pane()).getByText(QUEUED_SENTENCE));
             expect([...needs().querySelectorAll<HTMLElement>('.needs-row')].map((each) => each.dataset['row'])).toEqual(
                 ['apr_1', 'apr_2'],
             );
@@ -939,6 +943,39 @@ describe('Needs you', () => {
             expect(sent(fake, 'approval.approve')).toEqual([]);
             // The keyboard is on the line the pane shows, never on a button.
             expect(document.activeElement).toBe(row('apr_1'));
+        });
+
+        it('lets the kept row go as one decided elsewhere once its work ended before Jason asked again', async () => {
+            const fake = edits();
+            await renderConsole(fake);
+            await pressEdit();
+            await waitFor(() => within(pane()).getByRole('textbox', { name: 'Body' }));
+            await settle();
+            type(
+                within(pane()).getByRole('textbox', { name: 'Body' }),
+                'Hi Ines, thanks for the talk at the meetup. Shall we talk next week?',
+            );
+            fake.answer(
+                'approval.list',
+                'approval.list/needs-after-edit',
+                'approval.list/needs-message-all-after-edit',
+            );
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Save' }));
+            await waitFor(() => within(pane()).getByText(QUEUED_SENTENCE));
+
+            // The work is cancelled elsewhere before the runtime asked again: the next read of the list reads the item
+            // ended, and the row goes; the pane says what it said of a row decided elsewhere and shows the next one.
+            fake.answerAnyRequest('workitem.get', 'workitem.get/needs-message-cancelled');
+            fake.answer('approval.list', 'approval.list/needs-after-edit', 'approval.list/needs-message-all-cancelled');
+            await flush(() => reload());
+            await waitFor(() =>
+                expect(
+                    [...needs().querySelectorAll<HTMLElement>('.needs-row')].map((each) => each.dataset['row']),
+                ).toEqual(['apr_2']),
+            );
+            expect(words(needs().querySelector('.needs-left')!)).toMatch(/^What you had open is no longer waiting/);
+            expect(chips()[0]).toBe('All 1');
+            expect(sent(fake, 'approval.approve')).toEqual([]);
         });
 
         it('says before Save that saving approves nothing', async () => {
@@ -960,7 +997,7 @@ describe('Needs you', () => {
             await waitFor(() => expect(within(pane()).queryByRole('textbox', { name: 'Body' })).toBeNull());
             await settle();
             expect(sent(fake, 'workitem.update')).toEqual([]);
-            expect(within(pane()).queryByText(ASKING_SENTENCE)).toBeNull();
+            expect(within(pane()).queryByText(QUEUED_SENTENCE)).toBeNull();
             expect(within(pane()).getByRole('button', { name: 'Approve' })).toBeTruthy();
         });
 
@@ -981,9 +1018,13 @@ describe('Needs you', () => {
         let listed: FixtureName = 'approval.list/card-message-all-pending';
         let item: FixtureName = 'workitem.get/card-message-parked';
         let ofItem: FixtureName = 'approval.list/card-message-item-after-edit';
+        let allOfItem: FixtureName = 'approval.list/card-message-item-all-after-edit';
+        const everyStatus = (body: object) => ((body as { statuses?: string[] }).statuses ?? []).length > 1;
         const story = () =>
             new FakeApi()
-                .answerAnyRequest('approval.list', (body) => ('work_item_id' in body ? ofItem : listed))
+                .answerAnyRequest('approval.list', (body) =>
+                    'work_item_id' in body ? (everyStatus(body) ? allOfItem : ofItem) : listed,
+                )
                 .answer('decision.list', 'decision.list/empty')
                 .answer('approval.get', 'approval.get/card-message', 'approval.get/card-message-reasked')
                 .answerAnyRequest('workitem.get', () => item)
@@ -999,6 +1040,7 @@ describe('Needs you', () => {
             listed = 'approval.list/card-message-all-pending';
             item = 'workitem.get/card-message-parked';
             ofItem = 'approval.list/card-message-item-after-edit';
+            allOfItem = 'approval.list/card-message-item-all-after-edit';
         });
 
         it('stays, chosen, with the words saved, and becomes the approval asked again, which Approve then approves', async () => {
@@ -1016,7 +1058,7 @@ describe('Needs you', () => {
             listed = 'approval.list/card-message-all-after-edit';
             item = 'workitem.get/card-message-requeued';
             await flush(() => reload());
-            await waitFor(() => within(pane()).getByText(ASKING_SENTENCE));
+            await waitFor(() => within(pane()).getByText(QUEUED_SENTENCE));
             expect(pane().dataset['id']).toBe('apr_1');
             expect(words(pane().querySelector('.needs-body')!)).toBe(edited);
             expect(within(pane()).queryByRole('button', { name: 'Approve' })).toBeNull();
@@ -1027,13 +1069,14 @@ describe('Needs you', () => {
             listed = 'approval.list/card-message-all-reasked';
             item = 'workitem.get/card-message-reparked';
             ofItem = 'approval.list/card-message-item-reasked';
+            allOfItem = 'approval.list/card-message-item-all-reasked';
             await asked(journal, 'jrn_reasked_1');
             await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
             expect([...needs().querySelectorAll<HTMLElement>('.needs-row')].map((each) => each.dataset['row'])).toEqual(
                 ['apr_2'],
             );
             expect(needs().querySelector('.needs-left')).toBeNull();
-            expect(within(pane()).queryByText(ASKING_SENTENCE)).toBeNull();
+            expect(within(pane()).queryByText(QUEUED_SENTENCE)).toBeNull();
             const approve = await waitFor(() => {
                 const button = within(pane()).getByRole('button', { name: 'Approve' });
                 expect(live(button)).toBe(true);

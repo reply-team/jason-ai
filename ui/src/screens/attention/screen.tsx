@@ -36,8 +36,10 @@ export function AttentionScreen() {
         else store.detail.value = null;
     }, [api, selected?.kind, selected?.id]);
 
-    // A message edited here that the runtime has asked about again is the new approval, in the same place, still chosen.
-    const asked = selected?.kind === 'approvals' ? askedAfter(edits.value, selected.id) : null;
+    // A message edited here that the runtime has asked about again is the new approval, in the same place, still chosen,
+    // once the list holds it; one decided before this list held it leaves the withdrawn approval chosen, with no act.
+    const askedId = selected?.kind === 'approvals' ? askedAfter(edits.value, selected.id) : null;
+    const asked = askedId !== null && store.approvals.value.some((row) => row.id === askedId) ? askedId : null;
     useEffect(() => {
         if (asked !== null) replace({ screen: 'attention', kind: 'approvals', id: asked, ...keep });
     }, [asked]);
@@ -161,7 +163,8 @@ export function AttentionScreen() {
                     </>
                 )}
             </div>
-            {selected && detail?.kind === 'approvals' && (
+            {/* A detail is drawn only for the row chosen: one read for a row chosen before is never drawn with its acts. */}
+            {selected && detail?.kind === 'approvals' && detail.item.id === selected.id && (
                 <ApprovalPanel
                     approval={detail.item}
                     now={now}
@@ -182,7 +185,7 @@ export function AttentionScreen() {
                     onReasked={() => void store.load(api, decided)}
                 />
             )}
-            {selected && detail?.kind === 'questions' && (
+            {selected && detail?.kind === 'questions' && detail.item.id === selected.id && (
                 <QuestionPanel
                     decision={detail.item}
                     now={now}

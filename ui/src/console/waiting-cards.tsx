@@ -6,8 +6,8 @@ import { MessageEditor } from '../screens/attention/message-editor';
 import { SenderLine } from '../screens/attention/sender-line';
 import { repeated } from '../screens/attention/store';
 import { editable, readItem, sentence } from '../screens/attention/message-edit';
-import { asking } from '../screens/attention/reasking';
-import { ASKING_SENTENCE, withWords } from '../screens/attention/reasking-model';
+import { changedSince, withdrawn } from '../screens/attention/reasking';
+import { DIFFERS_SENTENCE, stateSentence, withWords } from '../screens/attention/reasking-model';
 import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
 import { senderReads, type SenderReads } from './senders';
@@ -39,8 +39,9 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     const api = useApi();
     const whole = waiting.approvals.value[row.id];
     const gate = approvalGate(whole, waiting.unread.value[row.id]);
-    // A message edited here stays as this card, with the words saved and no act, until the runtime has asked again.
-    const saved = asking(row.id);
+    // A message edited here stays as this card, with the words saved and no act, until the runtime has asked again; the
+    // approval the edit withdrew is never acted on again on this page.
+    const saved = withdrawn(row.id);
     const read = toApprovalCard(row, whole, clock.value);
     const card = saved === undefined ? read : withWords(read, saved.words);
     // An act of this chat's, on any card, holds every card's acts from its press until the lists read after it have
@@ -150,7 +151,12 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
             {card.intent !== null && <div className="waiting-intent">{card.intent}</div>}
             {saved !== undefined && (
                 <div className="note waiting-reasking" role="status">
-                    {ASKING_SENTENCE}
+                    {stateSentence(saved)}
+                </div>
+            )}
+            {saved === undefined && whole !== undefined && changedSince(whole) && (
+                <div className="note am waiting-reasking" role="alert">
+                    {DIFFERS_SENTENCE}
                 </div>
             )}
             {/* An approval is approved only once it is here whole: until then, the card says why it cannot be. */}

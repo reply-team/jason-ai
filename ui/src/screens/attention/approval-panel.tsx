@@ -27,8 +27,8 @@ import {
     isStale,
     uncheckedSentence,
 } from './message-edit';
-import { asking, noteAsked, noteEdit } from './reasking';
-import { ASKING_SENTENCE, withWords } from './reasking-model';
+import { asking, changedSince, noteAsked, noteEdit, withdrawn } from './reasking';
+import { DIFFERS_SENTENCE, stateSentence, withWords } from './reasking-model';
 
 type Props = {
     approval: Approval;
@@ -74,13 +74,15 @@ export function ApprovalPanel({
     const [item, setItem] = useState<WorkItem | null>(null);
     const [unread, setUnread] = useState<string | null>(null);
     // A message edited on this page: its approval was withdrawn and the runtime asks again with the saved words. The
-    // panel stays, with those words and no act, until the new approval comes (`reasking.ts`).
-    const edit = asking(approval.id);
-    const waits = edit !== undefined;
+    // panel shows those words and no act for as long as the page lives; while the runtime has not asked again it waits
+    // for the new approval (`reasking.ts`).
+    const edit = withdrawn(approval.id);
+    const inert = edit !== undefined;
+    const waits = asking(approval.id) !== undefined;
     useEffect(() => {
         setItem(null);
         setUnread(null);
-        if (!watched || waits) return;
+        if (!watched || inert) return;
         let current = true;
         void checkMessage(api, approval).then((checked) => {
             if (!current || checked === null) return;
@@ -90,8 +92,8 @@ export function ApprovalPanel({
         return () => {
             current = false;
         };
-    }, [api, watched, waits, approval.id, approval.work_item_id]);
-    const stale = watched && item !== null && isStale(approval, item);
+    }, [api, watched, inert, approval.id, approval.work_item_id]);
+    const stale = watched && !inert && item !== null && isStale(approval, item);
     // While the runtime has not asked again, the panel waits for the new approval and hands it on when it arrives.
     useEffect(() => {
         if (!waits) return;
@@ -166,7 +168,12 @@ export function ApprovalPanel({
             <div className="panel-body">
                 {edit !== undefined && (
                     <p className="notice reasking" role="status">
-                        {ASKING_SENTENCE}
+                        {stateSentence(edit)}
+                    </p>
+                )}
+                {pending && changedSince(approval) && (
+                    <p className="notice reasking" role="alert">
+                        {DIFFERS_SENTENCE}
                     </p>
                 )}
                 {stale && (
@@ -251,7 +258,7 @@ export function ApprovalPanel({
                     <pre>{JSON.stringify(approval.subject, null, 2)}</pre>
                 </details>
             </div>
-            {(pending || waits) && (
+            {(pending || inert) && (
                 <div className="panel-footer">
                     <span className="next">{remaining}</span>
                     <span className="spacer" />

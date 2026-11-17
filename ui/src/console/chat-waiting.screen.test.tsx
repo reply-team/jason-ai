@@ -8,7 +8,7 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { pendingMark } from '../shell/attention-mark';
 import { reasonLabel } from '../screens/attention/labels';
-import { ASKING_SENTENCE } from '../screens/attention/reasking-model';
+import { QUEUED_SENTENCE } from '../screens/attention/reasking-model';
 import { forgetEdits } from '../screens/attention/reasking';
 import { whyWords } from '../screens/send-modes/doubts';
 import * as classicCampaigns from '../screens/campaigns/store';
@@ -714,14 +714,14 @@ describe('what waits in an agent’s chat', () => {
         });
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
-        await waitFor(() => within(card(pane, 'apr_1')!).getByText(ASKING_SENTENCE));
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
 
         // The window is drawn again in the same page: the card is the page's own memory, and stays with its state.
         cleanup();
         freshConsole();
         renderConsole().fake.answer('workitem.get', 'workitem.get/parked-send');
         pane = await openChat('Spring');
-        await waitFor(() => within(card(pane, 'apr_1')!).getByText(ASKING_SENTENCE));
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
 
         // A reload of the page forgets it: the chat starts from what the runtime lists, which no longer holds the
         // withdrawn approval, so neither the card nor its state is drawn until the runtime asks again.
@@ -734,7 +734,7 @@ describe('what waits in an agent’s chat', () => {
         pane = await openChat('Spring');
         await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
         expect(card(pane, 'apr_1')).toBeNull();
-        expect(within(pane).queryByText(ASKING_SENTENCE)).toBeNull();
+        expect(within(pane).queryByText(QUEUED_SENTENCE)).toBeNull();
     });
 
     it('never lets one campaign’s lists set the mark of what waits', async () => {
@@ -877,7 +877,7 @@ describe('what waits in an agent’s chat', () => {
         });
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
-        await waitFor(() => within(card(pane, 'apr_1')!).getByText(ASKING_SENTENCE));
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
         expect(sent(fake, 'workitem.update')).toEqual([
             {
                 work_item_id: 'wi_1',

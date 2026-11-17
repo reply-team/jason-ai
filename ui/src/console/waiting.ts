@@ -9,7 +9,7 @@ import {
     readItem,
     uncheckedSentence,
 } from '../screens/attention/message-edit';
-import { asking, noteEdit } from '../screens/attention/reasking';
+import { noteEdit, withdrawn } from '../screens/attention/reasking';
 import { attentionStore, type AttentionStore } from '../screens/attention/store';
 import { keptAndMissing, type Approved, type Said } from './waiting-model';
 
@@ -167,10 +167,10 @@ export async function fillApprovals(api: Api, reads: WholeReads): Promise<void> 
     reads.approvals.value = approvals.kept;
     reads.unread.value = Object.fromEntries(Object.entries(reads.unread.value).filter(([id]) => listed.has(id)));
     // A row read whole, or gone from the lists, while it waited its turn is not read again; nor is the row of a message
-    // edited here, whose approval the edit withdrew: it shows the words saved until the runtime has asked again.
+    // edited here, whose approval the edit withdrew: it shows the words saved for as long as the page lives.
     await inTurn(approvals.missing, (id) =>
         Object.hasOwn(reads.approvals.value, id) ||
-        asking(id) !== undefined ||
+        withdrawn(id) !== undefined ||
         !reads.store.approvals.value.some((row) => row.id === id)
             ? Promise.resolve()
             : readOnce(
@@ -246,8 +246,8 @@ async function fill(api: Api, waiting: Waiting): Promise<void> {
  * Reads what waits in the campaign again: its two lists, then each new row whole. A refusal whose item the lists no
  * longer hold goes, as that item's card did.
  */
-export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
-    await listWaiting(api, waiting);
+export async function readWaiting(api: Api, waiting: Waiting, followed = false): Promise<void> {
+    await listWaiting(api, waiting, followed);
     await fill(api, waiting);
     await followApproved(api, waiting);
 }
@@ -290,8 +290,8 @@ export async function followApproved(api: Api, waiting: Waiting): Promise<void> 
 }
 
 /** The campaign's two lists read again; a refusal whose item they do not hold now goes. */
-async function listWaiting(api: Api, waiting: Waiting): Promise<void> {
-    await waiting.store.load(api, false);
+async function listWaiting(api: Api, waiting: Waiting, followed: boolean): Promise<void> {
+    await waiting.store.load(api, false, followed);
     const refused = waiting.refused.value;
     if (refused !== null && !listedIds(waiting.store).has(refused.id)) waiting.refused.value = null;
 }
@@ -315,9 +315,12 @@ export function drawWaiting(api: Api, campaignId: string): () => void {
     };
 }
 
-/** Reads again what waits in every campaign whose chat is drawn: the console calls it on the journal's word. */
-export function reloadWaiting(api: Api): void {
-    for (const campaignId of drawn.keys()) void readWaiting(api, waitingOf(campaignId));
+/**
+ * Reads again what waits in every campaign whose chat is drawn: the console calls it on the journal's word, which
+ * `followed` says, so a row edited here is read again only when a line named its work item.
+ */
+export function reloadWaiting(api: Api, followed = false): void {
+    for (const campaignId of drawn.keys()) void readWaiting(api, waitingOf(campaignId), followed);
 }
 
 /** Forgets every campaign's lists and reads; for a test that starts afresh. */
@@ -388,5 +391,5 @@ export function editedWaiting(api: Api, waiting: Waiting, approval: Approval, sa
     waiting.refused.value = null;
     noteEdit(approval, saved);
     // The save is an act of the person's: the cards' acts stay held until the lists read after it have answered.
-    void waiting.store.hold(() => listWaiting(api, waiting)).then(() => fill(api, waiting));
+    void waiting.store.hold(() => listWaiting(api, waiting, false)).then(() => fill(api, waiting));
 }

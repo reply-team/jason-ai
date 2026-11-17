@@ -14,8 +14,14 @@ import {
     wordsOf,
     type Words,
 } from '../screens/attention/message-edit';
-import { asking, edits, noteEdit } from '../screens/attention/reasking';
-import { ASKING_MARK, ASKING_SENTENCE, askedAfter, withWords } from '../screens/attention/reasking-model';
+import { asking, changedSince, edits, noteEdit, withdrawn } from '../screens/attention/reasking';
+import {
+    ASKING_MARK,
+    DIFFERS_SENTENCE,
+    askedAfter,
+    stateSentence,
+    withWords,
+} from '../screens/attention/reasking-model';
 import { doubtWords } from '../screens/send-modes/model';
 import { act, argsOf, define } from './actions';
 import { html, type Html } from './html';
@@ -297,9 +303,12 @@ async function acted(work: () => Promise<unknown>): Promise<void> {
     if (drawn > 0) await fillApprovals(here().api, reads);
 }
 
-/** Reads what waits again, every page the person had read, then each approval not read whole yet. */
-export async function reload(): Promise<void> {
-    await attention.load(here().api, false);
+/**
+ * Reads what waits again, every page the person had read, then each approval not read whole yet. `followed` says the
+ * journal's word asked for it, so a row edited here is read again only when a line named its work item.
+ */
+export async function reload(followed = false): Promise<void> {
+    await attention.load(here().api, false, followed);
     await fill();
 }
 
@@ -457,7 +466,7 @@ define('needs.rejected', ([id], _, event) => {
 // they have not seen. Save writes them through the work item's update and approves nothing.
 define('needs.edit', ([id]) => {
     const whole = typeof id === 'string' ? reads.approvals.value[id] : undefined;
-    if (whole === undefined || checking.value.has(whole.id) || asking(whole.id) !== undefined) return;
+    if (whole === undefined || checking.value.has(whole.id) || withdrawn(whole.id) !== undefined) return;
     said(whole.id, null);
     checked(whole.id, true);
     readItem(here().api, whole.work_item_id)
@@ -633,7 +642,7 @@ const openChat = (campaignId: string, name: string): Html =>
 function words(whole: Approval | undefined): Html | null {
     if (whole === undefined) return null;
     // A message edited here shows the words saved, which the runtime asks again with, never the withdrawn ones.
-    const edit = asking(whole.id);
+    const edit = withdrawn(whole.id);
     const read = toApprovalDetail(whole.preview);
     const detail = edit === undefined ? read : withWords(read, edit.words);
     return html`<div class="needs-words">
@@ -754,7 +763,8 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
     const edit = editing.value?.id === summary.id ? editing.value : null;
     const asked = rejecting.value === summary.id;
     // An approval an edit withdrew is acted on in no way: what it says is its state, and the agent's chat stays a way there.
-    const reasking = asking(summary.id) !== undefined;
+    const kept = withdrawn(summary.id);
+    const reasking = kept !== undefined;
     const acts = reasking
         ? html`<div class="ask-a">${openChat(summary.campaign_id, summary.campaign_name)}</div>`
         : edit
@@ -818,7 +828,12 @@ function approvalPane(summary: ApprovalSummary, now: number, busy: boolean): Htm
         </div>
         <h2 class="needs-title">${row.what} ${person(summary, now)}</h2>
         <div class="ask-w">${reasonLabel(whole?.reason ?? summary.reason)}</div>
-        ${reasking ? html`<div class="note needs-reasking" role="status">${ASKING_SENTENCE}</div>` : null}
+        ${kept === undefined ? null : html`<div class="note needs-reasking" role="status">${stateSentence(kept)}</div>`}
+        ${
+            whole !== undefined && !reasking && changedSince(whole)
+                ? html`<div class="note am needs-reasking" role="alert">${DIFFERS_SENTENCE}</div>`
+                : null
+        }
         ${whole === undefined || reasking ? null : doubts(whole.preview)} ${words(whole)}
         ${reasking ? null : heldNote(gate, summary.id)}
         ${inCheck ? html`<div class="note" role="status">${checkingSentence}</div>` : null}
