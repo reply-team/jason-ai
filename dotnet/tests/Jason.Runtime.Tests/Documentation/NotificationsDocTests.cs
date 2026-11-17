@@ -196,7 +196,7 @@ public sealed partial class NotificationsDocTests
     [InlineData("docs/notifications.md", "the next sign-in sends what is still waiting and was not said yet — once, after the start grace")]
     [InlineData("docs/notifications.md", "A pointer already sent is not sent again at the next sign-in: there are no reminders.")]
     [InlineData("docs/notifications.md", "The floor allows at most 48 a day at the defaults that reach somebody")]
-    [InlineData("docs/notifications.md", "A Linux runtime with `notify-send` and a session bus but no notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`, `toast_failed`; `Notifications:Toast` set to `false` turns it off.")]
+    [InlineData("docs/notifications.md", "A Linux runtime with `notify-send` and a session bus but no notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`, `toast_failed`; `jason notification disable toast --actor human:<Name>` turns it off.")]
     [InlineData("docs/notifications.md", "a Linux runtime with no session bus, or with no notification daemon running and none the bus can start on demand, record the toast as `not_attempted`, `no_desktop`.")]
     [InlineData("plugins/ntfy/plugin.yaml", "canonical operation: the `operations` list names versions of the delivery contract.")]
     [InlineData("docs/notifications.md", "At every toast the toast host ensures the key")]

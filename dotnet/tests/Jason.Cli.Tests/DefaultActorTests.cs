@@ -537,7 +537,7 @@ public class DefaultActorTests
     private static (string Help, string Form) Expected(string[] verb) => VerbOf(verb) switch
     {
         "workitem resume" => (ActorOption.NoDefaultForResume, "name who ends it, e.g. --actor human:<Name>"),
-        "suppression remove" or "route set" or "route unset" or "role set-profile" or "plugin grant" or "plugin revoke" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
+        "suppression remove" or "route set" or "route unset" or "role set-profile" or "plugin grant" or "plugin revoke" or "notification enable" or "notification disable" => (ActorOption.NoDefaultForAnAct, "name who does it, e.g. --actor human:<Name>"),
         "report submit" => (ActorOption.NoDefaultForReport, "write --actor human:<Name> or --actor role:<id>"),
         _ => (ActorOption.NoDefault, "write --actor human:<Name>"),
     };
