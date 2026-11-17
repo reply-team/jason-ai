@@ -37,10 +37,11 @@ public interface IMoveSystem
     Task<string?> UnzipAsync(string zip, string folder, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Windows: the setup run with <paramref name="arguments"/> and waited for up to <paramref name="bound"/>. A setup that has
-    /// not ended by then is left running and never killed.
+    /// Windows: the setup run silently into <paramref name="place"/> by the raw command line <see cref="MoveSystem.SetupCommandLine"/>
+    /// makes, in the environment <see cref="MoveSystem.SetupEnvironment"/> makes with <paramref name="marker"/>, and waited for up
+    /// to <paramref name="bound"/>. A setup that has not ended by then is left running and never killed.
     /// </summary>
-    Task<SetupRun> RunSetupAsync(string setup, IReadOnlyList<string> arguments, TimeSpan bound, CancellationToken cancellationToken);
+    Task<SetupRun> RunSetupAsync(string setup, string place, string marker, TimeSpan bound, CancellationToken cancellationToken);
 
     /// <summary>Whether a program runs from <paramref name="executable"/>, found by its exact path: an application's open window.</summary>
     bool Runs(string executable);
@@ -153,20 +154,29 @@ public sealed class MoveSystem : IMoveSystem
     }
 
     /// <summary>
-    /// The environment the setup is given, from this process's: nothing of the update's lock, so its own <c>jason install</c>,
-    /// a grandchild through the installer, finds the move's lock held and is refused, whatever nonce this process was handed.
+    /// The environment the setup is given, from this process's: nothing of the update's lock, whatever nonce this process was
+    /// handed, and the move's marker (<see cref="MoveMarker"/>), under which the setup's own <c>jason install</c>, a grandchild
+    /// through the installer, does nothing while the move's record stands not done.
     /// </summary>
-    internal static void SetupEnvironment(IDictionary<string, string?> environment) => environment.Remove(UpdateLock.Variable);
+    internal static void SetupEnvironment(IDictionary<string, string?> environment, string marker)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        environment.Remove(UpdateLock.Variable);
+        environment[MoveMarker.Variable] = marker;
+    }
 
-    public async Task<SetupRun> RunSetupAsync(string setup, IReadOnlyList<string> arguments, TimeSpan bound, CancellationToken cancellationToken)
+    /// <summary>
+    /// The setup's command line, raw: <c>/S /D=&lt;place&gt;</c>, the place last and never quoted. NSIS takes <c>/D=</c> only as the
+    /// last parameter and only unquoted, spaces included (NSIS's documentation, "Installer Usage", 3.2.1), as install.ps1 passes it;
+    /// an argument list would quote a place with a space in it, and the setup would install into its default instead.
+    /// </summary>
+    internal static string SetupCommandLine(string place) => "/S /D=" + place;
+
+    public async Task<SetupRun> RunSetupAsync(string setup, string place, string marker, TimeSpan bound, CancellationToken cancellationToken)
     {
         var start = ChildProcess.StartInfo(setup, ChildKind.SystemToolWithInput);
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        SetupEnvironment(start.Environment);
+        start.Arguments = SetupCommandLine(place);
+        SetupEnvironment(start.Environment, marker);
         Process.StandardStreams.KeepOutOfChildren();
         using var process = ChildProcess.Start(start) ?? throw new IOException($"{setup} could not be started.");
         process.StandardInput.Close();

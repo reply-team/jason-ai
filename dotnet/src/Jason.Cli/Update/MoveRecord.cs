@@ -60,6 +60,14 @@ public static class MoveSteps
 /// <param name="Reason">Why the move is pending or failed, the sentence <c>jason status</c> says; null otherwise.</param>
 /// <param name="Feed">The feed the update read, which a move carried on reads again.</param>
 /// <param name="UpdatedAt">When this was written.</param>
+/// <param name="Marker">
+/// What the move gives the setup's environment in <see cref="MoveMarker.Variable"/>: kept from one run of the move to the next
+/// while the record stands not done, so a setup an earlier run left running is still known as the move's.
+/// </param>
+/// <param name="Waits">
+/// Where the move is pending on something no command typed here changes — an Intel Mac, an application older than 0.49 —
+/// what would move it; <c>jason status</c> then says so rather than name a repair that cannot help. Null otherwise.
+/// </param>
 public sealed record MoveRecord(
     string Version,
     string From,
@@ -69,10 +77,16 @@ public sealed record MoveRecord(
     string? Application,
     string? Reason,
     string? Feed,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    string? Marker = null,
+    string? Waits = null)
 {
-    /// <summary>Whether the move still has to be carried on: begun and not ended, pending or failed.</summary>
-    public bool Open => State is MoveStates.Moving or MoveStates.Pending or MoveStates.Failed;
+    /// <summary>
+    /// Whether the command-line install at <paramref name="from"/> is retired into the application: gone (renamed aside or
+    /// removed, on Windows) or a wrapper over the application's jason (on macOS). One rule, which <c>jason status</c> and a
+    /// rollback both read.
+    /// </summary>
+    public static bool Retired(string from) => !File.Exists(from) || Installation.CommandFiles.IsWrapperFile(from);
 
     /// <summary>
     /// The record at <paramref name="file"/>; null where there is none. One that cannot be read throws
@@ -134,6 +148,43 @@ public sealed record MoveRecord(
             }
 
             throw;
+        }
+    }
+}
+
+/// <summary>
+/// The marker a move gives the environment of the setup it runs. <c>jason install</c> run under it — the installer's own last
+/// step — does nothing while the record it names stands not done: the move sets the machine up itself once the installer has
+/// returned, and an installer the move left running, past its bound or after a kill, then retires nothing and stops no
+/// runtime. A marker that names no record standing not done, one left in somebody's shell say, is ignored.
+/// </summary>
+public static class MoveMarker
+{
+    /// <summary>The variable, in the setup's environment alone.</summary>
+    public const string Variable = "JASON_MOVE";
+
+    /// <summary>
+    /// The move record the marker in <paramref name="variables"/> (the process's own where null) names, where that record stands
+    /// not done; null otherwise, an unreadable record included.
+    /// </summary>
+    public static MoveRecord? Standing(IReadOnlyDictionary<string, string>? variables, UpdatePaths update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        var marker = variables is null ? Environment.GetEnvironmentVariable(Variable) : variables.GetValueOrDefault(Variable);
+        if (string.IsNullOrWhiteSpace(marker))
+        {
+            return null;
+        }
+
+        try
+        {
+            return MoveRecord.Read(update.Move) is { } record && record.State != MoveStates.Done && string.Equals(record.Marker, marker, StringComparison.Ordinal)
+                ? record
+                : null;
+        }
+        catch (MoveRecordUnreadable)
+        {
+            return null;
         }
     }
 }

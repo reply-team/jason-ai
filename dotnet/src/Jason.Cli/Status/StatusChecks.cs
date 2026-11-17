@@ -436,13 +436,25 @@ internal static partial class StatusChecks
         // The routine retired the command-line install, renamed aside on Windows or a wrapper over the application's jason on
         // macOS, and the move that asked for it ended before it said so: the install is in the application, and a start it
         // owes is the runtime check's to name.
-        if (!File.Exists(record.From) || CommandFiles.IsWrapperFile(record.From))
+        if (Jason.Cli.Update.MoveRecord.Retired(record.From))
         {
             return new StatusCheck(
                 Name,
                 false,
                 CheckState.Ok,
                 $"The command-line install at {record.From} is retired into Jason Desktop{(record.Application is { } application ? " at " + application : string.Empty)}; the move's record stopped before it said so.",
+                null);
+        }
+
+        // Waiting on what no command typed here changes - an Intel Mac, an older or unreadable application: what stands and what
+        // would move it, with no repair that cannot help.
+        if (record.Waits is { } waits)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Unknown,
+                $"The move of the command-line install at {record.From} into Jason Desktop waits: {record.Reason ?? "it says no more."} It goes on once {waits}.",
                 null);
         }
 

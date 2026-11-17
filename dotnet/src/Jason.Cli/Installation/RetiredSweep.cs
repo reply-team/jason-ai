@@ -35,7 +35,15 @@ public static partial class RetiredSweep
 
         foreach (var parent in parents.Where(parent => parent.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            SweepIn(places, parent);
+            try
+            {
+                SweepIn(places, parent);
+            }
+            catch (Exception unexpected) when (unexpected is not OutOfMemoryException)
+            {
+                // Quiet whatever it meets: the sweep is housekeeping, and an update, a move or a setup it runs in is never
+                // failed by it. What it could not take is left for the next sweep.
+            }
         }
     }
 

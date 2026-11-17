@@ -145,22 +145,18 @@ public sealed class CommandLineMoveTests
     }
 
     /// <summary>
-    /// An application older than 0.49.0, its window open or not, is touched not at all, nor is anything else: the move is
-    /// pending, never failed, and says what finishes it; the command-line install answers as it did, its runtime running.
+    /// An application older than 0.49.0 is touched not at all, nor is anything else: the move is pending, never failed, and
+    /// says what finishes it; the command-line install answers as it did, its runtime running. Nothing typed here changes it, so
+    /// <c>jason status</c> says what stands and what would move it, with no repair that cannot help.
     /// </summary>
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    [InlineData(false, false)]
-    public async Task An_application_older_than_0_49_leaves_the_move_pending_and_touches_nothing(bool windows, bool open)
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_application_older_than_0_49_leaves_the_move_pending_and_touches_nothing(bool windows)
     {
         using var rig = new MoveRig(windows);
         rig.Installation.WithRuntime();
         MoveRig.PlantApplication(rig.Application, windows, "0.48.2");
-        if (open)
-        {
-            rig.System.Running.Add(Path.Combine(rig.Application, "Jason.exe"));
-        }
 
         var before = Snapshot(rig.Application);
         var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
@@ -168,17 +164,126 @@ public sealed class CommandLineMoveTests
         Assert.Equal(MoveStates.Pending, answer.State);
         Assert.Contains("0.48.2", answer.Reason!, StringComparison.Ordinal);
         Assert.Contains("Check for Updates", answer.Reason!, StringComparison.Ordinal);
-        Assert.Equal(open, answer.Reason!.Contains("window is open", StringComparison.Ordinal));
         Assert.Equal(before, Snapshot(rig.Application));
         Assert.DoesNotContain("routine", rig.Acts);
         Assert.True(File.Exists(rig.Old));
         Assert.True(rig.Installation.Running);
 
-        // The same sentence in `jason status`, with the command that carries the move on from the jason that runs it.
+        // The same sentence in `jason status`, saying what would move it, and no repair.
+        var check = StatusChecks.Move(rig.Env);
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.Contains(answer.Reason!, check.Fact, StringComparison.Ordinal);
+        Assert.Contains("goes on once Jason Desktop at", check.Fact, StringComparison.Ordinal);
+        Assert.Null(check.Fix);
+    }
+
+    /// <summary>
+    /// An application whose window is open, of any version and on either system, is left as it is: the routine never stops a
+    /// runtime under an open window. Pending, with what to do — close it — and the command that carries the move on.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "0.48.2")]
+    [InlineData(true, null)]
+    [InlineData(false, "0.48.2")]
+    [InlineData(false, null)]
+    public async Task An_application_with_its_window_open_of_any_version_leaves_the_move_pending(bool windows, string? version)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        MoveRig.PlantApplication(rig.Application, windows, version ?? SemanticVersion.Current.ToString());
+        rig.System.Running.Add(windows ? Path.Combine(rig.Application, "Jason.exe") : Path.Combine(rig.Application, "Contents", "MacOS", "Jason"));
+        var before = Snapshot(rig.Application);
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Pending, answer.State);
+        Assert.Contains("has its window open", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains("Close Jason Desktop", answer.Reason!, StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot(rig.Application));
+        Assert.DoesNotContain("routine", rig.Acts);
+        Assert.True(rig.Installation.Running);
         var check = StatusChecks.Move(rig.Env);
         Assert.Equal(CheckState.Failed, check.State);
-        Assert.Contains(answer.Reason!, check.Fact, StringComparison.Ordinal);
         Assert.Equal("jason update apply", check.Fix);
+    }
+
+    /// <summary>
+    /// An application of no readable version that this move never began: touched not at all, pending, with a repair that can
+    /// work — its installer from the release page — and status saying what would move it.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_application_of_no_readable_version_leaves_the_move_pending_with_a_repair_that_can_work(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        MoveRig.PlantApplication(rig.Application, windows, SemanticVersion.Current.ToString());
+        File.Delete(Path.Combine(Path.GetDirectoryName(rig.Carried)!, CarriedExecutable.RecordName));
+        var before = Snapshot(rig.Application);
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Pending, answer.State);
+        Assert.Contains("no version that can be read", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains($"/releases/tag/v{SemanticVersion.Current}", answer.Reason!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Check for Updates", answer.Reason!, StringComparison.Ordinal);
+        Assert.Equal(before, Snapshot(rig.Application));
+        Assert.DoesNotContain(rig.Acts, act => act.StartsWith("setup", StringComparison.Ordinal));
+        Assert.Equal(CheckState.Unknown, StatusChecks.Move(rig.Env).State);
+    }
+
+    /// <summary>
+    /// The application a setup this move began left half installed — the record put it there at <c>verified</c> and never said
+    /// it was placed — is set up again where nothing runs from it; where its setup or anything of it still runs, the move waits.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_setup_this_move_began_and_never_finished_is_run_again_where_nothing_runs_from_it(bool stillRunning)
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        var ledger = rig.Complete();
+        new MoveRecord(SemanticVersion.Current.ToString(), Path.GetFullPath(rig.Old), MoveStates.Pending, MoveSteps.Verified, null, rig.Application, "left running", rig.Installation.Feed.AbsoluteUri, DateTimeOffset.UtcNow, "the-moves-marker").Write(rig.Update.Move);
+        File.WriteAllText(Path.Combine(Directory.CreateDirectory(rig.Application).FullName, "Jason.exe"), "half");
+        if (stillRunning)
+        {
+            rig.System.Running.Add(Path.Combine(rig.Update.MoveDownloads, CommandLineMove.WindowsAsset));
+        }
+
+        var answer = await rig.Move().RunAsync(ledger, rig.Installation.Feed, Ct);
+
+        if (stillRunning)
+        {
+            Assert.Equal(MoveStates.Pending, answer.State);
+            Assert.DoesNotContain(rig.Acts, act => act.StartsWith("setup", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.Equal(MoveStates.Done, answer.State);
+            Assert.Contains($"setup /S /D={rig.Application}", rig.Acts);
+            Assert.Equal("the-moves-marker", rig.Record()!.Marker);
+        }
+    }
+
+    /// <summary>
+    /// On Windows an application of this version or later already there has its jason held to the publisher before anything of
+    /// it runs, as a downloaded installer is and as macOS holds a found application: one signed by another is never run.
+    /// </summary>
+    [Fact]
+    public async Task On_Windows_a_found_applications_jason_not_signed_by_the_publisher_is_never_run()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        MoveRig.PlantApplication(rig.Application, windows: true, SemanticVersion.Current.ToString());
+        rig.System.SignedBy = "Somebody Else Ltd.";
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Failed, answer.State);
+        Assert.Equal(["signature"], rig.Acts);
+        Assert.True(rig.Installation.Running);
     }
 
     // --- the checks --------------------------------------------------------------------------------------------
@@ -292,6 +397,12 @@ public sealed class CommandLineMoveTests
         Assert.Equal(["sysctl"], rig.Acts);
         Assert.Equal(MoveStates.Pending, rig.Record()!.State);
         Assert.DoesNotContain(rig.Installation.Release.Requested, path => path.EndsWith(CommandLineMove.MacAsset, StringComparison.Ordinal));
+
+        // Nothing typed here moves it: status says what stands and what would, with no repair.
+        var check = StatusChecks.Move(rig.Env);
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.Contains("goes on once Jason Desktop is offered for Intel Macs", check.Fact, StringComparison.Ordinal);
+        Assert.Null(check.Fix);
     }
 
     /// <summary>An elevated process moves nothing and writes nothing, the record included.</summary>

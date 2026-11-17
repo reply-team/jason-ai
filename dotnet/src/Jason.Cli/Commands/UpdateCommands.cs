@@ -222,8 +222,18 @@ public static class UpdateCommands
         }
 
         var move = new CommandLineMove(env, new UpdatePaths(env.Paths), env.Clock ?? TimeProvider.System);
-        var response = await move.RunAsync(ledger, feed, cancellationToken).ConfigureAwait(false);
-        return (move.Lines, response);
+        try
+        {
+            var response = await move.RunAsync(ledger, feed, cancellationToken).ConfigureAwait(false);
+            return (move.Lines, response);
+        }
+        catch (Exception unexpected) when (unexpected is not OutOfMemoryException)
+        {
+            // Nothing of the move can turn a complete update into a refusal: what escaped it is said as the move's failure.
+            env.Error.WriteLine(unexpected.Message);
+            var reason = $"The move into Jason Desktop stopped: {unexpected.Message} `jason update apply` carries it on.";
+            return ([.. move.Lines, $"move: {MoveStates.Failed} — {reason}"], new UpdateMoveResponse(MoveStates.Failed, null, null, reason));
+        }
     }
 
     /// <summary>
@@ -1040,13 +1050,18 @@ public static class UpdateCommands
         return true;
     }
 
-    /// <summary>Whether a move into Jason Desktop is done from the command-line install at <paramref name="installPath"/>.</summary>
+    /// <summary>
+    /// Whether the command-line install at <paramref name="installPath"/> was moved into Jason Desktop: its move is done, or the
+    /// install is retired by the rule <c>jason status</c> reads (<see cref="MoveRecord.Retired"/>), which a move stopped after the
+    /// routine leaves with its record not done.
+    /// </summary>
     private static bool MovedFrom(CliEnvironment env, string installPath)
     {
         try
         {
-            return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { State: MoveStates.Done } done
-                && string.Equals(Path.GetFullPath(done.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { } record
+                && string.Equals(Path.GetFullPath(record.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                && (record.State == MoveStates.Done || MoveRecord.Retired(record.From));
         }
         catch (MoveRecordUnreadable)
         {

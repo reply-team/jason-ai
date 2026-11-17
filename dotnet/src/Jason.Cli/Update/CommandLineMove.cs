@@ -37,9 +37,10 @@ namespace Jason.Cli.Update;
 /// setup that has not ended within its bound do. Pending is never failed: <c>jason update apply</c> carries it on.
 /// </para>
 /// <para>
-/// <b>One at a time, under the update's lock</b>, held for the whole move. The installer's own <c>jason install</c> finds it
-/// held and is refused, which the installer ignores; the move runs the application's routine itself once the installer has
-/// returned, handing it the lock.
+/// <b>One at a time, under the update's lock</b>, held for the whole move. The setup is given the move's marker
+/// (<see cref="MoveMarker"/>) and no nonce: its own <c>jason install</c> does nothing while the record stands not done, even
+/// in a setup the move left running, and the move runs the application's routine itself once the installer has returned,
+/// handing it the lock.
 /// </para>
 /// </remarks>
 public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, TimeProvider clock)
@@ -76,6 +77,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     internal TimeSpan Poll { get; init; } = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>How often a download says how far it has come, on standard error.</summary>
+    internal TimeSpan ProgressEvery { get; init; } = TimeSpan.FromSeconds(15);
+
+    private static long Megabytes(long bytes) => bytes / (1024 * 1024);
+
     /// <summary>Called with each record once it is written, as the update's own <c>Writes</c> is: where a test stands a kill.</summary>
     internal Action<MoveRecord>? Writes { get; init; }
 
@@ -85,6 +91,9 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     private IRuntimeProcessControl Processes => env.Processes ?? RuntimeProcessControl.Instance;
 
     private MoveRecord? _record;
+
+    /// <summary>The record a run before this one left, of this same install; null where there was none.</summary>
+    private MoveRecord? _before;
 
     /// <summary>
     /// The move of the install <paramref name="ledger"/> updated, at the version it installed, from <paramref name="feed"/>:
@@ -108,15 +117,22 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         var old = Path.GetFullPath(ledger.InstallPath);
         try
         {
-            if (MoveRecord.Read(update.Move) is { State: MoveStates.Done } done && SamePath(done.From, old, places))
-            {
-                Say($"{old} was moved into Jason Desktop already, at {done.Application}");
-                return Response(done);
-            }
+            _before = MoveRecord.Read(update.Move);
         }
         catch (MoveRecordUnreadable)
         {
             // Written over below, under the lock.
+        }
+
+        if (_before is { State: MoveStates.Done } done && SamePath(done.From, old, places))
+        {
+            Say($"{old} was moved into Jason Desktop already, at {done.Application}");
+            return Response(done);
+        }
+
+        if (_before is not null && !SamePath(_before.From, old, places))
+        {
+            _before = null;
         }
 
         // Refused before anything is read, asked or written: neither is any move's to change.
@@ -155,10 +171,13 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         using (held)
         {
-            _record = new MoveRecord(ledger.ToVersion.ToString(), old, MoveStates.Moving, null, null, null, null, feed.AbsoluteUri, clock.GetUtcNow());
-            RetiredSweep.Sweep(places, old);
+            // The marker an earlier run gave a setup it may have left running is kept, so that setup's own `jason install` still
+            // finds it naming a record that stands not done.
+            var marker = _before is { Marker.Length: > 0 } earlier ? earlier.Marker : Guid.NewGuid().ToString("N");
+            _record = new MoveRecord(ledger.ToVersion.ToString(), old, MoveStates.Moving, null, null, null, null, feed.AbsoluteUri, clock.GetUtcNow(), marker);
             try
             {
+                RetiredSweep.Sweep(places, old);
                 return await MoveAsync(places, ledger.ToVersion, old, feed, held, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -185,23 +204,31 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             // Never attempted: whether Intel Macs are offered Jason Desktop is not decided here.
             return End(
                 MoveStates.Pending,
-                "This is an Intel Mac, for which Jason Desktop is not offered yet, so the command-line install was not moved and nothing was changed; it answers as jason as it did.");
+                "This is an Intel Mac, for which Jason Desktop is not offered yet, so the command-line install was not moved and nothing was changed; it answers as jason as it did.",
+                waits: "Jason Desktop is offered for Intel Macs");
         }
 
         var found = Look(places);
         if (found.Refusal is { } refusal)
         {
-            return End(MoveStates.Pending, refusal, application: found.Application);
+            return End(MoveStates.Pending, refusal, application: found.Application, waits: found.Waits);
         }
 
         Done(MoveSteps.Looked, found.Application);
         if (found.Version is { } there)
         {
+            // Held to the publisher before anything of it runs, as a new one is.
             if (places.Platform is SetupSystem.MacOs
                 && await System.MacSignatureRefusalAsync(found.Application, MoveSignatures.RequirementInForce, cancellationToken).ConfigureAwait(false) is { } unsigned)
             {
                 env.Error.WriteLine(unsigned);
                 return End(MoveStates.Failed, $"The Jason.app at {found.Application} does not verify as signed by the team that signs Jason, so its jason was not run and nothing was changed ({OneLine(unsigned)}). `jason update apply` carries the move on.");
+            }
+
+            if (places.Platform is SetupSystem.Windows
+                && System.WindowsSignatureRefusal(Carried(places, found.Application)!, MoveSignatures.PublisherInForce) is { } unsignedHere)
+            {
+                return End(MoveStates.Failed, $"The jason that Jason Desktop at {found.Application} carries was not run: {unsignedHere}. Nothing was changed. `jason update apply` carries the move on.");
             }
 
             Say($"Jason Desktop {there} is at {found.Application} already, so it is kept as it is and nothing is downloaded");
@@ -334,8 +361,8 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     /// <summary>
     /// Windows: the setup run silently into the application's place and waited for, within its bound; the place looked at
-    /// again first, as the install script does at its last moment. Its own install step finds this move's lock held and is
-    /// refused: the routine is the move's to run.
+    /// again first, as the install script does at its last moment. Its own install step, under the move's marker, does
+    /// nothing: the routine is the move's to run.
     /// </summary>
     private async Task<UpdateMoveResponse?> RunSetupAsync(SetupPlaces places, SemanticVersion version, string application, string setup, CancellationToken cancellationToken)
     {
@@ -344,7 +371,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         {
             // An application appeared while the setup was downloaded and checked: its own, never installed over.
             return again.Refusal is { } refusal
-                ? End(MoveStates.Pending, refusal, application: again.Application)
+                ? End(MoveStates.Pending, refusal, application: again.Application, waits: again.Waits)
                 : End(MoveStates.Pending, $"Jason Desktop {again.Version} appeared at {again.Application} while the move downloaded its installer, so nothing was installed over it; `jason update apply` carries the move on into it.", application: again.Application);
         }
 
@@ -352,7 +379,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         SetupRun run;
         try
         {
-            run = await System.RunSetupAsync(setup, ["/S", "/D=" + application], SetupWait, cancellationToken).ConfigureAwait(false);
+            run = await System.RunSetupAsync(setup, application, _record!.Marker!, SetupWait, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception unstarted) when (unstarted is Win32Exception or IOException or InvalidOperationException)
         {
@@ -361,7 +388,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         if (!run.Ended)
         {
-            return End(MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"The installer of Jason Desktop {version} has not ended within {SetupWait.TotalMinutes:F0} minutes, so it was left running and the command-line install was not touched: it answers as jason as it did. Once Jason Desktop is installed, `jason update apply` carries the move on."));
+            return End(MoveStates.Pending, string.Create(CultureInfo.InvariantCulture, $"The installer of Jason Desktop {version} has not ended within {SetupWait.TotalMinutes:F0} minutes, so it was left running, never ended. Under the move's marker its own setup of this machine does nothing: the command-line install answers as jason as it did, and its runtime runs as it did. Once the installer has ended, `jason update apply` carries the move on into the application it installed."));
         }
 
         switch (run.ExitCode)
@@ -458,14 +485,6 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
             {
                 return End(MoveStates.Failed, $"{application} could not be put in place ({OneLine(refused.Message)}); nothing was installed or changed. `jason update apply` carries the move on.");
-            }
-
-            // The look and the rename are two steps: a Jason.app that appeared between them took this one inside it. It is
-            // taken back out, and that one is left as it was.
-            if (!Directory.Exists(staged) && Directory.Exists(Path.Combine(application, "Jason.app")))
-            {
-                TryMove(Path.Combine(application, "Jason.app"), staged);
-                return End(MoveStates.Pending, $"{application} appeared while the move ran and is left as it was; nothing was installed. `jason update apply` carries the move on into it.", application: application);
             }
 
             Done(MoveSteps.Placed, application);
@@ -616,35 +635,80 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     /// <summary>
     /// The application already here, in either place, and its version; or, where none is, the place a new one goes. An
-    /// application older than <see cref="FirstSettingUp"/>, or one whose version cannot be read, is a refusal: never
-    /// replaced from a terminal.
+    /// application is never replaced, renamed or closed from a terminal: one whose window is open, whatever its version, one
+    /// older than <see cref="FirstSettingUp"/> and one whose version cannot be read are refusals, and the last two wait on what
+    /// no command typed here changes (<c>Waits</c>). The one exception is a Windows setup this move began at that very place,
+    /// killed or left before it ended: where nothing runs from it, the setup is run there again.
     /// </summary>
-    private (string Application, SemanticVersion? Version, string? Refusal) Look(SetupPlaces places)
+    private (string Application, SemanticVersion? Version, string? Refusal, string? Waits) Look(SetupPlaces places)
     {
         foreach (var application in Places(places))
         {
-            var program = places.Platform is SetupSystem.Windows ? Path.Combine(application, "Jason.exe") : application;
-            if (!File.Exists(program) && !Directory.Exists(program))
+            var windows = places.Platform is SetupSystem.Windows;
+            var there = windows ? Path.Combine(application, "Jason.exe") : application;
+            if (!File.Exists(there) && !Directory.Exists(there))
             {
                 continue;
             }
 
+            // The program a window runs: Jason.exe, or the bundle's own executable.
+            var program = windows ? there : Path.Combine(application, "Contents", "MacOS", "Jason");
             var carried = Carried(places, application)!;
-            if (CarriedExecutable.Of(carried) is { } placed && SemanticVersion.TryParse(placed.Version, out var version) && (version with { PreRelease = null }) >= FirstSettingUp)
+            var placed = CarriedExecutable.Of(carried);
+            SemanticVersion version = default;
+            var readable = placed is not null && SemanticVersion.TryParse(placed.Version, out version);
+            if (System.Runs(program))
             {
-                return (application, version, null);
+                return (
+                    application,
+                    null,
+                    $"Jason Desktop{(readable ? " " + version : string.Empty)} at {application} has its window open, and the move never sets the machine up under an open window, so nothing was changed; the command-line install answers as jason as it did. Close Jason Desktop, then `jason update apply` carries the move on.",
+                    null);
             }
 
-            var named = CarriedExecutable.Of(carried)?.Version ?? "of an unknown version";
-            var open = places.Platform is SetupSystem.Windows && System.Runs(program) ? ", and its window is open" : string.Empty;
+            if (readable && (version with { PreRelease = null }) >= FirstSettingUp)
+            {
+                return (application, version, null, null);
+            }
+
+            if (readable)
+            {
+                return (
+                    application,
+                    null,
+                    $"Jason Desktop {version} at {application} is older than {FirstSettingUp}, so it cannot be set up from a terminal and the move of the command-line install waits; nothing was changed, and the command-line install answers as jason as it did. Update Jason Desktop from its own menu (Check for Updates): its first start of {FirstSettingUp} or later takes the command-line install in, and so does `jason update apply` run again after it.",
+                    $"Jason Desktop at {application} is updated to {FirstSettingUp} or later from its own menu");
+            }
+
+            if (windows && SetupBegunHere(application, carried))
+            {
+                Say($"the setup this move began at {application} did not end, and nothing runs from it, so it is run there again");
+                return (application, null, null, null);
+            }
+
+            var page = $"{PublicRepository.Url}/releases/tag/v{_record!.Version}";
             return (
                 application,
                 null,
-                $"Jason Desktop {named} at {application} is older than {FirstSettingUp}{open}, so it cannot be set up from a terminal and the move of the command-line install waits; nothing was changed, and the command-line install answers as jason as it did. Update Jason Desktop from its own menu (Check for Updates): its first start of {FirstSettingUp} or later takes the command-line install in, and so does `jason update apply` run again after it.");
+                $"Jason Desktop at {application} has no version that can be read, perhaps an install that was interrupted, so the move of the command-line install waits; nothing was changed, and the command-line install answers as jason as it did. Run Jason Desktop's installer from {page} again: then `jason update apply` carries the move on.",
+                $"Jason Desktop is installed again at {application} from {page}");
         }
 
-        return (NewPlace(places), null, null);
+        return (NewPlace(places), null, null, null);
     }
+
+    /// <summary>
+    /// Whether the application at <paramref name="application"/>, of no readable version, is what a setup this move began there
+    /// left: the move's own record put the application there and never said it was placed, and no process runs from it, the
+    /// window, its jason or the setup this move downloaded.
+    /// </summary>
+    private bool SetupBegunHere(string application, string carried) =>
+        _before is { State: not MoveStates.Done, Step: MoveSteps.Verified } before
+        && before.Application is { } recorded
+        && string.Equals(Path.GetFullPath(recorded), Path.GetFullPath(application), StringComparison.OrdinalIgnoreCase)
+        && !System.Runs(Path.Combine(application, "Jason.exe"))
+        && !System.Runs(carried)
+        && !System.Runs(Path.Combine(update.MoveDownloads, WindowsAsset));
 
     /// <summary>Where an application is looked for: on macOS this account's own folder first, then the shared one.</summary>
     private IEnumerable<string> Places(SetupPlaces places) =>
@@ -721,6 +785,10 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 throw new MoveDownloadException($"{address} is larger than any Jason Desktop is.");
             }
 
+            var size = response.Content.Headers.ContentLength;
+            Progress(size is { } known
+                ? string.Create(CultureInfo.InvariantCulture, $"downloading {address} ({Megabytes(known)} MB)")
+                : $"downloading {address}");
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             await using (var body = await response.Content.ReadAsStreamAsync(stall.Token).ConfigureAwait(false))
             await using (var file = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -728,10 +796,16 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 var chunk = new byte[81920];
                 long total = 0;
                 int read;
+                var said = clock.GetUtcNow();
                 while ((read = await body.ReadAsync(chunk, stall.Token).ConfigureAwait(false)) > 0)
                 {
                     stall.CancelAfter(StallWait);
                     total += read;
+                    if (clock.GetUtcNow() - said >= ProgressEvery)
+                    {
+                        said = clock.GetUtcNow();
+                        Progress(string.Create(CultureInfo.InvariantCulture, $"downloaded {Megabytes(total)}{(size is { } all ? $" of {Megabytes(all)}" : string.Empty)} MB"));
+                    }
                     if (total > MaxDownloadBytes)
                     {
                         throw new MoveDownloadException($"{address} is larger than any Jason Desktop is.");
@@ -766,14 +840,33 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     // --- the record --------------------------------------------------------------------------------------------
 
-    private void Begin(string step) => Write(_record! with { State = MoveStates.Moving, Doing = step, Reason = null });
+    private void Begin(string step)
+    {
+        Write(_record! with { State = MoveStates.Moving, Doing = step, Reason = null, Waits = null });
+
+        // One line on standard error at each step, which the 0.48 parent passes through as it comes: minutes of a download,
+        // a setup and a routine are never minutes of silence.
+        Progress(step switch
+        {
+            MoveSteps.Looked => "looking for Jason Desktop",
+            MoveSteps.Fetched => "downloading Jason Desktop",
+            MoveSteps.Verified => "checking Jason Desktop against the release's checksums and its publisher's signature",
+            MoveSteps.Placed => "installing Jason Desktop",
+            MoveSteps.SetUp => "setting this machine up through Jason Desktop's jason",
+            MoveSteps.Started => "starting the runtime from Jason Desktop's jason",
+            _ => step,
+        });
+    }
+
+    /// <summary>A line of progress on standard error; never part of the document.</summary>
+    private void Progress(string line) => env.Error.WriteLine($"move: {line}");
 
     private void Done(string step, string? application = null) =>
         Write(_record! with { Step = step, Doing = null, Application = application ?? _record!.Application });
 
-    private UpdateMoveResponse End(string state, string? reason, string? application = null)
+    private UpdateMoveResponse End(string state, string? reason, string? application = null, string? waits = null)
     {
-        Write(_record! with { State = state, Doing = null, Reason = reason, Application = application ?? _record!.Application });
+        Write(_record! with { State = state, Doing = null, Reason = reason, Application = application ?? _record!.Application, Waits = waits });
         if (reason is not null)
         {
             Say(state == MoveStates.Done ? reason : $"{state} — {OneLine(reason)}");
@@ -854,18 +947,6 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         catch (Exception left) when (left is IOException or UnauthorizedAccessException)
         {
             // A staging folder of a dot name beside the application's place: nothing reads it.
-        }
-    }
-
-    private static void TryMove(string from, string to)
-    {
-        try
-        {
-            Directory.Move(from, to);
-        }
-        catch (Exception left) when (left is IOException or UnauthorizedAccessException)
-        {
-            // Left inside the one that appeared: said by the pending sentence's place.
         }
     }
 }

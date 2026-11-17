@@ -1283,24 +1283,33 @@ begins; `jason status` reads it as its `move` check, which names a move that has
 it on: `jason update apply` from the command-line install, which at the version it already is carries the move on rather
 than refuse with `update_up_to_date`, and answers with `from` and `to` both that version. A move that is `done` is not
 carried on again, and a command-line install the application's routine retired is reported as moved, whatever the
-record says.
+record says. Where the move waits on what no command typed here changes — an Intel Mac, an application older than 0.49 or
+one of no readable version — the check says what stands and what would move it, with no repair. Each step, and a running
+download every fifteen seconds, says so in one line beginning `move:` on standard error, which the 0.48 parent passes
+through as it comes; the document is untouched by them.
 
 **The steps**, each recorded before it is taken, after the folders an earlier routine renamed a still-running executable
 into are removed where their process has ended:
 
 | Step | What it does |
 |---|---|
-| `looked` | an application is looked for: on Windows in `%LOCALAPPDATA%\Programs\jason-desktop`; on macOS at `~/Applications/Jason.app`, then `/Applications/Jason.app`. One of 0.49.0 or later is reused as it is, on macOS once its signature verifies, and the next three steps are taken as done; one older, or of a version that cannot be read, is never replaced, renamed or closed from a terminal: the move is `pending`, saying to update Jason Desktop from its own menu, whose first start of 0.49 or later takes the install in |
+| `looked` | an application is looked for: on Windows in `%LOCALAPPDATA%\Programs\jason-desktop`; on macOS at `~/Applications/Jason.app`, then `/Applications/Jason.app`. One of 0.49.0 or later is reused as it is once it verifies — its signature on macOS, its jason's signer on Windows — and the next three steps are taken as done. An application is never replaced, renamed or closed from a terminal: one whose window is open, of any version, leaves the move `pending` until it is closed; one older than 0.49 leaves it `pending`, saying to update Jason Desktop from its own menu, whose first start of 0.49 or later takes the install in; one of no readable version, `pending`, saying to run its installer from the release page again — except on Windows the one a setup this move began there left, which is set up again where nothing runs from it |
 | `fetched` | the release of this version read again, and refused where it names another; `checksums.txt` and the application's asset downloaded under `<data>/update/move/`: `jason-desktop-windows-x64-setup.exe`, or `jason-desktop-macos-arm64.zip`. A download is given 30 minutes whole and never two without a byte; one that does not arrive is `pending` |
 | `verified` | the SHA-256 against its line in `checksums.txt`, then the publisher: on Windows the installer's Authenticode signature, valid and naming the signer `install.ps1` holds it to; on macOS `codesign --verify --deep --strict` with the designated requirement `install.sh` holds it to, on the application unpacked from the zip, before anything of it runs. A refusal is `failed`, and the download is removed |
-| `placed` | Windows: the place looked at again, then the setup run as `/S /D=<place>`, with no window, and waited for at most ten minutes; one that has not ended then is left running and never killed, and the move is `pending`. Its exit 1 or 2 is the include's refusal and is `failed`. macOS: the zip unpacked with `ditto -x -k` into a folder beside the place, so that putting it there is one rename on one volume, and renamed into the place only while it is empty; the shared folder is chosen where this account may write in it, as the updater needs, else the account's own |
+| `placed` | Windows: the place looked at again, then the setup run with the raw command line `/S /D=<place>`, the place last and unquoted as NSIS takes it, spaces included, with no window, and waited for at most ten minutes; one that has not ended then is left running and never killed, and the move is `pending`. Its exit 1 or 2 is the include's refusal and is `failed`. macOS: the zip unpacked with `ditto -x -k` into a folder beside the place, so that putting it there is one rename on one volume, and renamed into the place only while it is empty; the shared folder is chosen where this account may write in it, as the updater needs, else the account's own |
 | `set_up` | the application's own `jason install --retire <the command-line install>`, handed the update's lock and read by its report (§9): it places the application's `jason` in the terminal before it retires anything, stops the command-line install's runtime, leaving the note that a start is owed, and retires that install |
 | `started` | where the routine stopped a runtime, or the note stands and nothing answers, one started from the application's `jason` and waited for for a minute |
 
 **One at a time, and one stop.** The move takes `<data>/update/update.lock` and holds it to its end; a move that finds it
-held is `pending` and writes nothing. The installer's own last step, `jason install` with no flags, finds the lock held and
-is refused, which the installer ignores, so the routine that runs is the move's, once the installer has returned. The only
-runtime stopped is the routine's, after the download and both checks, and the move, having asked for it, starts one again.
+held is `pending` and writes nothing. It gives the setup an environment with no nonce of the lock's and with `JASON_MOVE`,
+the marker its record keeps from one run to the next while it stands not done. The installer's own last step, `jason
+install` with no flags, finds that marker naming a record standing not done and does nothing — nothing placed, retired or
+stopped — says so in its document and exits 0; a `JASON_MOVE` naming no such record is ignored. So the routine that runs
+is the move's, once the installer has returned, and a setup the move left running, past its bound or after a kill, changes
+nothing of the command-line install or its runtime: the next `jason update apply` finds the application, reuses it and runs
+the routine under its own hold. The only runtime stopped is the routine's, after the download and both checks, and the
+move, having asked for it, starts one again. Nothing of the move, the sweep of retired executables included, fails the
+update.
 
 **Every prefix leaves a working installation.** Until `set_up` the command-line install is untouched and answers as
 `jason`, its runtime with it; from `set_up` on, the application's `jason` answers in a new terminal. A move ended at any
@@ -1309,10 +1318,12 @@ point, the runtime's start it owed with it, leaves the note that a start is owed
 
 **What the move never does.** It never renames, replaces or deletes an application that is there, and never closes one.
 It is `pending`, never begun, in a process `update_elevated` would refuse (elevated above the account's ordinary
-rights, another account than the session's, root) and for an install a package manager made, and writes no record there; on an Intel Mac it is `pending` at `looked`, with nothing changed.
+rights, another account than the session's, root) and for an install a package manager made, and writes no record
+there; on an Intel Mac it is `pending` at `looked`, with nothing changed.
 
 **After a move,** the executable the update replaced stays in `<data>/update/previous/` until the next update, and
-`jason update rollback` refuses, pointing to the section below.
+`jason update rollback` refuses, pointing to the section below, once the move is done or the command-line install is
+retired, whatever the record says.
 
 **A test build.** A CLI built with `-p:JasonTestBuild=true` reads the Windows signer and the macOS requirement from
 `JASON_TEST_BUILD_SIGNER` and `JASON_TEST_BUILD_REQUIREMENT`, so a CI run can move into an application it signed itself;

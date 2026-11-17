@@ -26,8 +26,11 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
     /// <summary>The requirement each codesign was asked to hold an application to.</summary>
     public List<string> Requirements { get; } = [];
 
-    /// <summary>What the setup does, given its arguments: by default it installs the application at the version <see cref="Installs"/>.</summary>
-    public Func<IReadOnlyList<string>, Task<SetupRun>>? OnSetup { get; set; }
+    /// <summary>What the setup does, given how it was started: by default it installs the application at the version <see cref="Installs"/>.</summary>
+    public Func<SetupCall, Task<SetupRun>>? OnSetup { get; set; }
+
+    /// <summary>The environment of the process the move runs in, which the setup's is made from.</summary>
+    public IReadOnlyDictionary<string, string> ProcessVariables { get; set; } = new Dictionary<string, string>();
 
     /// <summary>The version an installer or a zip of this release carries.</summary>
     public string Installs { get; set; } = SemanticVersion.Current.ToString();
@@ -63,17 +66,21 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
         return Task.FromResult<string?>(null);
     }
 
-    public Task<SetupRun> RunSetupAsync(string setup, IReadOnlyList<string> arguments, TimeSpan bound, CancellationToken cancellationToken)
+    public Task<SetupRun> RunSetupAsync(string setup, string place, string marker, TimeSpan bound, CancellationToken cancellationToken)
     {
-        acts.Add("setup " + string.Join(' ', arguments));
+        // Started as the real seam starts it: the raw command line and the environment its two functions make.
+        var commandLine = MoveSystem.SetupCommandLine(place);
+        var environment = ProcessVariables.ToDictionary(pair => pair.Key, pair => (string?)pair.Value);
+        MoveSystem.SetupEnvironment(environment, marker);
+        acts.Add("setup " + commandLine);
         Assert.True(File.Exists(setup));
+        var call = new SetupCall(commandLine, SetupCall.NsisPlace(commandLine), environment.Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value!));
         if (OnSetup is { } setUp)
         {
-            return setUp(arguments);
+            return setUp(call);
         }
 
-        var place = arguments.Single(argument => argument.StartsWith("/D=", StringComparison.Ordinal))[3..];
-        MoveRig.PlantApplication(place, windows: true, Installs);
+        MoveRig.PlantApplication(call.Place ?? throw new InvalidOperationException("NSIS found no /D= in " + commandLine), windows: true, Installs);
         return Task.FromResult(new SetupRun(true, 0));
     }
 
@@ -88,6 +95,27 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
     public bool MayWriteInto(string folder) => SharedWritable;
 }
 
+/// <summary>A setup as the move started it: its raw command line, the place NSIS reads from it, and its environment.</summary>
+public sealed record SetupCall(string CommandLine, string? Place, IReadOnlyDictionary<string, string> Environment)
+{
+    /// <summary>
+    /// The install folder NSIS takes from a command line: the text after the last " /D=", to the end, only where it is not
+    /// quoted (NSIS's documentation, "Installer Usage", 3.2.1); null where NSIS would install into its default instead.
+    /// </summary>
+    public static string? NsisPlace(string commandLine)
+    {
+        var line = " " + commandLine;
+        var at = line.LastIndexOf(" /D=", StringComparison.Ordinal);
+        if (at < 0)
+        {
+            return null;
+        }
+
+        var place = line[(at + 4)..];
+        return place.Length == 0 || place.Contains('"', StringComparison.Ordinal) ? null : place;
+    }
+}
+
 /// <summary>
 /// A command-line install whose update to this version is complete, on a Windows or a macOS machine of the test's own: the
 /// installation's data directory, runtime and release (<see cref="FakeInstallation"/>), a home and a programs folder of its
@@ -96,8 +124,11 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
 /// </summary>
 public sealed class MoveRig : IDisposable
 {
-    public MoveRig(bool windows)
+    /// <param name="windows">A Windows machine, else a macOS one.</param>
+    /// <param name="localData">The name of the account's local application data folder, which may hold a space, as a profile's often does.</param>
+    public MoveRig(bool windows, string localData = "local")
     {
+        _localData = localData;
         Windows = windows;
         Installation = new FakeInstallation(SemanticVersion.Parse("0.48.2"), SemanticVersion.Current);
         System = new FakeMoveSystem(Acts) { SharedApplications = Path.Combine(Installation.Root, "Applications") };
@@ -138,7 +169,9 @@ public sealed class MoveRig : IDisposable
 
     public string Home => Path.Combine(Installation.Root, "home");
 
-    public string LocalAppData => Path.Combine(Installation.Root, "local");
+    public string LocalAppData => Path.Combine(Installation.Root, _localData);
+
+    private readonly string _localData;
 
     public string Temporary => Path.Combine(Installation.Root, "tmp");
 
