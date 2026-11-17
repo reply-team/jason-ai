@@ -967,7 +967,11 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
 });
 
-test('a Claude Code turn scrubs the commands it runs on macOS, keyed or not, and on Linux never', async (t) => {
+// Skipped on Windows: the rig stands a macOS or Linux turn on this machine's Windows paths, which the POSIX file rules
+// resolve against the working folder, so the host's command line passes the 32,767 characters Windows allows and the
+// start fails with ENAMETOOLONG before any host runs. The rule itself is held on every platform, keyed or not, by
+// 'a Claude Code turn on macOS and Windows asks the host to scrub credentials ...' in chat-hosts.test.ts.
+test('a Claude Code turn scrubs the commands it runs on macOS, keyed or not, and on Linux never', { skip: process.platform === 'win32' }, async (t) => {
     for (const platform of ['darwin', 'linux'] as const) {
         const r = rig(t, { chat: { platform } });
         Object.assign(r.b.env, { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0' });
