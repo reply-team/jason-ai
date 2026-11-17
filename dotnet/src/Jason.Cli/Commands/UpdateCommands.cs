@@ -61,7 +61,9 @@ public static class UpdateCommands
     {
         var command = new Command(
             "apply",
-            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. Refused, before anything is fetched or stopped, when this jason is the one the desktop application carries, or when the update in flight is that jason's: the desktop's Check for Updates updates the application and its jason together.");
+            "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. "
+            + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window: this jason copies itself under the data directory and continues from there, drains the runtime, starts the application with --update-apply and waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
+            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, and the runtime as it was found. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -74,10 +76,15 @@ public static class UpdateCommands
         {
             Description = "How long to wait for work in flight to finish before stopping the runtime. 0 waits for none of it. Default: 120.",
         };
+        var finish = new Option<bool>("--finish")
+        {
+            Description = "Finish an update a jason Jason Desktop carries handed over, from 'swapped' on, and nothing else: run by that jason's update on the new jason the application now carries. A usage error where no such update is in flight.",
+        };
         var human = VerbOptions.Human();
         command.Options.Add(feed);
         command.Options.Add(version);
         command.Options.Add(drain);
+        command.Options.Add(finish);
         command.Options.Add(human);
 
         command.SetAction((parseResult, cancellationToken) =>
@@ -89,11 +96,21 @@ public static class UpdateCommands
                 parseResult.GetValue(version),
                 parseResult.GetValue(drain),
                 parseResult.GetValue(human),
+                parseResult.GetValue(finish),
                 cancellationToken);
         });
 
         return command;
     }
+
+    public static Task<int> ApplyAsync(
+        CliEnvironment env,
+        string? feed,
+        string? version,
+        int? drainSeconds,
+        bool human,
+        CancellationToken cancellationToken) =>
+        ApplyAsync(env, feed, version, drainSeconds, human, finish: false, cancellationToken);
 
     public static async Task<int> ApplyAsync(
         CliEnvironment env,
@@ -101,27 +118,36 @@ public static class UpdateCommands
         string? version,
         int? drainSeconds,
         bool human,
+        bool finish,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded. A
-        // carried executable reads the update record only to know whether it was handed an update an earlier release began.
-        if (RefusedAsCarried(env, "apply", carriesOnAHandOver: true)
-            || RefusedAsRecordedCarried(env, "apply", completeToo: false)
+        // A jason Jason Desktop carries hands the update to the Desktop, and the copy of it under the data directory carries
+        // on what it began; neither replaces a file of the application's itself.
+        if (CarriedExecutable.Of(env) is { } carried)
+        {
+            return await CarriedApplyAsync(env, carried, continuing: false, feed, version, drainSeconds, human, finish, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (ContinuingFor(env) is { } recorded)
+        {
+            return await CarriedApplyAsync(env, recorded, continuing: true, feed, version, drainSeconds, human, finish, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (finish)
+        {
+            throw new UsageException("--finish finishes an update a jason Jason Desktop carries handed over, and this jason is not one the application carries.");
+        }
+
+        // Before anything at all: before a byte is fetched, the runtime is asked to drain or a step is recorded.
+        if (RefusedAsRecordedCarried(env, "apply", completeToo: false)
             || RefusedAsManaged(env, "apply"))
         {
             return ExitCodes.ApiError;
         }
 
-        var request = new UpdateRequest(
-            Address(feed),
-            Wanted(version),
-            TimeSpan.FromSeconds(drainSeconds is { } seconds and >= 0
-                ? seconds
-                : drainSeconds is null
-                    ? DefaultDrainSeconds
-                    : throw new UsageException("--drain-seconds cannot be negative.")));
+        var request = Request(feed, version, drainSeconds);
 
         // Inside the try: an installation that cannot be updated is a refusal with a code, like every other.
         UpdateApplier applier;
@@ -134,7 +160,14 @@ public static class UpdateCommands
             var ledger = await applier.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
             if (applier.HandedOver)
             {
-                return await HandOverAsync(env, applier.Steps, ledger, request, human, cancellationToken).ConfigureAwait(false);
+                return await HandOverAsync(
+                    env,
+                    applier.Steps,
+                    [ledger.InstallPath, "update", "apply", "--feed", request.Feed.AbsoluteUri],
+                    human,
+                    (why, cause) => NotFinished(env, ledger, why, cause),
+                    recover: null,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             Print(env, human, applier.Steps, ledger);
@@ -181,30 +214,38 @@ public static class UpdateCommands
     private static async Task<int> HandOverAsync(
         CliEnvironment env,
         IReadOnlyList<string> steps,
-        UpdateLedger ledger,
-        UpdateRequest request,
+        IReadOnlyList<string> command,
         bool human,
+        Func<string, Exception?, UpdateException> unfinished,
+        Func<CancellationToken, Task>? recover,
         CancellationToken cancellationToken)
     {
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         FinishedCommand finished;
         try
         {
-            finished = await processes
-                .RunAsync(env.Paths, [ledger.InstallPath, "update", "apply", "--feed", request.Feed.AbsoluteUri], env.Error, cancellationToken)
-                .ConfigureAwait(false);
+            finished = await processes.RunAsync(env.Paths, command, env.Error, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception error) when (error is Win32Exception or IOException or InvalidOperationException)
         {
-            throw NotFinished(env, ledger, $"it could not be run to finish the update: {error.Message}", error);
+            if (recover is not null)
+            {
+                await recover(cancellationToken).ConfigureAwait(false);
+            }
+
+            throw unfinished($"it could not be run to finish the update: {error.Message}", error);
         }
 
         if (finished.ExitCode is not (ExitCodes.Success or ExitCodes.ApiError or ExitCodes.Usage or ExitCodes.RuntimeUnavailable)
             || Document(finished.StandardOutput) is not { } document)
         {
-            throw NotFinished(
-                env,
-                ledger,
+            // Whoever asked for a runtime's stop starts one again: a hand-over that ended with no answer may have left none.
+            if (recover is not null)
+            {
+                await recover(cancellationToken).ConfigureAwait(false);
+            }
+
+            throw unfinished(
                 string.Create(CultureInfo.InvariantCulture, $"the update was handed to it and it ended without an answer this command gives, with exit code {finished.ExitCode}."),
                 null);
         }
@@ -241,6 +282,259 @@ public static class UpdateCommands
             UpdateCodes.NotHealthy,
             $"{ledger.ToVersion} is in place at {ledger.InstallPath}, and {why} The update stands at '{SnakeCase(step)}'. "
             + $"Run `jason update apply` to finish it, or `jason update rollback` to put {ledger.FromVersion} back.",
+            cause);
+    }
+
+    /// <summary>What an apply was asked for: the feed, the version, and the bound of the drain.</summary>
+    private static UpdateRequest Request(string? feed, string? version, int? drainSeconds) =>
+        new(
+            Address(feed),
+            Wanted(version),
+            TimeSpan.FromSeconds(drainSeconds is { } seconds and >= 0
+                ? seconds
+                : drainSeconds is null
+                    ? DefaultDrainSeconds
+                    : throw new UsageException("--drain-seconds cannot be negative.")));
+
+    /// <summary>
+    /// The carried jason whose update this process continues: where it runs as the copy under
+    /// <c>&lt;data&gt;/update/applier/</c> and the update in flight names a jason Jason Desktop carries. Null otherwise.
+    /// </summary>
+    private static CarriedExecutable? ContinuingFor(CliEnvironment env)
+    {
+        var paths = new UpdatePaths(env.Paths);
+        if ((env.InstallPath ?? SelfExecutable.InstalledImage) is not { } self
+            || !SamePath(self, Path.Combine(paths.Applier, ReleaseAssets.ExecutableName)))
+        {
+            return null;
+        }
+
+        try
+        {
+            return UpdateLedger.ReadFile(paths.Ledger) is { Step: not UpdateStep.Complete } ledger && !string.IsNullOrWhiteSpace(ledger.InstallPath)
+                ? CarriedExecutable.Of(ledger.InstallPath)
+                : null;
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static bool SamePath(string path, string other) =>
+        string.Equals(
+            Path.GetFullPath(path),
+            Path.GetFullPath(other),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// The update of a jason Jason Desktop carries (<see cref="CarriedUpdate"/>), from wherever it stands: planned and handed
+    /// to the copy of this jason; carried on by that copy through the Desktop's install to <c>swapped</c> and handed to the new
+    /// carried jason; or finished by the new carried jason, which is this process.
+    /// </summary>
+    /// <remarks>
+    /// The copy continues because the Windows installer refuses while any process runs from the carried file, and on macOS
+    /// the file is replaced under it. A refusal of the Desktop's, or no answer, leaves the runtime as it was found and puts
+    /// back the record that stood; a hand-over that ends with no answer starts the runtime again where one was running.
+    /// </remarks>
+    private static async Task<int> CarriedApplyAsync(
+        CliEnvironment env,
+        CarriedExecutable carried,
+        bool continuing,
+        string? feed,
+        string? version,
+        int? drainSeconds,
+        bool human,
+        bool finish,
+        CancellationToken cancellationToken)
+    {
+        var paths = new UpdatePaths(env.Paths);
+        var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform);
+
+        // The record first, and only to know whether this jason was handed an update past the swap, which it finishes with
+        // or without a Desktop to ask; a record that cannot be read hands nothing over.
+        UpdateLedger? inFlight = null;
+        Exception? unread = null;
+        try
+        {
+            inFlight = UpdateLedger.ReadFile(paths.Ledger) is { Step: not UpdateStep.Complete } open ? open : null;
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            unread = error;
+        }
+
+        if (!handing.HasDesktop && inFlight is not { Step: >= UpdateStep.Swapped } && !(continuing && inFlight is not null))
+        {
+            env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "apply"), retryable: false));
+            return ExitCodes.ApiError;
+        }
+
+        if (unread is not null)
+        {
+            env.Out.WriteLine(unread is UpdateLedgerException invalid
+                ? CliErrors.Serialize(invalid.Code, invalid.Message, retryable: false)
+                : CliErrors.Serialize(UpdateCodes.FileRefused, $"The update ledger at {paths.Ledger} could not be read: {unread.Message} Run `jason update apply` again once it can.", retryable: true));
+            return ExitCodes.ApiError;
+        }
+
+        var request = Request(feed, version, drainSeconds);
+        var wasLive = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is not null;
+        try
+        {
+            if (inFlight is not null && !carried.Is(inFlight.InstallPath))
+            {
+                throw new UpdateException(
+                    UpdateCodes.InProgress,
+                    $"An update of the jason at {inFlight.InstallPath} to {inFlight.ToVersion} is in flight at '{SnakeCase(inFlight.Step)}'. "
+                    + $"Finish it with that jason, `{inFlight.InstallPath} update apply`, or see where it stands with `jason update status`.");
+            }
+
+            if (inFlight is not null && request.Version is { } wanted && wanted != inFlight.ToVersion)
+            {
+                throw new UpdateException(
+                    UpdateCodes.InProgress,
+                    $"An update to {inFlight.ToVersion} is in flight at '{SnakeCase(inFlight.Step)}'. Finish it with `jason update apply`, "
+                    + $"or see where it stands with `jason update status`; {wanted} cannot be started until it is done.");
+            }
+
+            // Past the swap, or with the application already the new version, what is left is the new jason's: this process
+            // where it is that jason, and the carried file run with --finish where this is the copy.
+            if (inFlight is not null && (inFlight.Step >= UpdateStep.Swapped || handing.Names(inFlight.ToVersion)))
+            {
+                if (continuing)
+                {
+                    var swapped = inFlight.Step >= UpdateStep.Swapped ? inFlight : handing.Swapped(inFlight);
+                    return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+                }
+
+                return await FinishAsync(env, handing, inFlight, request, human, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (finish)
+            {
+                throw new UsageException(
+                    $"--finish finishes an update of {carried.Executable} that is past 'swapped', and none is in flight: `jason update apply` begins one.");
+            }
+
+            if (continuing)
+            {
+                var installed = await handing.InstallAsync(inFlight!, request, cancellationToken).ConfigureAwait(false);
+                return await HandToFinishAsync(env, handing, installed, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+            }
+
+            // This jason plans, puts its copy aside and ends its part there: the copy drains, asks the Desktop and waits.
+            var planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+            handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
+            return await HandOverAsync(
+                env,
+                handing.Steps,
+                [handing.Copy, "update", "apply", "--feed", request.Feed.AbsoluteUri, "--drain-seconds", ((int)request.Drain.TotalSeconds).ToString(CultureInfo.InvariantCulture)],
+                human,
+                (why, cause) => CopyNotFinished(env, handing, planned, why, cause),
+                ct => handing.RecoverAsync(wasLive, ct),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (UpdateException error)
+        {
+            foreach (var step in handing.Steps)
+            {
+                env.Error.WriteLine(step);
+            }
+
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, error.Retryable));
+            return ExitCodes.ApiError;
+        }
+        catch (UpdateFeedException error)
+        {
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: error.Code == UpdateFeedException.Unreachable));
+            return ExitCodes.ApiError;
+        }
+        catch (UpdateLedgerException error)
+        {
+            env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
+            return ExitCodes.ApiError;
+        }
+    }
+
+    /// <summary>
+    /// The copy's part ends at <c>swapped</c>: the new carried jason, the application's own file now, takes the rest with
+    /// <c>--finish</c>, and its document is this one with the copy's lines in front.
+    /// </summary>
+    private static Task<int> HandToFinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger swapped, UpdateRequest request, bool human, bool wasLive, CancellationToken cancellationToken) =>
+        HandOverAsync(
+            env,
+            handing.Steps,
+            [handing.Carried.Executable, "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
+            human,
+            (why, cause) => NotFinished(env, swapped, why, cause),
+            ct => handing.RecoverAsync(wasLive, ct),
+            cancellationToken);
+
+    /// <summary>
+    /// The new carried jason's part: <c>plugins</c>, <c>started</c>, <c>healthy</c>, <c>complete</c>, the skills this
+    /// installation recorded, the machine setup and the UI, then the application's own record of the update settled.
+    /// </summary>
+    private static async Task<int> FinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger inFlight, UpdateRequest request, bool human, CancellationToken cancellationToken)
+    {
+        if (inFlight.Step < UpdateStep.Swapped)
+        {
+            handing.Swapped(inFlight);
+            handing.Steps.Add($"swapped: the application is {inFlight.ToVersion}");
+        }
+
+        var applier = new UpdateApplier(env, new UpdatePaths(env.Paths), TimeProvider.System, handing.Carried.Executable) { SetsUpTheMachine = true };
+        try
+        {
+            var ledger = await applier.ApplyAsync(request, cancellationToken).ConfigureAwait(false);
+            var steps = handing.Steps.Concat(applier.Steps).ToList();
+            if (ledger.Step == UpdateStep.Complete)
+            {
+                handing.Steps.Clear();
+                await handing.SettleAsync(cancellationToken).ConfigureAwait(false);
+                steps.AddRange(handing.Steps);
+            }
+
+            Print(env, human, steps, ledger);
+            return ExitCodes.Success;
+        }
+        catch (UpdateException)
+        {
+            handing.Steps.AddRange(applier.Steps);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Why a jason Jason Desktop carries is not updated here: there is no Jason Desktop to hand the update to, on Linux, or
+    /// where the application is not where its jason says.
+    /// </summary>
+    private static string NoDesktop(CliEnvironment env, CarriedExecutable carried, string verb) =>
+        env.Setup is { } places
+            ? $"This jason is the one the Jason desktop application carries, at {carried.Executable}, and the application is not at "
+              + $"{CarriedUpdate.ApplicationOf(carried.Executable, places.Platform)}, so `jason update {verb}` has no Jason Desktop to hand the update to "
+              + "and would change a file inside the application. Choose Check for Updates in the desktop's Jason menu, or in the menu of its icon in the tray."
+            : $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason update {verb}` "
+              + "would change a file inside the application. The application and the jason it carries are updated together: "
+              + "choose Check for Updates in the desktop's Jason menu, or in the menu of its icon in the tray.";
+
+    /// <summary>The refusal for a copy that ended with no answer: the update stands at the step it reached, and is carried on.</summary>
+    private static UpdateException CopyNotFinished(CliEnvironment env, CarriedUpdate handing, UpdateLedger ledger, string why, Exception? cause)
+    {
+        UpdateStep step;
+        try
+        {
+            step = UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger)?.Step ?? ledger.Step;
+        }
+        catch (UpdateLedgerException)
+        {
+            step = ledger.Step;
+        }
+
+        return new UpdateException(
+            UpdateCodes.NotHealthy,
+            $"The update to {ledger.ToVersion} was handed to the copy of this jason at {handing.Copy}, and {why} The update stands at "
+            + $"'{SnakeCase(step)}'. Run `jason update apply` to carry it on.",
             cause);
     }
 
@@ -315,14 +609,34 @@ public static class UpdateCommands
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        if (RefusedAsCarried(env, "rollback", carriesOnAHandOver: false)
-            || RefusedAsRecordedCarried(env, "rollback", completeToo: true)
+        string? application = null;
+        if (CarriedExecutable.Of(env) is { } carried)
+        {
+            if (RefusedAsAnotherRecord(env, carried))
+            {
+                return ExitCodes.ApiError;
+            }
+
+            if (env.Setup is not { } places)
+            {
+                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                return ExitCodes.ApiError;
+            }
+
+            application = CarriedUpdate.ApplicationFolderOf(carried.Executable, places.Platform);
+            if (!File.Exists(CarriedUpdate.ApplicationOf(carried.Executable, places.Platform)))
+            {
+                env.Out.WriteLine(CliErrors.Serialize(UpdateCodes.CarriedByDesktop, NoDesktop(env, carried, "rollback"), retryable: false));
+                return ExitCodes.ApiError;
+            }
+        }
+        else if (RefusedAsRecordedCarried(env, "rollback", completeToo: true)
             || RefusedAsManaged(env, "rollback"))
         {
             return ExitCodes.ApiError;
         }
 
-        var rollback = new UpdateRollback(env, new UpdatePaths(env.Paths), TimeProvider.System);
+        var rollback = new UpdateRollback(env, new UpdatePaths(env.Paths), TimeProvider.System) { Application = application };
         try
         {
             var ledger = await rollback.RollBackAsync(cancellationToken).ConfigureAwait(false);
@@ -349,47 +663,33 @@ public static class UpdateCommands
     }
 
     /// <summary>
-    /// Refuses, and says so, where this jason is the one the desktop application carries (<see cref="CarriedExecutable"/>).
-    /// The file is the application's — signed with it on macOS, the installer's on Windows — and the desktop's own update
-    /// replaces the application and the jason inside it together, so these verbs leave it alone and point there.
+    /// Refuses, and says so, where a jason Jason Desktop carries is asked to roll back an update whose record names another
+    /// file: a rollback acts on the file the record names, and that file is not this application's.
     /// </summary>
-    /// <remarks>
-    /// One update is carried on rather than refused, and only by <c>apply</c>: one already past <c>swapped</c> whose
-    /// install path is this very file. Only the applier of a release from before this refusal leaves one: it takes every
-    /// step up to the swap in its own process — the runtime stopped, the carried file moved aside, the new one put in its
-    /// place — and then runs <c>jason update apply</c> from that path, so no code of this build runs before the carried file
-    /// is replaced. A refusal then would leave the runtime it stopped stopped and the update half done; the update is
-    /// finished instead, and the next one is refused.
-    /// </remarks>
-    private static bool RefusedAsCarried(CliEnvironment env, string verb, bool carriesOnAHandOver)
+    private static bool RefusedAsAnotherRecord(CliEnvironment env, CarriedExecutable carried)
     {
-        if (CarriedExecutable.Of(env) is not { } carried || (carriesOnAHandOver && HandedOverTo(env, carried)))
+        var path = new UpdatePaths(env.Paths).Ledger;
+        UpdateLedger? ledger;
+        try
+        {
+            ledger = UpdateLedger.ReadFile(path);
+        }
+        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        if (ledger is null || string.IsNullOrWhiteSpace(ledger.InstallPath) || carried.Is(ledger.InstallPath))
         {
             return false;
         }
 
         env.Out.WriteLine(CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
-            $"This jason is the one the Jason desktop application carries, at {carried.Executable}, so `jason update {verb}` "
-            + "would change a file inside the application. The application and the jason it carries are updated together: "
-            + "choose Check for Updates in the desktop's Jason menu, or in the menu of its icon in the tray.",
+            $"The update recorded at {path} is of the jason at {ledger.InstallPath}, not of the one the Jason desktop application carries, "
+            + $"at {carried.Executable}, so this jason does not roll it back: that jason does, with `{ledger.InstallPath} update rollback`.",
             retryable: false));
         return true;
-    }
-
-    /// <summary>Whether the update record names one past <c>swapped</c>, not complete, whose install path is the carried file.</summary>
-    private static bool HandedOverTo(CliEnvironment env, CarriedExecutable carried)
-    {
-        try
-        {
-            return UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger) is { Step: >= UpdateStep.Swapped and not UpdateStep.Complete } ledger
-                && carried.Is(ledger.InstallPath);
-        }
-        catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
-        {
-            // Not an update record this build reads: nothing was handed over that it can tell, and the refusal stands.
-            return false;
-        }
     }
 
     /// <summary>

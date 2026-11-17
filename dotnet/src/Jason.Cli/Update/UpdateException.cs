@@ -69,9 +69,28 @@ public static class UpdateCodes
 
     /// <summary>
     /// This jason is the one the desktop application carries, known by the record beside it, so its file is the
-    /// application's: the desktop's own update replaces the application and the jason inside it together.
+    /// application's, and no Jason Desktop is there to hand the update to: on Linux, or where the application is not
+    /// where its carried jason says it is. Or the update recorded names such a file other than this one.
     /// </summary>
     public const string CarriedByDesktop = "update_carried_by_desktop";
+
+    /// <summary>
+    /// A carried jason handed the update to Jason Desktop, and the Desktop refused it: its reason and its sentence are the
+    /// message. Nothing was installed, and the runtime is as it was before the drain.
+    /// </summary>
+    public const string RefusedByDesktop = "update_refused_by_desktop";
+
+    /// <summary>
+    /// A carried jason handed the update to Jason Desktop and had no answer: the start could not be made, ended with no
+    /// request file naming an end, or a running window named none within the wait. The runtime is as it was before the drain.
+    /// </summary>
+    public const string DesktopUnanswered = "update_desktop_unanswered";
+
+    /// <summary>
+    /// Jason Desktop handed the update to its installer, and within ten minutes the application's <c>version.json</c> did
+    /// not name the version asked for.
+    /// </summary>
+    public const string DesktopNotInstalled = "update_desktop_not_installed";
 
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
@@ -91,6 +110,9 @@ public static class UpdateCodes
         RollbackUnsafe,
         ManagedByPackageManager,
         CarriedByDesktop,
+        RefusedByDesktop,
+        DesktopUnanswered,
+        DesktopNotInstalled,
     ];
 }
 

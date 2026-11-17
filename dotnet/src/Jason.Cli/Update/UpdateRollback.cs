@@ -71,6 +71,13 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// </remarks>
     internal Action WarmUp { get; init; } = AssemblyWarmUp.Run;
 
+    /// <summary>
+    /// The folder of the application whose carried jason the update replaced, where it was one Jason Desktop carries: then
+    /// the application is the Desktop's to put back, by hand, and this rollback puts back the plugin packages and the
+    /// database and starts no runtime, since the jason that would start it is still the newer one. Null for a jason of its own.
+    /// </summary>
+    internal string? Application { get; init; }
+
     public async Task<UpdateLedger> RollBackAsync(CancellationToken cancellationToken)
     {
         var ledger = UpdateLedger.ReadFile(update.Ledger)
@@ -78,7 +85,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 UpdateCodes.NothingToRollBack,
                 $"There is no record of an update at {update.Ledger}, so there is nothing to put back.");
 
-        if (!File.Exists(ledger.PreviousPath))
+        if (Application is null && !File.Exists(ledger.PreviousPath))
         {
             throw new UpdateException(
                 UpdateCodes.NothingToRollBack,
@@ -90,19 +97,37 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
 
         await StopAsync(cancellationToken).ConfigureAwait(false);
 
-        // Before the first move: from then on the file at this process's own path may be another build, and the start
-        // below is from the executable put back there, which is whole.
-        WarmUp();
-        Restore(ledger);
+        if (Application is null)
+        {
+            // Before the first move: from then on the file at this process's own path may be another build, and the start
+            // below is from the executable put back there, which is whole.
+            WarmUp();
+            Restore(ledger);
+        }
 
+        // Whether this update's first start migrated the database, decided before the restore below reads it: a database it
+        // migrated and that is not put back is one a version from DataNewer.FirstRefusing on does not start on, whatever the
+        // reason it stays, a backup that is gone among them.
+        var migrated = ledger.NewlyApplied.Count > 0 || (ledger.BackupFile ?? BackupWrittenByThisUpdate(ledger)) is not null;
         var (restored, unsafeToRestore) = RestoreDatabase(ledger, chronicle);
         RestorePlugins(ledger);
 
-        // Whatever was decided about the database, the runtime is started on the version that is now installed, and a
-        // refusal below is about the database, never about the start. A version from DataNewer.FirstRefusing on does not
-        // start on a database the newer one migrated and that was left as it is: then nothing is running, its refusal is
-        // said as a step, and the database refusal below says how to go the rest of the way.
-        await StartAsync(ledger, refusesTheDatabase: unsafeToRestore is not null && RefusesNewerData(ledger.FromVersion), cancellationToken).ConfigureAwait(false);
+        if (Application is { } application)
+        {
+            // The application is still the newer one, and so is the jason it carries: a runtime started from it would migrate
+            // a restored database again. Putting the application back is the one step by hand, and the start follows it.
+            Say($"the application at {application} is still {ledger.ToVersion}, and no runtime was started: quit Jason Desktop, "
+                + $"put {ledger.KeptApplication ?? "the copy Jason Desktop kept under its rollback folder"} back in the place of {application} by hand, "
+                + $"then run `jason runtime start` to start {ledger.FromVersion}");
+        }
+        else
+        {
+            // Whatever was decided about the database, the runtime is started on the version that is now installed, and a
+            // refusal below is about the database, never about the start. A version from DataNewer.FirstRefusing on does not
+            // start on a database the newer one migrated and that was left as it is: then nothing is running, its refusal is
+            // said as a step, and the database refusal below says how to go the rest of the way.
+            await StartAsync(ledger, refusesTheDatabase: !restored && migrated && RefusesNewerData(ledger.FromVersion), cancellationToken).ConfigureAwait(false);
+        }
 
         var back = ledger with { Step = UpdateStep.Complete, ToVersion = ledger.FromVersion, FromVersion = ledger.ToVersion, Plugins = [] };
         var record = Keep(back, restored);
@@ -490,7 +515,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             Say($"the database was left as it is: {why}");
             return (false, new UpdateException(
                 UpdateCodes.RollbackUnsafe,
-                $"{ledger.FromVersion} is back in place, but the database was left as it is: {why}, "
+                $"{BackInPlace(ledger)}, but the database was left as it is: {why}, "
                 + $"and restoring '{Path.GetFileName(backup)}' would erase it. "
                 + OlderOnNewer(ledger.FromVersion, ledger.ToVersion)
                 + $"stop the runtime, copy '{backup}' over state/jason.db, delete the -wal and -shm files beside it, and start again."));
@@ -551,7 +576,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             Say($"the database could not be restored from {Path.GetFileName(backup)}: {error.Message}");
             return (false, new UpdateException(
                 UpdateCodes.FileRefused,
-                $"{ledger.FromVersion} is back in place, but the database could not be restored from '{backup}': {error.Message} "
+                $"{BackInPlace(ledger)}, but the database could not be restored from '{backup}': {error.Message} "
                 + "The database is as the update left it. To go the rest of the way, stop the runtime, copy that file over "
                 + "state/jason.db, delete the -wal and -shm files beside it, and start again."
                 + stranded,
@@ -569,6 +594,15 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
         Say($"restored the database from {Path.GetFileName(backup)} and took its write-ahead log away");
         return (true, null);
     }
+
+    /// <summary>
+    /// What went back, as a refusal about the database begins: the version, or for an application Jason Desktop carries, its
+    /// plugin packages, with the application still to be put back by hand.
+    /// </summary>
+    private string BackInPlace(UpdateLedger ledger) =>
+        Application is null
+            ? $"{ledger.FromVersion} is back in place"
+            : $"The plugin packages of {ledger.FromVersion} are back, and the application at {Application} is put back by hand";
 
     /// <summary>
     /// What an image moved out of the install path is kept under: the version it is, the moment it was moved,

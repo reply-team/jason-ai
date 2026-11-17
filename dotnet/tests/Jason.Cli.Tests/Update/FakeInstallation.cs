@@ -39,8 +39,13 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// The notices the release's archive carries beside the executable, by their names in the archive, with their text. A
     /// release carries its licence alone when not given, as releases before 0.6.0 do.
     /// </param>
-    public FakeInstallation(SemanticVersion? from = null, SemanticVersion? to = null, IReadOnlyDictionary<string, string>? releaseNotices = null)
+    /// <param name="installedIn">
+    /// Where under the test's own tree the executable is installed: <c>install</c> when not given, or the folder an application
+    /// carries its jason in, for an installation Jason Desktop carries (<see cref="FakeDesktop"/>).
+    /// </param>
+    public FakeInstallation(SemanticVersion? from = null, SemanticVersion? to = null, IReadOnlyDictionary<string, string>? releaseNotices = null, string? installedIn = null)
     {
+        _installedIn = installedIn ?? "install";
         From = from ?? SemanticVersion.Current;
         To = to ?? SemanticVersion.Parse("9.9.9");
         ReleaseNotices = releaseNotices ?? new Dictionary<string, string> { ["LICENSE"] = "MIT" };
@@ -100,12 +105,30 @@ public sealed class FakeInstallation : HttpMessageHandler
             // under test; what a real one is made of is the update job's to prove.
             OnRun = async (paths, command, error, cancellationToken) =>
             {
-                var feed = command[command.ToList().IndexOf("--feed") + 1];
+                // The application, where Jason Desktop carries this installation: its own start, never `jason`.
+                if (Desktop is { } desktop && desktop.IsStartOf(command))
+                {
+                    return await desktop.RunAsync(paths, command, cancellationToken);
+                }
+
+                var arguments = command.ToList();
+                var feed = arguments[arguments.IndexOf("--feed") + 1];
+                var drain = arguments.IndexOf("--drain-seconds") is >= 0 and var at ? int.Parse(arguments[at + 1], System.Globalization.CultureInfo.InvariantCulture) : (int?)null;
                 var said = new StringWriter();
+                OnHandOver?.Invoke(command);
                 _handedOver = true;
                 try
                 {
-                    var exit = await UpdateCommands.ApplyAsync((Machine ?? Env!) with { Out = said, Error = error, Paths = paths }, feed, null, null, human: false, cancellationToken);
+                    // The program run is the one the command names: the new build at the install path, or the copy of a carried
+                    // jason under the data directory, which reads where it runs from as itself.
+                    var exit = await UpdateCommands.ApplyAsync(
+                        (Machine ?? Env!) with { Out = said, Error = error, Paths = paths, InstallPath = command[0] },
+                        feed,
+                        null,
+                        drain,
+                        human: false,
+                        finish: arguments.Contains("--finish"),
+                        cancellationToken);
                     return new FinishedCommand(exit, said.ToString());
                 }
                 finally
@@ -149,9 +172,20 @@ public sealed class FakeInstallation : HttpMessageHandler
 
     public JasonPaths Paths => new(Path.Combine(_tree.Root, "data"));
 
+    /// <summary>The test's own tree, for a fake that lays things beside the installation.</summary>
+    public string Root => _tree.Root;
+
+    private readonly string _installedIn;
+
+    /// <summary>The application that carries this installation, where a test made one: its starts are answered by it.</summary>
+    public FakeDesktop? Desktop { get; set; }
+
+    /// <summary>What to do as a command an update hands the rest to is run, before it runs: for a test about one that fails.</summary>
+    public Action<IReadOnlyList<string>>? OnHandOver { get; set; }
+
     public UpdatePaths Update => new(Paths);
 
-    public string InstallDirectory => Path.Combine(_tree.Root, "install");
+    public string InstallDirectory => Path.Combine(_tree.Root, _installedIn);
 
     public string InstallPath => Path.Combine(InstallDirectory, ReleaseAssets.ExecutableName);
 
@@ -432,6 +466,13 @@ public sealed class FakeInstallation : HttpMessageHandler
     /// Its descriptor stays behind, naming a process that has gone, and nothing answers at the address it names.
     /// </summary>
     public void RuntimeDies() => Running = false;
+
+    /// <summary>The runtime stopped as <c>jason runtime stop</c> stops it, by a program other than the verb under test.</summary>
+    public void RuntimeStopped()
+    {
+        Running = false;
+        File.Delete(Paths.DescriptorFile);
+    }
 
     /// <summary>Starts with a runtime already up, which is what an update usually finds.</summary>
     public FakeInstallation WithRuntime(int runningAttempts = 0)

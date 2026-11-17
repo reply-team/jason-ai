@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Files;
+using Jason.Cli.Installation;
 using Jason.Cli.Plugins;
 using Jason.Cli.Process;
 using Jason.Cli.Skills;
@@ -61,6 +62,9 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>The name the UI's line goes under, which is no step of the ledger either.</summary>
     private const string Ui = "ui";
+
+    /// <summary>The name the machine setup's lines go under, after the skills: no step of the ledger either.</summary>
+    private const string Install = "install";
 
     /// <summary>Everything the applier did, in order, for the caller to print.</summary>
     public List<string> Steps { get; } = [];
@@ -143,8 +147,66 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         }
 
         await RedeploySkillsAsync(ledger, request, cancellationToken).ConfigureAwait(false);
+        if (SetsUpTheMachine)
+        {
+            await SetUpTheMachineAsync(ledger, cancellationToken).ConfigureAwait(false);
+        }
+
         await PlaceUiAsync(ledger, request, cancellationToken).ConfigureAwait(false);
         return ledger;
+    }
+
+    /// <summary>
+    /// Whether the update, once complete and its recorded skills redeployed, runs the machine setup <c>jason install</c>
+    /// runs, without <c>--roles</c>: what an update of a jason Jason Desktop carries does before the UI, so the terminal
+    /// command and the harness skills move with the application although no window opens.
+    /// </summary>
+    internal bool SetsUpTheMachine { get; init; }
+
+    /// <summary>
+    /// The machine setup of the jason this update installed, run in this process, which is that jason: one line under
+    /// <c>install</c> for each thing it did and left, and for each problem one that names <c>jason install</c>.
+    /// </summary>
+    /// <remarks>
+    /// After <c>complete</c> and never a step of the ledger, as the skills are: the update has happened, so nothing here
+    /// fails it. The role skills are not its: the skills step before it redeployed every deployment this installation
+    /// recorded, the role skills among them.
+    /// </remarks>
+    private async Task SetUpTheMachineAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    {
+        if (env.Setup is not { } places || CarriedExecutable.Of(ledger.InstallPath) is not { } carried)
+        {
+            Say(Install, "not run: this system has no machine setup for Jason Desktop");
+            return;
+        }
+
+        try
+        {
+            var report = await MachineSetup
+                .RunAsync(env, carried, places, new InstallOptions(Human: false, Roles: false, Retire: null), cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var line in report.Done.Concat(report.Left))
+            {
+                Say(Install, OneLine(line).TrimEnd('.'));
+            }
+
+            foreach (var problem in report.Problems)
+            {
+                env.Error.WriteLine(problem);
+                Say(Install, $"{ReasonSaid(problem)}; run: jason install");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Say(Install, "not run — cancelled; run: jason install");
+        }
+        catch (Exception error)
+        {
+            // Everything, as the skills catch everything: a completed update reported as refused is the one outcome this
+            // step must never have.
+            env.Error.WriteLine(error.Message);
+            Say(Install, $"not run — {ReasonSaid(error.Message)}; run: jason install");
+        }
     }
 
     /// <summary>
@@ -519,7 +581,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
     /// is not running is already drained: <c>jason update</c> is the same command whether one is up or not — and one
     /// whose descriptor was left behind by a process that has gone is not running.
     /// </summary>
-    private async Task<UpdateLedger> DrainAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    internal async Task<UpdateLedger> DrainAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
     {
         if (Live() is null)
         {
