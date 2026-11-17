@@ -259,6 +259,23 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return Running.GetValueOrDefault(executable) ?? [];
     }
 
+    /// <summary>
+    /// The processes said to run each executable in any session, where a test says so apart from <see cref="Running"/>: a
+    /// jason in another session, which this session's look does not see.
+    /// </summary>
+    public Dictionary<string, int[]> RunningInAnySession { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyList<int> RunningFromInAnySession(string executable)
+    {
+        Reads.Add($"any-session {executable}");
+        return RunningInAnySession.GetValueOrDefault(executable) ?? Running.GetValueOrDefault(executable) ?? [];
+    }
+
+    /// <summary>The process that started each, where a test says; any other has none that can be told.</summary>
+    public Dictionary<int, int> Parents { get; } = [];
+
+    public int? ParentOf(int pid) => Parents.TryGetValue(pid, out var parent) ? parent : null;
+
     public void UnloadLaunchAgent(string file) => Record("launchagent.unload", file);
 
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>

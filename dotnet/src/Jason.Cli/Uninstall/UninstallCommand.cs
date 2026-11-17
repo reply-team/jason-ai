@@ -94,8 +94,10 @@ public static class UninstallCommand
           - refused before anything is removed while Jason Desktop is open (desktop_running): quit it
             first. --wait-for <pid> waits up to two minutes for that process to end before anything is read.
           - on Windows, from a terminal, refused before anything is removed while another process runs this
-            jason (jason_running): a runtime of another data directory, a journal watch, an agent's call. The
-            application's uninstaller removes nothing while one does. The runtime this stops is not counted.
+            jason, in any session (jason_running): a runtime of another data directory, a journal watch, a
+            call of an agent host opened by hand. The application's uninstaller removes nothing while one
+            does. The runtime this stops, and every process it started (its plugin hosts, its agents' calls),
+            are not counted.
           - with the logon registration: Open Jason at Login, where it starts this application.
           - with the runtime: the runtime an earlier version's demo left running on its own data directory.
           - with the jason: link: the jason-desktop link registration, where it starts this application.
@@ -115,8 +117,8 @@ public static class UninstallCommand
             --keep-application leaves it: the Windows uninstaller in Installed apps calls this so, and removes
             the folder itself next. --keep-application with --purge-data is refused (uninstall_refused).
             macOS: the bundle is deleted only where its Contents/Info.plist names ai.jasonharness.desktop. If
-            macOS refuses the delete, the report says what is left and the verb exits 1: move Jason from
-            Applications to the Bin.
+            macOS refuses the delete, the report says what is left and the verb exits 1: move the bundle it
+            names, wherever it is, to the Bin.
         Elsewhere (Linux), and where no system's places are known, the jason the application carries refuses
         (uninstall_carried_by_desktop) before anything is read or removed, and the message names the way the
         system removes the application.
@@ -588,9 +590,11 @@ public static class UninstallCommand
         return others.Count == 0
             ? null
             : $"Another jason runs from the application's folder (process {string.Join(", ", others.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), "
-              + "and the application's uninstaller removes nothing while one does, so nothing was removed. It may be a runtime "
-              + $"of another data directory, which `\"{carried.Executable}\" runtime stop` with JASON_DATA_DIR set to that directory "
-              + "stops, a `jason journal watch`, or an agent's call, which ends by itself. Once none runs, run this again.";
+              + "and the application's uninstaller removes nothing while one does, so nothing was removed. It is neither the runtime "
+              + $"of {env.Paths.Root}, which this would stop, nor anything that runtime started. It may be a runtime of another data "
+              + $"directory, which `\"{carried.Executable}\" runtime stop` with JASON_DATA_DIR set to that directory stops, a "
+              + "`jason journal watch`, or a call an agent host you opened yourself makes, which ends by itself; in another session "
+              + "of this account, it may be a task that runs whether you are signed in or not. Once none runs, run this again.";
     }
 
     /// <summary>

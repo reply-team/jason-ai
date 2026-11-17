@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Principal;
 using System.Text;
 using Jason.Contracts.Discovery;
@@ -155,7 +156,15 @@ public static class AutostartRegistrars
     internal static string Home => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     /// <summary>Runs one command and says what it said. Nothing here is a shell, and nothing opens a window.</summary>
-    internal static (int Exit, string Output, string Error) Run(IReadOnlyList<string> command)
+    internal static (int Exit, string Output, string Error) Run(IReadOnlyList<string> command) => Run(command, null);
+
+    /// <summary>Runs one command and says what it said, waiting for it no longer than <paramref name="limit"/>.</summary>
+    /// <param name="command">The program and its arguments.</param>
+    /// <param name="limit">
+    /// How long it is waited for, where a caller would rather go on without its answer: past it the command is ended, with
+    /// what it started, and refused. Null waits for it to end.
+    /// </param>
+    internal static (int Exit, string Output, string Error) Run(IReadOnlyList<string> command, TimeSpan? limit)
     {
         var start = ChildProcess.StartInfo(command[0], ChildKind.SystemTool);
 
@@ -174,6 +183,23 @@ public static class AutostartRegistrars
             // the other pipe blocks writing to it, and never gets to the end of the one being read.
             var output = process.StandardOutput.ReadToEndAsync();
             var error = process.StandardError.ReadToEndAsync();
+            if (limit is { } bound && !process.WaitForExit(bound))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // It ended between the wait and the kill.
+                }
+
+                process.WaitForExit();
+                throw new AutostartException(
+                    AutostartCodes.Refused,
+                    string.Create(CultureInfo.InvariantCulture, $"'{command[0]}' did not answer within {bound.TotalSeconds:0} seconds, and was ended."));
+            }
+
             process.WaitForExit();
             return (process.ExitCode, output.GetAwaiter().GetResult(), error.GetAwaiter().GetResult());
         }

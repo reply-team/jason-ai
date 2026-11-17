@@ -162,10 +162,12 @@ public static partial class DesktopRemoval
     private static partial Regex BundleIdentifier();
 
     /// <summary>
-    /// Windows, the terminal door: the processes running the carried jason besides this one, the runtime this uninstall stops
-    /// and an earlier demo's runtime it stops. The application's uninstaller ends with nothing removed while any process runs
-    /// from that file (<c>installer/uninstall.nsh</c>), after this verb has ended and can no longer say so, so the verb refuses
-    /// first while one does. A process started after this look still blocks it; the report says what to do then.
+    /// Windows, the terminal door: the processes running the carried jason, in any session, besides this one, the runtime
+    /// this uninstall stops, an earlier demo's runtime it stops, and every process any of those started, at any depth: a
+    /// runtime's plugin hosts and an agent's <c>jason</c> calls for its work, which that stop ends. The application's
+    /// uninstaller ends with nothing removed while any process runs from that file, whichever session it is in
+    /// (<c>installer/uninstall.nsh</c>), after this verb has ended and can no longer say so, so the verb refuses first while
+    /// one does. A process started after this look still blocks it; the report says what to do then.
     /// </summary>
     public static IReadOnlyList<int> OthersRunningTheCarriedJason(CliEnvironment env, CarriedExecutable carried, DesktopPlan plan)
     {
@@ -183,7 +185,37 @@ public static partial class DesktopRemoval
             }
         }
 
-        return [.. env.Removes!.RunningFrom(carried.Executable).Where(pid => !stopped.Contains(pid)).Order()];
+        var removes = env.Removes!;
+        return [.. removes.RunningFromInAnySession(carried.Executable).Where(pid => !stopped.Contains(pid) && !Descends(removes, pid, stopped)).Order()];
+    }
+
+    /// <summary>The deepest a chain of processes is followed up to one this uninstall stops.</summary>
+    private const int DeepestChain = 64;
+
+    /// <summary>
+    /// Whether <paramref name="pid"/> was started, through any number of processes, by one of <paramref name="ancestors"/>.
+    /// A parent that cannot be told ends the chain, and the process is counted.
+    /// </summary>
+    private static bool Descends(IInstallationRemover removes, int pid, HashSet<int> ancestors)
+    {
+        var seen = new HashSet<int> { pid };
+        var current = pid;
+        for (var step = 0; step < DeepestChain; step++)
+        {
+            if (removes.ParentOf(current) is not { } parent || !seen.Add(parent))
+            {
+                return false;
+            }
+
+            if (ancestors.Contains(parent))
+            {
+                return true;
+            }
+
+            current = parent;
+        }
+
+        return false;
     }
 
     /// <summary>The application's own executable inside its folder.</summary>
@@ -790,7 +822,7 @@ public static partial class DesktopRemoval
                     // macOS may refuse a terminal the right to delete an application (Privacy & Security, App Management), and
                     // a delete refused part-way leaves part of the bundle. Never passed over: the verb ends 1 on it.
                     var left = Directory.Exists(application) ? $"{application} is still there, and may be only part of the application now" : $"{application} is gone";
-                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move Jason from Applications to the Bin (the Trash) in the Finder to remove it.");
+                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Bin (the Trash) in the Finder to remove it.");
                 }
 
                 return;
