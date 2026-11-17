@@ -44,6 +44,18 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// </summary>
     internal Action<string> Delete { get; init; } = File.Delete;
 
+    /// <summary>
+    /// The key under <c>HKEY_CURRENT_USER</c> whose values start programs at sign-in, where Electron writes "Open Jason at
+    /// Login" on Windows; a key of a test's own in a test.
+    /// </summary>
+    internal string RunKey { get; init; } = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    /// <summary>Where Electron writes each <see cref="RunKey"/> value's state, under the same name.</summary>
+    internal string StartupApprovedKey { get; init; } = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    /// <summary>The key under <c>HKEY_CURRENT_USER</c> link schemes are registered under: <c>Software\Classes</c>, except in a test.</summary>
+    internal string ClassesKey { get; init; } = @"Software\Classes";
+
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
 

@@ -45,6 +45,12 @@ public static class CliErrors
     public const string UninstallCarriedByDesktop = "uninstall_carried_by_desktop";
 
     /// <summary>
+    /// <c>jason uninstall</c> run by the jason the desktop application carries found Jason Desktop open: nothing was read
+    /// or removed, since the application it would remove is running.
+    /// </summary>
+    public const string DesktopRunning = "desktop_running";
+
+    /// <summary>
     /// <c>jason install</c> run by a jason the desktop application does not carry: it sets the machine up for the
     /// application's own, and nothing was read or written.
     /// </summary>

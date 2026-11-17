@@ -103,31 +103,66 @@ public static class UninstallRunner
                 return new UninstallReport(plan, done, kept, problems, refusedAt1.Code, refusedAt1.Message);
             }
 
+            // And the application's own start at sign-in, beside it, for the same reason.
+            var desktop = plan.Desktop;
+            var places = env.Setup;
+            if (desktop is not null && places is not null)
+            {
+                DesktopRemoval.RemoveOpenAtLogin(env, places, desktop, done, problems);
+            }
+
             // 2. The runtime, and only then.
             if (await Step2StopRuntimeAsync(env, plan, options, done, kept, cancellationToken).ConfigureAwait(false) is { } refusedAt2)
             {
                 return new UninstallReport(plan, done, kept, problems, refusedAt2.Code, refusedAt2.Message);
             }
 
+            if (desktop is not null && await DesktopRemoval.StopDemoRuntimeAsync(env, desktop, options, done, cancellationToken).ConfigureAwait(false) is { } refusedAtDemo)
+            {
+                return new UninstallReport(plan, done, kept, problems, refusedAtDemo.Code, refusedAtDemo.Message);
+            }
+
             // 3. The notification registration, after the runtime that could write it back has stopped.
             StepRemoveNotificationRegistration(env, plan, done, problems);
             StepRemoveLinkRegistration(env, done, kept, problems);
+            if (desktop is not null)
+            {
+                DesktopRemoval.RemoveDesktopLink(desktop, done, problems);
+            }
 
             // 4. Everything a receipt names, and nothing else.
             Step3RemoveByReceipt(env, plan, options, done, kept, problems);
 
-            // 5. The PATH entry, only where this installer wrote it.
-            Step4RemovePathEntry(env, plan, done, kept, problems);
+            // 5. The PATH entry, only where this installer wrote it; for the application's jason, the terminal command
+            //    `jason install` placed and what an older command-line install left, then the application's other files.
+            if (desktop is not null && places is not null)
+            {
+                DesktopRemoval.RemoveCommand(env, places, desktop, done, kept, problems);
+                DesktopRemoval.RemoveDemoAndCaches(env, desktop, done, problems);
+            }
+            else
+            {
+                Step4RemovePathEntry(env, plan, done, kept, problems);
+            }
 
             // Rendered once and thrown away, while this process can still load whatever rendering it needs.
             beforeTheImageGoes?.Invoke(new UninstallReport(plan, [.. done], [.. kept], [.. problems], null, null));
 
             // 6. The executable, its install directory and what it unpacked, last, because everything above is
             //    run from it.
-            Step5RemoveExecutable(env, plan, done, kept, problems);
+            if (desktop is null)
+            {
+                Step5RemoveExecutable(env, plan, done, kept, problems);
+            }
 
             // 7. And the data directory, only on the explicit word, after everything else.
             Step6Data(env, plan, purge, done, kept, problems);
+
+            // 8. The application itself, last of all: everything above ran from the jason inside it.
+            if (desktop is not null)
+            {
+                DesktopRemoval.RemoveApplication(env, desktop, done, kept, problems);
+            }
         }
         catch (Exception unexpected) when (unexpected is not OperationCanceledException)
         {

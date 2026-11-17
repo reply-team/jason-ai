@@ -250,6 +250,24 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     /// Paths on which this remover fails with something nobody planned for, rather than refusing: the shape of
     /// an exception an uninstall did not expect, part-way through a run that has already removed things.
     /// </summary>
+    /// <summary>The processes said to run each executable: the application open, for the uninstall that must not remove it from under itself.</summary>
+    public Dictionary<string, int[]> Running { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyList<int> RunningFrom(string executable)
+    {
+        Reads.Add(executable);
+        return Running.GetValueOrDefault(executable) ?? [];
+    }
+
+    /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
+    public int? Waiter { get; init; } = 4242;
+
+    public int? HandToUninstaller(string application, int waitFor)
+    {
+        Record("application.uninstaller", application);
+        return Waiter;
+    }
+
     public HashSet<string> Breaks { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     private void Record(string verb, string path)

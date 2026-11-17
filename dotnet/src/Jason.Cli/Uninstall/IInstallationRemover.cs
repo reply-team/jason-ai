@@ -160,6 +160,19 @@ public interface IInstallationRemover
     /// <paramref name="command"/> or no command at all (<see cref="LinkRegistrationPlan.Require"/>).
     /// </summary>
     void RemoveLinkRegistration(string? command);
+
+    /// <summary>
+    /// The processes of this session running <paramref name="executable"/>: Jason Desktop's own, which an uninstall of the
+    /// application does not remove from under. One whose image cannot be read, under that file's name, is counted.
+    /// </summary>
+    IReadOnlyList<int> RunningFrom(string executable) => [];
+
+    /// <summary>
+    /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
+    /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
+    /// application's steps are done. Its id, or null where it could not be started.
+    /// </summary>
+    int? HandToUninstaller(string application, int waitFor) => null;
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -175,6 +188,38 @@ public interface IInstallationRemover
 /// this uninstall set out to remove and did not, so it is a problem and the verb exits 1, rather than a note
 /// beside a success.
 /// </param>
+/// <summary>
+/// The waiter an uninstall of the application leaves on Windows, as the script it runs: it waits for the uninstall's own
+/// process to end, since the uninstaller refuses while a process runs from the folder it removes, then copies the
+/// uninstaller out of that folder and runs the copy silently on it, in place (<c>_?=</c>), waiting for it; then the copy goes.
+/// </summary>
+public static class UninstallerHandOff
+{
+    /// <summary>The script, for Windows PowerShell's <c>-Command</c>.</summary>
+    /// <remarks>
+    /// <c>_?=</c> is the last of the arguments and never quoted, a space in the folder included: NSIS reads the rest of the
+    /// line as the folder. With it the uninstaller runs where it is started from and the caller can wait for it; without it,
+    /// it copies itself to the temporary folder and returns at once. A copy outside the folder is what lets the folder go
+    /// whole, the copy of the uninstaller with it.
+    /// </remarks>
+    public static string Script(string application, int waitFor, string temporary)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(application);
+        ArgumentException.ThrowIfNullOrWhiteSpace(temporary);
+
+        static string Literal(string value) => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var aside = Path.Combine(temporary, $"jason-uninstall-{Guid.NewGuid():N}");
+        var folder = Path.TrimEndingDirectorySeparator(application);
+        var wait = waitFor.ToString(CultureInfo.InvariantCulture);
+        return $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {wait} -Timeout 600; "
+            + $"$aside = {Literal(aside)}; New-Item -ItemType Directory -Path $aside | Out-Null; "
+            + $"$copy = Join-Path $aside {Literal(DesktopRemoval.UninstallerName)}; "
+            + $"Copy-Item -LiteralPath {Literal(Path.Combine(folder, DesktopRemoval.UninstallerName))} -Destination $copy; "
+            + $"if (Test-Path -LiteralPath $copy) {{ Start-Process -Wait -FilePath $copy -ArgumentList {Literal($"/S {DesktopRemoval.UninstalledByJasonFlag} _?={folder}")} }}; "
+            + "Remove-Item -LiteralPath $aside -Recurse -Force";
+    }
+}
+
 public sealed record ExecutableOutcome(bool Removed, string? MovedTo, string? Note, bool LeftBehind = false);
 
 /// <summary>The removers this build knows how to make.</summary>
@@ -566,6 +611,94 @@ public static class InstallationRemovers
             if (OperatingSystem.IsWindows())
             {
                 Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(Jason.Contracts.Notifications.LinkRegistration.Key, throwOnMissingSubKey: false);
+            }
+        }
+
+        public IReadOnlyList<int> RunningFrom(string executable)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+
+            var name = Path.GetFileNameWithoutExtension(executable);
+            var session = System.Diagnostics.Process.GetCurrentProcess().SessionId;
+            var found = new List<int>();
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        if (process.SessionId != session)
+                        {
+                            continue;
+                        }
+
+                        if (process.MainModule?.FileName is { } image
+                            && string.Equals(Path.GetFullPath(image), Path.GetFullPath(executable), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        {
+                            found.Add(process.Id);
+                        }
+                    }
+                    catch (Exception unread) when (unread is Win32Exception or InvalidOperationException or NotSupportedException)
+                    {
+                        // Its image cannot be read: under the application's own name, spelled as it is, it may be the
+                        // application, and an uninstall does not remove a running application from under it.
+                        if (string.Equals(SafeName(process), name, StringComparison.Ordinal))
+                        {
+                            found.Add(process.Id);
+                        }
+                    }
+                }
+            }
+
+            return found;
+        }
+
+        private static string? SafeName(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.ProcessName;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        public int? HandToUninstaller(string application, int waitFor)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(application);
+
+            var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (!OperatingSystem.IsWindows() || !File.Exists(powershell))
+            {
+                return null;
+            }
+
+            var start = ChildProcess.StartInfo(powershell, ChildKind.SystemToolWithInput);
+            foreach (var argument in new[] { "-NoProfile", "-NonInteractive", "-Command", UninstallerHandOff.Script(application, waitFor, Path.GetTempPath()) })
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            // Not one of this process's standard streams: a caller reading this verb's output to its end would otherwise wait
+            // for the waiter, and the waiter for the uninstaller.
+            StandardStreams.KeepOutOfChildren();
+
+            try
+            {
+                using var process = ChildProcess.Start(start);
+                if (process is null)
+                {
+                    return null;
+                }
+
+                process.StandardInput.Close();
+                return process.Id;
+            }
+            catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+            {
+                return null;
             }
         }
 

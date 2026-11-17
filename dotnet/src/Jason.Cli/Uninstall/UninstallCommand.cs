@@ -88,9 +88,32 @@ public static class UninstallCommand
         Installed by a package manager (Homebrew, winget): steps 5 and 6 are the manager's. The executable, its
         directory and the PATH entry that reaches it are left to it, and the plan names the command that takes
         them off: brew uninstall jason, or winget uninstall Reply.Jason. The runtime is still stopped first.
-        Carried by the desktop application (a version.json beside the executable): refused before anything is
-        read or removed, since it would delete the executable out of the application. The application is
-        removed the way the system removes one, and its own uninstall says what it takes off.
+        Run as the jason Jason Desktop carries (a version.json beside the executable), on macOS and Windows, this
+        takes Jason Desktop off as well, one uninstall from either door, the data directory kept unless
+        --purge-data, the harness root never:
+          - refused before anything is read or removed while Jason Desktop is open (desktop_running): quit it
+            first. --wait-for <pid> waits up to two minutes for that process to end before it looks.
+          - with the logon registration: Open Jason at Login, where it starts this application.
+          - with the runtime: the runtime an earlier version's demo left running on its own data directory.
+          - with the jason: link: the jason-desktop link registration, where it starts this application.
+          - in place of steps 5 and 6: the terminal command jason install placed, by the rules it placed it by:
+            on macOS ~/.local/bin/jason and jason-desktop where each is the application's wrapper running this
+            jason (or a jason that is gone), then install.sh's lines for ~/.local/bin where it then holds nothing
+            but Jason, then the folder once empty; on Windows the application's jason and jason-desktop command
+            files in WindowsApps, and the entry in this account's Path naming the application's resources\bundle,
+            where that folder holds nothing but what the application carries there. An older command-line install
+            of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
+            profile block and its folder. Then the folders an earlier version's demo made, each only where it
+            carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
+            ai.jasonharness.desktop.ShipIt).
+          - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
+            Windows: a waiter is started, which once this command has ended runs the application's own
+            uninstaller silently on its folder, so the folder goes after this ends; the report says so.
+            --keep-application leaves it: the Windows uninstaller in Installed apps calls this so, and removes
+            the folder itself next.
+        Elsewhere (Linux), and where no system's places are known, the jason the application carries refuses
+        (uninstall_carried_by_desktop) before anything is read or removed, and the message names the way the
+        system removes the application.
         This account's, not this installation's: the logon registration, the notification registration and the
         agent harnesses. Uninstalling a second installation on one account takes the first one's registrations
         and harness skills too. The jason: link goes only where its command names this executable.
@@ -116,8 +139,10 @@ public static class UninstallCommand
         var purgeData = new Option<bool>("--purge-data") { Description = "Also remove the data directory. Without it, it is kept and the verb says where." };
         var yes = new Option<bool>("--yes") { Description = "Do not ask before removing the data directory." };
         var force = new Option<bool>("--force") { Description = "Remove a recorded file whose bytes you have since changed. Without it such a file is reported and kept." };
+        var keepApplication = new Option<bool>("--keep-application") { Description = "Run as the jason Jason Desktop carries: leave the application's own folder, which the Windows uninstaller that runs this removes next." };
+        var waitFor = new Option<int?>("--wait-for") { Description = "Run as the jason Jason Desktop carries: wait up to two minutes for this process to end before anything is read, as the application's Uninstall Jason item asks before it quits." };
 
-        foreach (var option in new Option[] { human, dryRun, purgeData, yes, force })
+        foreach (var option in new Option[] { human, dryRun, purgeData, yes, force, keepApplication, waitFor })
         {
             command.Options.Add(option);
         }
@@ -129,7 +154,9 @@ public static class UninstallCommand
                 parse.GetValue(dryRun),
                 parse.GetValue(purgeData),
                 parse.GetValue(yes),
-                parse.GetValue(force)),
+                parse.GetValue(force),
+                KeepApplication: parse.GetValue(keepApplication),
+                WaitFor: parse.GetValue(waitFor)),
             cancellationToken));
 
         return command;
@@ -144,7 +171,8 @@ public static class UninstallCommand
     {
         // Before anything at all, a dry run included: the executable this would delete last is the desktop
         // application's, and a plan that named it under what is removed would be a plan nobody should follow.
-        if (CarriedExecutable.Of(env) is { } carried)
+        var carried = CarriedExecutable.Of(env);
+        if (carried is not null && env.Setup is null)
         {
             return Refuse(
                 env,
@@ -200,7 +228,17 @@ public static class UninstallCommand
                 + "directory itself, or run this without --purge-data to keep it.");
         }
 
-        var plan = UninstallReader.Read(env, options.PurgeData);
+        DesktopPlan? desktop = null;
+        if (carried is not null && env.Setup is { } places)
+        {
+            desktop = DesktopRemoval.Read(env, carried, places, options.KeepApplication);
+            if (await DesktopOpenAsync(env, desktop, places, options, cancellationToken).ConfigureAwait(false) is { } open)
+            {
+                return Refuse(env, options.Human, CliErrors.DesktopRunning, open);
+            }
+        }
+
+        var plan = UninstallReader.Read(env, options.PurgeData, desktop);
 
         // A person is shown the plan before a byte of it is acted on, because a plan nobody saw is one
         // nobody could have stopped. A caller reading the machine shape gets one document at the end
@@ -360,11 +398,16 @@ public static class UninstallCommand
             env.Out.WriteLine($"  '{entry.Directory}' off the PATH");
         }
 
+        if (plan.Desktop is { } desktop)
+        {
+            DescribeDesktop(env, desktop);
+        }
+
         if (plan.Executable is { } executable)
         {
             env.Out.WriteLine($"  the executable at {executable}");
         }
-        else if (plan.LeftTo is null)
+        else if (plan.LeftTo is null && plan.Desktop is null)
         {
             // Said here as well as in the report, because a dry run never reaches the report: the plan is the
             // whole of what a person sees, and a list with no executable in it reads as one that forgot. It sat
@@ -437,6 +480,88 @@ public static class UninstallCommand
             : $"The data directory at {plan.DataDirectory} is kept. --purge-data removes it.");
     }
 
+    /// <summary>The application's own lines of the plan, for a person.</summary>
+    private static void DescribeDesktop(CliEnvironment env, DesktopPlan desktop)
+    {
+        foreach (var item in desktop.OpenAtLogin)
+        {
+            env.Out.WriteLine($"  Open Jason at Login: {item}");
+        }
+
+        if (desktop.DesktopLink is { } link)
+        {
+            env.Out.WriteLine($"  the jason-desktop link registration at {link}");
+        }
+
+        foreach (var file in desktop.CommandFiles)
+        {
+            env.Out.WriteLine($"  the terminal command {file}");
+        }
+
+        env.Out.WriteLine($"  the PATH entry or profile lines for {desktop.CommandFolder}, where that folder holds nothing but Jason");
+        if (desktop.CommandLineInstall is { } old)
+        {
+            env.Out.WriteLine($"  the command-line install at {old}, with its notice files, its PATH entry and its folder");
+        }
+
+        foreach (var folder in desktop.Demo)
+        {
+            env.Out.WriteLine($"  an earlier version's demo folder, {folder}");
+        }
+
+        foreach (var cache in desktop.Caches)
+        {
+            env.Out.WriteLine($"  the updater's cache, {cache}");
+        }
+
+        foreach (var line in desktop.Left)
+        {
+            env.Out.WriteLine($"  NOT touched: {line}");
+        }
+
+        env.Out.WriteLine(desktop.ApplicationFate switch
+        {
+            ApplicationFates.Deleted => $"  last, the application, {desktop.Application}",
+            ApplicationFates.AfterExit => $"  last, the application, {desktop.Application}: its own uninstaller removes it once this command has ended",
+            ApplicationFates.Kept => $"  NOT touched: the application, {desktop.Application}, which the uninstaller that asked for this removes next",
+            _ => "  no application: this jason is not inside one",
+        });
+    }
+
+    /// <summary>How long <c>--wait-for</c> waits for the application to quit.</summary>
+    private static readonly TimeSpan QuitWait = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Why the application cannot be removed now, or null: Jason Desktop open, after waiting for the process
+    /// <c>--wait-for</c> names. A dry run removes nothing and is never refused for it, and the Windows uninstaller's own call
+    /// (<c>--keep-application</c>) is made by the application's start it waits on.
+    /// </summary>
+    private static async Task<string?> DesktopOpenAsync(CliEnvironment env, DesktopPlan desktop, SetupPlaces places, UninstallOptions options, CancellationToken cancellationToken)
+    {
+        if (options.WaitFor is { } pid)
+        {
+            var clock = env.Clock ?? TimeProvider.System;
+            var processes = env.Processes ?? Process.RuntimeProcessControl.Instance;
+            var until = clock.GetUtcNow() + QuitWait;
+            while (processes.IsRunning(pid) && clock.GetUtcNow() < until)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250), clock, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        if (options.DryRun || desktop.Application is not { } application || desktop.ApplicationFate == ApplicationFates.Kept)
+        {
+            return null;
+        }
+
+        var running = env.Removes!.RunningFrom(DesktopRemoval.ApplicationExecutable(application, places.Platform));
+        return running.Count == 0
+            ? null
+            : $"Jason Desktop is open (process {string.Join(", ", running.Select(id => id.ToString(CultureInfo.InvariantCulture)))}), and this would remove it from under itself, so nothing was read or removed. "
+              + (places.Platform is SetupSystem.MacOs ? "Quit it from the Jason menu" : "Quit it from its icon in the notification area")
+              + ", then run this again. The data directory is kept either way unless --purge-data says otherwise.";
+    }
+
     private static string RemovingTheApplication() =>
         OperatingSystem.IsWindows()
             ? "Uninstall Jason from Installed apps in Settings: its uninstaller stops the runtime the application carries and takes off what it placed."
@@ -473,6 +598,8 @@ public static class UninstallCommand
 /// <param name="Force">Remove a recorded file whose bytes no longer match the record's digest.</param>
 /// <param name="StopTimeout">How long the runtime is given to go. Null is the stop verb's own wait.</param>
 /// <param name="StopPoll">How often it is asked. Null is the stop verb's own interval.</param>
+/// <param name="KeepApplication">The application's own folder is left: the Windows uninstaller that asked removes it next.</param>
+/// <param name="WaitFor">A process to wait for before anything is read: the application that started this and quits.</param>
 public sealed record UninstallOptions(
     bool Human,
     bool DryRun,
@@ -480,4 +607,6 @@ public sealed record UninstallOptions(
     bool Yes,
     bool Force,
     TimeSpan? StopTimeout = null,
-    TimeSpan? StopPoll = null);
+    TimeSpan? StopPoll = null,
+    bool KeepApplication = false,
+    int? WaitFor = null);
