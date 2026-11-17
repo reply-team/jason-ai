@@ -96,7 +96,26 @@ write_listing() {
             if [ -e "$HOME/$profile" ]; then printf 'profile %s\t%s\n' "$profile" "$(shasum -a 256 "$HOME/$profile" | cut -d' ' -f1)"; else printf 'profile %s\tabsent\n' "$profile"; fi
         done
         for agent in "$HOME"/Library/LaunchAgents/ai.jason*; do [ -e "$agent" ] && printf 'launch agent file\t%s\n' "${agent#$HOME/}"; done
-        launchctl print "gui/$(id -u)" 2>/dev/null | grep -oE 'ai\.jason[A-Za-z0-9.-]*' | sort -u | sed 's/^/launchd job\t/' || true
+        # launchd, read two ways that are kept apart: a job loaded in this account's domain (its label answering a print of
+        # its own), and the record launchd keeps of a label enabled or disabled (the "disabled services" block, which
+        # `load -w` and `unload -w` write and which outlives the job).
+        {
+        launchctl print "gui/$(id -u)/ai.jason.runtime" > /dev/null 2>&1 && printf 'launchd job loaded\tai.jason.runtime\n'
+        launchctl print "gui/$(id -u)" 2>/dev/null | awk '
+            /disabled services = \{/ { record = 1; next }
+            record && /^[[:space:]]*\}/ { record = 0; next }
+            match($0, /ai\.jason[A-Za-z0-9.-]*/) {
+                label = substr($0, RSTART, RLENGTH)
+                if (record) { state = $0; sub(/.*=>[[:space:]]*/, "", state); gsub(/[[:space:]]/, "", state); print "launchd record\t" label " " state }
+                else { print "launchd label\t" label }
+            }' | sort -u | while IFS="$(printf '\t')" read -r kind rest; do
+                if [ "$kind" = 'launchd label' ]; then
+                    if launchctl print "gui/$(id -u)/$rest" > /dev/null 2>&1; then printf 'launchd job loaded\t%s\n' "$rest"; fi
+                else
+                    printf '%s\t%s\n' "$kind" "$rest"
+                fi
+            done
+        } | sort -u || true
         folder 'updater cache' "$HOME/Library/Caches/jason-desktop-updater"
         folder 'ShipIt cache' "$HOME/Library/Caches/ai.jasonharness.desktop.ShipIt"
         # What macOS and Electron keep for an application that ran, by its bundle id or its name, in every place of
