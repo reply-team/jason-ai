@@ -1,0 +1,603 @@
+# A throwaway probe of what GitHub's hosted macOS and Windows runners allow an install job to do: the runner account's
+# rights, the Applications folders, a GUI session, Gatekeeper and quarantine on the published v0.48.1 Mac packages, the
+# silent Windows installer and uninstaller, the Path a new process sees, and how Git Bash passes an installer's switches.
+# Every probe prints its command and its exit code and never stops the job; the log is the result.
+
+name: Runner probes
+
+on:
+  push:
+    branches: [REPLY-54684-runner-probes]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-probes
+  cancel-in-progress: false
+
+env:
+  TAG: v0.48.1
+  REPO: ${{ github.repository }}
+
+jobs:
+  probe-macos-arm64:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: Helpers
+        run: |
+          cat > "$RUNNER_TEMP/h.sh" <<'EOF'
+          r() { printf '\n$ %s\n' "$*"; eval "$*" 2>&1; local rc=$?; printf '[exit %s]\n' "$rc"; return 0; }
+          to() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+          quit_jason() {
+            r 'pgrep -fl "Jason" | cut -c1-220'
+            for p in $(pgrep -f "Jason.app/Contents/MacOS/Jason"); do r "kill $p"; done
+            sleep 5
+            r 'pgrep -fl "Jason" | cut -c1-220'
+            pkill -9 -f "Jason.app/" ; pkill -9 -f "bundle/jason"
+            sleep 2
+            r 'pgrep -fl "Jason" | cut -c1-220'
+          }
+          launch_probe() {
+            local label=$1 app=$2
+            r "open -g \"$app\""
+            sleep 25
+            r 'ps -axo pid,ppid,user,command | grep -E "Jason|CoreServicesUIAgent|AppTranslocation" | grep -v grep | cut -c1-260'
+            r 'ps -axo command | grep -c "[/]AppTranslocation/"'
+            r 'mount | grep -i translocation'
+            r 'lsappinfo list | grep -i -A8 "\"Jason\"" | head -30'
+            mkdir -p "$RUNNER_TEMP/shots"
+            r "screencapture -x \"$RUNNER_TEMP/shots/$label.png\""
+            quit_jason
+          }
+          EOF
+          mkdir -p "$RUNNER_TEMP/shots"
+
+      - name: probe identity and rights
+        continue-on-error: true
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          r 'sw_vers'
+          r 'uname -a'
+          r 'uname -m'
+          r 'sysctl hw.optional.arm64'
+          r 'sysctl -n machdep.cpu.brand_string'
+          r 'echo "ImageOS=$ImageOS ImageVersion=$ImageVersion"'
+          r 'whoami'
+          r 'id'
+          r 'dseditgroup -o checkmember -m "$(whoami)" admin'
+          r 'dscl . -read /Groups/admin GroupMembership'
+          r 'sudo -n true && echo passwordless-sudo-yes'
+          r 'sudo -n -l | head -20'
+          r 'csrutil status'
+          r 'spctl --status'
+          r 'pgrep -l oahd'
+          r 'arch -x86_64 /usr/bin/true && echo rosetta-runs-x86_64'
+          r 'command -v jason'
+
+      - name: probe Applications folders
+        continue-on-error: true
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          r 'ls -lde /Applications'
+          r 'ls -lde ~/Applications'
+          r 'test -d ~/Applications && echo exists || echo absent'
+          r 'test -w /Applications && echo writable || echo not-writable'
+          r 'test -w ~/Applications && echo writable || echo not-writable'
+          r 'touch /Applications/.probe-write && echo touched && rm /Applications/.probe-write'
+          r 'stat -f "%N %Su:%Sg %Sp" /Applications "$HOME"'
+          r 'ls /Applications | head -60'
+          r 'ls -ld /Applications/Jason.app ~/Applications/Jason.app'
+
+      - name: probe GUI session
+        continue-on-error: true
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          r 'launchctl print gui/$(id -u) | head -25'
+          r 'launchctl managername'
+          r 'who'
+          r 'stat -f %Su /dev/console'
+          r 'echo "show State:/Users/ConsoleUser" | scutil'
+          r 'defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser'
+          r 'ps -axo pid,user,command | grep -E "loginwindow|WindowServer|/Dock.app|/Finder.app|CoreServicesUIAgent" | grep -v grep | cut -c1-200'
+          r 'lsappinfo front'
+          r 'echo "SSH_CONNECTION=${SSH_CONNECTION:-unset} TERM=${TERM:-unset}"'
+          r 'ps -o pid,ppid,user,command -p $$ -p $PPID | cut -c1-200'
+          r 'sudo -n launchctl procinfo $$ | grep -iE "domain|session|port" | head -20'
+
+      - name: probe shells and profiles
+        continue-on-error: true
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          r 'echo "SHELL=$SHELL"; dscl . -read /Users/$(whoami) UserShell'
+          r 'ls -la ~/.zshenv ~/.zprofile ~/.zshrc ~/.zlogin ~/.bash_profile ~/.bashrc ~/.profile'
+          r 'ls -ld ~/.local ~/.local/bin'
+          r 'cat /etc/paths; ls /etc/paths.d; cat /etc/paths.d/*'
+          r 'for f in ~/.zshenv ~/.zprofile ~/.zshrc ~/.zlogin ~/.bash_profile ~/.bashrc ~/.profile; do echo "== $f"; grep -n "PATH" "$f" 2>/dev/null | head -12; done'
+          r 'echo "job PATH=$PATH"'
+          r 'zsh -l -i -c "echo \$PATH" </dev/null'
+          r 'bash -l -c "echo \$PATH" </dev/null'
+          r 'env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh /bin/zsh -l -i -c "echo \$PATH" </dev/null'
+          r 'env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/zsh /bin/zsh -l -i -c "echo \$PATH" </dev/null | tr ":" "\n" | grep -n "\.local/bin" || echo "no .local/bin in a clean zsh login shell"'
+
+      - name: probe download of the v0.48.1 Mac packages
+        continue-on-error: true
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          mkdir -p "$RUNNER_TEMP/dl" && cd "$RUNNER_TEMP/dl"
+          r 'gh release download "$TAG" -R "$REPO" -p jason-desktop-macos-arm64.zip -p jason-desktop-macos-arm64.dmg -p checksums.txt -D "$RUNNER_TEMP/dl"'
+          r 'ls -l'
+          r 'shasum -a 256 jason-desktop-macos-arm64.zip jason-desktop-macos-arm64.dmg; grep "jason-desktop-macos-arm64\.\(zip\|dmg\)$" checksums.txt'
+          r 'xattr -l jason-desktop-macos-arm64.zip jason-desktop-macos-arm64.dmg'
+
+      - name: probe the dmg
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          D="$RUNNER_TEMP/dl/jason-desktop-macos-arm64.dmg"
+          r 'hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$D"'
+          r 'ls -la "$RUNNER_TEMP/dmg"'
+          r 'spctl -a -vv -t open --context context:primary-signature "$D"'
+          r 'xcrun stapler validate "$D"'
+          r 'codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/dmg/Jason.app"'
+          r 'hdiutil detach "$RUNNER_TEMP/dmg"'
+
+      - name: probe placing in ~/Applications, never launched, then rename and delete
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          Z="$RUNNER_TEMP/dl/jason-desktop-macos-arm64.zip"
+          A="$HOME/Applications/Jason.app"
+          r 'test -d ~/Applications && echo existed-before || echo absent-before'
+          r 'mkdir -p ~/Applications'
+          r 'time ditto -x -k "$Z" ~/Applications/'
+          r 'ls -la ~/Applications'
+          r 'ls -lde "$A"'
+          r 'codesign --verify --deep --strict --verbose=2 "$A"'
+          r 'codesign -dv "$A"'
+          r 'spctl --assess -vv --type execute "$A"'
+          r 'xcrun stapler validate "$A"'
+          r 'xattr -l "$A" "$A/Contents/Resources/bundle/jason"'
+          r 'ls -la "$A/Contents/Resources/bundle"'
+          r 'cat "$A/Contents/Resources/bundle/version.json"'
+          r 'file "$A/Contents/Resources/bundle/jason"'
+          r 'JASON_DATA_DIR="$RUNNER_TEMP/jd1" to 60 "$A/Contents/Resources/bundle/jason" --version'
+          r 'touch "$A/Contents/Resources/probe-touch" && echo touched-inside-bundle'
+          r 'rm -f "$A/Contents/Resources/probe-touch" && echo removed-inside-bundle'
+          r 'mv "$A" "$HOME/Applications/Jason-renamed.app" && echo renamed'
+          r 'rm -rf "$HOME/Applications/Jason-renamed.app" && echo deleted'
+          r 'ls -la ~/Applications'
+
+      - name: probe placing in /Applications, launched, then rename and delete
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          Z="$RUNNER_TEMP/dl/jason-desktop-macos-arm64.zip"
+          B="/Applications/Jason.app"
+          r 'ls -la ~/.jason ~/.local/bin'
+          r 'time ditto -x -k "$Z" /Applications/ && echo placed-without-sudo'
+          if [ ! -d "$B" ]; then r 'sudo -n ditto -x -k "$Z" /Applications/ && echo placed-with-sudo'; fi
+          r 'ls -lde "$B"'
+          r 'codesign --verify --deep --strict --verbose=2 "$B"'
+          r 'spctl --assess -vv --type execute "$B"'
+          r 'xcrun stapler validate "$B"'
+          r 'JASON_DATA_DIR="$RUNNER_TEMP/jd2" to 60 "$B/Contents/Resources/bundle/jason" --version'
+          launch_probe launched-unquarantined "$B"
+          r 'ls -la ~/.jason ~/.local/bin'
+          r 'ls ~/Library/Caches | grep -iE "jason|shipit"'
+          r 'touch "$B/Contents/Resources/probe-touch" && echo touched-inside-bundle'
+          r 'rm -f "$B/Contents/Resources/probe-touch" && echo removed-inside-bundle'
+          r 'mv "$B" /Applications/Jason-renamed.app && echo renamed'
+          r 'rm -rf /Applications/Jason-renamed.app && echo deleted'
+          r 'ls -ld /Applications/Jason*.app'
+
+      - name: probe a quarantined source, translocation, the carried jason
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          Q="$RUNNER_TEMP/q"; mkdir -p "$Q"
+          cp "$RUNNER_TEMP/dl/jason-desktop-macos-arm64.zip" "$Q/"
+          QV="0081;$(printf %x $(date +%s));Safari;"
+          C="$HOME/Applications/Jason.app"
+          r 'xattr -w com.apple.quarantine "$QV" "$Q/jason-desktop-macos-arm64.zip"'
+          r 'xattr -p com.apple.quarantine "$Q/jason-desktop-macos-arm64.zip"'
+          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" ~/Applications/'
+          echo "--- did ditto carry the zip's quarantine onto what it unpacked?"
+          r 'xattr -p com.apple.quarantine "$C"'
+          r 'xattr -p com.apple.quarantine "$C/Contents/Resources/bundle/jason"'
+          if ! xattr -p com.apple.quarantine "$C" >/dev/null 2>&1; then
+            echo "--- ditto carried none: writing the attribute on every file of the placed copy"
+            r 'xattr -r -w com.apple.quarantine "$QV" "$C"'
+          fi
+          r 'xattr -p com.apple.quarantine "$C" "$C/Contents/Resources/bundle/jason"'
+          r 'spctl --assess -vv --type execute "$C"'
+          r 'JASON_DATA_DIR="$RUNNER_TEMP/jd3" to 60 "$C/Contents/Resources/bundle/jason" --version'
+          r 'xattr -p com.apple.quarantine "$C/Contents/Resources/bundle/jason"'
+          launch_probe launched-quarantined "$C"
+          r 'xattr -p com.apple.quarantine "$C"'
+          r 'to 90 log show --last 4m --style compact --predicate "process == \"syspolicyd\"" | grep -iE "jason|translocat|assess|notari" | tail -40'
+          r 'mv "$C" "$HOME/Applications/Jason-renamed.app" && echo renamed'
+          r 'rm -rf "$HOME/Applications/Jason-renamed.app" && echo deleted'
+
+      - name: probe caches and launchd user jobs
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          r 'ls -ld ~/Library/Caches ~/Library/LaunchAgents'
+          r 'test -w ~/Library/Caches && echo writable || echo not-writable'
+          r 'ls ~/Library/Caches | head -40'
+          r 'launchctl submit -l probe.submit -- /bin/sh -c "date > /tmp/probe-submit.txt; sleep 60"'
+          sleep 3
+          r 'cat /tmp/probe-submit.txt'
+          r 'launchctl list | grep probe'
+          r 'launchctl remove probe.submit'
+          mkdir -p ~/Library/LaunchAgents
+          cat > ~/Library/LaunchAgents/probe.agent.plist <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Label</key><string>probe.agent</string>
+            <key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>date &gt; /tmp/probe-agent.txt</string></array>
+            <key>RunAtLoad</key><true/>
+          </dict></plist>
+          EOF
+          r 'launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/probe.agent.plist'
+          sleep 3
+          r 'launchctl print gui/$(id -u)/probe.agent | head -20'
+          r 'cat /tmp/probe-agent.txt'
+          r 'launchctl bootout gui/$(id -u)/probe.agent'
+          rm -f ~/Library/LaunchAgents/probe.agent.plist
+
+      - name: Upload screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: probe-macos-screens
+          path: ${{ runner.temp }}/shots/
+          retention-days: 3
+          if-no-files-found: warn
+
+  probe-macos-intel:
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: probe Intel identity, rights and the x64 carried jason
+        continue-on-error: true
+        run: |
+          r() { printf '\n$ %s\n' "$*"; eval "$*" 2>&1; local rc=$?; printf '[exit %s]\n' "$rc"; return 0; }
+          to() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+          r 'sw_vers'
+          r 'uname -m'
+          r 'sysctl hw.optional.arm64'
+          r 'sysctl -n machdep.cpu.brand_string'
+          r 'echo "ImageOS=$ImageOS ImageVersion=$ImageVersion"'
+          r 'id'
+          r 'dseditgroup -o checkmember -m "$(whoami)" admin'
+          r 'ls -lde /Applications ~/Applications'
+          r 'test -w /Applications && echo writable || echo not-writable'
+          mkdir -p "$RUNNER_TEMP/dl"
+          r 'gh release download "$TAG" -R "$REPO" -p jason-desktop-macos-x64.zip -D "$RUNNER_TEMP/dl"'
+          mkdir -p ~/Applications
+          r 'time ditto -x -k "$RUNNER_TEMP/dl/jason-desktop-macos-x64.zip" ~/Applications/'
+          A="$HOME/Applications/Jason.app"
+          r 'codesign --verify --deep --strict --verbose=2 "$A"'
+          r 'spctl --assess -vv --type execute "$A"'
+          r 'file "$A/Contents/Resources/bundle/jason" "$A/Contents/MacOS/Jason"'
+          r 'JASON_DATA_DIR="$RUNNER_TEMP/jd" to 60 "$A/Contents/Resources/bundle/jason" --version'
+
+  probe-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Helpers
+        run: |
+          @'
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $ProgressPreference = 'SilentlyContinue'
+          $Dir = Join-Path $env:LOCALAPPDATA 'Programs\jason-desktop'
+          $Un = Join-Path $Dir 'Uninstall Jason.exe'
+          $Setup = Join-Path $env:RUNNER_TEMP 'dl\setup-pwsh7.exe'
+          $Motw = Join-Path $env:RUNNER_TEMP 'dl\setup-motw.exe'
+          function R([string]$c) {
+            Write-Host "`n> $c"; $global:LASTEXITCODE = 0
+            try { $o = Invoke-Expression $c 2>&1 | Out-String -Width 400; Write-Host $o.TrimEnd() } catch { Write-Host "THREW: $($_.Exception.Message)" }
+            Write-Host "[LASTEXITCODE $global:LASTEXITCODE]"
+          }
+          function Get-JasonKeys {
+            foreach ($root in 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall') {
+              Get-ChildItem $root -ErrorAction SilentlyContinue | Where-Object { "$((Get-ItemProperty $_.PSPath).DisplayName)" -like '*Jason*' }
+            }
+          }
+          function Get-Interesting { Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'jason|uninstall|setup|^Un_|^Au_' } }
+          function Show-State([string]$label) {
+            Write-Host "`n===== state: $label ($(Get-Date -Format 'HH:mm:ss.fff'))"
+            Write-Host "install folder exists: $(Test-Path -LiteralPath $Dir)"
+            if (Test-Path -LiteralPath $Dir) { Get-ChildItem -LiteralPath $Dir -Force | ForEach-Object { Write-Host ("  {0}{1}" -f $_.Name, $(if ($_.PSIsContainer) { '\' } else { " ($($_.Length))" })) } }
+            foreach ($k in Get-JasonKeys) {
+              Write-Host "uninstall key: $($k.Name)"
+              Get-ItemProperty $k.PSPath | Select-Object DisplayName, DisplayVersion, Publisher, InstallLocation, UninstallString, QuietUninstallString, EstimatedSize | Format-List | Out-String -Width 400 | Write-Host
+            }
+            Get-Interesting | ForEach-Object { Write-Host ("  proc {0} parent {1} session {2} {3} | {4}" -f $_.ProcessId, $_.ParentProcessId, $_.SessionId, $_.Name, "$($_.CommandLine)".Substring(0, [Math]::Min(200, "$($_.CommandLine)".Length))) }
+            Write-Host "WindowsApps jason*: $((Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps') -Filter 'jason*' -Name -ErrorAction SilentlyContinue) -join ', ')"
+            foreach ($p in "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Jason.lnk", "$env:USERPROFILE\Desktop\Jason.lnk", "$env:PUBLIC\Desktop\Jason.lnk", 'HKCU:\Software\Classes\jason-desktop', 'HKCU:\Software\Classes\jason', "$env:LOCALAPPDATA\jason-desktop-updater", "$env:USERPROFILE\.jason", "$env:APPDATA\Jason", "$env:APPDATA\jason-desktop") {
+              Write-Host ("  exists={0} {1}" -f (Test-Path -LiteralPath $p), $p)
+            }
+            $run = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue
+            Write-Host "Run values: $(($run.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object { $_.Name }) -join ', ')"
+            $userPath = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+            Write-Host "user Path entries naming jason: $((($userPath -split ';') | Where-Object { $_ -match 'jason' }) -join ' | ')"
+          }
+          function Reset-State {
+            Get-Process -Name 'Jason' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $Dir) { Write-Host "reset: removing a leftover $Dir"; Remove-Item -LiteralPath $Dir -Recurse -Force -ErrorAction SilentlyContinue }
+            Get-JasonKeys | Where-Object { $_.Name -like 'HKEY_CURRENT_USER*' } | ForEach-Object { Write-Host "reset: removing key $($_.Name)"; Remove-Item $_.PSPath -Recurse -Force }
+          }
+          function Watch-Uninstall([int]$seconds) {
+            $sw = [Diagnostics.Stopwatch]::StartNew(); $last = ''
+            while ($sw.Elapsed.TotalSeconds -lt $seconds) {
+              $n = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^Un_|^Au_|Uninstall' }).Count
+              $s = "folder=$(Test-Path -LiteralPath $Dir) uninstaller-procs=$n keys=$(@(Get-JasonKeys).Count) jason-procs=$(@(Get-Process Jason -ErrorAction SilentlyContinue).Count)"
+              if ($s -ne $last) { Write-Host ("  t+{0:n1}s {1}" -f $sw.Elapsed.TotalSeconds, $s); $last = $s }
+              if ($n -eq 0 -and $sw.Elapsed.TotalSeconds -gt 3) { break }
+              Start-Sleep -Milliseconds 500
+            }
+            Write-Host ("  watch ended at t+{0:n1}s" -f $sw.Elapsed.TotalSeconds)
+          }
+          function Start-Waited([string]$file, [string[]]$argList, [int]$timeout) {
+            $j = Start-ThreadJob -ScriptBlock {
+              param($f, $a)
+              $sw = [Diagnostics.Stopwatch]::StartNew()
+              $p = Start-Process -Wait -PassThru -FilePath $f -ArgumentList $a
+              'Start-Process -Wait returned after {0:n1}s, ExitCode={1}' -f $sw.Elapsed.TotalSeconds, $p.ExitCode
+            } -ArgumentList $file, $argList
+            if (Wait-Job $j -Timeout $timeout) { Receive-Job $j | ForEach-Object { Write-Host $_ } } else { Write-Host "Start-Process -Wait had not returned after $timeout s" }
+            return $j
+          }
+          '@ | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'h.ps1')
+
+      - name: probe identity, rights and session
+        continue-on-error: true
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          R 'whoami'
+          R 'whoami /groups /fo csv | Select-String "Mandatory Label|BUILTIN\\Administrators"'
+          R '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'
+          R 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object EnableLUA, ConsentPromptBehaviorAdmin, PromptOnSecureDesktop, FilterAdministratorToken | Format-List'
+          R 'Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List'
+          R '"ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"'
+          R '$PSVersionTable.PSVersion.ToString()'
+          R 'powershell.exe -NoProfile -Command "`$PSVersionTable.PSVersion.ToString()"'
+          R '[Environment]::UserInteractive'
+          R '(Get-Process -Id $PID).SessionId'
+          R 'query user'
+          R 'Get-Process explorer, winlogon, dwm -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table'
+          R 'Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" | Select-Object AutoAdminLogon, DefaultUserName | Format-List'
+          R 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -Name SmartScreenEnabled -ErrorAction SilentlyContinue | Select-Object SmartScreenEnabled'
+          R 'Get-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\Windows\System -ErrorAction SilentlyContinue | Select-Object EnableSmartScreen, ShellSmartScreenLevel'
+          R 'Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled | Format-List'
+          R 'Get-Command jason -ErrorAction SilentlyContinue | Select-Object Source'
+
+      - name: probe the three Paths
+        continue-on-error: true
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          $wa = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+          Write-Host "WindowsApps folder: $wa exists=$(Test-Path $wa)"
+          R "Get-ChildItem '$wa' -Name"
+          $uk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $mk = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+          foreach ($pair in @(@('USER (HKCU\Environment)', $uk), @('MACHINE (HKLM\...\Session Manager\Environment)', $mk))) {
+            $raw = $pair[1].GetValue('Path', '', 'DoNotExpandEnvironmentNames'); $kind = $pair[1].GetValueKind('Path')
+            Write-Host "`n--- $($pair[0]) Path, kind $kind"
+            $i = 0; foreach ($e in $raw -split ';') { Write-Host ("  [{0}] {1}{2}" -f $i, $e, $(if ($e -match 'WindowsApps') { '   <== WindowsApps' } else { '' })); $i++ }
+          }
+          Write-Host "`n--- PROCESS Path"
+          $i = 0; foreach ($e in $env:Path -split ';') { Write-Host ("  [{0}] {1}{2}" -f $i, $e, $(if ($e -match 'WindowsApps') { '   <== WindowsApps' } else { '' })); $i++ }
+
+      - name: probe the download of the v0.48.1 setup
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          $d = Join-Path $env:RUNNER_TEMP 'dl'; New-Item -ItemType Directory -Force $d | Out-Null
+          $url = "https://github.com/$env:REPO/releases/download/$env:TAG/jason-desktop-windows-x64-setup.exe"
+          $sw = [Diagnostics.Stopwatch]::StartNew(); Invoke-WebRequest -Uri $url -OutFile $Setup; Write-Host ("pwsh {0} Invoke-WebRequest took {1:n1}s" -f $PSVersionTable.PSVersion, $sw.Elapsed.TotalSeconds)
+          Set-Content -LiteralPath "$d\dl51.ps1" -Value '$ProgressPreference = ''SilentlyContinue''; Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]; "Windows PowerShell " + $PSVersionTable.PSVersion'
+          R "powershell.exe -NoProfile -ExecutionPolicy Bypass -File '$d\dl51.ps1' '$url' '$d\setup-ps51.exe'"
+          R "curl.exe -sSL -o '$d\setup-curl.exe' '$url'"
+          foreach ($f in 'setup-pwsh7.exe', 'setup-ps51.exe', 'setup-curl.exe') {
+            Write-Host "`n--- streams of $f"
+            Get-Item -LiteralPath "$d\$f" -Stream * | ForEach-Object { Write-Host ("  {0} ({1} bytes)" -f $_.Stream, $_.Length) }
+            $z = Get-Content -LiteralPath "$d\$f" -Stream Zone.Identifier -ErrorAction SilentlyContinue
+            if ($z) { Write-Host "  Zone.Identifier: $($z -join ' / ')" } else { Write-Host '  no Zone.Identifier stream' }
+          }
+          Invoke-WebRequest -Uri "https://github.com/$env:REPO/releases/download/$env:TAG/checksums.txt" -OutFile "$d\checksums.txt"
+          Write-Host "sha256 of setup: $((Get-FileHash $Setup -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "checksums.txt: $(Select-String -LiteralPath "$d\checksums.txt" -Pattern 'jason-desktop-windows-x64-setup.exe$')"
+          R "Get-AuthenticodeSignature '$Setup' | Select-Object Status, StatusMessage, @{n='Subject';e={`$_.SignerCertificate.Subject}} | Format-List"
+          Copy-Item $Setup $Motw
+          Set-Content -LiteralPath $Motw -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=$url"
+          Write-Host "--- marked copy streams: $((Get-Item -LiteralPath $Motw -Stream * | ForEach-Object Stream) -join ', ')"
+
+      - name: probe install 1 (Start-Process -Wait /S) and uninstall a (/S, -Wait)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          Show-State 'before any install'
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process -Wait -PassThru -FilePath $Setup -ArgumentList '/S'
+          Write-Host ("install 1: Start-Process -Wait returned after {0:n1}s, ExitCode={1}" -f $sw.Elapsed.TotalSeconds, $p.ExitCode)
+          Show-State 'right after install 1'
+          Start-Sleep -Seconds 10
+          Show-State 'install 1 + 10s'
+          $j = Start-Waited $Un @('/S') 120
+          Show-State 'right after uninstall a returned'
+          Watch-Uninstall 90
+          Show-State 'after uninstall a settled'
+
+      - name: probe install 2 (call operator, marked copy) and uninstall b (/S _?=, -Wait)
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          Reset-State
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          & $Motw /S
+          Write-Host ("install 2: & returned after {0:n1}s, LASTEXITCODE={1}" -f $sw.Elapsed.TotalSeconds, $LASTEXITCODE)
+          Get-Interesting | ForEach-Object { Write-Host "  running: $($_.Name) $($_.ProcessId)" }
+          Get-Process -Name 'setup-motw' -ErrorAction SilentlyContinue | Wait-Process -Timeout 180
+          Write-Host ("install 2: setup-motw gone after {0:n1}s" -f $sw.Elapsed.TotalSeconds)
+          Show-State 'after install 2'
+          $j = Start-Waited $Un @('/S', "_?=$Dir") 120
+          Show-State 'right after uninstall b returned'
+          Watch-Uninstall 30
+          Show-State 'after uninstall b settled'
+
+      - name: probe install 3 (two at once) and uninstall c (/S, not waited)
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          Reset-State
+          $a = Start-Process -PassThru -FilePath $Setup -ArgumentList '/S'; $null = $a.Handle
+          Start-Sleep -Milliseconds 700
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $b = Start-Process -PassThru -FilePath $Setup -ArgumentList '/S'; $null = $b.Handle
+          if ($b.WaitForExit(120000)) { Write-Host ("second concurrent setup exited after {0:n1}s, ExitCode={1}" -f $sw.Elapsed.TotalSeconds, $b.ExitCode) }
+          else { $b.Refresh(); Write-Host "second concurrent setup still running after 120s; window title '$($b.MainWindowTitle)'"; Stop-Process -Id $b.Id -Force }
+          if ($a.WaitForExit(180000)) { Write-Host ("first setup exited after {0:n1}s, ExitCode={1}" -f $sw.Elapsed.TotalSeconds, $a.ExitCode) } else { Write-Host 'first setup still running after 180s' }
+          Show-State 'after install 3'
+          $sw.Restart()
+          $u = Start-Process -PassThru -FilePath $Un -ArgumentList '/S'; $null = $u.Handle
+          Write-Host ("uninstall c started, not waited, pid {0}" -f $u.Id)
+          Watch-Uninstall 90
+          if ($u.HasExited) { Write-Host "uninstall c launcher ExitCode=$($u.ExitCode)" }
+          Show-State 'after uninstall c settled'
+
+      - name: probe install 4 (/S --force-run) and uninstall d (/S, -Wait, Jason running)
+        continue-on-error: true
+        timeout-minutes: 7
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          Reset-State
+          $j = Start-Waited $Setup @('/S', '--force-run') 90
+          Start-Sleep -Seconds 15
+          Get-CimInstance Win32_Process -Filter "Name='Jason.exe' OR Name='jason.exe'" | ForEach-Object {
+            $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($_.ParentProcessId)"
+            Write-Host ("  Jason pid {0} session {1} parent {2} ({3}) | {4}" -f $_.ProcessId, $_.SessionId, $_.ParentProcessId, $parent.Name, "$($_.CommandLine)".Substring(0, [Math]::Min(160, "$($_.CommandLine)".Length)))
+          }
+          Get-Process Jason -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object { Write-Host "  window: pid $($_.Id) handle $($_.MainWindowHandle) title '$($_.MainWindowTitle)'" }
+          Show-State 'after install 4 with --force-run + 15s'
+          if ($j.State -ne 'Completed') { Write-Host "install 4's Start-Process -Wait still waiting (state $($j.State))" }
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $u = Start-Waited $Un @('/S') 120
+          Show-State 'right after uninstall d returned, Jason was running'
+          Watch-Uninstall 60
+          Show-State 'after uninstall d settled'
+          Get-Process Jason -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          if (Wait-Job $j -Timeout 20) { Receive-Job $j | ForEach-Object { Write-Host "install 4 job: $_" } } else { Write-Host "install 4's Start-Process -Wait still waiting after Jason was stopped" }
+
+      - name: probe install 5 (Start-Process -Wait, marked copy) and uninstall e (/S _?=, not waited)
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          Reset-State
+          $j = Start-Waited $Motw @('/S') 150
+          if ($j.State -ne 'Completed') { Show-State 'install 5 not returned'; Get-Process setup-motw -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  setup-motw window title '$($_.MainWindowTitle)'" }; Get-Process setup-motw -ErrorAction SilentlyContinue | Stop-Process -Force }
+          Show-State 'after install 5'
+          $u = Start-Process -PassThru -FilePath $Un -ArgumentList '/S', "_?=$Dir"; $null = $u.Handle
+          Write-Host "uninstall e started, not waited, pid $($u.Id)"
+          Watch-Uninstall 60
+          if ($u.HasExited) { Write-Host "uninstall e ExitCode=$($u.ExitCode)" }
+          Show-State 'after uninstall e settled'
+          Reset-State
+          Show-State 'final'
+
+      - name: probe a new user Path entry and what a new process sees
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          $bin = Join-Path $env:LOCALAPPDATA 'probe-bin'; New-Item -ItemType Directory -Force $bin | Out-Null
+          Copy-Item "$env:WINDIR\System32\hostname.exe" (Join-Path $bin 'jason.exe')
+          $uk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $before = $uk.GetValue('Path', '', 'DoNotExpandEnvironmentNames'); Write-Host "user Path kind before: $($uk.GetValueKind('Path')), entries $(($before -split ';').Count)"
+          [Environment]::SetEnvironmentVariable('Path', ($before.TrimEnd(';') + ';' + $bin), 'User')
+          $uk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
+          $after = $uk.GetValue('Path', '', 'DoNotExpandEnvironmentNames'); Write-Host "user Path kind after: $($uk.GetValueKind('Path')), entries $(($after -split ';').Count), last '$(($after -split ';')[-1])'"
+          Write-Host "this process sees probe-bin: $([bool](($env:Path -split ';') -like '*probe-bin*'))"
+          $child = Join-Path $env:RUNNER_TEMP 'child.ps1'
+          Set-Content -LiteralPath $child -Value @(
+            '"  probe-bin on Path: " + [bool](($env:Path -split '';'') -like ''*probe-bin*'')',
+            '"  jason resolves to: " + (Get-Command jason -ErrorAction SilentlyContinue).Source',
+            '"  WindowsApps on Path: " + [bool](($env:Path -split '';'') -like ''*WindowsApps*'')')
+          $sh = Join-Path $env:RUNNER_TEMP 'child.sh'
+          Set-Content -LiteralPath $sh -Value "echo `"  command -v jason: `$(command -v jason)`"; echo `"  jason runs: `$(jason 2>&1)`"" -NoNewline
+          $gb = 'C:\Program Files\Git\bin\bash.exe'
+          foreach ($mode in 'UseNewEnvironment', 'inherited') {
+            $o = Join-Path $env:RUNNER_TEMP "out-pwsh-$mode.txt"
+            $args1 = @{ FilePath = 'pwsh'; ArgumentList = @('-NoProfile', '-File', "`"$child`""); Wait = $true; NoNewWindow = $true; RedirectStandardOutput = $o }
+            if ($mode -eq 'UseNewEnvironment') { $args1.UseNewEnvironment = $true }
+            Start-Process @args1; Write-Host "pwsh child ($mode):"; Get-Content $o | ForEach-Object { Write-Host $_ }
+            $o2 = Join-Path $env:RUNNER_TEMP "out-bash-$mode.txt"
+            $args2 = @{ FilePath = $gb; ArgumentList = @('-l', "`"$($sh.Replace('\', '/'))`""); Wait = $true; NoNewWindow = $true; RedirectStandardOutput = $o2 }
+            if ($mode -eq 'UseNewEnvironment') { $args2.UseNewEnvironment = $true }
+            Start-Process @args2; Write-Host "Git Bash -l child ($mode):"; Get-Content $o2 | ForEach-Object { Write-Host $_ }
+          }
+          R "cmd.exe /d /c where jason"
+          [Environment]::SetEnvironmentVariable('Path', $before, 'User')
+          Write-Host "user Path restored, kind $([Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment').GetValueKind('Path'))"
+
+      - name: probe Git Bash argument conversion
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        run: |
+          echo "bash: $(command -v bash) $(bash --version | head -1)"; uname -a
+          cat > "$RUNNER_TEMP/args.ps1" <<'EOF'
+          "  CommandLine: " + [Environment]::CommandLine
+          $i = 0; foreach ($a in $args) { "  arg[$i]: <$a>"; $i++ }
+          EOF
+          P="$(cygpath -w "$RUNNER_TEMP/args.ps1")"
+          set -- /S '_?=C:\Users\runneradmin\AppData\Local\Programs\jason-desktop' --updated --force-run '/D=C:\Probe' /currentuser
+          echo "--- default"; pwsh -NoProfile -File "$P" "$@"
+          echo "--- MSYS_NO_PATHCONV=1"; MSYS_NO_PATHCONV=1 pwsh -NoProfile -File "$P" "$@"
+          echo "--- MSYS2_ARG_CONV_EXCL='*'"; MSYS2_ARG_CONV_EXCL='*' pwsh -NoProfile -File "$P" "$@"
+          echo "--- //S doubled"; pwsh -NoProfile -File "$P" //S
+
+      - name: probe a logon task of the runner user
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          . (Join-Path $env:RUNNER_TEMP 'h.ps1')
+          $out = Join-Path $env:RUNNER_TEMP 'probe-task.txt'
+          $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/d /c echo ran> `"$out`""
+          $t = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+          R 'Register-ScheduledTask -TaskName probe-logon -Action $a -Trigger $t | Select-Object TaskName, State | Format-List'
+          R 'Start-ScheduledTask -TaskName probe-logon'
+          Start-Sleep -Seconds 5
+          R 'Get-ScheduledTaskInfo -TaskName probe-logon | Select-Object LastRunTime, LastTaskResult | Format-List'
+          R "Get-Content '$out'"
+          R 'Unregister-ScheduledTask -TaskName probe-logon -Confirm:$false'
