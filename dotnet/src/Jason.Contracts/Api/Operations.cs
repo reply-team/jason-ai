@@ -12,8 +12,10 @@ namespace Jason.Contracts.Api;
 /// contract document, and goes looking for one that was never meant to exist.
 /// </para>
 /// <para>
-/// And not every name here has a command. <c>system.info</c> is reached through <c>jason runtime status</c>;
-/// there is no <c>system</c> noun in the CLI, so nothing types <c>jason system info</c>.
+/// And a command is not always spelt as its name. <c>system.info</c> is reached through <c>jason runtime status</c> and
+/// <c>system.shutdown</c> through <c>jason runtime stop</c>, the noun a person types for the process; the CLI's
+/// <c>system</c> noun is the dispatcher's <c>drain</c> and <c>resume</c> alone, so nothing types <c>jason system info</c>.
+/// Every name here is sent by a verb, or is declared where the verb map's guard says why none sends it.
 /// </para>
 /// </remarks>
 public static class Operations

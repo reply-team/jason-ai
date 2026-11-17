@@ -56,6 +56,7 @@ public static class ConfinedVerbs
         (Kind.PersonsWord, "report submit"),
         (Kind.PersonsWord, "subscription rewind"),
         (Kind.Installation, "runtime"),
+        (Kind.Installation, "system"),
         (Kind.Installation, "plugin install"),
         (Kind.Installation, "plugin reload"),
         (Kind.Installation, "profile"),

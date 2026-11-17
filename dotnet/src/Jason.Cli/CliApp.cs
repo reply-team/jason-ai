@@ -250,6 +250,7 @@ public static class CliApp
         var actor = ActorOption.Create();
         root.Options.Add(actor);
         root.Subcommands.Add(RuntimeCommands.Build(env, actor));
+        root.Subcommands.Add(SystemCommands.Build(env, actor));
         root.Subcommands.Add(CampaignCommands.Build(env, actor));
         root.Subcommands.Add(ProjectCommands.Build(env, actor));
         root.Subcommands.Add(PreferenceCommands.Build(env, actor));
