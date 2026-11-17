@@ -1807,6 +1807,8 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
+    timeout-minutes: 45
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2027,6 +2029,8 @@ jobs:
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
+    # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
+    timeout-minutes: 45
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
