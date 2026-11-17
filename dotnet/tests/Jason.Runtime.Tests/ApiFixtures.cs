@@ -35,6 +35,8 @@ public static class ApiFixtures
     //                     -item-approved|-item-all-approved).
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
+    //   reply:            approval.list card-reply-pending, approval.get card-reply (a reply in a thread, which
+    //                     names no account it goes from).
     //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
     //                     decision.answer card-free-text.
     //   many messages:    approval.list card-messages-first-page|-next-page.
@@ -105,6 +107,7 @@ public static class ApiFixtures
         "approval.get/card-message-withdrawn",
         "approval.get/card-needs-decided",
         "approval.get/card-needs-pending",
+        "approval.get/card-reply",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -151,6 +154,7 @@ public static class ApiFixtures
         "approval.list/card-messages-first-page",
         "approval.list/card-messages-next-page",
         "approval.list/card-needs-all",
+        "approval.list/card-reply-pending",
         "approval.list/card-status-waiting",
         "approval.list/decided",
         "approval.list/empty",
