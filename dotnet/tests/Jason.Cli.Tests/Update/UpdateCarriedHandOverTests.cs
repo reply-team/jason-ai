@@ -802,6 +802,68 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     /// <summary>
+    /// While <c>jason install</c> holds the lock, an apply, a finishing step and a rollback beside it refuse with
+    /// install_in_progress, a sentence of their own that names the setup and no update, and touch nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("apply")]
+    [InlineData("finish")]
+    [InlineData("rollback")]
+    public async Task An_update_beside_a_setup_that_holds_the_lock_refuses_as_beside_a_setup(string verb)
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        if (verb == "rollback")
+        {
+            Assert.Equal(ExitCodes.Success, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+            installation.Out.GetStringBuilder().Clear();
+        }
+
+        var before = File.Exists(installation.Update.Ledger) ? File.ReadAllText(installation.Update.Ledger) : null;
+        var starts = desktop.Starts.Count;
+        using var held = UpdateLock.Take(installation.Update, "a test's setup", holder: UpdateLock.Holder.Install);
+
+        var exit = verb switch
+        {
+            "apply" => await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct),
+            "finish" => await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, finish: true, Ct),
+            _ => await CliApp.RunAsync(["update", "rollback"], installation.Machine!, Ct),
+        };
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(CliErrors.InstallInProgress, refusal.Code);
+        Assert.StartsWith($"`jason install` is setting this machine up, process {System.Environment.ProcessId}", refusal.Message, StringComparison.Ordinal);
+        Assert.True(refusal.Retryable);
+        Assert.Equal(before, File.Exists(installation.Update.Ledger) ? File.ReadAllText(installation.Update.Ledger) : null);
+        Assert.Equal(starts, desktop.Starts.Count);
+    }
+
+    /// <summary>
+    /// The lock is the open file, not the file: a lock file and a holder named beside it that a process left when it ended,
+    /// by a kill as much as by an end, refuse no update; the next one takes the lock and names itself.
+    /// </summary>
+    [Theory]
+    [InlineData("update 999999 left-behind")]
+    [InlineData("install 999999 left-behind")]
+    public void A_lock_file_a_dead_process_left_refuses_no_update(string holder)
+    {
+        var (installation, _) = FakeDesktop.Carried();
+        using var _installation = installation;
+        Directory.CreateDirectory(installation.Update.Root);
+        File.WriteAllText(installation.Update.Lock, string.Empty);
+        File.WriteAllText(installation.Update.LockHolder, holder);
+
+        using (var taken = UpdateLock.Take(installation.Update, "the next update"))
+        {
+            Assert.False(taken.Joined);
+            Assert.StartsWith($"update {System.Environment.ProcessId} ", File.ReadAllText(installation.Update.LockHolder), StringComparison.Ordinal);
+        }
+
+        Assert.False(File.Exists(installation.Update.LockHolder), "a holder was left named beside a lock no one holds");
+    }
+
+    /// <summary>
     /// A console's close cancels the update as Ctrl+C does and is held until the way out has run, a few seconds at most.
     /// </summary>
     [Fact]

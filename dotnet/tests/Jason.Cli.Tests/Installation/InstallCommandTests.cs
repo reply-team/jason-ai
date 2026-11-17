@@ -108,6 +108,98 @@ public sealed class InstallCommandTests : IDisposable
         using var free = Jason.Cli.Update.UpdateLock.Take(update, "the next update");
     }
 
+    /// <summary>
+    /// A second <c>jason install</c> beside one that holds the lock refuses in words of its own, install_in_progress, and
+    /// names the process: no update is in flight, and the other setup takes seconds.
+    /// </summary>
+    [Fact]
+    public async Task A_second_setup_beside_one_that_holds_the_lock_refuses_as_a_setup()
+    {
+        var executable = Carried();
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        var (env, output) = Environment(MacPlaces(), executable);
+
+        using (Jason.Cli.Update.UpdateLock.Take(update, "a test's setup", holder: Jason.Cli.Update.UpdateLock.Holder.Install))
+        {
+            Assert.Equal(ExitCodes.ApiError, await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct));
+        }
+
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(CliErrors.InstallInProgress, refusal.Code);
+        Assert.Contains($"`jason install` is setting this machine up, process {System.Environment.ProcessId}", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("updating", refusal.Message, StringComparison.Ordinal);
+        Assert.True(refusal.Retryable);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
+    }
+
+    /// <summary>
+    /// The lock is the open file, not the file: one a process left when it ended, its holder still named beside it, refuses
+    /// nobody, and the setup runs.
+    /// </summary>
+    [Fact]
+    public async Task A_lock_file_a_dead_process_left_refuses_nobody()
+    {
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        File.WriteAllText(update.Lock, string.Empty);
+        File.WriteAllText(update.LockHolder, "install 999999 left-behind");
+        var (env, output) = Environment(MacPlaces(), Carried());
+
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct));
+        Assert.True(Report(output).GetProperty("completed").GetBoolean());
+        Assert.False(File.Exists(update.LockHolder), "the setup left its own name beside a lock it let go");
+    }
+
+    /// <summary>
+    /// A setup the lock's holder runs as its waited child, handed the holder's nonce in JASON_UPDATE_LOCK as the update's own
+    /// parts are, goes on under that hold and leaves it held; one handed no nonce, or another, is refused by what holds the
+    /// lock and sets nothing up.
+    /// </summary>
+    [Theory]
+    [InlineData("update", "handed")]
+    [InlineData("install", "handed")]
+    [InlineData("update", "none")]
+    [InlineData("install", "none")]
+    [InlineData("update", "wrong")]
+    [InlineData("install", "wrong")]
+    public async Task A_setup_handed_the_holders_nonce_runs_under_its_hold_and_no_other_does(string holder, string nonce)
+    {
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        using var held = Jason.Cli.Update.UpdateLock.Take(
+            update,
+            "a test's holder",
+            holder: holder == "install" ? Jason.Cli.Update.UpdateLock.Holder.Install : Jason.Cli.Update.UpdateLock.Holder.Update);
+        var named = File.ReadAllText(update.LockHolder);
+        var variables = new Dictionary<string, string>();
+        if (nonce != "none")
+        {
+            variables[Jason.Cli.Update.UpdateLock.Variable] = nonce == "handed" ? held.HandOver() : "0123456789abcdef0123456789abcdef";
+        }
+
+        var (env, output) = Environment(MacPlaces(), Carried(), variables);
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        if (nonce == "handed")
+        {
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.True(Report(output).GetProperty("completed").GetBoolean());
+        }
+        else
+        {
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Equal(
+                holder == "install" ? CliErrors.InstallInProgress : Jason.Cli.Update.UpdateCodes.InProgress,
+                RuntimeVerbs.Envelope(output.ToString()).Code);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
+        }
+
+        Assert.Equal(named, File.ReadAllText(update.LockHolder));
+        var second = Assert.Throws<Jason.Cli.Update.UpdateException>(() => Jason.Cli.Update.UpdateLock.Take(update, "a second update").Dispose());
+        Assert.Equal(holder == "install" ? CliErrors.InstallInProgress : Jason.Cli.Update.UpdateCodes.InProgress, second.Code);
+    }
+
     /// <summary>A data directory with no update folder: the setup takes no lock and makes none.</summary>
     [Fact]
     public async Task With_no_update_folder_the_setup_makes_no_lock()
@@ -1250,7 +1342,7 @@ public sealed class InstallCommandTests : IDisposable
 
     private SetupPlaces WindowsPlaces(string pathKey) => new(SetupSystem.Windows, Home, LocalAppData, pathKey, null) { Temporary = _tree.Paths.Root };
 
-    private (CliEnvironment Env, StringWriter Output) Environment(SetupPlaces? places, string executable)
+    private (CliEnvironment Env, StringWriter Output) Environment(SetupPlaces? places, string executable, Dictionary<string, string>? variables = null)
     {
         var output = new StringWriter();
         var env = new CliEnvironment(
@@ -1262,7 +1354,7 @@ public sealed class InstallCommandTests : IDisposable
             InstallPath: executable,
             Autostart: new RecordingRegistrar(places?.Platform is SetupSystem.Windows ? AutostartPlatform.Windows : AutostartPlatform.MacOs),
             Harnesses: HarnessLocators.ForHome(Home),
-            Variables: new Dictionary<string, string>(),
+            Variables: variables ?? new Dictionary<string, string>(),
             SearchPath: "/usr/bin:/bin",
             Setup: places);
         return (env, output);
