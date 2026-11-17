@@ -103,14 +103,14 @@ export function showsOnSecondStart(argv: readonly string[]): boolean {
 }
 
 /**
- * How the window behaves where it is. On Windows and macOS the tray keeps the application: the menu bar is hidden (the
- * tray carries its items off macOS), closing the window hides it, and a start at sign-in stays in the tray. On Linux no
- * tray can be counted on, since a session may show no tray icon at all, so the menu bar stays visible, closing the window
- * quits the application while the runtime keeps running, and a start at sign-in opens the window minimized rather than
- * hidden, on every Linux desktop alike, tray or no tray.
+ * How the window behaves where it is. On Windows and macOS the tray keeps the application: closing the window hides it,
+ * and a start at sign-in stays in the tray. On Linux no tray can be counted on, since a session may show no tray icon at
+ * all, so closing the window quits the application while the runtime keeps running, and a start at sign-in opens the
+ * window minimized rather than hidden, on every Linux desktop alike, tray or no tray. No window shows a menu bar: one
+ * without its title bar has none (`window-frame.ts`), and the menu's keys act without it.
  */
-export function windowConduct(platform: NodeJS.Platform): { menuBar: boolean; closeQuits: boolean; atLogin: 'hidden' | 'minimized' } {
-    return platform === 'linux' ? { menuBar: true, closeQuits: true, atLogin: 'minimized' } : { menuBar: false, closeQuits: false, atLogin: 'hidden' };
+export function windowConduct(platform: NodeJS.Platform): { closeQuits: boolean; atLogin: 'hidden' | 'minimized' } {
+    return platform === 'linux' ? { closeQuits: true, atLogin: 'minimized' } : { closeQuits: false, atLogin: 'hidden' };
 }
 
 /** The part of a window that bringing it forward uses. */

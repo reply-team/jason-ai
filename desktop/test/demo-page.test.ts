@@ -5,6 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { runInNewContext } from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -29,9 +30,20 @@ import {
     demoStripAt,
     demoStripSheets,
     demoBeforeReady,
+    demoLinkGestureMs,
+    demoLinkMark,
+    demoLinkOpener,
+    demoLinkScript,
+    demoLinkSheet,
+    demoLinkSpanMs,
+    demoLinkWorld,
+    demoRepository,
+    demoRepositoryText,
     demoResolverRule,
     noDragSheet,
     switchChoice,
+    isDemoLinkGesture,
+    watchDemoGestures,
     type DemoRefusal,
 } from '../src/demo-page.ts';
 import { persists } from '../src/window-pairing.ts';
@@ -233,6 +245,10 @@ function stand(): Stand {
         insertCSS: async (css: string, options?: { cssOrigin?: string }) => {
             calls.push(`insertCSS:${options?.cssOrigin}:${css}`);
             return 'key';
+        },
+        executeJavaScriptInIsolatedWorld: async (world: number, scripts: { code: string }[]) => {
+            calls.push(`executeJavaScriptInIsolatedWorld:${world}:${scripts.map((script) => script.code).join('')}`);
+            return undefined;
         },
         loadURL: async (url: string) => void calls.push(`loadURL:${url}`),
         isDestroyed: () => false,
@@ -592,14 +608,18 @@ test('our switch’s view is transparent, so the page’s strip shows through it
     assert.ok(window.indexOf("ours.setBackgroundColor('#00000000');") < window.indexOf('window.contentView.addChildView(ours);'), 'before it is shown');
 });
 
-test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags', () => {
+// The band's document is the window's own contents, which fill the whole window under the two views, and Electron asks
+// the window's own contents first whether a point is in a drag region, whichever view is drawn over it: so only the band's
+// own height drags, never the document as a whole.
+test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags over its own height alone', () => {
     const page = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8');
     assert.ok(!/<script|on[a-z]+\s*=|javascript:|href=|<a\b|<button|<input/i.test(page), 'no script and nothing to follow');
     assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
     const css = page.replace(/\s+/g, ' ');
-    assert.ok(/html \{[^}]*-webkit-app-region: drag;/.test(css));
     assert.ok(/background: linear-gradient\(to right, #f3f5f9 0 284px, #fff4d6 284px\);/.test(css));
-    assert.ok(!/no-drag/.test(css), 'all of it drags');
+    assert.ok(/html \{[^}]*\}/.test(css) && !/html \{[^}]*-webkit-app-region/.test(css), 'the document as a whole carries no drag region');
+    assert.equal(css.split('-webkit-app-region').length - 1, 1, 'one drag region');
+    assert.ok(css.includes(`body { margin: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: drag; }`), 'the body drags, as high as the band');
 });
 
 test('the Demo window takes the window’s own frame, loads our band under its views on macOS, and elsewhere keeps its frame', () => {
@@ -747,10 +767,12 @@ test('every request from the page’s view to an address the page holds, or to a
     }
 });
 
-// ---- The strip on Windows, where the caption buttons stand over its right end -------------------------------------------
+// ---- The strip on Windows and Linux, where the caption buttons stand over its right end ---------------------------------
 
-// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%.
+// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%:
+// on Windows, and on Linux as GNOME draws them, and at 100% as Plasma does.
 const captions = [138, 137.33];
+const linuxCaptions = [114, 113.33, 72];
 
 test('the page’s strip, as the desktop’s sheet names it, is still in the page: the selectors, the strip’s padding and its breakpoint', () => {
     const page = pageText();
@@ -770,9 +792,14 @@ test('the page’s strip, as the desktop’s sheet names it, is still in the pag
     assert.ok(page.includes("say('an example of what you can build on Jason. The data is samples, and nothing is sent.','an example of what you can build. Nothing is sent.')"));
 });
 
-test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
+test('on Windows and Linux the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
     const sheets = demoStripSheets('win32');
     assert.ok(sheets);
+    // Linux takes the same sheets, but for the font of the switch's words: Segoe UI is a Windows font, so on Linux the
+    // words stay in the system's own font, the switch page's.
+    const font = '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ';
+    assert.deepEqual(demoStripSheets('linux'), { page: sheets.page, switch: sheets.switch.replace(font, '') });
+    assert.doesNotMatch(demoStripSheets('linux')!.switch, /font/);
     const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
     assert.ok(sheets.page.includes(`padding-right: calc(${demoStrip.inset}px + ${caption}) !important;`));
     assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
@@ -815,29 +842,33 @@ test('on Windows from 900 to 933 pixels our switch takes its tighter form and th
     }
 });
 
-test('on Windows at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
-    for (const caption of captions) {
-        for (let width = 900; width <= 2600; width++) {
-            const at = demoStripAt('win32', width, caption);
-            assert.ok(at.whole, `${width} whole`);
-            assert.ok(at.textEnd <= at.coveredFrom, `${width}`);
+test('on Windows and Linux at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
+    for (const [platform, widths] of [
+        ['win32', captions],
+        ['linux', linuxCaptions],
+    ] as const) {
+        for (const caption of widths) {
+            for (let width = 900; width <= 2600; width++) {
+                const at = demoStripAt(platform, width, caption);
+                assert.ok(at.whole, `${platform} ${width} whole`);
+                assert.ok(at.textEnd <= at.coveredFrom, `${platform} ${width}`);
+            }
         }
     }
 });
 
-test('on macOS and Linux nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
-    for (const platform of ['darwin', 'linux'] as const) {
-        assert.equal(demoStripSheets(platform), null);
-        for (let width = 900; width <= 2600; width++) {
-            const at = demoStripAt(platform, width, 0);
-            assert.equal(at.form, width <= 1100 ? 'short' : 'long');
-            assert.equal(at.switchForm, 'normal');
-            assert.ok(at.whole && at.textEnd <= at.coveredFrom, `${platform} ${width}`);
-        }
+test('on macOS nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
+    assert.equal(demoStripSheets('darwin'), null);
+    for (let width = 900; width <= 2600; width++) {
+        const at = demoStripAt('darwin', width, 0);
+        assert.equal(at.form, width <= 1100 ? 'short' : 'long');
+        assert.equal(at.switchForm, 'normal');
+        assert.ok(at.whole && at.textEnd <= at.coveredFrom, `darwin ${width}`);
     }
     const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
     assert.ok(window.includes('const sheets = demoStripSheets(deps.platform);'));
-    assert.ok(window.includes('sheet: sheets?.page'));
+    // On macOS the page's view gets the link's sheet alone; elsewhere the strip's and the link's.
+    assert.ok(window.includes('sheet: sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`'));
     assert.ok(window.includes('sheet: sheets?.switch'));
 });
 
@@ -860,4 +891,360 @@ test('the sheets’ three numbers are the ones the strip’s measures give, and 
     assert.equal(demoStrip.longFrom, 641);
     assert.equal(demoStrip.tightBelow, 494);
     assert.equal(Math.round(demoStrip.ours.tight * 100) / 100, 70.16);
+});
+
+// ---- The repository's address in the page's note: the desktop's link, and the one address the view hands out -------
+
+/**
+ * The page's view sealed as the window seals it: the desktop's link sheet and script, the watch over the input that
+ * reaches the view, and the reader that opens the one address.
+ */
+async function sealedPage() {
+    const made = stand();
+    const refused: DemoRefusal[] = [];
+    const opened: string[] = [];
+    const asks: string[] = [];
+    const clock = { now: 1_000_000 };
+    const gestures = watchDemoGestures(made.contents, () => clock.now);
+    const opener = demoLinkOpener(() => opened.push(demoRepository), gestures, () => clock.now);
+    const asked = (url: string) => {
+        asks.push(url);
+        return opener(url);
+    };
+    await sealView(made.contents, demoPage, { read: () => pageBytes, refused: (kind) => refused.push(kind), sheet: demoLinkSheet, script: demoLinkScript, asked });
+    /** A person's click let go in the view, as Electron reports it to the main process. */
+    const click = () => call(made.on.get('input-event'), event(), { type: 'mouseUp', button: 'left', clickCount: 1, x: 1, y: 1, modifiers: [] });
+    /** Enter pressed in the view, as Electron reports it before the page sees it. */
+    const enter = () => call(made.on.get('before-input-event'), event(), { type: 'keyDown', key: 'Enter', code: 'Enter', isAutoRepeat: false });
+    return { ...made, refused, opened, asks, clock, click, enter };
+}
+
+const navigate = (view: Stand, name: string, url: string, isMainFrame = true) => {
+    const stop = event({ url, isMainFrame });
+    call(view.on.get(name), stop);
+    return stop.stopped;
+};
+
+test('a person’s click, then the repository’s address: it opens in the browser once, and the view stays where it was', async () => {
+    const view = await sealedPage();
+    view.click();
+    view.clock.now += 50;
+    assert.ok(navigate(view, 'will-navigate', demoRepository), 'the navigation is refused');
+    assert.deepEqual(view.opened, [demoRepository]);
+    // Electron asks about the same navigation of the main frame a second time: the span opens it once.
+    assert.ok(navigate(view, 'will-frame-navigate', demoRepository));
+    assert.deepEqual(view.opened, [demoRepository]);
+    assert.ok(!view.calls.some((name) => name.startsWith('loadURL:')), 'nothing is loaded in the view');
+    // The person's own click is a choice, not a refusal.
+    assert.deepEqual(view.refused, []);
+});
+
+test('the repository’s address with no click or Enter before it opens nothing: a page that asks on load, or on its own, is refused', async () => {
+    const view = await sealedPage();
+    for (let step = 0; step < 5; step++) {
+        assert.ok(navigate(view, 'will-navigate', demoRepository));
+        view.clock.now += demoLinkSpanMs + 1;
+    }
+    assert.deepEqual(view.opened, []);
+    assert.ok(view.refused.length > 0 && view.refused.every((kind) => kind === 'navigation'));
+});
+
+test('a click or Enter opens the address within the gesture’s second, and after that second nothing', async () => {
+    const inside = await sealedPage();
+    inside.enter();
+    inside.clock.now += demoLinkGestureMs;
+    assert.ok(navigate(inside, 'will-navigate', demoRepository));
+    assert.deepEqual(inside.opened, [demoRepository], 'Enter, then the address inside the second: it opens once');
+
+    const after = await sealedPage();
+    after.click();
+    after.clock.now += demoLinkGestureMs + 1;
+    assert.ok(navigate(after, 'will-navigate', demoRepository));
+    assert.deepEqual(after.opened, [], 'the address after the second opens nothing');
+    assert.deepEqual(after.refused, ['navigation']);
+    assert.equal(demoLinkGestureMs, 1000);
+});
+
+test('a moment before the gesture opens nothing, and both moments are read from a monotonic clock', async () => {
+    const view = await sealedPage();
+    view.click();
+    view.clock.now -= 1;
+    assert.ok(navigate(view, 'will-navigate', demoRepository));
+    assert.deepEqual(view.opened, [], 'a clock that stepped back keeps the gate shut');
+    assert.deepEqual(view.refused, ['navigation']);
+    // Without a clock given, the watch and the opener read performance.now(), which no step of the system's clock moves.
+    const source = readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8');
+    assert.match(source, /const monotonic = \(\): number => performance\.now\(\);/);
+    assert.match(source, /export function watchDemoGestures\(contents: Pick<WebContents, 'on'>, now: \(\) => number = monotonic\)/);
+    assert.match(source, /export function demoLinkOpener\(open: \(\) => void, gestureAt: \(\) => number \| null, now: \(\) => number = monotonic\)/);
+    assert.ok(!/Date\.now/.test(source.slice(source.indexOf('export const demoLinkGestureMs'))), 'no wall clock in the gate');
+});
+
+test('the same address again within the span opens nothing, a gesture before it or not; after the span a new gesture opens it again', async () => {
+    const view = await sealedPage();
+    view.click();
+    navigate(view, 'will-navigate', demoRepository);
+    view.clock.now += demoLinkSpanMs - 1;
+    view.click();
+    assert.ok(navigate(view, 'will-navigate', demoRepository));
+    assert.deepEqual(view.opened, [demoRepository], 'a person clicking again and again opens one tab');
+    view.clock.now += 1;
+    view.click();
+    assert.ok(navigate(view, 'will-navigate', demoRepository));
+    assert.deepEqual(view.opened, [demoRepository, demoRepository]);
+    assert.equal(demoLinkSpanMs, 2000);
+});
+
+test('only the main frame’s navigation is read: a frame’s within the page and a redirect are refused and ask nothing', async () => {
+    const view = await sealedPage();
+    view.click();
+    assert.ok(navigate(view, 'will-frame-navigate', demoRepository, false));
+    assert.ok(navigate(view, 'will-navigate', demoRepository, false));
+    assert.ok(navigate(view, 'will-redirect', demoRepository, true));
+    assert.ok(navigate(view, 'will-redirect', demoRepository, false));
+    assert.deepEqual(view.asks, [], 'the reader is asked nothing');
+    assert.deepEqual(view.opened, []);
+    assert.ok(view.refused.length > 0 && view.refused.every((kind) => kind === 'navigation'));
+});
+
+test('any other address opens nothing and is refused, a gesture before it or not: another address, a path, a query, a fragment, another scheme', async () => {
+    const view = await sealedPage();
+    const others = [
+        'https://github.com/reply-team/jason-ai/releases',
+        'https://github.com/reply-team/jason-ai/',
+        'https://github.com/reply-team/jason-ai?tab=readme',
+        'https://github.com/reply-team/jason-ai#readme',
+        'https://github.com/reply-team/jason-ai.git',
+        'https://github.com/reply-team/jason-ai%2F',
+        'https://github.com/reply-team',
+        'https://github.com/',
+        'http://github.com/reply-team/jason-ai',
+        'ws://github.com/reply-team/jason-ai',
+        'file://github.com/reply-team/jason-ai',
+        'github.com/reply-team/jason-ai',
+        'https://github.com.example.com/reply-team/jason-ai',
+        'https://user@github.com/reply-team/jason-ai',
+        'https://example.com/',
+    ];
+    for (const url of others) {
+        view.click();
+        for (const name of ['will-navigate', 'will-frame-navigate', 'will-redirect']) assert.ok(navigate(view, name, url), `${name} ${url} is refused`);
+    }
+    assert.deepEqual(view.opened, []);
+    assert.ok(view.refused.length > 0 && view.refused.every((kind) => kind === 'navigation'), 'each is told as a refusal');
+    // A pop-up to the address itself is denied and opens nothing: the view's window-open handler hands out no address.
+    assert.deepEqual(call(view.handler('setWindowOpenHandler'), { url: demoRepository }), { action: 'deny' });
+    assert.deepEqual(view.opened, []);
+});
+
+test('the opener compares the text it is handed whole, so any other text, the same letters in another case included, is not the address', () => {
+    // Chromium hands a navigation's address over canonical (a host in lower case, no default port), so in a view these
+    // reach the opener as the address itself; this row is about the comparison alone.
+    const opened: string[] = [];
+    const ask = demoLinkOpener(() => opened.push(demoRepository), () => 0, () => 0);
+    for (const text of ['https://example.com/', 'jason-switch://switch/live', 'HTTPS://github.com/reply-team/jason-ai', 'https://GitHub.com/reply-team/jason-ai', 'https://github.com:443/reply-team/jason-ai', ' https://github.com/reply-team/jason-ai']) {
+        assert.equal(ask(text), false, text);
+    }
+    assert.equal(ask(demoRepository), true);
+    assert.deepEqual(opened, [demoRepository]);
+});
+
+test('a gesture is the left button let go or Enter pressed, nothing else', () => {
+    assert.ok(isDemoLinkGesture({ type: 'mouseUp', button: 'left' }));
+    assert.ok(isDemoLinkGesture({ type: 'keyDown', key: 'Enter' }));
+    for (const input of [
+        { type: 'mouseUp', button: 'right' },
+        { type: 'mouseUp', button: 'middle' },
+        { type: 'mouseUp' },
+        { type: 'mouseDown', button: 'left' },
+        { type: 'mouseMove' },
+        { type: 'mouseWheel' },
+        { type: 'keyDown', key: 'Enter', isAutoRepeat: true },
+        { type: 'keyUp', key: 'Enter' },
+        { type: 'keyDown', key: ' ' },
+        { type: 'char', key: 'Enter' },
+    ]) {
+        assert.equal(isDemoLinkGesture(input), false, JSON.stringify(input));
+    }
+});
+
+test('every document of the page’s view gets the link’s sheet, of the user’s origin, and the script, in a world of its own', async () => {
+    const view = await sealedPage();
+    call(view.on.get('dom-ready'));
+    await Promise.resolve();
+    assert.ok(view.calls.includes(`insertCSS:user:${noDragSheet}`));
+    assert.ok(view.calls.includes(`insertCSS:user:${demoLinkSheet}`));
+    assert.ok(view.calls.includes(`executeJavaScriptInIsolatedWorld:${demoLinkWorld}:${demoLinkScript}`));
+    assert.notEqual(demoLinkWorld, 0, 'never the page’s own world');
+    // Our switch's view carries no script.
+    const switchView = await sealed(demoSwitch);
+    switchView.on.get('dom-ready')?.();
+    assert.ok(!switchView.calls.some((name) => name.startsWith('executeJavaScript')));
+});
+
+test('the window seals the page’s view with the link, the script, the gesture watch and the one opener, and our switch’s without them', () => {
+    const source = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
+    assert.match(source, /sheet: sheets === null \? demoLinkSheet : `\$\{sheets\.page\} \$\{demoLinkSheet\}`,/);
+    assert.match(source, /script: demoLinkScript,/);
+    assert.match(source, /asked: demoLinkOpener\(deps\.open, watchDemoGestures\(page\.webContents\)\),/);
+    assert.equal(source.match(/demoLinkScript|demoLinkOpener|watchDemoGestures/g)?.length, 6, 'the import and the page’s view alone');
+});
+
+test('the address is spelled once, is the one the page’s note names, and the sheet and the script name no other', () => {
+    assert.equal(demoRepository, 'https://github.com/reply-team/jason-ai');
+    assert.equal(`https://${demoRepositoryText}`, demoRepository);
+    // The page names it once, as the whole text of an element of its note; with no scheme, it adds nothing to its counted list.
+    const page = pageText();
+    assert.equal(page.split(demoRepositoryText).length - 1, 1);
+    assert.ok(page.includes(`get the code at <b>${demoRepositoryText}</b>`));
+    assert.ok(!page.includes(demoLinkMark), 'nothing of the page carries the mark');
+    const source = readFileSync(join(root, 'src', 'demo-page.ts'), 'utf8');
+    assert.equal(source.split('github.com/reply-team/jason-ai').length - 1, 2, 'once in the constant, once in its comment');
+    const pattern = listed().pattern;
+    assert.deepEqual([...addressesIn(demoLinkSheet, pattern).keys()], []);
+    assert.deepEqual([...addressesIn(demoLinkScript, pattern).entries()], [['https://github.com', 1]]);
+    assert.equal(demoLinkScript.split(JSON.stringify(demoRepository)).length - 1, 1);
+    // The link takes the page's own link colour, a pointer, and an underline on hover and focus.
+    assert.match(demoLinkSheet, /color: var\(--teal, #2f5be0\) !important/);
+    assert.match(demoLinkSheet, /cursor: pointer !important/);
+    assert.match(demoLinkSheet, /:hover, \[data-jason-link\]:focus-visible \{ text-decoration: underline !important;/);
+    assert.ok(page.includes('.uinote a{color:var(--teal);'), 'the page’s own links in its note are of that colour');
+});
+
+// A small stand-in of the document the script runs in: elements, text, a tree walker, an observer, a location.
+class FakeText {
+    readonly nodeType = 3;
+    parentElement: FakeElement | null = null;
+    data: string;
+    constructor(data: string) {
+        this.data = data;
+    }
+    get textContent(): string {
+        return this.data;
+    }
+}
+class FakeElement {
+    readonly nodeType = 1;
+    parentElement: FakeElement | null = null;
+    readonly attributes = new Map<string, string>();
+    readonly children: (FakeElement | FakeText)[];
+    constructor(...children: (FakeElement | FakeText)[]) {
+        this.children = children;
+        for (const child of children) child.parentElement = this;
+    }
+    get textContent(): string {
+        return this.children.map((child) => child.textContent).join('');
+    }
+    hasAttribute(name: string): boolean {
+        return this.attributes.has(name);
+    }
+    setAttribute(name: string, value: string): void {
+        this.attributes.set(name, value);
+    }
+    removeAttribute(name: string): void {
+        this.attributes.delete(name);
+    }
+    append(child: FakeElement | FakeText): void {
+        this.children.push(child);
+        child.parentElement = this;
+    }
+    closest(selector: string): FakeElement | null {
+        const name = /^\[(.+)\]$/.exec(selector)?.[1];
+        assert.ok(name, selector);
+        for (let element: FakeElement | null = this; element !== null; element = element.parentElement) if (element.hasAttribute(name)) return element;
+        return null;
+    }
+}
+
+function texts(node: FakeElement | FakeText): FakeText[] {
+    return node instanceof FakeText ? [] : node.children.flatMap((child) => (child instanceof FakeText ? [child] : texts(child)));
+}
+
+function runLinkScript(documentElement: FakeElement) {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const observers: ((records: unknown[]) => void)[] = [];
+    const navigations: string[] = [];
+    const document = {
+        documentElement,
+        addEventListener: (type: string, listener: (event: unknown) => void, capture: boolean) => {
+            assert.equal(capture, true);
+            listeners.set(type, listener);
+        },
+        createTreeWalker: (root: FakeElement | FakeText) => {
+            const found = texts(root);
+            let at = 0;
+            return {
+                currentNode: root as FakeElement | FakeText,
+                nextNode() {
+                    const next = found[at++] ?? null;
+                    if (next !== null) this.currentNode = next;
+                    return next;
+                },
+            };
+        },
+    };
+    runInNewContext(demoLinkScript, {
+        document,
+        Element: FakeElement,
+        Node: { TEXT_NODE: 3 },
+        NodeFilter: { SHOW_TEXT: 4 },
+        MutationObserver: class {
+            constructor(callback: (records: unknown[]) => void) {
+                observers.push(callback);
+            }
+            observe() {}
+        },
+        location: {
+            set href(url: string) {
+                navigations.push(url);
+            },
+        },
+    });
+    const fire = (type: string, fields: Record<string, unknown>) => {
+        let prevented = false;
+        listeners.get(type)?.({ isTrusted: true, button: 0, repeat: false, ...fields, preventDefault: () => void (prevented = true) });
+        return prevented;
+    };
+    return { navigations, fire, observe: (records: unknown[]) => observers.forEach((observer) => observer(records)) };
+}
+
+const isLink = (element: FakeElement) => element.hasAttribute(demoLinkMark) && element.attributes.get('role') === 'link' && element.attributes.get('tabindex') === '0';
+
+test('the script marks the note’s address as a focusable link, asks nothing on load, and asks for the address on a person’s click or Enter alone', () => {
+    const address = new FakeElement(new FakeText(demoRepositoryText));
+    const demo = new FakeElement(new FakeText('Demo'));
+    const longer = new FakeElement(new FakeText(`${demoRepositoryText}/releases`));
+    const note = new FakeElement(new FakeElement(new FakeText('get the code at '), address), demo, longer);
+    const run = runLinkScript(new FakeElement(new FakeElement(note)));
+    assert.deepEqual(run.navigations, [], 'nothing is asked on load');
+    assert.ok(isLink(address));
+    assert.equal(demo.attributes.size + longer.attributes.size, 0, 'nothing else of the page is touched');
+
+    assert.equal(run.fire('click', { target: demo }), false);
+    assert.equal(run.fire('click', { target: address, isTrusted: false }), false, 'a click the page made is not the person’s');
+    assert.equal(run.fire('click', { target: address, button: 1 }), false);
+    assert.equal(run.fire('keydown', { target: address, key: ' ' }), false);
+    assert.equal(run.fire('keydown', { target: address, key: 'Enter', repeat: true }), false);
+    assert.equal(run.fire('keydown', { target: address, key: 'Enter', isTrusted: false }), false);
+    assert.deepEqual(run.navigations, []);
+
+    assert.equal(run.fire('click', { target: address }), true);
+    assert.equal(run.fire('keydown', { target: address, key: 'Enter' }), true);
+    assert.deepEqual(run.navigations, [demoRepository, demoRepository]);
+});
+
+test('the script keeps the mark as the page draws its note again, and takes it off an element whose text is no longer the address', () => {
+    const body = new FakeElement();
+    const run = runLinkScript(new FakeElement(body));
+    const address = new FakeElement(new FakeText(demoRepositoryText));
+    const note = new FakeElement(new FakeElement(new FakeText('get the code at '), address));
+    body.append(note);
+    run.observe([{ type: 'childList', addedNodes: [note] }]);
+    assert.ok(isLink(address), 'a note drawn again is marked again');
+    const words = address.children[0] as FakeText;
+    words.data = 'something else';
+    run.observe([{ type: 'characterData', target: words }]);
+    assert.equal(address.attributes.size, 0, 'mark, role and focus taken off');
+    assert.equal(run.fire('click', { target: address }), false);
+    assert.deepEqual(run.navigations, []);
 });

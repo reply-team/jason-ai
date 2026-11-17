@@ -228,9 +228,12 @@ export interface SealDeps {
     refused(kind: DemoRefusal): void;
     /** A sheet of the desktop's own, of the user's origin, put into every document of the view (`demoStripSheets`). */
     sheet?: string | undefined;
+    /** A script of the desktop's own, run in every document of the view in a world of its own (`demoLinkWorld`), never the page's. */
+    script?: string | undefined;
     /**
-     * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
-     * answers true when it was one, which is then not told as a refusal.
+     * A navigation of the view's main frame, asked for by the view and stopped: the switch reads the person's choice from
+     * it, and answers true when it was one, which is then not told as a refusal. A frame's navigation within the page and
+     * a redirect are refused and asked nothing.
      */
     asked?(url: string): boolean;
 }
@@ -326,15 +329,15 @@ export async function sealView(contents: WebContents, view: DemoView, deps: Seal
  * and the page's drag regions.
  */
 function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, refuse: (kind: DemoRefusal) => void): void {
-    const guard = (event: Stoppable, url: string, isMainFrame: boolean) => {
+    const guard = (event: Stoppable, url: string, isMainFrame: boolean, asks: boolean) => {
         if (navigationAllowed(view, url, isMainFrame)) return;
         event.preventDefault();
-        if (deps.asked?.(url) === true) return;
+        if (asks && isMainFrame && deps.asked?.(url) === true) return;
         refuse('navigation');
     };
-    contents.on('will-navigate', (event) => guard(event, event.url, event.isMainFrame));
-    contents.on('will-frame-navigate', (event) => guard(event, event.url, event.isMainFrame));
-    contents.on('will-redirect', (event) => guard(event, event.url, event.isMainFrame));
+    contents.on('will-navigate', (event) => guard(event, event.url, event.isMainFrame, true));
+    contents.on('will-frame-navigate', (event) => guard(event, event.url, event.isMainFrame, true));
+    contents.on('will-redirect', (event) => guard(event, event.url, event.isMainFrame, false));
     // A navigation Electron asks no handler about, `about:blank` from the page's script, is undone once it is made: the
     // main frame shows its own address or is loaded with it again.
     contents.on('did-navigate', (_event, url) => {
@@ -343,10 +346,12 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
         if (!contents.isDestroyed()) contents.loadURL(view.url).catch(() => undefined);
     });
     const sheets = [...(view.drags ? [] : [noDragSheet]), ...(deps.sheet === undefined ? [] : [deps.sheet])];
-    if (sheets.length > 0) {
+    const script = deps.script;
+    if (sheets.length > 0 || script !== undefined) {
         contents.on('dom-ready', () => {
-            // A document gone before a sheet lands refuses it; the next document gets its own.
+            // A document gone before a sheet or the script lands refuses it; the next document gets its own.
             for (const sheet of sheets) contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined);
+            if (script !== undefined) contents.executeJavaScriptInIsolatedWorld(demoLinkWorld, [{ code: script }]).catch(() => undefined);
         });
     }
     contents.setWindowOpenHandler(() => {
@@ -389,13 +394,156 @@ export function switchChoice(url: string): 'live' | null {
 }
 
 /**
+ * The one address the Demo leads out to: the repository the page's note names ("get the code at
+ * github.com/reply-team/jason-ai"), as text. In the desktop's window that text is drawn as a link, and using it has the
+ * desktop open this address in the person's browser. The page itself stays as it was built and reaches nothing: the
+ * link is the desktop's own sheet and script, put into the page's view (`demoLinkSheet`, `demoLinkScript`), and the
+ * address leaves the view only through the view's own navigation guard, which refuses the navigation as it refuses every
+ * other and hands this address, compared whole, to the browser (`demoLinkOpener`). In a browser tab the page is the same
+ * file and the address stays text.
+ */
+export const demoRepository = 'https://github.com/reply-team/jason-ai';
+
+/** The words the note shows the address in: the address without its scheme. */
+export const demoRepositoryText = demoRepository.slice('https://'.length);
+
+/** The attribute the desktop's script marks the note's address with; nothing of the page carries it. */
+export const demoLinkMark = 'data-jason-link';
+
+/** The world the desktop's script runs in: one of its own beside the page's, sharing the document and nothing else. */
+export const demoLinkWorld = 1001;
+
+/** How long after the address was opened it is not opened again, so a page that asks for it again and again opens one tab. */
+export const demoLinkSpanMs = 2000;
+
+/**
+ * The link's look, of the user's origin and important: the colour of the page's own links (`--teal`), a pointer, and an
+ * underline on hover and on keyboard focus, as the page's own links in its note have.
+ */
+export const demoLinkSheet =
+    `[${demoLinkMark}] { color: var(--teal, #2f5be0) !important; cursor: pointer !important; text-decoration: none !important; } ` +
+    `[${demoLinkMark}]:hover, [${demoLinkMark}]:focus-visible { text-decoration: underline !important; text-underline-offset: 3px !important; }`;
+
+/**
+ * The script, run in every document of the page's view in a world of its own (`demoLinkWorld`). It marks the element
+ * whose whole text is the address, and keeps marking it as the page draws its note again; the mark makes it focusable,
+ * with the link role. A person's click on it, or Enter on it, asks for the address as a navigation of the view, which the
+ * view's guard refuses and reads (`demoLinkOpener`); nothing else of the page is touched, and nothing is asked on load.
+ */
+export const demoLinkScript = `(() => {
+    const text = ${JSON.stringify(demoRepositoryText)};
+    const address = ${JSON.stringify(demoRepository)};
+    const mark = ${JSON.stringify(demoLinkMark)};
+    const unmark = (element) => {
+        element.removeAttribute(mark);
+        element.removeAttribute('role');
+        element.removeAttribute('tabindex');
+    };
+    const markIn = (root) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.currentNode; node !== null; node = walker.nextNode()) {
+            if (node.nodeType !== Node.TEXT_NODE) continue;
+            const element = node.parentElement;
+            if (element === null) continue;
+            const whole = element.textContent === text;
+            if (whole && !element.hasAttribute(mark)) {
+                element.setAttribute(mark, '');
+                element.setAttribute('role', 'link');
+                element.setAttribute('tabindex', '0');
+            } else if (!whole && element.hasAttribute(mark)) unmark(element);
+        }
+    };
+    new MutationObserver((records) => {
+        for (const record of records) {
+            if (record.type === 'characterData') markIn(record.target);
+            else for (const node of record.addedNodes) markIn(node);
+        }
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+    const marked = (target) => {
+        const element = target instanceof Element ? target.closest('[' + mark + ']') : null;
+        return element !== null && element.textContent === text;
+    };
+    document.addEventListener('click', (event) => {
+        if (!event.isTrusted || event.button !== 0 || !marked(event.target)) return;
+        event.preventDefault();
+        location.href = address;
+    }, true);
+    document.addEventListener('keydown', (event) => {
+        if (!event.isTrusted || event.key !== 'Enter' || event.repeat || !marked(event.target)) return;
+        event.preventDefault();
+        location.href = address;
+    }, true);
+    markIn(document.documentElement);
+})();`;
+
+/**
+ * How long after a person's own click or Enter in the page's view a navigation to the repository's address may open it.
+ * The main process cannot see what the page's script does with a gesture; it sees the input that reached the view, so a
+ * page that asks for the address on load, or again and again, opens nothing.
+ */
+export const demoLinkGestureMs = 1000;
+
+/** The gesture watch's and the opener's clock: monotonic, so a step of the system's clock neither opens nor closes the second. */
+const monotonic = (): number => performance.now();
+
+/** What the gesture watch reads of an input event that reached the view: its type, and a key's name or a mouse button. */
+export interface DemoInput {
+    type: string;
+    key?: string;
+    button?: string;
+    isAutoRepeat?: boolean;
+}
+
+/** Pure: whether an input event is a person's act on a link: the left mouse button let go, or Enter pressed (not held). */
+export function isDemoLinkGesture(input: DemoInput): boolean {
+    if (input.type === 'mouseUp') return input.button === 'left';
+    return input.type === 'keyDown' && input.key === 'Enter' && input.isAutoRepeat !== true;
+}
+
+/**
+ * Watches the input that reaches the page's view, a mouse button's by `input-event` and a key's by `before-input-event`,
+ * and answers when the last person's act on a link (`isDemoLinkGesture`) reached it, or null before any.
+ */
+export function watchDemoGestures(contents: Pick<WebContents, 'on'>, now: () => number = monotonic): () => number | null {
+    let last: number | null = null;
+    const seen = (input: DemoInput) => {
+        if (isDemoLinkGesture(input)) last = now();
+    };
+    contents.on('input-event', (_event, input) => seen(input as DemoInput));
+    contents.on('before-input-event', (_event, input) => seen({ type: input.type, key: input.key, isAutoRepeat: input.isAutoRepeat }));
+    return () => last;
+}
+
+/**
+ * The page view's reader of a refused navigation of its main frame: a navigation to the repository's address, compared
+ * as text whole, within `demoLinkGestureMs` of a person's click or Enter in the view (`gestureAt`), calls `open`, which
+ * opens that address and is handed none, at most once in `demoLinkSpanMs`, and is answered as the person's choice rather
+ * than a refusal. The address with no such act before it, and any other address, are refused and open nothing. Electron
+ * asks about one navigation of the main frame twice (`will-navigate`, `will-frame-navigate`); the span opens it once.
+ */
+export function demoLinkOpener(open: () => void, gestureAt: () => number | null, now: () => number = monotonic): (url: string) => boolean {
+    let last: number | null = null;
+    return (url) => {
+        if (url !== demoRepository) return false;
+        const at = now();
+        const gesture = gestureAt();
+        // A moment before the gesture is a clock gone wrong, not a moment within its second.
+        if (gesture === null || at < gesture || at - gesture > demoLinkGestureMs) return false;
+        if (last !== null && at - last < demoLinkSpanMs) return true;
+        last = at;
+        open();
+        return true;
+    };
+}
+
+/**
  * Where the Demo's views stand. The page's own numbers, which are fixed: its sidebar is 284 pixels wide, and right of it
  * its top strip is 38 high (the strip and its one-pixel border), with its own dot and words at its left and its right end
  * left free for a switch. Our view lies over that strip whole, from the sidebar to the window's right edge, the window's
  * drag region; it is transparent, so the page's words show through, and draws the switch alone at the right end. On macOS the window's title bar is hidden,
  * so the traffic lights stand in the window's top 26 pixels; the page cannot know it is on a Mac and keeps nothing clear
  * for them, so there the page and our switch start 26 below the top, under a band of ours (`shell/demo-band.html`). On
- * Windows the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
+ * Windows and Linux the caption buttons stand over the strip's right end, as high as it, and our switch's page leaves their width
  * free, told it in its own view's coordinates.
  */
 export const demoGeometry = { sidebar: 284, strip: stripHeight, macBand: titleBand } as const;
@@ -418,9 +566,9 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
 }
 
 /**
- * The page's strip on Windows. The caption buttons stand over the strip's right end, and the page cannot know they are
- * there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a sentence
- * that does not fit end in an ellipsis of its own. So on Windows the desktop puts two sheets of its own into the views,
+ * The page's strip on Windows and Linux. The caption buttons stand over the strip's right end, and the page cannot know
+ * they are there: it picks its sentence by the window's width alone (its short one at 1100 pixels and below) and lets a
+ * sentence that does not fit end in an ellipsis of its own. So there the desktop puts two sheets of its own into the views,
  * each of the user's origin and important, which no rule of a page outranks: into the page's view, one that insets the
  * strip by the caption buttons' width, read from the overlay's geometry (`env(titlebar-area-*)`), and our switch beside
  * them, and has the page show its own short sentence wherever the strip so inset is too narrow for its long one; into our
@@ -428,8 +576,9 @@ export function demoLayout(platform: NodeJS.Platform, width: number, height: num
  * inside its two segments, the same words and the same height. Nothing of the page is edited, and no word of ours is
  * drawn over it.
  *
- * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium
- * with the system's Segoe UI, from the strip's left edge (its 16 pixels of padding included); `test/demo-page.test.ts`
+ * The numbers are the page's own and ours. The sentence's two ends are measured from the page as committed, in Chromium,
+ * from the strip's left edge (its 16 pixels of padding included); the sentence is drawn in the Inter the page carries,
+ * so they are the same on every system, while our switch's width is measured in Segoe UI. `test/demo-page.test.ts`
  * holds the page's rules they rest on. `margin` is the room kept beyond them before the switch takes its normal form or
  * the page its long sentence.
  */
@@ -453,9 +602,14 @@ export const demoStrip = {
     tightBelow: Math.ceil(sentence.short + ours.padEnd + ours.normal + ours.shadow + margin - ours.padStart - ours.padEnd),
 } as const;
 
-/** The two sheets on `platform`: on Windows alone, where the caption buttons stand over the strip. */
+/**
+ * The two sheets on `platform`: on Windows and Linux, where the caption buttons stand over the strip. The page's sentence
+ * is drawn in the font the page carries, so its numbers hold on both; our switch's are measured in Segoe UI, a Windows
+ * font, so on Linux its words stay in the system's own font. Ubuntu's and Plasma's were seen to fit in the room kept
+ * beside them (`margin`); a much wider font may put the sentence's last letters under the switch's edge.
+ */
 export function demoStripSheets(platform: NodeJS.Platform): { page: string; switch: string } | null {
-    if (platform !== 'win32') return null;
+    if (platform !== 'win32' && platform !== 'linux') return null;
     const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
     const tight = demoStrip.ours.segment.tight;
     return {
@@ -463,8 +617,8 @@ export function demoStripSheets(platform: NodeJS.Platform): { page: string; swit
             `.jc-console #mode-bar { container: jason-strip / inline-size !important; padding-right: calc(${demoStrip.inset}px + ${caption}) !important; } ` +
             `@container jason-strip (width < ${demoStrip.longFrom}px) { .jc-console .mb-long { display: none !important; } .jc-console .mb-short { display: inline !important; } }`,
         switch:
-            // Its widths are measured in Segoe UI, so its words are drawn in that font by name, never by the system's.
-            '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' +
+            // Its widths are measured in Segoe UI, so on Windows its words are drawn in that font by name, never by the system's.
+            (platform === 'win32' ? '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ' : '') +
             'body { container: jason-switch / inline-size !important; } ' +
             `@container jason-switch (width < ${demoStrip.tightBelow}px) { .switch a, .switch span { padding-left: ${tight}px !important; padding-right: ${tight}px !important; } }`,
     };

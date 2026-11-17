@@ -465,9 +465,17 @@ const inheritedProvider: Readonly<Record<'claude' | 'codex', ReadonlySet<string>
 };
 
 /**
- * Set on every Claude Code turn: the host strips credentials from the environment of the commands, hooks and stdio
- * servers it starts (a key provider's key among them), so the key reaches the host's own process and not a read-only
- * `echo` that runs without a card.
+ * Set on every Claude Code turn on macOS and Windows: the host strips credentials from the environment of the commands,
+ * hooks and stdio servers it starts (a key provider's key among them), so the key reaches the host's own process and not
+ * a read-only `echo` that runs without a card. Never set on Linux, nor passed on there when the desktop inherited it:
+ * there the variable runs every command inside Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing, read
+ * 2026-11-16: "A Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set: every command runs sandboxed"), and the
+ * sandbox shuts `jason` off from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn sets
+ * (`claudeTurnSettings`), it denies reads of the home directory (the settings reference, "Sandboxed commands under the
+ * block"), so Jason's data directory and the runtime's descriptor in it are hidden; and "a sandboxed command's
+ * `localhost` is private to that command", so the runtime's loopback address is out of reach too. `socat` is only the
+ * sandbox's network relay, which stock Ubuntu lacks, and the PID namespace the variable also brings on Linux is a
+ * separate effect. On Linux a key and the credentials the turn carries reach the commands the agent runs.
  */
 const scrub = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB';
 
@@ -497,12 +505,12 @@ const effortLevel = 'CLAUDE_CODE_EFFORT_LEVEL';
  * `CLAUDE_AUTO_BACKGROUND_TASKS`, which would let the host move a waiting permission call to the background, is removed,
  * as are the markers of a Claude Code session the desktop itself was started from. A key provider's turn is started
  * without the provider and credentials the desktop inherited (`inheritedProvider`); a Claude Code turn always carries
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and
- * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. Every host's turn carries `JASON_CONFINED=1`, whatever the desktop
- * inherited, so the jason it runs reads a request's content from standard input only and runs a provider check's
- * program by a bare name only; the desktop's own calls of jason do not carry it. No host's turn carries a
- * `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every host's turn also carries the
- * harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
+ * `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and off Linux
+ * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (`scrub`, which says why not on Linux). Every host's turn carries
+ * `JASON_CONFINED=1`, whatever the desktop inherited, so the jason it runs reads a request's content from standard
+ * input only and runs a provider check's program by a bare name only; the desktop's own calls of jason do not carry
+ * it. No host's turn carries a `JASON_ATTEMPT_ID` the desktop inherited: a chat turn is never a role's attempt. Every
+ * host's turn also carries the harness's label for reply-cli, `REPLY_CLIENT`, built from the bundle's version (`withReplyClient`), in place of any the
  * desktop inherited, and none at all when the build carries no bundle version. It is a label the reply-cli the host
  * runs may put in its User-Agent; nothing defends it. A turn that names an effort is started without an inherited
  * `CLAUDE_CODE_EFFORT_LEVEL` (`effortNamed`), which would override it.
@@ -553,7 +561,7 @@ export function hostEnvironment(
     for (const [name, value] of Object.entries(options.provider)) env[name] = value;
     env[confinedVariable] = '1';
     if (options.program === 'claude') {
-        env[scrub] = '1';
+        if (options.platform !== 'linux') env[scrub] = '1';
         env[maintainFolder] = '1';
         env[noBackground] = '1';
     }

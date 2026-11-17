@@ -130,6 +130,30 @@ export const navigationOpeners: Readonly<Record<string, string>> = {
  */
 export const ownPageCaller = "src/main.ts: openTab's open, in the Open in browser place, the bridge's opening act";
 
+/**
+ * The one opener outside the navigation lock: the Demo's, in main.ts, which takes no address and hands the system browser
+ * the repository's, the constant its page's note names, once.
+ */
+export const demoOpener = { definition: 'function openDemoRepository(log: Logger): void {', call: 'shell.openExternal(demoRepository)' } as const;
+
+/** The Demo opener's name: in main.ts its definition and one call, the Demo window's `open`; named nowhere else. */
+const demoOpenerName = /\bopenDemoRepository\b/g;
+/** The opener's call, the one place main.ts names it but its definition. */
+const demoOpenerCall = 'open: () => openDemoRepository(log),';
+/** A name in main.ts that could stand for the address the opener opens: only the import from demo-page.ts may name it. */
+const demoRepositoryBound = /\bdemoRepository\s*=(?!=)|\bas\s+demoRepository\b|\bdemoRepository\s*:|:\s*demoRepository\b/g;
+
+/** main.ts's import of the address from the page's module, the one place the opener's constant may come from. */
+const demoRepositoryImport = /^import \{[^}]*\bdemoRepository\b[^}]*\} from '\.\/demo-page\.ts';$/m;
+
+/** The body of main.ts's Demo opener, or null. */
+function demoOpenerBody(text: string): { start: number; end: number } | null {
+    const start = text.indexOf(demoOpener.definition);
+    if (start < 0) return null;
+    const end = text.indexOf('\n}\n', start);
+    return end < 0 ? null : { start, end };
+}
+
 const ownPageName = /\bownPage\b/g;
 const ownPageHandedOut = /=\s*lockNavigation\(/;
 const ownPageToTab = /\bopenTab\(\{[^\n]*\bopen:\s*ownPage\b/;
@@ -243,8 +267,15 @@ export function processViolations(path: string, text: string): string[] {
     if (killTaken.test(text)) found.push(`${path} takes kill from process, which hides what it signals`);
     if (openPath.test(text)) found.push(`${path} uses shell.openPath, which opens a file with whatever the system runs it with`);
     const lock = path === 'src/main.ts' ? lockNavigationBody(text) : null;
+    const demo = path === 'src/main.ts' ? demoOpenerBody(text) : null;
     const opened = new Map<string, number>();
+    let demoOpened = 0;
     for (const match of text.matchAll(openExternal)) {
+        if (demo !== null && match.index > demo.start && match.index < demo.end) {
+            if (!text.startsWith(demoOpener.call, match.index)) found.push(`${path} hands the system browser something other than the repository's address in the Demo's opener`);
+            else if (++demoOpened === 2) found.push(`${path} hands a URL to the system browser more than once in the Demo's opener`);
+            continue;
+        }
         if (lock === null || match.index < lock.start || match.index > lock.end) {
             found.push(`${path} hands a URL to the system browser outside main.ts's navigation lock`);
             continue;
@@ -256,6 +287,19 @@ export function processViolations(path: string, text: string): string[] {
         }
         opened.set(opener, (opened.get(opener) ?? 0) + 1);
         if (opened.get(opener) === 2) found.push(`${path} hands a URL to the system browser more than once in ${opener}`);
+    }
+    const demoNames = [...text.matchAll(demoOpenerName)].filter((match) => !/^\s*(?:\*|\/\/|\/\*)/.test(lineAt(text, match.index)));
+    if (path !== 'src/main.ts' && demoNames.length > 0) found.push(`${path} names the Demo's opener, which only main.ts may`);
+    if (path === 'src/main.ts' && demoNames.length > 0) {
+        const callers = demoNames.filter((match) => !text.startsWith(demoOpener.definition, match.index - 'function '.length));
+        if (callers.length !== 1 || !lineAt(text, callers[0]!.index).trim().startsWith(demoOpenerCall)) {
+            found.push(`${path} calls the Demo's opener other than once, as the Demo window's ${demoOpenerCall}`);
+        }
+    }
+    if (path === 'src/main.ts') {
+        for (const match of text.matchAll(demoRepositoryBound)) found.push(`${path} binds a name of its own to the repository's address: ${match[0].trim()}`);
+        // The name the opener opens is the import from demo-page.ts, so no binding the patterns above miss can stand for it.
+        if (text.includes(demoOpener.definition) && !demoRepositoryImport.test(text)) found.push(`${path} defines the Demo's opener without importing demoRepository from './demo-page.ts'`);
     }
     const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
     if (path !== 'src/browser-bridge.ts') {

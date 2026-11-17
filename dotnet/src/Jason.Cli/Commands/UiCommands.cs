@@ -23,7 +23,7 @@ public static class UiCommands
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(actor);
 
-        var ui = new Command("ui", "The browser UI: place this release's build, open it, see which browsers are paired with this runtime, and unpair one.");
+        var ui = new Command("ui", "The browser UI: place this release's build, open it, see which browsers are paired with this runtime, and unpair one. This release's build draws its console in Jason Desktop and in a tab the desktop opens; any other tab opens on the demo, or, while something waits, shows where to get the desktop and what waits.");
         ui.Subcommands.Add(Install(env, actor));
         ui.Subcommands.Add(Open(env, actor));
         ui.Subcommands.Add(Tokens(env, actor));
@@ -93,9 +93,9 @@ public static class UiCommands
 
     private static Command Open(CliEnvironment env, Option<string?> actor)
     {
-        var command = new Command("open", "Open the UI in your browser. The link pairs this browser once, within a minute; after that a bookmark of the page works.");
-        var approval = new Option<string?>("--approval") { Description = "Open on one approval, as approval list shows its id." };
-        var question = new Option<string?>("--question") { Description = "Open on one question, as decision list shows its id." };
+        var command = new Command("open", "Open the installed UI in your browser, whatever build it is, a build of your own included. The link pairs this browser once, within a minute; after that a bookmark of the page works. This release's build draws its console in Jason Desktop and in a tab the desktop opens; any other tab opens on the demo, or, while something waits, shows one page that says where to get Jason Desktop and what waits.");
+        var approval = new Option<string?>("--approval") { Description = "Open at the address of one approval, #/attention/approvals/<id>, as approval list shows its id." };
+        var question = new Option<string?>("--question") { Description = "Open at the address of one question, #/attention/questions/<id>, as decision list shows its id." };
         var noOpen = new Option<bool>("--no-open") { Description = "Print the link and open nothing; for an agent handing it to a person." };
         var human = VerbOptions.Human();
         command.Options.Add(approval);

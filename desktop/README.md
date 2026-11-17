@@ -129,7 +129,9 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
   another credential, a profile or a federation; the design is that a key the host does not take fails the turn instead
   of running it on the person's own plan, as built and not yet seen with a real host. A Claude Console profile kept under
   the person's own home is not moved by the folder; the key in the environment ranks above it. The key itself is never
-  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex). Each folder keeps the
+  written there: it reaches the host in its environment alone (`CODEX_API_KEY` for Codex), but on Linux, where a Claude
+  Code turn's commands carry it too (no scrub, `src/chat-hosts.ts`), a command that prints it leaves it in the
+  transcript. Each folder keeps the
   transcripts of its provider's turns, one Claude Code folder per provider since a conversation keeps one session per
   provider.
 - How a turn on a key ends. On Anthropic's own key, a turn whose host says the key came from elsewhere is stopped. On a
@@ -286,17 +288,17 @@ desktop does not narrow, so it may read the records.
   begins with an underscore, and at most 300 characters. Every other page asks, a page of Claude Code's own preapproved
   documentation set included. On Codex every turn searches OpenAI's cached index with no card and opens no page live;
   the person's own search setting is set aside for the run, also when they had turned search off.
-- A conversation whose turn runs is not removed, started afresh or attached; each is refused with a sentence.
-  "Start afresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
+- A conversation whose turn runs is not removed, started fresh or attached; each is refused with a sentence.
+  "Start fresh" drops the hosts' sessions and keeps the record. `chat.list` and `chat.open` say whether a
   conversation's turn runs. When the page is loaded again while a turn runs, the turn shows running with Stop, and a
   card that waited is drawn as ended, since the record keeps no request to answer it by. A conversation is kept from its first turn: one made and never sent to is not listed and
-  leaves no record, and starting it afresh writes nothing.
+  leaves no record, and starting it fresh writes nothing.
 - **A refusal is a value.** Each chat call the desktop refuses answers `{ refused }` with its sentence alone, and a
   call with nothing to answer answers null; only what is no refusal rejects. Electron would put "Error invoking remote
   method" and the channel before a sentence thrown across the seam.
 - **What never carries one.** `jason doctor` carries none of it, its count and size included. The desktop's log says
   how many were read, how many files were not records, a record's error code when one could not be written, how many
-  new campaigns a set-up turn found and why a turn started afresh, and nothing else. `jason export` carries no part of
+  new campaigns a set-up turn found and why a turn started fresh, and nothing else. `jason export` carries no part of
   `<data>/desktop/`, so conversations do not travel to another machine, nor do the transcripts of turns on a provider's
   key. `jason uninstall --purge-data` removes both with the data directory; the transcripts the agent hosts keep of the
   chat's other turns are theirs, in their own folders, and are never touched.
@@ -314,11 +316,11 @@ applies to the turns a person starts by sending, from the next one on.
   the CLI's tests, where each verb of the allow list is declared a read or a change. The desktop refuses every other
   request, with no card, but two kinds of card: reading a file or a folder outside the chat's folders, and opening a web
   page. Every deny rule stays. Codex runs as in Ask first. Plan only is kept on the conversation's record (`mode`), so
-  it stays with the chat after a restart, an update and Start afresh. A Plan only turn that ends with no error, not
+  it stays with the chat after a restart, an update and Start fresh. A Plan only turn that ends with no error, not
   stopped, outside the Feed and with words last marks those words its plan, `plan: true` on the kept text entry and on
   the turn's `done`; an older page or desktop ignores the field. Words too long to keep whole are no plan: the cut that
   fits them to the record takes the mark off. The mark goes from every entry at each turn's end, at
-  Start afresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
+  Start fresh and when the chat leaves Plan only, so the page's card for it is never offered twice. The card's go is a
   send that names `mode: 'ask_first'`, and the desktop refuses a send whose `mode` is not the chat's mode now, before
   any host starts.
 - **Full access** runs commands and changes files on this computer without asking, except what Jason cannot read plainly. It is given only after the person says yes to the desktop's own
@@ -334,7 +336,7 @@ applies to the turns a person starts by sending, from the next one on.
   `fullAccess.takeBack` removes it, leaving the chats in Full access as they are. It is refused before any box where it cannot apply: on Codex, and on a Claude Code older than
   2.1.322 or whose version cannot be read, the menu shows it disabled with the reason and the desktop refuses it. The
   page draws a line under the composer from the mode the desktop holds, never from what it asked for: "Full access: the AI runs commands without asking, except those Jason cannot read." and a Change button. The confirmation says what the AI can reach, that Jason still asks about a command it cannot read plainly, that Jason refuses the AI's commands that approve, reject, answer or clear for you while a program the AI writes and runs can still act as you, that a question left unanswered for thirty minutes is not run, that the risk is the person's, and where the AI works. Full access is
-  held in memory alone, for that conversation, and gone when the window closes or the chat is started afresh: a record
+  held in memory alone, for that conversation, and gone when the window closes or the chat is started fresh: a record
   never says it, and one that says so is read as Ask first, so every chat opens in Ask first after a restart; the standing choice only skips the box.
 - **How Full access runs.** Claude Code starts in its default permission mode, and the hook answers allow, ask or deny for every tool use. Anthropic says a Bash rule "isn't a security boundary around the
   program", so every deny rule is passed as in Ask first, and the turn's settings, in a file under
@@ -464,7 +466,7 @@ applies to the turns a person starts by sending, from the next one on.
   host that does not drive the chat and for the Feed (`feedAutoEdit`); each host's listing carries `autoEdit`, the
   reason or null, and the menu shows the item disabled with it. It has no version floor, no confirmation, no switch and
   no standing entry; it is held in memory alone, for that conversation, like Full access, so a record never says it, a
-  restart opens Ask first, Start afresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
+  restart opens Ask first, Start fresh leaves it, and closing the window forgets it; a Codex send takes it back to Ask
   first. The page draws its line under the composer from the mode the desktop holds, with the same Change button as
   Full access's. **The limits:** the chat folder is shared by the chats that are not in Full access, so a chat in
   Auto-edit can remove a file another chat left there; a hard link already in the folder is not told by its path, so a
@@ -548,19 +550,29 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   desktop also adds a band of its own to every document the window loads: an empty element at the end of the document,
   drawn over those 284 by 26 pixels as a drag region by a stylesheet of the user's origin whose every declaration is
   important, which no stylesheet of a page outranks. The page shown while Jason starts has a drag band across its top.
-- On Windows the window has no title bar either: the system's caption buttons are Electron's title bar overlay
+- On Windows and Linux the window has no title bar either: the caption buttons are Electron's title bar overlay
   (`titleBarStyle: 'hidden'` with `titleBarOverlay`), 38 pixels high, the console's top strip's height, standing over
   the strip's right end. Their ground has no colour at all, so the strip shows through them in either mode and theme;
   their symbols are the console's ink in the theme in force, set again at each `nativeTheme` `updated` while the window
   is open (`followTheme`), the person's choice and the system's own change alike. The console leaves the buttons' width
-  free at the strip's right (its `desktop-win` class), read from the overlay's own geometry, the `env(titlebar-area-*)`
-  variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live switch stand left of
-  them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left of the buttons and as
-  high as they are, placed by the same variables, so a page that marks no drag region still moves the window; a double
-  click on a drag region maximizes it, as the system does for a title bar: a drag region answers the system's hit test
-  as the caption, the buttons as minimize, maximize and close. The window shows no menu bar on Windows, and About is not
-  reachable there (it was not before either: the bar was hidden and not auto-hide); the tray carries the Jason menu's
-  other acts. Linux keeps the native frame, and none of this is added there.
+  free at the strip's right (its `desktop-overlay` class), read from the overlay's own geometry, the
+  `env(titlebar-area-*)` variables Chromium gives the page, never a number of its own, so Open in and the Demo | Live
+  switch stand left of them at any scale of the display. The desktop's own band is there too, 40 pixels wide just left
+  of the buttons and as high as they are, placed by the same variables, so a page that marks no drag region still moves
+  the window; a double click on a drag region does what one on the desktop's own title bars does (on Windows, where a
+  drag region answers the system's hit test as the caption and the buttons as minimize, maximize and close, it
+  maximizes; on GNOME and Plasma too, as seen). The window shows no menu bar on
+  Windows or Linux: Electron makes none for a window without its title bar, and on Windows it was hidden before too. The
+  menu stays the application's, so its keys act in the window; the tray carries the Jason menu's other acts, and About
+  is not reachable from the window or the tray.
+- On Linux the buttons are drawn in the desktop's own style (round on Ubuntu's GNOME, Breeze's on Plasma), and as many
+  as the desktop's button layout names for its windows (`org.gnome.desktop.wm.preferences` `button-layout`, which GTK
+  reads, and follows as it changes): where it names the close button alone (`appmenu:close`, GNOME's own default,
+  which Ubuntu changes), the overlay shows that alone, like the desktop's other windows. A layout that puts the buttons
+  at the left stands them over the sidebar's brand, and the strip keeps its right end free all the same: the window is
+  closed and moved as ever, but the console leaves no room there. The same window is made under Wayland and under X11.
+  On Hyprland, which draws no title bars, a window with the system's frame has no buttons at all; the overlay gives it
+  its close button under Wayland, and all three under XWayland, where its layout does not reach.
 - In Demo the window loads no runtime's page and has no preload: it holds two views (`src/demo-window.ts`), the demo page
   and, over its right end, the desktop's switch (`shell/demo-switch.html`, a page with no script whose Live is a link the
   view refuses and reads as the choice). Each view has Chromium's sandbox, `contextIsolation`, no Node, no preload and an
@@ -575,7 +587,24 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   device chooser and screen capture is denied. Every document of the page's view gets a sheet of the user's origin that
   makes each element no-drag (`noDragSheet`), so no region the page marks is the window's drag region, which in a window
   without a frame would take the clicks of our switch over it. Each kind refused is logged once a run (`demo_refused`), by
-  its name alone; the person's click on Live is a choice and is not. A Demo start appends, before Electron is ready, the
+  its name alone; the person's click on Live is a choice and is not. The page's note names the repository as text,
+  `github.com/reply-team/jason-ai`, and the page's view draws it as a link of the desktop's own: a sheet of the user's
+  origin (`demoLinkSheet`: the colour of the page's own links, a pointer, an underline on hover and focus) and a script
+  run in a world of its own beside the page's (`demoLinkScript`), which marks the element whose whole text is the address,
+  keeps marking it as the page draws its note again, makes it focusable with the link role, and on a person's click or
+  Enter there, never on load, asks for the address as a navigation of the view. The view's guard refuses that navigation
+  as it refuses every other, and its reader (`demoLinkOpener`), asked of the main frame's navigations alone (a frame's
+  within the page and a redirect ask nothing), for `https://github.com/reply-team/jason-ai` (`demoRepository`) compared
+  whole, calls `openDemoRepository` in `src/main.ts`, which is handed no address and gives `shell.openExternal` that
+  constant. It does so only within a second (`demoLinkGestureMs`) of a person's left click let go or Enter pressed in the
+  page's view, which the main process sees as input reaching the view (`watchDemoGestures`, by `input-event` and
+  `before-input-event`), so a page that asks for the address on load or on its own opens nothing; and at most once in two
+  seconds (`demoLinkSpanMs`), so a person clicking again and again opens one tab. Said plainly: any real click or Enter
+  in the page, on the link or anywhere else, gives the page one second in which that one address may open, at most one
+  tab per act. Both moments are read from a monotonic clock (`performance.now()`), and a moment before the gesture is
+  refused. Any other address opens nothing. The view's pop-ups stay denied, the policy is
+  unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
+  `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
   all: a name the page names ahead (`<link rel="dns-prefetch">`) is looked up below every guard above, and this is what
   stops it. Nothing of the desktop in Demo needs a name: no runtime, no update check, no deep-link registration, only the
@@ -589,18 +618,25 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
   Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
   pixels) and both views start below that band, which they leave to the window's own contents: our band
-  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, all of it a
-  drag region, where the traffic lights stand. The page's strip, 26 to 64 pixels down the window there, lies under
-  our switch's view. On Windows and Linux the views start at the top of the content. On Windows the caption buttons
-  stand over the right end of our switch's view, which Electron tells the free title bar area in the view's own
-  coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
+  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the strip's beyond, where the
+  traffic lights stand, and a drag region over those 26 pixels alone. The band's document fills the whole window under
+  the two views, and Electron asks each of them whether a point is in its drag region, the window's own contents first,
+  whichever view is drawn over the point; so the band's body alone drags, as high as `demoGeometry.macBand`, and the
+  document as a whole carries no drag region, which would take every click meant for the page and the switch. The
+  page's strip, 26 to 64 pixels down the window there, lies under our switch's view. On Windows and Linux the views
+  start at the top of the content, and the caption buttons stand over the right end of our switch's view, which
+  Electron tells the free title bar area in the view's own coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
   them and the rest of the view moves the window. The page does not know the buttons are there: it picks its sentence
-  by the window's width alone. So on Windows the desktop puts a sheet of its own, of the user's origin, into each view
+  by the window's width alone. So there the desktop puts a sheet of its own, of the user's origin, into each view
   (`demoStripSheets`): the page's strip is inset by the buttons' width, read from the same variables, and our switch's,
   and the page shows its own short sentence wherever the strip so inset is too narrow for its long one; where even the
   short sentence would reach the switch, at the narrowest widths, the switch's two segments take less padding, with the
   same words and height. No word of the page lies under the switch at any width the window allows (`demoStripAt`, held
-  by `test/demo-page.test.ts` at every width). On Linux the frame is the system's, and on Linux and macOS no sheet is put.
+  by `test/demo-page.test.ts` at every width, with the buttons' width as Windows, GNOME and Plasma draw them). The
+  page's sentence is drawn in the font the page carries, so its numbers hold on both systems; our switch's are measured
+  in Segoe UI, so on Windows its words are drawn in that font by name, and on Linux, which lacks it, in the system's
+  own: Ubuntu's and Plasma's fonts were seen to fit in the room kept beside them, and a much wider one may put the
+  sentence's last letters under the switch's edge. On macOS no sheet is put.
 
 ## Links
 
@@ -661,7 +697,9 @@ only, the login shell's PATH, read before anything is started) and `scripts/prep
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
-outside the navigation lock in `src/main.ts`.
+outside the navigation lock in `src/main.ts`, but for the Demo's opener there, `openDemoRepository`, which hands it the
+repository's address alone, once, and is called once, by the Demo window; `src/main.ts` binds no name of its own to that
+address.
 
 What the desktop tells Reply about itself is one label in the User-Agent of reply-cli's requests and nothing else:
 `REPLY_CLIENT=jason-harness/<the bundle's version, less any build metadata after a plus sign>`, set in the environment of
@@ -714,7 +752,20 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
 
 ## On Linux
 
-- The window keeps its menu bar, which carries the tray's items, since a session may show no tray icon. Closing the
+- The window shows no menu bar, as on Windows (above): the menu's keys act, and the tray carries the Jason menu's acts
+  but About. The update item and Back to Your Own Installation have keys of their own (`itemKeys` in
+  `src/keybindings.ts`: Ctrl+Shift+D and Ctrl+Shift+L, Cmd on a Mac), so a session that shows no tray icon (GNOME
+  without an extension for one) still reaches them. The update key acts on the item's current step (check, download,
+  restart to install), which shows only in the item's label: on such a session, nowhere. At the install it asks first,
+  naming the version (`pressItem`, `installQuestion`), on every platform, since the install stops the runtime, which
+  ends a running turn and the work in progress, and restarts the desktop; a click on the item, whose label says so,
+  installs at once. The tray's item takes every press as a click: a Linux tray reports a click with no mouse button,
+  which Electron's `triggeredByAccelerator` counts as a key's. The page shown when the Demo could not be shown names the
+  back key; the versions-differ sentence and the System screen's notice of an update name the update key where the item
+  can act (`updateKeyWords`, which the page reads through the seam's `updates.key`), never under "Updates Come to an
+  Installed Build" or "Through the Package", where the key does nothing. `jason update`'s refusal of a runtime the
+  desktop carries still names the menu and the tray alone. Such a session has no way from the window to the items
+  without a key: Open Jason at Login, Start the Runtime at Logon, Command Line and Remove What Jason Placed. Closing the
   window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login writes `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that
   is set), whose `Exec` line starts the AppImage file or the installed executable with `--opened-at-login`; it reads as

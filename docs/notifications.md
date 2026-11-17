@@ -196,6 +196,10 @@ such a unit exists only while the person is signed in.
   start leaves the click with no page and no fallback, and `jason ui open` reaches the browser UI; `opener_failed`
   there means the opener itself failed. The real click on a real toast is not yet measured on a machine; the link's
   handling is composed and checked by tests here.
+  A browser UI that opens where no desktop is installed is a tab no desktop opened: it draws no console. While something waits it
+  opens on one page that says Live Mode is only available in Jason Desktop, counts what waits and says where to decide
+  it in the words of this pointer; with nothing waiting it opens on the demo
+  ([ui.md](ui.md#settings-and-chat-in-the-browser)).
 - **Copy prompt.** A toast for one item also has a **Copy prompt** button. It shows no page of Jason's: it puts on the
   clipboard the text `jason approval get <approval-id> --prompt` or `jason decision get <decision-id> --prompt`
   prints, for you to paste into your agent host. The list's toast has no button, and neither has a toast whose link is

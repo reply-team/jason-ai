@@ -372,6 +372,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        updates: { key: () => Promise.resolve(null) },
         dailyTrends: {
             get: () => Promise.resolve(stub.dailyTrendsKept),
             set: (on: boolean) => {
@@ -547,7 +548,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             restart: answering('chat.restart', (id) => {
                 const record = own(id);
                 if (!record) return notKept;
-                if (record.running) return answeringStill('start it afresh');
+                if (record.running) return answeringStill('start it fresh');
                 if (listed.has(record.id)) record.updatedAt = now();
                 return null;
             }),
@@ -640,6 +641,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             connectReplyWithKey: call('setup.connectReplyWithKey'),
             setProviderKey: call('setup.setProviderKey'),
             installProgram: call('setup.installProgram'),
+            useProgram: call('setup.useProgram'),
             configurePlugin: call('setup.configurePlugin'),
             disconnectPlugin: call('setup.disconnectPlugin'),
             replyConnect: acting('setup.replyConnect', (channel, options) => linked(channel, 'connect', options)),

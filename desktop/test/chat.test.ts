@@ -945,7 +945,7 @@ test('a provider\'s key reaches the host\'s environment only, and an Anthropic-c
     for (const host of [compatible, anthropic]) assert.ok(!host?.args.some((arg) => arg.includes('sk-planted')), 'a key is never on the command line');
 });
 
-test('a key provider\'s turn is started without the provider the desktop inherited, and a plain turn with it; every Claude Code turn scrubs', async (t) => {
+test('a key provider\'s turn is started without the provider the desktop inherited, and a plain turn with it', async (t) => {
     const r = rig(t);
     Object.assign(r.b.env, { ANTHROPIC_API_KEY: 'sk-inherited', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'inherited-haiku', OPENAI_BASE_URL: 'https://inherited.example/v1' });
     r.keys.deepseek = 'sk-planted-deepseek';
@@ -964,8 +964,23 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     assert.equal(openai?.env.CODEX_API_KEY, 'sk-planted-openai');
     assert.equal(openai?.env.OPENAI_API_KEY, undefined);
     assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
-    for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+});
+
+// Skipped on Windows: the rig stands a macOS or Linux turn on this machine's Windows paths, which the POSIX file rules
+// resolve against the working folder, so the host's command line passes the 32,767 characters Windows allows and the
+// start fails with ENAMETOOLONG before any host runs. The rule itself is held on every platform, keyed or not, by
+// 'a Claude Code turn on macOS and Windows asks the host to scrub credentials ...' in chat-hosts.test.ts.
+test('a Claude Code turn scrubs the commands it runs on macOS, keyed or not, and on Linux never', { skip: process.platform === 'win32' }, async (t) => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        const r = rig(t, { chat: { platform } });
+        Object.assign(r.b.env, { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0' });
+        r.keys.deepseek = 'sk-planted-deepseek';
+        await r.turn('c1', words, { host: 'deepseek' });
+        await r.turn('c2', words, { host: 'claude' });
+        assert.equal(r.hosts().length, 2, platform);
+        for (const host of r.hosts()) assert.equal(host.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, platform === 'linux' ? undefined : '1', platform);
+    }
 });
 
 test('a keyed turn runs in a host folder of the desktop\'s own with no sign-in in it: per provider for Claude Code, one for Codex', async (t) => {
@@ -1337,7 +1352,7 @@ test('the instruction text holds the sixteen rules in plain words, and says noth
     // A card is not an act, and names none of the acts the person makes with the screen's own buttons.
     assert.equal(
         rules[15],
-        `16. A card is not an act. Nothing on it approves, rejects, answers, starts, pauses, connects or sends for the person, so never say that clicking it will. Never write a label or a question that names an act the person makes with the screen's own buttons, such as approving, rejecting, answering a question Jason holds, starting, pausing or sending: those are done with the buttons on the screen, and you point to them. A label is never the word of a button of the screen that acts: Approve, Reject, Approve and run, Approving, Keep planning, Allow, Allow for this chat, Don't allow, Answer, Start, Resume, Pause, Stop, Send, Send when the turn ends, Replace, Save, Save name, Remove, Remove it, Rename, Start afresh, Take back, Connect, Reconnect, Disconnect, Sign in, Add account, Make the link, Set, Keep, Install, Update, Remove the key, Use the public server, Configure, Reload, Unblock, Delete, Delete anyway, Ask first, Plan only, Auto-edit, Full access, Default effort, Add to this agent. When you end with a choice, do not ask its question again in your words. Do not put on a choice a question that waits in Jason as a decision: it shows below the chat with its own answers. Never write a heading or a line in your text that looks like the title of one of the screen's own cards, such as Jason asks, Jason's proposal, On record now, Waiting for your decision or Waiting for you.`,
+        `16. A card is not an act. Nothing on it approves, rejects, answers, starts, pauses, connects or sends for the person, so never say that clicking it will. Never write a label or a question that names an act the person makes with the screen's own buttons, such as approving, rejecting, answering a question Jason holds, starting, pausing or sending: those are done with the buttons on the screen, and you point to them. A label is never the word of a button of the screen that acts: Approve, Reject, Approve and run, Approving, Keep planning, Allow, Allow for this chat, Don't allow, Answer, Start, Resume, Pause, Stop, Send, Send when the turn ends, Send your own answer, Replace, Save, Save name, Remove, Remove it, Rename, Start fresh, Take back, Connect, Reconnect, Disconnect, Sign in with Reply, Add account, Make the link, Set, Save key, Use key, Install, Update, Remove the key, Use the public server, Use, Configure, Reload, Unblock, Delete, Delete anyway, Ask first, Plan only, Auto-edit, Full access, Default effort, Add to this agent. When you end with a choice, do not ask its question again in your words. Do not put on a choice a question that waits in Jason as a decision: it shows below the chat with its own answers. Never write a heading or a line in your text that looks like the title of one of the screen's own cards, such as Jason asks, Jason's proposal, On record now, Waiting for your decision or Waiting for you.`,
     );
     assert.doesNotMatch(text, /language|english|russian|ukrainian|translat/i);
     assert.doesNotMatch(text, /[^\x09\x0a\x20-\x7e]/, 'plain text, no character a terminal or a host could take otherwise');

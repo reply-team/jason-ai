@@ -740,7 +740,7 @@ define('connect.providerKey', ([provider, remove]) => {
     if (typeof provider !== 'string') return;
     const key = remove === true ? '' : typedOf(`provider:${provider}`);
     if (key || remove === true)
-        void doing('Keeping the key…', async () => {
+        void doing(remove === true ? 'Removing the key…' : 'Saving the key…', async () => {
             await here().desktop.setup.setProviderKey(provider, key);
             forget(`provider:${provider}`);
         });
@@ -848,63 +848,228 @@ export function runsRolesLine(host: DesktopHost): string | null {
     return t('connect.runsRoles', { host: host.label, profile: host.runsRoles });
 }
 
+/**
+ * Whether a host is drawn as a card of its own: found here, or carrying a sentence about its version. Every other host is
+ * named on the one line of the hosts not found.
+ */
+export const hostRow = (host: DesktopHost): boolean => host.found || host.belowFloor !== null;
+
+/**
+ * Whether a program is the one in use: the one the agents' roles run on by default, the fact its runs-roles line says.
+ * At most one program answers it, since the default profile is on one program.
+ */
+export const inUse = (host: DesktopHost): boolean => runsRolesLine(host) !== null;
+
+/**
+ * Whether a program's card offers Use: a program found here that could carry "In use" — it drives the chat and is at its
+ * version floor, as the runs-roles line needs — and does not carry it now. Never a key provider, which runs no role.
+ */
+export const usable = (host: DesktopHost): boolean =>
+    host.kind === 'program' && host.found && host.drivesChat && host.belowFloor === null && !inUse(host);
+
+/** The program a person last put the agents' roles on with Use, while the page is open; null before any. */
+const used = signal<string | null>(null);
+
+/**
+ * The line a program's card says after a person's Use, while the card reads that program in use again: what the act did
+ * not change. What it changed, that the roles run on this program, is the runs-roles line the card already draws, since
+ * In use and that line are one fact, so it is never said twice.
+ */
+export function usedLine(host: DesktopHost): string | null {
+    return used.value === host.id && inUse(host) ? t('connect.used') : null;
+}
+
+define('connect.use', ([id]) => {
+    if (!can('setup.useProgram') || typeof id !== 'string') return;
+    const host = setup.value?.hosts.find((each) => each.id === id);
+    if (host === undefined || !usable(host)) return;
+    used.value = null;
+    void doing(t('connect.using', { host: host.label }), async () => {
+        await here().desktop.setup.useProgram(id);
+        used.value = id;
+    });
+});
+
+/** A program found here: a card, its name, its version as its state and "In use" on one line, its notes under it. */
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     const own = ownServersLine(host);
     const roles = runsRolesLine(host);
-    return html`<div class="setrow">
+    const after = usedLine(host);
+    const state = host.found ? (host.version ?? 'Found') : 'Not found';
+    const tone = host.belowFloor !== null ? 'amber' : host.found ? 'green' : 'gray';
+    const how = host.belowFloor !== null || sentence !== null || own !== null || roles !== null || after !== null;
+    return html`<div class="setrow host-row host-card">
         <div class="grow">
-            <b>${host.label}</b>
-            <span class="meta">${host.found ? (host.version ?? 'Found') : 'Not found'}</span>
+            <div class="row-hd">
+                <b>${host.label}</b> <span class="pillc ${tone} host-state">${state}</span>
+                ${inUse(host) ? html`<span class="pillc green in-use">In use</span>` : null}
+                ${
+                    usable(host)
+                        ? html`<button
+                              class="btn sm use-program"
+                              type="button"
+                              ${unlessCan(busy, 'setup.useProgram')}
+                              ${act('connect.use', host.id)}
+                          >
+                              Use
+                          </button>`
+                        : null
+                }
+                ${
+                    !host.found && host.install
+                        ? html`<button
+                              class="btn sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.installProgram')}
+                              ${act('connect.install', host.install)}
+                          >
+                              Install
+                          </button>`
+                        : null
+                }
+            </div>
             ${
                 host.found
-                    ? html`<div class="meta">
+                    ? html`<div class="host-does">
                           ${host.drivesChat ? 'Drives the chat' : 'Runs campaign work, not the chat yet'}
                       </div>`
                     : null
             }
-            ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
-            ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
-            ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
-            ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+            ${
+                how
+                    ? html`<div class="host-how">
+                          ${host.belowFloor !== null ? html`<div class="meta">${withCode(host.belowFloor)}</div>` : null}
+                          ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
+                          ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
+                          ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+                          ${after !== null ? html`<div class="meta used-program" role="status">${after}</div>` : null}
+                      </div>`
+                    : null
+            }
         </div>
-        ${
-            !host.found && host.install
-                ? html`<button
-                      class="btn sm"
-                      type="button"
-                      ${unlessCan(busy, 'setup.installProgram')}
-                      ${act('connect.install', host.install)}
-                  >
-                      Install
-                  </button>`
-                : null
-        }
     </div>`;
 }
 
-function provider(host: DesktopHost, busy: Html | null): Html {
-    return html`<div class="setrow">
-        <div class="grow"><b>${host.label}</b> <span class="meta">${host.found ? 'Key set' : 'No key'}</span></div>
+/**
+ * The hosts not found, on one quiet line that names them: those that can be installed first, each followed by its own
+ * Install button, then the others.
+ */
+function notFound(hosts: readonly DesktopHost[], busy: Html | null): Html | null {
+    if (hosts.length === 0) return null;
+    const ordered = [...hosts.filter((each) => each.install), ...hosts.filter((each) => !each.install)];
+    return html`<div class="meta hosts-absent">
+        <span>Not found</span>:
+        ${ordered.map(
+            (host, at) =>
+                html`${at > 0 ? html`<span class="sep">·</span>` : null}<span class="absent-host"
+                        >${host.label}${
+                            host.install
+                                ? html` <button
+                                      class="btn sm"
+                                      type="button"
+                                      ${unlessCan(busy, 'setup.installProgram')}
+                                      ${act('connect.install', host.install)}
+                                  >
+                                      Install
+                                  </button>`
+                                : null
+                        }</span
+                    >`,
+        )}
+    </div>`;
+}
+
+/** The key provider the person picked in the panel; null until they pick one. */
+const chosenProvider = signal<string | null>(null);
+
+define('connect.provider', (_args, element) => {
+    if (!(element instanceof HTMLSelectElement)) return;
+    // A key typed and not saved is not kept behind the person's back under the provider they leave.
+    for (const key of [...typed.keys()]) if (key.startsWith('provider:')) typed.delete(key);
+    chosenProvider.value = element.value;
+});
+
+/** The provider the panel shows: the one picked, else the first with no key, else the first. */
+export function shownProvider(providers: readonly DesktopHost[], picked: string | null): DesktopHost | undefined {
+    return providers.find((each) => each.id === picked) ?? providers.find((each) => !each.found) ?? providers[0];
+}
+
+/**
+ * The key providers whose key is set, as one row of what is on this computer: "Model keys" and each such provider as a
+ * pill; nothing when none is.
+ */
+function keysSet(providers: readonly DesktopHost[]): Html | null {
+    const set = providers.filter((each) => each.found);
+    if (set.length === 0) return null;
+    return html`<div class="setrow host-card keys-set">
+        <div class="row-hd">
+            <b>Model keys</b>
+            ${set.map((each) => html`<span class="pillc green key-held">${each.label}</span>`)}
+        </div>
+    </div>`;
+}
+
+/**
+ * The model keys as one panel: a Provider select over the key providers, each with a key saying so; under it, for the
+ * provider shown, the API key field and Save key when it has no key, or Key set and Remove the key when it has one.
+ */
+function keyPanel(providers: readonly DesktopHost[], busy: Html | null): Html | null {
+    const shown = shownProvider(providers, chosenProvider.value);
+    if (!shown) return null;
+    const key = `provider:${shown.id}`;
+    return html`<div class="key-panel">
+        <div class="key-hd">
+            <b>Model keys</b>
+            <span class="meta">Run through Claude Code; kept in the system keychain.</span>
+        </div>
+        <label class="key-fld">
+            <span>Provider</span>
+            <select class="inp" aria-label="Provider" data-change="connect.provider">
+                ${providers.map(
+                    (each) =>
+                        html`<option value="${each.id}" ${each.id === shown.id ? html`selected` : null}>
+                            ${each.label}${each.found ? ' · key set' : ''}
+                        </option>`,
+                )}
+            </select>
+        </label>
         ${
-            host.found
-                ? html`<button
-                      class="btn sm"
-                      type="button"
-                      ${unlessCan(busy, 'setup.setProviderKey')}
-                      ${act('connect.providerKey', host.id, true)}
-                  >
-                      Remove the key
-                  </button>`
-                : html`${secret(`provider:${host.id}`, `${host.label} key`)}
+            shown.found
+                ? html`<div class="key-act" data-id="${shown.id}">
+                      <span class="pillc green key-state">Key set</span>
                       <button
                           class="btn sm"
                           type="button"
                           ${unlessCan(busy, 'setup.setProviderKey')}
-                          ${act('connect.providerKey', host.id)}
+                          ${act('connect.providerKey', shown.id, true)}
                       >
-                          Keep
-                      </button>`
+                          Remove the key
+                      </button>
+                  </div>`
+                : html`<label class="key-fld">
+                          <span>API key</span>
+                          <input
+                              class="inp"
+                              type="password"
+                              autocomplete="off"
+                              aria-label="API key"
+                              placeholder="Enter your API key"
+                              value="${typed.get(key) ?? ''}"
+                              data-input="connect.type"
+                              ${argsOf(key)}
+                          />
+                      </label>
+                      <div class="key-act" data-id="${shown.id}">
+                          <button
+                              class="btn p sm"
+                              type="button"
+                              ${unlessCan(busy, 'setup.setProviderKey')}
+                              ${act('connect.providerKey', shown.id)}
+                          >
+                              Save key
+                          </button>
+                      </div>`
         }
     </div>`;
 }
@@ -918,8 +1083,9 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
     // Every act is off while one is being asked for.
     const asks = realBusy(busy ?? (actDialog.value?.asking === true ? html`disabled` : null));
     const real = realBusy(busy);
+    // Only a CLI that is missing is said: the version of one that is there is nothing a person acts on.
     const cli = state.cli.found
-        ? html`<span class="meta">Reply CLI ${state.cli.version ?? ''}</span>`
+        ? null
         : html`<span class="meta">The Reply CLI was not found.</span> ${
                   state.cli.install
                       ? html`<button
@@ -932,11 +1098,19 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                         </button>`
                       : null
               }`;
-    return html`<div class="card" ${label ? html`role="region" aria-label="${label}"` : null}>
-        <div class="hd"><b>Reply</b></div>
+    return html`<div class="card reply-card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="bd">
-            ${notInDemo()}
-            <div class="setrow"><div class="grow">${cli}</div></div>
+            <div class="reply-top">
+                <div class="grow">
+                    <div class="reply-name"><b>Reply</b> <span class="pillc green">Recommended</span></div>
+                    <p class="meta reply-why">
+                        Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox
+                        and your LinkedIn account to it, and Jason sends from them once you approve.
+                    </p>
+                </div>
+                ${state.cli.found ? html`<button class="${state.signedIn ? 'btn' : 'btn p'}" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
+            </div>
+            ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${
                 state.cli.found && below !== null
                     ? html`<div class="setrow below-minimum">
@@ -956,27 +1130,32 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                       </div>`
                     : null
             }
-            <div class="setrow">
+            <div class="setrow reply-state">
                 <div class="grow">
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
-                    <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
+                    ${
+                        state.signedIn
+                            ? html`<span class="meta"
+                                  >${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span
+                              >`
+                            : null
+                    }
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in</button>` : null}
             </div>
             ${
                 state.cli.found
-                    ? html`<div class="setrow">
-                          <div class="grow meta">Or an API key, for an account the browser sign-in does not reach:</div>
-                          ${secret('reply', 'Reply API key')}
-                          <button
-                              class="btn sm"
-                              type="button"
-                              ${unlessCan(real, 'setup.connectReplyWithKey')}
-                              ${act('connect.replyKey')}
-                          >
-                              Connect
-                          </button>
-                      </div>`
+                    ? html`<div class="reply-key">
+                              ${secret('reply', 'Or paste a Reply API key')}
+                              <button
+                                  class="btn"
+                                  type="button"
+                                  ${unlessCan(real, 'setup.connectReplyWithKey')}
+                                  ${act('connect.replyKey')}
+                              >
+                                  Use key
+                              </button>
+                          </div>
+                          <div class="meta reply-key-why">For an account the browser sign-in does not reach.</div>`
                     : null
             }
             ${grouped(state.accounts, pending).map(
@@ -1219,28 +1398,52 @@ export function accountsReplyView(): Html {
 /** The Accounts page stopped painting the card: a dialog it held open is dropped. */
 export const accountsReplyGone = (): void => dropDialogs(accountsPlace);
 
-/** The AI hosts' card and, when there are any, the model keys' card: what Connect holds for the AI. */
-function aiCards(programs: readonly DesktopHost[], providers: readonly DesktopHost[], disabled: Html | null): Html {
-    return html`<div class="card">
-            <div class="hd"><b>AI</b></div>
-            <div class="bd">${elsewhere()}${programs.map((each) => program(each, disabled))}</div>
+/**
+ * The AI card, what Connect and Settings' Models hold for the AI, in two groups. What is on this computer: each program
+ * found, a card, the one in use marked, then the key providers whose key is set, in one row. Under it, in a panel of its
+ * own, what can be added or changed: the programs not found, with Install where it can be done, and the model keys' panel.
+ */
+function aiCards(
+    programs: readonly DesktopHost[],
+    providers: readonly DesktopHost[],
+    disabled: Html | null,
+    heading = true,
+): Html {
+    const found = programs.filter(hostRow);
+    const set = keysSet(providers);
+    const absent = notFound(
+        programs.filter((each) => !hostRow(each)),
+        disabled,
+    );
+    const keys = keyPanel(providers, disabled);
+    return html`<div class="card ai-card">
+        ${heading ? html`<div class="hd"><b>AI</b></div>` : null}
+        <div class="bd">
+            ${elsewhere()}
+            ${
+                found.length > 0 || set !== null
+                    ? html`<div class="ai-here">
+                          <div class="group-label">On this computer</div>
+                          ${found.map((each) => program(each, disabled))}${set}
+                      </div>`
+                    : null
+            }
+            ${
+                absent !== null || keys !== null
+                    ? html`<div class="ai-add">
+                          <div class="group-label">Add or change</div>
+                          ${absent}${keys}
+                      </div>`
+                    : null
+            }
         </div>
-        ${
-            providers.length
-                ? html`<div class="card">
-                      <div class="hd">
-                          <b>Model keys</b>
-                          <span class="meta">Run through Claude Code; kept in the system keychain.</span>
-                      </div>
-                      <div class="bd">${providers.map((each) => provider(each, disabled))}</div>
-                  </div>`
-                : null
-        }`;
+    </div>`;
 }
 
 /**
  * The AI hosts and the model keys alone, for Settings' Models section: the same cards, with the same acts, that Connect
- * draws, read from the same `setup.status()` answer. Connect keeps them as well.
+ * draws, read from the same `setup.status()` answer, without the card's own "AI" heading: the section says "Models".
+ * Connect keeps them as well, with the heading.
  */
 export function modelsView(): Html {
     const state = setup.value;
@@ -1255,6 +1458,7 @@ export function modelsView(): Html {
                   state.hosts.filter((each) => each.kind === 'program'),
                   state.hosts.filter((each) => each.kind === 'provider'),
                   disabled,
+                  false,
               )
             : failure
               ? null

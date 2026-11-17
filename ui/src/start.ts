@@ -5,7 +5,7 @@ import type { PlaceKind } from './platform/places';
 // Which shell the page starts, and over which object. In Jason Desktop's own window the console starts at once, with
 // nothing awaited before it. In a browser the page first learns whether the desktop opened the tab with a bridge, which
 // takes the pairing's bootstrap; then a tab with a bridge gets the console over the tab's object, and any other tab
-// gets the console over an object that does nothing of the desktop's, and says where the chat is.
+// gets the page over an object that does nothing of the desktop's: one page that says where Live Mode is, never the console.
 
 export interface Starts {
     /** The window's object, undefined in a browser. */
@@ -30,7 +30,7 @@ export async function start(deps: Starts): Promise<void> {
     await deps.session.bootstrap();
     const bridge = deps.session.bridge.value;
     if (bridge === null) {
-        // A tab with no desktop shows the console too, over an object that can do nothing of the desktop's.
+        // A tab with no desktop is handed an object that can do nothing of the desktop's; the console draws the demo or one page for it.
         const none = deps.noDesktop();
         deps.setPlace('none', none);
         return deps.startConsole(none, true);

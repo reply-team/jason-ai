@@ -203,6 +203,12 @@ describe('Connect in a tab', () => {
         const ai = screen.getAllByText('AI', { selector: 'b' })[0]!.closest<HTMLElement>('.card')!;
         for (const each of within(ai).queryAllByRole('button') as HTMLButtonElement[])
             expect(each.disabled, words(each)).toBe(true);
+        // Use, on Claude Code found and not in use, is the window's act: drawn off, with the card's one sentence.
+        const use = within(ai).getByRole<HTMLButtonElement>('button', { name: 'Use' });
+        expect(use.disabled).toBe(true);
+        fireEvent.click(use);
+        expect(within(ai).getByText("Done in Jason Desktop's own window.")).toBeTruthy();
+        expect(calls(stand, 'setup.useProgram')).toEqual([]);
         expect(calls(stand, 'setup.installProgram')).toEqual([]);
         expect(calls(stand, 'setup.configurePlugin')).toEqual([]);
     });
@@ -316,10 +322,10 @@ describe('A chat in a tab', () => {
         if (locked) expect(calls(stand, 'chat.send')).toEqual([]);
     });
 
-    it('draws no Start afresh, Remove, Open folder, Connect or Not now, and keeps Rename', async () => {
+    it('draws no Start fresh, Remove, Open folder, Connect or Not now, and keeps Rename', async () => {
         await shown({ entries: [{ kind: 'notice', text: 'Made a folder', folder: 'spring' }] as never });
         expect(screen.getByText('Made a folder')).toBeTruthy();
-        for (const name of ['Start afresh', 'Remove', 'Open folder', 'Not now'])
+        for (const name of ['Start fresh', 'Remove', 'Open folder', 'Not now'])
             expect(screen.queryByRole('button', { name })).toBeNull();
         expect(screen.getByRole('button', { name: 'Rename' })).toBeTruthy();
     });

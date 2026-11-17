@@ -2,6 +2,7 @@ import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } fro
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { session } from '../api/session';
 import { Bridge } from '../platform/bridge';
+import { opening } from '../platform/tab-choice';
 import { demoFrame, demoPage } from '../platform/demo-frame';
 import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { noDesktop, setPlace, tabDesktop, type PlaceKind } from '../platform/places';
@@ -26,7 +27,8 @@ const frame = () => document.querySelector<HTMLIFrameElement>('iframe');
 const switchIn = (where: HTMLElement | Document = document) =>
     within(where as HTMLElement).getByRole('group', { name: 'Data' });
 const button = (name: 'Demo' | 'Live') => within(switchIn()).getByRole('button', { name }) as HTMLButtonElement;
-const consoleShown = () => document.querySelector('.side') !== null;
+// Where the tab has its home: the console, or with no desktop the one page that stands in its place.
+const consoleShown = () => document.querySelector('.side') !== null || document.querySelector('.no-desktop') !== null;
 
 let present = true;
 const realPresent = demoPage.present;
@@ -69,6 +71,8 @@ async function renderIn(kind: PlaceKind, hash = '') {
 }
 
 beforeEach(() => {
+    opening.done = false;
+    sessionStorage.clear();
     present = true;
     demoPage.present = () => Promise.resolve(present);
     chats.value = {};

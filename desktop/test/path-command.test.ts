@@ -3,12 +3,12 @@
 // the person's word, read back on every look, and never put in the place of a `jason` that is not ours.
 
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { test } from 'node:test';
 import { fileLogger } from '../src/log.ts';
-import { commandFolder, commandMenuOf, commandQuestion, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
+import { actLabel, commandFolder, commandMenuOf, commandQuestion, isProgramFile, PathCommand, sameFile, type PathCommandDeps } from '../src/path-command.ts';
 import { memoryLog } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }): string {
@@ -398,4 +398,101 @@ test('the executables a command of ours runs are read back, under either name, a
     mkdirSync(folder, { recursive: true });
     writeFileSync(join(folder, 'jason'), '#!/bin/sh\nexec /usr/lib/jason/jason "$@"\n');
     assert.deepEqual(command.named(), [], 'a jason the desktop did not write names nothing of ours');
+});
+
+test('which jason the PATH finds by name: this window’s, another or none, with the way out the Command Line submenu really offers', (t) => {
+    // None: the folder is on the PATH and nothing answers, so the act that puts jason there is the way out; with the folder
+    // off the PATH no act would help, and none is named.
+    const fresh = windows(t);
+    assert.deepEqual(fresh.command.onPath(), { found: 'none', way: 'put', act: 'put_jason' });
+    assert.deepEqual(windows(t, { onPath: false }).command.onPath(), { found: 'none' });
+
+    // This: our command, running this executable with the data directory the desktop runs on, is what the PATH finds.
+    fresh.command.place();
+    assert.deepEqual(fresh.command.onPath(), { found: 'this' });
+    const elsewhere = new PathCommand({ platform: 'win32', folder: fresh.folder, executable: windowsExe, dataDirectory: 'D:\\Jason data', path: () => fresh.folder, isProgram: present, log: memoryLog() });
+    assert.deepEqual(elsewhere.onPath(), { found: 'other', way: 'point', act: 'point_jason' }, 'our command naming other data is another Jason');
+
+    // Another: an older copy our command still runs, by the act that points it back.
+    const older = windows(t);
+    writeFileSync(join(older.folder, 'jason.cmd'), `@echo off\r\n"D:\\Old\\Jason\\resources\\bundle\\jason.exe" %*\r\n`);
+    assert.deepEqual(older.command.onPath(), { found: 'other', way: 'point', act: 'point_jason' });
+
+    // Another installation's jason: the act gives this window's Jason the name jason-desktop, and once that is placed it is
+    // typed by that name, with no act.
+    const other = 'C:\\Tools\\Jason\\jason.exe';
+    const foreign = windows(t, { others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
+    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'name', act: 'put_jason_desktop' });
+    foreign.command.place();
+    assert.deepEqual(foreign.command.onPath(), { found: 'other', way: 'type' });
+
+    // Our jason placed, but another earlier on the PATH: no act of the desktop's would help.
+    const behind = windows(t, { onPath: false, others: ['C:\\Tools\\Jason'], isProgram: (file) => file === other || present(file) });
+    const shadowed = new PathCommand({ platform: 'win32', folder: behind.folder, executable: windowsExe, dataDirectory: null, path: () => behind.folder, isProgram: present, log: memoryLog() });
+    shadowed.place();
+    const ahead = new PathCommand({ platform: 'win32', folder: behind.folder, executable: windowsExe, dataDirectory: null, path: () => `C:\\Tools\\Jason;${behind.folder}`, isProgram: (file) => file === other || present(file), log: memoryLog() });
+    assert.equal(ahead.status().state, 'placed');
+    assert.deepEqual(ahead.onPath(), { found: 'other' });
+
+    // The bundled executable itself, its folder on the PATH, is this window's Jason.
+    const bundled = new PathCommand({ platform: 'darwin', folder: '/Users/someone/.local/bin', executable: macExe, dataDirectory: null, path: () => '/Applications/Jason.app/Contents/Resources/bundle', isProgram: (file) => file === macExe, log: memoryLog() });
+    assert.deepEqual(bundled.onPath(), { found: 'this' });
+
+    // Where the command is not offered, nothing is told.
+    assert.equal(new PathCommand({ platform: 'freebsd', folder: null, executable: macExe, dataDirectory: null, path: () => '', isProgram: () => false, log: memoryLog() }).onPath(), undefined);
+});
+
+test('a jason on the PATH that is a link to the bundled executable is this window’s; a link that leads nowhere is not, and nothing throws', (t) => {
+    // On this host's own file system: the link is resolved as the system resolves it, so the row runs where it is.
+    const root = scratch(t);
+    const host = process.platform;
+    const exeName = host === 'win32' ? 'jason.exe' : 'jason';
+    const bundle = join(root, 'bundle');
+    mkdirSync(bundle);
+    const executable = join(bundle, exeName);
+    writeFileSync(executable, '');
+    if (host !== 'win32') chmodSync(executable, 0o755);
+    const folder = join(root, 'bin');
+    const command = (path: string, isProgram: (file: string) => boolean = (file) => isProgramFile(file, host)) =>
+        new PathCommand({ platform: host, folder, executable, dataDirectory: null, path: () => path, isProgram, log: memoryLog() });
+
+    // A folder on the PATH that is a link to the bundle's: a junction on Windows, which needs no privilege.
+    const linkedFolder = join(root, 'linked');
+    symlinkSync(bundle, linkedFolder, host === 'win32' ? 'junction' : 'dir');
+    assert.deepEqual(command(linkedFolder).onPath(), { found: 'this' });
+
+    // A file on the PATH that is a link to the executable; an account that may not make one skips this half.
+    const links = join(root, 'links');
+    mkdirSync(links);
+    let fileLink = true;
+    try {
+        symlinkSync(executable, join(links, exeName), 'file');
+    } catch {
+        fileLink = false;
+        t.diagnostic('this account cannot make a link to a file here; the folder link above stands for it');
+    }
+    if (fileLink) assert.deepEqual(command(links).onPath(), { found: 'this' });
+
+    // A link whose target is gone cannot be resolved: it is not this window's Jason, and the look does not throw.
+    const goneTarget = join(root, 'gone');
+    mkdirSync(goneTarget);
+    const dangling = join(root, 'dangling');
+    symlinkSync(goneTarget, dangling, host === 'win32' ? 'junction' : 'dir');
+    rmSync(goneTarget, { recursive: true, force: true });
+    const found = join(dangling, exeName);
+    assert.equal(command(dangling, (file) => file === found).onPath()?.found, 'other');
+});
+
+test('a way out travels as a code, and the page words each act letter for letter as the menu labels it', () => {
+    // The page's table of words, read as text: no sentence comes from the desktop, so the two sides are held here.
+    const words = readFileSync(join(import.meta.dirname, '..', '..', 'ui', 'src', 'locale', 'en.ts'), 'utf8');
+    for (const code of ['put_jason', 'put_jason_desktop', 'point_jason', 'point_jason_desktop'] as const) {
+        const line = words.split('\n').find((each) => each.includes(`'openIn.act.${code}':`));
+        assert.ok(line !== undefined, code);
+        assert.equal(line.slice(line.indexOf(':') + 1).trim().replace(/^'(.*)',$/, '$1'), actLabel(code), code);
+    }
+    // And the menu draws its acts by the same function.
+    const absent = (name: 'jason' | 'jason-desktop') => commandMenuOf({ state: 'absent', name, files: [], folderOnPath: true, shadows: null, executable: macExe }).acts[0]?.label;
+    const elsewhere = (name: 'jason' | 'jason-desktop') => commandMenuOf({ state: 'elsewhere', name, files: [], why: '', executable: macExe }).acts[0]?.label;
+    assert.deepEqual([absent('jason'), absent('jason-desktop'), elsewhere('jason'), elsewhere('jason-desktop')], [actLabel('put_jason'), actLabel('put_jason_desktop'), actLabel('point_jason'), actLabel('point_jason_desktop')]);
 });

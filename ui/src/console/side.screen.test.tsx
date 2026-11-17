@@ -15,6 +15,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { styleOf, tokenOf } from '../test/stylesheet';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
+import { Picker } from '../pickers/pickers';
 import { attention } from './needs';
 import { chats, conversations, here } from './state';
 
@@ -442,25 +443,50 @@ describe('the sidebar’s look', () => {
         expect(styleOf(brand.querySelector('.wordmark.light')!)).toMatchObject({ height: '19px' });
     });
 
-    it('draws New GTM agent as one full-width box, its caret a quiet end of the same box', async () => {
+    it('draws New GTM agent as a light button beside a drop-down button of its own', async () => {
         renderConsole(stubDesktop(), 'live');
         await settled();
         const button = () => side().getByRole('button', { name: 'New GTM agent' });
         const row = () => button().closest<HTMLElement>('.newrow')!;
+        // Two controls in one row, the main one first in the keyboard order, each its own accessible name.
+        const controls = Array.from(row().querySelectorAll('button'));
+        expect(controls).toEqual([button(), caret()]);
+        expect(button()).not.toBe(caret());
+        expect(button().getAttribute('aria-label')).toBeNull();
+        expect(caret().getAttribute('aria-label')).toBe('More to create');
         expect(row().contains(caret())).toBe(true);
-        // Start is in front: the whole box is marked, the caret's end with it.
+        // Start is in front: the main button is marked and the drop-down is not.
         expect(button().getAttribute('aria-current')).toBe('true');
-        expect(styleOf(row())).toMatchObject({ background: 'var(--hover)', 'border-color': 'var(--accent-line)' });
+        expect(styleOf(button())).toMatchObject({ 'border-color': 'var(--accent-line)', background: 'var(--hover)' });
         fireEvent.click(within(menu()).getByRole('button', { name: /^Needs you/ }));
         await waitFor(() => expect(inFront()).toBe('Needs you'));
-        expect(styleOf(row())).toMatchObject({
-            margin: '2px 14px 8px',
+        expect(styleOf(row())).toMatchObject({ margin: '2px 14px 8px', gap: '8px' });
+        expect(styleOf(button())).toMatchObject({
             border: '1px solid var(--line)',
-            'border-radius': '12px',
+            'border-radius': '10px',
             background: 'var(--panel)',
+            'font-weight': '500',
+            flex: '1',
         });
-        expect(styleOf(button())).toMatchObject({ border: '0', background: 'none', flex: '1' });
-        expect(styleOf(caret())).toMatchObject({ border: '0', background: 'none' });
+        expect(styleOf(caret())).toMatchObject({
+            border: '1px solid var(--line)',
+            'border-radius': '10px',
+            background: 'var(--panel)',
+            width: '34px',
+        });
+    });
+
+    it('leaves the caret of a filter inside the console as it was: no border, no fill', () => {
+        const { container } = render(
+            <div className="jc-console">
+                <Picker label="All campaigns" options={[{ value: null, label: 'All campaigns' }]} onPick={() => {}} />
+            </div>,
+        );
+        const filter = styleOf(container.querySelector('.caret')!);
+        expect(filter.border).toBe('0');
+        expect(filter.background).toBe('none');
+        expect(filter['border-radius']).toBeUndefined();
+        expect(filter['box-shadow']).toBeUndefined();
     });
 
     it('heads Recent quietly, scrolls the rows, and keeps Settings at the foot of the window', async () => {
@@ -533,7 +559,7 @@ describe('the sidebar in the Mac desktop’s window, which has no title bar', ()
         expect(band()).toBeNull();
     });
 
-    it('draws no band on Windows, whose buttons stand over the strip, nor on Linux, whose window keeps its frame', async () => {
+    it('draws no band on Windows or Linux, whose buttons stand over the strip', async () => {
         for (const platform of ['win32', 'linux'] as const) {
             renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
             await screen.findByRole('heading', { name: 'Who do you want to reach?' });
@@ -604,51 +630,58 @@ describe('the sidebar where the window is narrow', () => {
     });
 });
 
-describe('the strip in the Windows desktop’s window, whose caption buttons stand over its right end', () => {
-    const windows = () => Object.assign(stubDesktop(), { platform: 'win32' as const });
+describe('the strip in the Windows and Linux desktop’s window, whose caption buttons stand over its right end', () => {
+    const overlaid = ['win32', 'linux'] as const;
+    const on = (platform: (typeof overlaid)[number]) => Object.assign(stubDesktop(), { platform });
     const strip = () => screen.getByRole('region', { name: 'Mode bar' });
 
     it('leaves the buttons’ width and the desktop’s band free at its right, read from the overlay’s own geometry', async () => {
-        renderConsole(windows(), 'live');
-        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
-        const root = document.querySelector<HTMLElement>('.jc-console')!;
-        expect(root.classList.contains('desktop-win')).toBe(true);
-        expect(root.classList.contains('desktop-mac')).toBe(false);
-        // The free title bar area ends where the buttons begin; the desktop's band is 40 px left of them.
-        expect(styleOf(strip())).toMatchObject({
-            'padding-right': 'calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))',
-            '-webkit-app-region': 'drag',
-        });
-        // Nothing is kept over the sidebar: the buttons are at the window's right, not its left.
-        expect(styleOf(document.querySelector('.jc-console .side')!)['padding-top']).toBeUndefined();
-        expect(document.querySelector('.jc-console > .title-drag')).toBeNull();
+        for (const platform of overlaid) {
+            renderConsole(on(platform), 'live');
+            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+            const root = document.querySelector<HTMLElement>('.jc-console')!;
+            expect(root.classList.contains('desktop-overlay'), platform).toBe(true);
+            expect(root.classList.contains('desktop-mac')).toBe(false);
+            // The free title bar area ends where the buttons begin; the desktop's band is 40 px left of them.
+            expect(styleOf(strip())).toMatchObject({
+                'padding-right':
+                    'calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))',
+                '-webkit-app-region': 'drag',
+            });
+            // Nothing is kept over the sidebar: the buttons are at the window's right, not its left.
+            expect(styleOf(document.querySelector('.jc-console .side')!)['padding-top']).toBeUndefined();
+            expect(document.querySelector('.jc-console > .title-drag')).toBeNull();
+            cleanup();
+        }
     });
 
     it('keeps Open in and the Demo | Live switch clickable inside the strip that drags the window', async () => {
-        renderConsole(windows(), 'demo');
-        await waitFor(() => expect(strip()).not.toBeNull());
-        const switches = within(strip()).getByRole('group', { name: 'Data' });
-        expect(styleOf(switches)['-webkit-app-region']).toBe('no-drag');
-        for (const button of within(switches).getAllByRole('button'))
-            expect(styleOf(button)['-webkit-app-region']).toBe('no-drag');
-        const slot = strip().querySelector<HTMLElement>('[data-slot="open-in"]')!;
-        const made = document.createElement('button');
-        slot.append(made);
-        expect(styleOf(made)['-webkit-app-region']).toBe('no-drag');
-    });
-
-    it('leaves nothing in a browser tab on Windows, nor on Linux or macOS', async () => {
-        setPlace('tab', windows());
-        renderConsole(windows(), 'live');
-        await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
-        expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
-        cleanup();
-        setPlace('window');
-        for (const platform of ['linux', 'darwin'] as const) {
-            renderConsole(Object.assign(stubDesktop(), { platform }), 'live');
-            await screen.findByRole('heading', { name: 'Who do you want to reach?' });
-            expect(document.querySelector('.jc-console')!.classList.contains('desktop-win')).toBe(false);
+        for (const platform of overlaid) {
+            renderConsole(on(platform), 'demo');
+            await waitFor(() => expect(strip()).not.toBeNull());
+            const switches = within(strip()).getByRole('group', { name: 'Data' });
+            expect(styleOf(switches)['-webkit-app-region'], platform).toBe('no-drag');
+            for (const button of within(switches).getAllByRole('button'))
+                expect(styleOf(button)['-webkit-app-region']).toBe('no-drag');
+            const slot = strip().querySelector<HTMLElement>('[data-slot="open-in"]')!;
+            const made = document.createElement('button');
+            slot.append(made);
+            expect(styleOf(made)['-webkit-app-region']).toBe('no-drag');
             cleanup();
         }
+    });
+
+    it('leaves nothing in a browser tab on Windows or Linux, nor in the Mac’s window', async () => {
+        for (const platform of overlaid) {
+            setPlace('tab', on(platform));
+            renderConsole(on(platform), 'live');
+            await waitFor(() => expect(document.querySelector('.jc-console .side')).not.toBeNull());
+            expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay'), platform).toBe(false);
+            cleanup();
+        }
+        setPlace('window');
+        renderConsole(Object.assign(stubDesktop(), { platform: 'darwin' as const }), 'live');
+        await screen.findByRole('heading', { name: 'Who do you want to reach?' });
+        expect(document.querySelector('.jc-console')!.classList.contains('desktop-overlay')).toBe(false);
     });
 });

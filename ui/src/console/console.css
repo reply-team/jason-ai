@@ -227,6 +227,59 @@
     font-size: 12.5px;
     font-weight: 500;
 }
+/* The Reply card: its name with the Recommended mark and one sentence at the left, the sign-in at the right, and under
+   them the row for a key. */
+.jc-console .reply-card .reply-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 2px 0 10px;
+}
+.jc-console .reply-card .reply-top > .btn {
+    flex: none;
+}
+.jc-console .reply-card .reply-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+.jc-console .reply-card .reply-name b {
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 650;
+}
+/* Every row of the card is one line that wraps: a note spans the card, and an account's state and acts keep their own
+   sizes beside its name, instead of the three columns a page of settings gives a row. */
+.jc-console .reply-card .setrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding-left: 0;
+    padding-right: 0;
+}
+.jc-console .reply-card .setrow .grow {
+    flex: 1 1 240px;
+}
+.jc-console .reply-card .reply-why {
+    margin: 4px 0 0;
+}
+.jc-console .reply-card .reply-key {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+.jc-console .reply-card .reply-key .inp {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+}
+.jc-console .reply-card .reply-key-why {
+    margin: 6px 0 4px;
+}
 .jc-console .grow {
     flex: 1;
     min-width: 0;
@@ -442,32 +495,19 @@
 .jc-console .menuwrap {
     position: relative;
 }
-/* New GTM agent: one full-width box, its words centred across it, the caret's menu a quiet end of the same box. */
+/* New GTM agent: two controls side by side, the main one a light button across the width, the drop-down a small square button of its own. */
 .jc-console .newrow {
     display: flex;
+    gap: 8px;
     margin: 2px 14px 8px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-    overflow: hidden;
-}
-.jc-console .newrow:hover {
-    border-color: var(--accent-line);
-}
-.jc-console .newrow:has(> .newbtn[aria-current='true']) {
-    border-color: var(--accent-line);
-    background: var(--hover);
 }
 .jc-console .newrow .newbtn {
     margin: 0;
     flex: 1;
     min-width: 0;
-    border: 0;
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    padding: 10px 10px 10px 44px;
+    font-weight: 500;
+    padding: 8px 10px;
+    border-radius: 10px;
 }
 .jc-console .caret {
     flex: none;
@@ -482,6 +522,18 @@
 }
 .jc-console .caret:hover {
     background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .newrow .caret {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.jc-console .newrow .caret:hover,
+.jc-console .newrow .caret[aria-expanded='true'] {
+    background: var(--panel);
+    border-color: var(--accent-line);
     color: var(--ink);
 }
 .jc-console .menu-away {
@@ -987,12 +1039,13 @@
     z-index: 30;
     -webkit-app-region: drag;
 }
-/* The Windows desktop's window has no title bar: the system's caption buttons stand over the strip's right end, as high
-   as it, with the desktop's own 40 px drag band just left of them. The strip leaves both free, the buttons' width read
-   from the overlay's own geometry, the free title bar area ending where they begin, so Open in and the switch stand left
-   of them at any scale of the display; without an overlay the variables fall back and only the band is left. The 40px
-   is the desktop's `windowsBandWidth` (desktop/src/window-frame.ts); a test of the desktop holds the two equal. */
-.jc-console.desktop-win .mode-strip {
+/* The Windows and Linux desktop's window has no title bar: the caption buttons are an overlay standing over the strip's
+   right end, as high as it, with the desktop's own 40 px drag band just left of them. The strip leaves both free, the
+   buttons' width read from the overlay's own geometry, the free title bar area ending where they begin, so Open in and
+   the switch stand left of them at any scale of the display; without an overlay the variables fall back and only the
+   band is left. The 40px is the desktop's `overlayBandWidth` (desktop/src/window-frame.ts); a test of the desktop holds
+   the two equal. */
+.jc-console.desktop-overlay .mode-strip {
     padding-right: calc(12px + 40px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 .jc-console .menu,
@@ -1241,6 +1294,15 @@ body,
     height: auto;
     overflow: visible;
 }
+/* The Accounts page draws the Reply card as its own card, across the page, with no frame around it. */
+.jc-console .harness .sys > .provider {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+.jc-console .harness .sys > .provider > .painted {
+    height: auto;
+    overflow: visible;
+}
 .jc-console .chat-panel {
     display: flex;
     flex-direction: column;
@@ -1301,6 +1363,25 @@ body,
     justify-content: flex-end;
     gap: 6px;
     padding: 8px 16px 0;
+}
+.jc-console .chat-bar .btn.ib {
+    flex: none;
+    width: 36px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: none;
+    color: var(--mute);
+}
+.jc-console .chat-bar .btn.ib:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--hover);
+    color: var(--ink);
+}
+.jc-console .chat-bar .btn.ib:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 .jc-console .chat-remove {
     margin: 8px 16px 0;
@@ -1367,6 +1448,118 @@ body,
 }
 .jc-console .setrow .inp {
     max-width: 240px;
+}
+/* The AI card in two groups. On this computer: each program found a card of its own, its name, state and "In use" on
+   one line, what it does under it and apart from the how-to lines; then one row, "Model keys", with each provider that
+   holds a key as a pill. Under it, a tinted panel of what can be added or changed: the programs not found on one quiet
+   line, each that can be installed followed by its own Install, and the model keys' panel. */
+.jc-console .ai-card .group-label {
+    margin: 2px 0 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mute);
+}
+.jc-console .ai-here {
+    padding: 12px 16px 4px;
+}
+.jc-console .setrow.host-card {
+    display: block;
+    margin: 0 0 8px;
+    padding: 11px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .row-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+.jc-console .row-hd > .in-use,
+.jc-console .row-hd > .use-program {
+    margin-left: auto;
+}
+.jc-console .host-does {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: var(--ink);
+}
+.jc-console .host-how {
+    margin-top: 6px;
+    padding-left: 10px;
+    border-left: 2px solid var(--line);
+}
+.jc-console .host-how .meta {
+    color: var(--mute);
+    overflow-wrap: anywhere;
+}
+.jc-console .ai-add {
+    margin: 4px 16px 16px;
+    padding: 12px 16px 16px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.jc-console .hosts-absent {
+    color: var(--mute);
+    line-height: 1.9;
+}
+.jc-console .hosts-absent .sep {
+    margin: 0 6px;
+}
+.jc-console .hosts-absent .absent-host {
+    white-space: nowrap;
+}
+.jc-console .hosts-absent .btn {
+    height: auto;
+    margin-left: 4px;
+    padding: 1px 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    vertical-align: baseline;
+}
+.jc-console .hosts-absent + .key-panel {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+.jc-console .key-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+}
+.jc-console .key-hd b {
+    font-size: 13px;
+    font-weight: 600;
+}
+.jc-console .key-fld {
+    display: block;
+    margin-top: 10px;
+}
+.jc-console .key-fld > span {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink);
+}
+.jc-console .key-fld > .inp {
+    max-width: none;
+}
+.jc-console .key-act {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+.jc-console .key-act > .key-state {
+    margin-right: auto;
 }
 .jc-console .versions {
     margin-top: 18px;
@@ -1737,9 +1930,12 @@ body,
     z-index: 30;
     display: flex;
     flex-direction: column;
-    min-width: 210px;
+    width: 300px;
+    /* Inside the window: the strip above it is 38 pixels, and a menu taller than what is left scrolls within itself. */
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
     margin-top: 6px;
-    padding: 4px;
+    padding: 6px;
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1749,10 +1945,49 @@ body,
     white-space: normal;
 }
 .jc-console .open-in-header {
-    padding: 6px 10px 2px;
-    color: var(--mute);
+    padding: 6px 10px 4px;
+    color: var(--faint);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 400;
+}
+/* In a menu that scrolls, nothing is squeezed to fit: each child keeps its own height. */
+.jc-console .open-in-menu > * {
+    flex: none;
+}
+.jc-console .open-in-rule {
+    height: 1px;
+    margin: 6px 4px;
+    background: var(--line);
+}
+/* An item: its icon in a column of its own, then its words. The names and the one-line hints stay on one line at this
+   width; a note's sentence is the one thing that wraps. */
+.jc-console .open-in-menu .oi-icon {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--mute);
+}
+/* An application's own icon fills the icon's cell, whatever the size of the pixels the desktop read. */
+.jc-console .open-in-menu .oi-app {
+    display: block;
+    width: 20px;
+    height: 20px;
+}
+.jc-console .open-in-menu .oi-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.jc-console .open-in-menu .oi-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jc-console .open-in-menu .oi-about {
+    display: none;
 }
 .jc-console .open-in-menu small {
     display: block;
@@ -1760,18 +1995,41 @@ body,
     font-size: 12px;
 }
 .jc-console .open-in-note {
-    max-width: 260px;
-    padding: 6px 10px 4px;
+    margin-top: 4px;
+    padding: 8px 10px 4px;
     border-top: 1px solid var(--line);
     color: var(--mute);
     font-size: 12px;
 }
+/* The line under Editors while jason on the PATH is another or none: quiet, inside its group, so no rule of its own. */
+.jc-console .open-in-jason {
+    margin-top: 0;
+    padding: 2px 10px 0 40px;
+    border-top: 0;
+}
+/* What an act did, under the split button where the menu opens and as wide: a sentence after an editor says which jason
+   the PATH finds and the way out, more than a strip holds on one line, so it wraps here and covers nothing of the strip. */
 .jc-console .open-in-toast {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 30;
+    width: 300px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
     color: var(--mute);
     font-size: 13px;
+    white-space: normal;
 }
 .jc-console .open-in-menu button {
-    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
     border: 0;
     border-radius: 6px;
     background: transparent;
@@ -1786,9 +2044,8 @@ body,
 .jc-console .open-in-continue {
     display: flex;
     flex-direction: column;
-    max-width: 320px;
-    margin-top: 4px;
-    padding-top: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px solid var(--line);
 }
 .jc-console .open-in-menu button:disabled {
@@ -1884,6 +2141,11 @@ body,
 }
 /* In a narrow tab the strip's sentence is read whole: the strip grows to the lines it needs. */
 @media (max-width: 520px) {
+    /* The strip wraps here and can stand three lines (about 62 pixels), and the menu hangs from the button centred in it,
+       so its top lands near 50 pixels down; 88 leaves the menu a breath above the window's edge. */
+    .jc-console .open-in-menu {
+        max-height: calc(100vh - 88px);
+    }
     .jc-console .mode-strip {
         height: auto;
         min-height: 38px;
@@ -2543,4 +2805,42 @@ body,
     .jc-console .demo-missing {
         padding-top: 24px;
     }
+}
+/* A browser tab with no desktop: one page of text on a plain ground, in the theme in force, with the Demo | Live switch at
+   the top right. Nothing of the console is drawn here. */
+.jc-console.no-desktop {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    height: auto;
+}
+.jc-console .no-desktop-top {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px;
+}
+.jc-console .no-desktop-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 0 16px 64px;
+    text-align: center;
+}
+.jc-console .no-desktop-page h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    line-height: 1.3;
+}
+.jc-console .no-desktop-page p {
+    margin: 0;
+}
+.jc-console .no-desktop-page .no-desktop-waiting {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--mute);
 }

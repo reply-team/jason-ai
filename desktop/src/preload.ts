@@ -45,6 +45,9 @@ const desktop = {
         get: () => ipcRenderer.invoke('jason:theme.get'),
         set: (choice: 'system' | 'light' | 'dark') => ipcRenderer.invoke('jason:theme.set', choice),
     },
+    updates: {
+        key: () => ipcRenderer.invoke('jason:updates.key'),
+    },
     dailyTrends: {
         get: () => ipcRenderer.invoke('jason:dailyTrends.get'),
         set: (on: boolean) => ipcRenderer.invoke('jason:dailyTrends.set', on),
@@ -73,6 +76,7 @@ const desktop = {
         connectReplyWithKey: (key: string) => ipcRenderer.invoke('jason:setup.connectReplyWithKey', key),
         setProviderKey: (providerId: string, key: string) => ipcRenderer.invoke('jason:setup.setProviderKey', providerId, key),
         installProgram: (programId: string) => ipcRenderer.invoke('jason:setup.installProgram', programId),
+        useProgram: (programId: string) => ipcRenderer.invoke('jason:setup.useProgram', programId),
         configurePlugin: (pluginId: string, values: unknown) => ipcRenderer.invoke('jason:setup.configurePlugin', pluginId, values),
         disconnectPlugin: (pluginId: string) => ipcRenderer.invoke('jason:setup.disconnectPlugin', pluginId),
         replyConnect: (channel: 'email' | 'linkedin', options: unknown) => ipcRenderer.invoke('jason:setup.replyConnect', channel, options),

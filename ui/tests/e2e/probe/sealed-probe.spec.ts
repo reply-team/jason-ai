@@ -135,10 +135,11 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
 
         const { url } = await jason.uiOpen();
         await page.goto(url);
-        await expect(page.locator('.jc-console .side')).toBeVisible();
+        // A plain tab, no desktop and nothing waiting, opens on the Demo by itself, in the frame a tab the desktop opened
+        // draws too (never the desktop's window); nothing is pressed.
+        await expect(page.locator('iframe.demo-frame')).toBeVisible();
         const token = await page.evaluate(() => localStorage.getItem('jason.ui.session'));
         expect(token).not.toBeNull();
-        await page.getByRole('group', { name: 'Data' }).getByRole('button', { name: 'Demo' }).click();
         await expect(page.locator('iframe.demo-frame')).toHaveAttribute('sandbox', 'allow-scripts');
 
         const written = await outcomes(page, true);
@@ -154,7 +155,7 @@ test('a page under sealed/, in the console’s frame, reaches no address and cha
         ]);
         expect(seen.received).toEqual([]);
 
-        // The page above is the console's, where it was, holding what it held.
+        // The page above is the tab's, where it was, holding what it held.
         expect(page.url()).toMatch(/\/ui\/#\/demo$/);
         expect(await page.evaluate(() => localStorage.getItem('jason.ui.session'))).toBe(token);
         await expect(page.locator('.demo-over')).toBeVisible();

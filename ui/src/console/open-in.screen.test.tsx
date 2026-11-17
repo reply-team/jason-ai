@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
@@ -6,6 +6,7 @@ import { loadMode, mode, modeRefusal, modeUnopened } from '../platform/mode';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import * as classicCampaigns from '../screens/campaigns/store';
+import type { DesktopOpenInJason } from '../platform/desktop';
 import { chatDesktop, stubStream, type StubDesktop } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { styleOf } from '../test/stylesheet';
@@ -65,7 +66,7 @@ const menu = () => screen.getByRole('menu');
 const items = () =>
     within(menu())
         .getAllByRole('menuitem')
-        .map((each) => each.querySelector('span')?.textContent);
+        .map((each) => each.querySelector('.oi-name')?.textContent);
 
 beforeEach(() => {
     chats.value = {};
@@ -126,9 +127,11 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
             'open-in-header',
             'on',
             '',
+            'open-in-rule',
             'open-in-header',
             '',
             '',
+            'open-in-rule',
             '',
             '',
             '',
@@ -136,9 +139,17 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         ]);
         expect(within(menu()).getByText('Agents')).not.toBeNull();
         expect(within(menu()).getByText('Editors')).not.toBeNull();
-        expect(
-            within(menu()).getAllByText('A new session in a terminal, with your own settings and tools'),
-        ).toHaveLength(2);
+        // The line drawn is the short form; the whole sentence stays each agent's description, for a pointer and a screen reader.
+        expect(within(menu()).getAllByText('A new session in a terminal')).toHaveLength(2);
+        for (const agent of ['Claude Code', 'Codex']) {
+            const entry = within(menu()).getByRole('menuitem', { name: agent });
+            expect(entry.getAttribute('title')).toBe(
+                `${agent}: A new session in a terminal, with your own settings and tools`,
+            );
+            expect(document.getElementById(entry.getAttribute('aria-describedby')!)?.textContent).toBe(
+                'A new session in a terminal, with your own settings and tools',
+            );
+        }
         // Copy path carries the folder as its subtitle; the arrow carries its own title.
         expect(within(within(menu()).getByRole('menuitem', { name: /^Copy path/ })).getByText('Jason')).not.toBeNull();
         expect(arrow().getAttribute('title')).toBe('Open in…');
@@ -165,6 +176,47 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         fireEvent.click(arrow());
         expect(items()).toEqual(['Cursor', 'New terminal', 'Copy path']);
         expect(within(menu()).queryByText('Agents')).toBeNull();
+    });
+
+    it('paints an application’s own icon the desktop sends on a canvas, and draws the glyph for a place without one', async () => {
+        const desktop = chatDesktop();
+        // Two pixels by two, red, green, blue and see-through: pixels only, as the desktop sends them, never a path.
+        const rgba = btoa(String.fromCharCode(255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0));
+        desktop.openInKept = {
+            places: [
+                { id: 'claude', label: 'Claude Code' },
+                { id: 'terminal', label: '' },
+                { id: 'vscode', label: 'VS Code', icon: { width: 2, height: 2, rgba } },
+                // Pixels that do not fill the size the icon says are not painted: the glyph is drawn.
+                { id: 'zed', label: 'Zed', icon: { width: 4, height: 4, rgba } },
+                { id: 'files', label: 'File Explorer', icon: { width: 2, height: 2, rgba } },
+                { id: 'copy', label: '' },
+            ],
+            default: 'claude',
+            folder: 'Jason',
+        };
+        await renderConsole(kept, desktop);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        const icon = (name: RegExp) => within(menu()).getByRole('menuitem', { name }).querySelector('.oi-icon')!;
+        for (const name of [/^VS Code/, /^File Explorer/]) {
+            const canvas = icon(name).querySelector('canvas.oi-app');
+            expect(canvas?.getAttribute('width')).toBe('2');
+            expect(canvas?.getAttribute('height')).toBe('2');
+            expect(icon(name).querySelector('svg')).toBeNull();
+        }
+        for (const [name, glyph] of [
+            [/^Claude Code/, 'prompt'],
+            [/^New terminal/, 'terminal'],
+            [/^Zed/, 'editor'],
+            [/^Copy path/, 'copy'],
+        ] as const) {
+            expect(icon(name).querySelector('canvas')).toBeNull();
+            expect(icon(name).querySelector('svg.oi-glyph')?.getAttribute('data-glyph')).toBe(glyph);
+        }
+        // No image element and no address of one: the page's content policy needs no image source.
+        expect(menu().querySelector('img')).toBeNull();
+        expect(menu().outerHTML).not.toMatch(/data:|blob:|src=/);
     });
 
     it('opens a place chosen from the menu, closes the menu, and the place used last becomes the main part', async () => {
@@ -203,17 +255,15 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         expect(mainPart().textContent).toBe('Open in Claude Code');
     });
 
-    it('says nothing of data after the file manager in the demo, and the same sentence as ever in Live', async () => {
-        await renderConsole(kept);
+    it('says nothing of data after the file manager, which runs nothing, whichever jason the PATH finds', async () => {
+        const desktop = chatDesktop();
+        desktop.openInKept.jason = { found: 'this' };
+        await renderConsole(kept, desktop);
         await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^File manager/ }));
         await waitFor(() =>
-            expect(document.querySelector('.open-in-toast')?.textContent).toBe(
-                kept === 'demo'
-                    ? 'Opened Jason in File manager.'
-                    : 'Opened Jason in File manager. Jason there works with the same data as this window.',
-            ),
+            expect(document.querySelector('.open-in-toast')?.textContent).toBe('Opened Jason in File manager.'),
         );
     });
 
@@ -238,12 +288,13 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
         );
         fireEvent.click(arrow());
         fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
-        // An editor already running keeps its own environment, so in the demo the second sentence is left off.
+        // An editor already running keeps its own environment, so in the demo the second sentence is the other way about;
+        // in Live it says which jason the PATH finds, and nothing where the desktop does not tell.
         await waitFor(() =>
             expect(document.querySelector('.open-in-toast')?.textContent).toBe(
                 kept === 'demo'
                     ? "Opened Jason in VS Code. An editor's own terminal may work with your own installation, not the demo."
-                    : 'Opened Jason in VS Code. Jason there works with the same data as this window.',
+                    : 'Opened Jason in VS Code.',
             ),
         );
         fireEvent.click(arrow());
@@ -373,6 +424,88 @@ describe.each(['live', 'demo'] as const)('Open in, in %s', (kept) => {
     });
 });
 
+describe('Which jason an editor finds on the PATH', () => {
+    // The desktop starts an editor with the person's own environment, so a jason typed there is whichever the PATH finds:
+    // the desktop tells this window's, another or none, with the way out its Jason menu really offers.
+    async function openVsCode(jason: DesktopOpenInJason): Promise<string | null | undefined> {
+        const desktop = chatDesktop();
+        desktop.openInKept.jason = jason;
+        await renderConsole('live', desktop);
+        await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+        fireEvent.click(arrow());
+        fireEvent.click(within(menu()).getByRole('menuitem', { name: /^VS Code/ }));
+        await waitFor(() => expect(document.querySelector('.open-in-toast')).not.toBeNull());
+        return document.querySelector('.open-in-toast')?.textContent;
+    }
+
+    it('says the same data only where jason on the PATH is this window’s Jason', async () => {
+        expect(await openVsCode({ found: 'this' })).toBe(
+            "Opened Jason in VS Code. jason on your PATH is this window's Jason, so a terminal there works with the same data.",
+        );
+    });
+
+    it('says another Jason, never other data for certain, with the way out the Jason menu offers', async () => {
+        const other =
+            "Opened Jason in VS Code. jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
+        expect(await openVsCode({ found: 'other', way: 'name', act: 'put_jason_desktop' })).toBe(
+            other +
+                ' In the Jason menu, Command Line, "Put jason-desktop on the PATH…" gives this window\'s Jason the name jason-desktop; the other keeps jason.',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other', way: 'type' })).toBe(
+            other + " Type jason-desktop there instead: it runs this window's Jason.",
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other', way: 'point', act: 'point_jason' })).toBe(
+            other + ' In the Jason menu, Command Line, choose "Point jason at This Jason…".',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other', way: 'point', act: 'point_jason_desktop' })).toBe(
+            other +
+                ' In the Jason menu, Command Line, choose "Point jason-desktop at This Jason…", then type jason-desktop there.',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'other' })).toBe(other);
+    });
+
+    it('says jason is not on the PATH where none is, with the act that puts it there', async () => {
+        const none = 'Opened Jason in VS Code. jason is not on your PATH, so a terminal there does not find Jason.';
+        expect(await openVsCode({ found: 'none', way: 'put', act: 'put_jason' })).toBe(
+            none + ' In the Jason menu, Command Line, "Put jason on the PATH…" puts it there.',
+        );
+        cleanup();
+        expect(await openVsCode({ found: 'none' })).toBe(none);
+    });
+
+    it('carries one quiet line under Editors only while jason on the PATH is another or none', async () => {
+        const line = () => menu().querySelector('.open-in-jason');
+        const cases: [DesktopOpenInJason | undefined, string | null][] = [
+            [{ found: 'other', way: 'type' }, "jason on your PATH is another Jason, not this window's."],
+            [{ found: 'none', way: 'put', act: 'put_jason' }, 'jason is not on your PATH.'],
+            [{ found: 'this' }, null],
+            [undefined, null],
+        ];
+        for (const [jason, said] of cases) {
+            const desktop = chatDesktop();
+            if (jason !== undefined) desktop.openInKept.jason = jason;
+            await renderConsole('live', desktop);
+            await waitFor(() => expect(mainPart().textContent).toBe('Open in Claude Code'));
+            fireEvent.click(arrow());
+            expect(line()?.textContent ?? null).toBe(said);
+            if (said !== null) {
+                // Right under the last editor, with the whole sentence and the way out for a pointer.
+                expect(line()?.previousElementSibling?.textContent).toContain('Zed');
+                expect(line()?.getAttribute('title')).toBe(
+                    jason?.found === 'none'
+                        ? 'jason is not on your PATH, so a terminal there does not find Jason. In the Jason menu, Command Line, "Put jason on the PATH…" puts it there.'
+                        : "jason on your PATH is another Jason, not this window's: what you run there may work with other data. Type jason-desktop there instead: it runs this window's Jason.",
+                );
+            }
+            cleanup();
+        }
+    });
+});
+
 describe('Open in with an agent in front', () => {
     it('sends the campaign’s id with the act and asks for its folder, and never a path', async () => {
         const desktop = await renderConsole('live');
@@ -455,7 +588,7 @@ describe('Continue this chat in a terminal', () => {
             await waitFor(() => expect(entry()).not.toBeNull());
             const all = within(menu()).getAllByRole('menuitem');
             expect(all.at(-1)).toBe(entry());
-            expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+            expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Claude Code');
             expect(entry().querySelector('small')?.textContent).toBe(note);
             expect((entry() as HTMLButtonElement).disabled).toBe(false);
             expect(entry().className).not.toBe('on');
@@ -479,7 +612,7 @@ describe('Continue this chat in a terminal', () => {
         const id = await chatInFront();
         desktop.openInContinue.set(id, { host: 'codex', label: 'Codex', running: false });
         fireEvent.click(arrow());
-        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        await waitFor(() => expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex'));
         fireEvent.click(entry());
         await waitFor(() => expect(continues(desktop)).toHaveLength(1));
         await waitFor(() => expect(targets(desktop).length).toBeGreaterThan(2));
@@ -570,12 +703,12 @@ describe('Continue this chat in a terminal', () => {
         currentChat.value = second;
         await waitFor(() => expect(targets(desktop).some((each) => each.args[1] === second)).toBe(true));
         fireEvent.click(arrow());
-        await waitFor(() => expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex'));
+        await waitFor(() => expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex'));
         // The first chat's answer lands late, after the second chat's: it is dropped, and the entry stays the second's.
         land();
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(within(menu()).getAllByRole('menuitem', { name: /^Continue this chat/ })).toHaveLength(1);
-        expect(entry().querySelector('span')?.textContent).toBe('Continue this chat in Codex');
+        expect(entry().querySelector('.oi-name')?.textContent).toBe('Continue this chat in Codex');
         fireEvent.click(entry());
         await waitFor(() => expect(continues(desktop)).toHaveLength(1));
         expect(continues(desktop)[0]!.args).toEqual([second]);
@@ -643,7 +776,7 @@ describe('Change Jason itself', () => {
         await offered();
         fireEvent.click(arrow());
         await waitFor(() => expect(entry()).not.toBeNull());
-        expect(entry().querySelector('span')?.textContent).toBe('Change Jason itself');
+        expect(entry().querySelector('.oi-name')?.textContent).toBe('Change Jason itself');
         expect(entry().querySelector('small')?.textContent).toBe(line);
         expect(entry().textContent).not.toMatch(/Claude Code|Codex/);
         expect((entry() as HTMLButtonElement).disabled).toBe(false);
@@ -712,7 +845,7 @@ describe('Change Jason itself', () => {
         );
         const all = within(menu()).getAllByRole('menuitem');
         expect(all.at(-2)).toBe(entry());
-        expect(all.at(-1)?.querySelector('span')?.textContent).toBe('Continue this chat in Claude Code');
+        expect(all.at(-1)?.querySelector('.oi-name')?.textContent).toBe('Continue this chat in Claude Code');
         const groups = [...menu().children].map((each) => each.className);
         expect(groups.slice(-2)).toEqual(['open-in-change', 'open-in-continue']);
     });

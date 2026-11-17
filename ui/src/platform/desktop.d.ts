@@ -538,8 +538,11 @@ export type DesktopOpenInPlace =
  * part opens (the place used last, else Claude Code), and the folder's name, never its path.
  */
 export interface DesktopOpenInAnswer {
-    /** A product's name (VS Code, Finder, Claude Code) is the label; a generic place (Terminal, Copy path) has an empty one and the page's own word. */
-    places: { id: DesktopOpenInPlace; label: string }[];
+    /**
+     * A product's name (VS Code, Finder, Claude Code) is the label; a generic place (Terminal, Copy path) has an empty one and
+     * the page's own word. `icon` is the application's own icon where the desktop could read it; absent, the page's glyph.
+     */
+    places: { id: DesktopOpenInPlace; label: string; icon?: DesktopOpenInIcon }[];
     default: DesktopOpenInPlace;
     folder: string;
     /** Present only when the chat the page named may be continued in a terminal. */
@@ -549,7 +552,39 @@ export interface DesktopOpenInAnswer {
      * `openIn.changeJason` opens. It names no host: the person's preference chooses one when the entry is chosen.
      */
     changeJason?: true;
+    /**
+     * Which `jason` the PATH an editor is started with finds by name: this window's, another, or none, with the way out the
+     * desktop's Jason menu offers. Absent where the desktop cannot tell, or offers no PATH command: in the demo, say.
+     */
+    jason?: DesktopOpenInJason;
 }
+
+/**
+ * An application's own icon, as the desktop read it from the application it found: pixels only, never a path or a file, so
+ * the page paints them on a canvas and its content policy needs no image source. `rgba` is base64 of `width` x `height`
+ * pixels, four bytes each, red, green, blue and alpha, not premultiplied.
+ */
+export interface DesktopOpenInIcon {
+    width: number;
+    height: number;
+    rgba: string;
+}
+
+/**
+ * Which `jason` the PATH finds by name, and the way out the Jason menu's Command Line really offers: `put` places `jason`,
+ * `name` places this window's Jason as `jason-desktop` (the other keeps `jason`), `point` points a command of the desktop's
+ * back at this window's Jason, each by `act`, the code of the menu's act that does it, whose words are the page's
+ * (`openIn.act.*`, the menu's label letter for letter); `type` says `jason-desktop` already finds this window's Jason. No
+ * way where the desktop offers none that would help. No sentence comes from the desktop.
+ */
+export type DesktopOpenInJason =
+    | { found: 'this' }
+    | { found: 'none'; way?: 'put'; act?: 'put_jason' }
+    | {
+          found: 'other';
+          way?: 'name' | 'point' | 'type';
+          act?: 'put_jason_desktop' | 'point_jason' | 'point_jason_desktop';
+      };
 
 /**
  * The entry that continues the chat in front in a terminal: the host whose own conversation it continues, by its product's
@@ -575,6 +610,14 @@ export interface JasonDesktop {
          * window and starting page. The page calls it as it starts and whenever the choice changes.
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
+    };
+    updates: {
+        /**
+         * The key of the desktop's update item as a person reads it ("Ctrl+Shift+D", "Cmd+Shift+D" on a Mac), where the
+         * item can act; null where it says "Updates Come to an Installed Build" or "Updates Come Through the Package", where
+         * the key does nothing. The page names the key only when this says one; a desktop before it names none.
+         */
+        key(): Promise<string | null>;
     };
     dailyTrends: {
         /** Whether the desktop keeps the Dashboard's daily trends as shown (true) or hidden (false), or null when the person never chose; the page reads null as shown. */
@@ -672,7 +715,7 @@ export interface JasonDesktop {
         /** Removes a conversation and its record: null once done. Refused while its turn runs. */
         remove(chatId: string): Promise<DesktopRefusal | null>;
         /**
-         * "Start afresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
+         * "Start fresh": the hosts' sessions are dropped, and the entries and the campaign kept; null once done. Refused
          * while its turn runs.
          */
         restart(chatId: string): Promise<DesktopRefusal | null>;
@@ -749,6 +792,14 @@ export interface JasonDesktop {
         setProviderKey(providerId: string, key: string): Promise<void>;
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
         installProgram(programId: string): Promise<void>;
+        /**
+         * Puts the agents' roles on a program found here by default, `claude` or `codex`: an enabled execution profile on
+         * it is named the default with `jason profile set-default`, the desktop's own first, else the one there is, and
+         * where there is none one is made under the desktop's own name. Refused, in the runtime's words where it refused,
+         * for several profiles on it and none the desktop's own, and for a default a JASON_ variable sets. What the card
+         * shows afterwards is read again from `status()`.
+         */
+        useProgram(programId: string): Promise<void>;
         /**
          * Configures one of `status().plugins` in one edit of the settings file. It writes `Plugins:Config:<id>` (the
          * token where the plugin reads one from there; the forwarder's `url` from `target`), `Plugins:Grants:<id>:Http`,

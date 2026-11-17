@@ -44,6 +44,7 @@ export const templates = {
     program_installed: 'npm install of {Program} exited {Exit}',
     own_servers_unread: 'The MCP servers of {Program} were not listed: its file is {Kind}',
     roles_profile: 'The agents’ roles were looked at for a profile of their own: {Outcome}',
+    program_used: 'The agents’ roles were asked to run on {Program} by default: {Outcome}',
     roles_profile_unmarked: 'The mark of a profile for the agents’ roles could not be written to the desktop’s settings, so none was made',
     reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.
@@ -115,6 +116,8 @@ export const templates = {
     demo_shown: 'The demo page was shown in its sealed view, with the switch over it',
     demo_unshown: 'The demo page could not be shown; the window says so',
     demo_refused: 'The demo {View} was refused a {Kind}; each kind is said once a run',
+    demo_link_opened: 'The repository\'s address in the demo\'s note was handed to the system browser',
+    demo_link_open_failed: 'The system browser was asked to open the repository\'s address and did not',
     open_in: 'The folder was opened in {Place}',
     open_in_refused: 'The folder could not be opened in {Place}',
     open_in_remember_failed: 'The place Open in used last could not be kept',

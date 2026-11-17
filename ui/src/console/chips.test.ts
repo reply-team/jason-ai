@@ -96,19 +96,19 @@ describe('the chips under an agent’s answer', () => {
 });
 
 describe('the chips of a chat of no agent', () => {
-    it('are the opening three in the Feed and in a set-up chat, whatever the counts', () => {
+    it('are none under an answer in the Feed and in a set-up chat, whatever the counts', () => {
         for (const place of [
             { main: true, campaignId: null },
             { main: false, campaignId: null },
-        ])
-            expect(chipsUnder(answered([], place), row({ people: 5, waiting: 5 }))).toEqual(openingChips);
+        ]) {
+            expect(chipsUnder(answered([], place), row({ people: 5, waiting: 5 }))).toEqual([]);
+            expect(chipsUnder(answered([], place), undefined)).toEqual([]);
+        }
     });
 
-    it('stand after the Feed’s lines that came after the answer', () => {
+    it('are none after the Feed’s lines that came after the answer either', () => {
         const line = { kind: 'line', line: {} } as unknown as Entry;
-        expect(chipsUnder(answered([line, { kind: 'gap' }], { main: true, campaignId: null }), undefined)).toEqual(
-            openingChips,
-        );
+        expect(chipsUnder(answered([line, { kind: 'gap' }], { main: true, campaignId: null }), undefined)).toEqual([]);
     });
 });
 
@@ -147,26 +147,21 @@ describe('when there are no chips', () => {
         ];
         for (const entry of after) expect(chipsUnder(answered([entry]), row()), entry.kind).toEqual([]);
     });
+});
 
-    it('never the person’s last message again, as a person reads it, shown or sent', () => {
+describe('the chips and the question just asked', () => {
+    it('never offer the person’s last message again, as a person reads it, shown or sent', () => {
         const asked = (text: string) =>
-            answered(
-                [
-                    { kind: 'user', text },
-                    { kind: 'text', text: 'Here.' },
-                ],
-                { main: true, campaignId: null },
-            );
-        expect(shown(chipsUnder(asked('  what is WAITING for me  '), undefined))).toEqual([
-            'How are my agents doing?',
-            'Help me start a new agent.',
+            answered([
+                { kind: 'user', text },
+                { kind: 'text', text: 'Here.' },
+            ]);
+        const waiting = row({ people: 3, waiting: 1, working: 2 });
+        expect(shown(chipsUnder(asked('  what is WAITING for me  '), waiting))).toEqual([
+            'How is it going?',
+            'Show me the people',
         ]);
-        expect(shown(chipsUnder(asked('How are my campaigns doing?'), undefined))).not.toContain(
-            'How are my agents doing?',
-        );
-        expect(shown(chipsUnder(asked('How are my agents doing'), undefined))).not.toContain(
-            'How are my agents doing?',
-        );
+        expect(shown(chipsUnder(asked('What is waiting for me'), waiting))).not.toContain('What is waiting for me?');
         const agent = answered([
             { kind: 'user', text: 'Who should this campaign reach?' },
             { kind: 'text', text: 'Founders.' },

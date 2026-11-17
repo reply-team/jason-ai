@@ -17,7 +17,7 @@ import { choicesOf, currentOf, menuButton, waitForMenus } from '../test/menus';
 
 // The conversations the desktop keeps: listed in the sidebar, reopened with what the page drew, a set-up chat handed
 // over to the campaign its turn made or to the one the person picks, a fresh session said in one line, and a
-// conversation started afresh or removed.
+// conversation started fresh or removed.
 
 const hostile = '<img src=x onerror="window.hit=1">';
 
@@ -394,17 +394,38 @@ describe('the desktop’s conversations', () => {
         );
     });
 
-    it('starts a conversation afresh, and removes one only once asked again, saying the host keeps its transcript', async () => {
+    it('draws Rename, Start fresh and Remove as icons that keep their names and say what they do', async () => {
+        const { desktop } = renderConsole();
+        const id = await send(desktop, 'Go');
+        flush(() => desktop.emit(id, { kind: 'done', error: null }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', false));
+        const titles: Record<string, string> = {
+            Rename: 'Give this conversation a name of your own',
+            'Start fresh':
+                "The AI's next turn begins without its memory of this conversation; what is shown here stays",
+            Remove: 'Remove this conversation',
+        };
+        for (const [name, title] of Object.entries(titles)) {
+            const button = screen.getByRole('button', { name });
+            expect(button.textContent).toBe('');
+            expect(button.getAttribute('title')).toBe(title);
+            const glyph = button.querySelector('svg');
+            expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+            expect(glyph?.querySelector('path')).toBeTruthy();
+        }
+    });
+
+    it('starts a conversation fresh, and removes one only once asked again, saying the host keeps its transcript', async () => {
         const { desktop } = renderConsole();
         const id = await send(desktop, 'Go');
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
         await waitFor(() =>
-            expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', false),
+            expect(screen.getByRole('button', { name: 'Start fresh' })).toHaveProperty('disabled', false),
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Start afresh' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Start fresh' }));
         await waitFor(() => expect(calls(desktop, 'chat.restart').map((each) => each.args)).toEqual([[id]]));
         await waitFor(() =>
-            screen.getByText("Started afresh: the AI's next turn begins without its memory of this conversation."),
+            screen.getByText("Started fresh: the AI's next turn begins without its memory of this conversation."),
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
@@ -421,11 +442,11 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => expect(within(listed()).queryByRole('button', { name: 'Go' })).toBeNull());
     });
 
-    it('keeps Start afresh and Remove from a turn that runs, and says a refusal in the desktop’s words', async () => {
+    it('keeps Start fresh and Remove from a turn that runs, and says a refusal in the desktop’s words', async () => {
         const desktop = chatDesktop();
         renderConsole(desktop);
         const id = await send(desktop, 'Go');
-        expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('button', { name: 'Start fresh' })).toHaveProperty('disabled', true);
         expect(screen.getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', true);
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
         desktop.refuse.set(
@@ -501,24 +522,24 @@ describe('the desktop’s conversations', () => {
         expect(Object.keys(chats.value)).toEqual([id]);
     });
 
-    it('says in the chat, in the desktop’s words, a Start afresh it refused and a turn sent to a conversation it does not keep', async () => {
+    it('says in the chat, in the desktop’s words, a Start fresh it refused and a turn sent to a conversation it does not keep', async () => {
         const { desktop } = renderConsole();
         const id = await send(desktop, 'Go');
         flush(() => desktop.emit(id, { kind: 'done', error: null }));
         desktop.refuse.set(
             'chat.restart',
-            'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.',
+            'This conversation is still answering. Wait for it to finish, or stop it, then start it fresh.',
         );
         await waitFor(() =>
-            expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', false),
+            expect(screen.getByRole('button', { name: 'Start fresh' })).toHaveProperty('disabled', false),
         );
-        fireEvent.click(screen.getByRole('button', { name: 'Start afresh' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Start fresh' }));
         await waitFor(() =>
             screen.getByText(
-                'This conversation is still answering. Wait for it to finish, or stop it, then start it afresh.',
+                'This conversation is still answering. Wait for it to finish, or stop it, then start it fresh.',
             ),
         );
-        expect(screen.queryByText(/^Started afresh/)).toBeNull();
+        expect(screen.queryByText(/^Started fresh/)).toBeNull();
         // The desktop no longer keeps it, removed elsewhere: its next turn is refused, said as the turn's error.
         desktop.kept.delete(id);
         await send(desktop, 'Again');
@@ -568,7 +589,7 @@ describe('the desktop’s conversations', () => {
         // While it asks, the conversation takes nothing else.
         expect(screen.getByRole('textbox', { name: 'Your message' })).toHaveProperty('disabled', true);
         expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
-        expect(screen.getByRole('button', { name: 'Start afresh' })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('button', { name: 'Start fresh' })).toHaveProperty('disabled', true);
         expect(screen.getByRole('button', { name: 'Remove' })).toHaveProperty('disabled', true);
         fireEvent.keyDown(dialog, { key: 'Escape' });
         expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -612,7 +633,7 @@ describe('the desktop’s conversations', () => {
         ]);
     });
 
-    it('reads the list again after Start afresh, so the conversation started afresh is listed first', async () => {
+    it('reads the list again after Start fresh, so the conversation started fresh is listed first', async () => {
         const desktop = chatDesktop();
         desktop.keep({
             id: 'conv_01JDKEPT0000000000000000S1',
@@ -638,7 +659,7 @@ describe('the desktop’s conversations', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'What should Jason do in Spring?' }));
         const header = document.querySelector<HTMLElement>('.agent-head')!;
         fireEvent.click(within(header).getByRole('button', { name: "More for this agent's conversation" }));
-        fireEvent.click(within(header).getByRole('menuitem', { name: 'Start conversation afresh' }));
+        fireEvent.click(within(header).getByRole('menuitem', { name: 'Start conversation fresh' }));
         await waitFor(() => expect(names()).toEqual(['Spring', 'Summer', 'Autumn']));
     });
 

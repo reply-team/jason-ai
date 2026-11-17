@@ -133,7 +133,7 @@ Jason is built to do as much as it can on its own and nothing that should be you
 ## Who it is not for
 
 - **Someone who wants a hosted product with a screen in front of the work.** Jason runs on your machine and is driven
-  from your agent's session. Its browser UI shows what the runtime holds, approves, rejects and answers what waits for
+  from your agent's session. Its UI, drawn in Jason Desktop, shows what the runtime holds, approves, rejects and answers what waits for
   you, and pauses or starts a campaign; it is not a place where outreach is designed.
 - **Someone with no provider, or no agent.** Jason performs no sending of its own: without a provider account and its
   plugin, it can plan and keep records, and nothing reaches anyone. Without an agent host, the runtime still keeps its

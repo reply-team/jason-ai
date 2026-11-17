@@ -14,6 +14,8 @@ import type {
     DesktopLink,
     DesktopOpenInAnswer,
     DesktopOpenInContinue,
+    DesktopOpenInIcon,
+    DesktopOpenInJason,
     DesktopOpenInPlace,
     DesktopRefusal,
     DesktopReplyCopied,
@@ -28,7 +30,9 @@ import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
-import type { ContinueOffer, OpenInAnswer, OpenInRefusal, PlaceId } from '../src/open-in.ts';
+import type { ContinueOffer, OpenInAnswer, OpenInRefusal, Place, PlaceId } from '../src/open-in.ts';
+import type { PlaceIcon } from '../src/open-in-icons.ts';
+import type { JasonOnPath } from '../src/path-command.ts';
 import type { DesktopPreload } from '../src/preload.ts';
 import type { ReplyCopied, ReplyDone, ReplyOpened, ReplyRefusal, SetupState } from '../src/setup.ts';
 import type { eventChannels, InvokeMember } from '../src/ipc.ts';
@@ -47,6 +51,7 @@ type PreloadIsTheSeam = [
     Holds<Equal<keyof DesktopPreload['setup'], keyof JasonDesktop['setup']>>,
     Holds<Equal<keyof DesktopPreload['links'], keyof JasonDesktop['links']>>,
     Holds<Equal<keyof DesktopPreload['theme'], keyof JasonDesktop['theme']>>,
+    Holds<Equal<keyof DesktopPreload['updates'], keyof JasonDesktop['updates']>>,
     Holds<Equal<keyof DesktopPreload['dailyTrends'], keyof JasonDesktop['dailyTrends']>>,
     Holds<Equal<keyof DesktopPreload['mode'], keyof JasonDesktop['mode']>>,
     Holds<Equal<keyof DesktopPreload['openIn'], keyof JasonDesktop['openIn']>>,
@@ -70,6 +75,7 @@ type DeclaredCalls =
     | Calls<JasonDesktop['setup'], 'setup'>
     | Calls<JasonDesktop['links'], 'links'>
     | Calls<JasonDesktop['theme'], 'theme'>
+    | Calls<JasonDesktop['updates'], 'updates'>
     | Calls<JasonDesktop['dailyTrends'], 'dailyTrends'>
     | Calls<JasonDesktop['mode'], 'mode'>
     | Calls<JasonDesktop['openIn'], 'openIn'>
@@ -146,10 +152,12 @@ type ModeIsTheSeam = [
 // Open in: the places, the default and the folder's name reach the page as the desktop makes them, a place is named by
 // the one list of words both sides hold, and the page sends a name and a campaign's id, nothing else. A chat to continue in
 // a terminal reaches the page as its host's name and whether a turn runs, and the page sends the chat's id alone. Change
-// Jason itself reaches the page as a mark that names no host, and the page sends nothing with it.
+// Jason itself reaches the page as a mark that names no host, and the page sends nothing with it. An application's own
+// icon reaches the page as its size and its pixels alone, never a path.
 type OpenInIsTheSeam = [
     Holds<Equal<PlaceId, DesktopOpenInPlace>>,
     Holds<Equal<OpenInAnswer, DesktopOpenInAnswer>>,
+    Holds<Equal<JasonOnPath, DesktopOpenInJason>>,
     Holds<Equal<OpenInRefusal, DesktopRefusal>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['open']>, [target: DesktopOpenInPlace, campaignId?: string]>>,
     Holds<Equal<Parameters<JasonDesktop['openIn']['targets']>, [campaignId?: string, chatId?: string]>>,
@@ -157,6 +165,9 @@ type OpenInIsTheSeam = [
     Holds<Equal<Parameters<JasonDesktop['openIn']['changeJason']>, []>>,
     Holds<Equal<ContinueOffer, DesktopOpenInContinue>>,
     Holds<Equal<keyof DesktopOpenInContinue, 'host' | 'label' | 'running'>>,
+    Holds<Equal<PlaceIcon, DesktopOpenInIcon>>,
+    Holds<Equal<keyof DesktopOpenInIcon, 'width' | 'height' | 'rgba'>>,
+    Holds<Equal<Place, DesktopOpenInAnswer['places'][number]>>,
 ];
 
 export type SeamHeld = [

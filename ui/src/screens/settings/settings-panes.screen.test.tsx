@@ -28,7 +28,7 @@ import { chosenSection } from './chosen';
 const sheet = readFileSync('src/console/settings.css', 'utf8').replace(/[/][*][^]*?[*][/]/g, '');
 const scope = '.jc-console .harness .settings';
 
-const names = ['Appearance', 'Your name and tone', 'How messages go', 'Models', 'Runtime'];
+const names = ['Appearance', 'Your name and tone', 'How messages go', 'Notifications', 'Models', 'Runtime'];
 
 function api() {
     const fake = new FakeApi()
@@ -73,8 +73,8 @@ describe('the sheet of the two panes', () => {
         );
         expect(hidden.length).toBe(1);
         const selectors = hidden[0]![1]!.split(',').map((each) => each.trim());
-        expect(selectors).toHaveLength(5);
-        for (const section of ['appearance', 'voice', 'modes', 'models', 'runtime'])
+        expect(selectors).toHaveLength(6);
+        for (const section of ['appearance', 'voice', 'modes', 'notifications', 'models', 'runtime'])
             expect(selectors).toContain(
                 `${scope}[data-chosen='${section}'] > [data-section]:not([data-section='${section}'])`,
             );
@@ -128,22 +128,29 @@ describe('Settings in two panes', () => {
         await openConsoleSettings();
         const buttons = list().getAllByRole('button');
         expect(buttons.map((each) => each.textContent)).toEqual(names);
-        expect(buttons.map((each) => each.getAttribute('aria-current'))).toEqual(['true', null, null, null, null]);
+        expect(buttons.map((each) => each.getAttribute('aria-current'))).toEqual([
+            'true',
+            null,
+            null,
+            null,
+            null,
+            null,
+        ]);
         expect(chosen()).toBe('appearance');
         expect(
             Array.from(document.querySelectorAll('.settings > [data-section]')).map((each) =>
                 each.getAttribute('data-section'),
             ),
-        ).toEqual(['appearance', 'voice', 'modes', 'models', 'runtime']);
+        ).toEqual(['appearance', 'voice', 'modes', 'notifications', 'models', 'runtime']);
     });
 
     it('names the list with a group label and gives each entry its own mark', async () => {
         await openConsoleSettings();
         expect(document.querySelector('.settings-list > .settings-group')?.textContent).toBe('Jason');
         const buttons = list().getAllByRole('button');
-        expect(buttons.map((each) => each.querySelectorAll('svg.settings-mark').length)).toEqual([1, 1, 1, 1, 1]);
+        expect(buttons.map((each) => each.querySelectorAll('svg.settings-mark').length)).toEqual([1, 1, 1, 1, 1, 1]);
         const shapes = buttons.map((each) => each.querySelector('svg.settings-mark')!.innerHTML);
-        expect(new Set(shapes).size).toBe(5);
+        expect(new Set(shapes).size).toBe(6);
     });
 
     it('chooses a section by its button, and the choice follows with aria-current', async () => {
@@ -273,6 +280,6 @@ describe('Settings in two panes', () => {
             list()
                 .getAllByRole('button')
                 .map((each) => each.textContent),
-        ).toEqual(['Appearance', 'Your name and tone', 'How messages go', 'Models']);
+        ).toEqual(['Appearance', 'Your name and tone', 'How messages go', 'Notifications', 'Models']);
     });
 });

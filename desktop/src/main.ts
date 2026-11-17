@@ -5,9 +5,10 @@
  * only through CLI verbs and the settings file a person would edit.
  */
 
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, nativeTheme, protocol, safeStorage, session, shell, type WebContents } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Chat } from './chat.ts';
@@ -18,6 +19,7 @@ import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
 import { cliAt, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
+import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
 import { isFolder, systemProbes } from './open-in-probes.ts';
 import { editorEnvironment } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
@@ -31,7 +33,7 @@ import { ownRuntimeDeps, stopOwnRuntime, whoseRuntime } from './own-runtime.ts';
 import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
-import { debFile, previousRelease, Updater } from './updates.ts';
+import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -39,10 +41,10 @@ import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistra
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
 import { dataDirectory, dataLayout, desktopPaths, type DesktopPaths } from './paths.ts';
-import { applyMode, demoMenu, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
+import { applyMode, demoMenu, demoUnshownSentence, keepFirstStart, offersOf, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Mode, type ModeAnswer, type PersonEnvironment, type StartRun } from './mode.ts';
 // Live still stops a runtime an earlier version's demo left running, before an update or a removal replaces the jason it runs.
 import { stopDemoRuntime, stopWithDemo } from './demo-runtime.ts';
-import { demoBeforeReady } from './demo-page.ts';
+import { demoBeforeReady, demoRepository } from './demo-page.ts';
 import { openDemo, type DemoViews } from './demo-window.ts';
 import { permissionAllowed } from './permissions.ts';
 import { pathOf, programsOn, withPath } from './programs.ts';
@@ -117,6 +119,19 @@ function isHttps(url: string): boolean {
     }
 }
 
+/**
+ * The Demo's one way to the system browser: it takes no address and opens the repository's, the constant the page's note
+ * names (`demoRepository`). When it is opened is the page's view's to say (`demoLinkOpener`: a navigation of its main
+ * frame to exactly that address, within a second of a person's click or Enter there, at most once in two seconds); what
+ * is opened is this constant alone.
+ */
+function openDemoRepository(log: Logger): void {
+    shell.openExternal(demoRepository).then(
+        () => log.info('demo_link_opened', {}),
+        () => log.warn('demo_link_open_failed', {}),
+    );
+}
+
 /** Shows the desktop's own page while the installation comes up, or why it did not. */
 function showStarting(window: BrowserWindow, message: string, failed: boolean): Promise<void> {
     return window.loadFile(join(app.getAppPath(), 'shell', 'starting.html'), { query: { message, state: failed ? 'failed' : 'starting' } });
@@ -173,6 +188,7 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
         ['setup.connectReplyWithKey', (key) => setup.connectReplyWithKey(key)],
         ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
         ['setup.installProgram', (id) => setup.installProgram(id)],
+        ['setup.useProgram', (id) => setup.useProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
         // The Reply card's acts, each a verb of the Reply CLI on the person's click; a link goes to the browser, never here.
@@ -258,8 +274,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // On macOS and Windows no title bar: the page leaves the window's buttons their room and marks where it is dragged
-        // by; on Windows the caption buttons are drawn in the theme in force.
+        // No title bar: the page leaves the window's buttons their room and marks where it is dragged by; on Windows and
+        // Linux the caption buttons are drawn in the theme in force.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         // A start the computer made at sign-in stays in the tray until the person opens the window; on Linux, where no
         // tray can be counted on, it opens minimized instead.
@@ -284,12 +300,12 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     });
     // The console's own <title> is the browser tab's, and an older console's says "Jason": the window keeps its name.
     keepWindowTitle(window);
-    // With no title bar on macOS and Windows, every page the window shows is given a band to drag the window by.
+    // With no title bar, every page the window shows is given a band to drag the window by.
     keepMovable(window, process.platform);
-    // On Windows the caption buttons follow each change of the theme in force while the window is open.
+    // On Windows and Linux the caption buttons follow each change of the theme in force while the window is open.
     followTheme(window, nativeTheme, process.platform);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
-    window.setMenuBarVisibility(conduct.menuBar);
+    window.setMenuBarVisibility(false);
     // The tray keeps the application: closing the window hides it, and Quit in the tray or the menu ends it. On Linux
     // closing the window quits; the runtime keeps running either way.
     let quitting = false;
@@ -369,6 +385,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
               changed: () => desk.renderMenu(),
           })
         : null;
+    // The update item's key, where the item can act: the page and the versions-differ sentence name it only then.
+    const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);
     const commandDeps: PathCommandDeps = {
         platform: process.platform,
         folder: commandFolder(process.platform, process.env, home),
@@ -456,6 +474,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     };
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
+    handle(seam, 'updates.key', origin, updateKey, refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -483,6 +502,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         bundleVersion: version ?? 'unprepared',
         runtimeVersion: () => runtimeVersion,
         runtimeIsOurs: () => runtimeIsOurs,
+        updateKey,
         settings: () => settings,
         // The mark of a profile being made for the agents' roles, kept with the rest of this run's own settings.
         saveSettings: (next) => {
@@ -560,7 +580,15 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // installation's own record, and an editor, the file manager or a terminal is started from here (`open-in.ts`). The
     // place used last is kept in this run's own settings. A chat is continued in a terminal by the session its record keeps,
     // in this run's chat folder, by this run's CLI. "Change Jason itself" is offered in the person's own installation,
-    // which this run is.
+    // which this run is. Each application the menu offers is drawn with its own icon where one can be read: the pixels are
+    // read here, by the system on Windows and from the bundle's own files on macOS, and kept for the run in memory only.
+    const icons = new IconReader({
+        platform: process.platform,
+        stat: (path) => stat(path),
+        readAtMost: (path, cap) => readRegularFileAtMost(path, cap),
+        fileIcon: (path) => app.getFileIcon(path, { size: 'normal' }),
+        fromBuffer: (png) => nativeImage.createFromBuffer(png),
+    });
     const openIn = new OpenIn({
         probes: systemProbes(env),
         hosts: () => ({ claude: programs.find('claude') !== null, codex: programs.find('codex') !== null }),
@@ -589,6 +617,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
+        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look; none told where
+        // this run offers no command (the demo, a start that carries no copy).
+        ...(command === null ? {} : { jason: () => command.onPath() }),
+        icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
@@ -733,7 +765,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minHeight: 600,
         title: windowTitle,
         // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); on
-        // Windows none either, the caption buttons over the strip's right end, drawn light as the page is; on Linux the system's.
+        // Windows and Linux none either, the caption buttons over the strip's right end, drawn light as the page is.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         show: !atLogin || conduct.atLogin === 'minimized',
         backgroundColor: lightBackground,
@@ -754,7 +786,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     });
     keepWindowTitle(window);
     if (atLogin && conduct.atLogin === 'minimized') window.minimize();
-    window.setMenuBarVisibility(conduct.menuBar);
+    window.setMenuBarVisibility(false);
     // The tray keeps the application, as in Live: closing the window hides it; on Linux closing it quits.
     let quitting = false;
     app.on('before-quit', () => {
@@ -781,13 +813,14 @@ async function runDemo(_links: LinkPost): Promise<void> {
     desk.open();
     showWindow = () => desk.show();
 
-    const unshown = 'The demo could not be shown. Choose Back to Your Own Installation in the Jason menu or the tray.';
+    const unshown = demoUnshownSentence(process.platform);
     try {
         views = await openDemo(window, {
             appPath: app.getAppPath(),
             platform: process.platform,
             refused: (view, kind) => log.warn('demo_refused', { View: view, Kind: kind }),
             live: () => backToLive(modeDeps),
+            open: () => openDemoRepository(log),
             unshown: () => {
                 log.error('demo_unshown', {});
                 if (current !== null) void showStarting(current, unshown, true);

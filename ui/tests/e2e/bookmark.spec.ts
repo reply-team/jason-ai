@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { quietDesktop } from './fixtures';
 import { Jason, freePort } from './harness';
 
 test('a bookmark works after the runtime restarts on its fixed port', async ({ page }) => {
+    // The console is the window's and a desktop tab's; a tab with no desktop draws one page.
+    await page.addInitScript(quietDesktop);
     const port = await freePort();
     const jason = await Jason.start({ port });
     try {

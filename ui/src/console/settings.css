@@ -266,6 +266,47 @@
     font-family: inherit;
     font-size: inherit;
 }
+/* Notifications: the channels as one ruled row each, the header quiet at the left, the state a pill, a failure in red. */
+.jc-console .harness .settings .notif-channels {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.jc-console .harness .settings .notif-channels th {
+    padding: 8px 12px 8px 0;
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .harness .settings .notif-channels td {
+    padding: 11px 12px 11px 0;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--line2);
+}
+.jc-console .harness .settings .notif-channels tr:last-child td {
+    border-bottom: 0;
+}
+.jc-console .harness .settings .notif-channels td.failed {
+    color: var(--red);
+}
+.jc-console .harness .settings [data-section='notifications'] .badge {
+    display: inline-block;
+    height: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: var(--line2);
+    color: var(--mute);
+}
+.jc-console .harness .settings [data-section='notifications'] .badge.danger {
+    background: var(--red-2);
+    color: var(--red);
+}
 .jc-console .harness .settings .badge.success {
     height: auto;
     padding: 2px 8px;
@@ -359,6 +400,7 @@
 .jc-console .harness .settings[data-chosen='appearance'] > [data-section]:not([data-section='appearance']),
 .jc-console .harness .settings[data-chosen='voice'] > [data-section]:not([data-section='voice']),
 .jc-console .harness .settings[data-chosen='modes'] > [data-section]:not([data-section='modes']),
+.jc-console .harness .settings[data-chosen='notifications'] > [data-section]:not([data-section='notifications']),
 .jc-console .harness .settings[data-chosen='models'] > [data-section]:not([data-section='models']),
 .jc-console .harness .settings[data-chosen='runtime'] > [data-section]:not([data-section='runtime']) {
     display: none;
@@ -406,8 +448,13 @@
    next stronger ones are taken there, under the console's own two dark selectors. */
 :root[data-theme='dark'] .jc-console .harness .settings .voice-part label,
 :root[data-theme='dark'] .jc-console .harness .settings .facts dt,
-:root[data-theme='dark'] .jc-console .harness .settings .facts dd {
+:root[data-theme='dark'] .jc-console .harness .settings .facts dd,
+:root[data-theme='dark'] .jc-console .harness .settings .notif-channels th,
+:root[data-theme='dark'] .jc-console .harness .settings .notif-channels td {
     border-bottom-color: var(--line);
+}
+:root[data-theme='dark'] .jc-console .harness .settings .notif-channels th {
+    color: var(--mute);
 }
 :root[data-theme='dark'] .jc-console .harness .settings .send-mode-choice {
     border-top-color: var(--line);
@@ -418,8 +465,13 @@
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) .jc-console .harness .settings .voice-part label,
     :root:not([data-theme='light']) .jc-console .harness .settings .facts dt,
-    :root:not([data-theme='light']) .jc-console .harness .settings .facts dd {
+    :root:not([data-theme='light']) .jc-console .harness .settings .facts dd,
+    :root:not([data-theme='light']) .jc-console .harness .settings .notif-channels th,
+    :root:not([data-theme='light']) .jc-console .harness .settings .notif-channels td {
         border-bottom-color: var(--line);
+    }
+    :root:not([data-theme='light']) .jc-console .harness .settings .notif-channels th {
+        color: var(--mute);
     }
     :root:not([data-theme='light']) .jc-console .harness .settings .send-mode-choice {
         border-top-color: var(--line);
@@ -427,4 +479,15 @@
     :root:not([data-theme='light']) .jc-console .harness .settings .facts dt {
         color: var(--mute);
     }
+}
+
+/* Models: the AI card's groups sit on the section's own edges; a program's card keeps its own padding. */
+.jc-console .harness .settings .settings-models .ai-here {
+    padding: 4px 0 0;
+}
+.jc-console .harness .settings .settings-models .ai-add {
+    margin: 8px 0 0;
+}
+.jc-console .harness .settings .settings-models .setrow.host-card {
+    padding: 11px 14px;
 }

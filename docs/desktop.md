@@ -74,7 +74,7 @@ is named; `jason status` then says what is missing. A profile or a default a per
 or any later one, nor a default in force when the desktop looks again just before it asks for the naming, and nothing of
 this happens or is read in the demo. The naming itself has no condition, so a default a person names in the moment
 between that look and the naming is replaced, and the runtime journals the change as it journals every one. Connect says
-which host the roles run on.
+which host the roles run on, and its **Use** moves them to the other one when you ask ([Connect](#connect)).
 
 The desktop starts every program with a file and arguments, never through a shell, and only from the modules that are
 named for it; a test holds that, and holds the page to a window that reaches the desktop through one object,
@@ -129,12 +129,18 @@ shows before anything is typed and what you send waits, while the window is open
 
 **Appearance** (Settings) offers Light, Dark and the system's, in that order. A new installation meets Light when you first choose Live (the demo's page is
 drawn in the light theme it was built in); one that existed before keeps what it had, its chosen theme or the system's if it never chose. In the desktop the choice is kept in
-its settings and the starting page and the window's background before the page loads follow it, and on Windows the
-window's minimize, maximize and close buttons, as the theme changes.
+its settings and the starting page and the window's background before the page loads follow it, and on Windows and
+Linux the window's minimize, maximize and close buttons, as the theme changes.
 
 The View menu carries the keys (New Chat, What Needs You, Performance, Agents, Work Items, People, System, Reload).
-On Windows the window shows no menu bar: the keys work without it, and the tray's menu carries the Jason menu's acts,
-all but About.
+Beside Quit Jason, two more items of the Jason menu have keys of their own: the update item, Ctrl+Shift+D, and Back to
+Your Own Installation in the demo, Ctrl+Shift+L (Cmd on a Mac). The update item's key acts on the item's current step:
+Check for Updates…, then Download, then Restart to Install as the update goes on; the step shows in the item's label, in
+the tray's menu or the Mac's menu bar, and a desktop that shows neither shows it nowhere. At the install the key asks
+first, naming the version, since installing stops the runtime, which ends a running turn, and restarts Jason. Jason
+names the key only where the update item can act. On Windows and Linux the window shows no menu bar: the keys work
+without it, and the tray's menu carries the Jason menu's acts, all but About, which neither the window nor the tray
+reaches.
 The Jason menu carries Open Jason at Login, Start the Runtime at Logon, Command Line, the update item and, on macOS and
 Linux, Remove What Jason Placed. The tray's menu opens the window, a new chat and what needs you, and carries the same
 acts for the installation. The tray counts what waits for you, approvals and questions, read through
@@ -160,8 +166,9 @@ them on.
   only where the session offers a keyring (GNOME Keyring or KWallet); where Electron would fall back to its fixed-key
   store, the card says so and the key is not kept.
 - `<data>/desktop/claude-keyed/<provider id>/` and `<data>/desktop/codex-keyed/`: the folders a turn on a provider's key
-  runs its host with. They keep the host's transcripts of those turns, never the key, and are readable by your account
-  alone where the system has modes.
+  runs its host with. They keep the host's transcripts of those turns, never the key (but on Linux, where a command the
+  agent runs can read the key, what such a command printed), and are readable by your account alone where the system
+  has modes.
 - `<data>/desktop/turns/`: one small configuration file per running chat turn, readable by your account alone where the
   system has modes, naming the desktop's permission endpoint and carrying that turn's secret. It is removed when the turn ends, and any a crash left
   are removed at the next start.
@@ -221,6 +228,9 @@ opens a folder in the place you used last, and its arrow lists every place avail
 - **Browser**, which opens no folder: it opens the desktop's chat in a tab of your browser
   ([below](#the-chat-in-a-browser-tab)).
 
+On Windows and macOS, the row of an installed application shows that application's own icon, read at run time. On Linux,
+and for rows with no application of their own, the menu keeps its glyphs.
+
 **The default** is the place you used last, while it is still available; otherwise Claude Code where the desktop finds it,
 otherwise the first place of the list. Copy path, Browser and Change Jason itself are never the default, and a terminal is always there. The desktop keeps the choice
 in `<data>/desktop/settings.json`, in the data directory of the installation it runs on, and never in the window or in
@@ -237,15 +247,36 @@ there yet is refused, with a sentence that it is made with the first agent.
 **What starts.** The desktop starts the editors and the file manager itself, with your own environment. The three terminal
 entries run `jason session open` on the folder, with the environment of the installation the desktop runs on; no first input is sent to the host, so the session is yours to begin. Typed by hand,
 the same verb does the same ([ui.md](ui.md#at-a-folder-with-no-item) describes it). A successful open says "Opened {folder} in
-{place}.", with "Jason there works with the same data as this window." after a terminal, an editor or the file manager;
-Copy path says "Copied the path of {folder}.".
+{place}.", with "Jason there works with the same data as this window." after a terminal, since `jason session open` puts
+this installation's `jason` first on that terminal's PATH. After an editor it says instead, where the desktop can tell,
+which `jason` your PATH finds by name, by the same look the Command Line item of the Jason menu makes ([below](#the-command-line-and-the-login-items)),
+and no more than that:
+
+- this window's Jason, by its own path or a link to it: "jason on your PATH is this window's Jason, so a terminal there
+  works with the same data.";
+- another one: "jason on your PATH is another Jason, not this window's: what you run there may work with other data.";
+  whose data that other one works with is not something the desktop can tell;
+- none: "jason is not on your PATH, so a terminal there does not find Jason.".
+
+Where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
+on the PATH where there is none; where another `jason` is found, the one that gives this window's Jason the name
+`jason-desktop`, the other keeping `jason`; where a command of the desktop's points elsewhere, the one that points it
+back at this window's Jason, and to type `jason-desktop` afterwards where that is its name; and where a `jason-desktop`
+of the desktop's is already there, it says to type that instead, with no act. An editor that was already running keeps
+the PATH it started with, so the sentences speak of your PATH, never of the editor. The desktop looks the name up as
+Command Prompt does; a shell inside an editor may resolve it in its own order (PowerShell takes a `jason.ps1` first,
+Git Bash an extensionless `jason`), so what answers there can differ from what the desktop finds. While `jason` on your PATH is another one or none, the menu carries one quiet
+line under Editors that says so. The file manager runs nothing, so after it the open says nothing about data, and Copy
+path says "Copied the path of {folder}.".
 
 Two folders are refused for the file manager with a sentence that points to Copy path: on Windows one whose path holds a
 comma, which File Explorer reads as a separator, and on macOS one whose name ends in `.app`, which could be started rather
 than shown.
 
-**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`. The desktop
-and the command line share one installation, so `jason` in any terminal or editor already reaches it. Open in is the page's
+**What it leaves alone.** Nothing is written into your folders for it: no wrapper, no `.vscode`, no `.claude`, and an
+editor is not started with a changed PATH. The desktop and the command line share one data directory, the one
+`JASON_DATA_DIR` names or `~/.jason`, but a `jason` typed in an editor is whichever your PATH finds first, which may be
+another installation's or none; the sentence after an editor's open says which. Open in is the page's
 own act, through the window's one object, and the chat's AI cannot reach it: in a chat turn the `jason session` commands are
 refused, as the commands that start a session on your computer. It does not open the data directory; the folders of it a
 terminal is opened in are the chat's own, to continue a chat, and the role skills folder, with the plugins folder beside
@@ -287,14 +318,14 @@ with one sentence, "Done in Jason Desktop's own window.": the account acts of Co
 modes other than the chat's own, and the take-back of the standing choice of Full access. The tab's Demo | Live switch
 shows the demo page in that tab alone and leaves the desktop's mode as it is
 ([ui.md](ui.md#the-demo-in-a-browser-tab)). A tab
-draws no Start afresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
+draws no Start fresh, Remove, Open folder or attach buttons, and Open in is not offered inside it; an agent's **…** there
 holds Rename conversation alone. The tab shows the
 Dashboard's daily trends and does not remember the switch; the theme it keeps is the browser's own.
 
 The desktop opens the runtime's own page with a pairing code in the link's fragment. The code opens one tab: it is spent
 on its first use or expires within sixty seconds, whichever comes first, and a spent or expired code opens nothing, so only
-a tab the desktop opened holds the chat; any other tab shows the same console with no chat, and says that the chat needs Jason Desktop
-([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
+a tab the desktop opened holds the chat; any other tab draws no console: it opens on the demo, or, while something waits, on one page that
+says Live Mode is only available in Jason Desktop ([ui.md](ui.md#settings-and-chat-in-the-browser)). The browser is handed the link as an argument, so a browser that was
 not already running keeps it, with the code, in its arguments for as long as it runs. The desktop listens for the tab on
 `127.0.0.1` alone, from the first time you choose Browser in a run, and stops when the window closes or the desktop quits,
 which ends every tab's session. After it opens, the desktop says "Opened the chat in your browser. A permission card is
@@ -320,16 +351,16 @@ installation is made until you choose **Live**. An installation that already exi
 updated from an earlier version open where they did.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
-for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows the window has no title bar of its own:
-the system's minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
+for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
+own: the minimize, maximize and close buttons stand at the strip's right end, the switch left of them, and the strip
 moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
 window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
-a little tighter. On Linux the window keeps the system's title bar, which moves it. On macOS the window has no title bar
+a little tighter. On macOS the window has no title bar
 of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
 strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
-meets; **Back to Your Own Installation**, in the tray and the Jason menu, does the same. Your own installation's top bar
-carries the same switch, with **Demo** to come back.
+meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
+the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
 
 **What the page can reach.** Nothing outside itself. The desktop shows it in a view of its own, with Chromium's sandbox,
 a session of its own kept in memory only, and no bridge of any kind to the desktop or to your computer. The page runs
@@ -342,6 +373,17 @@ else of the desktop in Demo, so it cannot even ask your network's name server ab
 denied: the camera, the microphone, your location, notifications, reading the clipboard, the screen and any device. Its
 content policy lets it run only the script and the styles written inside it, with the fonts and the pictures it carries.
 What you type into it stays in it. A file you drop onto it can be read by the page's script, which can send it nowhere.
+
+**The repository's address.** The page's note says where Jason's code is, github.com/reply-team/jason-ai, and in the
+desktop's window that address is drawn as a link, in the colour of the page's own links. Click it, or press Enter on it,
+and the desktop opens https://github.com/reply-team/jason-ai in your browser. The page itself still reaches nothing and
+opens no window: the link is the desktop's own, added to the page as it is shown, and the window refuses the page's
+navigation to the address as it refuses every other, then opens that one address, compared whole, only within a second
+of your own click or Enter in the page and at most once in two seconds, so the page cannot open it by itself. Said
+plainly: the link opens only right after a click or Enter of yours in the demo, so any real click or Enter in the page
+gives the page one second in which that one address may open, at most one tab per act. Any other
+address, the same one with a path, a query, a fragment or another scheme included, opens nothing. In a browser tab the
+address is text.
 
 **In a browser tab.** A tab of your own installation shows the same page, the same file, as a view of that tab alone,
 with its own switch over the page's strip, while the desktop stays on your installation
@@ -363,7 +405,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
 - **Agent hosts.** The cards detect the agent hosts (Claude Code, Codex, Gemini CLI, Antigravity CLI, Cursor CLI and GitHub Copilot CLI), `reply` and `node`. A missing program is explained with its install
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
-  sign-in.
+  sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
   runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
@@ -371,11 +413,26 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
   roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
   answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
-  version floor, whoever made the profile, and nowhere else.
+  version floor, whoever made the profile, and nowhere else; that card is marked **In use**.
+  **Use**, on the card of Claude Code or Codex when it is found, at its version floor and not in use (never on a model
+  key, which runs no role), puts the agents' roles on that program by default. It names an enabled execution profile on
+  that host the default with `jason profile set-default`, which you could type yourself: the desktop's own
+  (`claude-code` or `codex`) first, else the only one there is. Where there is none, one is made the way the desktop
+  makes the first one, with `jason profile create`; where several are there and none is the desktop's own, Use names them
+  and leaves the choice to `jason profile set-default <name>`, and it never makes a profile over one of the same name that
+  is disabled or runs another program. The card then reads the default the runtime answers in force again and draws that,
+  so a default a `JASON_` variable sets, or a Roles section of the settings file the runtime refuses, keeps the card as it
+  was and the refusal is said in the runtime's own words. Use changes only the default: a work item, a campaign or a role
+  that names a profile keeps it, work already running finishes on the program it started on, the chat is not touched (each
+  chat's program is chosen in its own model menu, and a new chat starts as before), and neither is the host Open in
+  starts a session of your own on (`agent.interactive_host`). In a browser tab it is drawn off with the other acts.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's
-  process environment and nothing else (`CODEX_API_KEY` for Codex), and is never written in the clear, to a file of Jason's or anywhere else: the file `provider-keys` holds it encrypted by the operating system. A turn on
+  process environment and nothing else (`CODEX_API_KEY` for Codex), but for the commands a Claude Code turn runs on
+  Linux (below, "On Linux it does"), and is never written in the clear, to a file of Jason's or anywhere else, but on
+  Linux where a command the agent runs prints it: the host's transcript then keeps what the command printed. The file
+  `provider-keys` holds it encrypted by the operating system. A turn on
   a key runs its host with a configuration folder of the desktop's own, holding no claude.ai login and no saved Codex
   login, and without the variables that name another credential, a profile or a federation: the design is that a key the
   host does not take fails the turn instead of running it on your own plan, as built and not yet seen with a real host.
@@ -424,8 +481,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
-  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
-  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts;
+  the notification channels as the runtime reports them are in Settings, under Notifications; see
+  [the browser UI](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 
@@ -511,10 +569,10 @@ tab, the first of its tabs, under the agent's one header, which stays while you 
 state and kind as pills, its one move, **Start** for a draft, **Pause** for an agent that runs, **Resume** for a paused
 one, and **…** with the conversation's acts. The move is the agent page's own control, with the same confirmation, which
 says before a start how many people the agent holds and how its messages go; it shows from the moment a set-up chat
-becomes a campaign's. **…** holds **Rename conversation**, **Start conversation afresh**, which begins the agent's next
+becomes a campaign's. **…** holds **Rename conversation**, **Start conversation fresh**, which begins the agent's next
 turn without its memory of the conversation and keeps what is shown, and **Remove conversation**, which deletes the
 conversation's record from this computer after one question, saying that the agent stays as it is; the host keeps its
-own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start afresh** and **Remove**.
+own transcript. A set-up chat has the same acts in its own bar, as **Rename**, **Start fresh** and **Remove**.
 
 A conversation is a record under `<data>/desktop/conversations/`, readable by your account alone where the system has
 modes: the campaign, a title,
@@ -642,7 +700,7 @@ writes through it, a `cp` onto it say, reaches the file it shares wherever that 
 before the command runs, so a link put into the folder by something else between the two is the same limit Ask first's
 Write has.
 
-Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start afresh**
+Plan only is kept with the chat: it holds after a restart of the desktop and after an update, and **Start fresh**
 leaves it. Changing to Plan only stops the turn that is running, so the menu never says Plan only while a turn could
 still ask to change something; changing back to Ask first lets a running turn finish in the mode it started in. The menu
 also lists Full access. Full access is chosen only after a confirmation, with Cancel focused and Escape answering
@@ -758,11 +816,17 @@ Under the chat, these things differ from a terminal:
   table of these commands.
 - **The provider check names a program, never a path.** `jason status --provider-cli <program>` runs a bare name found on
   the search path, and a name with a directory in it is neither looked up nor started; run a path from a terminal.
-- **A credential in an environment variable does not reach the commands the agent runs.** Every Claude Code turn sets
-  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or by value, from the commands
-  the host runs. `reply` signed in through its own store is unaffected. On Linux the host runs those commands in a process
-  namespace of their own, so a check that looks at a host process by its number may answer differently from inside the
-  chat than in a terminal; what `jason status` sees of the runtime from there has not been checked on a real machine.
+- **On macOS and Windows a credential in an environment variable does not reach the commands the agent runs.** There
+  every Claude Code turn sets `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which strips what looks like a credential, by name or
+  by value, from the commands the host runs. `reply` signed in through its own store is unaffected.
+- **On Linux it does.** No Claude Code turn sets that variable there, and one the desktop inherited is not passed on: on
+  Linux the variable runs every command the agent runs inside Claude Code's sandbox, and the sandbox shuts `jason` off
+  from the runtime twice. Under `blockReadsOutsideWorkingDirectories`, which every turn of the chat sets, it denies reads
+  of the home directory, so Jason's data directory and the runtime's descriptor in it are hidden; and a sandboxed
+  command's `localhost` is its own, so the runtime's loopback address is out of reach as well. (`socat` is the sandbox's
+  network relay, and the process namespace the variable also brings is a separate effect.) So on Linux a key connected
+  on a Connect card, and the credentials the turn carries from the desktop's own environment, reach the commands the
+  agent runs, as they would in a terminal.
 - **A folder the chat works in is trusted** the way a folder you open your agent in is trusted: the agent definitions and
   skills it carries run with what they declare, and the cards stand in front of what the agent itself asks for.
 - **Limits that are said.** Claude Code's documentation leaves one case open, a read-only command that names no path after
@@ -813,8 +877,17 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## On Linux
 
-- The window keeps its menu bar, which carries the tray's items, since a session may show no tray icon. Closing the window
-  quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
+- The window has no title bar, under Wayland and under X11: its buttons stand at the right end of the top strip, in your
+  desktop's style and as many as it shows on its other windows, so where it shows the close button alone (GNOME as it
+  ships, Hyprland under Wayland) Jason's window does too. The strip moves the window, and a double click on it does what
+  one on a title bar does on your desktop (it maximizes on GNOME and Plasma). If your desktop puts the buttons at the
+  left, they stand over the sidebar's top, over the name Jason AI.
+- The window shows no menu bar: the keys work without it, and the tray carries the Jason menu's acts; About is not
+  reachable from the window or the tray. On a desktop that shows no tray icon (GNOME without an extension for one), the
+  update item and Back to Your Own Installation are reached by their keys (Ctrl+Shift+D, Ctrl+Shift+L; the update key
+  acts on the item's current step, which shows nowhere there, and asks before it installs), and Open Jason at Login,
+  Start the Runtime at Logon, Command Line and Remove What Jason Placed cannot be reached from the window. Closing the
+  window quits the application; the runtime keeps running. A start at sign-in opens the window minimized.
 - Open Jason at Login reads as on only while its autostart entry's `Exec` line is there and the entry is neither hidden
   nor marked `X-GNOME-Autostart-enabled=false`.
 - An AppImage update that installs under a new file name moves an entry that is on to it, and re-points a logon

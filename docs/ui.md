@@ -13,11 +13,16 @@ jason ui open
 The runtime answers with a link into the page and the command opens it in your default browser (`--no-open` prints it
 instead, for an agent to hand to you). The link carries a ticket that pairs one browser, once, within 60 seconds;
 after that the page is paired and a bookmark of `http://127.0.0.1:52766/ui/` keeps working, across runtime restarts.
-`jason ui open --approval <id>` and `--question <id>` open on one item.
+`jason ui open --approval <id>` and `--question <id>` open at the address of one item, `#/attention/approvals/<id>` or
+`#/attention/questions/<id>`. The build of this release draws its console in Jason Desktop and in a tab the desktop
+opens; the tab `jason ui open` opens is neither, so it opens on the demo, or, while something waits, on the one page
+that says Live Mode is only available in Jason Desktop, where to download it, what waits and where to decide it
+([below](#settings-and-chat-in-the-browser)). A build of your own in `ui/custom` draws whatever it draws.
 
 On Windows a toast opens the same page when clicked, through a `jason:` link: `jason://attention` for the list of what
 waits, `jason://attention/approvals/<id>` and `jason://attention/questions/<id>` for one item. Each pairs as
-`jason ui open` does, and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
+`jason ui open` does (with no desktop it lands on the demo or the one page described above, which ignore the address),
+and a link Jason does not know opens nothing ([notifications.md](notifications.md), §7). Where
 Jason Desktop is installed for your account, the same click opens the desktop's Needs you instead
 ([desktop.md](desktop.md), Links).
 `jason://attention/approvals/<id>/prompt` and `jason://attention/questions/<id>/prompt`, the toast's Copy prompt button,
@@ -93,8 +98,11 @@ The release's build carries one page there, `sealed/demo.html`: the demo page Ja
 byte for byte ([`desktop/demo/`](../desktop/demo/README.md)). In a browser tab the console's **Demo | Live** switch shows
 it as a view of that tab alone: **Demo** moves the address to `#/demo` and draws the page over the whole tab, with the
 switch over the right end of the page's own top strip, where the desktop draws its own; **Live**, the browser's Back or any
-other address brings the console back, where it was. Nothing is kept and nothing is asked: the runtime is not told, the
-desktop is not asked and its mode is not changed, and your installation is as it was. A reload at `#/demo` shows the page
+other address brings back where the tab was before: the console in a tab the desktop opened, and in a tab with no
+desktop the page that tab opens on ([below](#settings-and-chat-in-the-browser)). Nothing is kept of this in your
+installation and nothing is asked: the runtime is not told, the desktop is not asked and its mode is not changed, and
+your installation is as it was. The tab alone remembers which of Demo and Live you pressed last, in its session storage,
+so a reload of that tab keeps it; another tab does not. A reload at `#/demo` shows the page
 again from its beginning. A custom build that carries no page there says so in its place. In Jason Desktop's own window
 the switch is the desktop's, as [desktop.md](desktop.md#the-demo) says.
 
@@ -268,10 +276,10 @@ conversation, and an approval or a question opening Needs you. A line carries no
 next message there, as records. One whose turn still runs opens running, with Stop. A set-up chat whose turn made one
 campaign, with no other turn beside it, becomes that campaign's conversation, and one that made more, or ran beside
 another, offers what its last turn made to pick from. An agent's header holds its conversation's acts in **…**:
-**Rename conversation**, **Start conversation afresh**, which begins the AI's next turn without its memory of the
+**Rename conversation**, **Start conversation fresh**, which begins the AI's next turn without its memory of the
 conversation and keeps what is shown, and **Remove conversation**, which asks first, says the agent stays as it is and
 where its pause and its archive are, then takes the conversation off this computer, and the AI host keeps its own
-transcript of it; a set-up chat has them in its own bar as **Rename**, **Start afresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
+transcript of it; a set-up chat has them in its own bar as **Rename**, **Start fresh** and **Remove**. What the desktop refuses is said in its own words. An agent's chat shows,
 under its conversation, that agent's approvals and questions waiting for you as cards, read from the runtime and never
 from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which channel, and the subject and
 text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once, and **Details**, which opens it
@@ -280,7 +288,7 @@ from, the card says the sending name the provider holds for that mailbox now, th
 not list the mailbox now, or that the name could not be read and why: read when the card is drawn, never from what the AI
 wrote, and not part of what you approve, so it changes no button. A card leaves once the item is decided, there or
 anywhere else. In a browser the console is the same, and a campaign's Chat
-and the Start screen work only in a tab the desktop opened; any other tab says where the chat is
+and the Start screen work only in the desktop's window and in a tab the desktop opened; any other tab draws no console
 ([below](#settings-and-chat-in-the-browser)).
 
 ## Performance
@@ -515,21 +523,27 @@ jason session open --setup --host codex
 **Settings** holds what this browser keeps for itself and the runtime never hears of: the theme, light, dark or the
 system's, in the order Light, Dark, System. A new installation meets Light; a browser that already kept a choice, or
 never chose and follows the system, keeps that. Inside Jason Desktop the desktop keeps the choice, so its starting page
-follows it.
+follows it. Its **Notifications** section is [described below](#notifications-in-settings).
 
-**The console in a browser.** A browser shows the same console as the desktop's window, in one of two ways. A tab Jason
-Desktop opened (its **Open in** menu, then **Browser**) is a view onto the desktop's chats and sends through the desktop,
-while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
+**The console in a browser.** A browser shows the same console as the desktop's window only in a tab Jason
+Desktop opened (its **Open in** menu, then **Browser**). That tab is a view onto the desktop's chats and sends through
+the desktop, while the desktop runs: it sends only to a chat in Ask first or Plan only, says of a permission card or a plan card that it
 is answered in Jason Desktop, shows the chat's mode as a label, and draws what only the desktop's window may do, such as the
 account acts of Connect and the other access modes, off, with the sentence "Done in Jason Desktop's own window."; its
 Demo | Live switch shows the demo in that tab alone ([above](#the-demo-in-a-browser-tab)); the desktop's window stays the
 only place that approves
-([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, shows the same console
-with everything that reads the runtime, and where the chat would be it says that the chat with the AI is part of Jason
-Desktop, that it can be opened in this tab from Jason Desktop through Open in, then the browser, links to the releases page
-where the desktop is downloaded, and says that everything here also works from a session with your AI in a terminal, with
-the skills Jason deployed; what only the desktop does is drawn off with the sentence "This needs Jason Desktop.", and its
-Demo | Live switch shows the demo in that tab alone. The runtime starts no AI and no process for a screen, in either case.
+([desktop.md](desktop.md#the-chat-in-a-browser-tab)). Any other tab, as `jason ui open` opens it, draws no console, whatever the installation holds and whatever the address
+names (the address is left as it is). It draws one page of text, centred, with the Demo | Live switch at the top right:
+"Live Mode is only available in Jason Desktop.", then "To access Live Mode, download Jason Desktop." with a link to the
+releases page and the sentence that the desktop app starts an AI session locally on your computer, and then that you can
+build your own web interface or work directly with Jason from a terminal session with your AI using the installed Jason
+skills. A tab opens on that page only while approvals or questions wait, or when the read of them fails; with nothing
+waiting it opens on the demo, as a press of Demo does (until the read answers, only the switch is drawn). A quiet line
+under the words counts what waits and says where to decide: in Jason Desktop, or ask your agent what Jason is waiting
+for, or run `jason approval list` and `jason decision list`, as the toast's pointer does; when the read fails there is no
+line. Once you press Live or Demo, that tab keeps your choice over a reload, and `#/demo` in the address still means the
+demo. The switch's Demo shows the demo in that tab alone, and its Live shows the page and stays. The default Demo takes the
+address's place, so the address a person came with is not kept once they press Live; the page ignores an address anyway. The runtime starts no AI and no process for a screen, in either case.
 
 ## Accounts
 
@@ -537,11 +551,18 @@ One screen for what you have connected. **Provider** is the Reply connection of 
 the same code and acting through the same acts of the desktop: adding an account and reconnecting one go straight to
 the provider's link, with no box; pausing and resuming, unblocking, changing a daily limit and deleting each ask in a
 box of the desktop's own; a connection link is opened or copied by the desktop and never shown in or kept by the page. In a browser the page says in one sentence that these
-acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
+acts are the desktop's and offers none. The page writes no setting and adds no provider. The notification channels are not
+here: they are the **Notifications** section of Settings.
+
+## Notifications in Settings
+
+**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows, read only, what
+`system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
-The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
-asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+The section says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
+question is waiting, and how a channel is turned on or off: by asking the AI, and in Jason Desktop a provider's channel can also be connected or
+disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The section writes no setting.
 
 ## Inside Jason Desktop
 
@@ -566,7 +587,7 @@ shows its archived pill, no move, and its tabs to read. The People tab begins wi
 carry, how many people the agent holds and the provider campaign it is linked to, and **Add people**. Each tab has an
 address of its own, `#/campaigns/<id>/chat`, `/people`, `/inbox` and `/settings`, so a reload, a deep link, Back and
 Forward land where the address says, and an address naming the agent alone opens its first tab: Chat where a chat can be
-made, and People in a tab no desktop opened, which draws no Chat and opens People at a Chat's address. Drawing the Chat
+made. Drawing the Chat
 tab makes nothing: the conversation is made at your first message or choice in it, a send, a chip, or opening one of the
 composer's menus, which show what the new conversation will take.
 

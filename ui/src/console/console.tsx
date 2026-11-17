@@ -6,7 +6,7 @@ import { session } from '../api/session';
 import { CurrentPage } from '../app';
 import { Notice } from '../layout/notice';
 import { DemoView } from '../platform/demo-frame';
-import { can, earlier, placeKind } from '../platform/places';
+import { can, earlier, placeKind, showsConsole } from '../platform/places';
 import type { DesktopCommand, DesktopLink, JasonDesktop } from '../platform/desktop';
 import { pageStream, type JournalStream } from '../platform/journal-stream';
 import { consoleShell } from '../platform/console-shell';
@@ -16,6 +16,7 @@ import { href, navigate, parseRoute, replace, route, type Route } from '../route
 import { AgentHeaded, CampaignChat } from '../screens/campaigns/campaign-chat';
 import { ProviderAccountsContext } from '../screens/accounts/provider-card';
 import { ModeStrip } from './mode-strip';
+import { NoDesktopPage } from './no-desktop';
 import { OpenIn } from './open-in';
 import { PairAgain } from '../shell/pair-again';
 import * as shell from '../shell/shell';
@@ -682,12 +683,12 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
     }, [api, desktop, dock, stream]);
 
     // The Mac desktop's own window has no title bar: its buttons sit over the sidebar's top, and the window is dragged by
-    // a band there and by the strip. The Windows desktop's window has none either: the caption buttons stand over the
-    // strip's right end, which leaves them free. A browser tab, and the desktop's window on Linux, keep their own frame.
+    // a band there and by the strip. The Windows and Linux desktop's window has none either: the caption buttons are an
+    // overlay over the strip's right end, which leaves them free. A browser tab keeps its own frame.
     const mac = desktop.platform === 'darwin' && placeKind() === 'window';
-    const win = desktop.platform === 'win32' && placeKind() === 'window';
+    const overlay = (desktop.platform === 'win32' || desktop.platform === 'linux') && placeKind() === 'window';
     return (
-        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${win ? ' desktop-win' : ''}`}>
+        <div ref={root} className={`jc-console${mac ? ' desktop-mac' : ''}${overlay ? ' desktop-overlay' : ''}`}>
             {mac && <div className="title-drag" aria-hidden="true" />}
             {bound && (
                 <>
@@ -766,6 +767,8 @@ export function Console({
     // A browser tab shows the demo as a view of its own, the console put away; the window's demo is the desktop's.
     if (route.value.screen === 'demo' && placeKind() !== 'window') return <DemoView />;
     if (!session.paired.value) return <PairAgain />;
+    // A tab with no desktop draws the demo or one page, never the console.
+    if (!showsConsole()) return <NoDesktopPage api={client} />;
     return (
         <ApiProvider api={client}>
             <Shell api={client} desktop={desktop} stream={stream} />

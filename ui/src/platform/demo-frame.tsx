@@ -2,6 +2,7 @@ import { effect } from '@preact/signals-react';
 import { useEffect, useRef, useState } from 'react';
 import { href, navigate, route, type Route } from '../router';
 import { demoFrame, demoStrip } from './demo-page';
+import { choose, opening } from './tab-choice';
 import { t } from './i18n';
 
 export { demoFrame, demoStrip };
@@ -10,8 +11,9 @@ export { demoFrame, demoStrip };
 // in Demo, carried by the UI's build under `sealed/` and served by the runtime unable to act; here it is shown in a frame
 // sandboxed without the same origin, so it holds no storage of the runtime's origin, the UI's token among it, and reaches
 // no address. The Demo | Live switch is drawn over the right end of the page's own top strip, where the desktop draws its
-// own, so one page serves the window and the tab and a person sees one strip. The choice lives in the address (`#/demo`):
-// nothing is kept, nothing is asked of the desktop, and the installation is unchanged.
+// own, so one page serves the window and the tab and a person sees one strip. The view lives in the address (`#/demo`), and
+// the tab alone remembers the person's last press of Demo or Live in its session storage (`tab-choice.ts`); nothing is
+// asked of the desktop, and the installation is unchanged.
 
 /**
  * Whether the build the runtime serves carries the page: one read of it, as the frame would read it, stopped once its
@@ -42,14 +44,18 @@ effect(() => {
     inDemo = now;
 });
 
-/** Shows the demo in this tab: the address moves to it, so Back leaves it. */
+/** Shows the demo in this tab, as the person's own choice: the address moves to it, so Back leaves it. */
 export function showDemo(): void {
+    choose('demo');
+    opening.done = true;
     if (route.value.screen !== 'demo') before = href(route.value);
     navigate({ screen: 'demo' });
 }
 
-/** Leaves the demo for the console, where it was before, or the address the console opens at. */
+/** Leaves the demo for the console, where it was before, or the address the console opens at; the person's own choice. */
 export function leaveDemo(): void {
+    choose('live');
+    opening.done = true;
     const to = before;
     before = null;
     if (to !== null && to !== href({ screen: 'demo' })) {
@@ -67,6 +73,10 @@ export function leaveDemo(): void {
 export function DemoView() {
     const [present, setPresent] = useState<boolean | null>(null);
     const view = useRef<HTMLDivElement>(null);
+    // A load that starts at the Demo has opened: coming back to the page later in it is the person leaving the Demo.
+    useEffect(() => {
+        opening.done = true;
+    }, []);
     useEffect(() => {
         let live = true;
         void demoPage.present().then((found) => {
