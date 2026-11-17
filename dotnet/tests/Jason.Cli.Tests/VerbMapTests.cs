@@ -1,4 +1,5 @@
 using Jason.Cli;
+using Jason.Cli.Tests.Process;
 using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
@@ -328,7 +329,7 @@ public class VerbMapTests
 
         foreach (var args in RunHereOnly)
         {
-            var run = await DefaultActorTests.RunEachAsync(args, processes: new Process.FakeProcessControl());
+            var run = await DefaultActorTests.RunEachAsync(args, processes: new FakeProcessControl());
             Assert.True(run.Requests.Count > 0, $"'jason {string.Join(' ', args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");
             sent.UnionWith(run.Requests.Select(request => request.Operation));
         }
