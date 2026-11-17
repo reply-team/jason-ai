@@ -159,6 +159,33 @@ public partial class CardExchangesTests
     }
 
     /// <summary>
+    /// A reply in a person's thread waiting on a person: the list row and the approval whole. A reply names no account
+    /// it goes from, because the provider answers from the account the conversation is in, so its preview carries none.
+    /// </summary>
+    [Fact]
+    public async Task A_reply_in_a_thread_waiting_is_read_whole()
+    {
+        await using var api = await RuntimeApiFixture.StartAsync(Ct, clock: new FixedClock(Nine));
+        var scene = await Scene.OpenAsync(api, "Spring launch", more: ["conversation.reply"]);
+        var kai = await scene.PersonAsync("Kai", "Lindt", "email", "kai@example.test");
+        var item = await scene.SendAsync(kai, "conversation.reply", new JsonObject
+        {
+            ["channel"] = "email",
+            ["thread"] = new JsonObject { ["external_id"] = "t_501" },
+            ["body"] = "Thanks Kai, Thursday at ten works for me.",
+        });
+        await scene.ClaimAsync();
+
+        var row = Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-reply-pending", new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
+        Assert.Equal((item, "conversation.reply", "Kai Lindt"), (row.WorkItemId, row.Operation, row.ContactName));
+        var asked = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-reply", new { approval_id = row.Id }, Ct);
+        Assert.Equal((row.Id, item, ApprovalStatus.Pending), (asked.Id, asked.WorkItemId, asked.Status));
+        var seen = asked.Preview["highlights"]!.AsObject();
+        Assert.Equal("t_501", (string?)seen["/args/thread"]!["external_id"]);
+        Assert.False(seen.ContainsKey("/args/sender"), "a reply names no account it goes from");
+    }
+
+    /// <summary>
     /// Three questions a role left for a person, as the chat's cards read them: the campaign's pending questions, each
     /// question whole, and one answered in the person's own words. The role is a real claimed attempt, running, and the
     /// questions are raised through the verb it uses.

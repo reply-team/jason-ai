@@ -1,0 +1,145 @@
+{
+  "operation": "approval.get",
+  "case": "card-reply",
+  "request": {
+    "approval_id": "apr_1"
+  },
+  "status": 200,
+  "response": {
+    "id": "apr_1",
+    "work_item_id": "wi_1",
+    "campaign_id": "cmp_1",
+    "operation": "conversation.reply",
+    "operation_version": 1,
+    "status": "pending",
+    "reason": "approval_required",
+    "subject_hash": "sha256:recorded-1",
+    "subject": {
+      "binding_identity": "sha256:recorded-2",
+      "input": {
+        "args": {
+          "channel": "email",
+          "thread": {
+            "external_id": "t_501"
+          },
+          "body": "Thanks Kai, Thursday at ten works for me."
+        },
+        "contacts": [
+          {
+            "id": "cnt_1",
+            "channels": [
+              {
+                "channel": "email",
+                "value": "kai@example.test",
+                "primary": true
+              }
+            ],
+            "external_ids": {}
+          }
+        ],
+        "campaign": {
+          "id": "cmp_1",
+          "name": "Spring launch",
+          "status": "active",
+          "external_ids": {}
+        },
+        "idempotency_key": "wi_1"
+      },
+      "operation": "conversation.reply",
+      "operation_version": 1,
+      "plugin": "reply",
+      "work_item": "wi_1"
+    },
+    "preview": {
+      "summary": "Reply in the provider's thread t_501 to kai@example.test by email, from the account that owns the thread and to nobody else: Thanks Kai, Thursday at ten works for me.",
+      "highlights": {
+        "/contacts/0/channels/0/value": "kai@example.test",
+        "/args/channel": "email",
+        "/args/thread": {
+          "external_id": "t_501"
+        },
+        "/args/reply_to_message": null,
+        "/args/body": "Thanks Kai, Thursday at ten works for me."
+      },
+      "intent": "\"Send this message to this person\" — one person, one channel per call, with that channel's own required elements and cost",
+      "reach": {
+        "value": "act",
+        "conditional": false,
+        "detail": null
+      },
+      "reversibility": {
+        "value": "irreversible",
+        "conditional": false,
+        "detail": null
+      },
+      "cost": {
+        "value": "metered",
+        "conditional": true,
+        "detail": "metered against the message allowance on channels that meter sending; `none` on channels that do not."
+      },
+      "campaign": {
+        "id": "cmp_1",
+        "name": "Spring launch"
+      },
+      "contact": {
+        "id": "cnt_1",
+        "name": "Kai Lindt",
+        "channel": "email",
+        "value": "kai@example.test"
+      },
+      "plugin": "reply",
+      "binding_identity": "sha256:recorded-2",
+      "subject": {
+        "binding_identity": "sha256:recorded-2",
+        "input": {
+          "args": {
+            "channel": "email",
+            "thread": {
+              "external_id": "t_501"
+            },
+            "body": "Thanks Kai, Thursday at ten works for me."
+          },
+          "contacts": [
+            {
+              "id": "cnt_1",
+              "channels": [
+                {
+                  "channel": "email",
+                  "value": "kai@example.test",
+                  "primary": true
+                }
+              ],
+              "external_ids": {}
+            }
+          ],
+          "campaign": {
+            "id": "cmp_1",
+            "name": "Spring launch",
+            "status": "active",
+            "external_ids": {}
+          },
+          "idempotency_key": "wi_1"
+        },
+        "operation": "conversation.reply",
+        "operation_version": 1,
+        "plugin": "reply",
+        "work_item": "wi_1"
+      }
+    },
+    "plugin_id": "reply",
+    "binding_identity": "sha256:recorded-2",
+    "route_scope": "global_default",
+    "plugin_snapshot_id": "snp_1",
+    "routing_snapshot_id": "rts_1",
+    "requested_at": "2026-10-16T09:00:00.000Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_reason": null,
+    "campaign_name": "Spring launch",
+    "contact_name": "Kai Lindt",
+    "send_modes_unset": [
+      "send_mode.cold",
+      "send_mode.warm"
+    ]
+  }
+}

@@ -103,7 +103,8 @@ shows before anything is typed and what you send waits, while the window is open
 **Connect an account**.
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
-  channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
+  channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
+  narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
   that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
@@ -112,8 +113,9 @@ shows before anything is typed and what you send waits, while the window is open
   if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
   agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
-  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
-  channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
+  from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox (for a
+  reply in a conversation, from the account this conversation is in, which it does not name), on which channel, and
+  the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
   and **Details**, which opens it in Needs you; a question's card has its options as buttons and a box for your own
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
@@ -128,6 +130,16 @@ shows before anything is typed and what you send waits, while the window is open
   turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
   waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
   conversation to its foot above the box; opening a chat leaves its place alone.
+- While a turn runs, the round button beside the box is the arrow once you type and what you type can be sent, and
+  **Stop** otherwise: with the box empty, while the model's name is still to be typed, while a stop is under way, and in
+  a tab when Jason Desktop's window has taken the chat to a mode a tab cannot send to. What you send with the arrow is
+  queued. It shows in the conversation as your message, with "Queued · Jason takes it when this turn ends" under it,
+  and goes as your next message once the turn ends well. A message you send while one is queued is added under it, a
+  blank line between, and the two go together. **Take back** puts the whole queue into the box when the box is empty.
+  Escape in the box stops the turn, with words typed or none, except while a menu, a list, the search box or a dialog is
+  open on the screen: then the key is theirs, and the sidebar's menus and the search box close by it. A turn you stop,
+  and a turn that fails, gives the queued words back to the box, above what you typed there, and so does a turn that
+  ends while a tab may no longer send to its chat; nothing is sent by itself.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
