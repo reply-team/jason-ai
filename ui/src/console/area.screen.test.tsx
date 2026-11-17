@@ -155,8 +155,8 @@ describe('the one area', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(sends(desktop)).toHaveLength(1));
         type('And then?');
-        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-        await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+        await waitFor(() => screen.getByRole('group', { name: 'Queued message' }));
         type('Half a thought');
         // The person goes to Needs you: the chat is out of sight, and Recent marks nothing.
         fireEvent.click(menu().getByRole('button', { name: /^Needs you/ }));
@@ -169,7 +169,7 @@ describe('the one area', () => {
         await waitFor(() => expect(shown()).toBe('chat:conv_s'));
         expect(box().value).toBe('Half a thought');
         expect(within(shownPane()!).getByText('Arrived while you were away')).toBeTruthy();
-        expect(screen.getByRole('status', { name: 'Waiting message' }).textContent).toContain('And then?');
+        expect(screen.getByRole('group', { name: 'Queued message' }).textContent).toContain('And then?');
         expect(sends(desktop)).toHaveLength(1);
     });
 
@@ -181,8 +181,8 @@ describe('the one area', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
         await waitFor(() => expect(sends(desktop)).toHaveLength(1));
         type('And then?');
-        fireEvent.click(screen.getByRole('button', { name: 'Send when the turn ends' }));
-        await waitFor(() => screen.getByRole('status', { name: 'Waiting message' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Send when this turn ends' }));
+        await waitFor(() => screen.getByRole('group', { name: 'Queued message' }));
         type('Half a thought');
         for (const [at, title] of fourTitles.slice(1).entries()) {
             fireEvent.click(recentRow(title));
@@ -198,7 +198,7 @@ describe('the one area', () => {
         expect(box().value).toBe('Half a thought');
         for (const title of fourTitles.slice(1))
             expect(within(shownPane()!).getByText(`Arrived while ${title} was shown`)).toBeTruthy();
-        expect(screen.getByRole('status', { name: 'Waiting message' }).textContent).toContain('And then?');
+        expect(screen.getByRole('group', { name: 'Queued message' }).textContent).toContain('And then?');
         expect(sends(desktop)).toHaveLength(1);
         // Chosen again, it is drawn again, and the one shown longest ago goes in its place.
         expect(document.querySelector('[data-pane="chat:conv_2"]')).toBeNull();
