@@ -2,9 +2,15 @@ import { signal, type Signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../api/client';
 import type { Approval, Decision } from '../api/types';
 import { t } from '../platform/i18n';
-import { STALE_SENTENCE, checkMessage, isMessage, uncheckedSentence } from '../screens/attention/message-edit';
+import {
+    STALE_SENTENCE,
+    checkMessage,
+    isMessage,
+    readItem,
+    uncheckedSentence,
+} from '../screens/attention/message-edit';
 import { attentionStore, type AttentionStore } from '../screens/attention/store';
-import { keptAndMissing, stillAsking, type Reasked, type Said } from './waiting-model';
+import { keptAndMissing, stillAsking, type Approved, type Reasked, type Said } from './waiting-model';
 
 // What waits on a person in one agent's chat: the campaign's pending approvals and questions, read with
 // `approval.list` and `decision.list` of that campaign and decided through the holder Needs you is built on, so an
@@ -16,7 +22,7 @@ import { keptAndMissing, stillAsking, type Reasked, type Said } from './waiting-
 // whole once, a few at a time, and approved only once read and, for a message, checked against its work item at the
 // press.
 
-export type { Said } from './waiting-model';
+export type { Approved, Said } from './waiting-model';
 
 /** One holder's approvals read whole: an agent's chat's, or Needs you's. */
 export interface WholeReads {
@@ -41,6 +47,8 @@ export interface Waiting extends WholeReads {
     readonly refused: Signal<(Said & { id: string }) | null>;
     /** The messages edited in this drawing of the chat, until the runtime has asked about each again. */
     readonly reasked: Signal<readonly Reasked[]>;
+    /** The approvals this drawing of the chat approved, each followed to the end of its work, so the chat can say so. */
+    readonly approved: Signal<readonly Approved[]>;
 }
 
 /** The whole reads of a holder's approvals, none read yet. */
@@ -76,6 +84,7 @@ export function waitingOf(campaignId: string): Waiting {
             questions: signal({}),
             refused: signal(null),
             reasked: signal([]),
+            approved: signal([]),
         };
         held.set(campaignId, waiting);
     }
@@ -240,6 +249,44 @@ async function fill(api: Api, waiting: Waiting): Promise<void> {
 export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
     await listWaiting(api, waiting);
     await fill(api, waiting);
+    await followApproved(api, waiting);
+}
+
+/** What each work item state says of an approved act: the state it is shown in, and why it is held where it is. */
+const standing: Readonly<Record<string, Pick<Approved, 'state' | 'why'>>> = {
+    created: { state: 'approved' },
+    scheduled: { state: 'approved' },
+    processing: { state: 'running' },
+    awaiting_approval: { state: 'held', why: 'it waits for a person to approve it again' },
+    waiting: { state: 'held', why: 'it is waiting' },
+    succeeded: { state: 'done' },
+    failed: { state: 'failed' },
+    cancelled: { state: 'cancelled' },
+    expired: { state: 'expired' },
+};
+
+/** The states a read can still move: an act that parked, or expired, may be queued again, so only these end the following. */
+const settled: ReadonlySet<Approved['state']> = new Set(['done', 'failed', 'cancelled']);
+
+/**
+ * Reads again the work of each approval this chat approved that has not ended for good, and keeps how it stands. A read
+ * that fails keeps what was known; the next read tries again.
+ */
+export async function followApproved(api: Api, waiting: Waiting): Promise<void> {
+    const open = waiting.approved.value.filter((each) => !settled.has(each.state));
+    await Promise.all(
+        open.map(async (each) => {
+            try {
+                const now = standing[(await readItem(api, each.workItemId)).status];
+                if (now === undefined) return;
+                waiting.approved.value = waiting.approved.value.map((kept) =>
+                    kept.approvalId === each.approvalId ? { ...kept, state: now.state, why: now.why } : kept,
+                );
+            } catch {
+                // Kept as it was: a later read says it.
+            }
+        }),
+    );
 }
 
 /** The campaign's two lists read again; a refusal whose item they do not hold now goes. */
@@ -258,6 +305,7 @@ export function drawWaiting(api: Api, campaignId: string): () => void {
     if (!drawn.has(campaignId)) {
         waiting.refused.value = null;
         waiting.reasked.value = [];
+        waiting.approved.value = [];
     }
     drawn.set(campaignId, (drawn.get(campaignId) ?? 0) + 1);
     void readWaiting(api, waiting);
@@ -294,8 +342,26 @@ async function decide(api: Api, waiting: Waiting, id: string, act: () => Promise
     return done;
 }
 
-export const approveWaiting = (api: Api, waiting: Waiting, id: string): Promise<boolean> =>
-    decide(api, waiting, id, () => waiting.store.approve(api, id));
+/**
+ * Approves one approval through the holder. When it was approved, `act` (what it was, as the card showed it) is kept so
+ * the chat says what was approved and, once its work ends, whether it was sent.
+ */
+export async function approveWaiting(
+    api: Api,
+    waiting: Waiting,
+    id: string,
+    act?: Omit<Approved, 'approvalId' | 'state'>,
+): Promise<boolean> {
+    const done = await decide(api, waiting, id, () => waiting.store.approve(api, id));
+    if (done && act !== undefined) {
+        waiting.approved.value = [
+            ...waiting.approved.value.filter((each) => each.approvalId !== id),
+            { ...act, approvalId: id, state: 'approved' },
+        ];
+        await followApproved(api, waiting);
+    }
+    return done;
+}
 
 export const rejectWaiting = (api: Api, waiting: Waiting, id: string, reason?: string): Promise<boolean> =>
     decide(api, waiting, id, () => waiting.store.reject(api, id, reason));

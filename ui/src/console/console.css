@@ -833,6 +833,11 @@
     align-items: center;
     margin-bottom: 18px;
 }
+/* A turn parked on a card waits for the person, not for the AI: its line is said plainly, with no spinner. */
+.jc-console .typing.asking {
+    color: var(--ink);
+    font-weight: 600;
+}
 .jc-console .spin {
     width: 13px;
     height: 13px;

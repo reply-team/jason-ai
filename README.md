@@ -27,8 +27,8 @@ answered and what comes next.
 **Jason is the missing layer.** Tell it what you sell and who should buy it, in plain words. Jason finds the contacts,
 plans each person's line of contact, writes, sends through your provider, reads the replies and keeps the work going
 while you're in meetings. Your agent does the thinking, Jason keeps the memory, and you choose whether each message
-waits for your yes or goes on its own. Whoever installs it, you or your AI, starts from the three lines under
-Quick start.
+waits for your yes or goes on its own. Whoever installs it, you or your AI, starts under Quick start: with your agent,
+or with Jason Desktop.
 
 **You use Jason from a release.** Nothing in this repository is built, cloned or tested to use it; the source is here
 for changing Jason.
@@ -43,7 +43,8 @@ for changing Jason.
 
 ## Quick start
 
-Paste this into your AI (Claude Code, Codex or another agent). It installs Jason and takes you to your first campaign.
+Two ways in, to the same Jason. **With your agent**, if you are at home in a terminal or an editor: paste this into your
+AI (Claude Code, Codex or another agent). It installs Jason and takes you to your first campaign.
 
 ```text
 Install Jason by following https://get.jasonharness.ai/install
@@ -51,7 +52,9 @@ When it reports Ready, start its quick-start skill and take me to my first campa
 If anything stops you, ask me directly and tell me why.
 ```
 
-Prefer a window? [Jason Desktop](#jason-desktop). Everything about installing: [docs/INSTALL.md](docs/INSTALL.md).
+**With [Jason Desktop](#jason-desktop)**, if you want a desktop application, signed on Windows and macOS, with a way
+into the terminal later: one download, and its window sets the rest up. Everything about installing:
+[docs/INSTALL.md](docs/INSTALL.md).
 
 ---
 
@@ -71,9 +74,12 @@ means today.
 - **What you don't need:** `git`, a build, a server, a mock provider, a hosted account or an onboarding call.
 - **How you take it off:** `jason uninstall`. It removes only the skills it recorded installing, so anything you copied in
   by hand stays. Your data stays too unless you add `--purge-data`, and your `~/Jason` folder is never touched.
-- **If you would rather have a window:** [Jason Desktop](#jason-desktop) installs from one download, a signed installer
-  for Windows, a dmg for macOS, or a deb or an AppImage for Linux, and comes off with Remove What Jason Placed… in its
-  menu (macOS and Linux) or Windows's own uninstaller, and then the application itself. It keeps your data too.
+- **The other way, Jason Desktop:** for a person who wants a desktop application rather than a terminal,
+  [Jason Desktop](#jason-desktop) installs from one download, a signed installer for Windows, a dmg for macOS, or a deb
+  or an AppImage for Linux, puts a command in your terminal from its menu whenever you want one (`jason`, or
+  `jason-desktop` where another `jason` already stands; on Windows, only where the PATH holds the folder it uses), and
+  comes off with Remove What Jason Placed… in its menu (macOS and Linux) or Windows's own uninstaller, and then the
+  application itself. It keeps your data too.
 
 If your agent runs in auto mode, it may ask before the download, or refuse where nothing can ask you. Both are right: say
 yes, or run the install line under "Or install it yourself".
@@ -284,13 +290,13 @@ No forms, no sequence builder. You say what you want the way you'd brief a great
 
 ## Jason Desktop
 
-Jason Desktop is a window onto the same installation your agent and the `jason` command use, for the moments you want
-to see a screen. It is one more client of the runtime, not a second Jason: it works on the data directory the CLI
-uses, starts the runtime through `jason runtime start`, and changes the installation only through the CLI's verbs. It
-adds a chat that starts your own agent (Claude Code, or Codex to read and advise) on your computer and asks you before
-the agent acts, a tray that counts what waits for you, and one-step setup of Reply, your notification channels and your
-AI provider's key. The full experience is still a session with your agent, by text or by voice, with the skills
-loaded; the desktop never replaces it, and what a screen shows is never all there is.
+Jason Desktop is a window onto the same installation your agent and the `jason` command use. It is one more client of
+the runtime, not a second Jason: it works on the data directory the CLI uses, starts the runtime through
+`jason runtime start`, and changes the installation only through the CLI's verbs. Its chat is a session with your own
+agent, started for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads
+and advises. Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification
+channels and your AI provider's key. The terminal stays open to you at any time: the Command Line item of its menu
+puts a command there, `jason`, or `jason-desktop` where another `jason` already stands.
 
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and
@@ -492,8 +498,8 @@ a Jason plugin.</sub>
 
 </details>
 
-**Also works with:** desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away · approvals in the chat or in Jason's browser
-UI · macOS (Apple silicon), Linux x64 and Windows x64.
+**Also works with:** desktop notifications, and phone pushes, Slack and Telegram each one `jason plugin install` away · approvals in Jason
+Desktop · macOS (Apple silicon), Linux x64 and Windows x64.
 
 ---
 

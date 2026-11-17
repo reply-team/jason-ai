@@ -1215,7 +1215,36 @@ export function threadView(chat: Chat, host: DesktopHost | null): Html {
         chat.dropped > 0
             ? noteLine('Earlier messages of this conversation were let go to keep it within its size.')
             : null;
-    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? html`<div class="typing"><span class="spin"></span>Thinking…</div>` : null}`;
+    return html`${dropped}${parts}${chipsNext(chat, host)}${chat.running ? typing(chat) : null}`;
+}
+
+/**
+ * The moves that bring a thread to its foot: each message the person sent (named by its words and how many times they
+ * were said before it) and each permission card still asking. A key a thread had not before is a new move.
+ */
+function movesOf(entries: Chat['entries']): string[] {
+    const said = new Map<string, number>();
+    const keys: string[] = [];
+    for (const entry of entries) {
+        if (entry.kind === 'user') {
+            const nth = (said.get(entry.text) ?? 0) + 1;
+            said.set(entry.text, nth);
+            keys.push(`u:${nth}:${entry.text}`);
+        } else if (entry.kind === 'permission' && entry.answer === null) keys.push(`p:${entry.request}`);
+    }
+    return keys;
+}
+
+/**
+ * What a running turn says under the thread: Thinking while the AI works, and, while a permission card of the turn waits
+ * for the person's answer, that it is the person's move and where the card is; the AI is not working then.
+ */
+function typing(chat: Chat): Html {
+    const asking = chat.entries.some((entry) => entry.kind === 'permission' && entry.answer === null);
+    if (!asking) return html`<div class="typing"><span class="spin"></span>Thinking…</div>`;
+    return html`<div class="typing asking" role="status">
+        ${inTab() ? 'Waiting for your answer on the card above, which Jason Desktop shows.' : 'Waiting for your answer on the card above.'}
+    </div>`;
 }
 
 /** The agent of a chat as the console last read it, its state and its counts; none for a chat of no agent. */
@@ -1552,6 +1581,20 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         () => (asked === null ? undefined : readActs(api, chatId, asked.campaignId, asked.at)),
         [api, chatId, asked?.campaignId, asked?.at],
     );
+    // A message the person sends, and a card that asks them something, are brought into view at the foot of the
+    // conversation, above the composer; a thread merely opened, or growing with the AI's words, keeps its place.
+    const scroller = useRef<HTMLDivElement>(null);
+    const seenMoves = useRef<{ chat: string; keys: ReadonlySet<string> } | null>(null);
+    const moves = movesOf(entries ?? []);
+    const movesKey = moves.join('|');
+    useEffect(() => {
+        const before = seenMoves.current;
+        seenMoves.current = { chat: chatId, keys: new Set(moves) };
+        const box = scroller.current;
+        // Only a move this chat did not have before counts: switching to another chat, or opening one, moves nothing.
+        if (before?.chat === chatId && moves.some((key) => !before.keys.has(key)) && box !== null)
+            box.scrollTop = box.scrollHeight;
+    }, [chatId, movesKey]);
     if (!chat) return null;
     const keep = () => changeChat(chatId, (each) => ({ ...each, removing: false }));
     // A conversation the desktop keeps is listed; one never sent to has no record to rename yet.
@@ -1702,7 +1745,7 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                     </div>
                 </div>
             )}
-            <div className="chat-scroll">
+            <div className="chat-scroll" ref={scroller}>
                 <Painted className="thread" view={view} />
                 {/* An agent's approvals and questions, from its campaign's lists and never from what the AI wrote. */}
                 {chat.campaignId !== null && !chat.main && <WaitingCards campaignId={chat.campaignId} />}
