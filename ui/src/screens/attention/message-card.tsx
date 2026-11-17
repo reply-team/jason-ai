@@ -16,8 +16,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 /**
  * The message an approval would send, as it was written: an email's sender, recipient, subject and body in that order,
- * a LinkedIn message's text, a template with the example the runtime made of it. Everything is text, never markup. It
- * claims nothing about how the message reaches the person, and the sentence under it says what it leaves out.
+ * a LinkedIn message's text, a reply's account, recipient, channel and text, a template with the example the runtime
+ * made of it. Everything is text, never markup. It claims nothing about how the message reaches the person, and the
+ * sentence under it says what it leaves out.
  */
 export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail; reply?: boolean }) {
     if (!detail.body) return null;
@@ -27,7 +28,7 @@ export function MessageCard({ detail, reply = false }: { detail: ApprovalDetail;
         <div className="section message-card">
             <h3>The message as written</h3>
             <dl className="facts message-facts">
-                {email && detail.from && <Row label="From">{detail.from}</Row>}
+                {(email || reply) && detail.from && <Row label="From">{detail.from}</Row>}
                 {(email || reply) && detail.to && <Row label="To">{detail.to}</Row>}
                 {reply && detail.channel && <Row label="Channel">{detail.channel}</Row>}
                 {detail.subject && (

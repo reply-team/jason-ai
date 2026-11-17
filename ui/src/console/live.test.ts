@@ -3,6 +3,7 @@ import type { JournalEntry } from '../api/types';
 import type { DesktopHost, DesktopSetup } from '../platform/desktop';
 import {
     ageOf,
+    CONVERSATION_ACCOUNT,
     chatHosts,
     isSignInFailure,
     signInSentence,
@@ -130,6 +131,29 @@ describe('what the console draws from the runtime', () => {
         expect(
             toApprovalDetail({ highlights: { '/args/message': { subject: 'Hello', body: 'Two lines\nof text' } } }),
         ).toMatchObject({ subject: 'Hello', body: 'Two lines\nof text', to: null, intent: null });
+    });
+
+    it('says a reply in a thread goes from the account the conversation is in, and names no account', () => {
+        const reply = (sender?: Record<string, unknown> | null) =>
+            toApprovalDetail({
+                highlights: {
+                    '/args/channel': 'linkedin',
+                    '/args/thread': { external_id: 't_1' },
+                    '/args/body': 'Thanks, Thursday works.',
+                    ...(sender === undefined ? {} : { '/args/sender': sender }),
+                },
+            });
+        expect(reply().from).toBe('the account this conversation is in');
+        expect(reply().from).toBe(CONVERSATION_ACCOUNT);
+        // A send that names its account is read by that account alone, whatever else it names.
+        expect(reply({ external_id: 's_1', address: 'owner@example.test' }).from).toBe('owner@example.test');
+        expect(reply({ external_id: 's_1', address: null }).from).toBe('s_1');
+        // Only a thread makes the words: a message and an invitation that name no account say nothing in its place.
+        expect(
+            toApprovalDetail({ highlights: { '/args/channel': 'email', '/args/message': { body: 'Hi' } } }).from,
+        ).toBeNull();
+        expect(toApprovalDetail({ highlights: { '/args/note': 'Hi' } }).from).toBeNull();
+        expect(toApprovalDetail({ highlights: { '/args/thread': null, '/args/body': 'Hi' } }).from).toBeNull();
     });
 
     it('asks a question as it was raised', () => {

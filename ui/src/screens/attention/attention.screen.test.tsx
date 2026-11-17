@@ -4,6 +4,7 @@ import { FakeApi } from '../../test/fake-api';
 import { fixtures } from '../../test/fixtures';
 import { renderApp } from '../../test/render-app';
 import { route } from '../../router';
+import { title } from './labels';
 import * as store from './store';
 
 function pendingFake() {
@@ -94,6 +95,28 @@ describe('Attention', () => {
         const from = Array.from(document.querySelectorAll('.facts dt')).find((dt) => dt.textContent === 'From')!;
         expect(from.nextElementSibling?.firstChild?.textContent).toBe('owner@example.test');
         expect(fact('Channel')).toBe('Email');
+    });
+
+    it('says a reply in a thread goes from the account the conversation is in, with no sending name under it', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/needs-inbox')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply')
+            .answer('preference.list', 'preference.list/set');
+        // A reply is checked against its work item; its recording holds no item, so this row holds it.
+        const call = fake.call.bind(fake);
+        fake.call = async (operation, body, kind) =>
+            operation === 'workitem.get'
+                ? ({ context: { input: fixtures['approval.get/needs-reply'].response.subject.input.args } } as never)
+                : call(operation, body, kind);
+        renderApp(fake);
+        const heading = title('conversation.reply', 'Kai Lindt');
+        await waitFor(() => screen.getByText(heading));
+        fireEvent.click(screen.getByText(heading));
+        await waitFor(() => expect(fact('From')).toBe('the account this conversation is in'));
+        expect(fact('Channel')).toBe('Email');
+        expect(document.querySelector('.sender-line')).toBeNull();
+        expect(fake.calls.filter((each) => each.operation === 'sender.list')).toEqual([]);
     });
 
     it('shows no sender and no channel where the preview carries none', async () => {
