@@ -1,9 +1,12 @@
 ; The uninstaller's own part, which electron-builder runs before it removes the installed files, so the application is
-; still there to be started. A person's uninstall starts it with --uninstall: it takes off the PATH command's files that
-; are its own, "Open Jason at login" and a logon registration of the runtime that starts this application's executable,
-; and the demo's data directory and harness root, and says what it took and what it leaves - a file another program wrote, the data directory, the harness root and the
-; updater's cache under the profile. A silent uninstall (/S) shows nothing. The uninstall an update runs takes off none
-; of it, because the new version is installed in the same place at once. A runtime running from the carried jason.exe is
+; still there to be started. A person's uninstall starts it with --uninstall, which runs the one uninstall, the jason the
+; application carries as `jason uninstall --keep-application`: it stops the runtime and takes off what Jason and Jason
+; Desktop placed outside this folder, keeps the data directory and the harness root, and leaves this folder to the
+; uninstaller; the start says what it took and what it leaves. A silent uninstall (/S) shows nothing. `jason uninstall`
+; run in a terminal has taken all of that off already when it runs this uninstaller, and says so with
+; --uninstalled-by-jason: then the application is not started at all, so nothing of it is written into a data directory
+; the terminal's uninstall may just have purged. The uninstall an update runs takes off none of it, because the new
+; version is installed in the same place at once. A runtime running from the carried jason.exe is
 ; stopped before any of this, by the check below, which the installer and the uninstaller both run first; the
 ; --uninstall start stops the runtime of its own data directory again, in case one was started in between.
 
@@ -115,28 +118,32 @@
   ${ifNot} ${isUpdated}
     ${GetParameters} $R0
     ClearErrors
-    ${GetOptions} $R0 "/S" $R1
+    ${GetOptions} $R0 "--uninstalled-by-jason" $R1
     ${if} ${Errors}
-      StrCpy $R3 ""
-      StrCpy $R2 "0"
       ClearErrors
-      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2
-    ${else}
-      StrCpy $R3 "quiet"
-      StrCpy $R2 "0"
-      ClearErrors
-      ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2
-    ${endIf}
-    ${if} ${Errors}
-      StrCpy $R2 "none"
-    ${endIf}
-    ${if} $R2 == "1"
-      SetErrorLevel 1
-      Quit
-    ${endIf}
-    ${if} $R2 != "0"
-    ${andIf} $R3 == ""
-      MessageBox MB_OK|MB_ICONEXCLAMATION "Jason could not take off what it placed outside its folder, so the jason command on the PATH, Open Jason at login and the runtime's start at logon may be left. The uninstall goes on."
+      ${GetOptions} $R0 "/S" $R1
+      ${if} ${Errors}
+        StrCpy $R3 ""
+        StrCpy $R2 "0"
+        ClearErrors
+        ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2
+      ${else}
+        StrCpy $R3 "quiet"
+        StrCpy $R2 "0"
+        ClearErrors
+        ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2
+      ${endIf}
+      ${if} ${Errors}
+        StrCpy $R2 "none"
+      ${endIf}
+      ${if} $R2 == "1"
+        SetErrorLevel 1
+        Quit
+      ${endIf}
+      ${if} $R2 != "0"
+      ${andIf} $R3 == ""
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Jason could not take off what it placed outside its folder, so the jason command on the PATH, Open Jason at login and the runtime's start at logon may be left. The uninstall goes on."
+      ${endIf}
     ${endIf}
   ${endIf}
 !macroend

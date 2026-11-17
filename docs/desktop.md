@@ -1002,11 +1002,16 @@ Take off what Jason placed first, then the application. What stays in every case
 updater's cache named above. The two folders an earlier version's demo made (see [the demo](#the-demo)) are not your
 data: the removal takes them off too.
 
-- **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
-  removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
-  the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
-  names this application's `jason`, then an earlier demo's two folders and any marked `<folder>.removing-*` copy beside them, and names what it leaves.
-- **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
+- **Windows.** Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal. Either is the one
+  uninstall, the `jason` the application carries (`docs/release-and-update.md` §9): it stops the runtime and removes
+  nothing when it does not stop, then takes off Open Jason at Login, the `jason-desktop://` link registration when it
+  names this application, the `jason` command and the skills `jason install` placed, an older command-line install, an
+  earlier demo's marked folders and the updater's cache, and names what it leaves; then the application's folder goes.
+  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays.
+- **macOS.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal with
+  Jason quit. The menu item asks first, with a box for deleting the data directory too, quits Jason and runs the same
+  uninstall, which deletes Jason.app last and writes what it did to the file the dialog names.
+- **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
@@ -1014,7 +1019,7 @@ data: the removal takes them off too.
   after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
   one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since that demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
-- **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
+- **On macOS, when Jason will not start**, run `Jason.app/Contents/Resources/bundle/jason uninstall`. **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`
   for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

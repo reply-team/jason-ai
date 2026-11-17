@@ -482,16 +482,18 @@ made with its record is carried wherever it is.
 The file is the application's: on macOS it is part of a signed application, and on Windows the installer owns it. The
 desktop's own updater replaces the application and the `jason` inside it together, and the system's way of removing the
 application removes both. So, run as a carried executable, `jason update apply` replaces no file itself: it hands the
-update to the application's own updater, with no window, and the new `jason` the application then carries finishes it (§7,
-"Handing the update to Jason Desktop"); Check for Updates… in the desktop's menu updates the same way from a window.
-`jason update rollback` puts back what the command line kept and names the one step by hand that puts the application back
-(§7, "Going back"). Where there is no Jason Desktop to hand the update to — on Linux, or where the application is not where
-its `jason` says — both refuse with `update_carried_by_desktop`, before anything is fetched or stopped. `jason uninstall`
-refuses with `uninstall_carried_by_desktop` (§9). A resumed apply and a rollback act on the file the update record names,
-not on the one they run as, so another `jason` sharing the data directory, one the install line put on the PATH say,
-refuses both where that record names a carried file other than itself. `jason update check` and `jason status` answer as
-they do anywhere. When the runtime the desktop finds is another version than the one it carries, its system screen names
-Check for Updates where that runtime runs from the carried `jason`, and `jason update` where it is another installation's.
+update to the application's own updater, with no window, and the new `jason` the application then carries finishes it
+(§7, "Handing the update to Jason Desktop"); Check for Updates… in the desktop's menu updates the same way from a
+window. `jason update rollback` puts back what the command line kept and names the one step by hand that puts the
+application back (§7, "Going back"). Where there is no Jason Desktop to hand the update to — on Linux, or where the
+application is not where its `jason` says — both refuse with `update_carried_by_desktop`, before anything is fetched or
+stopped. `jason uninstall` is the one uninstall of the application and of everything placed for it on macOS and Windows,
+and refuses with `uninstall_carried_by_desktop` on Linux, before anything is read or removed (§9). A resumed apply and a
+rollback act on the file the update record names, not on the one they run as, so another `jason` sharing the data
+directory, one the install line put on the PATH say, refuses both where that record names a carried file other than
+itself. `jason update check` and `jason status` answer as they do anywhere. When the runtime the desktop finds is
+another version than the one it carries, its system screen names Check for Updates where that runtime runs from the
+carried `jason`, and `jason update` where it is another installation's.
 
 A desktop whose `jason` was built before 0.49.0 carries the record too. One built before the refusal that came before this
 hand-over, the candidate 0.34.0-rc.1, takes every step up to `swapped` in its own process before it hands the rest to the
@@ -1402,12 +1404,33 @@ unpacked, which stay with it; the plan and the report name them as left to it, w
 `brew uninstall jason`, or `winget uninstall Reply.Jason`. Everything above them goes as it always does, the runtime
 stopped first, and the plan an agent reads carries the same as `left_to`.
 
-**Where the desktop application carries this `jason`** (§6), the verb refuses with `uninstall_carried_by_desktop`
-before anything is read or removed, a dry run included: its last step would delete the executable out of the
-application. The application is removed the way the system removes one — on Windows from Installed apps in Settings,
-whose uninstaller stops the runtime it carries and takes off what it placed; elsewhere by taking off what it placed from
-its Jason menu and then removing the application — and the message names that way for the system it runs on. The data
-directory is kept either way.
+**Where the desktop application carries this `jason`** (§6), on macOS and Windows, this verb is the one uninstall: of
+the application, of what `jason install` placed for it, and of an older command-line install. It is reached from a
+terminal on both systems, from Installed apps on Windows, whose uninstaller runs it, and from **Uninstall Jason…** in the
+Jason menu on macOS; the data directory is kept unless `--purge-data` says otherwise, and the harness root is never
+touched. While Jason Desktop is open it refuses with `desktop_running` before anything is removed, a dry run aside;
+`--wait-for <pid>` first waits up to two minutes for that process to end, and only then reads what it will take off,
+which is how the menu item starts it before it quits. On Windows, run from a terminal, it also refuses with
+`jason_running`, naming each, while another process runs the carried `jason` — a runtime of another data directory, a
+`jason journal watch`, an agent's call — because the application's uninstaller removes nothing while one does; the
+runtime this verb stops, and an earlier demo's, are not counted. `--keep-application` together with `--purge-data` is
+refused with `uninstall_refused`: the first is the uninstaller's call from inside the application, and a purge never
+runs from there. Beside the steps above:
+
+| Step | What it takes |
+|---|---|
+| with the logon registration | Open Jason at Login, where it starts this application: the LaunchAgent `~/Library/LaunchAgents/ai.jasonharness.desktop.plist` on macOS, unloaded from the login session (`launchctl unload`, without `-w`) before its file goes, the values of this account's `Run` key on Windows with the state Electron keeps beside each under `StartupApproved` |
+| with the runtime | the runtime an earlier version's demo left running on its own data directory, stopped through `jason runtime stop` on it; one that does not stop ends the verb as the person's own does |
+| with the `jason:` link | on Windows the `jason-desktop` link registration, where its command starts this application |
+| in place of the PATH entry and the executable | the terminal command, by the rules `jason install` placed it by: on macOS `~/.local/bin/jason` and `jason-desktop` where each is the application's wrapper running this `jason`, or one that is gone, then `install.sh`'s lines for `~/.local/bin` where that folder then holds nothing but Jason, then the folder once empty; on Windows the application's `jason` and `jason-desktop` command files in WindowsApps, and the entry in this account's Path naming the application's `resources\bundle` where that folder holds nothing but what the application carries there (the executable, `LICENSE`, `THIRD-PARTY-NOTICES`, `skills/`, `version.json`). An older command-line install, found where `jason install` looks for one, goes by the rule that retires one: its executable, its notice files, its Path entry or profile block, its folder. Then the folders an earlier version's demo made, each only where it carries the demo's mark, and the updater's cache — on macOS also Squirrel's ShipIt state, `~/Library/Caches/ai.jasonharness.desktop.ShipIt` |
+| last, after the data directory | the application. macOS: the `Jason.app` the `jason` is inside, deleted by this verb, whose own image stays mapped until it exits, and only where its `Contents/Info.plist` names the bundle identifier `ai.jasonharness.desktop`; a bundle that does not is left and named, with `application_fate` `not_found`. A delete macOS refuses — it may refuse a terminal the right to delete an application — is reported with what is left and the one thing to do, move Jason to the Bin, and the verb exits 1. Windows: the application's uninstaller refuses while any process runs from its folder, this verb's included, so the verb starts one waiter, which once the verb has ended copies `Uninstall Jason.exe` out of the folder and runs the copy silently on it in place (`/S --uninstalled-by-jason _?=<folder>`), waiting for it; the report says the folder goes after the verb ends, and that a Jason still listed in Installed apps afterwards is uninstalled there. `--uninstalled-by-jason` tells the uninstaller the application's steps are done, so it does not start the application, which would write into a data directory just purged. `--keep-application` leaves the folder: the uninstaller in Installed apps runs the verb so, through the application's own start, and removes the folder itself next |
+
+The plan carries these under `desktop`: `application`, `application_fate` (`deleted`, `after_exit`, `kept`, or
+`not_found` where the `jason` is not inside a folder shaped as the application's), `open_at_login`, `desktop_link`,
+`command_files`, `command_folder`, `command_line_install`, `demo`, `caches` and `left`. On Linux, and wherever no
+system's places are known, the carried `jason` refuses with `uninstall_carried_by_desktop` before anything is read or
+removed, a dry run included, and the message names the way that system removes the application; the data directory is
+kept either way.
 
 **Never touched:** a skill there is no receipt for, including one copied into a harness by hand; any other
 skill in that harness; any provider CLI; any model credential; a PATH entry the installer did not write; another
