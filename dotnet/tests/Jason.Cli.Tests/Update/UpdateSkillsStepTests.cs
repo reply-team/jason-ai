@@ -540,6 +540,30 @@ public class UpdateSkillsStepTests
         Assert.True(roles.Ref == Tag(installation), $"The role root is recorded at {roles.Ref} after the update.");
     }
 
+    /// <summary>
+    /// The finishing step with no update in flight moves every deployment recorded at the tag before to the installed
+    /// version's and says the part done; run again, with every record at that tag already, it says the part was there.
+    /// </summary>
+    [Fact]
+    public async Task The_finishing_step_says_skills_already_at_the_installed_tag_are_there_already()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+
+        var first = await Applier(installation).FinishInstalledAsync(installation.To, Request(installation), Ct);
+        var second = await Applier(installation).FinishInstalledAsync(installation.To, Request(installation), Ct);
+
+        var moved = Assert.Single(first.Parts, part => part.Part == "skills");
+        Assert.Equal(UpdateFinishStates.Done, moved.State);
+        Assert.All(Deployments(installation), deployment => Assert.Equal(Tag(installation), deployment.Ref));
+        var there = Assert.Single(second.Parts, part => part.Part == "skills");
+        Assert.Equal(UpdateFinishStates.AlreadyThere, there.State);
+        Assert.Null(there.Reason);
+        Assert.Equal(2, there.Lines.Count);
+    }
+
     /// <summary>An installation nothing was deployed to is told so, and no source is fetched for it.</summary>
     [Fact]
     public async Task An_installation_with_no_skills_deployed_is_told_so_and_nothing_is_fetched()

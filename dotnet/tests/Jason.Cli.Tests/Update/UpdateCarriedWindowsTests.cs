@@ -39,6 +39,16 @@ public sealed class UpdateCarriedWindowsTests
         using var __ = desktop;
         var original = File.ReadAllText(installation.InstallPath);
 
+        // What the store held when the installer had the update: the image, and the version it came from beside it.
+        var store = CarriedUpdate.Store(desktop.Places)!;
+        (string Image, string Version)? stored = null;
+        desktop.Answer = (id, to) =>
+        {
+            var folder = Path.Combine(store, id);
+            stored = (File.ReadAllText(Path.Combine(folder, ReleaseAssets.ExecutableName)), File.ReadAllText(Path.Combine(folder, CarriedUpdate.MovedVersionName)));
+            return desktop.Install(id, to);
+        };
+
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
 
         Assert.Equal(ExitCodes.Success, exit);
@@ -67,14 +77,15 @@ public sealed class UpdateCarriedWindowsTests
             Assert.Equal(string.Create(CultureInfo.InvariantCulture, $"{self.Id} {self.StartTime.ToFileTimeUtc()}"), pid);
         }
 
-        // Afterwards: the record and the go taken away, the image in the updater's store with the version it came from beside
-        // it, the new jason in place and running.
+        // Afterwards: the record and the go taken away, the new jason in place and running. The image was in the updater's
+        // store with the version it came from beside it, and the new jason's install step swept it once the update was
+        // complete: nothing runs from it here, where on a machine the process still running from it keeps it until a later
+        // sweep.
         Assert.False(File.Exists(Path.Combine(installation.InstallDirectory, CarriedUpdate.PidFileName)));
         var id = runs[0][runs[0].ToList().IndexOf("--request") + 1];
         Assert.False(File.Exists(Path.Combine(installation.Update.Root, $"desktop-{id}.go")), "the go was left behind");
-        var moved = Path.Combine(desktop.LocalAppData, "jason-desktop-updater", "jason-carried", id, ReleaseAssets.ExecutableName);
-        Assert.Equal(original, File.ReadAllText(moved));
-        Assert.Equal(installation.From.ToString(), File.ReadAllText(Path.Combine(Path.GetDirectoryName(moved)!, CarriedUpdate.MovedVersionName)));
+        Assert.Equal((original, installation.From.ToString()), stored);
+        Assert.False(Directory.Exists(Path.Combine(store, id)), "the store kept an image once the update was complete and nothing ran from it");
         Assert.Equal(installation.To.ToString(), installation.Installed());
         Assert.True(installation.Running);
 
@@ -595,6 +606,55 @@ public sealed class UpdateCarriedWindowsTests
 
         Assert.False(Directory.Exists(Path.GetDirectoryName(earlier)), "an earlier request's folder was left in the store");
         Assert.True(File.Exists(carried.Moved));
+    }
+
+    /// <summary>
+    /// The finishing step with nothing in flight sweeps the store too, under its lock, before it brings anything up to the
+    /// installed version.
+    /// </summary>
+    [Fact]
+    public async Task The_finishing_step_with_nothing_in_flight_sweeps_the_store()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, system: SetupSystem.Windows, to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        var earlier = Path.Combine(CarriedUpdate.Store(desktop.Places)!, "cli-earlier", ReleaseAssets.ExecutableName);
+        Directory.CreateDirectory(Path.GetDirectoryName(earlier)!);
+        File.WriteAllText(earlier, "an image an earlier update left");
+
+        var exit = await CliApp.RunAsync(["update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.False(Directory.Exists(Path.GetDirectoryName(earlier)), "the finishing step left an earlier request's folder in the store");
+    }
+
+    /// <summary>
+    /// The sweep <c>jason install</c> runs takes the store's folders away where no update is in flight, and none while one
+    /// stands short of complete: that update's image may be the only one of the application's jason.
+    /// </summary>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(UpdateStep.Complete, true)]
+    [InlineData(UpdateStep.Stopped, false)]
+    [InlineData(UpdateStep.Swapped, false)]
+    public void The_installs_sweep_keeps_the_store_while_an_update_is_in_flight(UpdateStep? step, bool swept)
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, system: SetupSystem.Windows);
+        using var _ = installation;
+        using var __ = desktop;
+        var store = CarriedUpdate.Store(desktop.Places)!;
+        var image = Path.Combine(store, "cli-moved", ReleaseAssets.ExecutableName);
+        Directory.CreateDirectory(Path.GetDirectoryName(image)!);
+        File.WriteAllText(image, "the image an update moved out");
+        if (step is { } at)
+        {
+            installation.Killed(at);
+        }
+
+        CarriedUpdate.SweepWhereNothingIsInFlight(store, installation.Update);
+
+        Assert.Equal(!swept, File.Exists(image));
+        Assert.True(Directory.Exists(store), "the sweep took the store itself away");
     }
 
     /// <summary>The move's default place: the updater's store under the local application data, a folder per request.</summary>

@@ -1161,6 +1161,29 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         }
     }
 
+    /// <summary>
+    /// The sweep <c>jason install</c> runs, where no update stands short of complete: an update in flight may have moved the
+    /// only image of the application's jason out, and its next door puts that one back. It fails quietly, a record that
+    /// cannot be read included.
+    /// </summary>
+    public static void SweepWhereNothingIsInFlight(string? store, UpdatePaths update)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        try
+        {
+            if (UpdateLedger.ReadFile(update.Ledger) is { Step: < UpdateStep.Complete })
+            {
+                return;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or UpdateLedgerException)
+        {
+            return;
+        }
+
+        Sweep(store);
+    }
+
     private static void TryDelete(string? file)
     {
         if (file is null)

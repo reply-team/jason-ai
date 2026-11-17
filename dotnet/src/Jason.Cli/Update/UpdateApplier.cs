@@ -356,9 +356,13 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             Say(Skills, $"{stoppedIn}not updated — {ReasonSaid(cause ?? complained.ToString())}; run: jason skills update");
         }
 
-        return outcome.Exit == ExitCodes.Success && outcome.Carried.All(group => group.Exit == ExitCodes.Success)
-            ? UpdateFinishStates.Done
-            : UpdateFinishStates.NotDone;
+        // Every deployment already recorded at the ref it was redeployed at is a part that was there already: the finishing
+        // step run a second time says so, as it does of a package that is current and a UI in place.
+        return outcome.Exit != ExitCodes.Success || !outcome.Carried.All(group => group.Exit == ExitCodes.Success)
+            ? UpdateFinishStates.NotDone
+            : outcome.Carried.All(group => group.Unmoved)
+                ? UpdateFinishStates.AlreadyThere
+                : UpdateFinishStates.Done;
     }
 
     /// <summary>
