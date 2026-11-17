@@ -70,9 +70,10 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
   and "Help me start a new agent." no longer stand under an answer in the Feed or in a set-up chat. An agent's chat
   keeps the chips that follow the agent's state.
 
-- **Settings' Accounts says what the notification channels are for.** The line under the table reads: "This is how Jason
-  tells you that an approval or a question is waiting for you. To turn a channel on or off, use the Connect panel or ask
-  your AI." In a browser tab, which has no Connect panel, the second sentence says "ask your AI" alone.
+- **Settings' Accounts says what the notification channels are for.** The line under the table reads, in Jason Desktop:
+  "This is how Jason tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your
+  AI; a provider's channel can also be connected or disconnected on the Connect panel." In a browser tab, which has no
+  Connect panel, it ends at "To turn a channel on or off, ask your AI."
 
 - **Jason Desktop on Linux has no title bar of its own.** As on Windows, the window's minimize, maximize and close
   buttons stand over the right end of the console's top strip, drawn in your desktop's own style, as many as its button
