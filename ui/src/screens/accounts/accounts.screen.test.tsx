@@ -222,7 +222,9 @@ describe('Accounts inside the desktop', () => {
         expect(words(page)).not.toContain('a browser cannot do them');
         // The notification half is the same as in a browser.
         await waitFor(() => expect(words(notifications())).toContain('Delivered just now.'));
-        expect(words(notifications())).toContain('To turn a channel on or off, use the Connect panel or ask your AI.');
+        expect(words(notifications())).toContain(
+            'To turn a channel on or off, ask your AI; a provider’s channel can also be connected or disconnected on the Connect panel.',
+        );
     });
 
     it('asks the desktop for a Pause by the account id, and the desktop answers it', async () => {

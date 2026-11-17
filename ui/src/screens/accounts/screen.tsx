@@ -91,7 +91,10 @@ export function AccountsScreen() {
                         )}
                         <p className="hint">
                             This is how Jason tells you that an approval or a question is waiting for you. To turn a
-                            channel on or off, {provider ? 'use the Connect panel or ask your AI.' : 'ask your AI.'}
+                            channel on or off, ask your AI
+                            {provider &&
+                                '; a provider’s channel can also be connected or disconnected on the Connect panel'}
+                            .
                         </p>
                     </section>
                 </div>
