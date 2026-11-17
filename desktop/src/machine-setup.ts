@@ -167,6 +167,20 @@ export interface MachineSetupDeps {
     /** The login shell's own PATH, or null where it printed none. */
     terminalPath(): Promise<string | null>;
     log: Logger;
+    /**
+     * THE FINISHING STEP'S SEAM: the command line's own finishing step of an update (`jason update apply --finish`, run on a
+     * carried install with no update in flight, `docs/release-and-update.md` §7), which brings the plugin packages, the
+     * recorded skills deployments and the UI up to the version installed and starts no runtime. Run after a routine that
+     * completed; the record is written only when both completed. Absent until the command line offers it, and then the
+     * routine alone decides.
+     */
+    finishingStep?(): Promise<FinishingStep>;
+}
+
+/** What the finishing step answered: whether it completed, and its sentences of what it did not do. */
+export interface FinishingStep {
+    completed: boolean;
+    problems: string[];
 }
 
 export class MachineSetup {
@@ -237,8 +251,14 @@ export class MachineSetup {
             if (platform === 'darwin') terminalPath = await this.#deps.terminalPath().catch(() => null);
             const result = await cli.run(setupArguments(platform, terminalPath), { timeoutMs: setupLimitMs });
             const answer = answerOf(result);
-            const completed = 'report' in answer && answer.report.completed && result.exit === 0;
-            log.info('machine_setup_ran', { Why: why, Exit: result.exit, Completed: completed });
+            const routineDone = 'report' in answer && answer.report.completed && result.exit === 0;
+            log.info('machine_setup_ran', { Why: why, Exit: result.exit, Completed: routineDone });
+            let finishing: FinishingStep | null = null;
+            if (routineDone && this.#deps.finishingStep !== undefined) {
+                finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${error instanceof Error ? error.message : String(error)}`] }));
+                log.info('machine_setup_finished', { Why: why, Completed: finishing.completed });
+            }
+            const completed = routineDone && (finishing === null || finishing.completed);
             if (completed) {
                 try {
                     writeSetupRecord(record, version, JSON.parse(result.stdout));
@@ -246,7 +266,10 @@ export class MachineSetup {
                     log.warn('machine_setup_unrecorded', { Version: version });
                 }
             }
-            return 'report' in answer ? ({ state: 'reported', report: answer.report } as const) : ({ state: 'refused', why: answer.refused } as const);
+            if (!('report' in answer)) return { state: 'refused', why: answer.refused } as const;
+            // What the finishing step did not do is said beside the routine's own problems.
+            const report = finishing === null || finishing.completed ? answer.report : { ...answer.report, problems: [...answer.report.problems, ...finishing.problems], completed: false };
+            return { state: 'reported', report } as const;
         })()
             .catch((error: unknown) => ({ state: 'refused', why: error instanceof Error ? error.message : String(error) }) as const)
             .then((next) => {

@@ -956,6 +956,7 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
         record: desktopPaths(runOn.person).machineSetup,
         terminalPath: () => askedShell(),
         log,
+        // The finishing step's seam (`machine-setup.ts`) stays unset until the command line offers that step.
     });
 }
 if (unsandboxed !== null) {

@@ -385,3 +385,37 @@ test('the look reads only the head of what the PATH finds: a wrapper whole, an e
     assert.equal(readHead(big)?.length, 4096);
     assert.equal(readHead(join(at, 'missing')), null);
 });
+
+test('the finishing step’s seam: run after a routine that completed, and the record written only when both did; no step given, the routine alone decides', async () => {
+    // A routine that completed and a finishing step that did not: no record, and the item says what was not done.
+    const data = join(folder(), '.jason');
+    const order: string[] = [];
+    const cli: Cli = { run: async () => (order.push('install'), printed(report())) };
+    const failing = setupOn(data, cli, { finishingStep: async () => (order.push('finish'), { completed: false, problems: ['The plugins were not brought up to 0.49.0.'] }) });
+    await failing.setup.atStart();
+    assert.deepEqual(order, ['install', 'finish']);
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false, 'done for this version only when both reported success');
+    assert.ok(setupMenuOf(failing.setup.state, macExe).lines.includes('Not done: The plugins were not brought up to 0.49.0.'));
+    assert.deepEqual(failing.log.lines.at(-1), { level: 'info', name: 'machine_setup_finished', fields: { Why: 'start', Completed: false } });
+    // The next start tries both again, and with both done the record is written.
+    const next = setupOn(data, fakeCli(printed(report())), { finishingStep: async () => ({ completed: true, problems: [] }) });
+    await next.setup.atStart();
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
+    // A routine that did not complete runs no finishing step.
+    let finished = 0;
+    const partly = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ problems: ['x'], completed: false }), 1)), { finishingStep: async () => (finished++, { completed: true, problems: [] }) });
+    await partly.setup.atStart();
+    assert.equal(finished, 0);
+    // A finishing step that throws is a step that did not complete.
+    const thrown = setupOn(join(folder(), '.jason'), fakeCli(printed(report())), { finishingStep: async () => { throw new Error('gone'); } });
+    await thrown.setup.atStart();
+    assert.equal(thrown.setup.state.state, 'reported');
+    assert.ok(setupMenuOf(thrown.setup.state, macExe).lines.includes('Not done: The finishing step did not run: gone'));
+});
+
+test('main gives the set-up no finishing step yet: the seam waits for the command line’s one, and no verb is stubbed', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
+    assert.equal(factory.includes('finishingStep'), false);
+    assert.equal(main.includes("'--finish'"), false);
+});
