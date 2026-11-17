@@ -55,6 +55,9 @@ const shownMode = (): DesktopChatMode => startMode.value ?? defaultMode();
 /** The choices on the start screen as a chat, so the chat's own controls draw them. */
 const startChatNow = (): Chat => ({ ...startPick.value, mode: shownMode() });
 
+/** The repository the Live note's second paragraph links to; the desktop's window sends an https link to the system browser. */
+const sourceRepository = 'https://github.com/reply-team/jason-ai';
+
 /** The key under which this browser keeps that the note on the start screen was closed, in one mode. */
 export const noteKey = (which: Mode): string => `jason.ui.start-note-closed.${which}`;
 
@@ -354,10 +357,24 @@ function StartChat() {
                 )}
                 {!notesClosed.value.includes(mode.value) && (
                     <div className="start-note uinote" role="note">
-                        <span>
-                            <strong>{t(mode.value === 'demo' ? 'start.note.demo.lead' : 'start.note.lead')}</strong>{' '}
-                            {t(mode.value === 'demo' ? 'start.note.demo.body' : 'start.note.body')}
-                        </span>
+                        {mode.value === 'demo' ? (
+                            <span>
+                                <strong>{t('start.note.demo.lead')}</strong> {t('start.note.demo.body')}
+                            </span>
+                        ) : (
+                            <span>
+                                <span className="start-note-para">
+                                    <strong>{t('start.note.lead')}</strong> {t('start.note.body')}
+                                </span>
+                                <span className="start-note-para">
+                                    {t('start.note.source.before')}
+                                    <a href={sourceRepository} target="_blank" rel="noopener noreferrer">
+                                        {t('start.note.source.link')}
+                                    </a>
+                                    {t('start.note.source.after')}
+                                </span>
+                            </span>
+                        )}
                         <button
                             className="btn sm start-note-close"
                             type="button"

@@ -94,8 +94,8 @@ its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
-link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
-without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
+link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
+without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
