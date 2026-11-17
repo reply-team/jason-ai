@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { ApprovalSummary } from '../api/types';
+import type { Approval, ApprovalSummary, WorkItem } from '../api/types';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
 import { route } from '../router';
@@ -11,7 +11,10 @@ import { whyWords } from '../screens/send-modes/doubts';
 import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
-import { fixtures } from '../test/fixtures';
+import { fixtures, type FixtureName } from '../test/fixtures';
+import { ASKING_MARK, ASKING_SENTENCE } from '../screens/attention/reasking-model';
+import { noteEdit } from '../screens/attention/reasking';
+import { here } from './state';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention, forgetNeeds, reads, reload } from './needs';
@@ -865,13 +868,19 @@ describe('Needs you', () => {
     });
 
     describe('edits a message as the person’s own words, and approves nothing', () => {
-        const edits = () =>
-            new FakeApi()
+        /** The message's work item as the runtime holds it: parked for the approval, then queued again once it is saved. */
+        const edits = () => {
+            const fake = new FakeApi()
                 .answer('approval.list', 'approval.list/needs-inbox')
                 .answer('decision.list', 'decision.list/empty')
                 .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply')
-                .answer('workitem.get', 'workitem.get/needs-message-parked')
                 .answer('workitem.update', 'workitem.update/needs-message-edited');
+            return fake.answerAnyRequest('workitem.get', () =>
+                sent(fake, 'workitem.update').length > 0
+                    ? 'workitem.get/needs-message-requeued'
+                    : 'workitem.get/needs-message-parked',
+            );
+        };
 
         /**
          * Presses Edit once the pane has painted what it reads for the approval, the sending name last: a paint
@@ -882,7 +891,7 @@ describe('Needs you', () => {
             fireEvent.click(within(pane()).getByRole('button', { name: 'Edit' }));
         }
 
-        it('opens the boxes on the words the work item holds, saves them through the work item, and says Jason asks again', async () => {
+        it('opens the boxes on the words the work item holds, saves them through the work item, and keeps the row where it was with them', async () => {
             const fake = edits();
             await renderConsole(fake);
             await pressEdit();
@@ -906,14 +915,26 @@ describe('Needs you', () => {
                     asGiven(fixtures['workitem.update/needs-message-edited'].request),
                 ]),
             );
-            await waitFor(() => expect(needs().querySelector('[data-row="apr_1"]')).toBeNull());
-            expect(words(needs().querySelector('.needs-reasked')!)).toBe(
-                'Jason asks again with the new text when it next takes this work.',
+            // The runtime lists the reply alone now; the edited row stays first, chosen, and says where it stands.
+            await waitFor(() => within(pane()).getByText(ASKING_SENTENCE));
+            expect([...needs().querySelectorAll<HTMLElement>('.needs-row')].map((each) => each.dataset['row'])).toEqual(
+                ['apr_1', 'apr_2'],
             );
+            expect(pane().dataset['id']).toBe('apr_1');
+            expect(words(row('apr_1'))).toContain(ASKING_MARK);
+            expect(words(pane().querySelector('.needs-body')!)).toBe(
+                'Hi Ines, thanks for the talk at the meetup. Shall we talk next week?',
+            );
+            // No act on the withdrawn approval: Approve, Edit and Reject come back with the approval asked again.
+            for (const name of ['Approve', 'Edit', 'Reject'])
+                expect(within(pane()).queryByRole('button', { name })).toBeNull();
+            expect(within(pane()).getByRole('button', { name: 'Open the chat' })).toBeTruthy();
+            // The list's own count does not fall because of the edit.
+            expect(chips()[0]).toBe('All 2');
+            expect(needs().querySelector('.needs-left')).toBeNull();
             expect(sent(fake, 'approval.approve')).toEqual([]);
-            expect(pane().dataset['id']).toBe('apr_2');
-            // The keyboard is on the line the pane shows now, never on a button of an item the person did not choose.
-            expect(document.activeElement).toBe(row('apr_2'));
+            // The keyboard is on the line the pane shows, never on a button.
+            expect(document.activeElement).toBe(row('apr_1'));
         });
 
         it('says before Save that saving approves nothing', async () => {
@@ -935,7 +956,7 @@ describe('Needs you', () => {
             await waitFor(() => expect(within(pane()).queryByRole('textbox', { name: 'Body' })).toBeNull());
             await settle();
             expect(sent(fake, 'workitem.update')).toEqual([]);
-            expect(needs().querySelector('.needs-reasked')).toBeNull();
+            expect(within(pane()).queryByText(ASKING_SENTENCE)).toBeNull();
             expect(within(pane()).getByRole('button', { name: 'Approve' })).toBeTruthy();
         });
 
@@ -947,6 +968,94 @@ describe('Needs you', () => {
             fireEvent.click(within(pane()).getByRole('button', { name: 'Cancel' }));
             await waitFor(() => expect(within(pane()).queryByRole('textbox', { name: 'Body' })).toBeNull());
             expect(sent(fake, 'workitem.update')).toEqual([]);
+        });
+    });
+
+    describe('keeps a message edited on this page until Jason asks again, then becomes the new approval in place', () => {
+        // One story the runtime recorded: a message waiting, its text edited, the approval withdrawn, the item queued
+        // again, and the claim asking again with the edited text under a new approval of the same work item.
+        let listed: FixtureName = 'approval.list/card-message-all-pending';
+        let item: FixtureName = 'workitem.get/card-message-parked';
+        let ofItem: FixtureName = 'approval.list/card-message-item-after-edit';
+        const story = () =>
+            new FakeApi()
+                .answerAnyRequest('approval.list', (body) => ('work_item_id' in body ? ofItem : listed))
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/card-message', 'approval.get/card-message-reasked')
+                .answerAnyRequest('workitem.get', () => item)
+                .answer('approval.approve', 'approval.approve/card-message-reasked');
+        const edited = 'Hi Ines, thanks for the talk at the meetup. Shall we talk next week?';
+        const live = (button: HTMLElement) => !button.hasAttribute('disabled');
+        const asked = (journal: StubStream, id: string) =>
+            flush(() => {
+                journal.open();
+                journal.send(journalLine({ id, kind: 'approval_requested' }));
+            });
+        beforeEach(() => {
+            listed = 'approval.list/card-message-all-pending';
+            item = 'workitem.get/card-message-parked';
+            ofItem = 'approval.list/card-message-item-after-edit';
+        });
+
+        it('stays, chosen, with the words saved, and becomes the approval asked again, which Approve then approves', async () => {
+            const journal = stubStream();
+            const fake = story();
+            await renderConsole(fake, journal);
+            await waitFor(() => expect(live(within(pane()).getByRole('button', { name: 'Approve' }))).toBe(true));
+            expect(pane().dataset['id']).toBe('apr_1');
+
+            // The edit as the page saved it (the save itself is the test above): the approval withdrawn, the item queued.
+            noteEdit(
+                fixtures['approval.get/card-message'].response as unknown as Approval,
+                fixtures['workitem.update/card-message-edited'].response as unknown as WorkItem,
+            );
+            listed = 'approval.list/card-message-all-after-edit';
+            item = 'workitem.get/card-message-requeued';
+            await flush(() => reload());
+            await waitFor(() => within(pane()).getByText(ASKING_SENTENCE));
+            expect(pane().dataset['id']).toBe('apr_1');
+            expect(words(pane().querySelector('.needs-body')!)).toBe(edited);
+            expect(within(pane()).queryByRole('button', { name: 'Approve' })).toBeNull();
+            expect(chips()[0]).toBe('All 1');
+
+            // The runtime asks again: the row is the new approval, where the old one stood, still chosen, and Approve
+            // approves the new one once it has been read whole and checked against its work item.
+            listed = 'approval.list/card-message-all-reasked';
+            item = 'workitem.get/card-message-reparked';
+            ofItem = 'approval.list/card-message-item-reasked';
+            await asked(journal, 'jrn_reasked_1');
+            await waitFor(() => expect(pane().dataset['id']).toBe('apr_2'));
+            expect([...needs().querySelectorAll<HTMLElement>('.needs-row')].map((each) => each.dataset['row'])).toEqual(
+                ['apr_2'],
+            );
+            expect(needs().querySelector('.needs-left')).toBeNull();
+            expect(within(pane()).queryByText(ASKING_SENTENCE)).toBeNull();
+            const approve = await waitFor(() => {
+                const button = within(pane()).getByRole('button', { name: 'Approve' });
+                expect(live(button)).toBe(true);
+                return button;
+            });
+            expect(words(pane().querySelector('.needs-body')!)).toBe(edited);
+            fireEvent.click(approve);
+            await waitFor(() =>
+                expect(sent(fake, 'approval.approve')).toEqual([
+                    asGiven(fixtures['approval.approve/card-message-reasked'].request),
+                ]),
+            );
+        });
+
+        it('acts on nothing while it asks again, even when Approve of the withdrawn approval is pressed by a stale paint', async () => {
+            const fake = story();
+            await renderConsole(fake);
+            await waitFor(() => expect(live(within(pane()).getByRole('button', { name: 'Approve' }))).toBe(true));
+            noteEdit(
+                fixtures['approval.get/card-message'].response as unknown as Approval,
+                fixtures['workitem.update/card-message-edited'].response as unknown as WorkItem,
+            );
+            expect(await attention.approve(here().api, 'apr_1')).toBe(false);
+            expect(await attention.reject(here().api, 'apr_1')).toBe(false);
+            expect(sent(fake, 'approval.approve')).toEqual([]);
+            expect(sent(fake, 'approval.reject')).toEqual([]);
         });
     });
 

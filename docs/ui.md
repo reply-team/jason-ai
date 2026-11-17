@@ -157,9 +157,13 @@ is made of. One sentence under it says what is not shown: the sender's signature
 provider's tracking, which are added when it sends. A reply in a thread shows who it goes to, the channel and the text.
 A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's
 body and nothing else: **Edit message**, then **Save**, which is `jason workitem update` of the message's input with
-you as the actor and a reason the page words. Saving approves nothing: the old card is gone, the page says "Jason asks
-again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs
-to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
+you as the actor and a reason the page words. Saving approves nothing, and the runtime withdraws the approval it was
+asked under, but the row stays where it was in the list, chosen, with the new text, and says the text is saved and Jason
+is asking again with it; nothing on it acts on the withdrawn approval. When a pending approval of the same work item
+arrives, matched by the work item alone, the row becomes it in place, still chosen, and Approve belongs to that one; if
+the work ended another way meanwhile, the row goes as a row decided elsewhere does. The list's counts do not fall
+because of the edit. The kept row is the page's own memory, the same in Needs you and an agent's chat: a reload of the
+page forgets it, and the row comes back when the runtime has asked again. If the
 text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
 box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
 subject, the arguments the runtime parked, is compared, as whole documents and whatever the order of their keys,

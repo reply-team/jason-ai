@@ -59,6 +59,9 @@ public class NeedsExchangesTests
         Assert.True(JsonNode.DeepEquals(edited, patched.Context["input"]));
         var after = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-after-edit", new { }, Ct);
         Assert.Equal([ReplyApproval], after.Items.Select(a => a.Id));
+        // What a list that kept the edited row reads of it: the item, back in the queue until the claim asks again.
+        var requeued = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-message-requeued", new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Created, requeued.Status);
 
         // A question the autumn campaign's AI raised, with its options: what waits on a person beside the approvals.
         var questions = await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "needs-questions", new { }, Ct);

@@ -4,11 +4,13 @@ import { FiltersBar } from '../../layout/filters-bar';
 import { Segmented } from '../../layout/segmented';
 import { t } from '../../platform/i18n';
 import { Toolbar } from '../../layout/toolbar';
-import { navigate, route } from '../../router';
+import { navigate, replace, route } from '../../router';
 import { ApprovalPanel } from './approval-panel';
 import { AttentionList } from './list';
 import { QuestionPanel } from './question-panel';
 import * as store from './store';
+import { edits } from './reasking';
+import { askedAfter } from './reasking-model';
 import { Notice } from '../../layout/notice';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -33,6 +35,12 @@ export function AttentionScreen() {
         if (selected) void store.open(api, selected.kind, selected.id);
         else store.detail.value = null;
     }, [api, selected?.kind, selected?.id]);
+
+    // A message edited here that the runtime has asked about again is the new approval, in the same place, still chosen.
+    const asked = selected?.kind === 'approvals' ? askedAfter(edits.value, selected.id) : null;
+    useEffect(() => {
+        if (asked !== null) replace({ screen: 'attention', kind: 'approvals', id: asked, ...keep });
+    }, [asked]);
 
     // The filter is the screen's own: kept while it is open, never stored, in the address or anywhere else, and never
     // sent to the runtime. When nothing is listed at all it goes back to everything, so what arrives next is shown.
@@ -171,10 +179,7 @@ export function AttentionScreen() {
                     onSkip={() => go(store.nextPending(selected, only))}
                     onClose={close}
                     onSuperseded={() => void store.load(api, decided)}
-                    onReasked={(id) => {
-                        void store.load(api, decided);
-                        go({ kind: 'approvals', id });
-                    }}
+                    onReasked={() => void store.load(api, decided)}
                 />
             )}
             {selected && detail?.kind === 'questions' && (

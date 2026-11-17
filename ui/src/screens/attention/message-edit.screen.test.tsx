@@ -5,6 +5,7 @@ import { ApiProvider } from '../../api/context';
 import type { Approval, WorkItem } from '../../api/types';
 import { fixtures } from '../../test/fixtures';
 import { ApprovalPanel } from './approval-panel';
+import { ASKING_SENTENCE } from './reasking-model';
 
 /** An Api whose work item is held here, so a test can change it from outside between a render and a press. */
 class Held implements Api {
@@ -157,7 +158,7 @@ describe('approving a message', () => {
 });
 
 describe('editing a message before it is approved', () => {
-    it('saves only the subject and the body by workitem.update, approves nothing, and says Jason asks again', async () => {
+    it('saves only the subject and the body by workitem.update, approves nothing, and says Jason asks again with them', async () => {
         const approval = email();
         const input = structuredClone(argsOf(approval));
         input['send_after'] = '2026-12-01T09:00:00+00:00';
@@ -168,9 +169,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'New subject' } });
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body\nline two' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() =>
-            expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy(),
-        );
+        await waitFor(() => expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy());
         const update = held.calls.find((c) => c.operation === 'workitem.update')!;
         expect(update.body).toEqual({
             work_item_id: 'wi_1',
@@ -185,6 +184,9 @@ describe('editing a message before it is approved', () => {
         expect(held.calls.filter((c) => c.operation === 'workitem.update')).toHaveLength(1);
         expect(onApprove).not.toHaveBeenCalled();
         expect(approveButton()).toBeNull();
+        // The panel stays, with the words saved, which Jason asks again with.
+        expect(screen.getByText('New subject')).toBeTruthy();
+        expect(screen.getByText(/^New body/)).toBeTruthy();
     });
 
     it("shows the runtime's sentence for a refusal and keeps the edit in the box", async () => {
@@ -198,7 +200,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByText('The subject must be one line.')).toBeTruthy());
         expect((screen.getByLabelText('Body') as HTMLTextAreaElement).value).toBe('Typed but refused');
-        expect(screen.queryByText('Jason asks again with the new text when it next takes this work.')).toBeNull();
+        expect(screen.queryByText(ASKING_SENTENCE)).toBeNull();
     });
 
     it('refuses to write over text that changed while the editor was open, and keeps what was typed', async () => {
@@ -228,22 +230,25 @@ describe('editing a message before it is approved', () => {
         ).toBe('What the person typed');
     });
 
-    it('removes the old card after Save, and keeps the sentence when the new approval never comes', async () => {
+    it('keeps the panel after Save with the words saved and no act on the withdrawn approval, while the new one never comes', async () => {
         const approval = email();
         const held = new Held(structuredClone(argsOf(approval)));
         const onReasked = vi.fn();
         mount(held, approval, vi.fn(), onReasked, { tries: 2, delayMs: 0 });
         await waitFor(() => screen.getByRole('button', { name: 'Edit message' }));
         fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+        fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Shall we talk next week?' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => screen.getByText('Jason asks again with the new text when it next takes this work.'));
+        await waitFor(() => screen.getByText(ASKING_SENTENCE));
         expect(approveButton()).toBeNull();
         expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
-        expect(screen.queryByText('The message as written')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+        expect(screen.getByText('The message as written')).toBeTruthy();
+        expect(screen.getByText('Shall we talk next week?')).toBeTruthy();
         await waitFor(() => expect(held.calls.filter((c) => c.operation === 'approval.list')).toHaveLength(2));
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(onReasked).not.toHaveBeenCalled();
-        expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy();
+        expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy();
     });
 
     it('hands on the new approval once the runtime has asked again, and not before', async () => {
@@ -255,7 +260,7 @@ describe('editing a message before it is approved', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'New body' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => screen.getByText('Jason asks again with the new text when it next takes this work.'));
+        await waitFor(() => screen.getByText(ASKING_SENTENCE));
         expect(onReasked).not.toHaveBeenCalled();
         held.pending = ['apr_9'];
         await waitFor(() => expect(onReasked).toHaveBeenCalledWith('apr_9'), { timeout: 3000 });
@@ -272,9 +277,7 @@ describe('editing a message before it is approved', () => {
         expect(screen.queryByLabelText('Subject')).toBeNull();
         fireEvent.change(screen.getByLabelText('Body'), { target: { value: 'Thursday is better.' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() =>
-            expect(screen.getByText('Jason asks again with the new text when it next takes this work.')).toBeTruthy(),
-        );
+        await waitFor(() => expect(screen.getByText(ASKING_SENTENCE)).toBeTruthy());
         expect(held.calls.find((c) => c.operation === 'workitem.update')!.body).toEqual({
             work_item_id: 'wi_1',
             set: { input: { ...input, body: 'Thursday is better.' } },

@@ -25,7 +25,11 @@ public static class ApiFixtures
     //
     //   message waiting:  approval.list card-message-pending|-after-edit|-reasked, approval.get card-message|
     //                     -withdrawn|-reasked, workitem.get card-message-parked, workitem.update card-message-edited,
-    //                     sender.list card-message-sender|card-sender-other|card-sender-unnamed.
+    //                     sender.list card-message-sender|card-sender-other|card-sender-unnamed; the same lists as
+    //                     every campaign's are read (approval.list card-message-all-pending|-all-after-edit|
+    //                     -all-reasked), the reads of a row a list keeps after its edit (workitem.get
+    //                     card-message-requeued|-reparked, approval.list card-message-item-after-edit|-item-reasked), and
+    //                     the approval asked again, approved (approval.approve card-message-reasked).
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
     //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
@@ -55,8 +59,8 @@ public static class ApiFixtures
     //
     // The "needs-" files are Needs you's, recorded as one story (NeedsExchangesTests): approval.list needs-inbox (a first
     // message beside an answer to a reply, two campaigns), approval.get needs-message|-reply, workitem.get
-    // needs-message-parked, workitem.update needs-message-edited, approval.list needs-after-edit (the person's edit of
-    // the message), decision.list needs-questions and decision.get needs-question (a question beside them),
+    // needs-message-parked, workitem.update needs-message-edited, approval.list needs-after-edit and workitem.get
+    // needs-message-requeued (the person's edit of the message), decision.list needs-questions and decision.get needs-question (a question beside them),
     // approval.list needs-first-page|-next-page (two more than the default page, read by its cursor), approval.get
     // needs-page-two, workitem.get needs-page-two-parked, approval.approve needs-page-two-approved and approval.list
     // needs-next-page-after (the second page's first approved, the page read again).
@@ -84,6 +88,7 @@ public static class ApiFixtures
         "approval.approve/already-decided",
         "approval.approve/approved",
         "approval.approve/approved-and-allowed",
+        "approval.approve/card-message-reasked",
         "approval.approve/from-campaign-row",
         "approval.approve/from-campaign-row-again",
         "approval.approve/needs-page-two-approved",
@@ -127,6 +132,11 @@ public static class ApiFixtures
         "approval.list/card-archived",
         "approval.list/card-invitation-pending",
         "approval.list/card-message-after-edit",
+        "approval.list/card-message-all-after-edit",
+        "approval.list/card-message-all-pending",
+        "approval.list/card-message-all-reasked",
+        "approval.list/card-message-item-after-edit",
+        "approval.list/card-message-item-reasked",
         "approval.list/card-message-pending",
         "approval.list/card-message-reasked",
         "approval.list/card-messages-first-page",
@@ -618,9 +628,12 @@ public static class ApiFixtures
         "workitem.get/awaiting",
         "workitem.get/card-invitation-parked",
         "workitem.get/card-message-parked",
+        "workitem.get/card-message-reparked",
+        "workitem.get/card-message-requeued",
         "workitem.get/expired",
         "workitem.get/failed",
         "workitem.get/needs-message-parked",
+        "workitem.get/needs-message-requeued",
         "workitem.get/needs-page-two-parked",
         "workitem.get/needs-two-first-parked",
         "workitem.get/open",

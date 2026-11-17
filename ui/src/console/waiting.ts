@@ -1,6 +1,6 @@
 import { signal, type Signal } from '@preact/signals-react';
 import { ApiError, Unpaired, type Api } from '../api/client';
-import type { Approval, Decision } from '../api/types';
+import type { Approval, Decision, WorkItem } from '../api/types';
 import { t } from '../platform/i18n';
 import {
     STALE_SENTENCE,
@@ -9,8 +9,9 @@ import {
     readItem,
     uncheckedSentence,
 } from '../screens/attention/message-edit';
+import { asking, noteEdit } from '../screens/attention/reasking';
 import { attentionStore, type AttentionStore } from '../screens/attention/store';
-import { keptAndMissing, stillAsking, type Approved, type Reasked, type Said } from './waiting-model';
+import { keptAndMissing, type Approved, type Said } from './waiting-model';
 
 // What waits on a person in one agent's chat: the campaign's pending approvals and questions, read with
 // `approval.list` and `decision.list` of that campaign and decided through the holder Needs you is built on, so an
@@ -45,8 +46,6 @@ export interface Waiting extends WholeReads {
      * go by the first reload after it that no longer lists that item, so it leaves with the item's card.
      */
     readonly refused: Signal<(Said & { id: string }) | null>;
-    /** The messages edited in this drawing of the chat, until the runtime has asked about each again. */
-    readonly reasked: Signal<readonly Reasked[]>;
     /** The approvals this drawing of the chat approved, each followed to the end of its work, so the chat can say so. */
     readonly approved: Signal<readonly Approved[]>;
 }
@@ -83,7 +82,6 @@ export function waitingOf(campaignId: string): Waiting {
             campaignId,
             questions: signal({}),
             refused: signal(null),
-            reasked: signal([]),
             approved: signal([]),
         };
         held.set(campaignId, waiting);
@@ -168,9 +166,12 @@ export async function fillApprovals(api: Api, reads: WholeReads): Promise<void> 
     const listed = listedIds(reads.store);
     reads.approvals.value = approvals.kept;
     reads.unread.value = Object.fromEntries(Object.entries(reads.unread.value).filter(([id]) => listed.has(id)));
-    // A row read whole, or gone from the lists, while it waited its turn is not read again.
+    // A row read whole, or gone from the lists, while it waited its turn is not read again; nor is the row of a message
+    // edited here, whose approval the edit withdrew: it shows the words saved until the runtime has asked again.
     await inTurn(approvals.missing, (id) =>
-        Object.hasOwn(reads.approvals.value, id) || !reads.store.approvals.value.some((row) => row.id === id)
+        Object.hasOwn(reads.approvals.value, id) ||
+        asking(id) !== undefined ||
+        !reads.store.approvals.value.some((row) => row.id === id)
             ? Promise.resolve()
             : readOnce(
                   reads,
@@ -224,7 +225,6 @@ async function fill(api: Api, waiting: Waiting): Promise<void> {
         waiting.store.questions.value.map((row) => row.id),
     );
     waiting.questions.value = questions.kept;
-    waiting.reasked.value = stillAsking(waiting.reasked.value, waiting.store.approvals.value);
     await Promise.all([
         fillApprovals(api, waiting),
         ...questions.missing.map((id) =>
@@ -304,7 +304,6 @@ export function drawWaiting(api: Api, campaignId: string): () => void {
     const waiting = waitingOf(campaignId);
     if (!drawn.has(campaignId)) {
         waiting.refused.value = null;
-        waiting.reasked.value = [];
         waiting.approved.value = [];
     }
     drawn.set(campaignId, (drawn.get(campaignId) ?? 0) + 1);
@@ -382,14 +381,12 @@ export async function moreWaiting(api: Api, waiting: Waiting): Promise<void> {
 
 /**
  * A message was edited from its card: the runtime withdrew the approval and asks again with the new text when it next
- * takes the work, which the chat says until the new approval is listed.
+ * takes the work. The card stays where it was, with the words saved, until the new approval is listed and takes its
+ * place (`reasking.ts`).
  */
-export function editedWaiting(api: Api, waiting: Waiting, approval: Approval): void {
+export function editedWaiting(api: Api, waiting: Waiting, approval: Approval, saved: WorkItem): void {
     waiting.refused.value = null;
-    waiting.reasked.value = [
-        ...waiting.reasked.value.filter((each) => each.workItemId !== approval.work_item_id),
-        { workItemId: approval.work_item_id, approvalId: approval.id },
-    ];
+    noteEdit(approval, saved);
     // The save is an act of the person's: the cards' acts stay held until the lists read after it have answered.
     void waiting.store.hold(() => listWaiting(api, waiting)).then(() => fill(api, waiting));
 }

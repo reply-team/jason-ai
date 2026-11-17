@@ -61,6 +61,8 @@ public partial class CardExchangesTests
         var parked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-parked", new { work_item_id = row.WorkItemId }, Ct);
         Assert.Equal((item, WorkItemStatus.AwaitingApproval), (parked.Id, parked.Status));
         Assert.True(JsonNode.DeepEquals(parked.Context["input"], asked.Subject["input"]!["args"]), "the item holds the arguments its approval asked about");
+        // The same message in what waits across every campaign, as Needs you and the browser's Attention list it.
+        Assert.Equal([row.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-all-pending", new { }, Ct)).Items.Select(a => a.Id));
 
         // The line under the message: the accounts the campaign's route lists for a send, read as the card reads them (the
         // whole team's, the person's own among them), the same read once the account the send names is gone, and once more
@@ -95,12 +97,26 @@ public partial class CardExchangesTests
 
         // The old approval is gone from what waits, and the item is back in the queue for the claim to decide about again.
         Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-after-edit", new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
+        Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-all-after-edit", new { }, Ct)).Items);
+        // What a list that kept the edited row reads of it while it is not asked again: the item, queued, and none of its
+        // approvals pending.
+        var queued = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-requeued", new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Created, queued.Status);
+        Assert.Empty((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-after-edit", new { work_item_id = item, statuses = new[] { "pending" } }, Ct)).Items);
         await scene.ClaimAsync();
         var reasked = Assert.Single((await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-reasked", new { status = "pending", campaign_id = scene.Campaign, limit = 50 }, Ct)).Items);
         Assert.Equal(item, reasked.WorkItemId);
         Assert.NotEqual(row.Id, reasked.Id);
+        Assert.Equal([reasked.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-all-reasked", new { }, Ct)).Items.Select(a => a.Id));
+        Assert.Equal([reasked.Id], (await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "card-message-item-reasked", new { work_item_id = item, statuses = new[] { "pending" } }, Ct)).Items.Select(a => a.Id));
         var again = await api.RecordAsync<ApprovalDto>(Operations.ApprovalGet, "card-message-reasked", new { approval_id = reasked.Id }, Ct);
         Assert.True(JsonNode.DeepEquals(edited, again.Subject["input"]!["args"]), "the re-asked approval holds the edited text");
+        var reparked = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "card-message-reparked", new { work_item_id = item }, Ct);
+        Assert.True(JsonNode.DeepEquals(edited, reparked.Context["input"]), "the item holds the arguments the new approval asked about");
+
+        // The new approval approved: the edited text is what goes.
+        var approved = await api.RecordAsync<ApprovalDto>(Operations.ApprovalApprove, "card-message-reasked", new { approval_id = reasked.Id, actor = Ada }, Ct);
+        Assert.Equal(ApprovalStatus.Approved, approved.Status);
     }
 
     /// <summary>A LinkedIn invitation waiting on a person: the list row, the approval whole and the item behind it.</summary>
