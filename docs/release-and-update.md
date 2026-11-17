@@ -1239,8 +1239,8 @@ part is there already. Where no data directory exists — a machine that only ev
 makes nothing under one, asks nothing of the network, and says so; and so it does where the data directory holds nothing
 of an installation but Jason Desktop's own folder and its log, as on the Desktop's first start. That is the one
 definition of an installation being there, and `installation_found` says it: the Desktop's own folder, its
-`logs/desktop-*.jsonl`, an `update/` holding nothing but the update's lock file, which this step makes for itself and
-which never makes a machine installed, and the system's own litter (`.DS_Store`, `desktop.ini`, `Thumbs.db`) at the
+`logs/desktop-*.jsonl`, an `update/` holding nothing but the update's lock file and the note of its holder, which this
+step makes for itself and a holder that was killed leaves behind, and which never make a machine installed, and the system's own litter (`.DS_Store`, `desktop.ini`, `Thumbs.db`) at the
 top and in `logs/` are no installation; anything else is one, a record under `update/` among it. A data directory it
 cannot list is refused with `data_dir_unreadable` before anything is made or read, never taken for either answer.
 Wherever an installation is there it runs under the update's lock, making `<data>/update` for it where that is not

@@ -757,12 +757,19 @@ public static class UpdateCommands
         /// <summary>Something of an installation's is there.</summary>
         Here,
 
-        /// <summary>Nothing but Jason Desktop's own, an update's lock file and the system's litter.</summary>
+        /// <summary>Nothing but Jason Desktop's own, an update's lock files and the system's litter.</summary>
         DesktopsOwnOnly,
 
         /// <summary>The directory, or a folder in it the answer depends on, could not be listed.</summary>
         Unreadable,
     }
+
+    /// <summary>
+    /// The update's lock, <c>update/update.lock</c>, and the note its holder writes beside it, <c>update/update.lock.holder</c>
+    /// (<see cref="UpdatePaths.Lock"/>, <see cref="UpdatePaths.LockHolder"/>): an <c>update/</c> holding these alone is no
+    /// installation, a holder killed before it let go (a <c>jason install</c> Jason Desktop's quit ends, on Windows) included.
+    /// </summary>
+    private static readonly string[] LockFiles = ["update.lock", "update.lock.holder"];
 
     /// <summary>The files a system leaves in any folder it shows, passed over at the data directory's top and in its logs.</summary>
     private static readonly string[] SystemLitter = [".DS_Store", "desktop.ini", "Thumbs.db"];
@@ -770,8 +777,9 @@ public static class UpdateCommands
     /// <summary>
     /// Whether the data directory holds an installation: the one definition of "an installation is here". It does not where it
     /// holds nothing but Jason Desktop's own — its folder, <c>desktop/</c>, and its log, <c>logs/desktop-*.jsonl</c>, which it
-    /// writes from its first start — an <c>update/</c> folder holding nothing but the update's lock file, which the tool makes
-    /// for itself and which never makes a machine installed, and the system's litter (<see cref="SystemLitter"/>) at the top
+    /// writes from its first start — an <c>update/</c> folder holding nothing but the update's lock file and the note of its
+    /// holder (<see cref="LockFiles"/>), which the tool makes for itself, and leaves behind where a holder is killed, and which
+    /// never make a machine installed, and the system's litter (<see cref="SystemLitter"/>) at the top
     /// and in <c>logs/</c>. Anything else is an installation's, a record under <c>update/</c> among it. A directory, or one of
     /// those folders, that cannot be listed is <see cref="DataDirHolds.Unreadable"/>: never taken for either answer.
     /// </summary>
@@ -803,7 +811,7 @@ public static class UpdateCommands
 
                 if (name == "update"
                     && Directory.Exists(entry)
-                    && Directory.EnumerateFileSystemEntries(entry).All(held => File.Exists(held) && Path.GetFileName(held) == "update.lock"))
+                    && Directory.EnumerateFileSystemEntries(entry).All(held => File.Exists(held) && LockFiles.Contains(Path.GetFileName(held), StringComparer.Ordinal)))
                 {
                     continue;
                 }

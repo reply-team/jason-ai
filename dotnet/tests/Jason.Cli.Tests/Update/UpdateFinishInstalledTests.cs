@@ -142,6 +142,7 @@ public sealed class UpdateFinishInstalledTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Critical(Family.I2, "the finishing step reads no release and makes nothing where the data directory holds only the Desktop's own")]
     public async Task With_only_the_desktops_own_folder_nothing_is_read_or_made(bool withItsLog)
     {
         var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, to: SemanticVersion.Current);
@@ -250,6 +251,7 @@ public sealed class UpdateFinishInstalledTests
     [InlineData("desktop/rollback/0.48.3/Jason.exe", false)]
     [InlineData("logs/desktop-20261117.jsonl", false)]
     [InlineData("update/update.lock", false)]
+    [InlineData("update/update.lock.holder", false)]
     [InlineData(".DS_Store", false)]
     [InlineData("desktop.ini", false)]
     [InlineData("Thumbs.db", false)]
