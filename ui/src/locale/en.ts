@@ -340,9 +340,9 @@ export const en = {
     'modes.reminder':
         'Your name and tone are not set. Messages are written better with them: Settings, "Your name and tone".',
     'modes.reminder.hide': 'Hide for 7 days',
-    'modes.doubts.heading': 'Doubts about this message',
+    'modes.doubts.heading': 'Why this message was flagged',
     'modes.doubts.asked': '{who} asked you to look at this: {why}',
-    'modes.doubts.reviewed': '{who} doubted this: {why}',
+    'modes.doubts.reviewed': '{who} flagged this: {why}',
     'modes.doubts.who.person': 'A person',
     'modes.doubts.who.role': 'The {role} role',
     'modes.doubts.who.ai': 'The AI',
@@ -365,7 +365,7 @@ export const en = {
     'modes.agent.refused': 'That did not go through: {why}',
     'modes.park.sent_from_chat':
         "This message was written in Jason's chat, so it waits for you however messages are set to go.",
-    'modes.park.doubted': 'A doubt was raised about this message, so it waits for you; the doubt is below.',
+    'modes.park.doubted': 'This message was flagged, so it waits for you; the reason is below.',
     'modes.park.awaiting_judgement':
         'A reply from this person has not been judged yet, so nothing goes to them automatically until it is.',
     'modes.park.awaiting_nature':
@@ -396,6 +396,38 @@ export const en = {
     'agent.kind.sequence': 'Sequence',
     'agent.kind.adaptive': 'Adaptive',
     'agent.kind.paths': 'Paths',
+    // What an approval would do, one plain line per property of its operation's contract. A value with no line here is
+    // shown as the property's name and the value, never guessed.
+    // Where a reply in a thread goes from: the provider answers from the account the conversation is in, which the reply
+    // does not name, so neither do these words, and no account is guessed in their place.
+    'approval.from.conversation': 'the account this conversation is in',
+    'approval.fact.reach': 'Reach',
+    'approval.fact.reversibility': 'Reversibility',
+    'approval.fact.cost': 'Cost',
+    'approval.fact.reach.read': 'Contacts nobody: it only reads',
+    'approval.fact.reach.control': 'Contacts nobody: it acts in your provider account only',
+    'approval.fact.reach.act': 'Contacts the person: something is sent or shown to them',
+    'approval.fact.reversibility.reversible': 'Can be undone',
+    'approval.fact.reversibility.compensatable': 'Can be taken back afterwards, by a step that undoes it',
+    'approval.fact.reversibility.irreversible': 'Cannot be undone',
+    'approval.fact.cost.none': 'Costs nothing',
+    'approval.fact.cost.metered': "Spends your provider's allowance or credits",
+    // A property whose contract makes it depend on the moment, keyed by operation and property: the one sentence that
+    // replaces the whole line. A test beside the page tests holds every such contract property to a line here.
+    'approval.fact.campaign.activate.reach':
+        'Contacts everyone enrolled in the campaign. With nobody enrolled it contacts nobody yet, and the next person enrolled is sent to at once.',
+    'approval.fact.campaign.enroll.reach':
+        'Contacts nobody while the campaign is not live; contacts the person as soon as it is.',
+    'approval.fact.campaign.enroll.reversibility':
+        'Can be taken back until the first message or invitation goes; cannot be undone after.',
+    'approval.fact.contact.delete.reversibility':
+        "Can be restored within your provider account's restore window; cannot be undone after it.",
+    'approval.fact.campaign.enroll.cost':
+        "Costs nothing while the campaign is not live; spends your provider's allowance once it is.",
+    'approval.fact.message.send.cost':
+        'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+    'approval.fact.conversation.reply.cost':
+        'Spends your message allowance on channels that meter sending; costs nothing on the others.',
     'waiting.unanswered': 'The runtime did not answer within {seconds} seconds.',
 } as const;
 

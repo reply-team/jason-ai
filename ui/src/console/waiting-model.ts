@@ -74,7 +74,7 @@ export interface ApprovalCard {
  */
 export function toApprovalCard(row: ApprovalSummary, whole: Approval | undefined, now: number): ApprovalCard {
     const operation = whole?.operation ?? row.operation;
-    const detail = whole ? toApprovalDetail(whole.preview) : null;
+    const detail = whole ? toApprovalDetail(whole.preview, operation) : null;
     const name = row.contact_name;
     return {
         id: row.id,

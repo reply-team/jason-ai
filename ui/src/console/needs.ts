@@ -638,12 +638,12 @@ function listRow(item: WaitingItem, shown: WaitingItem | null, now: number): Htm
 const openChat = (campaignId: string, name: string): Html =>
     html`<button class="btn sm ghost" type="button" ${act('needs.chat', campaignId, name)}>Open the chat</button>`;
 
-/** What the message says, whole (the pane never clamps it), and below it what the act is: its reach, reversibility and cost. */
+/** What the message says, whole (the pane never clamps it), and below it what the act is: who it contacts, whether it can be undone and what it costs, in plain words. */
 function words(whole: Approval | undefined): Html | null {
     if (whole === undefined) return null;
     // A message edited here shows the words saved, which the runtime asks again with, never the withdrawn ones.
     const edit = withdrawn(whole.id);
-    const read = toApprovalDetail(whole.preview);
+    const read = toApprovalDetail(whole.preview, whole.operation);
     const detail = edit === undefined ? read : withWords(read, edit.words);
     return html`<div class="needs-words">
             ${detail.to ? html`<div class="meta">To ${detail.to}</div>` : null}

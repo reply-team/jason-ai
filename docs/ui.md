@@ -190,8 +190,9 @@ goes automatically. Nothing is chosen for you; **Remember this** sets `send_mode
 (`jason preference set`), and the question is gone once both are set. Approve and Reject never wait on it. Once a kind
 is remembered as going automatically, the mode is on, and the card says "Jason now sends messages in your name without
 you reading each one first. Saying who writes and how, in Settings under "Your name and tone", helps them sound like
-you.", with **Open Settings** beside it and nothing to answer. A send that was doubted shows, above the message, who
-doubted it and why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
+you.", with **Open Settings** beside it and nothing to answer. A send that was doubted shows, above the message under
+"Why this message was flagged" (flagged is the screen's word for a doubt a role or a person raised), who doubted it and
+why, with the sentence they wrote drawn as text (`preview.doubts`). While a mode in force goes
 automatically, the installation's own or that of the card's agent (`send_modes_in_force` of `campaign.get`), and the
 name or the tone is unset, a quiet line points to Settings, "Your name and tone"; while every mode waits for you it
 never shows, and it goes once both are set. **Hide for 7 days** keeps it away for a week in this browser's own storage,
