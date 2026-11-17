@@ -38,9 +38,14 @@ export const feed = { provider: 'github', owner: 'reply-team', repo: 'jason-ai' 
 /** The product's own address in front of the releases, its releases index: every release request passes it. */
 const releasesIndex = 'https://get.jasonharness.ai/releases/';
 
-/** A release's page, by its tag: where going back from a deb update finds the previous release's deb. */
-export function previousRelease(version: string): string {
+/** A release's page, by its tag: where its installers and packages are downloaded from. */
+export function releasePage(version: string): string {
     return `${releasesIndex}tag/v${version}`;
+}
+
+/** The page where going back from a deb update finds the previous release's deb. */
+export function previousRelease(version: string): string {
+    return releasePage(version);
 }
 
 /** The first look waits half a minute after the start, so the start itself is never slowed by it. */
@@ -156,10 +161,14 @@ export function runtimeRefusal(outcome: { kind: 'failed'; exit: number; demo?: t
     return `The update was not installed, because the runtime this application carries did not stop (${how}). Jason was left as it was. Stop the runtime with jason runtime stop. ${again}`;
 }
 
-/** What the person is told when the application could not be kept aside, after its runtime was stopped or with none to stop. */
-export function keepRefusal(stopped: boolean): string {
+/**
+ * What the person is told when the application could not be kept aside, after its runtime was stopped or with none to
+ * stop, and what they can do instead: install the new version from its release's own installer, which keeps no copy.
+ */
+export function keepRefusal(stopped: boolean, version: string): string {
     const why = 'The update was not installed, because a copy of this version could not be kept aside to go back to.';
-    return stopped ? `${why} The runtime this application carries was stopped for the update: jason runtime start starts it again.` : `${why} Jason was left as it was.`;
+    const left = stopped ? 'The runtime this application carries was stopped for the update: jason runtime start starts it again.' : 'Jason was left as it was.';
+    return `${why} ${left} You can install the new version yourself: download its installer from ${releasePage(version)} and run it.`;
 }
 
 /** What the person is told when the installer stopped before it finished, so Jason stayed open. */
@@ -309,10 +318,12 @@ export class Updater {
         let kept: string | null;
         try {
             kept = await keepPrevious(this.deps.rollback, this.deps.application, this.deps.version, version);
-        } catch {
+        } catch (error) {
+            const code = (error as { code?: unknown } | null)?.code;
+            this.deps.log.warn('update_keep_failed', { Code: typeof code === 'string' ? code : 'unknown' });
             this.deps.log.error('update_failed', { Step: 'keep', Failures: 1 });
             this.show({ step: 'downloaded', version });
-            this.deps.refused(keepRefusal(running.kind === 'stopped'));
+            this.deps.refused(keepRefusal(running.kind === 'stopped', version));
             return false;
         }
         this.deps.log.info('update_installing', { From: this.deps.version, To: version });

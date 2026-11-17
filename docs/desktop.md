@@ -975,7 +975,10 @@ started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself, because the
+`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
+installed and no part of a copy is left: Jason says so, and that the new version's installer can be downloaded from its
+release page and run instead. Nothing puts the kept copy back by itself, because the
 runtime has no guard against a data directory a newer version migrated: if the new version does not start, the
 starting page says what went wrong and where the kept version is, and going back is quitting Jason and putting that
 folder back in the place of the installed application. That puts back the previous application and the Jason it carried;

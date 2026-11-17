@@ -830,10 +830,16 @@ From `desktop/`:
 ```sh
 npm ci
 npm run check         # the type-check of the sources and the tests
+node node_modules/electron/install.js   # Electron's own binary, for the rows that run under it
 npm test              # the Node tests
 npm run prepare:bundle -- --pre rc.1   # publishes this checkout's jason into bundle/ as <VersionPrefix>-rc.1
 npm run dev           # builds and starts the window
 ```
+
+The electron package fetches its binary only when asked, held to the sha256 its `checksums.json` names, and no test
+downloads it. `test/rollback-electron.test.ts` runs the copy an update keeps aside under that binary as Node, where the
+file system reads `resources/app.asar` as an archive as the application's main process does; without the binary it skips
+and says so, and with `JASON_DESKTOP_ELECTRON_REQUIRED=1`, as CI sets it, it fails instead.
 
 A desktop build always carries a candidate's version string (`0.34.0-rc.1`), never `dev`, so `jason ui install` and
 `jason plugin install` resolve that candidate's own release directory. `test/candidate-version.test.ts` proves it against

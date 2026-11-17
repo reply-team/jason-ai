@@ -16,6 +16,7 @@ import {
     isFirstLaunchOfUpdate,
     isRejected,
     keptLine,
+    keepPrevious,
     keptNotice,
     parseRollbackState,
     readRollback,
@@ -339,7 +340,7 @@ test('a runtime the application carries that does not stop keeps the update from
     );
 });
 
-test('a copy that cannot be kept aside after the runtime was stopped says so, and how to start the runtime again', async (t) => {
+test('a copy that cannot be kept aside says so, how to start a stopped runtime again, and where the new version’s installer is', async (t) => {
     for (const stopped of [true, false]) {
         const s = scratch(t);
         // A file where the rollback folder goes: nothing can be kept there.
@@ -355,14 +356,39 @@ test('a copy that cannot be kept aside after the runtime was stopped says so, an
         assert.deepEqual(order, ['stopRuntime'], 'the runtime is stopped first, and nothing is closed');
         assert.equal(updater.calls.includes('quitAndInstall'), false);
         assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
-        assert.deepEqual(log.lines.at(-1), { level: 'error', name: 'update_failed', fields: { Step: 'keep', Failures: 1 } });
-        assert.deepEqual(told, [keepRefusal(stopped)]);
+        assert.deepEqual(log.lines.slice(-2), [
+            { level: 'warn', name: 'update_keep_failed', fields: { Code: 'ENOTDIR' } },
+            { level: 'error', name: 'update_failed', fields: { Step: 'keep', Failures: 1 } },
+        ]);
+        assert.deepEqual(told, [keepRefusal(stopped, '0.35.0')]);
     }
-    assert.equal(keepRefusal(false), 'The update was not installed, because a copy of this version could not be kept aside to go back to. Jason was left as it was.');
     assert.equal(
-        keepRefusal(true),
-        'The update was not installed, because a copy of this version could not be kept aside to go back to. The runtime this application carries was stopped for the update: jason runtime start starts it again.',
+        keepRefusal(false, '0.35.0'),
+        'The update was not installed, because a copy of this version could not be kept aside to go back to. Jason was left as it was. You can install the new version yourself: download its installer from https://get.jasonharness.ai/releases/tag/v0.35.0 and run it.',
     );
+    assert.equal(
+        keepRefusal(true, '0.35.0'),
+        'The update was not installed, because a copy of this version could not be kept aside to go back to. The runtime this application carries was stopped for the update: jason runtime start starts it again. You can install the new version yourself: download its installer from https://get.jasonharness.ai/releases/tag/v0.35.0 and run it.',
+    );
+});
+
+test('a copy that fails part way leaves nothing of itself and records nothing; the earlier record stays as it was', async (t) => {
+    for (const asFile of [false, true]) {
+        const s = scratch(t);
+        const application = asFile ? join(s.root, 'Jason.AppImage') : s.application;
+        if (asFile) writeFileSync(application, 'the AppImage 0.34.0');
+        const earlier = { pending: { fromVersion: '0.33.0', toVersion: '0.34.0', directory: join(s.rollback, '0.33.0', 'Jason') }, rejected: ['0.33.1'] };
+        writeRollback(s.rollback, earlier);
+        const failing = async (_source: string, target: string): Promise<void> => {
+            // Some of the copy is written before it fails, as a copy that runs out of room or meets a file it cannot read.
+            mkdirSync(join(target, 'resources'), { recursive: true });
+            writeFileSync(join(target, 'resources', 'app.asar'), 'half');
+            throw Object.assign(new Error('planted copy failure'), { code: 'ENOSPC' });
+        };
+        await assert.rejects(keepPrevious(s.rollback, application, '0.34.0', '0.35.0', failing), { code: 'ENOSPC' });
+        assert.deepEqual(readdirSync(s.rollback), ['state.json'], 'no part of the copy is left');
+        assert.deepEqual(readRollback(s.rollback), earlier, 'nothing is recorded');
+    }
 });
 
 test('the copy holds no file of <data>, even when <data> lies inside the installed application, and its record names no secret', async (t) => {

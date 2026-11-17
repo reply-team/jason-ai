@@ -70,6 +70,7 @@ export const templates = {
     update_downloaded: 'Jason {Version} was downloaded',
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
+    update_keep_failed: 'The application could not be kept aside for an update ({Code}); the update was not installed',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
     bundle_copy_failed: 'The jason an AppImage carries was not copied out of it; the copy there differs: {Differs}',
     autostart_repointed: 'Start the runtime at logon named another version’s copy and was registered again from this one: jason runtime autostart exited {Exit}',
