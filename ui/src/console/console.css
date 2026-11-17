@@ -1802,9 +1802,6 @@ body,
     width: 100%;
     margin: 8px 0 0;
 }
-.jc-console .needs-reasked {
-    margin: 0 0 12px;
-}
 @media (max-width: 900px) {
     .jc-console .needs-panes {
         grid-template-columns: minmax(0, 1fr);

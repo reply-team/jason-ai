@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 // The frame of the browser shell's screens inside the console's area: a screen that shows no detail draws no rule at
@@ -36,5 +36,31 @@ describe('a dialog in the dark theme', () => {
             expect(console_).toContain(`${lead} .jc-console .dialog {`);
         }
         expect(console_).toContain('background: rgba(0, 0, 0, 0.62);');
+    });
+});
+
+describe('a dialog’s layer', () => {
+    it('stands over every layer of the page and under the search palette alone', () => {
+        // Every z-index of the page's stylesheets, by the rule that sets it.
+        const layers = readdirSync('src', { recursive: true, encoding: 'utf8' })
+            .filter((name) => name.endsWith('.css'))
+            .flatMap((name) =>
+                [...strip(readFileSync(`src/${name}`, 'utf8')).matchAll(/([^{}]+)[{]([^{}]*)[}]/g)].flatMap(
+                    ([, head, body]) => {
+                        const z = /(?:^|;|\s)z-index:\s*(-?\d+)/.exec(body ?? '')?.[1];
+                        return z === undefined
+                            ? []
+                            : [{ selector: (head ?? '').trim().replace(/\s+/g, ' '), z: Number(z) }];
+                    },
+                ),
+            );
+        const overlay = layers.filter((each) => each.selector === '.overlay');
+        expect(overlay).toEqual([{ selector: '.overlay', z: 50 }]);
+        const above = layers.filter((each) => each.z >= 50 && each.selector !== '.overlay');
+        expect(above).toEqual([{ selector: '.jc-console .palette-away', z: 60 }]);
+        // The layers it must beat are read, each below it: the menus and the narrow sidebar among them.
+        const below = new Map(layers.filter((each) => each.z < 50).map((each) => [each.selector, each.z]));
+        for (const selector of ['.jc-console .menu', '.picker .menu', '.jc-console .side', '.jc-console .side-away'])
+            expect(below.has(selector), selector).toBe(true);
     });
 });

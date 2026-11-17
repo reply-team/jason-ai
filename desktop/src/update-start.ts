@@ -27,7 +27,7 @@ import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { settleByRequest } from './rollback.ts';
-import { applyExit, applyExits, busyRecord, createRequestFile, headlessLimitMs, requestFile, requestSupport, systemShell, takeRequest, usageRecord, windowOpenUpdate, type UpdateRequest, type UpdateRequests } from './update-request.ts';
+import { applyExit, applyExits, busyRecord, createRequestFile, headlessLimitOf, requestFile, requestSupport, systemShell, takeRequest, usageRecord, windowOpenUpdate, type UpdateRequest, type UpdateRequests } from './update-request.ts';
 import { Updater, type UpdateState } from './updates.ts';
 
 function readText(file: string): string | null {
@@ -100,7 +100,8 @@ export function refuseBusy(request: UpdateRequest, window: boolean): void {
 
 /**
  * The `--update-apply` start, once it holds the lock: its request taken by an updater of its own, bounded by
- * `headlessLimitMs`. Resolves to the exit, or never while the installer has the update and electron-updater quits.
+ * `headlessLimitOf` (`headlessLimitMs`, and the go's wait beside it for a request that waits for one). Resolves to the
+ * exit, or never while the installer has the update and electron-updater quits.
  */
 export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests): Promise<number> {
     const { data, log } = installation();
@@ -122,7 +123,7 @@ export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests)
                 log,
                 late: () => resolve(applyExits.answered),
                 limit: {
-                    ms: headlessLimitMs,
+                    ms: headlessLimitOf(taken),
                     timers: { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout) },
                     expired: () => resolve(applyExits.failed),
                 },

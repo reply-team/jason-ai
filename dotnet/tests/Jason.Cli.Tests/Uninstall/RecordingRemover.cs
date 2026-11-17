@@ -253,13 +253,35 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     /// <summary>The processes said to run each executable: the application open, for the uninstall that must not remove it from under itself.</summary>
     public Dictionary<string, int[]> Running { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>What a look at an executable answers, where a test says, given how many looks came before it; else <see cref="Running"/>.</summary>
+    public Func<string, int, IReadOnlyList<int>>? Looks { get; set; }
+
     public IReadOnlyList<int> RunningFrom(string executable)
     {
         Reads.Add(executable);
-        return Running.GetValueOrDefault(executable) ?? [];
+        return Looks?.Invoke(executable, Reads.Count - 1) ?? Running.GetValueOrDefault(executable) ?? [];
     }
 
-    public void UnloadLaunchAgent(string file) => Record("launchagent.unload", file);
+    /// <summary>
+    /// The processes said to run each executable in any session, where a test says so apart from <see cref="Running"/>: a
+    /// jason in another session, which this session's look does not see.
+    /// </summary>
+    public Dictionary<string, int[]> RunningInAnySession { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyList<int> RunningFromInAnySession(string executable)
+    {
+        Reads.Add($"any-session {executable}");
+        return RunningInAnySession.GetValueOrDefault(executable) ?? Running.GetValueOrDefault(executable) ?? [];
+    }
+
+    /// <summary>The process that started each, where a test says; any other has none that can be told.</summary>
+    public Dictionary<int, int> Parents { get; } = [];
+
+    public int? ParentOf(int pid) => Parents.TryGetValue(pid, out var parent) ? parent : null;
+
+    public void UnloadLaunchAgent(string file, string label) => Record("launchagent.unload", file);
+
+    public void DeletePreferences(string domain) => Record("preferences.delete", domain);
 
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;

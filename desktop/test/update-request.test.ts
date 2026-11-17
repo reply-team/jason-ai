@@ -2,17 +2,21 @@
 // loopback feed, the request's file and its steps, the switch a window obeys, and how the main module starts it.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import {
     applyExit,
     applyExits,
+    awaitGoFlag,
     busyRecord,
     createRequestFile,
+    goFile,
+    goWaitMs,
     handedData,
     headlessLimitMs,
+    headlessLimitOf,
     isRequestId,
     isVersion,
     loopbackFeed,
@@ -27,8 +31,10 @@ import {
     UpdateRequests,
     updateStart,
     usageRecord,
+    waitForGo,
     windowOpenUpdate,
     writeRequestFile,
+    type GoWait,
     type RequestRecord,
     type TakeDeps,
     type UpdateRequest,
@@ -556,4 +562,199 @@ test('a window’s run takes requests with its own updater; the Demo makes one f
     assert.ok(live.includes('serveRequests(log, paths.data, updates !== null, () => updates ?? requestUpdater({ data: paths.data, log }));'));
     assert.ok(main.includes('takeRequest(request, { data, from: app.getVersion(), where: { window: { menu } }, unsupported: requestSupport(app.isPackaged, process.platform), updater, windowOpen: windowOpenUpdate, log })'));
     assert.equal(existsSync(new URL('../src/update-start.ts', import.meta.url)), true);
+});
+
+// ---- The go -------------------------------------------------------------------------------------------------------
+
+/** A go wait of the test's own: the file looked for as it is, a few short pauses, and what happened at each look. */
+function goWaitOf(looks: number, onLook: (look: number) => void = () => undefined): GoWait & { looked: () => number } {
+    let looked = 0;
+    return {
+        exists: (file) => {
+            looked += 1;
+            onLook(looked);
+            return existsSync(file);
+        },
+        ms: looks * 5,
+        pollMs: 5,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        looked: () => looked,
+    };
+}
+
+/** The real updater over a recording electron-updater, its runtime stop and its keep heard in order. */
+function realUpdater(data: string) {
+    const { electron, calls } = recordingUpdater('0.49.1');
+    const order: string[] = [];
+    const updater = new Updater({
+        updater: electron,
+        version: '0.49.0',
+        application: null,
+        rollback: join(data, 'desktop', 'rollback'),
+        log: memoryLog(),
+        stopRuntime: async () => {
+            order.push('stopRuntime');
+            return { kind: 'stopped' };
+        },
+        refused: () => undefined,
+        beforeInstall: async () => void order.push('beforeInstall'),
+        afterRefused: async () => undefined,
+        changed: () => undefined,
+    });
+    updater.prepare();
+    return { updater, calls, order };
+}
+
+const waits: UpdateRequest = { ...request, awaitGo: true };
+
+test('--await-go is read once beside a request, handed to a running window and read again there, and the settle takes none', () => {
+    assert.equal(awaitGoFlag, '--await-go');
+    assert.deepEqual(updateStart(['Jason', '--update-apply', '--to', '0.49.1', '--request', 'req_01JA', '--await-go']), { kind: 'apply', request: waits });
+    assert.equal(updateStart(['Jason', '--update-apply', '--to', '0.49.1', '--request', 'r1', '--await-go', '--await-go'])?.kind, 'usage');
+    assert.equal(updateStart(['Jason', '--update-settle', '--await-go'])?.kind, 'usage');
+    assert.deepEqual(requestOf(handedData(waits)), waits);
+    assert.deepEqual(handedData(request), { update: { id: 'req_01JA', to: '0.49.1', feed: null } }, 'a request that waits for nothing hands nothing more than before');
+    for (const awaitGo of [false, 'yes', 1, null]) assert.equal(requestOf({ update: { ...request, awaitGo } }), null, String(awaitGo));
+    assert.equal(goFile('/data', 'req_01JA'), join('/data', 'update', 'desktop-req_01JA.go'));
+});
+
+test('the go is waited for longer than the verb may take to give it, by a stated margin, and a start that waits for it is bounded by both', () => {
+    // The verb gives the go within ten minutes of reading `downloaded` (docs/release-and-update.md §7), or gives none.
+    const verbGoBoundMs = 10 * 60_000;
+    assert.equal(goWaitMs, 15 * 60_000);
+    assert.ok(goWaitMs - verbGoBoundMs >= 5 * 60_000, 'a margin of five minutes over the verb’s own bound');
+    assert.equal(headlessLimitOf(request), headlessLimitMs, 'a request that waits for nothing is bounded as before');
+    assert.equal(headlessLimitOf(waits), headlessLimitMs + goWaitMs);
+});
+
+test('a request that names no --await-go never waits: no downloaded step, no go looked for, installed as before', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    const never: GoWait = { exists: () => assert.fail('a request that waits for nothing looked for a go'), ms: 10, pollMs: 5, sleep: async () => undefined };
+    const { all, written } = deps(data, () => updater, { go: never });
+    const end = await taken(request, all);
+    assert.equal(end.state, 'installing');
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'checking', 'downloading', 'installing']);
+    assert.deepEqual(calls.filter((call) => !call.startsWith('setFeedURL')), ['check', 'download', 'quitAndInstall(true, false)']);
+    assert.deepEqual(order, ['stopRuntime', 'beforeInstall']);
+    const planted_ = planted({ state: 'current' });
+    await taken(request, deps(scratch(t), planted_.updater).all);
+    assert.equal(planted_.asked[0]?.how.go, undefined, 'the updater is handed no go to wait for');
+});
+
+test('a request that waits for the go says downloaded and stops, keeps and installs nothing until the go is there', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    // The go appears at the third look, as the verb makes it once it has stopped the runtime and stepped out.
+    const wait = goWaitOf(100, (look) => {
+        assert.deepEqual(order, [], 'the runtime was stopped before the go');
+        // The first look is the one before the request is taken; every later one is the wait's, at `downloaded`.
+        if (look > 1) assert.equal(readRequestFile(requestFile(data, request.id))?.state, 'downloaded');
+        if (look === 4) writeFileSync(goFile(data, request.id), '');
+    });
+    const { all, written } = deps(data, () => updater, { go: wait });
+    const end = await taken(waits, all);
+    assert.equal(end.state, 'installing');
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'checking', 'downloading', 'downloaded', 'installing']);
+    assert.equal(written[3]?.offered, '0.49.1');
+    // One look before the request was taken, then the three of the wait.
+    assert.equal(wait.looked(), 4);
+    assert.deepEqual(order, ['stopRuntime', 'beforeInstall']);
+    assert.deepEqual(calls.filter((call) => !call.startsWith('setFeedURL')), ['check', 'download', 'quitAndInstall(true, false)']);
+});
+
+test('no go in time: go_timed_out, nothing stopped, kept or installed, and the download waits under the install item', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    const { all, written, log } = deps(data, () => updater, { go: goWaitOf(4) });
+    const end = await taken(waits, all);
+    assert.equal(end.state, 'refused');
+    assert.equal(end.reason, 'go_timed_out');
+    assert.equal(end.runtime_stopped, false);
+    assert.equal(end.kept, null);
+    assert.match(end.message ?? '', /did not say go within 15 minutes, so nothing was stopped, kept or installed/);
+    // A start of its own has no menu: the sentence names none, and the window's own Check for Updates instead.
+    assert.doesNotMatch(end.message ?? '', /install item/);
+    assert.match(end.message ?? '', /Check for Updates in Jason Desktop's menu once it is open/);
+    assert.equal(applyExit(end), applyExits.answered);
+    assert.deepEqual(written.map((record) => record.state), ['checking', 'checking', 'downloading', 'downloaded', 'refused']);
+    assert.deepEqual(order, [], 'nothing stopped or let go');
+    assert.equal(existsSync(join(data, 'desktop', 'rollback', '0.49.0')), false, 'nothing kept');
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')), 'nothing installed');
+    assert.deepEqual(updater.current, { step: 'downloaded', version: '0.49.1' }, 'the menu keeps the download');
+    assert.ok(log.lines.some((line) => line.name === 'update_request_ended' && line.fields['Code'] === 'go_timed_out'));
+});
+
+test('a go that is there before the request is taken is no go: refused as go_there, with no updater made', async (t) => {
+    const data = scratch(t);
+    mkdirSync(join(data, 'update'), { recursive: true });
+    writeFileSync(goFile(data, request.id), '');
+    const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: null });
+    const end = await taken(waits, deps(data, u.updater).all);
+    assert.equal(end.reason, 'go_there');
+    assert.equal(u.made(), 0);
+    assert.match(end.message ?? '', /no go/);
+    // A request that waits for nothing does not look at a go file at all.
+    writeFileSync(goFile(data, 'req_plain'), '');
+    assert.equal((await taken({ ...request, id: 'req_plain' }, deps(data, planted({ state: 'current' }).updater).all)).state, 'current');
+});
+
+test('a window that would install waits for the go too, and its menu stays at the download when none comes; one that may not close refuses first', async (t) => {
+    for (const windowOpen of ['close', 'stop'] as const) {
+        const data = scratch(t);
+        const { updater, order } = realUpdater(data);
+        const wait = goWaitOf(3);
+        const end = await taken(waits, deps(data, () => updater, { where: { window: { menu: true } }, windowOpen, go: wait }).all);
+        assert.equal(end.window, true);
+        assert.equal(end.reason, windowOpen === 'close' ? 'go_timed_out' : 'window_open', windowOpen);
+        if (windowOpen === 'close') assert.match(end.message ?? '', /The download waits under the install item of Jason Desktop's menu/);
+        // The look before the request is taken, and for a window that would install, the wait's own looks.
+        assert.equal(wait.looked() > 1, windowOpen === 'close', windowOpen);
+        assert.deepEqual(order, []);
+        assert.deepEqual(updater.current, { step: 'downloaded', version: '0.49.1' }, windowOpen);
+    }
+});
+
+test('a go made before the request said downloaded is no go the verb made: refused as go_there, nothing stopped, kept or installed', async (t) => {
+    const data = scratch(t);
+    const { updater, calls, order } = realUpdater(data);
+    // A go planted while the update downloads: there at the wait's first look, dated before the request's `downloaded`.
+    const wait = goWaitOf(100, (look) => {
+        if (look === 1) return;
+        const go = goFile(data, request.id);
+        if (!existsSync(go)) {
+            writeFileSync(go, '');
+            const before = new Date(Date.now() - 60_000);
+            utimesSync(go, before, before);
+        }
+    });
+    const end = await taken(waits, deps(data, () => updater, { go: { ...wait, made: (file) => statSync(file).mtimeMs } }).all);
+    assert.equal(end.state, 'refused');
+    assert.equal(end.reason, 'go_there');
+    assert.match(end.message ?? '', /no go the verb made: nothing was stopped, kept or installed/);
+    assert.deepEqual(order, [], 'nothing stopped or let go');
+    assert.ok(!calls.some((call) => call.startsWith('quitAndInstall')), 'nothing installed');
+
+    // The verb's own go, made after the request said downloaded, is taken.
+    const fresh = scratch(t);
+    const second = realUpdater(fresh);
+    const own = goWaitOf(100, (look) => {
+        if (look === 3) writeFileSync(goFile(fresh, request.id), '');
+    });
+    const taken_ = await taken(waits, deps(fresh, () => second.updater, { go: { ...own, made: (file) => statSync(file).mtimeMs } }).all);
+    assert.equal(taken_.state, 'installing');
+});
+
+test('the wait for the go ends when the request has ended meanwhile, its bound passed', async () => {
+    let over = false;
+    const wait: GoWait = {
+        exists: () => false,
+        ms: 1_000,
+        pollMs: 5,
+        sleep: async () => {
+            over = true;
+        },
+    };
+    assert.equal(await waitForGo('/nowhere.go', wait, () => over), false);
+    assert.equal(await waitForGo('/nowhere.go', { ...wait, exists: () => true }, () => false), true);
 });

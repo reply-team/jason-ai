@@ -274,8 +274,9 @@ internal sealed class CommandLineRemoval(SetupPlaces places, List<string> left, 
                 var without = PathEntry.WithoutEntry(bytes, directory);
                 if (!ReferenceEquals(without, bytes))
                 {
-                    File.WriteAllBytes(profile, without);
-                    removed.Add($"the block for {directory} in {profile}");
+                    removed.Add(CreatedProfiles.WriteBackOrRemove(places.Home, profile, without)
+                        ? $"the block for {directory} in {profile}, and {profile} itself, which jason install created and which held nothing else"
+                        : $"the block for {directory} in {profile}");
                 }
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)

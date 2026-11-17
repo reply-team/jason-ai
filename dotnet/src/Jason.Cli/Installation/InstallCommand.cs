@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Update;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Installation;
@@ -39,11 +40,16 @@ public static class InstallCommand
              the record, or on Windows that folder. --retire takes only a regular file named jason (jason.exe
              on Windows) with one of those signs; anything else is named and left. Only a runtime running from
              that executable is stopped, and no runtime is started: `jason runtime start` starts one from this
-             jason. Where nothing is to be retired, no runtime is asked anything. A runtime that will not stop
-             is resumed and leaves that install as it is, and so does a runtime that does not name the
-             executable it runs from. Where the data directory's layout.json names a layout newer than this
-             jason runs (layout_newer) or cannot be read (layout_unreadable), no runtime is stopped, no
-             registration moved and nothing of that install retired, with --roles or without.
+             jason. Just before it drains and stops one it writes run/start-owed.json in the data directory,
+             the moment in it, {"stopped_at":"<ISO-8601 UTC>"}: a start is owed. A runtime's own start removes
+             it, and so do any stop through jason runtime stop and an uninstall that keeps the data; jason
+             status names it while no runtime answers, and Jason Desktop starts one when it finds it standing;
+             a run killed or timed out during the stop's wait leaves it standing. Where nothing is to be
+             retired, no runtime is asked anything. A runtime that will not stop is resumed, its note taken
+             back, and leaves that install as it is, and so does a runtime that does not name the executable it runs from. Where the data
+             directory's layout.json names a layout newer than this jason runs (layout_newer) or cannot be
+             read (layout_unreadable), no runtime is stopped, no registration moved and nothing of that
+             install retired, with --roles or without.
           2. The terminal command.
              macOS: ~/.local/bin/jason, the application's own two-line sh wrapper running this jason (naming
              JASON_DATA_DIR where that is set), written over an earlier wrapper, the retired executable, or a
@@ -88,8 +94,8 @@ public static class InstallCommand
           5. With --roles, the role skills into the data directory, as `jason skills install --roles-only`.
 
         Written under the data directory: nothing without --roles, so an application's first start still opens
-        on the Demo; only an install being retired, which has data already, may have its runtime stopped and its
-        logon registration made again.
+        on the Demo; only an install being retired, which has data already, may have its runtime stopped, the
+        note that a start is owed written, and its logon registration made again.
 
         Callers: the Windows installer, at every install and update, silent or not, with no flags; the agent's
         install script on macOS, once the application is in place, with --roles and no --terminal-path; the
@@ -104,6 +110,15 @@ public static class InstallCommand
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.
+
+        One at a time with an update: where the data directory has an update folder, the setup holds the
+        update's lock, <data>/update/update.lock, while it runs, and names itself beside it. While an update,
+        its finish or a rollback holds it, the setup refuses with update_in_progress, having set nothing up:
+        an update's own finish sets the machine up itself. While another jason install holds it, it refuses
+        with install_in_progress, and so does an update begun then. The lock is the open file, which a killed
+        holder lets go. A setup the holder runs as its waited child, handed the holder's nonce in
+        JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
+        is no update folder, or no data directory at all, it takes no lock and makes none.
 
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
@@ -163,7 +178,39 @@ public static class InstallCommand
                 + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
         }
 
-        var report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`
+        // can run while it does. The lock is taken only where an update could hold it, so none is made under a data directory
+        // a first start must still find without one. A setup the lock's holder runs as its waited child is handed the
+        // holder's nonce, as the update's own parts are, and goes on under that hold rather than refuse; read here whether a
+        // lock is taken or not, so that nothing this setup starts carries it on.
+        var handed = UpdateLock.Handed(env.Variables);
+        var update = new UpdatePaths(env.Paths);
+        UpdateLock? held = null;
+        if (Directory.Exists(update.Root))
+        {
+            try
+            {
+                held = UpdateLock.Take(update, "the machine setup", handed, UpdateLock.Holder.Install);
+            }
+            catch (UpdateException refused)
+            {
+                return Refuse(
+                    env,
+                    options.Human,
+                    refused.Code,
+                    refused.Code == UpdateCodes.InProgress
+                        ? $"Another jason is updating this installation, or finishing or rolling back an update, and holds {update.Lock}, so nothing was set up: an update's own finish sets the machine up itself. Let that one end, then run `jason install` again; `jason update status` says where the update stands."
+                        : refused.Message,
+                    refused.Retryable);
+            }
+        }
+
+        InstallReport report;
+        using (held)
+        {
+            report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        }
+
         if (options.Human)
         {
             foreach (var line in report.Done.Concat(report.Left))
@@ -184,7 +231,7 @@ public static class InstallCommand
         return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
     }
 
-    private static int Refuse(CliEnvironment env, bool human, string code, string message)
+    private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)
     {
         if (human)
         {
@@ -192,7 +239,7 @@ public static class InstallCommand
         }
         else
         {
-            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
         }
 
         return ExitCodes.ApiError;

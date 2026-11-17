@@ -54,7 +54,10 @@ test('the setup runs hidden and is waited for, so the installer ends only once i
 
 test('the setup runs at every install and every update, silent or not', () => {
     const lines = macroLines('customInstall');
-    assert.ok(!lines.some((line) => /isUpdated|Silent|isForceRun|\$\{if|\$\{ifNot/i.test(line)), `the setup is conditional:\n${lines.join('\n')}`);
+    // Nothing before the setup decides whether it runs; the one test after it only says what it answered.
+    const ran = lines.indexOf('Pop $R0');
+    assert.ok(!lines.slice(0, ran).some((line) => /isUpdated|Silent|isForceRun|\$\{if|\$\{ifNot/i.test(line)), `the setup is conditional:\n${lines.join('\n')}`);
+    assert.ok(!lines.some((line) => /isUpdated|Silent|isForceRun/i.test(line)), lines.join('\n'));
     // electron-builder's install section runs customInstall once the files are in place and before it starts the
     // application or says it succeeded, and under no condition of its own but that the macro is defined.
     const files = section.indexOf('!insertmacro installApplicationFiles');
@@ -72,6 +75,17 @@ test('a setup that did not get everything done never fails the install, and noth
     // it again where its last run was for an older version.
     assert.ok(!lines.some((line) => /SetErrorLevel|Quit|Abort|MessageBox/i.test(line)), lines.join('\n'));
     assert.ok(!lines.some((line) => /runtime/i.test(line)), 'the installer starts or stops a runtime itself');
+});
+
+test('a setup that did not set everything up is said in one line of a run a person watches, naming jason install', () => {
+    const lines = macroLines('customInstall');
+    const ran = lines.indexOf('Pop $R0');
+    assert.deepEqual(lines.slice(ran + 1), [
+        // A string test: nsExec leaves "error" or "timeout" where the program could not be run, which is no answer of 0.
+        '${if} $R0 S!= 0',
+        `DetailPrint "jason install did not set everything up (it answered $R0). Run ${carried} install in a terminal to see what it says."`,
+        '${endIf}',
+    ]);
 });
 
 test('a runtime the install stopped is started again by whoever ran the installer, never by the installer itself', () => {

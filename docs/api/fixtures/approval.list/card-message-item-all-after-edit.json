@@ -1,0 +1,42 @@
+{
+  "operation": "approval.list",
+  "case": "card-message-item-all-after-edit",
+  "request": {
+    "work_item_id": "wi_1",
+    "statuses": [
+      "pending",
+      "approved",
+      "rejected",
+      "superseded",
+      "cancelled"
+    ]
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "apr_1",
+        "work_item_id": "wi_1",
+        "campaign_id": "cmp_1",
+        "operation": "message.send",
+        "status": "superseded",
+        "reason": "approval_required",
+        "subject_hash": "sha256:recorded-1",
+        "plugin_id": "reply",
+        "requested_at": "2026-10-16T09:00:00.000Z",
+        "decided_at": "2026-10-16T09:00:00.000Z",
+        "decided_by": {
+          "type": "human",
+          "id": "ada"
+        },
+        "campaign_name": "Spring launch",
+        "contact_name": "Ines Duarte",
+        "send_modes_unset": [
+          "send_mode.cold",
+          "send_mode.warm"
+        ]
+      }
+    ],
+    "next_cursor": null
+  }
+}

@@ -24,6 +24,7 @@ import {
     WorkItemSummary,
 } from '../../api/types';
 import { mergePage } from '../../lists/paging';
+import { keepEdited, withdrawn } from '../attention/reasking';
 import { inboxEntriesOf, inboxLines, type InboxEntry } from './inbox-lines';
 import type { CampaignFilters, CampaignView, Period } from '../../router';
 import { bucketOf, periodWindow } from '../../time/periods';
@@ -623,7 +624,11 @@ export async function loadPending(api: Api, id: string): Promise<void> {
             api.call<Page<WorkItemSummary>>('workitem.list', runningBody(id)),
         ]);
         if (mine !== pendingGeneration) return;
-        pendingApprovals.value = approvals.items;
+        // A message edited here keeps its row where it stood, as every list of approvals does (`reasking.ts`).
+        const previous = pendingOf.value === id ? pendingApprovals.value : [];
+        const rows = await keepEdited(api, previous, approvals.items);
+        if (mine !== pendingGeneration) return;
+        pendingApprovals.value = rows;
         pendingQuestions.value = questions.items;
         approvalsCursor.value = approvals.next_cursor;
         questionsCursor.value = questions.next_cursor;
@@ -683,6 +688,8 @@ export async function morePending(api: Api, id: string, section: Section): Promi
 
 /** Decides what waits, as Attention does, then shows the campaign again; the caller reads its numbers and list anew. */
 export async function decide(api: Api, operation: string, body: Record<string, unknown>): Promise<void> {
+    // An approval an edit on this page withdrew is never approved or rejected from here.
+    if (typeof body['approval_id'] === 'string' && withdrawn(body['approval_id']) !== undefined) return;
     busy.value = true;
     actionFailure.value = null;
     try {

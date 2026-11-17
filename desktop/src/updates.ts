@@ -217,11 +217,16 @@ export interface TakenRequest {
  */
 export interface TakenHow {
     install: boolean;
+    /**
+     * Where the request waits for the verb's go (`--await-go`): heard once the update is downloaded and before anything is
+     * stopped, kept or installed; true once the go is there, false when it did not come in time.
+     */
+    go?: () => Promise<boolean>;
     late?: () => void;
 }
 
 /** A step of a request under way, heard before it is taken. */
-export type TakenStep = { step: 'checking' } | { step: 'downloading'; offered: string } | { step: 'installing'; runtimeStopped: boolean; kept: string | null };
+export type TakenStep = { step: 'checking' } | { step: 'downloading'; offered: string } | { step: 'downloaded' } | { step: 'installing'; runtimeStopped: boolean; kept: string | null };
 
 /** How `take` words a refusal: the reason, the version the feed offered, and what was done before it. */
 type Refuse = (reason: TakenRefusal, offered?: string | null, done?: { runtimeStopped?: boolean; kept?: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered }) => TakenOutcome;
@@ -235,6 +240,7 @@ export type TakenRefusal =
     | 'version_mismatch'
     | 'download_failed'
     | 'window_open'
+    | 'go_timed_out'
     | 'runtime_not_stopped'
     | 'keep_failed'
     | 'install_failed';
@@ -457,6 +463,15 @@ export class Updater {
         }
         // A window that may not close stops here: the update waits under its menu's install item.
         if (!how.install) return refused('window_open', request.to);
+        // A request that waits for the go says it is downloaded and waits: no go in time stops nothing, keeps nothing and
+        // installs nothing, and the download waits under the install item.
+        if (how.go !== undefined) {
+            progress({ step: 'downloaded' });
+            if (!(await how.go())) {
+                this.deps.log.info('update_go_missed', { Version: request.to });
+                return refused('go_timed_out', request.to);
+            }
+        }
         const result = await this.installing(request.to, { late: how.late, progress });
         if (result.ok) return { state: 'installing', offered: request.to, runtimeStopped: result.runtimeStopped, kept: result.kept };
         if (result.step === 'runtime') return refused('runtime_not_stopped', request.to, { runtime: result.outcome });

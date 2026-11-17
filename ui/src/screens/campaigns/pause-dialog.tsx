@@ -9,6 +9,7 @@ import { kinds, modeWords, type Kind } from '../send-modes/model';
 import * as store from './store';
 import { Dialog } from '../../layout/dialog';
 import { Notice } from '../../layout/notice';
+import { ReasonField } from '../../layout/reason-field';
 
 /** Pause stops an active campaign's work; Resume releases a paused one's again; Start releases a draft's for the first time. */
 export type Transition = 'pause' | 'resume' | 'start';
@@ -207,9 +208,8 @@ export function TransitionDialog({ campaign, kind, onDone, onClose }: Props) {
             {releases && <WhatStartingReleases releases={releases} />}
             <div className="field">
                 <label htmlFor="transition-reason">Reason (optional, kept in the journal)</label>
-                <textarea
+                <ReasonField
                     id="transition-reason"
-                    className="textarea"
                     aria-label="Reason"
                     maxLength={2000}
                     value={reason}
