@@ -255,7 +255,7 @@ test('a test build, CI’s alone, turns every signature step and check off and c
     assert.equal(test.mac.notarize, false);
     assert.equal(test.mac.forceCodeSigning, false);
     assert.equal(test.dmg.sign, false);
-    assert.deepEqual(test.mac.target, [{ target: 'zip', arch: ['arm64', 'x64'] }]);
+    assert.deepEqual(test.mac.target, [{ target: 'zip' }]);
     // Everything else is the release's package: the same feed, fuses, files, bundle and names.
     const strip = (built: Configuration) => {
         const { win, mac, dmg, beforePack, afterPack, artifactBuildStarted, artifactBuildCompleted, ...rest } = built;

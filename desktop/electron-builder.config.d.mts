@@ -14,7 +14,7 @@ export const testBuildVariable: string;
 
 interface Target {
     target: string;
-    arch: string[];
+    arch?: string[];
 }
 
 export interface Configuration {

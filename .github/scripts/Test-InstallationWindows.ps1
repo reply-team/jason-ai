@@ -384,3 +384,6 @@ switch ($Step) {
         exit 0
     }
 }
+
+# Every assertion above throws; reached here, the step succeeded, whatever the last program it ran exited with.
+exit 0

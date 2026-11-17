@@ -243,11 +243,14 @@ export function configuration({ version, sign = null, testBuild = false, linuxWa
             deleteAppDataOnUninstall: false,
         },
         mac: {
-            // A test build makes the zip alone, which the install script and the updater take; a dmg is a person's.
-            target: [
-                ...(testBuild ? [] : [{ target: 'dmg', arch: ['arm64', 'x64'] }]),
-                { target: 'zip', arch: ['arm64', 'x64'] },
-            ],
+            // A test build makes the zip alone, which the install script and the updater take (a dmg is a person's), for
+            // the architecture the pack names: CI's runner builds the one it runs.
+            target: testBuild
+                ? [{ target: 'zip' }]
+                : [
+                      { target: 'dmg', arch: ['arm64', 'x64'] },
+                      { target: 'zip', arch: ['arm64', 'x64'] },
+                  ],
             category: 'public.app-category.business',
             // The desktop's link scheme, jason-desktop, written into Info.plist as CFBundleURLTypes (app-builder-lib 26.18.0,
             // out/electron/electronMac.js), so the system hands a link to the application by open-url (`deep-link.ts`).
