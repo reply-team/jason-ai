@@ -112,6 +112,8 @@ jobs:
           if ($code -eq 0) { throw "the released install.ps1 installed an unsigned setup" }
           if (-not ($said -replace '\s+', '').Contains('doesnotcarryavalidsignature')) { throw "the released install.ps1 failed for another reason than the signature" }
           if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Programs\jason-desktop')) { throw "the refused install left the application's folder" }
+          # The script's own exit code, 1, was the pass; the step says how it ended itself.
+          exit 0
 
       # The stand-in for the release's signer, on this runner alone: a code-signing certificate made here, its key never
       # leaving this runner, trusted in this machine's root store, signs the test build's setup, so the script's own check -
@@ -149,6 +151,7 @@ jobs:
           $script = Join-Path $env:RUNNER_TEMP 'install-stand-in-signer.ps1'
           Set-Content -LiteralPath $script -Value $copy -Encoding ascii
           "script=$script" >> $env:GITHUB_OUTPUT
+          exit 0
 
       # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
       # Jason ships. Then the listing everything after is compared with.
