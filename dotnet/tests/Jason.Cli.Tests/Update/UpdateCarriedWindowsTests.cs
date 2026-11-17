@@ -502,6 +502,42 @@ public sealed class UpdateCarriedWindowsTests
         Assert.Null(installation.Ledger());
     }
 
+    /// <summary>
+    /// A runtime an earlier version's Demo left running on its own folder beside the data directory runs the carried jason
+    /// too: the verb asks it to stop after this installation's runtime, and where it is still there gives no go, names the
+    /// folder and the way to stop it, and starts this installation's runtime again.
+    /// </summary>
+    [Fact]
+    public async Task A_demo_runtime_that_will_not_stop_gives_no_go_and_is_named()
+    {
+        var (installation, desktop, carried) = Windows();
+        using var _ = installation;
+        using var __ = desktop;
+        var demo = Path.TrimEndingDirectorySeparator(installation.Paths.Root) + "-demo";
+        var demoPaths = new JasonPaths(demo);
+        Directory.CreateDirectory(demoPaths.RunDirectory);
+        File.WriteAllText(Path.Combine(demo, Jason.Cli.Uninstall.DesktopRemoval.DemoMarkerName), Jason.Cli.Uninstall.DesktopRemoval.DemoMarkerText);
+        const int DemoPid = 48_484;
+        File.WriteAllText(
+            demoPaths.DescriptorFile,
+            JsonSerializer.Serialize(new RuntimeDescriptor("v1", installation.From.ToString(), "demo", DemoPid, "http://127.0.0.1:5001", "the-demo-token", DateTimeOffset.UnixEpoch), JasonJson.Options));
+        installation.Processes.RunningPids.Add(DemoPid);
+        var original = File.ReadAllText(installation.InstallPath);
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => carried.InstallAsync(ledger, Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.RuntimeUnreachable, refused.Code);
+        Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"process {DemoPid}, on {demo}, did not stop"), refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"JASON_DATA_DIR set to {demo}", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop was given no go", refused.Message, StringComparison.Ordinal);
+        Assert.Empty(desktop.Seen);
+        Assert.Equal(original, File.ReadAllText(installation.InstallPath));
+        Assert.Null(carried.Moved);
+        Assert.True(installation.Running);
+        Assert.Null(installation.Ledger());
+    }
+
     /// <summary>A runtime that will not stop: nothing is moved and no go given, and the drained runtime claims work again.</summary>
     [Fact]
     public async Task A_runtime_that_will_not_stop_is_resumed_and_nothing_is_moved()
@@ -655,6 +691,67 @@ public sealed class UpdateCarriedWindowsTests
 
         Assert.Equal(!swept, File.Exists(image));
         Assert.True(Directory.Exists(store), "the sweep took the store itself away");
+    }
+
+    /// <summary>
+    /// The record as this jason writes it — its id and its start as .NET reads them, by <see cref="CarriedUpdate.PidRecord"/> —
+    /// read by the installer's own look: the runtime filter of <c>desktop/installer/uninstall.nsh</c>, run by PowerShell as
+    /// the installer runs it, passes over the process it names and finds it again where no record names it.
+    /// </summary>
+    /// <remarks>
+    /// The process is a copy of the system's command interpreter of the test's own, named as the carried file is and started
+    /// with <c> update apply</c> on its command line, waiting on its input until it is ended; it shows no window.
+    /// </remarks>
+    [Fact]
+    public void The_record_this_jason_writes_is_the_one_the_installers_look_passes_over()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The installer's look is Windows' own.");
+        using var dir = new TempPaths();
+        var image = Path.Combine(dir.Paths.Root, ReleaseAssets.ExecutableName);
+        File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), image);
+        var record = Path.Combine(dir.Paths.Root, CarriedUpdate.PidFileName);
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "desktop", "installer", "uninstall.nsh"));
+        var filter = System.Text.RegularExpressions.Regex.Match(script, "^!define JASON_OWN_RUNTIME `([^`]+)`$", System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value.Replace("$$", "$", StringComparison.Ordinal);
+        Assert.NotEmpty(filter);
+
+        using var applying = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(image)
+        {
+            ArgumentList = { "/d", "/k", "rem", "update", "apply" },
+            RedirectStandardInput = true,
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        })!;
+        try
+        {
+            File.WriteAllText(record, CarriedUpdate.PidRecord(applying.Id, applying.StartTime.ToFileTimeUtc()));
+            Assert.False(Found(record), "the installer's look found the process the record this jason writes names");
+            Assert.True(Found(Path.Combine(dir.Paths.Root, "no-record.pid")), "the installer's look did not find the process with no record");
+        }
+        finally
+        {
+            applying.Kill();
+            applying.WaitForExit();
+        }
+
+        bool Found(string updating)
+        {
+            var look = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
+            {
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", $"if (@({filter}).Count -gt 0) {{ exit 0 }} else {{ exit 1 }}" },
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            look.Environment["JASON_DESKTOP_RUNTIME"] = image;
+            look.Environment["JASON_DESKTOP_UPDATING"] = updating;
+            using var run = System.Diagnostics.Process.Start(look)!;
+            run.StandardOutput.ReadToEnd();
+            run.StandardError.ReadToEnd();
+            run.WaitForExit();
+            Assert.True(run.ExitCode is 0 or 1, $"PowerShell ended with {run.ExitCode}");
+            return run.ExitCode == 0;
+        }
     }
 
     /// <summary>The move's default place: the updater's store under the local application data, a folder per request.</summary>
