@@ -172,7 +172,7 @@ such a unit exists only while the person is signed in.
   `jason status` names session 0, what runs there — a service, an SSH session, a runtime 0.1.0's logon task started —
   and, for the last, the acts that end it, in order. A Linux runtime with `notify-send` and a session bus but no
   notification daemon and no `gdbus` cannot ask whether a daemon is there, so its toast is recorded `failed`,
-  `toast_failed`; `Notifications:Toast` set to `false` turns it off. A probe that cannot answer — it fails, or
+  `toast_failed`; `jason notification disable toast --actor human:<Name>` turns it off. A probe that cannot answer — it fails, or
   outlives its bound — decides nothing, and the notification is sent; so one Linux toast can take three launches, each
   bounded at five seconds, fifteen in all, none of them on the scan.
 - **Each account has its own runtime and its own toasts.** One person's approvals are never shown on another's
@@ -293,7 +293,8 @@ jason journal list --kind notification_sent
 - `jason runtime status --human` says what each channel did last, on its `Notify:` line — including, before anything
   has been sent, a toast with no desktop.
 - `jason status` has an optional `notifications` check: off is `absent`; a channel that failed, a named plugin that was
-  not attempted, and a runtime in session 0 are `failed`, each saying why; a person's own setting — notifications
+  not attempted, a channel that is on and cannot deliver (its `readiness` is not `ready`), and a runtime in session 0
+  are `failed`, each saying why; a person's own setting — notifications
   switched off, a machine with no desktop by design — is never `failed`. Being optional, it never makes an
   installation unready.
 - The runtime's log (`~/.jason/logs/`, compact JSON, one line per event) has a line for each failed channel. It keeps
@@ -366,12 +367,36 @@ the setting's path and expected type for a mistyped one.
 
 | Setting | Default | What it decides |
 |---|---|---|
-| `Notifications:Enabled` | `true` | off means nothing is read, sent or written |
-| `Notifications:Toast` | `true` | the operating system's own notification |
+| `Notifications:Enabled` | `true` | off means nothing is read, sent or written; no verb writes it |
+| `Notifications:Toast` | `true` | the operating system's own notification; `jason notification enable` or `disable` `toast` writes it |
 | `Notifications:QuietSeconds` | `60` | how long the newest line of a burst must be quiet, 1 to 3600 |
 | `Notifications:MaxWaitSeconds` | `600` | how long the oldest line of a burst that never settles may wait, from `QuietSeconds` to 86400 |
 | `Notifications:MinIntervalMinutes` | `30` | the least time between two notifications that reached anybody, 0 to 1440; 0 is no floor |
-| `Notifications:Plugins:<id>` | none | a notification plugin named as a channel: `Enabled` (`true` unless written `false`) and its `Binding` |
+| `Notifications:Plugins:<id>` | none | a notification plugin named as a channel: `Enabled` (`true` unless written `false`, which `jason notification enable` or `disable` `<id>` writes) and its `Binding` |
+
+**One channel on or off.** `jason notification disable <channel>` turns one channel off and `jason notification enable
+<channel>` turns it on again, the channel being `toast` or a notification plugin's id; Settings → Notifications has a
+switch per channel that does the same ([ui.md](ui.md)). Each is the operation of the same name (`notification.enable`,
+`notification.disable`), written through the runtime's one writer of the settings file, which keeps every other byte:
+off writes `false`, on takes that `false` away. It is in force when it answers, with no reload, and answers the
+`notifications` section of `jason runtime status` as it then stands; a change of the channel in force is journaled as
+`notification_channel_updated`, with the setting's path and whether the channel was on before and after. Neither verb
+takes the CLI's default actor: whoever switches a channel is named, `--actor human:<Name>`, as for a grant, and the page
+switches in the paired person's name. Taken by a role from inside a run, either is refused (`decided_inside_a_run`), and
+the desktop's chat never runs them.
+
+- There is no verb for every notification at once: `Notifications:Enabled` is a line of the settings file. While it is
+  `false`, turning a channel on is refused as `notifications_off`, which names that line; turning one off is still
+  written.
+- A plugin is a channel only where §8 names it, with its binding, which a switch cannot write: an installed plugin
+  nothing names is refused as `notification_channel_not_configured`, and so is turning on a named one a notification
+  would not be tried on — the plugin not loaded, not declaring the delivery contract, or its binding refused by its own
+  schema — saying what is missing. The runtime's report says the same of each plugin channel before anybody asks, as
+  `readiness` and `readiness_detail`. A name that is neither the toast nor an installed plugin is
+  `notification_channel_not_found`.
+- What the operating system itself holds off — Jason's notifications switched off in Windows' settings, a machine with
+  no desktop — is not Jason's to switch. The toast's own switch stays as it is, and §5 says what Windows did with the last
+  one.
 
 ## 10. Checked by hand so far
 

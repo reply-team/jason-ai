@@ -110,7 +110,10 @@ public sealed record NotificationsInfo(
 /// One channel: whether it is on, and its last outcome — one of <c>delivered</c>, <c>silenced</c>, <c>failed</c> and
 /// <c>not_attempted</c>, or null before anything was sent. For the toast, <see cref="Presence"/> says whether this
 /// runtime has a desktop to show one on at all, decided when it started: <c>available</c>, or <c>no_desktop</c> with
-/// <see cref="PresenceDetail"/> saying why.
+/// <see cref="PresenceDetail"/> saying why. For a plugin channel, <see cref="Readiness"/> says whether a notification
+/// given to it now would be launched, read when the report is asked for by the checks a notification meets before
+/// anything starts: <c>ready</c>, or the reason one would not be tried (<c>unavailable</c>, <c>not_declared</c> or
+/// <c>binding_invalid</c>) with <see cref="ReadinessDetail"/> saying what is missing; null for the toast.
 /// </summary>
 public sealed record NotificationChannelInfo(
     string Channel,
@@ -123,7 +126,9 @@ public sealed record NotificationChannelInfo(
     string? Detail,
     DateTimeOffset? At,
     string? Presence = null,
-    string? PresenceDetail = null);
+    string? PresenceDetail = null,
+    string? Readiness = null,
+    string? ReadinessDetail = null);
 
 /// <summary>
 /// The role skills this runtime will teach from, as they are on disk at the moment it is asked, and the cap

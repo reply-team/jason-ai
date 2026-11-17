@@ -1,0 +1,7 @@
+{
+  "kind": "notification_channel_updated",
+  "version": 1,
+  "case": "on and off are booleans, never words",
+  "body": { "key": "Notifications:Toast", "old": "on", "new": false },
+  "expect": { "invalid": [{ "pointer": "/old", "reason": "type" }] }
+}

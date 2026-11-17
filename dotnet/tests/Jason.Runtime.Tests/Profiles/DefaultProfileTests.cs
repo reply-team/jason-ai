@@ -291,7 +291,7 @@ public class DefaultProfileTests
         Assert.Equal("setting_not_in_force", error.Code);
         Assert.False(error.Retryable);
         Assert.Equal(
-            "Roles:DefaultExecutionProfile cannot be put in force: the Roles settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the Roles section, then run the command again.",
+            "Roles:DefaultExecutionProfile cannot be put in force: the Roles settings in the file are refused, so the runtime keeps the last ones that validated; its log names the setting it refused. Mend the Roles section, then try again.",
             error.Message);
         var last = error.Details![^1];
         Assert.Equal(("settings.json", "settings_file_put_back"), (last.Field, last.Code));

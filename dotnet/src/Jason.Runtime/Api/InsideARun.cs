@@ -39,8 +39,9 @@ public static class InsideARun
     };
 
     /// <summary>
-    /// The operations that change Jason itself: what a plugin may use, and which profile agent work runs on by default. A role
-    /// Jason launches is no person granting it, nor the person who chose the host its kind of work runs on.
+    /// The operations that change Jason itself: what a plugin may use, which profile agent work runs on by default, and which
+    /// channels tell the person. A role Jason launches is no person granting it, nor the person who chose the host its kind
+    /// of work runs on or how they are told.
     /// </summary>
     public static IReadOnlySet<string> ChangesJason { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -48,6 +49,8 @@ public static class InsideARun
         Operations.PluginRevoke,
         Operations.ProfileSetDefault,
         Operations.ProfileUnsetDefault,
+        Operations.NotificationEnable,
+        Operations.NotificationDisable,
     };
 
     /// <summary>Every operation that refuses a request from inside a run.</summary>
@@ -57,6 +60,7 @@ public static class InsideARun
     public static Domain.ForbiddenException Refusal(string operation, string attempt) => operation switch
     {
         Operations.ProfileSetDefault or Operations.ProfileUnsetDefault => Domain.DomainErrors.DefaultProfileInsideARun(attempt),
+        Operations.NotificationEnable or Operations.NotificationDisable => Domain.DomainErrors.NotificationInsideARun(attempt),
         _ when ChangesJason.Contains(operation) => Domain.DomainErrors.ChangesJasonInsideARun(attempt),
         _ => Domain.DomainErrors.DecidedInsideARun(attempt),
     };
