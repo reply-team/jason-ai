@@ -216,7 +216,7 @@ public sealed class MoveRig : IDisposable
     public FinishedCommand Retire(IReadOnlyList<string> command, string? updateLock)
     {
         Acts.Add("routine");
-        RoutineLocks.Add((updateLock, File.Exists(Update.LockHolder) ? File.ReadAllText(Update.LockHolder).Trim() : null));
+        RoutineLocks.Add((updateLock, File.Exists(Update.LockHolder) ? File.ReadAllText(Update.LockHolder).Trim().Split(' ')[^1] : null));
         var old = command[command.ToList().IndexOf("--retire") + 1];
         var runtime = MachineSetup.RuntimeStates.NotRunning;
         if (Installation.Running)

@@ -129,6 +129,65 @@ public sealed class MoveHandOverTests
         Assert.Equal(ExitCodes.ApiError, await UpdateCommands.ApplyAsync(rig.Env with { Out = again, InstallPath = rig.Carried }, rig.Installation.Feed.AbsoluteUri, null, null, human: false, Ct));
     }
 
+    /// <summary>
+    /// The application's routine is this build's own <c>jason install --retire</c>, run as the move's child: handed the move's
+    /// nonce it joins the move's hold rather than refuse, stops the command-line install's runtime leaving the note that a
+    /// start is owed, retires that install, and prints the report the move reads; the move then starts the runtime from the
+    /// application's jason. macOS, whose setup writes only into the rig's own home; the same routine handed no nonce is
+    /// refused while the move holds the lock, as the installer's own <c>jason install</c> is.
+    /// </summary>
+    [Fact]
+    public async Task The_real_routine_joins_the_moves_hold_retires_the_install_and_the_move_starts_the_runtime()
+    {
+        using var rig = new MoveRig(windows: false);
+        rig.Installation.WithRuntime();
+        var refusedWithout = new List<string>();
+        rig.Routine = (command, updateLock) =>
+        {
+            rig.Acts.Add("routine");
+
+            // The installer's own `jason install`, handed nothing, while the move holds the lock.
+            var bare = new StringWriter();
+            Assert.Equal(ExitCodes.ApiError, Install(rig, bare, command[0], null, null));
+            refusedWithout.Add(JsonNode.Parse(bare.ToString())!["error"]!["code"]!.GetValue<string>());
+
+            var said = new StringWriter();
+            var exit = Install(rig, said, command[0], updateLock, command[command.ToList().IndexOf("--retire") + 1]);
+            return new Jason.Cli.Process.FinishedCommand(exit, said.ToString());
+        };
+
+        // The command-line install where install.sh put it, as the update recorded it.
+        var old = Path.Combine(rig.Home, ".local", "bin", "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.Copy(rig.Old, old);
+        rig.Installation.RunsFrom = old;
+        rig.Installation.WithRuntime();
+        var ledger = rig.Complete() with { InstallPath = old };
+        ledger.Write(rig.Update.Ledger);
+
+        var answer = await rig.Move().RunAsync(ledger, rig.Installation.Feed, Ct);
+
+        Assert.Equal([UpdateCodes.InProgress], refusedWithout);
+        Assert.True(answer.State == MoveStates.Done, answer.Reason);
+        Assert.True(CommandFiles.IsWrapperFile(old), "the wrapper over the application's jason has taken the install's place");
+        Assert.Equal($"launch {rig.Carried}", rig.Acts[^1]);
+        Assert.True(rig.Installation.Running);
+        Assert.False(StartOwed.Read(rig.Installation.Paths).Stands);
+        Assert.Equal(CheckState.Ok, StatusChecks.Move(rig.Env with { InstallPath = rig.Carried }).State);
+    }
+
+    private static int Install(MoveRig rig, StringWriter output, string carried, string? updateLock, string? retire)
+    {
+        var variables = new Dictionary<string, string>();
+        if (updateLock is not null)
+        {
+            variables[UpdateLock.Variable] = updateLock;
+        }
+
+        var env = rig.Env with { Out = output, Error = new StringWriter(), InstallPath = carried, Variables = variables, SearchPath = "/usr/bin:/bin" };
+        return InstallCommand.RunAsync(env, new InstallOptions(false, false, retire, StopTimeout: TimeSpan.FromSeconds(5), StopPoll: TimeSpan.FromMilliseconds(20)), CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     // --- a kill at each step ------------------------------------------------------------------------------
 
     /// <summary>

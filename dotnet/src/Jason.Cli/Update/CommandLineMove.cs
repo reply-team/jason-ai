@@ -148,7 +148,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         {
             return Unrecorded(
                 MoveStates.Pending,
-                refused.Code == UpdateCodes.InProgress
+                refused.Code is UpdateCodes.InProgress or CliErrors.InstallInProgress
                     ? $"Another jason holds {update.Lock}, so the move into Jason Desktop was not begun: let it end, then run `jason update apply` to carry the move on."
                     : refused.Message);
         }
@@ -518,7 +518,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         {
             var code = error["code"]?.GetValue<string>();
             var message = error["message"]?.GetValue<string>() ?? string.Empty;
-            return ($"The application's `jason install` refused ({code}): {message}", code == UpdateCodes.InProgress, false);
+            return ($"The application's `jason install` refused ({code}): {message}", code is UpdateCodes.InProgress or CliErrors.InstallInProgress, false);
         }
 
         var runtime = report["runtime"]?.GetValueKind() == JsonValueKind.String ? report["runtime"]!.GetValue<string>() : null;
