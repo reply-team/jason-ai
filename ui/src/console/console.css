@@ -1344,6 +1344,12 @@ body,
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.jc-console .perm-why {
+    margin: 6px 0 0;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.45;
+}
 .jc-console .perm-detail {
     margin: 8px 0 0;
     padding: 8px 10px;

@@ -769,6 +769,51 @@ describe('the console', () => {
         expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull();
     });
 
+    it('says under a Full access card why it asks, as text, and nothing under a card of any other mode', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        flush(() => {
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_1',
+                title: 'Full access asks about this one',
+                detail: 'ls *.md',
+                remember: null,
+                why: { reason: 'command.glob' },
+            });
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_2',
+                title: 'Full access asks about this one',
+                detail: '{"x":"<b>y</b>"}',
+                remember: null,
+                why: { reason: 'request.unknown_tool', tool: '<b>Frob</b>' },
+            });
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_3',
+                title: 'Run a command',
+                detail: 'git status',
+                remember: null,
+            });
+        });
+        await waitFor(() => screen.getByText('Run a command'));
+        const cards = [...document.querySelectorAll<HTMLElement>('.ask.perm')];
+        expect(cards.map((card) => card.querySelector('.perm-why')?.textContent ?? null)).toEqual([
+            'This command has a wildcard (*, ? or [ ]), which the shell turns into file names only as it runs, so Jason cannot read plainly what it would touch.',
+            'Jason does not know the tool <b>Frob</b>, so it cannot tell what it would do.',
+            null,
+        ]);
+        // The line sits between the title and the request, and a tool's name in it is text, never markup.
+        expect(cards[0]!.querySelector('.ask-h + .perm-why + .perm-detail')).toBeTruthy();
+        expect(cards[1]!.querySelector('.perm-why b')).toBeNull();
+    });
+
     it('says a turn parked on a permission card waits for the person, and thinks again once it is answered', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

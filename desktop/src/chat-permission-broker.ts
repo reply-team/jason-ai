@@ -13,6 +13,7 @@
 // said to the log.
 
 import { randomUUID } from 'node:crypto';
+import { fullAccessWhy, type FullAccessWhy } from './chat-full-access-why.ts';
 import type { HeldReason } from './chat-literal.ts';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
 import type { HookAnswer } from './chat-permission-endpoint.ts';
@@ -22,8 +23,11 @@ import { autoEditJudgement, fullAccessJudgement, heldSentence, judge, type ChatS
 export type ToolAnswer = { behavior: 'allow'; updatedInput?: Record<string, unknown> } | { behavior: 'deny'; message: string };
 
 export type BrokerEvent =
-    /** `remember` is what "always, in this chat" would cover, as the page prints it; null when it cannot be offered. */
-    | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null }
+    /**
+     * `remember` is what "always, in this chat" would cover, as the page prints it; null when it cannot be offered. `why`,
+     * on a card of a Full access turn only, is why Full access asks (`fullAccessWhy`).
+     */
+    | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null; why?: FullAccessWhy }
     | { kind: 'permission_gone'; request: string };
 
 /** How one request was settled, for the log: never its tool, its input or its words. */
@@ -77,7 +81,10 @@ const unanswered = 'Nobody answered within thirty minutes, so nothing was run.';
 const ended = 'The chat stopped, so nothing was run.';
 const notRunning = 'This chat is not running, so nothing was run.';
 const withdrawn = 'The request was withdrawn, so nothing was run.';
-/** The title of a card in Full access: the card is the one Ask first shows, and this says why Full access shows it. */
+/**
+ * The title of a card in Full access: the card is the one Ask first shows, and this says that Full access shows it; the
+ * card's `why` says why.
+ */
 export const fullAccessCardTitle = 'Full access asks about this one';
 
 function allowed(input: Record<string, unknown>): ToolAnswer {
@@ -163,7 +170,8 @@ export class PermissionBroker {
             const forget = () => signal?.removeEventListener('abort', withdraw);
             this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember, timer, settle, forget });
             const title = mode === 'full_access' ? fullAccessCardTitle : judged.title;
-            this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers });
+            const why = full === null ? {} : { why: fullAccessWhy(full, judged, tool) };
+            this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers, ...why });
         });
     }
 

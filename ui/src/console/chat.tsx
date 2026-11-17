@@ -67,6 +67,7 @@ import {
     shown,
     stopAsked,
     everyWordBack,
+    fullAccessWhyWords,
     takenBack,
     told,
     turnOptions,
@@ -705,6 +706,7 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
               : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
     return html`<div class="ask perm">
         <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
+        ${entry.why === undefined ? null : html`<p class="perm-why">${fullAccessWhyWords(entry.why)}</p>`}
         <pre class="perm-detail">${entry.detail}</pre>
         ${buttons}
     </div>`;
