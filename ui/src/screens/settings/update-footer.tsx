@@ -36,18 +36,20 @@ export function UpdateFooter() {
         };
     }, []);
     if (shown === null) return null;
-    const press = () => {
+    const item = shown.item;
+    const press = (label: string) => {
         const desktop = currentDesktop();
         if (desktop === undefined || !can('updates.press')) return;
-        // What comes of the press, a box or a refusal, is the desktop's own; the item follows through `onChanged`.
-        desktop.updates.press().catch(() => undefined);
+        // The press names the label drawn, which the desktop acts on only while its item still says it; what comes of it,
+        // a box or a refusal, is the desktop's own, and the item follows through `onChanged`.
+        desktop.updates.press(label).catch(() => undefined);
     };
     return (
         <div className="settings-update">
             <p className="settings-version">{t('settings.version', { version: shown.version })}</p>
-            {shown.item !== null && (
-                <button className="btn" type="button" disabled={!shown.item.enabled} onClick={press}>
-                    {shown.item.label}
+            {item !== null && (
+                <button className="btn" type="button" disabled={!item.enabled} onClick={() => press(item.label)}>
+                    {item.label}
                 </button>
             )}
         </div>

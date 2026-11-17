@@ -58,7 +58,7 @@ describe('the update item at the foot of Settings', () => {
         expect(button).toHaveProperty('disabled', false);
         fireEvent.click(button);
         expect(desktop.calls.filter((each) => each.name === 'updates.press')).toEqual([
-            { name: 'updates.press', args: [] },
+            { name: 'updates.press', args: ['Check for Updates…'] },
         ]);
         // The press changes nothing on the page by itself: the item stays as the desktop last said it.
         expect(shown.getByRole('button', { name: 'Check for Updates…' })).toBe(button);
@@ -88,7 +88,13 @@ describe('the update item at the foot of Settings', () => {
         const shown = await footShown();
         expect(shown.getByRole('button', { name: 'Check for Updates…' })).toBeTruthy();
         act(() => desktop.updateMoved({ version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true } }));
-        expect(await shown.findByRole('button', { name: 'Download Jason 0.48.6' })).toHaveProperty('disabled', false);
+        const download = await shown.findByRole('button', { name: 'Download Jason 0.48.6' });
+        expect(download).toHaveProperty('disabled', false);
+        // A press names the label the page shows, which the desktop acts on only while its item still says it.
+        fireEvent.click(download);
+        expect(desktop.calls.filter((each) => each.name === 'updates.press').map((each) => each.args)).toEqual([
+            ['Download Jason 0.48.6'],
+        ]);
         act(() =>
             desktop.updateMoved({
                 version: '0.48.5',

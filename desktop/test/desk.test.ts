@@ -14,6 +14,8 @@ import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
 import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, itemKeys, keyWords, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
 import type { DesktopCommand as PageCommand } from '../../ui/src/platform/desktop.d.ts';
+import { actShown, updateAnswerOf } from '../src/update-item.ts';
+import { menuItemOf, pressItem, type UpdateState } from '../src/updates.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = join(root, '..', 'docs', 'api', 'fixtures');
@@ -295,12 +297,53 @@ test('the page’s update item is the menu’s own, and its press goes the one w
     assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
     // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
     assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);"));
-    assert.ok(main.includes("handle(seam, 'updates.press', origin, () => desk.pressUpdate(desk.updateItem()?.act ?? null, false), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);"));
     assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
     // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
     assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
     assert.ok(main.includes("menuChanged: () => toPage('updates.changed') });"));
     assert.equal(main.split('menuChanged:').length - 1, 1, 'Live alone');
+});
+
+// The page's press acts on what the person saw: it sends the label it drew, and the desktop presses only while its item
+// is enabled and says that very label. A step that moved on between the word of the change and the page's repaint is
+// never pressed by a click meant for the step before: above all the install, which a click does without asking.
+test('a press from the page acts only on the item it drew: the same label, enabled now', async () => {
+    const item = (step: UpdateState) => menuItemOf(step, true, true);
+    const offered = item({ step: 'offered', version: '0.48.6' });
+    const downloaded = item({ step: 'downloaded', version: '0.48.6' });
+    assert.equal(actShown(offered, 'Download Jason 0.48.6'), 'download');
+    assert.equal(actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), 'install');
+    // The item moved on from the label the person saw: nothing.
+    assert.equal(actShown(downloaded, 'Download Jason 0.48.6'), null);
+    assert.equal(actShown(item({ step: 'idle' }), 'Download Jason 0.48.6'), null);
+    // Disabled now (a step under way, or Remove What Jason Placed running), no item, or no label: nothing.
+    assert.equal(actShown(item({ step: 'downloading', version: '0.48.6' }), 'Downloading Jason 0.48.6…'), null);
+    assert.equal(actShown({ ...offered, enabled: false }, 'Download Jason 0.48.6'), null);
+    assert.equal(actShown(null, 'Check for Updates…'), null);
+    for (const label of [undefined, null, 1, {}, ['Download Jason 0.48.6']]) assert.equal(actShown(offered, label), null);
+    // Through the menu's own press: once with the current label, never with an old one, and never a question asked.
+    const acts: string[] = [];
+    const updater = {
+        current: { step: 'downloaded', version: '0.48.6' } as UpdateState,
+        check: async () => void acts.push('check'),
+        download: async () => void acts.push('download'),
+        install: async () => {
+            acts.push('install');
+            return true;
+        },
+    };
+    const ask = async () => {
+        acts.push('asked');
+        return 0;
+    };
+    await pressItem(updater, actShown(downloaded, 'Download Jason 0.48.6'), false, ask);
+    assert.deepEqual(acts, [], 'the old label presses nothing');
+    await pressItem(updater, actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), false, ask);
+    assert.deepEqual(acts, ['install'], 'the current label presses once, as a click');
+    // The page is answered the label and whether it is enabled, never the act.
+    assert.deepEqual(updateAnswerOf('0.48.5', offered), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true } });
+    assert.deepEqual(updateAnswerOf('0.48.5', null), { version: '0.48.5', item: null });
 });
 
 test('a packaged build offers no developer tools', () => {

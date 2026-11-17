@@ -58,17 +58,6 @@ export interface DeskDeps {
     menuChanged?(): void;
 }
 
-/** What the seam's `updates.item` answers: the desktop's version, and the update item as the menu shows it, or none. */
-export interface UpdateItemAnswer {
-    version: string;
-    item: { label: string; enabled: boolean } | null;
-}
-
-/** The answer of `updates.item`: the item's label and whether it is enabled, never its act, which the press reads again. */
-export function updateAnswerOf(version: string, item: MenuItem | null): UpdateItemAnswer {
-    return { version, item: item === null ? null : { label: item.label, enabled: item.enabled } };
-}
-
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
 export const uncarriedLine = 'No jason command is offered: this start carries no copy of jason to name, as the starting page says.';
 
@@ -232,7 +221,7 @@ export class Desk {
 
     /**
      * A press of the update item, on the act of the step it showed: the menu's click and key, and the page's press in
-     * Settings (`updates.press`, a click), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
+     * Settings (`updates.press`, a click on the label the page drew, `actShown`), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
      * item is disabled, and a press does nothing either.
      */
     pressUpdate(act: MenuItem['act'], byKey: boolean): void {

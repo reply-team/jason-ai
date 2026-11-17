@@ -29,7 +29,7 @@ import type {
 import type { ChatEvent, ChatSendOptions, ConversationOpened, ConversationSummary, FullAccessStanding } from '../src/chat.ts';
 import type { KeptEntry } from '../src/chat-conversations.ts';
 import type { ChatRefusal } from '../src/chat-ipc.ts';
-import type { UpdateItemAnswer } from '../src/desk.ts';
+import type { UpdateItemAnswer } from '../src/update-item.ts';
 import type { LinkTarget } from '../src/deep-link.ts';
 import type { applyMode, Mode, ModeAnswer } from '../src/mode.ts';
 import type { ContinueOffer, OpenInAnswer, OpenInRefusal, Place, PlaceId } from '../src/open-in.ts';
@@ -143,11 +143,11 @@ type ReplyLinkIsTheSeam = [
 type StandingIsTheSeam = Holds<Equal<FullAccessStanding, DesktopFullAccessStanding>>;
 
 // The update item reaches the page as the desktop's version and the menu's label and whether it is enabled, never the act
-// it names, which a press reads again; a press sends nothing.
+// it names, which a press reads again; a press sends the label the page drew, and nothing else.
 type UpdateIsTheSeam = [
     Holds<Equal<UpdateItemAnswer, DesktopUpdateItem>>,
     Holds<Equal<Awaited<ReturnType<JasonDesktop['updates']['item']>>, DesktopUpdateItem>>,
-    Holds<Equal<Parameters<JasonDesktop['updates']['press']>, []>>,
+    Holds<Equal<Parameters<JasonDesktop['updates']['press']>, [label: string]>>,
 ];
 
 // A link reaches the page as the page the desktop parsed it to, never as the address.

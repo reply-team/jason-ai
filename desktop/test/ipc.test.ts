@@ -179,7 +179,7 @@ test('each member of the seam calls the channel ipc.ts checks, with its own argu
         ['theme.set', ['dark']],
         ['updates.key', []],
         ['updates.item', []],
-        ['updates.press', []],
+        ['updates.press', ['Check for Updates…']],
         ['dailyTrends.get', []],
         ['dailyTrends.set', [false]],
         ['mode.get', []],

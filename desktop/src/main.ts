@@ -25,7 +25,8 @@ import { editorEnvironment } from './open-in-env.ts';
 import { startDetached } from './open-in-start.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
-import { Desk, updateAnswerOf } from './desk.ts';
+import { Desk } from './desk.ts';
+import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
@@ -481,9 +482,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(seam, 'updates.key', origin, updateKey, refused);
-    // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu.
+    // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
+    // on the label the page drew and only while the item still says it.
     handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);
-    handle(seam, 'updates.press', origin, () => desk.pressUpdate(desk.updateItem()?.act ?? null, false), refused);
+    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,

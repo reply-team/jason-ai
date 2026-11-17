@@ -633,10 +633,12 @@ export interface JasonDesktop {
          */
         item(): Promise<DesktopUpdateItem>;
         /**
-         * Presses the update item as a click in the menu does, on the step it shows now: the same act, the same boxes
-         * and refusals of the desktop's own. The page learns what came of it through `onChanged`.
+         * Presses the update item as a click in the menu does: the same act, the same boxes and refusals of the
+         * desktop's own. `label` is the label the page drew; the desktop presses only while its item is enabled and says
+         * that very label, and otherwise does nothing, so a click lands only on the step the person saw. The page learns
+         * what came of it through `onChanged`.
          */
-        press(): Promise<void>;
+        press(label: string): Promise<void>;
         /** Calls `handler` whenever what `item()` answers may have changed; the function it returns stops that. */
         onChanged(handler: () => void): () => void;
     };
