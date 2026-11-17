@@ -46,8 +46,18 @@
 ; a failed start of PowerShell included, is read as a process found.
 !define JASON_RUNTIME_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
 
+; The application is looked for the same way, failing closed: only exit 1 says it is not running. It is looked for again
+; after it was closed, and a run where it is still found, or where that look failed, ends with error level 1 before a file
+; is replaced.
+!define JASON_APP_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
+
+; What a person is told: exit 0 is a process found; any other exit but 1 is a look that could not be made, said as such.
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
+!define JASON_LOOK_ASK "Jason could not look for its own processes, so it cannot tell whether a Jason runtime is running from this application's folder. Choose OK to stop it if it is, and go on."
+!define JASON_APP_UNSURE "Jason could not look for its own processes, so it cannot tell whether Jason is open. Choose OK to close it if it is, and go on."
+!define JASON_APP_STILL "Jason is still open, so nothing was changed. Close it, then run this again."
 !define JASON_RUNTIME_STILL "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\resources\bundle\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again."
+!define JASON_LOOK_FAILED "Jason could not look for its own processes, so it cannot tell whether Jason is running from this application's folder, and nothing was changed. Run this again."
 
 !macro customCheckAppRunning
   System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_APP", t "$INSTDIR\${APP_EXECUTABLE_FILENAME}")'
@@ -67,7 +77,12 @@
       nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"`
       Pop $R0
       ${if} $R0 != 1
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3
+        ${if} $R0 S== 0
+          StrCpy $R1 "${JASON_RUNTIME_ASK}"
+        ${else}
+          StrCpy $R1 "${JASON_LOOK_ASK}"
+        ${endIf}
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3
         SetErrorLevel 1
         Quit
         StrCpy $JasonRuntimeAsked "asked"
@@ -77,11 +92,16 @@
       ; The application quits itself before an update; this gives it the moment to.
       Sleep 300
     ${endIf}
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 }"`
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
     Pop $R0
-    ${if} $R0 == 0
+    ${if} $R0 != 1
       ${ifNot} ${isUpdated}
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK +2
+        ${if} $R0 S== 0
+          StrCpy $R1 "$(appRunning)"
+        ${else}
+          StrCpy $R1 "${JASON_APP_UNSURE}"
+        ${endIf}
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2
         Quit
       ${endIf}
       DetailPrint "$(appClosing)"
@@ -89,6 +109,22 @@
       Pop $R0
       ; So that the files it held are let go of before they are replaced or removed.
       Sleep 1000
+      ; The look decides, never the stop's exit code.
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
+      Pop $R0
+      ${if} $R0 != 1
+        ${ifNot} ${isUpdated}
+        ${AndIfNot} ${Silent}
+          ${if} $R0 S== 0
+            StrCpy $R1 "${JASON_APP_STILL}"
+          ${else}
+            StrCpy $R1 "${JASON_LOOK_FAILED}"
+          ${endIf}
+          MessageBox MB_OK|MB_ICONSTOP "$R1" /SD IDOK
+        ${endIf}
+        SetErrorLevel 1
+        Quit
+      ${endIf}
     ${endIf}
     nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"`
     Pop $R0
@@ -108,7 +144,12 @@
       ${if} $R0 != 1
         ${ifNot} ${isUpdated}
         ${AndIfNot} ${Silent}
-          MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"
+          ${if} $R0 S== 0
+            StrCpy $R1 "${JASON_RUNTIME_STILL}"
+          ${else}
+            StrCpy $R1 "${JASON_LOOK_FAILED}"
+          ${endIf}
+          MessageBox MB_OK|MB_ICONSTOP "$R1" /SD IDOK
         ${endIf}
         SetErrorLevel 1
         Quit
@@ -140,11 +181,14 @@
 ; starts a runtime from the carried file when it finds the note standing and none answering; jason status names it
 ; meanwhile. What it did not get done never fails the
 ; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
-; start runs it where its last run was for an older version.
+; start runs it where its last run was for an older version. A run a person watches says so in one line of its details.
 !macro customInstall
   DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of every agent host found."
   nsExec::Exec '"$INSTDIR\resources\bundle\jason.exe" install'
   Pop $R0
+  ${if} $R0 S!= 0
+    DetailPrint "jason install did not set everything up (it answered $R0). Run $INSTDIR\resources\bundle\jason.exe install in a terminal to see what it says."
+  ${endIf}
 !macroend
 
 ; The start's exit code says whether to go on: 1 when the runtime this application carries did not stop, or a runtime

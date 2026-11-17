@@ -7,8 +7,9 @@ namespace Jason.Cli.Installation;
 /// <summary>
 /// The note that a start is owed, at <see cref="JasonPaths.StartOwedFile"/> (<c>run/start-owed.json</c> in the data
 /// directory). <c>jason install</c> writes it just before it drains and stops this data directory's runtime, and takes it
-/// back where the runtime then does not stop; a runtime's own start removes it, and so do any stop through
-/// <c>jason runtime stop</c> and an uninstall that keeps the data. So it stands from the stop until a runtime runs on this
+/// back where the runtime then does not stop, and so does <c>jason runtime stop --start-owed</c>, a stop on an installer's
+/// behalf; a runtime's own start removes it, and so do any other stop through <c>jason runtime stop</c> and an uninstall
+/// that keeps the data. So it stands from the stop until a runtime runs on this
 /// data directory again, a routine killed or timed out during the stop's wait and a caller that quit before it started one
 /// included.
 /// </summary>

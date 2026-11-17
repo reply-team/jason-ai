@@ -817,10 +817,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     // --- small things --------------------------------------------------------------------------------------------
 
     private static string Elevated(SetupSystem platform) =>
-        (platform is SetupSystem.Windows ? "This jason runs as an administrator, elevated" : "This jason runs as root")
+        (platform is SetupSystem.Windows
+            ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
+            : "This jason runs as root")
         + ", and a move begun from here would install Jason Desktop and start the runtime the same way, or into another account's profile, so the command-line install was not moved and nothing was changed. "
         + (platform is SetupSystem.Windows
-            ? "Run `jason update apply` from an ordinary terminal that is not run as an administrator to carry the move on."
+            ? "Run `jason update apply` from an ordinary terminal of the account signed in here, not run as an administrator, to carry the move on."
             : "Run `jason update apply` from an ordinary terminal, without sudo, to carry the move on.");
 
     private static IEnumerable<string> Strings(JsonNode? node) =>
