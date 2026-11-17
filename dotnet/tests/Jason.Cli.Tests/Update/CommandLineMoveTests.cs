@@ -387,7 +387,7 @@ public sealed class CommandLineMoveTests
     /// <summary>
     /// A silent installer that meets Jason Desktop running, in its window or the tray, ends with its own code having changed
     /// and ended nothing: the move is pending, says to quit Jason Desktop and run the update again, and touches nothing.
-    /// The code is <see cref="SetupExits.ApplicationRunning"/>, the one place it is written.
+    /// The code is the installer's exit 3, <see cref="SetupExits.ApplicationRunning"/>.
     /// </summary>
     [Fact]
     public async Task A_setup_that_meets_Jason_Desktop_running_leaves_the_move_pending_and_says_to_quit_it()
@@ -409,6 +409,7 @@ public sealed class CommandLineMoveTests
         Assert.Equal(CheckState.Failed, check.State);
         Assert.Equal("jason update apply", check.Fix);
         Assert.NotEqual(SetupExits.ProcessRunsFromPlace, SetupExits.ApplicationRunning);
+        Assert.Equal(3, SetupExits.ApplicationRunning);
         Assert.NotEqual(SetupExits.AnotherInstall, SetupExits.ApplicationRunning);
 
         // The page says the same number: the constant and the sentence move together.

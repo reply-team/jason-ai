@@ -22,9 +22,9 @@ public static class SetupExits
     public const int AnotherInstall = 2;
 
     /// <summary>
-    /// Jason Desktop is running, in its window or in the tray, and a silent installer, an update or not, ends with this code
-    /// having changed nothing and ended nothing. The one place this number is written: the installer's own code is to be
-    /// held equal to it.
+    /// The installer's exit 3: run silently, an update or not, it found Jason Desktop's own Jason.exe running at the install
+    /// path, in its window or the tray, or could not tell because its look failed; it killed nothing, showed no box and
+    /// changed nothing, the installed version staying as it was. The move ends pending on it.
     /// </summary>
     public const int ApplicationRunning = 3;
 }
