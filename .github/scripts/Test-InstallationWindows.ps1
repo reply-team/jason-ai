@@ -366,9 +366,14 @@ switch ($Step) {
         $previousVersion = Read-Version $carried
         Say "the previous release's Jason Desktop $previousVersion installed by its own setup /S"
 
-        # Open, as a person leaves it, with the runtime its start brings up.
+        # Open, as a person leaves it. A fresh 0.48.2 opens on the Demo, which starts no runtime; a person who works in it
+        # has one running from the carried jason, which the updater then stops, so one is started from it here.
         $opened = Open-Window
-        Say "the previous Jason Desktop $previousVersion open, its runtime answering: $(Test-Runtime)"
+        if ((Test-Runtime) -ne 'yes') {
+            $started = Invoke-Program $carried @('runtime', 'start')
+            if ($started.Exit -ne 0) { Fail "the previous release's carried jason could not start a runtime ($($started.Exit)): $($started.Said)" }
+        }
+        Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
         # What 0.48.2's own updater does on the person's word (desktop/src/updates.ts install(), at v0.48.2): it stops the
         # runtime the application carries through jason runtime stop, keeps the application aside, and electron-updater
@@ -400,17 +405,18 @@ switch ($Step) {
     }
 
     'InstallOverOpenWindow' {
-        # A shape 0.48.2's updater never makes: this build's setup run by hand, silently, as an update, over an open window
-        # whose runtime still runs. The previous release is installed again for it, and taken off after by Installed apps.
+        # A shape 0.48.2's updater never makes: this build's setup run by hand, silently, as an update, over an open window,
+        # the Demo a fresh 0.48.2 opens on. The previous release is installed again for it, and taken off after by Installed
+        # apps.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $installed = Wait-Program (Join-Path $Previous 'jason-desktop-windows-x64-setup.exe') @('/S')
         if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
         $opened = Open-Window
-        Say "the previous Jason Desktop $(Read-Version $carried) open again, its runtime answering: $(Test-Runtime)"
+        Say "the previous Jason Desktop $(Read-Version $carried) open again; a runtime answering: $(Test-Runtime)"
         $new = Wait-Program (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') @('--updated', '/S', '--force-run')
         if ($new -ne 0) { Fail "this build's setup run by hand over the open window exited with $new" }
         if ((Read-Version $carried) -ne $Version) { Fail "after the setup the application is $(Read-Version $carried), not $Version" }
-        Say "this build's setup with --updated /S --force-run, run by hand over an open window and its runtime, put $Version in place"
+        Say "this build's setup with --updated /S --force-run, run by hand over an open window, put $Version in place"
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
     }

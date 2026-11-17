@@ -1988,8 +1988,8 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
 
       # A shape 0.48.2's own updater never makes, the setup run by hand: this build's setup run silently as an update over
-      # an open 0.48.2 window whose runtime runs. Then Installed apps takes it off again.
-      - name: Install this build by hand over an open 0.48.2 window and its runtime
+      # an open 0.48.2 window. Then Installed apps takes it off again.
+      - name: Install this build by hand over an open 0.48.2 window
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
