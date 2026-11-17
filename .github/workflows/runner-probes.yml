@@ -46,8 +46,11 @@ jobs:
           }
           launch_probe() {
             local label=$1 app=$2
-            r "open -g \"$app\""
+            printf '\n$ open -g "%s"   (in the background, killed after 60 s)\n' "$app"
+            to 60 open -g "$app" > "$RUNNER_TEMP/open-$label.log" 2>&1 &
+            local opid=$!
             sleep 25
+            r "ps -o pid,stat,etime,command -p $opid"
             r 'ps -axo pid,ppid,user,command | grep -E "Jason|CoreServicesUIAgent|AppTranslocation" | grep -v grep | cut -c1-260'
             r 'ps -axo command | grep -c "[/]AppTranslocation/"'
             r 'mount | grep -i translocation'
@@ -55,6 +58,8 @@ jobs:
             mkdir -p "$RUNNER_TEMP/shots"
             r "screencapture -x \"$RUNNER_TEMP/shots/$label.png\""
             quit_jason
+            kill "$opid" 2>/dev/null; wait "$opid"; echo "open -g exit status: $? (142 = still waiting when the alarm fired; 143 = killed here)"
+            r "cat \"$RUNNER_TEMP/open-$label.log\""
           }
           EOF
           mkdir -p "$RUNNER_TEMP/shots"
@@ -202,7 +207,7 @@ jobs:
 
       - name: probe a quarantined source, translocation, the carried jason
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 7
         run: |
           . "$RUNNER_TEMP/h.sh"
           Q="$RUNNER_TEMP/q"; mkdir -p "$Q"
@@ -228,6 +233,22 @@ jobs:
           r 'to 90 log show --last 4m --style compact --predicate "process == \"syspolicyd\"" | grep -iE "jason|translocat|assess|notari" | tail -40'
           r 'mv "$C" "$HOME/Applications/Jason-renamed.app" && echo renamed'
           r 'rm -rf "$HOME/Applications/Jason-renamed.app" && echo deleted'
+          echo "--- a second quarantined copy, its main executable started directly rather than through LaunchServices"
+          Q2="$RUNNER_TEMP/q2"; mkdir -p "$Q2"
+          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" "$Q2/"'
+          r 'xattr -p com.apple.quarantine "$Q2/Jason.app" "$Q2/Jason.app/Contents/MacOS/Jason"'
+          printf '\n$ "%s/Jason.app/Contents/MacOS/Jason"   (in the background, killed after 40 s)\n' "$Q2"
+          to 40 "$Q2/Jason.app/Contents/MacOS/Jason" > "$RUNNER_TEMP/direct.log" 2>&1 &
+          dpid=$!
+          sleep 20
+          r "ps -o pid,stat,etime,command -p $dpid | cut -c1-200"
+          r 'ps -axo pid,ppid,command | grep -E "Jason|CoreServicesUIAgent|AppTranslocation" | grep -v grep | cut -c1-200'
+          r 'lsappinfo list | grep -i -A6 "\"Jason\"" | head -20'
+          r 'screencapture -x "$RUNNER_TEMP/shots/direct-exec-quarantined.png"'
+          quit_jason
+          kill "$dpid" 2>/dev/null; wait "$dpid"; echo "direct start exit status: $?"
+          r 'head -30 "$RUNNER_TEMP/direct.log" | cut -c1-200'
+          r 'xattr -p com.apple.quarantine "$Q2/Jason.app"'
 
       - name: probe caches and launchd user jobs
         continue-on-error: true
@@ -270,6 +291,8 @@ jobs:
           if-no-files-found: warn
 
   probe-macos-intel:
+    # Answered in full by the first run; kept off so later runs hold one macOS slot only.
+    if: ${{ false }}
     runs-on: macos-26-intel
     timeout-minutes: 10
     env:
@@ -319,7 +342,7 @@ jobs:
           $Un = Join-Path $Dir 'Uninstall Jason.exe'
           $Setup = Join-Path $env:RUNNER_TEMP 'dl\setup-pwsh7.exe'
           $Motw = Join-Path $env:RUNNER_TEMP 'dl\setup-motw.exe'
-          function R([string]$c) {
+          function Show-Probe([string]$c) {
             Write-Host "`n> $c"; $global:LASTEXITCODE = 0
             try { $o = Invoke-Expression $c 2>&1 | Out-String -Width 400; Write-Host $o.TrimEnd() } catch { Write-Host "THREW: $($_.Exception.Message)" }
             Write-Host "[LASTEXITCODE $global:LASTEXITCODE]"
@@ -380,23 +403,23 @@ jobs:
         continue-on-error: true
         run: |
           . (Join-Path $env:RUNNER_TEMP 'h.ps1')
-          R 'whoami'
-          R 'whoami /groups /fo csv | Select-String "Mandatory Label|BUILTIN\\Administrators"'
-          R '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'
-          R 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object EnableLUA, ConsentPromptBehaviorAdmin, PromptOnSecureDesktop, FilterAdministratorToken | Format-List'
-          R 'Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List'
-          R '"ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"'
-          R '$PSVersionTable.PSVersion.ToString()'
-          R 'powershell.exe -NoProfile -Command "`$PSVersionTable.PSVersion.ToString()"'
-          R '[Environment]::UserInteractive'
-          R '(Get-Process -Id $PID).SessionId'
-          R 'query user'
-          R 'Get-Process explorer, winlogon, dwm -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table'
-          R 'Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" | Select-Object AutoAdminLogon, DefaultUserName | Format-List'
-          R 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -Name SmartScreenEnabled -ErrorAction SilentlyContinue | Select-Object SmartScreenEnabled'
-          R 'Get-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\Windows\System -ErrorAction SilentlyContinue | Select-Object EnableSmartScreen, ShellSmartScreenLevel'
-          R 'Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled | Format-List'
-          R 'Get-Command jason -ErrorAction SilentlyContinue | Select-Object Source'
+          Show-Probe 'whoami'
+          Show-Probe 'whoami /groups /fo csv | Select-String "Mandatory Label|BUILTIN\\Administrators"'
+          Show-Probe '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'
+          Show-Probe 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object EnableLUA, ConsentPromptBehaviorAdmin, PromptOnSecureDesktop, FilterAdministratorToken | Format-List'
+          Show-Probe 'Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List'
+          Show-Probe '"ImageOS=$env:ImageOS ImageVersion=$env:ImageVersion"'
+          Show-Probe '$PSVersionTable.PSVersion.ToString()'
+          Show-Probe 'powershell.exe -NoProfile -Command "`$PSVersionTable.PSVersion.ToString()"'
+          Show-Probe '[Environment]::UserInteractive'
+          Show-Probe '(Get-Process -Id $PID).SessionId'
+          Show-Probe 'query user'
+          Show-Probe 'Get-Process explorer, winlogon, dwm -ErrorAction SilentlyContinue | Select-Object Name, Id, SessionId | Format-Table'
+          Show-Probe 'Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" | Select-Object AutoAdminLogon, DefaultUserName | Format-List'
+          Show-Probe 'Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer -Name SmartScreenEnabled -ErrorAction SilentlyContinue | Select-Object SmartScreenEnabled'
+          Show-Probe 'Get-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\Windows\System -ErrorAction SilentlyContinue | Select-Object EnableSmartScreen, ShellSmartScreenLevel'
+          Show-Probe 'Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled | Format-List'
+          Show-Probe 'Get-Command jason -ErrorAction SilentlyContinue | Select-Object Source'
 
       - name: probe the three Paths
         continue-on-error: true
@@ -404,7 +427,7 @@ jobs:
           . (Join-Path $env:RUNNER_TEMP 'h.ps1')
           $wa = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
           Write-Host "WindowsApps folder: $wa exists=$(Test-Path $wa)"
-          R "Get-ChildItem '$wa' -Name"
+          Show-Probe "Get-ChildItem '$wa' -Name"
           $uk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment')
           $mk = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
           foreach ($pair in @(@('USER (HKCU\Environment)', $uk), @('MACHINE (HKLM\...\Session Manager\Environment)', $mk))) {
@@ -424,8 +447,8 @@ jobs:
           $url = "https://github.com/$env:REPO/releases/download/$env:TAG/jason-desktop-windows-x64-setup.exe"
           $sw = [Diagnostics.Stopwatch]::StartNew(); Invoke-WebRequest -Uri $url -OutFile $Setup; Write-Host ("pwsh {0} Invoke-WebRequest took {1:n1}s" -f $PSVersionTable.PSVersion, $sw.Elapsed.TotalSeconds)
           Set-Content -LiteralPath "$d\dl51.ps1" -Value '$ProgressPreference = ''SilentlyContinue''; Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]; "Windows PowerShell " + $PSVersionTable.PSVersion'
-          R "powershell.exe -NoProfile -ExecutionPolicy Bypass -File '$d\dl51.ps1' '$url' '$d\setup-ps51.exe'"
-          R "curl.exe -sSL -o '$d\setup-curl.exe' '$url'"
+          Show-Probe "powershell.exe -NoProfile -ExecutionPolicy Bypass -File '$d\dl51.ps1' '$url' '$d\setup-ps51.exe'"
+          Show-Probe "curl.exe -sSL -o '$d\setup-curl.exe' '$url'"
           foreach ($f in 'setup-pwsh7.exe', 'setup-ps51.exe', 'setup-curl.exe') {
             Write-Host "`n--- streams of $f"
             Get-Item -LiteralPath "$d\$f" -Stream * | ForEach-Object { Write-Host ("  {0} ({1} bytes)" -f $_.Stream, $_.Length) }
@@ -435,7 +458,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/$env:REPO/releases/download/$env:TAG/checksums.txt" -OutFile "$d\checksums.txt"
           Write-Host "sha256 of setup: $((Get-FileHash $Setup -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host "checksums.txt: $(Select-String -LiteralPath "$d\checksums.txt" -Pattern 'jason-desktop-windows-x64-setup.exe$')"
-          R "Get-AuthenticodeSignature '$Setup' | Select-Object Status, StatusMessage, @{n='Subject';e={`$_.SignerCertificate.Subject}} | Format-List"
+          Show-Probe "Get-AuthenticodeSignature '$Setup' | Select-Object Status, StatusMessage, @{n='Subject';e={`$_.SignerCertificate.Subject}} | Format-List"
           Copy-Item $Setup $Motw
           Set-Content -LiteralPath $Motw -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3`r`nHostUrl=$url"
           Write-Host "--- marked copy streams: $((Get-Item -LiteralPath $Motw -Stream * | ForEach-Object Stream) -join ', ')"
@@ -567,7 +590,7 @@ jobs:
             if ($mode -eq 'UseNewEnvironment') { $args2.UseNewEnvironment = $true }
             Start-Process @args2; Write-Host "Git Bash -l child ($mode):"; Get-Content $o2 | ForEach-Object { Write-Host $_ }
           }
-          R "cmd.exe /d /c where jason"
+          Show-Probe "cmd.exe /d /c where jason"
           [Environment]::SetEnvironmentVariable('Path', $before, 'User')
           Write-Host "user Path restored, kind $([Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment').GetValueKind('Path'))"
 
@@ -595,9 +618,9 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'probe-task.txt'
           $a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/d /c echo ran> `"$out`""
           $t = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
-          R 'Register-ScheduledTask -TaskName probe-logon -Action $a -Trigger $t | Select-Object TaskName, State | Format-List'
-          R 'Start-ScheduledTask -TaskName probe-logon'
+          Show-Probe 'Register-ScheduledTask -TaskName probe-logon -Action $a -Trigger $t | Select-Object TaskName, State | Format-List'
+          Show-Probe 'Start-ScheduledTask -TaskName probe-logon'
           Start-Sleep -Seconds 5
-          R 'Get-ScheduledTaskInfo -TaskName probe-logon | Select-Object LastRunTime, LastTaskResult | Format-List'
-          R "Get-Content '$out'"
-          R 'Unregister-ScheduledTask -TaskName probe-logon -Confirm:$false'
+          Show-Probe 'Get-ScheduledTaskInfo -TaskName probe-logon | Select-Object LastRunTime, LastTaskResult | Format-List'
+          Show-Probe "Get-Content '$out'"
+          Show-Probe 'Unregister-ScheduledTask -TaskName probe-logon -Confirm:$false'
