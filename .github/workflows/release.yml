@@ -928,7 +928,7 @@ jobs:
         run: |
           @(
             '### What this job does not prove',
-            '- The updater, end to end: no next build is made, so jason update apply handing an update to Jason Desktop, with no window and with one open, is not proven here.',
+            '- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here.',
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
             '- The previous release''s own Desktop updater reaching this release: it reads only the published releases; this job runs this release''s installer as that updater would.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -1050,7 +1050,7 @@ jobs:
         run: |
           {
             echo '### What this job does not prove'
-            echo "- The updater, end to end: no next build is made, so jason update apply handing an update to Jason Desktop, with no window and with one open, is not proven here."
+            echo "- The updater, end to end: no next build is made, so the command line handing an update to Jason Desktop, with no window and with one open, is not proven here."
             echo "- The 0.48 Jason Desktop's own updater on a Mac reaching this release: it reads only the published releases, and this release ships without that proof."
             echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
             echo "- Each account of a shared Mac: the runner has one account."
