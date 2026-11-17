@@ -1,0 +1,15 @@
+{
+  "operation": "notification.enable",
+  "case": "unknown-channel",
+  "request": {
+    "channel": "nobody-installed-this"
+  },
+  "status": 404,
+  "response": {
+    "error": {
+      "code": "notification_channel_not_found",
+      "message": "No notification channel is called nobody-installed-this: a channel is the toast, or a notification plugin installed in this data directory, by its id. jason runtime status --human says each on its Notify: line.",
+      "retryable": false
+    }
+  }
+}

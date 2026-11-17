@@ -52,45 +52,14 @@ public sealed class PluginNotificationChannel(
             ?? throw new InvalidOperationException("This build publishes no notification.send contract.");
 
         var snapshot = registry.Snapshot;
-        if (snapshot.Find(id) is not { } plugin)
+        var ready = BeforeLaunch(id, entry, snapshot, _timing);
+        if (ready.Outcome is { } decided)
         {
-            return NotAttempted(NotAttemptedReasons.Unavailable, "not loaded");
+            return decided;
         }
 
-        if (plugin.Status != PluginStatus.Valid)
-        {
-            return NotAttempted(NotAttemptedReasons.Unavailable, string.Join(", ", plugin.Problems.Select(problem => problem.Code).Distinct(StringComparer.Ordinal)));
-        }
-
-        if (plugin.Manifest.Kind != PluginKind.Notification || !plugin.Manifest.Contracts.Operations.Contains(DeliveryContract.CurrentVersion))
-        {
-            return NotAttempted(
-                NotAttemptedReasons.NotDeclared,
-                string.Create(CultureInfo.InvariantCulture, $"a {plugin.Manifest.Kind.ToString().ToLowerInvariant()} plugin declaring no version {DeliveryContract.CurrentVersion} of the delivery contract"));
-        }
-
-        // A binding that is not an object is refused by name: read as an empty one, it would be checked as if nothing
-        // had been written, and its own schema's refusal would name the wrong thing.
-        if (entry.Binding is { } given and not JsonObject)
-        {
-            return NotAttempted(NotAttemptedReasons.BindingInvalid, $"the binding is an object; this one is a {given.GetValueKind().ToString().ToLowerInvariant()}");
-        }
-
-        var binding = entry.Binding?.DeepClone() as JsonObject ?? [];
-        if (BindingProblem(binding) is { } problem)
-        {
-            return NotAttempted(NotAttemptedReasons.BindingInvalid, problem);
-        }
-
-        // The binding's own schema. A pattern there that did not finish matching, twice, finds nothing wrong with the
-        // binding, so it is never `binding_invalid`; nothing has been sent, so the channel fails transient and is tried
-        // again like any transient failure.
-        if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(binding, schema, _timing) is { Count: > 0 } bindingProblems)
-        {
-            return SchemaValidator.Verdicts(bindingProblems) is { Count: > 0 } wrong
-                ? NotAttempted(NotAttemptedReasons.BindingInvalid, Listed(wrong))
-                : ChannelOutcome.Failed(id, Kind, AttemptErrors.ValidationTimedOut, FailureClass.Transient, Listed(bindingProblems));
-        }
+        var plugin = ready.Plugin!;
+        var binding = ready.Binding!;
 
         var input = new JsonObject
         {
@@ -136,6 +105,70 @@ public sealed class PluginNotificationChannel(
             _ => ChannelOutcome.Failed(id, Kind, "result_invalid", FailureClass.Ambiguous),
         };
     }
+
+    /// <summary>
+    /// Everything about a channel that is decided before a child starts, against the snapshot in force: is the plugin loaded
+    /// and usable here, does it speak the delivery contract, does the binding satisfy its own schema. A channel that cannot
+    /// reach anybody has its outcome, with its reason; one that can has its plugin and the binding it would be handed. The
+    /// switch that turns a channel on and the runtime's report read the same checks, so neither says a channel is ready that
+    /// a notification would not be tried on.
+    /// </summary>
+    internal static PreLaunch BeforeLaunch(string id, NotificationPluginEntry entry, PluginSnapshot snapshot, PatternTiming timing)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(timing);
+
+        PreLaunch Refused(string reason, string detail) => new(ChannelOutcome.NotAttempted(id, ChannelKinds.Plugin, reason, detail), null, null);
+
+        if (snapshot.Find(id) is not { } plugin)
+        {
+            return Refused(NotAttemptedReasons.Unavailable, "not loaded");
+        }
+
+        if (plugin.Status != PluginStatus.Valid)
+        {
+            return Refused(NotAttemptedReasons.Unavailable, string.Join(", ", plugin.Problems.Select(problem => problem.Code).Distinct(StringComparer.Ordinal)));
+        }
+
+        if (plugin.Manifest.Kind != PluginKind.Notification || !plugin.Manifest.Contracts.Operations.Contains(DeliveryContract.CurrentVersion))
+        {
+            return Refused(
+                NotAttemptedReasons.NotDeclared,
+                string.Create(CultureInfo.InvariantCulture, $"a {plugin.Manifest.Kind.ToString().ToLowerInvariant()} plugin declaring no version {DeliveryContract.CurrentVersion} of the delivery contract"));
+        }
+
+        // A binding that is not an object is refused by name: read as an empty one, it would be checked as if nothing
+        // had been written, and its own schema's refusal would name the wrong thing.
+        if (entry.Binding is { } given and not JsonObject)
+        {
+            return Refused(NotAttemptedReasons.BindingInvalid, $"the binding is an object; this one is a {given.GetValueKind().ToString().ToLowerInvariant()}");
+        }
+
+        var binding = entry.Binding?.DeepClone() as JsonObject ?? [];
+        if (BindingProblem(binding) is { } problem)
+        {
+            return Refused(NotAttemptedReasons.BindingInvalid, problem);
+        }
+
+        // The binding's own schema. A pattern there that did not finish matching, twice, finds nothing wrong with the
+        // binding, so it is never `binding_invalid`; nothing has been sent, so the channel fails transient and is tried
+        // again like any transient failure.
+        if (plugin.Manifest.Binding is { } schema && SchemaValidator.Validate(binding, schema, timing) is { Count: > 0 } bindingProblems)
+        {
+            return SchemaValidator.Verdicts(bindingProblems) is { Count: > 0 } wrong
+                ? Refused(NotAttemptedReasons.BindingInvalid, Listed(wrong))
+                : new(ChannelOutcome.Failed(id, ChannelKinds.Plugin, AttemptErrors.ValidationTimedOut, FailureClass.Transient, Listed(bindingProblems)), plugin, binding);
+        }
+
+        return new(null, plugin, binding);
+    }
+
+    /// <summary>
+    /// What <see cref="BeforeLaunch"/> decided: an outcome where a notification would not reach anybody now (or could not be
+    /// measured), else the plugin and the binding it would be handed.
+    /// </summary>
+    internal sealed record PreLaunch(ChannelOutcome? Outcome, LoadedPlugin? Plugin, JsonObject? Binding);
 
     /// <summary>
     /// What the runtime's own half of the delivery contract makes of the input it is about to hand a plugin, or null
@@ -233,5 +266,4 @@ public sealed class PluginNotificationChannel(
         }
     }
 
-    private ChannelOutcome NotAttempted(string reason, string detail) => ChannelOutcome.NotAttempted(id, Kind, reason, detail);
 }

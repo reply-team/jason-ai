@@ -236,6 +236,11 @@ export interface SealDeps {
      * a redirect are refused and asked nothing.
      */
     asked?(url: string): boolean;
+    /**
+     * Told once for each document of the view, when every sheet put into it has settled, landed or refused: the page's
+     * view is shown only then (`demoPageShowing`), so no drag region of a document is the window's before its sheet.
+     */
+    landed?(): void;
 }
 
 /** A refusal hook that passes each kind on once, so a page that asks again and again cannot fill the log. */
@@ -347,11 +352,14 @@ function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, ref
     });
     const sheets = [...(view.drags ? [] : [noDragSheet]), ...(deps.sheet === undefined ? [] : [deps.sheet])];
     const script = deps.script;
-    if (sheets.length > 0 || script !== undefined) {
+    const landed = deps.landed;
+    if (sheets.length > 0 || script !== undefined || landed !== undefined) {
         contents.on('dom-ready', () => {
             // A document gone before a sheet or the script lands refuses it; the next document gets its own.
-            for (const sheet of sheets) contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined);
+            const inserted = sheets.map((sheet) => contents.insertCSS(sheet, { cssOrigin: 'user' }).catch(() => undefined));
             if (script !== undefined) contents.executeJavaScriptInIsolatedWorld(demoLinkWorld, [{ code: script }]).catch(() => undefined);
+            // Settled, not landed: a sheet refused is told too, and the bound of `demoPageShowing` covers one that never settles.
+            if (landed !== undefined) void Promise.all(inserted).then(() => landed());
         });
     }
     contents.setWindowOpenHandler(() => {
@@ -533,6 +541,73 @@ export function demoLinkOpener(open: () => void, gestureAt: () => number | null,
         last = at;
         open();
         return true;
+    };
+}
+
+/**
+ * The longest the page's view stays out of the window after a load of it began, waiting for its document's sheets to
+ * settle (`SealDeps.landed`): past it the view is added whatever happened, a sheet that never settles, a document that
+ * never comes, a load that fails, so the window never stays without its page.
+ */
+export const demoPageBoundMs = 1500;
+
+/** What `demoPageShowing` needs of the window: the view added under ours, taken off, and a timer. */
+export interface PageShowingDeps {
+    /** Adds the page's view to the window under every view already there (index 0), so ours stays drawn over it. */
+    add(): void;
+    /** Takes the page's view off the window. */
+    remove(): void;
+    setTimer(run: () => void, ms: number): unknown;
+    clearTimer(timer: unknown): void;
+}
+
+/** When the page's view is in the window: told of each load, of each document's sheets settled, and of the close. */
+export interface PageShowing {
+    /** A load of the page's document begins, the first or a reload: the view leaves the window until it is shown. */
+    loading(): void;
+    /** The document's sheets have settled: the view is shown, if it is not already. */
+    landed(): void;
+    /** The window closed: no timer is left, and nothing is shown again. */
+    close(): void;
+}
+
+/**
+ * The page's view is in the window only once the sheets of the document it holds have settled, or `demoPageBoundMs`
+ * after the load began, whichever comes first. The page's own script makes its strip a drag region as it runs, before
+ * the document's sheets can be put in; a view that is not in the window answers no hit test, so until the sheet that
+ * makes no drag region of the page the window's has settled, no point of the page drags the window, and our switch never
+ * answers as the caption. The same on every system: nothing here reads the platform.
+ */
+export function demoPageShowing(deps: PageShowingDeps): PageShowing {
+    let shown = false;
+    let closed = false;
+    let timer: unknown = null;
+    const stopTimer = () => {
+        if (timer === null) return;
+        deps.clearTimer(timer);
+        timer = null;
+    };
+    const show = () => {
+        stopTimer();
+        if (closed || shown) return;
+        shown = true;
+        deps.add();
+    };
+    return {
+        loading() {
+            if (closed) return;
+            stopTimer();
+            if (shown) {
+                shown = false;
+                deps.remove();
+            }
+            timer = deps.setTimer(show, demoPageBoundMs);
+        },
+        landed: show,
+        close() {
+            closed = true;
+            stopTimer();
+        },
     };
 }
 

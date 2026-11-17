@@ -2158,6 +2158,15 @@ internal static partial class StatusChecks
         DateTimeOffset? lastDelivered = null;
         foreach (var channel in on)
         {
+            // A channel that is on and could not deliver were it asked now — its plugin not loaded, not declaring the
+            // delivery contract, or its binding refused — reaches nobody, whatever its last outcome says. A runtime older
+            // than readiness says none, and its channels are read as before.
+            if (channel.Readiness is { } readiness && readiness != ChannelReadiness.Ready)
+            {
+                failures.Add($"{channel.Channel} is on but cannot deliver: {readiness}{Detail(channel.ReadinessDetail)}.");
+                continue;
+            }
+
             // Whether there is a desktop is this runtime's own fact, decided when it started and found again by its own
             // sends: a toast outcome a line from an earlier runtime carried never outweighs it.
             var noDesktop = NotificationReading.NoDesktop(channel, info.StartedAt);
@@ -2176,7 +2185,7 @@ internal static partial class StatusChecks
             }
             else if (noDesktop is not null)
             {
-                asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `Notifications:Toast` set to `false` turns the toast off.");
+                asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `jason notification disable toast --actor human:<Name>` turns the toast off.");
             }
             else if (outcome == ChannelResults.Failed)
             {

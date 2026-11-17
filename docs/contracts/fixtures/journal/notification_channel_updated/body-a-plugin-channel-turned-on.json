@@ -1,0 +1,7 @@
+{
+  "kind": "notification_channel_updated",
+  "version": 1,
+  "case": "a notification plugin's channel is turned back on",
+  "body": { "key": "Notifications:Plugins:ntfy:Enabled", "old": false, "new": true },
+  "expect": "valid"
+}

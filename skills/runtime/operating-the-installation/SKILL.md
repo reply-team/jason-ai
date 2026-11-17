@@ -194,7 +194,9 @@ they were and, where a line names a contact, whose email it was. You may also re
 `jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. The toast,
 the operating system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says
 on its `Notify:` line what each channel did last. `Notifications:Enabled` set to `false` in
-`~/.jason/config/settings.json` turns all of it off, and `Notifications:Toast` set to `false` turns off the toast alone.
+`~/.jason/config/settings.json` turns all of it off, and `jason notification disable <channel> --actor human:<Name>`
+turns off one channel alone, `toast` or a notification plugin's id, as `jason notification enable` turns it on again,
+naming the person who asked: say a refusal as Jason says it, which names what is missing.
 `docs/notifications.md` says when a burst is said, and what a pointer never carries.
 
 Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person

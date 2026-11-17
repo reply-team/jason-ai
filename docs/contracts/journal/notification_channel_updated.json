@@ -1,0 +1,29 @@
+{
+  "kind": "notification_channel_updated",
+  "version": 1,
+  "since": "0.48.5",
+  "summary": "One notification channel, the toast or a notification plugin, was turned on or off by notification.enable or notification.disable: whether it was on before and after, apart from the switch for every notification.",
+  "subscribable": true,
+  "entities": {},
+  "field_since": {},
+  "body": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["key", "old", "new"],
+    "properties": {
+      "key": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The setting the line is about, as the settings file spells its path: `Notifications:Toast`, or `Notifications:Plugins:<plugin id>:Enabled`."
+      },
+      "old": {
+        "type": ["boolean", "null"],
+        "description": "Whether the channel was on in the settings in force before, or null where the settings named no such channel."
+      },
+      "new": {
+        "type": "boolean",
+        "description": "Whether the channel is on in the settings in force now. A line is written only when it differs from the one before."
+      }
+    }
+  }
+}

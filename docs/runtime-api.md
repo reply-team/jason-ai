@@ -102,10 +102,11 @@ Jason-Attempt: att_...
 The header says where a request comes from; it is not a credential, it opens nothing, and it fences nothing: an
 operation an executor fences keeps its `attempt_id` in the body. Every operation reads past it but the ones that are a
 person's own word ([below](#what-a-program-can-write-so-its-result-comes-back-as-a-fact)), the two that change what
-a plugin may use, `plugin.grant` and `plugin.revoke`, and the two that name the profile agent work runs on by default,
-`profile.set_default` and `profile.unset_default`, which answer it `403` with the code `decided_inside_a_run` before
-the body is read, and record nothing; the grants and the default say in a sentence of their own that nothing inside a
-run changes Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
+a plugin may use, `plugin.grant` and `plugin.revoke`, the two that name the profile agent work runs on by default,
+`profile.set_default` and `profile.unset_default`, and the two that switch one notification channel,
+`notification.enable` and `notification.disable`, which answer it `403` with the code `decided_inside_a_run` before
+the body is read, and record nothing; the grants, the default and the channels say in a sentence of their own that
+nothing inside a run changes Jason itself. `route.set` and `route.unset` refuse the same way, with a sentence of their own,
 the global scope alone, which the body names, since nothing inside a run changes Jason itself; they change a
 campaign's own route from inside a run as before. Nor does `reply.record` read past it: it records a verdict that names
 a `human` actor from there as that run's, so that it lifts no opt-out's lock. A program that is not running inside an
@@ -519,6 +520,28 @@ question, and for one whose `inbound_reply` anybody but the runtime changed befo
   `setting_not_in_force`, with the file put back and one more detail under the field `settings.json`,
   `settings_file_put_back` or `settings_file_not_put_back`. Each change of the default in force is journaled as
   `default_profile_updated` ([docs/execution-profiles.md](execution-profiles.md), §3).
+
+### `notification`
+
+- `notification.enable`: turns one notification channel on.
+- `notification.disable`: turns one notification channel off.
+
+  Each takes the `channel`, `toast` or a notification plugin's id (`validation_failed` on `channel` where it is missing
+  or neither), and writes that channel's one setting into `settings.json` — `Notifications:Toast`, or
+  `Notifications:Plugins:<id>:Enabled` — keeping every byte of the file it does not own: off writes `false`, on takes
+  that `false` away. The setting is the one the notifier reads when the request answers, with no restart and no reload,
+  and the answer is the `notifications` section of `system.info` as it then stands. A channel already as asked writes
+  nothing and answers success. There is no operation for every channel at once: `Notifications:Enabled` is a line of the
+  settings file, and while it is `false` an enable is `409` `notifications_off`, which names it. `404`
+  `notification_channel_not_found` is a name that is neither the toast nor a plugin installed in the data directory;
+  `409` `notification_channel_not_configured` is an installed plugin nothing names under `Notifications:Plugins` —
+  `not_named` for a notification plugin, `not_declared` for a plugin that does not declare the delivery contract, which
+  naming would not make a channel, `unavailable` for one that is not loaded — or an enable of a named one a notification would not be tried on,
+  `unavailable`, `not_declared` or `binding_invalid`, the reason under the field `channel` and what would change it in
+  the message. The settings file's own
+  refusals and `setting_not_in_force` are answered as for `profile.set_default`. Each change of the channel in force is
+  journaled as `notification_channel_updated`, and from inside a run either is `403` `decided_inside_a_run`
+  ([docs/notifications.md](notifications.md), §9).
 
 ### `journal`
 
