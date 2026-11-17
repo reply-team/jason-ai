@@ -32,6 +32,12 @@ replaces the title and the body together.
 
 Nothing stops, no setting is renamed and no migration runs.
 
-- **The desktop:** update it from this release's installers or the update an installed desktop offers.
+- **The desktop:** update it from this release's installers.
 - **The executable:** nothing in it changed for this fix.
 - **From 0.48.2 or earlier,** the notes of each release in between apply as well.
+
+## Known issues
+
+- **The update an installed Jason Desktop offers does not install.** On Windows and macOS it stops with "The update
+  was not installed, because a copy of this version could not be kept aside to go back to." Install this release
+  from its installer instead. A fix follows in the next release.
