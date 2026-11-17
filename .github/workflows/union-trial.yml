@@ -177,9 +177,9 @@ jobs:
         shell: pwsh
         run: |
           $release = "v$($env:VERSION -replace '-.*$', '')"
-          $latest = Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -MaximumRedirection 0 -SkipHttpErrorCheck -UseBasicParsing
-          $tag = ([string]$latest.Headers.Location) -replace '^.*/releases/tag/', ''
-          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$($latest.Headers.Location)'" }
+          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
+          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
           if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
           New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
           foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
