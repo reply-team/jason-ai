@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dialog } from '../../layout/dialog';
+import { ReasonField } from '../../layout/reason-field';
 
 type Props = {
     verb: 'Reject';
@@ -30,9 +31,8 @@ export function DecideDialog({ verb, what, onConfirm, onCancel }: Props) {
         >
             <div className="field">
                 <label htmlFor="decide-reason">Reason (optional, kept in the journal)</label>
-                <textarea
+                <ReasonField
                     id="decide-reason"
-                    className="textarea"
                     maxLength={2000}
                     value={reason}
                     onChange={(e) => setReason((e.target as HTMLTextAreaElement).value)}

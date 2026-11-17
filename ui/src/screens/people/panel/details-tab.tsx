@@ -10,6 +10,7 @@ import { Details } from '../details';
 import { channelName } from '../labels';
 import { RegisterControl, WholePersonSwitch } from './register';
 import * as panel from './store';
+import { ReasonField } from '../../../layout/reason-field';
 
 type Props = { person: Contact; campaignId: string | undefined; now: Date; zone: string };
 
@@ -253,12 +254,7 @@ export function DetailsTab({ person, campaignId, now, zone }: Props) {
             </div>
             <div className="field">
                 <label htmlFor="person-reason">Reason (optional, kept in the journal)</label>
-                <textarea
-                    id="person-reason"
-                    className="textarea"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                />
+                <ReasonField id="person-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
             </div>
             {chosen && (
                 <div className="provider">

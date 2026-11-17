@@ -24,7 +24,7 @@ public static class RuntimeCommands
             "stop",
             "Ask the running runtime to shut down and wait until its process is gone.",
             actor,
-            (human, cancellationToken) => RuntimeStopCommand.RunAsync(env, human, cancellationToken)));
+            (human, cancellationToken) => RuntimeStopCommand.RunAsDeliberateAsync(env, human, cancellationToken)));
 
         runtime.Subcommands.Add(Verb(
             env,

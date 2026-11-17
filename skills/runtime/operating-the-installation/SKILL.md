@@ -51,6 +51,10 @@ this opens shows the demo, or, while something waits, one page that says Live Mo
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
 `jason decision` commands.
 
+Without Jason Desktop, then, that tab is not where a person watches their work. When they ask what happened, what is
+queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
+and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
+
 If it fails with `ui_not_installed`, no UI build is in place, and the message names the fix: `jason ui install` places
 this release's build as `ui/default`, which is also the repair `jason status` prints. Run it, then `jason ui open`
 again. A build from source has no published UI, and the command says so: then say that a build is made from `ui/` as

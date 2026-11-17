@@ -56,6 +56,12 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// <summary>The key under <c>HKEY_CURRENT_USER</c> link schemes are registered under: <c>Software\Classes</c>, except in a test.</summary>
     internal string ClassesKey { get; init; } = @"Software\Classes";
 
+    /// <summary>
+    /// macOS: the account's own home as the account database names it (<c>getpwuid</c>), which <c>HOME</c> may differ from;
+    /// null where it cannot be read and everywhere else. A test's own home in a test.
+    /// </summary>
+    internal Func<string?> AccountHome { get; init; } = AccountDatabase.Home;
+
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
 

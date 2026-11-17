@@ -83,6 +83,10 @@ public static class StatusCommand
         its last steps undone, so 'jason runtime start' refuses then, and so does the start a sign-in
         registration makes. An update ledger that cannot be read fails the runtime check and names the file.
 
+        Where jason install stopped the runtime to retire an older install and none has started since, the
+        runtime check says so, from the note it left in the data directory (run/start-owed.json), which a
+        runtime's own start removes, and any stop through jason runtime stop; its repair is jason runtime start.
+
         The roles check reads the same profiles, and Roles:DefaultExecutionProfile as the runtime would:
         JASON_Roles__DefaultExecutionProfile over the settings file, the value as written, with nothing trimmed;
         a padded, capitalised or blank value is one the runtime refuses, and the check says so. It is ok only

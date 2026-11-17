@@ -8,6 +8,8 @@ import { browserPlugins } from '../plugins';
 import { route } from '../router';
 import { pendingMark } from '../shell/attention-mark';
 import { reasonLabel } from '../screens/attention/labels';
+import { QUEUED_SENTENCE } from '../screens/attention/reasking-model';
+import { forgetEdits } from '../screens/attention/reasking';
 import { whyWords } from '../screens/send-modes/doubts';
 import * as classicCampaigns from '../screens/campaigns/store';
 import { chatDesktop, journalLine, stubStream, type StubDesktop, type StubStream } from '../test/desktop';
@@ -700,7 +702,7 @@ describe('what waits in an agent’s chat', () => {
         expect(card(pane, 'dec_1')).not.toBeNull();
     });
 
-    it('says Jason asks again only in the drawing of the chat it was edited in', async () => {
+    it('keeps the edited card while the page lives, the chat drawn again included, and a reload forgets it', async () => {
         const first = renderConsole();
         first.fake.answer('workitem.get', 'workitem.get/parked-send');
         first.fake.answerAnyRequest('workitem.update', 'workitem.update/dates');
@@ -712,15 +714,27 @@ describe('what waits in an agent’s chat', () => {
         });
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
-        await waitFor(() => within(waiting(pane)).getByText(/Jason asks again with the new text/));
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
 
-        // The window is drawn again: the chat starts from what the runtime lists, and the edit's note went with it.
+        // The window is drawn again in the same page: the card is the page's own memory, and stays with its state.
         cleanup();
         freshConsole();
+        renderConsole().fake.answer('workitem.get', 'workitem.get/parked-send');
+        pane = await openChat('Spring');
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
+
+        // A reload of the page forgets it: the chat starts from what the runtime lists, which no longer holds the
+        // withdrawn approval, so neither the card nor its state is drawn until the runtime asks again.
+        cleanup();
+        freshConsole();
+        forgetWaiting();
+        forgetEdits();
+        attention.forgetPages();
         renderConsole();
         pane = await openChat('Spring');
         await waitFor(() => within(card(pane, 'dec_1')!).getByRole('button', { name: 'Keep going' }));
-        expect(within(pane).queryByText(/Jason asks again with the new text/)).toBeNull();
+        expect(card(pane, 'apr_1')).toBeNull();
+        expect(within(pane).queryByText(QUEUED_SENTENCE)).toBeNull();
     });
 
     it('never lets one campaign’s lists set the mark of what waits', async () => {
@@ -816,8 +830,15 @@ describe('what waits in an agent’s chat', () => {
         const pane = await openChat('Spring');
         const enroll = await drawn(pane, 'apr_2');
         fireEvent.click(within(enroll).getByRole('button', { name: 'Reject' }));
-        // The question: Cancel asks nothing of the runtime.
+        // The question takes the keyboard on Cancel, neither on its optional reason, a field of one line, nor on Reject:
+        // Enter as it opens rejects nothing. Cancel asks nothing of the runtime.
         let asking = within(enroll).getByRole('alertdialog', { name: 'Reject Enroll Oli Example?' });
+        const reason = within(asking).getByRole('textbox', { name: 'Reason (optional, kept in the journal)' });
+        expect(reason.tagName).toBe('INPUT');
+        await waitFor(() =>
+            expect(document.activeElement).toBe(within(asking).getByRole('button', { name: 'Cancel' })),
+        );
+        expect(document.activeElement).not.toBe(within(asking).getByRole('button', { name: 'Reject' }));
         fireEvent.click(within(asking).getByRole('button', { name: 'Cancel' }));
         expect(within(enroll).queryByRole('alertdialog')).toBeNull();
         expect(sent(fake, 'approval.reject')).toEqual([]);
@@ -833,7 +854,7 @@ describe('what waits in an agent’s chat', () => {
         );
     });
 
-    it('edits a message with Needs you’s editor and saves it through workitem.update, then says Jason asks again', async () => {
+    it('edits a message with Needs you’s editor and saves it through workitem.update, then keeps the card with the words saved', async () => {
         const { fake } = renderConsole();
         fake.answer('workitem.get', 'workitem.get/parked-send');
         // No exchange was recorded for a message's edit; the request is read from what the card sent.
@@ -856,7 +877,7 @@ describe('what waits in an agent’s chat', () => {
         });
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Save' }));
-        await waitFor(() => within(waiting(pane)).getByText(/Jason asks again with the new text/));
+        await waitFor(() => within(card(pane, 'apr_1')!).getByText(QUEUED_SENTENCE));
         expect(sent(fake, 'workitem.update')).toEqual([
             {
                 work_item_id: 'wi_1',
@@ -874,7 +895,11 @@ describe('what waits in an agent’s chat', () => {
                 reason: 'Message text edited on the approval card.',
             },
         ]);
-        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        // The card stays where it was, with nothing to press but Details (the words saved are chat-edited.screen.test.tsx's: no
+        // exchange of this story's edit was recorded).
+        for (const name of ['Approve', 'Edit', 'Reject'])
+            expect(within(card(pane, 'apr_1')!).queryByRole('button', { name })).toBeNull();
+        expect(within(card(pane, 'apr_1')!).getByRole('button', { name: 'Details' })).toBeTruthy();
         expect(sent(fake, 'approval.approve')).toEqual([]);
     });
 

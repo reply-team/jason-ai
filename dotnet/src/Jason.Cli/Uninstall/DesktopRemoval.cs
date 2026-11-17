@@ -58,7 +58,16 @@ public sealed record DesktopPlan(
     string? CommandLineInstall,
     IReadOnlyList<string> Demo,
     IReadOnlyList<string> Caches,
-    IReadOnlyList<string> Left);
+    IReadOnlyList<string> Left)
+{
+    /// <summary>
+    /// macOS: what the application of this bundle identifier leaves under <c>~/Library</c> as its own state, found there,
+    /// each going with the application, just before it: its preferences, saved window state, caches, HTTP and WebKit
+    /// storage and its support folder. Never where the application stays, nor where the home is <c>/</c> or not the
+    /// account's own.
+    /// </summary>
+    public IReadOnlyList<string> ApplicationState { get; init; } = [];
+}
 
 /// <summary>
 /// The application's steps, in the uninstall the jason Jason Desktop carries runs: the one routine both doors reach — a
@@ -162,10 +171,12 @@ public static partial class DesktopRemoval
     private static partial Regex BundleIdentifier();
 
     /// <summary>
-    /// Windows, the terminal door: the processes running the carried jason besides this one, the runtime this uninstall stops
-    /// and an earlier demo's runtime it stops. The application's uninstaller ends with nothing removed while any process runs
-    /// from that file (<c>installer/uninstall.nsh</c>), after this verb has ended and can no longer say so, so the verb refuses
-    /// first while one does. A process started after this look still blocks it; the report says what to do then.
+    /// Windows, the terminal door: the processes running the carried jason, in any session, besides this one, the runtime
+    /// this uninstall stops, an earlier demo's runtime it stops, and every process any of those started, at any depth: a
+    /// runtime's plugin hosts and an agent's <c>jason</c> calls for its work, which that stop ends. The application's
+    /// uninstaller ends with nothing removed while any process runs from that file, whichever session it is in
+    /// (<c>installer/uninstall.nsh</c>), after this verb has ended and can no longer say so, so the verb refuses first while
+    /// one does. A process started after this look still blocks it; the report says what to do then.
     /// </summary>
     public static IReadOnlyList<int> OthersRunningTheCarriedJason(CliEnvironment env, CarriedExecutable carried, DesktopPlan plan)
     {
@@ -183,7 +194,37 @@ public static partial class DesktopRemoval
             }
         }
 
-        return [.. env.Removes!.RunningFrom(carried.Executable).Where(pid => !stopped.Contains(pid)).Order()];
+        var removes = env.Removes!;
+        return [.. removes.RunningFromInAnySession(carried.Executable).Where(pid => !stopped.Contains(pid) && !Descends(removes, pid, stopped)).Order()];
+    }
+
+    /// <summary>The deepest a chain of processes is followed up to one this uninstall stops.</summary>
+    private const int DeepestChain = 64;
+
+    /// <summary>
+    /// Whether <paramref name="pid"/> was started, through any number of processes, by one of <paramref name="ancestors"/>.
+    /// A parent that cannot be told ends the chain, and the process is counted.
+    /// </summary>
+    private static bool Descends(IInstallationRemover removes, int pid, HashSet<int> ancestors)
+    {
+        var seen = new HashSet<int> { pid };
+        var current = pid;
+        for (var step = 0; step < DeepestChain; step++)
+        {
+            if (removes.ParentOf(current) is not { } parent || !seen.Add(parent))
+            {
+                return false;
+            }
+
+            if (ancestors.Contains(parent))
+            {
+                return true;
+            }
+
+            current = parent;
+        }
+
+        return false;
     }
 
     /// <summary>The application's own executable inside its folder.</summary>
@@ -228,7 +269,102 @@ public static partial class DesktopRemoval
             CommandLineInstalls.Find(env, places, null, []),
             Demo(env, places, left),
             Caches(places),
-            left);
+            left)
+        {
+            ApplicationState = fate == ApplicationFates.Deleted ? ApplicationStateOf(places, left) : [],
+        };
+    }
+
+    /// <summary>
+    /// The name Electron gives the application, <c>productName</c> in its <c>package.json</c>: the last part of its default
+    /// profile folder (<c>app.getPath('userData')</c>, "the appData directory appended with your app's name") and of its
+    /// default log folder (<c>~/Library/Logs/YourAppName</c>).
+    /// </summary>
+    public const string ElectronName = "Jason";
+
+    /// <summary>
+    /// The application's own state under <c>~/Library</c>, by its bundle identifier, each found as itself (never through a
+    /// link). The application moves its profile and logs into the data directory before it is ready, so what is here is
+    /// what macOS and the frameworks write by that identifier, and what an earlier start wrote before the move.
+    /// </summary>
+    public static IReadOnlyList<string> ApplicationStatePlaces(string home)
+    {
+        var library = Path.Combine(home, "Library");
+        return
+        [
+            Path.Combine(library, "Preferences", Identifier + ".plist"),
+            Path.Combine(library, "Saved Application State", Identifier + ".savedState"),
+            Path.Combine(library, "Caches", Identifier),
+            Path.Combine(library, "HTTPStorages", Identifier),
+            Path.Combine(library, "HTTPStorages", Identifier + ".binarycookies"),
+            Path.Combine(library, "WebKit", Identifier),
+            Installation.CreatedProfiles.SupportFolder(home),
+        ];
+    }
+
+    /// <summary>
+    /// The two folders under <c>~/Library</c> Electron names by the application's name and not its identifier: its default
+    /// profile and log folders. Jason Desktop has kept its profile and logs in the data directory since its first release
+    /// (<c>app.setPath('userData')</c>, <c>setAppLogsPath</c>, before Electron is ready), so no file in them is one only Jason
+    /// Desktop writes, and nothing proves them Jason's rather than another application's named Jason: they are named and
+    /// left, never removed.
+    /// </summary>
+    public static IReadOnlyList<string> ElectronNamedPlaces(string home) =>
+    [
+        Path.Combine(home, "Library", "Application Support", ElectronName),
+        Path.Combine(home, "Library", "Logs", ElectronName),
+    ];
+
+    /// <summary>
+    /// Why the steps under <c>~/Library</c> are skipped, or null: a home of <c>/</c>, whose <c>Library</c> is the system's, and
+    /// a home that is not this account's own, as the account database names it. An account home that cannot be read decides
+    /// nothing.
+    /// </summary>
+    public static string? LibraryRefusal(string home, string? accountHome)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(home));
+        if (string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full) ?? string.Empty), StringComparison.Ordinal))
+        {
+            return $"The home directory is {home}, whose Library is the system's, so nothing under {Path.Combine(home, "Library")} was looked at or removed.";
+        }
+
+        if (accountHome is not null && !string.Equals(full, Path.TrimEndingDirectorySeparator(Path.GetFullPath(accountHome)), StringComparison.Ordinal))
+        {
+            return $"The home directory is {home}, which is not this account's own ({accountHome}), so nothing under {Path.Combine(home, "Library")} was looked at or removed.";
+        }
+
+        return null;
+    }
+
+    /// <summary>The preferences file macOS keeps for this bundle identifier.</summary>
+    public static string PreferencesFile(string home) => Path.Combine(home, "Library", "Preferences", Identifier + ".plist");
+
+    private static IReadOnlyList<string> ApplicationStateOf(SetupPlaces places, List<string> left)
+    {
+        if (places.Platform is not SetupSystem.MacOs)
+        {
+            return [];
+        }
+
+        if (LibraryRefusal(places.Home, places.AccountHome()) is { } refusal)
+        {
+            left.Add(refusal);
+            return [];
+        }
+
+        foreach (var named in ElectronNamedPlaces(places.Home).Where(Present))
+        {
+            left.Add($"{named} is named after the application, not its identifier, and holds no file only Jason Desktop writes (it keeps its own in the data directory), so it may be another application's: left as it is, --purge-data or not. Delete it yourself if it is Jason's.");
+        }
+
+        return [.. ApplicationStatePlaces(places.Home).Where(Present)];
+    }
+
+    /// <summary>There as itself: a file or a folder, never a link, which is left as it stands.</summary>
+    private static bool Present(string path)
+    {
+        var info = new FileInfo(path);
+        return (info.Exists || Directory.Exists(path)) && !info.Attributes.HasFlag(FileAttributes.ReparsePoint);
     }
 
     // --- reading -----------------------------------------------------------------------------------------------
@@ -515,10 +651,14 @@ public static partial class DesktopRemoval
                     // would end it, so the file alone goes.
                     if (plan.ApplicationFate == ApplicationFates.Deleted)
                     {
-                        env.Removes!.UnloadLaunchAgent(item);
+                        env.Removes!.UnloadLaunchAgent(item, Identifier);
+                        env.Removes!.RemoveFile(item);
                     }
-
-                    env.Removes!.RemoveFile(item);
+                    else
+                    {
+                        env.Removes!.RemoveFile(item);
+                        done.Add($"Open Jason at Login's job, {Identifier}, stays loaded until the next login: its file is gone, and the application kept here may be that job's own window, which an unload would end.");
+                    }
                 }
                 else if (OperatingSystem.IsWindows())
                 {
@@ -709,8 +849,9 @@ public static partial class DesktopRemoval
                 var without = PathEntry.WithoutEntry(bytes, folder);
                 if (!ReferenceEquals(without, bytes))
                 {
-                    File.WriteAllBytes(profile, without);
-                    done.Add($"Took the lines that put {folder} on the PATH out of {profile}.");
+                    done.Add(Installation.CreatedProfiles.WriteBackOrRemove(places.Home, profile, without)
+                        ? $"Took the lines that put {folder} on the PATH out of {profile}, which jason install created, and removed it: nothing else was in it."
+                        : $"Took the lines that put {folder} on the PATH out of {profile}.");
                 }
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
@@ -736,6 +877,41 @@ public static partial class DesktopRemoval
             catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
             {
                 problems.Add($"{folder}, {what}, could not be removed: {refused.Message} Deleting the folder takes it off.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// macOS, just before the bundle: the application's own state under <c>~/Library</c>. The preferences go through the
+    /// preferences system first
+    /// (<c>defaults delete</c>), which would otherwise write back a copy it holds, then as a file.
+    /// </summary>
+    private static void RemoveApplicationState(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> problems)
+    {
+        const string what = "the application's own state";
+        foreach (var place in plan.ApplicationState)
+        {
+            try
+            {
+                if (string.Equals(Path.GetFileName(place), Identifier + ".plist", StringComparison.Ordinal))
+                {
+                    env.Removes!.DeletePreferences(Identifier);
+                }
+
+                if (Directory.Exists(place))
+                {
+                    env.Removes!.RemoveTree(place);
+                }
+                else if (File.Exists(place))
+                {
+                    env.Removes!.RemoveFile(place);
+                }
+
+                done.Add($"Removed {place}, {what}.");
+            }
+            catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"{place}, {what}, could not be removed: {refused.Message} Deleting it takes it off.");
             }
         }
     }
@@ -780,6 +956,8 @@ public static partial class DesktopRemoval
                     return;
                 }
 
+                RemoveApplicationState(env, plan, done, problems);
+
                 try
                 {
                     env.Removes!.RemoveTree(application);
@@ -790,7 +968,7 @@ public static partial class DesktopRemoval
                     // macOS may refuse a terminal the right to delete an application (Privacy & Security, App Management), and
                     // a delete refused part-way leaves part of the bundle. Never passed over: the verb ends 1 on it.
                     var left = Directory.Exists(application) ? $"{application} is still there, and may be only part of the application now" : $"{application} is gone";
-                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move Jason from Applications to the Bin (the Trash) in the Finder to remove it.");
+                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Bin (the Trash) in the Finder to remove it.");
                 }
 
                 return;
