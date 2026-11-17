@@ -78,6 +78,26 @@ public sealed class CommandLineMoveTests
         Assert.True(rig.Installation.Running);
     }
 
+    /// <summary>
+    /// A staging folder a killed move left beside the place is taken away by the next, under the lock; a folder of any other
+    /// name there is not.
+    /// </summary>
+    [Fact]
+    public async Task On_macOS_what_a_killed_move_left_unpacked_is_taken_away_and_nothing_else()
+    {
+        using var rig = new MoveRig(windows: false);
+        var place = Path.GetDirectoryName(rig.Application)!;
+        var left = Path.Combine(place, $".jason-move.{Guid.NewGuid():N}");
+        var other = Path.Combine(place, ".jason-move.someone-elses");
+        MoveRig.PlantApplication(Path.Combine(left, "Jason.app"), windows: false, SemanticVersion.Current.ToString());
+        Directory.CreateDirectory(other);
+
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+
+        Assert.False(Directory.Exists(left));
+        Assert.True(Directory.Exists(other));
+    }
+
     /// <summary>The shared Applications folder takes a new application where this account may write there.</summary>
     [Fact]
     public async Task On_macOS_a_writable_shared_folder_takes_the_new_application()

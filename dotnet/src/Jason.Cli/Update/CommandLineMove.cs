@@ -400,6 +400,17 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         try
         {
             Directory.CreateDirectory(place);
+
+            // What a move killed while it unpacked left beside the place: only a staging folder of this move's own name, and
+            // only under the lock, so none of a move in flight.
+            foreach (var left in Directory.EnumerateDirectories(place, ".jason-move.*"))
+            {
+                if (Path.GetFileName(left) is { Length: 44 } name && name[12..].All(char.IsAsciiHexDigitLower) && !File.GetAttributes(left).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    TryDeleteTree(left);
+                }
+            }
+
             stage = Path.Combine(place, $".jason-move.{Guid.NewGuid():N}");
             Directory.CreateDirectory(stage);
         }
