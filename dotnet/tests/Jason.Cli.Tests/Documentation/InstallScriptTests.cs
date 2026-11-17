@@ -66,25 +66,33 @@ public partial class InstallScriptTests
         Assert.StartsWith("#!/bin/sh", Script("install.sh"), StringComparison.Ordinal);
 
     /// <summary>
-    /// Every platform the code publishes for is named, and no other: a script that offered a fourth would be
-    /// offering a download that does not exist. Each script installs on its own platforms and names the others
-    /// in the sentence that sends the reader to the other script, which is why both name all three.
+    /// Every download a script names is one a release publishes, and no other: a script that named another would be
+    /// offering a download that does not exist. <c>install.sh</c> installs the Linux archive and, on macOS, Jason Desktop's
+    /// zip for the machine's architecture, both of which a release publishes; <c>install.ps1</c> installs the Windows setup.
+    /// Neither names another platform's archive but in the sentence that refuses a machine no release is built for.
     /// </summary>
-    [Theory]
-    [InlineData("install.sh")]
-    [InlineData("install.ps1")]
-    public void The_platforms_a_script_names_are_exactly_the_ones_the_code_publishes(string script)
+    [Fact]
+    public void The_downloads_a_script_names_are_ones_a_release_publishes()
     {
-        var text = Script(script);
+        var sh = Script("install.sh");
+        Assert.Equal(new HashSet<string>(StringComparer.Ordinal) { ReleaseAssets.For("linux-x64") }, AssetNames().Matches(sh).Select(match => match.Value).ToHashSet(StringComparer.Ordinal));
+        Assert.Contains("ASSET=\"jason-desktop-macos-$ARCH.zip\"", Code("install.sh"), StringComparison.Ordinal);
+        foreach (var arch in new[] { "arm64", "x64" })
+        {
+            Assert.Contains($"jason-desktop-macos-{arch}.zip", ReleaseAssets.Desktop);
+            Assert.Contains($"ARCH=\"{arch}\"", Code("install.sh"), StringComparison.Ordinal);
+        }
 
-        var assets = AssetNames().Matches(text).Select(match => match.Value).ToHashSet(StringComparer.Ordinal);
-        Assert.Equal(ReleaseAssets.Rids.Select(ReleaseAssets.For).ToHashSet(StringComparer.Ordinal), assets);
+        var ps1 = Script("install.ps1");
+        Assert.Empty(AssetNames().Matches(ps1));
+        Assert.Contains("$asset = 'jason-desktop-windows-x64-setup.exe'", Code("install.ps1"), StringComparison.Ordinal);
+        Assert.Contains("jason-desktop-windows-x64-setup.exe", ReleaseAssets.Desktop);
 
-        var rids = Rids().Matches(text).Select(match => match.Value).ToHashSet(StringComparer.Ordinal);
-        Assert.Equal(ReleaseAssets.Rids.ToHashSet(StringComparer.Ordinal), rids);
-
-        Assert.Contains(ReleaseAssets.Checksums, text, StringComparison.Ordinal);
-        Assert.Contains(ReleaseAssets.Manifest, text, StringComparison.Ordinal);
+        foreach (var text in new[] { sh, ps1 })
+        {
+            Assert.Contains(ReleaseAssets.Checksums, text, StringComparison.Ordinal);
+            Assert.Contains(ReleaseAssets.Manifest, text, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>
@@ -100,20 +108,33 @@ public partial class InstallScriptTests
         Assert.True(code.IndexOf("sha256", StringComparison.Ordinal) < code.IndexOf("tar -x", StringComparison.Ordinal), "The checksum is not computed before tar extracts.");
     }
 
+    /// <summary>
+    /// The setup is run only after its digest matches its line in <c>checksums.txt</c> and its signer is the release's
+    /// publisher, both on the lines that are code; <see cref="InstallDesktopScriptTests"/> runs both refusals.
+    /// </summary>
     [Fact]
     [Critical(Family.I1, "install.ps1 verifies the checksum first")]
-    public void Install_ps1_checks_the_digest_before_it_unpacks()
+    public void Install_ps1_checks_the_digest_and_the_signer_before_it_runs_the_installer()
     {
         var code = Code("install.ps1");
-        Assert.True(code.IndexOf("Get-FileHash", StringComparison.Ordinal) < code.IndexOf("Expand-Archive", StringComparison.Ordinal), "The checksum is not computed before Expand-Archive.");
+        var run = code.IndexOf("Start-Process -FilePath $setup", StringComparison.Ordinal);
+        Assert.True(run > 0, "install.ps1 no longer runs the setup with Start-Process.");
+        Assert.InRange(code.IndexOf("Get-FileHash", StringComparison.Ordinal), 0, run);
+        Assert.InRange(code.IndexOf("    Assert-Signed $setup", StringComparison.Ordinal), 0, run);
     }
 
-    /// <summary>PA9: the PATH edit can be declined, the way rustup's can.</summary>
+    /// <summary>
+    /// PA9: on Linux the PATH edit can be declined, the way rustup's can. Where a script installs Jason Desktop, every
+    /// install puts jason in the terminal, so the option is refused by name, before anything is read or written, rather
+    /// than taken and not honoured.
+    /// </summary>
     [Fact]
-    public void Both_scripts_can_be_told_to_leave_the_path_alone()
+    public void The_path_edit_is_declined_on_linux_and_refused_where_jason_desktop_is_installed()
     {
-        Assert.Contains("--no-modify-path", Script("install.sh"), StringComparison.Ordinal);
-        Assert.Contains("NoModifyPath", Script("install.ps1"), StringComparison.Ordinal);
+        Assert.Contains("--no-modify-path) MODIFY_PATH=0 ;;", Code("install.sh"), StringComparison.Ordinal);
+        Assert.Contains("--no-modify-path is not taken on macOS", Code("install.sh"), StringComparison.Ordinal);
+        Assert.Contains("-NoModifyPath is not taken", Code("install.ps1"), StringComparison.Ordinal);
+        Assert.Contains("-InstallDir is not taken", Code("install.ps1"), StringComparison.Ordinal);
     }
 
     /// <summary>Both can be pointed at a different feed — a directory or a base URL — which is how CI runs them with no network.</summary>
@@ -254,36 +275,6 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
-    /// <c>install.ps1</c> runs the statements the Windows repair prints: one definition of how Jason goes on a
-    /// Windows PATH, held to the script line by line and in order.
-    /// </summary>
-    /// <remarks>
-    /// Two spellings of it are how the kind of an account's Path was lost in three places at once. What the
-    /// statements do is run, against a registry key of the test's own, in <c>UserPathRegistryTests</c>.
-    /// </remarks>
-    [Fact]
-    public void The_installer_runs_the_statements_the_repair_prints()
-    {
-        var script = Code("install.ps1").Split('\n').Select(line => line.Trim()).ToList();
-
-        // One block, line after line, rather than each statement somewhere after the one before it: a line
-        // between two of them — an edit to the value, a second SetValue — would have kept an order-only match
-        // green while the installer ran something the repair does not print.
-        var statements = Jason.Cli.Uninstall.PathEntry.RegistryStatements("$directory", $"'{Jason.Cli.Uninstall.UserPathValue.EnvironmentKey}'");
-        var at = script.IndexOf(statements[0]);
-        Assert.True(at >= 0, $"install.ps1 does not run: {statements[0]}");
-        for (var index = 1; index < statements.Count; index++)
-        {
-            Assert.True(
-                at + index < script.Count && script[at + index] == statements[index],
-                $"install.ps1 does not run, on the line after the one before it: {statements[index]}");
-        }
-
-        Assert.DoesNotContain(script, line => line.Contains("GetEnvironmentVariable('Path'", StringComparison.Ordinal));
-        Assert.DoesNotContain(script, line => line.Contains("SetEnvironmentVariable('Path'", StringComparison.Ordinal));
-    }
-
-    /// <summary>
     /// <c>--version X</c> names a release, and the manifest that comes back has to be that release's. Neither
     /// script looked: a feed that answered with another version — a stale mirror, a directory holding the wrong
     /// release, a download URL that resolved to something else — was installed anyway, under the version that
@@ -323,52 +314,6 @@ public partial class InstallScriptTests
         Assert.True(compared >= 0, "install.sh never compares the manifest's version with the one --version asked for.");
         Assert.True(downloaded > compared, "install.sh downloads the archive before checking that the manifest names the version that was asked for.");
         Assert.Contains(lines, line => line.Contains("fail ", StringComparison.Ordinal) && line.Contains("$VERSION", StringComparison.Ordinal) && line.Contains("$LATEST", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// Windows keeps the user's PATH in the registry rather than in a profile file, where a directory is its own
-    /// mark: the script adds it to the user's PATH only when it is not there. No profile file is edited.
-    /// </summary>
-    [Fact]
-    public void Install_ps1_adds_the_directory_to_the_user_path_only_when_it_is_not_there()
-    {
-        var text = Script("install.ps1");
-        Assert.Contains("CurrentUser.CreateSubKey('Environment')", text, StringComparison.Ordinal);
-        Assert.Contains("-split ';'", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("$PROFILE", text, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Expand-Archive hands the zip's mark of the web on to what it unpacks, and an executable carrying it is
-    /// stopped by SmartScreen the first time it runs. The mark is cleared after unpacking and before installing.
-    /// </summary>
-    /// <summary>
-    /// install.ps1 waits out a file another program holds open by the numbers jason itself waits by: PowerShell has no way
-    /// to read the uninstall's rule, so its two literals are held to that rule here.
-    /// </summary>
-    [Fact]
-    public void Install_ps1_waits_out_a_held_file_by_the_uninstalls_rule()
-    {
-        var rule = Jason.Cli.Uninstall.InstallationRemovers.HeldFiles;
-        var script = Code("install.ps1");
-
-        Assert.Contains(FormattableString.Invariant($"$deadline = [DateTime]::UtcNow.AddSeconds({rule.Wait.TotalSeconds})"), script, StringComparison.Ordinal);
-        Assert.Contains(FormattableString.Invariant($"Start-Sleep -Milliseconds {rule.Interval.TotalMilliseconds}"), script, StringComparison.Ordinal);
-        Assert.False(rule.AccessDeniedCounts);
-        Assert.Contains("$violations = @(-2147024864, -2147024863)", script, StringComparison.Ordinal);
-        Assert.Contains(
-            "if ($violations -notcontains $_.Exception.HResult -and -not ($inner -and $violations -contains $inner.HResult)) { throw }",
-            script,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Install_ps1_clears_the_mark_of_the_web()
-    {
-        var code = Code("install.ps1");
-        var unpacked = code.IndexOf("Expand-Archive", StringComparison.Ordinal);
-        var unblocked = code.IndexOf("Unblock-File", StringComparison.Ordinal);
-        Assert.True(unpacked >= 0 && unpacked < unblocked, "Unblock-File does not follow Expand-Archive.");
     }
 
     /// <summary>
@@ -416,7 +361,6 @@ public partial class InstallScriptTests
     /// </summary>
     [Theory]
     [InlineData("install.sh", "tar -xzf \"$TMP/$ASSET\" -C \"$TMP/unpacked\" jason", "mv -f \"$INSTALL_DIR/jason.installing.$$\" \"$TARGET\"")]
-    [InlineData("install.ps1", "$unpacked = Expand-Checked (Get-CheckedArchive)", "Move-Item -LiteralPath $fresh -Destination $target")]
     public void The_unpacked_executable_is_started_before_it_is_installed(string script, string unpack, string install)
     {
         var code = Code(script);
@@ -609,7 +553,6 @@ public partial class InstallScriptTests
             new Dictionary<string, string> { ["LOCALAPPDATA"] = tree.Root },
             "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", Path.Combine(RepositoryRoot(), "install", "install.ps1"),
-            "-InstallDir", tree.NewDirectory("programs"), "-NoModifyPath",
             "-Feed", tree.NewDirectory("feed"));
 
         Assert.DoesNotContain("No release is built", stderr, StringComparison.Ordinal);
@@ -679,26 +622,18 @@ public partial class InstallScriptTests
     private const string WindowsPowerShell = "Windows PowerShell 5.1";
 
     /// <summary>
-    /// A .NET call that fails inside <c>install.ps1</c> stops the install with exit code 1, in every form the pages show it
-    /// run in and under both shells, with what failed on stderr. Such a failure used to end the run with 0: the exception
+    /// A failure inside <c>install.ps1</c> stops the install with exit code 1, in every form the pages show it run in and
+    /// under both shells, with what failed on stderr. A failure used to end the run with 0: an exception from a .NET call
     /// left the installer's function and reached the call at the bottom of the script, whose <c>try</c> had a
-    /// <c>finally</c> and no <c>catch</c>, and the shell printed it and went on to the end. A <c>throw</c> or a failed
-    /// command exited 1; only an exception from a method call got through, and a CI step or an agent that reads the exit
-    /// code took a failed install for an installed one.
+    /// <c>finally</c> and no <c>catch</c>, and the shell printed it and went on to the end; a CI step or an agent that reads
+    /// the exit code took a failed install for an installed one. The <c>catch</c> that throws it on is what every form
+    /// ends through.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The failure is a real one, reached as a damaged archive would reach it: the archive's first entry is a directory
-    /// named <c>jason.exe</c>, ahead of the file of that name. Expand-Archive makes the directory, and the .NET call that
-    /// writes the file over it is refused. The checksums match, so nothing before the unpack stops the run.
-    /// </para>
-    /// <para>
-    /// <c>irm … | iex</c> passes no parameters, so that form cannot be told to leave the PATH alone, and the PATH is the
-    /// account's registry. Three things keep the row away from it: the failure is at the unpack, long before the PATH
-    /// step; the file named <c>jason.exe</c> holds text that does not run, so an archive that did unpack would stop at the
-    /// check that the executable starts; and the account's Path is read before and after each row, its text and its kind,
-    /// so a run that wrote it fails here rather than passing.
-    /// </para>
+    /// The failure is a setup whose digest is not its line in <c>checksums.txt</c>: nothing is run, so nothing is
+    /// installed under the <c>LOCALAPPDATA</c> of the test's own, and the account's Path, read before and after each row,
+    /// its text and its kind, is left as it was. <c>irm … | iex</c> passes no parameters; the feed reaches it through
+    /// <c>JASON_INSTALL_FEED</c>, as it reaches the other two.
     /// </remarks>
     [Theory]
     [InlineData(PowerShell7, "-File")]
@@ -708,31 +643,22 @@ public partial class InstallScriptTests
     [InlineData(WindowsPowerShell, "[scriptblock]::Create")]
     [InlineData(WindowsPowerShell, "| iex")]
     [SupportedOSPlatform("windows")]
-    public void A_failed_net_call_stops_the_install_with_exit_1_in_every_form_the_pages_show(string shell, string form)
+    public void A_failure_stops_the_install_with_exit_1_in_every_form_the_pages_show(string shell, string form)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "install.ps1 refuses a PowerShell that is not on Windows, so its rules can only be run on Windows.");
 
         using var tree = new TempTree();
         var feed = tree.NewDirectory("feed");
-        var asset = ReleaseAssets.For("win-x64");
-        var archive = Path.Combine(feed, asset);
-        using (var zip = ZipFile.Open(archive, ZipArchiveMode.Create))
-        {
-            zip.CreateEntry("jason.exe/");
-            using var file = zip.CreateEntry("jason.exe").Open();
-            file.Write("This is not a program.\n"u8);
-        }
+        const string setup = "jason-desktop-windows-x64-setup.exe";
+        File.WriteAllText(Path.Combine(feed, setup), "This is not the setup the checksums name.\n");
+        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), """{ "schema": 1, "version": "0.49.0" }""");
+        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Checksums), new string('0', 64) + "  " + setup + "\n");
 
-        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), """{ "schema": 1, "version": "0.7.0" }""");
-        File.WriteAllText(Path.Combine(feed, ReleaseAssets.Checksums), Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(archive))) + "  " + asset + "\n");
-
-        // Where the one-liner installs, under a LOCALAPPDATA of the test's own; the other two forms are told the same place.
-        var programs = Path.Combine(tree.Root, "Programs", "jason");
         var script = Path.Combine(RepositoryRoot(), "install", "install.ps1");
         string[] arguments = form switch
         {
-            "-File" => ["-File", script, "-InstallDir", programs, "-NoModifyPath", "-Feed", feed],
-            "[scriptblock]::Create" => ["-Command", $"& ([scriptblock]::Create((Get-Content -LiteralPath {Quoted(script)} -Raw))) -InstallDir {Quoted(programs)} -NoModifyPath -Feed {Quoted(feed)}"],
+            "-File" => ["-File", script, "-Feed", feed],
+            "[scriptblock]::Create" => ["-Command", $"& ([scriptblock]::Create((Get-Content -LiteralPath {Quoted(script)} -Raw))) -Feed {Quoted(feed)}"],
             _ => ["-Command", $"Get-Content -LiteralPath {Quoted(script)} -Raw | iex"],
         };
         var temp = tree.NewDirectory("temp");
@@ -740,6 +666,7 @@ public partial class InstallScriptTests
         {
             ["LOCALAPPDATA"] = tree.Root,
             ["JASON_INSTALL_FEED"] = feed,
+            ["JASON_DATA_DIR"] = tree.NewDirectory("data"),
             ["TEMP"] = temp,
             ["TMP"] = temp,
         };
@@ -749,11 +676,10 @@ public partial class InstallScriptTests
 
         Assert.Equal(path, AccountPath());
         Assert.True(exit == 1, $"{shell} {form} exited {exit}. It said: {stderr}");
-        Assert.False(Directory.Exists(programs) && Directory.EnumerateFileSystemEntries(programs).Any(), $"{shell} {form} installed something.");
-        // The refusal is the system's, in the machine's language; the path it names is not, so the path is what is read.
+        Assert.False(Directory.Exists(Path.Combine(tree.Root, "Programs")), $"{shell} {form} installed something.");
         Assert.True(
-            Regex.Replace(stderr, @"\s+", string.Empty).Contains(@"unpacked\jason.exe", StringComparison.Ordinal),
-            $"{shell} {form} did not say the unpack was refused. It said: {stderr}");
+            Regex.Replace(stderr, @"\s+", string.Empty).Contains("doesnotmatchchecksums.txt", StringComparison.Ordinal),
+            $"{shell} {form} did not say the digest was refused. It said: {stderr}");
     }
 
     /// <summary>
@@ -766,15 +692,14 @@ public partial class InstallScriptTests
     [UnsupportedOSPlatform("windows")]
     public void Install_sh_stops_where_a_command_fails_with_nothing_installed()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux and macOS legs run this row.");
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh refuses a Windows shell by name; CI's Linux leg runs this row.");
         Assert.SkipUnless(
-            (OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64)
-            || (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64),
-            "No release is built for this machine, and install.sh refuses it by name.");
+            OperatingSystem.IsLinux() && RuntimeInformation.OSArchitecture == Architecture.X64,
+            "install.sh takes an install directory on Linux on x64 alone: macOS installs Jason Desktop, and no other release is built.");
 
         using var tree = new TempTree();
         var feed = tree.NewDirectory("feed");
-        var asset = ReleaseAssets.For(OperatingSystem.IsMacOS() ? "osx-arm64" : "linux-x64");
+        var asset = ReleaseAssets.For("linux-x64");
         File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"0.7.0\"\n}\n");
         File.WriteAllText(Path.Combine(feed, asset), "Not an archive.\n");
         var checksums = Path.Combine(feed, ReleaseAssets.Checksums);
@@ -863,8 +788,7 @@ public partial class InstallScriptTests
 
         string[] fixedArguments =
         [
-            "-File", Path.Combine(RepositoryRoot(), "install", "install.ps1"),
-            "-InstallDir", tree.NewDirectory("programs"), "-NoModifyPath", "-Feed", feed,
+            "-File", Path.Combine(RepositoryRoot(), "install", "install.ps1"), "-Feed", feed,
         ];
 
         return Pwsh(new Dictionary<string, string> { ["LOCALAPPDATA"] = tree.Root }, [.. fixedArguments, .. arguments]);
