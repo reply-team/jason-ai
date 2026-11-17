@@ -8,7 +8,8 @@ changed.
 ## How to ask
 
 - **In the desktop**, choose **Open in › Change Jason itself** ([the desktop guide](desktop.md#open-in)). It opens your
-  own AI (the one your preference names, else Claude Code, else Codex) on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
+  own AI (the one your preference names, else the program marked In use in Settings › Models, else Claude Code, else
+  Codex) on Jason's roles and plugins. The desktop's chat cannot do this: it is kept from changing
   them on purpose (on Codex it can read those files but not change them), so that it can never rewrite the instructions Jason's own agents work by.
 - **From a terminal**, run `jason session open --setup`. It opens the same session, and opening it changes nothing.
 
