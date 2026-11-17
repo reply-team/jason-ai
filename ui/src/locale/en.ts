@@ -62,7 +62,10 @@ export const en = {
     'start.send': 'Send',
     'start.note.lead': 'This interface is optional.',
     'start.note.body':
-        'It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+        'It showcases the main things Jason Harness can do, but the harness works just as well without it, through Claude Code, Codex, or any other agent.',
+    'start.note.source.before': 'Jason is open source: get the code at ',
+    'start.note.source.link': 'github.com/reply-team/jason-ai',
+    'start.note.source.after': ' and let your coding agent build the pages you need.',
     'start.note.demo.lead': 'This interface is optional.',
     'start.note.demo.body':
         'It shows the main things the Jason harness can do, and the harness runs fine without it, from Claude Code, Codex or any other agent. What you see in Demo is an example of what you can build; Live has the essentials. Jason is open source: get the code at github.com/reply-team/jason-ai and have your coding agent build the pages you need.',
