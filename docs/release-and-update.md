@@ -942,6 +942,7 @@ a code on its own tells nobody what to do next.
 | `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/`, or, run as the `jason` Jason Desktop carries, the update stands before `kept`, or at `kept`, and the application is still the version it began from: nothing was put aside yet, or nothing is to be put back. Where the application names the new version already, the refusal is `update_in_progress`, and `jason update apply` finishes the update first |
 | `update_cancelled` | a carried `jason update apply` was cancelled — Ctrl+C, a SIGTERM, its console closed — while it waited for Jason Desktop or before the go. The record that stood is put back, on Windows a `jason` is put back at the carried path, and a runtime it stopped is launched again and not waited for, which the message says, with `jason runtime status` as the way to see it answer. Cancelled once the go was given or the installer has the update, nothing is put back or started: the application is the installer's, the runtime stays stopped until the update is finished, and the message names `jason update apply` and `jason status`; this answer is not retryable, since an apply typed while the installer still has the update is refused with `update_in_progress` (below) |
 | `update_elevated` | a carried `jason update apply`, `--finish` included, was run elevated — on Windows with a token elevated above the account's ordinary one (an administrator's elevated terminal under User Account Control), or as another account than the one signed in to the session; on macOS as root — and is refused before anything is read, staged or asked: Jason Desktop, its installer and the runtime it starts again would run elevated too, or install into the profile of the account that elevated. The message names an ordinary terminal, or Check for Updates in Jason Desktop's menu An administrator whose Windows has no split token, User Account Control off as on a hosted build machine, runs with the account's ordinary token and is not refused. |
+| `data_dir_unreadable` | `jason update apply --finish` could not list the data directory, or its `logs/` or `update/`, so whether an installation is there cannot be told: it is refused before the update's lock, nothing is made and no release read. Worth trying again once the directory can be read |
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. A version from 0.49.0 on that was put back does not start on the database the newer one migrated (`data_newer`), and the message says so. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start`, `restart` and `run` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
 
@@ -1228,8 +1229,14 @@ It starts and stops no runtime: where a package changed and a runtime answers, i
 asks, and where none answers the package loads at the runtime's next start. Run again it changes nothing and says each
 part is there already. Where no data directory exists — a machine that only ever opened the Demo — it does nothing,
 makes nothing under one, asks nothing of the network, and says so; and so it does where the data directory holds nothing
-of an installation but Jason Desktop's own folder and its log, as on the Desktop's first start. Wherever an installation
-is there it runs under the update's lock, making `<data>/update` for it where that is not there yet. Where the release cannot be read, it says what it
+of an installation but Jason Desktop's own folder and its log, as on the Desktop's first start. That is the one
+definition of an installation being there, and `installation_found` says it: the Desktop's own folder, its
+`logs/desktop-*.jsonl`, an `update/` holding nothing but the update's lock file, which this step makes for itself and
+which never makes a machine installed, and the system's own litter (`.DS_Store`, `desktop.ini`, `Thumbs.db`) at the
+top and in `logs/` are no installation; anything else is one, a record under `update/` among it. A data directory it
+cannot list is refused with `data_dir_unreadable` before anything is made or read, never taken for either answer.
+Wherever an installation is there it runs under the update's lock, making `<data>/update` for it where that is not
+there yet. Where the release cannot be read, it says what it
 could not do and changes nothing of that part. It exits 0 with one document whenever it could run, and the document says
 what became of each part:
 
@@ -1238,6 +1245,7 @@ what became of each part:
   "version": "0.49.0",
   "data_dir": "/Users/you/.jason",
   "data_dir_found": true,
+  "installation_found": true,
   "complete": true,
   "parts": [
     { "part": "plugins", "state": "done", "reason": null, "lines": ["reply 0.17.0 -> 0.18.0", "reload: the runtime loaded the packages"] },
@@ -1252,6 +1260,7 @@ what became of each part:
 | `version` | the installed version, the running `jason`'s own |
 | `data_dir` | the data directory the parts belong to |
 | `data_dir_found` | whether it exists; `false` means nothing was done or made, and every part is `not_done` with the reason saying so |
+| `installation_found` | whether an installation is there; `false` where no data directory exists or it holds nothing but Jason Desktop's own, as above: nothing was done, read or made, every part is `not_done` with the reason saying so, and nothing is left to finish; `true` in every other answer |
 | `complete` | whether every part is `done` or `already_there` |
 | `parts` | `plugins`, `skills`, `ui`, always in that order |
 | `parts[].state` | `done` — it changed something and is the installed version's now; `already_there` — nothing needed changing, or nothing of it is installed; `not_done` — it could not be brought up, and nothing of it was left half changed |

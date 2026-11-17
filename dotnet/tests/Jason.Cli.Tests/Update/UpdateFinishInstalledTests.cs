@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using Jason.Cli.Commands;
 using Jason.Cli.Tests.Commands;
+using Jason.Cli.Tests.Skills;
 using Jason.Cli.Update;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Json;
@@ -34,6 +36,7 @@ public sealed class UpdateFinishInstalledTests
         var first = await FinishAsync(installation);
 
         Assert.True(first.DataDirFound);
+        Assert.True(first.InstallationFound);
         Assert.True(first.Complete);
         Assert.Equal(SemanticVersion.Current.ToString(), first.Version);
         Assert.Equal(["plugins", "skills", "ui"], first.Parts.Select(part => part.Part));
@@ -119,6 +122,7 @@ public sealed class UpdateFinishInstalledTests
         Assert.Equal(ExitCodes.Success, exit);
         var report = JsonSerializer.Deserialize<UpdateFinishResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.False(report.DataDirFound);
+        Assert.False(report.InstallationFound);
         Assert.False(report.Complete);
         Assert.Equal(installation.Paths.Root, report.DataDir);
         Assert.All(report.Parts, part =>
@@ -159,6 +163,7 @@ public sealed class UpdateFinishInstalledTests
         Assert.Equal(ExitCodes.Success, exit);
         var report = JsonSerializer.Deserialize<UpdateFinishResponse>(installation.Out.ToString(), JasonJson.Options)!;
         Assert.True(report.DataDirFound);
+        Assert.False(report.InstallationFound);
         Assert.False(report.Complete);
         Assert.All(report.Parts, part =>
         {
@@ -193,9 +198,226 @@ public sealed class UpdateFinishInstalledTests
         var report = await FinishAsync(installation);
 
         Assert.True(report.DataDirFound);
+        Assert.True(report.InstallationFound);
         Assert.NotEmpty(heldWhileAsked);
         Assert.All(heldWhileAsked, held => Assert.True(held, "the release was read with the update's lock not held"));
         Assert.False(Held(update.Lock), "the lock outlived the finishing step");
+    }
+
+    /// <summary>
+    /// A data directory that holds nothing but the Desktop's own, as a fresh machine's first start leaves it: <c>desktop/mode</c>
+    /// and nothing else.
+    /// </summary>
+    private static void DesktopOnly(FakeInstallation installation)
+    {
+        Directory.Delete(installation.Paths.Root, recursive: true);
+        Directory.CreateDirectory(Path.Combine(installation.Paths.Root, "desktop"));
+        File.WriteAllText(Path.Combine(installation.Paths.Root, "desktop", "mode"), "demo");
+    }
+
+    /// <summary>
+    /// The update's lock file is the tool's own by-product: an <c>update/</c> holding it and nothing else, beside the Desktop's
+    /// own, is no installation. Nothing is read or made, the lock file is not taken, and the mark says no installation.
+    /// </summary>
+    [Fact]
+    public async Task A_lone_update_lock_beside_the_desktops_own_is_no_installation_and_nothing_is_read_or_made()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        DesktopOnly(installation);
+        var update = new UpdatePaths(installation.Paths);
+        Directory.CreateDirectory(update.Root);
+        File.WriteAllText(update.Lock, string.Empty);
+        var before = Listing(installation.Paths.Root);
+
+        var report = await FinishAsync(installation);
+
+        Assert.True(report.DataDirFound);
+        Assert.False(report.InstallationFound);
+        Assert.All(report.Parts, part => Assert.Contains("holds nothing of an installation but Jason Desktop's own", part.Reason, StringComparison.Ordinal));
+        Assert.Equal(before, Listing(installation.Paths.Root));
+        Assert.Empty(installation.Release.Requested);
+    }
+
+    /// <summary>
+    /// The one definition of "an installation is here", entry by entry: the Desktop's own, a lone lock file and the system's
+    /// litter at the top and in <c>logs/</c> are none; a record under <c>update/</c>, an entry nobody named, litter anywhere
+    /// else, or a folder in the place of a log, is one.
+    /// </summary>
+    [Theory]
+    [InlineData("desktop/mode", false)]
+    [InlineData("desktop/rollback/0.48.3/Jason.exe", false)]
+    [InlineData("logs/desktop-20261117.jsonl", false)]
+    [InlineData("update/update.lock", false)]
+    [InlineData(".DS_Store", false)]
+    [InlineData("desktop.ini", false)]
+    [InlineData("Thumbs.db", false)]
+    [InlineData("logs/.DS_Store", false)]
+    [InlineData("logs/desktop.ini", false)]
+    [InlineData("logs/Thumbs.db", false)]
+    [InlineData("update/ledger.json", true)]
+    [InlineData("update/desktop-req_01JA.json", true)]
+    [InlineData("update/.DS_Store", true)]
+    [InlineData("logs/runtime-20261117.jsonl", true)]
+    [InlineData("logs/desktop-20261117.jsonl/inside", true)]
+    [InlineData("notes.txt", true)]
+    [InlineData("thumbs.db", true)]
+    [InlineData("jason.db", true)]
+    [InlineData("skills/roles/researcher/SKILL.md", true)]
+    public void An_installation_is_anything_but_the_desktops_own_a_lone_lock_and_the_systems_litter(string entry, bool installed)
+    {
+        using var paths = new TempPaths();
+        var root = paths.Paths.Root;
+        Directory.CreateDirectory(Path.Combine(root, "desktop"));
+        File.WriteAllText(Path.Combine(root, "desktop", "mode"), "demo");
+        var file = Path.Combine(root, entry);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, string.Empty);
+        if (!OperatingSystem.IsWindows() && entry == "thumbs.db")
+        {
+            // Only a system whose names differ by case can hold this beside the one the litter names; the name is never folded.
+            Assert.Equal(UpdateCommands.DataDirHolds.Here, UpdateCommands.InstallationAt(root));
+            return;
+        }
+
+        Assert.Equal(installed ? UpdateCommands.DataDirHolds.Here : UpdateCommands.DataDirHolds.DesktopsOwnOnly, UpdateCommands.InstallationAt(root));
+    }
+
+    /// <summary>
+    /// Fail closed: a data directory, or its <c>logs/</c> or <c>update/</c>, this account cannot list is refused before the
+    /// lock, retryable, and never taken for an installation: nothing is made, no release read.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("logs")]
+    [InlineData("update")]
+    public async Task A_data_directory_that_cannot_be_listed_is_refused_before_the_lock_and_nothing_is_read_or_made(string folder)
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        DesktopOnly(installation);
+        var denied = Path.Combine(installation.Paths.Root, folder);
+        Directory.CreateDirectory(denied);
+        if (folder == "update")
+        {
+            File.WriteAllText(Path.Combine(denied, "update.lock"), string.Empty);
+        }
+
+        var before = Listing(installation.Paths.Root);
+        using var unlistable = Unlistable.Make(denied);
+        Assert.SkipWhen(unlistable is null, "This account lists a folder whatever its mode says (root, say).");
+
+        var exit = await CliApp.RunAsync(["update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.DataDirUnreadable, refusal.Code);
+        Assert.True(refusal.Retryable);
+        Assert.Contains(installation.Paths.Root, refusal.Message, StringComparison.Ordinal);
+        unlistable!.Dispose();
+        Assert.Equal(before, Listing(installation.Paths.Root));
+        Assert.Empty(installation.Release.Requested);
+    }
+
+    /// <summary>
+    /// A machine whose person typed <c>jason install --roles</c> after the Desktop's first start holds an installation: the
+    /// role skills. The finishing step then finds it, runs, and completes, so the set-up does not run again at every start.
+    /// </summary>
+    [Fact]
+    public async Task After_install_with_roles_on_the_desktops_own_directory_the_finishing_step_completes()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        DesktopOnly(installation);
+        // The skills the application carries beside its jason, as a release lays them out.
+        var bundle = Path.GetDirectoryName(installation.InstallPath)!;
+        foreach (var (file, text) in SkillsPackage.Files($"v{SemanticVersion.Current}").Where(entry => entry.Name.StartsWith("skills/", StringComparison.Ordinal)))
+        {
+            var path = Path.Combine(bundle, file.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, text);
+        }
+
+        var installed = await CliApp.RunAsync(["install", "--roles"], installation.Machine!, Ct);
+        Assert.True(installed == ExitCodes.Success, installation.Out.ToString());
+        Assert.Equal(UpdateCommands.DataDirHolds.Here, UpdateCommands.InstallationAt(installation.Paths.Root));
+        installation.Out.GetStringBuilder().Clear();
+
+        var report = await FinishAsync(installation);
+
+        Assert.True(report.InstallationFound);
+        Assert.True(report.Complete, string.Join(" | ", report.Parts.Select(part => $"{part.Part}: {part.State} {part.Reason}")));
+        Assert.All(report.Parts, part => Assert.NotEqual(UpdateFinishStates.NotDone, part.State));
+    }
+
+    /// <summary>A folder this account cannot list, for as long as it lives; null where the account lists it all the same.</summary>
+    private sealed class Unlistable : IDisposable
+    {
+        private readonly Action _undo;
+        private bool _undone;
+
+        private Unlistable(Action undo) => _undo = undo;
+
+        public static Unlistable? Make(string folder)
+        {
+            var made = OperatingSystem.IsWindows() ? Denied(folder) : Closed(folder);
+            try
+            {
+                _ = Directory.EnumerateFileSystemEntries(folder).Any();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return made;
+            }
+
+            made.Dispose();
+            return null;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static Unlistable Denied(string folder)
+        {
+            var info = new DirectoryInfo(folder);
+            var rule = new System.Security.AccessControl.FileSystemAccessRule(
+                System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+                System.Security.AccessControl.FileSystemRights.ListDirectory,
+                System.Security.AccessControl.AccessControlType.Deny);
+            var security = info.GetAccessControl();
+            security.AddAccessRule(rule);
+            info.SetAccessControl(security);
+            return new Unlistable(() => Allowed(info, rule));
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static void Allowed(DirectoryInfo info, System.Security.AccessControl.FileSystemAccessRule rule)
+        {
+            var security = info.GetAccessControl();
+            security.RemoveAccessRule(rule);
+            info.SetAccessControl(security);
+        }
+
+        [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+        private static Unlistable Closed(string folder)
+        {
+            var mode = File.GetUnixFileMode(folder);
+            File.SetUnixFileMode(folder, UnixFileMode.None);
+            return new Unlistable(() => Opened(folder, mode));
+        }
+
+        [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+        private static void Opened(string folder, UnixFileMode mode) => File.SetUnixFileMode(folder, mode);
+
+        public void Dispose()
+        {
+            if (!_undone)
+            {
+                _undone = true;
+                _undo();
+            }
+        }
     }
 
     /// <summary>Whether another process holds the lock: an open that shares nothing is refused while it does.</summary>
@@ -286,7 +508,7 @@ public sealed class UpdateFinishInstalledTests
         Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], installation.Machine!, Ct));
 
         using var document = JsonDocument.Parse(installation.Out.ToString());
-        Assert.Equal(["version", "data_dir", "data_dir_found", "complete", "parts"], document.RootElement.EnumerateObject().Select(member => member.Name));
+        Assert.Equal(["version", "data_dir", "data_dir_found", "installation_found", "complete", "parts"], document.RootElement.EnumerateObject().Select(member => member.Name));
         Assert.All(document.RootElement.GetProperty("parts").EnumerateArray(), part =>
             Assert.Equal(["part", "state", "reason", "lines"], part.EnumerateObject().Select(member => member.Name)));
     }

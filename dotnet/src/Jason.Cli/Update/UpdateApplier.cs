@@ -390,6 +390,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             version.ToString(),
             env.Paths.Root,
             DataDirFound: true,
+            InstallationFound: true,
             Complete: parts.All(part => part.State != UpdateFinishStates.NotDone),
             parts);
     }
@@ -402,6 +403,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             version.ToString(),
             root,
             DataDirFound: false,
+            InstallationFound: false,
             Complete: false,
             [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
     }
@@ -417,6 +419,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
             version.ToString(),
             root,
             DataDirFound: true,
+            InstallationFound: false,
             Complete: false,
             [.. new[] { "plugins", Skills, Ui }.Select(part => new UpdateFinishPart(part, UpdateFinishStates.NotDone, reason, []))]);
     }
