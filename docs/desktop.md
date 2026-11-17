@@ -298,11 +298,15 @@ it, to change Jason itself.
 
 **Changing Jason itself.** **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
-plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
-`jason session open --setup`, which opens the host the preference
-[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
-host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
-the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
+plugins folder beside it and a first message that tells it how Jason is changed. The program it opens is, in this order:
+the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have
+stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or
+Codex and is installed; else Claude Code. When you choose the entry, the desktop reads the preference and the program in
+use and runs `jason session open --setup`, with `--host` naming the program in use only where you have stated no
+preference; where either cannot be read, or no program is in use, it runs the command with no host, which opens the
+preference's host, else Claude Code. Only where the host it ran the command for is not installed, or the preference
+cannot be read or names no host this jason knows, does it run the command once more with a host the desktop finds that
+was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
 changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude

@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { handle, invokeChannels, RefusedSender } from '../src/ipc.ts';
-import { changeJasonNoHost, changeJasonUnoffered, hostUnchosen, OpenIn, type OpenInAnswer, type OpenInDeps, type PlaceId } from '../src/open-in.ts';
+import { changeJasonNoHost, changeJasonUnoffered, hostUnchosen, inUseHost, OpenIn, type OpenInAnswer, type OpenInDeps, type PlaceId } from '../src/open-in.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from '../src/open-in-terminal.ts';
+import { hostWords } from '../src/roles-profile.ts';
 
-// "Change Jason itself": the entry that opens the person's own AI on Jason, by `jason session open --setup`. The command
-// line's own rule chooses the host, the preference first; only where it cannot choose does the desktop name the host it
-// found. Every answer of the command line here is made up, in the shape it prints.
+// "Change Jason itself": the entry that opens the person's own AI on Jason, by `jason session open --setup`. A preference
+// the person stated chooses the host by the command line's own rule; with none stated the desktop names the program the
+// Models page marks In use; else the command line's rule chooses; only where the host could not be opened does the desktop
+// name the host it found. Every answer of the command line here is made up, in the shape it prints.
 
 type Answer = { exit: number; stdout: string; stderr: string };
 
@@ -26,16 +28,45 @@ interface Bench {
     calls: { args: string[]; cwd: string | undefined }[];
     kept: PlaceId[];
     logged: string[];
+    /** How many times the program In use was read. */
+    inUseReads: () => number;
 }
+
+/** A promise that settles after the turns of the event loop given, so two reads can be made to land in either order. */
+const after = <T>(turns: number, value: () => T): Promise<T> =>
+    new Promise((resolve, reject) => {
+        const step = (left: number) => {
+            if (left > 0) return void setImmediate(() => step(left - 1));
+            try {
+                resolve(value());
+            } catch (error) {
+                reject(error as Error);
+            }
+        };
+        step(turns);
+    });
 
 /**
  * An installation whose command line answers `session open` from the list, in order, `preference list` with the answer
- * given (by default a preference naming a host that is neither of the two), and every other verb with nothing.
+ * given (by default a preference naming a host that is neither of the two), and every other verb with nothing; the
+ * program In use is the host word given (by default none), or a read that throws. `preferenceTurns` and `inUseTurns`
+ * delay each read's answer by that many turns of the event loop.
  */
-function bench(options: { offered?: boolean; hosts?: { claude: boolean; codex: boolean }; answers?: Answer[]; preference?: Answer } = {}): Bench {
+function bench(
+    options: {
+        offered?: boolean;
+        hosts?: { claude: boolean; codex: boolean };
+        answers?: Answer[];
+        preference?: Answer;
+        inUse?: string | null | Error;
+        preferenceTurns?: number;
+        inUseTurns?: number;
+    } = {},
+): Bench {
     const calls: { args: string[]; cwd: string | undefined }[] = [];
     const kept: PlaceId[] = [];
     const logged: string[] = [];
+    let inUseReads = 0;
     const answers = [...(options.answers ?? [opened])];
     const deps: OpenInDeps = {
         probes: { platform: 'win32', env: {}, home: 'C:\\Users\\ada', onPath: () => null, exists: () => false },
@@ -44,7 +75,9 @@ function bench(options: { offered?: boolean; hosts?: { claude: boolean; codex: b
             run: (args, given) => {
                 calls.push({ args: [...args], cwd: given?.cwd });
                 if (args[0] === 'session') return Promise.resolve(answers.shift() ?? assert.fail(`no answer left for ${args.join(' ')}`));
-                return Promise.resolve(args[0] === 'preference' ? (options.preference ?? preferences('gemini_cli')) : { exit: 0, stdout: '{}', stderr: '' });
+                if (args[0] === 'preference') return after(options.preferenceTurns ?? 0, () => options.preference ?? preferences('gemini_cli'));
+                if (args[0] === 'campaign') return Promise.resolve({ exit: 0, stdout: JSON.stringify({ folder_path: 'C:\\Jason\\campaigns\\one' }), stderr: '' });
+                return Promise.resolve({ exit: 0, stdout: '{}', stderr: '' });
             },
         },
         harnessRoot: () => 'C:\\Jason',
@@ -57,9 +90,25 @@ function bench(options: { offered?: boolean; hosts?: { claude: boolean; codex: b
         continuable: () => null,
         chatFolder: () => 'C:\\data\\desktop\\chat',
         continueFlags,
-        ...(options.offered === false ? {} : { changeJason: { flags: changeJasonFlags, log: (event: string, fields: { Host: string; Exit: number; Code?: string }) => void logged.push([event, fields.Host, fields.Exit, ...(fields.Code === undefined ? [] : [fields.Code])].join(':')) } }),
+        ...(options.offered === false
+            ? {}
+            : {
+                  changeJason: {
+                      flags: changeJasonFlags,
+                      inUse: () => {
+                          inUseReads += 1;
+                          return after(options.inUseTurns ?? 0, () => {
+                              const word = options.inUse ?? null;
+                              if (word instanceof Error) throw word;
+                              return word;
+                          });
+                      },
+                      log: (event: string, fields: { Host: string; Exit: number; Code?: string }) =>
+                          void logged.push([event, fields.Host, fields.Exit, ...(fields.Code === undefined ? [] : [fields.Code])].join(':')),
+                  },
+              }),
     };
-    return { openIn: new OpenIn(deps), calls, kept, logged };
+    return { openIn: new OpenIn(deps), calls, kept, logged, inUseReads: () => inUseReads };
 }
 
 const sessions = (b: Bench) => b.calls.filter((call) => call.args[0] === 'session');
@@ -82,14 +131,144 @@ test('Change Jason itself is offered in the person\'s own installation whatever 
     assert.equal(answer.default, 'claude');
 });
 
-test('Change Jason itself runs jason session open --setup with no host and no working folder, and is never kept as the default', async () => {
+test('Change Jason itself runs jason session open --setup with no working folder, after one read of the preference, and is never kept as the default', async () => {
     const b = bench();
     assert.equal(await b.openIn.changeJason(), null);
     assert.deepEqual(sessions(b), [{ args: ['session', 'open', '--setup'], cwd: undefined }]);
-    assert.deepEqual(b.calls.filter((call) => call.args[0] !== 'session'), [], 'nothing else is asked');
+    assert.deepEqual(
+        b.calls.filter((call) => call.args[0] !== 'session').map((call) => call.args),
+        [['preference', 'list']],
+        'the preference is read once, at the click, and nothing else is asked of the command line',
+    );
+    assert.equal(b.inUseReads(), 1);
     assert.deepEqual(b.kept, []);
     assert.deepEqual(b.logged, ['open_in_change_jason:preference:0']);
-    assert.deepEqual(b.calls.filter((call) => call.args[0] === 'preference'), [], 'the preference is read only after a host was not found');
+});
+
+test('the menu is built with exactly the processes it started before: neither the preference nor the program In use is read until the click', async () => {
+    for (const campaign of [undefined, 'cmp_01ABC']) {
+        const b = bench({ preference: preferences(null), inUse: 'codex' });
+        const answer = (await b.openIn.targets(campaign)) as OpenInAnswer;
+        assert.equal(answer.changeJason, true);
+        assert.deepEqual(
+            b.calls.map((call) => call.args),
+            campaign === undefined ? [] : [['campaign', 'get', campaign]],
+            `the menu of ${campaign ?? 'the harness root'}`,
+        );
+        assert.equal(b.inUseReads(), 0);
+    }
+});
+
+test('with no preference stated, the program the Models page marks In use is named: Codex in use opens Codex, Claude Code in use opens Claude Code', async () => {
+    for (const [word, flag, logged] of [
+        ['codex', 'codex', 'in_use_codex'],
+        ['claude_code', 'claude_code', 'in_use_claude'],
+    ] as const) {
+        const b = bench({ preference: preferences(null), inUse: word });
+        assert.equal(await b.openIn.changeJason(), null, word);
+        assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup', '--host', flag]], word);
+        assert.deepEqual(b.logged, [`open_in_change_jason:${logged}:0`], word);
+    }
+});
+
+test('a preference the person stated wins whatever is in use: the command is run with no host, so the command line chooses by it', async () => {
+    for (const stated of ['claude_code', 'codex', 'gemini_cli', 'no_such_host']) {
+        for (const word of ['codex', 'claude_code', null]) {
+            const b = bench({ preference: preferences(stated), inUse: word });
+            assert.equal(await b.openIn.changeJason(), null, `${stated} ${word}`);
+            assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup']], `${stated} ${word}`);
+            assert.deepEqual(b.logged, ['open_in_change_jason:preference:0']);
+        }
+    }
+    // A stated value of a shape the desktop does not read is still the person's word.
+    const odd = bench({ preference: { exit: 0, stdout: JSON.stringify({ items: [{ key: 'agent.interactive_host', value: 'codex' }] }), stderr: '' }, inUse: 'codex' });
+    await odd.openIn.changeJason();
+    assert.deepEqual(sessions(odd).map((call) => call.args), [['session', 'open', '--setup']]);
+});
+
+test('a preference that cannot be read, a program In use that cannot be read or names none: the command is run as before, with no host', async () => {
+    const unread: Answer[] = [
+        { exit: 3, stdout: '', stderr: 'No runtime answered.' },
+        { exit: 1, stdout: JSON.stringify({ error: { code: 'internal', message: 'x', retryable: true } }), stderr: '' },
+        { exit: 0, stdout: 'not json', stderr: '' },
+        { exit: 0, stdout: '{"items":"none"}', stderr: '' },
+    ];
+    for (const preference of unread) {
+        const b = bench({ preference, inUse: 'codex' });
+        assert.equal(await b.openIn.changeJason(), null, preference.stdout);
+        assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup']], preference.stdout);
+    }
+    for (const inUse of [null, new Error('the runtime could not be asked')]) {
+        const b = bench({ preference: preferences(null), inUse });
+        assert.equal(await b.openIn.changeJason(), null, String(inUse));
+        assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup']], String(inUse));
+        assert.deepEqual(b.logged, ['open_in_change_jason:preference:0']);
+    }
+});
+
+test('every host word the program In use can name is a host session open takes, or the command is run as before', () => {
+    const both = { claude: true, codex: true };
+    // Named with --host, by the words of the command line's own host table.
+    assert.deepEqual(changeJasonFlags(inUseHost('claude_code', both)), ['--setup', '--host', 'claude_code']);
+    assert.deepEqual(changeJasonFlags(inUseHost('codex', both)), ['--setup', '--host', 'codex']);
+    // Every other word a profile's host can carry, a word of no host, and none: no host, the command line's own rule.
+    for (const word of [...Object.values(hostWords), 'no_such_host', '', null]) {
+        if (word === 'claude_code' || word === 'codex') continue;
+        assert.equal(inUseHost(word, both), null, String(word));
+    }
+    assert.deepEqual(new Set(Object.values(hostWords)), new Set(['claude_code', 'codex', 'gemini_cli', 'antigravity_cli', 'cursor_cli', 'copilot_cli']), 'a new host word is given a row here');
+    // A program In use that the desktop does not find here is not named, as the card's In use needs it found.
+    assert.equal(inUseHost('codex', { claude: true, codex: false }), null);
+    assert.equal(inUseHost('claude_code', { claude: false, codex: true }), null);
+});
+
+test('a program In use that is not installed is not named: the command is run as before, with no host', async () => {
+    const b = bench({ hosts: { claude: true, codex: false }, preference: preferences(null), inUse: 'codex' });
+    assert.equal(await b.openIn.changeJason(), null);
+    assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup']]);
+});
+
+test('the two reads land in either order and the outcome is the same', async () => {
+    for (const [preferenceTurns, inUseTurns] of [
+        [0, 5],
+        [5, 0],
+        [2, 2],
+    ] as const) {
+        for (const [preference, expected] of [
+            [preferences(null), ['session', 'open', '--setup', '--host', 'codex']],
+            [preferences('claude_code'), ['session', 'open', '--setup']],
+        ] as const) {
+            const b = bench({ preference, inUse: 'codex', preferenceTurns, inUseTurns });
+            assert.equal(await b.openIn.changeJason(), null);
+            assert.deepEqual(sessions(b).map((call) => call.args), [expected], `${preferenceTurns}/${inUseTurns}`);
+        }
+    }
+});
+
+test('a host In use the command line does not find takes the same fallback: the other host the desktop found, never the one tried', async () => {
+    for (const code of hostUnchosen) {
+        const b = bench({ preference: preferences(null), inUse: 'codex', answers: [refusal(code), opened] });
+        assert.equal(await b.openIn.changeJason(), null, code);
+        assert.deepEqual(
+            sessions(b).map((call) => call.args),
+            [['session', 'open', '--setup', '--host', 'codex'], ['session', 'open', '--setup', '--host', 'claude_code']],
+            code,
+        );
+        assert.deepEqual(b.logged, ['open_in_change_jason:desktop_claude:0'], code);
+        assert.deepEqual(b.calls.filter((call) => call.args[0] === 'preference').length, 1, 'the click\'s one read');
+    }
+    // Codex In use, not found by the command line, and no other host here: said as the two the entry needs.
+    const alone = bench({ hosts: { claude: false, codex: true }, preference: preferences(null), inUse: 'codex', answers: [refusal('host_not_found')] });
+    assert.deepEqual(await alone.openIn.changeJason(), { refused: changeJasonNoHost });
+    assert.equal(sessions(alone).length, 1);
+    assert.deepEqual(alone.logged, ['open_in_change_jason_refused:in_use_codex:1:host_not_found']);
+});
+
+test('only Codex installed and nothing stated or in use: the command line tries Claude Code, and the desktop runs it once more on Codex', async () => {
+    const b = bench({ hosts: { claude: false, codex: true }, preference: preferences(null), inUse: null, answers: [refusal('host_not_found'), opened] });
+    assert.equal(await b.openIn.changeJason(), null);
+    assert.deepEqual(sessions(b).map((call) => call.args), [['session', 'open', '--setup'], ['session', 'open', '--setup', '--host', 'codex']]);
+    assert.deepEqual(b.logged, ['open_in_change_jason:desktop_codex:0']);
 });
 
 test('where the preference chooses a host that is there, that host opens and the desktop names none, Codex with Claude Code found included', async () => {
@@ -126,7 +305,7 @@ test('the second run never names the host the command line tried: with no prefer
     const both = bench({ preference: preferences(null), answers: [refusal('host_not_found'), opened] });
     assert.equal(await both.openIn.changeJason(), null);
     assert.deepEqual(sessions(both).map((call) => call.args), [['session', 'open', '--setup'], ['session', 'open', '--setup', '--host', 'codex']]);
-    assert.deepEqual(both.calls.filter((call) => call.args[0] === 'preference').map((call) => call.args), [['preference', 'list']], 'read once, to know which host was tried');
+    assert.deepEqual(both.calls.filter((call) => call.args[0] === 'preference').map((call) => call.args), [['preference', 'list']], 'read once, at the click, which also says which host was tried');
     assert.deepEqual(both.logged, ['open_in_change_jason:desktop_codex:0']);
     // Claude Code found by the desktop, not by the command line, and no Codex: nothing else to try.
     const claudeOnly = bench({ hosts: { claude: true, codex: false }, preference: preferences(null), answers: [refusal('host_not_found')] });
@@ -151,12 +330,12 @@ test('where the preference list cannot be read, which host was tried is not know
     assert.deepEqual(b.logged, ['open_in_change_jason_refused:preference:1:host_not_found']);
 });
 
-test('a preference it could not read, or a word it does not know, tried no host: the second run takes Claude Code first, and no preference is read', async () => {
+test('a preference it could not read, or a word it does not know, tried no host: the second run takes Claude Code first, and the preference is not read again', async () => {
     for (const code of ['host_unknown', 'preference_unreadable']) {
         const b = bench({ answers: [refusal(code), opened] });
         assert.equal(await b.openIn.changeJason(), null, code);
         assert.deepEqual(sessions(b).at(-1)!.args, ['session', 'open', '--setup', '--host', 'claude_code'], code);
-        assert.deepEqual(b.calls.filter((call) => call.args[0] === 'preference'), [], code);
+        assert.equal(b.calls.filter((call) => call.args[0] === 'preference').length, 1, code);
     }
 });
 
@@ -202,6 +381,7 @@ test('in a run that does not offer it, Change Jason itself is refused and nothin
     for (const b of [bench({ offered: false })]) {
         assert.deepEqual(await b.openIn.changeJason(), { refused: changeJasonUnoffered });
         assert.deepEqual(b.calls, []);
+        assert.equal(b.inUseReads(), 0);
         assert.deepEqual(b.kept, []);
     }
 });
@@ -220,6 +400,8 @@ test('the act answers only the runtime’s own page in its top frame, and the ma
     const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
     assert.match(main, /handle\(seam, 'openIn\.changeJason', origin, \(\) => openIn\.changeJason\(\), refused\);/);
     assert.match(main, /changeJason: \{\s+flags: changeJasonFlags,/);
+    // The program In use is read by the routine the Models page's cards are read by, never a second reader.
+    assert.match(main, /inUse: \(\) => setup\.rolesHost\(\),/);
     // Whatever a page sends with it is never read.
     const b = bench();
     const act = b.openIn.changeJason.bind(b.openIn) as (...args: unknown[]) => Promise<unknown>;

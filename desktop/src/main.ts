@@ -629,6 +629,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
+            // The program the Models page marks In use, read by its own routine at the click: the host named where the
+            // person has stated no preference of their own.
+            inUse: () => setup.rolesHost(),
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
                 event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
         },
