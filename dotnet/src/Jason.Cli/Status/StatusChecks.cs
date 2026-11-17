@@ -364,7 +364,7 @@ internal static partial class StatusChecks
 
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there." + owes, Repair.Start)
-            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {JasonVersion.Stated(info.RuntimeVersion, info.TestBuild == true)}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
     /// <summary>

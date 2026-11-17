@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Jason.Cli.Installation;
@@ -383,6 +384,38 @@ public sealed class CommandLineMoveTests
         Assert.True(rig.Installation.Running);
     }
 
+    /// <summary>
+    /// A silent installer that meets Jason Desktop running, in its window or the tray, ends with its own code having changed
+    /// and ended nothing: the move is pending, says to quit Jason Desktop and run the update again, and touches nothing.
+    /// The code is <see cref="SetupExits.ApplicationRunning"/>, the one place it is written.
+    /// </summary>
+    [Fact]
+    public async Task A_setup_that_meets_Jason_Desktop_running_leaves_the_move_pending_and_says_to_quit_it()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        rig.System.OnSetup = _ => Task.FromResult(new SetupRun(true, SetupExits.ApplicationRunning));
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Pending, answer.State);
+        Assert.Equal(MoveSteps.Verified, answer.Step);
+        Assert.Contains("Quit Jason Desktop, then run `jason update apply` again", answer.Reason!, StringComparison.Ordinal);
+        Assert.DoesNotContain("routine", rig.Acts);
+        Assert.True(File.Exists(rig.Old));
+        Assert.True(rig.Installation.Running);
+
+        var check = StatusChecks.Move(rig.Env);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal("jason update apply", check.Fix);
+        Assert.NotEqual(SetupExits.ProcessRunsFromPlace, SetupExits.ApplicationRunning);
+        Assert.NotEqual(SetupExits.AnotherInstall, SetupExits.ApplicationRunning);
+
+        // The page says the same number: the constant and the sentence move together.
+        var page = File.ReadAllText(Path.Combine(TreeRoot(), "docs", "release-and-update.md"));
+        Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"its exit {SetupExits.ApplicationRunning}, Jason Desktop running in its window or the tray"), page, StringComparison.Ordinal);
+    }
+
     /// <summary>An Intel Mac: never attempted, nothing downloaded or run, and recorded pending.</summary>
     [Fact]
     public async Task On_an_Intel_Mac_the_move_is_pending_and_never_attempted()
@@ -691,6 +724,7 @@ public sealed class CommandLineMoveTests
     public void No_released_build_is_a_test_build()
     {
         Assert.False(MoveSignatures.TestBuild);
+        Assert.Equal(Jason.Contracts.JasonVersion.TestBuild, MoveSignatures.TestBuild);
         Assert.Equal(MoveSignatures.Publisher, MoveSignatures.PublisherInForce);
         Assert.Equal(MoveSignatures.Requirement, MoveSignatures.RequirementInForce);
 
