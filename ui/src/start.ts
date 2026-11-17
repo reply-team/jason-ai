@@ -30,7 +30,7 @@ export async function start(deps: Starts): Promise<void> {
     await deps.session.bootstrap();
     const bridge = deps.session.bridge.value;
     if (bridge === null) {
-        // A tab with no desktop is handed an object that can do nothing of the desktop's; the console draws one page for it.
+        // A tab with no desktop is handed an object that can do nothing of the desktop's; the console draws the demo or one page for it.
         const none = deps.noDesktop();
         deps.setPlace('none', none);
         return deps.startConsole(none, true);
