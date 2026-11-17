@@ -548,8 +548,9 @@ box of the desktop's own; a connection link is opened or copied by the desktop a
 acts are the desktop's and offers none. **Notifications** shows, read only, what `system.info` says of the channels: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
-The page says in one sentence where they are changed: under `Notifications:*` in the installation's settings file, or by
-asking your AI, whose `operating-the-installation` skill covers it. The page writes no setting and adds no provider.
+The page says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
+question is waiting, and how a channel is turned on or off: by asking the AI, and in Jason Desktop a provider's channel can also be connected or
+disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The page writes no setting and adds no provider.
 
 ## Inside Jason Desktop
 
