@@ -472,9 +472,11 @@ describe('what waits for a decision', () => {
             .answer('decision.list', 'decision.list/pending', 'decision.list/card-archived');
         renderConsole([setUp(turn({ kind: 'needs', campaign: 'cmp_5' }))], fake);
         const pane = await openChat('Looking');
-        const read = await waitFor(() => card(pane, 'Waiting for your decision'));
+        // A read that lists nothing is not headed "Waiting for your decision": its heading says no more than its body.
+        const read = await waitFor(() => card(pane, 'Your decisions'));
         await waitFor(() => within(read).getByText('This agent is archived.'));
         expect(within(read).getByText('Nothing is waiting for your decision.')).toBeTruthy();
+        expect(within(pane).queryByRole('group', { name: 'Waiting for your decision' })).toBeNull();
     });
 
     it('says an unknown agent is not in this installation, and reads no list for it', async () => {
