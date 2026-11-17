@@ -294,6 +294,20 @@ public static class MachineSetup
                 return (RuntimeStates.Running, false);
             }
 
+            // The stop owes a start, and this routine starts none: the note says so from before the drain, so a routine killed
+            // or timed out during the stop's wait, or a caller that quits before it starts one, leaves it standing for the
+            // next to find. It is taken back where the runtime does not stop; a runtime's own start removes it, and so does a
+            // stop through `jason runtime stop`.
+            string? unwritten = null;
+            try
+            {
+                StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                unwritten = refused.Message;
+            }
+
             using var said = new StringWriter();
             var quiet = env with { Out = said };
             var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
@@ -306,6 +320,9 @@ public static class MachineSetup
             var exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
             if (exit != ExitCodes.Success)
             {
+                // Still running, so no start is owed.
+                StartOwed.Remove(env.Paths);
+
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
                 var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
@@ -314,7 +331,14 @@ public static class MachineSetup
             }
 
             Done.Add($"Stopped the runtime that ran from {old}.");
-            Left.Add($"No runtime was started: `jason runtime start` starts one from {carried.Executable}.");
+            Left.Add(unwritten is null
+                ? $"No runtime was started: `jason runtime start` starts one from {carried.Executable}. Until one starts, {env.Paths.StartOwedFile} says a start is owed."
+                : $"No runtime was started: `jason runtime start` starts one from {carried.Executable}.");
+            if (unwritten is not null)
+            {
+                Problems.Add($"The note that a start is owed could not be written at {env.Paths.StartOwedFile} ({unwritten}), so nothing that reads it will start the runtime this stopped: `jason runtime start` starts one.");
+            }
+
             return (RuntimeStates.Stopped, false);
         }
 
@@ -432,9 +456,16 @@ public static class MachineSetup
 
                     try
                     {
+                        // Whether this run brings the file into being, recorded so the uninstall takes away only a file Jason
+                        // made and that holds nothing else by then (CreatedProfiles).
+                        var created = !File.Exists(profile) && !IsLink(profile);
                         if (PathEntry.AddToProfile(profile, places.LocalBin))
                         {
                             added.Add(profile);
+                            if (created)
+                            {
+                                RecordCreated(profile);
+                            }
                         }
                     }
                     catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
@@ -790,6 +821,22 @@ public static class MachineSetup
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Records a profile this run created. One that cannot be recorded is said, and stays at an uninstall like a file the
+        /// person had: the safe direction.
+        /// </summary>
+        private void RecordCreated(string profile)
+        {
+            try
+            {
+                CreatedProfiles.Add(places.Home, profile);
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places.Home)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
             }
         }
 

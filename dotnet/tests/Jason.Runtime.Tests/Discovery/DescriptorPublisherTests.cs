@@ -43,6 +43,28 @@ public class DescriptorPublisherTests
         Assert.Single(Directory.EnumerateFileSystemEntries(dir.Paths.RunDirectory));
     }
 
+    /// <summary>
+    /// The note <c>jason install</c> leaves when it stops a runtime says a start is owed; a runtime's own start pays it, so
+    /// publishing the descriptor removes it, and a start with none to remove goes ahead the same.
+    /// </summary>
+    [Fact]
+    public void A_runtimes_start_removes_the_note_that_a_start_is_owed()
+    {
+        using var dir = new TempDataDir();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        var publisher = new DescriptorPublisher(dir.Paths);
+
+        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:1"), "t", TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(dir.Paths.DescriptorFile));
+        Assert.False(File.Exists(dir.Paths.StartOwedFile), "the note that a start is owed outlived the start");
+        Assert.Equal(Path.Combine(dir.Paths.Root, "run", "start-owed.json"), dir.Paths.StartOwedFile);
+
+        publisher.Publish(RuntimeInfo.Create(), new Uri("http://127.0.0.1:2"), "t", TestContext.Current.CancellationToken);
+        Assert.False(File.Exists(dir.Paths.StartOwedFile));
+    }
+
     [Fact]
     public void Remove_deletes_the_descriptor_and_tolerates_absence()
     {
