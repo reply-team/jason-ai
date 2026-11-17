@@ -8,6 +8,7 @@ import { setTheme, themeChoice, type ThemeChoice } from '../../platform/theme';
 import * as shell from '../../shell/shell';
 import { SendModesSettings } from '../send-modes/settings-section';
 import { chosenSection, type SettingsSection } from './chosen';
+import { NotificationsSection } from './notifications';
 import { VoiceSection } from './voice';
 
 const themes: readonly ThemeChoice[] = ['light', 'dark', 'system'];
@@ -21,6 +22,7 @@ const names: Record<SettingsSection, () => string> = {
     voice: () => t('voice.heading'),
     modes: () => t('modes.settings.heading'),
     models: () => t('settings.models'),
+    notifications: () => t('settings.notifications'),
     runtime: () => 'Runtime',
 };
 
@@ -30,6 +32,7 @@ const marks: Record<SettingsSection, string[]> = {
     voice: ['M4 5h16v11H9l-5 4z'],
     modes: ['M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z'],
     models: ['M9 2v6M15 2v6M6 8h12v4a6 6 0 01-12 0zM12 18v4'],
+    notifications: ['M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7', 'M10 20a2 2 0 004 0'],
     runtime: ['M3 12h4l3-8 4 16 3-8h4'],
 };
 
@@ -106,6 +109,7 @@ export function SettingsScreen() {
     // the console in Live lists its sections at the left and shows the chosen one alone; the sheet hides the rest, so the
     // page keeps every section in its markup.
     const listed: SettingsSection[] = ['appearance', 'voice', 'modes'];
+    listed.push('notifications');
     if (Added) listed.push('models');
     if (Added && shell.info.value !== null) listed.push('runtime');
     const chosen = listed.includes(chosenSection.value) ? chosenSection.value : listed[0]!;
@@ -156,6 +160,7 @@ export function SettingsScreen() {
             </section>
             <VoiceSection />
             <SendModesSettings />
+            <NotificationsSection />
             {Added && <Added />}
         </div>
     );
