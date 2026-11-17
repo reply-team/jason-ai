@@ -205,6 +205,32 @@ public sealed class UpdateCarriedWindowsTests
         Assert.Empty(desktop.Starts);
         Assert.Equal(original, File.ReadAllText(installation.InstallPath));
         Assert.Null(carried.Moved);
+        Assert.False(File.Exists(carried.PidFile), "a record was left for the installer's look");
+        Assert.True(installation.Running);
+        Assert.Equal(installation.InstallPath, installation.Processes.Executables.Last()[0]);
+        Assert.Null(installation.Ledger());
+    }
+
+    /// <summary>
+    /// A record for the installer's look that cannot be written ends before the Desktop is asked anything, with the jason put
+    /// back at the carried path, and the runtime this verb stopped started again from it.
+    /// </summary>
+    [Fact]
+    public async Task A_record_that_cannot_be_written_puts_the_jason_back_and_asks_the_desktop_nothing()
+    {
+        var (installation, desktop, carried) = Windows();
+        using var _ = installation;
+        using var __ = desktop;
+        var original = File.ReadAllText(installation.InstallPath);
+        Directory.CreateDirectory(carried.PidFile);
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => carried.InstallAsync(ledger, Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.FileRefused, refused.Code);
+        Assert.Contains("Nothing was asked of Jason Desktop", refused.Message, StringComparison.Ordinal);
+        Assert.Empty(desktop.Starts);
+        Assert.Equal(original, File.ReadAllText(installation.InstallPath));
         Assert.True(installation.Running);
         Assert.Equal(installation.InstallPath, installation.Processes.Executables.Last()[0]);
         Assert.Null(installation.Ledger());
@@ -228,6 +254,7 @@ public sealed class UpdateCarriedWindowsTests
         Assert.Empty(desktop.Starts);
         Assert.True(File.Exists(installation.InstallPath));
         Assert.Null(carried.Moved);
+        Assert.False(File.Exists(carried.PidFile), "a record was left for the installer's look");
         Assert.Equal("system.resume", installation.Operations.Last());
     }
 

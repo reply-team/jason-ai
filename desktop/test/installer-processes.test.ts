@@ -9,7 +9,7 @@
 // nor the uninstaller is run here.
 
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, linkSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
@@ -193,7 +193,7 @@ test('the carried jason executable is looked for by its exact path, in a filter 
     assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
         'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
     ]);
-    assert.equal(filter('JASON_OWN_RUNTIME'), "& { $skip = -1; try { $named = @((Get-Content -LiteralPath $env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $found = Get-Process -Id ([int]$named[0]) -ErrorAction Stop; if ($found.StartTime.ToFileTimeUtc() -eq [long]$named[1]) { $skip = $found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $skip } }");
+    assert.equal(filter('JASON_OWN_RUNTIME'), "& { $skip = -1; try { $named = @((Get-Content -LiteralPath $env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $found = Get-Process -Id ([int]$named[0]) -ErrorAction Stop; $asked = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + $found.Id); if ($found.StartTime.ToFileTimeUtc() -eq [long]$named[1] -and $asked.CommandLine.Contains(' update apply')) { $skip = $found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $skip } }");
     const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_OWN_RUNTIME}'));
     assert.deepEqual(looks, Array(3).fill(runtimeLook));
 });
@@ -298,9 +298,10 @@ test('the filters find a running program by its exact path, whatever the case, a
     }
 });
 
-test('the runtime filter passes over the one process the record names by its id and its start, and no other', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, async () => {
-    // A process of the test's own, from a path no other process runs from, so that what the filter finds is that process
-    // alone: node itself, linked under a folder of the test's own, waiting until it is ended.
+test('the runtime filter passes over only the live jason update apply the record names, by its id and its start, and every other process is still found', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, async () => {
+    // Processes of the test's own, from a path no other process runs from, so that what the filter finds is theirs alone:
+    // node itself, linked under a folder of the test's own, waiting until it is ended. One is started as a carried jason's
+    // update apply is, its command line carrying ` update apply`; the other is not.
     const folder = mkdtempSync(join(tmpdir(), 'jason-update-pid-'));
     const image = join(folder, 'jason.exe');
     try {
@@ -308,12 +309,17 @@ test('the runtime filter passes over the one process the record names by its id 
     } catch {
         copyFileSync(process.execPath, image);
     }
-    const child = spawn(image, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true });
-    try {
+    const children: ChildProcess[] = [];
+    const start = async (...extra: string[]): Promise<ChildProcess> => {
+        const child = spawn(image, ['-e', 'setInterval(() => {}, 1000)', ...extra], { stdio: 'ignore', windowsHide: true });
+        children.push(child);
         await new Promise<void>((resolve, reject) => {
             child.once('spawn', () => resolve());
             child.once('error', reject);
         });
+        return child;
+    };
+    try {
         const record = join(folder, 'jason-update.pid');
         const found = (updating: string) => {
             try {
@@ -327,25 +333,49 @@ test('the runtime filter passes over the one process the record names by its id 
                 return false;
             }
         };
-        // The process's start as Windows reads it, which is what the carried jason writes (Process.StartTime, as file time).
-        const started = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${child.pid}).StartTime.ToFileTimeUtc()`], { encoding: 'utf8', windowsHide: true }).trim();
-        assert.match(started, /^\d+$/);
+        // A process's start as Windows reads it, which is what the carried jason writes (Process.StartTime, as file time).
+        const startOf = (child: ChildProcess) => {
+            const started = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${child.pid}).StartTime.ToFileTimeUtc()`], { encoding: 'utf8', windowsHide: true }).trim();
+            assert.match(started, /^\d+$/);
+            return started;
+        };
 
+        const applying = await start('update', 'apply');
+        const started = startOf(applying);
         // No record, an empty one, a malformed one: nothing is passed over, and the process is found.
         assert.equal(found(join(folder, 'none.pid')), true);
         writeFileSync(record, '');
         assert.equal(found(record), true);
         writeFileSync(record, 'not a pid');
         assert.equal(found(record), true);
-        // A start that is not the process's: a record left behind, its id since given to another process.
-        writeFileSync(record, `${child.pid} ${BigInt(started) - 1n}`);
+        // A stale record: the id with a start that is not the process's, as a record left behind once its id is reused.
+        writeFileSync(record, `${applying.pid} ${BigInt(started) - 1n}`);
         assert.equal(found(record), true, 'a record whose start does not match passed a process over');
-        // The process the record names, by its id and its start, is passed over.
-        writeFileSync(record, `${child.pid} ${started}`);
-        assert.equal(found(record), false, 'the process the record names was not passed over');
+        // The update apply the record names, alive, by its id and its start, is passed over.
+        writeFileSync(record, `${applying.pid} ${started}`);
+        assert.equal(found(record), false, 'the update apply the record names was not passed over');
+
+        // A planted record: a live process at the path, named by its true id and start, that is no update apply.
+        const other = await start();
+        writeFileSync(record, `${other.pid} ${startOf(other)}`);
+        assert.equal(found(record), true, 'a process that is no update apply was passed over');
+        // Every other process at the path is still found while the record passes the one over.
+        writeFileSync(record, `${applying.pid} ${started}`);
+        assert.equal(found(record), true, 'a second process at the carried path was passed over with the first');
     } finally {
-        child.kill();
-        await new Promise<void>((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve() : child.once('exit', () => resolve())));
+        for (const child of children) {
+            child.kill();
+            await new Promise<void>((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve() : child.once('exit', () => resolve())));
+        }
         rmSync(folder, { recursive: true, force: true });
     }
+});
+
+test('the record the runtime filter reads is named once, inside the installation folder, and read by that filter alone', () => {
+    const check = macro('customCheckAppRunning');
+    assert.deepEqual([...check.matchAll(/JASON_DESKTOP_UPDATING", t "([^"]*)"/g)].map((found) => found[1]), ['$INSTDIR\\resources\\bundle\\jason-update.pid']);
+    assert.ok(check.indexOf('JASON_DESKTOP_UPDATING') < check.indexOf('IS_POWERSHELL_AVAILABLE'), 'the record is named after a look may read it');
+    assert.deepEqual([...script.matchAll(/\$\$?env:JASON_DESKTOP_UPDATING/g)].length, 1);
+    // NSIS holds a string to 1024 characters; the longest command it runs is the runtime look with its filter.
+    assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "if (@(${filterText('JASON_OWN_RUNTIME')}).Count -gt 0) { exit 0 } else { exit 1 }"`.length < 1024);
 });

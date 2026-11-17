@@ -29,9 +29,11 @@
 ; jason update apply. It moved its own file out of this folder and goes on running, waiting for the installer, and
 ; Windows still reports the path it was started from. Right before it starts the application it writes its process id
 ; and its start, in Windows file time, to jason-update.pid beside the carried executable, and takes the file away once
-; the install has ended. A process is passed over only where both match a process that is running; a file left behind
-; names a process that has ended, and every other process found at that path is looked for as before.
-!define JASON_OWN_RUNTIME `& { $$skip = -1; try { $$named = @((Get-Content -LiteralPath $$env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $$found = Get-Process -Id ([int]$$named[0]) -ErrorAction Stop; if ($$found.StartTime.ToFileTimeUtc() -eq [long]$$named[1]) { $$skip = $$found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $$_.ProcessId -ne $$skip } }`
+; the install has ended. The file is read only there, inside this installation's folder. A process is passed over only
+; where both match a process that is running and its command line is that jason's update apply; a file left behind names
+; a process that has ended, one written by anything else names no such process, and every other process found at that
+; path is looked for as before.
+!define JASON_OWN_RUNTIME `& { $$skip = -1; try { $$named = @((Get-Content -LiteralPath $$env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $$found = Get-Process -Id ([int]$$named[0]) -ErrorAction Stop; $$asked = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + $$found.Id); if ($$found.StartTime.ToFileTimeUtc() -eq [long]$$named[1] -and $$asked.CommandLine.Contains(' update apply')) { $$skip = $$found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $$_.ProcessId -ne $$skip } }`
 
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
 !define JASON_RUNTIME_STILL "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\resources\bundle\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again."
