@@ -267,7 +267,7 @@ describe('Archiving an agent from its Settings', () => {
 
         // The answer opens a dialog of its own in place of the one that was reading.
         const said = await screen.findByText(/archived already/);
-        const dialog = said.closest('[role="dialog"]') as HTMLElement;
+        const dialog = said.closest('dialog') as HTMLElement;
         expect(said.textContent).toBe(
             'This agent is archived already, from another window or a terminal. Nothing more is done.',
         );

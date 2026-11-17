@@ -1,5 +1,5 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -77,6 +77,10 @@ beforeEach(() => {
     classicCampaigns.shown.value = null;
 });
 
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
 describe('the agent’s move over its chat', () => {
     it('a draft’s chat says Draft and offers Start, which opens the agent page’s own confirmation', async () => {
         const desktop = chatDesktop();
@@ -107,6 +111,33 @@ describe('the agent’s move over its chat', () => {
         fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(sent(fake, 'campaign.start')).toEqual([]);
+    });
+
+    it('opens its confirmation in the top layer, so nothing the chat paints, its option cards included, stands over it', async () => {
+        const modal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+        const desktop = chatDesktop();
+        const fake = consoleApi()
+            .answer('campaign.summary', 'campaign.summary/all', 'campaign.summary/unlinked')
+            .answer('campaign.get', 'campaign.get/unlinked');
+        renderConsole(desktop, fake);
+        await openKept(desktop, 'cmp_2', 'Autumn');
+
+        fireEvent.click(within(agent()!).getByRole('button', { name: 'Start' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Start Autumn' });
+        // The browser's modal dialog: the top layer is above every stacking context of the page, whatever z-index,
+        // opacity or transform an element there makes one with, and the page under it takes no click.
+        expect(dialog.tagName).toBe('DIALOG');
+        expect(modal.mock.contexts).toEqual([dialog]);
+        expect((dialog as HTMLDialogElement).open).toBe(true);
+        // The dimmed layer is the dialog itself, and its title is inside it.
+        expect(dialog.classList.contains('overlay')).toBe(true);
+        expect(within(dialog).getByRole('heading', { name: 'Start Autumn' })).toBeTruthy();
+        // The browser's own close on Escape is refused: the page closes it, through its own way out.
+        const cancel = new Event('cancel', { cancelable: true });
+        dialog.dispatchEvent(cancel);
+        expect(cancel.defaultPrevented).toBe(true);
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
     it('a live agent’s chat says Active and offers Pause, saying what the provider keeps doing, and pauses with the reason', async () => {
