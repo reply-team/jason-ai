@@ -330,7 +330,7 @@ public static class MachineSetup
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
                 var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
-                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason system resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
+                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason runtime resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
                 return (RuntimeStates.WouldNotStop, true);
             }
 
