@@ -47,9 +47,10 @@ public sealed class FakeDesktop : IDisposable
     }
 
     /// <summary>A carried installation with its Desktop, and the environment its verbs run in, which knows the system.</summary>
-    public static (FakeInstallation Installation, FakeDesktop Desktop) Carried(bool withRuntime = true, SetupSystem system = SetupSystem.MacOs)
+    /// <param name="to">The version the release offers; 9.9.9 when not given, the installed one for the finishing step's own tests.</param>
+    public static (FakeInstallation Installation, FakeDesktop Desktop) Carried(bool withRuntime = true, SetupSystem system = SetupSystem.MacOs, SemanticVersion? to = null)
     {
-        var installation = new FakeInstallation(installedIn: system is SetupSystem.Windows ? WindowsBundle : Bundle);
+        var installation = new FakeInstallation(to: to, installedIn: system is SetupSystem.Windows ? WindowsBundle : Bundle);
         if (withRuntime)
         {
             installation.WithRuntime();

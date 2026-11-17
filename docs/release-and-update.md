@@ -1104,7 +1104,55 @@ answer starts the runtime again where one was running and none answers, from the
 can be read and otherwise from the verb's own file, and says where the update stands. An update stopped part-way is
 carried on by typing `jason update apply` again, into the carried `jason`, or on macOS into the copy; one whose
 application is already the version asked for, updated from the window say, is finished by the new carried `jason` with no
-request. `--finish` with no update past `swapped` in flight is a usage error.
+request. `--finish` while an update stands before `swapped`, its application not yet the version asked for, is refused
+with `update_in_progress`; with none in flight it is the finishing step below.
+
+**The finishing step.** `jason update apply --finish`, run as the `jason` Jason Desktop carries with no update in flight
+— the ledger absent or at `complete` — is the one step both doors use to bring what belongs to the installed version up
+to it: the window's update, whose new version's start runs it, and the command line's, whose hand-over runs it past
+`swapped`. It needs no Jason Desktop to answer, and a `jason` the application does not carry is refused it as a usage
+error.
+
+| Part | What it brings up to the installed version |
+|---|---|
+| `plugins` | the plugin packages the installed version's release publishes, by the plan an update's `plugins` step makes against that release's `manifest.json`: a package behind is replaced, and every other is left as that step leaves it — not installed, current, later, unreadable, or edited on this machine (it "differs from every package a release published") |
+| `skills` | every skills deployment this installation records, redeployed at the installed version's tag, as an update's skills step redeploys them, the role skills among them |
+| `ui` | the release's UI for the installed version, where the build in place is not already that version for this build's API |
+
+It starts and stops no runtime: where a package changed and a runtime answers, it asks the reload `jason plugin install`
+asks, and where none answers the package loads at the runtime's next start. Run again it changes nothing and says each
+part is there already. Where no data directory exists — a machine that only ever opened the Demo — it does nothing,
+makes nothing under one, asks nothing of the network, and says so. Where the release cannot be read, it says what it
+could not do and changes nothing of that part. It exits 0 with one document whenever it could run, and the document says
+what became of each part:
+
+```json
+{
+  "version": "0.49.0",
+  "data_dir": "/Users/you/.jason",
+  "data_dir_found": true,
+  "complete": true,
+  "parts": [
+    { "part": "plugins", "state": "done", "reason": null, "lines": ["reply 0.17.0 -> 0.18.0", "reload: the runtime loaded the packages"] },
+    { "part": "skills", "state": "already_there", "reason": null, "lines": ["nothing on this machine was deployed by jason skills, so nothing was redeployed"] },
+    { "part": "ui", "state": "done", "reason": null, "lines": ["placed 0.49.0"] }
+  ]
+}
+```
+
+| Member | Meaning |
+|---|---|
+| `version` | the installed version, the running `jason`'s own |
+| `data_dir` | the data directory the parts belong to |
+| `data_dir_found` | whether it exists; `false` means nothing was done or made, and every part is `not_done` with the reason saying so |
+| `complete` | whether every part is `done` or `already_there` |
+| `parts` | `plugins`, `skills`, `ui`, always in that order |
+| `parts[].state` | `done` — it changed something and is the installed version's now; `already_there` — nothing needed changing, or nothing of it is installed; `not_done` — it could not be brought up, and nothing of it was left half changed |
+| `parts[].reason` | at `not_done`, one sentence why; `null` otherwise |
+| `parts[].lines` | what the part did and left, one line each, as an update's step lines say them; a line that left something to do ends with `run:` and the command that does it |
+
+With `--human` it prints one line a part, its state and any reason, and the part's lines under it.
+
 
 **`--update-settle`** records the update that installed the version it runs as kept, as a window's first start would:
 the copy stays at `kept` until the next update, and the version is not refused. It settles only that update and only

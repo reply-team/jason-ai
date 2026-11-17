@@ -389,21 +389,6 @@ public sealed class UpdateCarriedHandOverTests
         Assert.True(installation.Running);
     }
 
-    /// <summary><c>--finish</c> finishes an update past the swap, and with none in flight is a usage error.</summary>
-    [Fact]
-    public async Task Finish_with_nothing_in_flight_is_a_usage_error()
-    {
-        var (installation, desktop) = FakeDesktop.Carried();
-        using var _ = installation;
-
-        var exit = await CliApp.RunAsync(["update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], installation.Machine!, Ct);
-
-        Assert.Equal(ExitCodes.Usage, exit);
-        Assert.Empty(desktop.Starts);
-        Assert.Null(installation.Ledger());
-        Assert.True(installation.Running);
-    }
-
     /// <summary>
     /// A rollback of an update a carried jason handed to the Desktop puts back what the command line kept — the plugin
     /// packages and, where nothing has been recorded since, the database — starts nothing, since the jason that would start

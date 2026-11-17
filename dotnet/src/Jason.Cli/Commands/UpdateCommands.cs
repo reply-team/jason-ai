@@ -78,7 +78,7 @@ public static class UpdateCommands
         };
         var finish = new Option<bool>("--finish")
         {
-            Description = "Finish an update a jason Jason Desktop carries handed over, from 'swapped' on, and nothing else: run by that jason's update on the new jason the application now carries. A usage error where no such update is in flight.",
+            Description = "The finishing step of a jason Jason Desktop carries. With an update past 'swapped' in flight, it finishes that update, as the update's own hand-over runs it. With none in flight, it brings what belongs to the installed version up to it - the plugin packages its release publishes, by the update's own plan (an edited package is left as it is), every skills deployment this installation records, and the UI - starts and stops no runtime, asks a running one to reload where a package changed, and answers one document: version, data_dir, data_dir_found, complete, and parts (plugins, skills, ui), each with state done, already_there or not_done, a reason where not_done, and its lines. Run again it changes nothing. With no data directory it makes none and says so. Refused with update_in_progress while an update stands before 'swapped'; a usage error for a jason the application does not carry.",
         };
         var human = VerbOptions.Human();
         command.Options.Add(feed);
@@ -351,6 +351,15 @@ public static class UpdateCommands
         CancellationToken cancellationToken)
     {
         var paths = new UpdatePaths(env.Paths);
+
+        // The finishing step with nothing in flight makes nothing under a data directory that was never made: a machine
+        // that only ever opened the Demo keeps none.
+        if (finish && !continuing && !Directory.Exists(env.Paths.Root))
+        {
+            PrintFinish(env, human, UpdateApplier.NoDataDirectory(SemanticVersion.Current, env.Paths.Root));
+            return ExitCodes.Success;
+        }
+
         var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform)
         {
             // On Windows the carried process itself carries the update, its own image moved out of the application's folder.
@@ -368,6 +377,14 @@ public static class UpdateCommands
         catch (Exception error) when (error is UpdateLedgerException or IOException or UnauthorizedAccessException)
         {
             unread = error;
+        }
+
+        // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop.
+        if (finish && !continuing && unread is null && inFlight is null)
+        {
+            var finishing = new UpdateApplier(env, paths, TimeProvider.System, carried.Executable);
+            PrintFinish(env, human, await finishing.FinishInstalledAsync(SemanticVersion.Current, Request(feed, null, null), cancellationToken).ConfigureAwait(false));
+            return ExitCodes.Success;
         }
 
         if (!handing.HasDesktop && inFlight is not { Step: >= UpdateStep.Swapped } && !(continuing && inFlight is not null))
@@ -419,8 +436,10 @@ public static class UpdateCommands
 
             if (finish)
             {
-                throw new UsageException(
-                    $"--finish finishes an update of {carried.Executable} that is past 'swapped', and none is in flight: `jason update apply` begins one.");
+                throw new UpdateException(
+                    UpdateCodes.InProgress,
+                    $"An update to {inFlight!.ToVersion} is in flight at '{SnakeCase(inFlight.Step)}', and the application is not {inFlight.ToVersion} yet, so "
+                    + "--finish has nothing of it to finish: `jason update apply` carries it on, and `jason update status` says where it stands.");
             }
 
             if (continuing)
@@ -517,6 +536,25 @@ public static class UpdateCommands
         {
             handing.Steps.AddRange(applier.Steps);
             throw;
+        }
+    }
+
+    /// <summary>The finishing step's report: its document, or for a person one line a part and the part's own lines under it.</summary>
+    private static void PrintFinish(CliEnvironment env, bool human, UpdateFinishResponse report)
+    {
+        if (!human)
+        {
+            env.Out.WriteLine(JsonSerializer.Serialize(report, JasonJson.Options));
+            return;
+        }
+
+        foreach (var part in report.Parts)
+        {
+            env.Out.WriteLine(part.Reason is { } reason ? $"{part.Part}: {part.State} - {reason}" : $"{part.Part}: {part.State}");
+            foreach (var line in part.Lines)
+            {
+                env.Out.WriteLine($"  - {line}");
+            }
         }
     }
 

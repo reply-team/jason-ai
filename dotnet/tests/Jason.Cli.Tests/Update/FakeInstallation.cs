@@ -652,6 +652,10 @@ public sealed class FakeInstallation : HttpMessageHandler
                 State = DispatcherState.Running;
                 return Json(new DrainResponse(State, RunningAttempts));
 
+            case "plugin.reload":
+                // The registry a reload answers; what it holds is not read by the verbs that ask it here.
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"plugins\":[]}", Encoding.UTF8, "application/json") };
+
             case "system.shutdown":
                 if (RefusesToStop)
                 {
