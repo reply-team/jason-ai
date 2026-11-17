@@ -1695,9 +1695,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         }
         if (event.key === 'Enter' && !event.shiftKey) send(event);
     };
-    // While a turn runs the round button sends only where the words typed can wait for its end: typed, not held for a
-    // model's name, not in a tab locked out of the chat, no stop asked for and no removal asked.
-    const queues = chat.draft.trim() !== '' && !nameMissing && !tabLocked && !chat.stopping && !chat.removing;
+    // While a turn runs the round button sends only where the words typed can wait for its end: typed, a host to send
+    // them to, not held for a model's name, not in a tab locked out of the chat, no stop asked for and no removal asked.
+    const queues =
+        chat.draft.trim() !== '' && host !== null && !nameMissing && !tabLocked && !chat.stopping && !chat.removing;
     const underHead = headed && chat.campaignId !== null && !chat.main;
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>

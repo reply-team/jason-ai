@@ -626,6 +626,20 @@ describe('the console', () => {
             expect(box().value).toBe('More');
         });
 
+        it('is Stop, never an arrow that cannot send, when the host is gone while the turn runs', async () => {
+            const { desktop } = await running();
+            setup.value = { ...setup.value!, hosts: [] };
+            type('More');
+            await waitFor(() =>
+                expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([
+                    ['Stop', false],
+                ]),
+            );
+            fireEvent.click(round()[0]!);
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+        });
+
         it('says that a message is queued to a screen reader, in the queued line’s words', async () => {
             await running();
             const region = () => document.querySelector<HTMLElement>('.chat-panel .chat-announce')!;
