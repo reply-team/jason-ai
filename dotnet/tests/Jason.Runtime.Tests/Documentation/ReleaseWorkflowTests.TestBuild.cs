@@ -144,7 +144,8 @@ public partial class ReleaseWorkflowTests
     /// <summary>
     /// Each install script names exactly one signer, in one line that is a plain value, and nothing it reads - an environment
     /// variable, an option - can change it: the Windows script assigns <c>$signer</c> once, the literal publisher; the macOS
-    /// script names the release's team in one line, assigning a variable once, from no expansion.
+    /// script holds a signature to one requirement naming the release's team, a constant assigned once, which every
+    /// <c>codesign -R</c> it runs tests.
     /// </summary>
     [Fact]
     public void Each_install_script_names_one_signer_that_nothing_it_reads_can_change()
@@ -156,14 +157,27 @@ public partial class ReleaseWorkflowTests
         Assert.DoesNotContain(ps1, line => Regex.IsMatch(line, @"(?i)\$env:[A-Za-z_]*(SIGN|PUBLISHER)"));
         Assert.DoesNotContain(ps1, line => Regex.IsMatch(line, @"(?i)\[[^\]]*\]\s*\$[A-Za-z]*(Signer|Publisher|Unsigned|SkipSignature)\b"));
 
+        // The macOS script holds a signature to one requirement, in one line, which the copy changes alone; every line that
+        // names the release's team is a plain assignment of a constant, made once, that nothing it reads can change; and
+        // codesign is asked to test that requirement and no other.
         var sh = Read(ShScript).ReplaceLineEndings("\n").Split('\n');
-        var team = Assert.Single(sh, line => line.Contains("BD8M7U5YBV", StringComparison.Ordinal));
-        var variable = Regex.Match(team, @"^([A-Z_]+)=");
-        Assert.True(variable.Success, $"install.sh names the release's team in a line that is not a plain assignment: {team}");
-        Assert.DoesNotContain("$", team[variable.Length..], StringComparison.Ordinal);
-        var name = variable.Groups[1].Value;
-        Assert.Single(sh, line => Regex.IsMatch(line, $@"^\s*(export\s+)?{name}="));
-        Assert.DoesNotContain(sh, line => line.Contains("${" + name + ":", StringComparison.Ordinal) || line.Contains("${" + name + "-", StringComparison.Ordinal));
-        Assert.DoesNotContain(sh, line => Regex.IsMatch(line, @"^\s*--[a-z-]*(sign|team|unsigned)[a-z-]*\)"));
+        var requirement = Assert.Single(sh, line => line.Contains("anchor apple generic", StringComparison.Ordinal));
+        Assert.Contains("BD8M7U5YBV", requirement, StringComparison.Ordinal);
+        var naming = sh.Where(line => line.Contains("BD8M7U5YBV", StringComparison.Ordinal)).ToList();
+        Assert.Contains(requirement, naming);
+        foreach (var line in naming)
+        {
+            var variable = Regex.Match(line, @"^([A-Z_]+)=(['""])[^$'""]*(""[^$'""]*""[^$'""]*)*\2$");
+            Assert.True(variable.Success, $"install.sh names the release's team in a line that is not a plain assignment of a constant: {line}");
+            var name = variable.Groups[1].Value;
+            Assert.Single(sh, other => Regex.IsMatch(other, $@"^\s*(export\s+|readonly\s+|local\s+)?{name}="));
+            Assert.DoesNotContain(sh, other => other.Contains("${" + name + ":", StringComparison.Ordinal) || other.Contains("${" + name + "-", StringComparison.Ordinal) || other.Contains("${" + name + "=", StringComparison.Ordinal));
+        }
+
+        var held = Regex.Match(requirement, @"^([A-Z_]+)=").Groups[1].Value;
+        var tested = sh.Where(line => line.Contains("-R", StringComparison.Ordinal) && line.Contains("codesign", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(tested);
+        Assert.All(tested, line => Assert.Contains($"-R=\"${held}\"", line, StringComparison.Ordinal));
+        Assert.DoesNotContain(sh, line => Regex.IsMatch(line, @"^\s*--[a-z-]*(sign|team|unsigned|requirement)[a-z-]*\)"));
     }
 }
