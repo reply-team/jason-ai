@@ -2,8 +2,9 @@ namespace Jason.Contracts.Discovery;
 
 /// <summary>
 /// The refusal of a data directory whose database a newer Jason migrated: the database holds an applied migration this build
-/// does not know. The runtime refuses such a start before its migrator, its lock, its log or anything else writes to the data
-/// directory, and says so in this code and sentence; <c>jason runtime start</c> answers the runtime's refusal as its own, and
+/// does not know. The runtime refuses such a start before its migrator, its lock, its log or anything else changes the data
+/// directory: no file is added or removed, and the database and its log keep every byte. SQLite may rebuild
+/// <c>jason.db-shm</c>. The refusal is said in this code and sentence; <c>jason runtime start</c> answers it as its own, and
 /// the desktop branches on the code.
 /// </summary>
 /// <remarks>

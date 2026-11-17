@@ -154,7 +154,7 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
                 log.error('layout_refused', { Code: layout.code });
                 throw new LayoutRefused(start, layout.code, layout.message);
             }
-            // So is a database a newer Jason migrated, which the runtime refused before it wrote anything.
+            // So is a database a newer Jason migrated, which the runtime refused before it changed the database.
             const newer = dataNewerRefusalIn(start.stdout);
             if (newer !== null) {
                 log.error('data_newer_refused', { Code: dataNewerCode });

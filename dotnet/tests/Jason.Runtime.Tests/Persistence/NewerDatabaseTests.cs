@@ -304,7 +304,7 @@ public class NewerDatabaseTests
         using var dir = new TempDataDir();
         new DatabaseMigrator(dir.Paths).Migrate();
         SqliteConnection.ClearAllPools();
-        using var holder =new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString());
+        using var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dir.Paths.DatabaseFile, Pooling = false }.ToString());
         holder.Open();
         using (var command = holder.CreateCommand())
         {

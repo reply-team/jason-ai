@@ -63,7 +63,7 @@ public sealed class FakeInstallation : HttpMessageHandler
                 OnStart?.Invoke();
 
                 // A version put back from DataNewer.FirstRefusing on, on the database the newer one migrated: its runtime
-                // refuses before it writes anything, says so in the envelope a refused start writes, and exits.
+                // refuses before it changes the database, says so in the envelope a refused start writes, and exits.
                 if (PutBackRefusesTheDatabase && Installed() == From.ToString())
                 {
                     StartsHandedOver.Add(_handedOver);

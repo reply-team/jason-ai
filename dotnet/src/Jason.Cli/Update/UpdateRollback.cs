@@ -451,7 +451,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     /// </summary>
     internal static string OlderOnNewer(SemanticVersion from, SemanticVersion to) =>
         RefusesNewerData(from)
-            ?$"{from} does not start on a database {to} migrated, and says so with {DataNewer.Code}; to go all the way back, "
+            ? $"{from} does not start on a database {to} migrated, and says so with {DataNewer.Code}; to go all the way back, "
             : $"{from} may refuse to open a database migrated by {to}; to go all the way back, ";
 
     /// <summary>Whether <paramref name="version"/> refuses to start on a database a newer Jason migrated: from <see cref="DataNewer.FirstRefusing"/> on.</summary>

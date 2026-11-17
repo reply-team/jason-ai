@@ -7,7 +7,7 @@ namespace Jason.App.Tests.EndToEnd;
 
 /// <summary>
 /// A database a newer Jason migrated, met by the shipped program: the runtime <c>jason runtime start</c> launches refuses it
-/// with <c>data_newer</c> before it writes anything, and the start answers that refusal as its own, which is what an agent
+/// with <c>data_newer</c> before it changes the database, and the start answers that refusal as its own, which is what an agent
 /// and the desktop branch on.
 /// </summary>
 public class NewerDatabaseStartRefusalTests
