@@ -58,6 +58,8 @@ export const requestTitles: ReadonlyMap<string, RequestReason> = new Map<string,
     ['Change instructions the AI reads', 'request.instructions'],
     [serversTitle, 'request.server_list'],
     ['Write or run a jason that is not the desktop\'s', 'request.local_jason'],
+    // Not reached today: this card comes only from a command, and in Full access every command is read literally and
+    // named `command.search`. Kept so that the title is placed, with a sentence true for it.
     ['Change where the shell finds programs', 'request.search'],
     ['Use a path Windows reads as another name', 'request.windows_name'],
     ['Use a path that begins with ~', 'request.tilde_path'],
@@ -110,6 +112,18 @@ export function fullAccessWhy(full: FullAccessJudgement, judged: Extract<Judgeme
         if (judged.title === `Use ${tool}`) return { reason: 'request.unknown_tool', tool };
     }
     return { reason: 'request.other' };
+}
+
+/**
+ * The card's `why`, or none where working it out failed: a failure here leaves the card exactly as it was before there
+ * was a why, and never costs the card.
+ */
+export function whyOrNone(work: () => FullAccessWhy): { why?: FullAccessWhy } {
+    try {
+        return { why: work() };
+    } catch {
+        return {};
+    }
 }
 
 /** Whether a kept card's `why` is one the table can say: a known code, and a tool's name only where its code takes one. */

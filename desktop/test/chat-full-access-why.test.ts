@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { afterEach, test } from 'node:test';
-import { fullAccessReasons, fullAccessWhy, isFullAccessWhy, requestTitles, type FullAccessWhy } from '../src/chat-full-access-why.ts';
+import { fullAccessReasons, fullAccessWhy, isFullAccessWhy, requestTitles, whyOrNone, type FullAccessWhy } from '../src/chat-full-access-why.ts';
 import type { HeldReason } from '../src/chat-literal.ts';
 import { newConversationId, parseConversation, serialize } from '../src/chat-conversations.ts';
 import { PermissionBroker } from '../src/chat-permission-broker.ts';
@@ -168,4 +168,37 @@ test('the page has one sentence for every code and none besides', () => {
     const locale = readFileSync(new URL('../../ui/src/locale/en.ts', import.meta.url), 'utf8');
     const keys = [...locale.matchAll(/'fullAccess\.why\.([a-z_.]+)':/g)].map((match) => match[1]);
     assert.deepEqual([...keys].sort(), [...fullAccessReasons].sort());
+});
+
+test('a failure while the why is worked out leaves the card without one, never without the card', () => {
+    assert.deepEqual(whyOrNone(() => ({ reason: 'command.glob' })), { why: { reason: 'command.glob' } });
+    assert.deepEqual(
+        whyOrNone(() => {
+            throw new Error('no why');
+        }),
+        {},
+    );
+});
+
+test('the why and its words are the card\'s alone: nothing of them is in what the hook, the host or the log is given', async () => {
+    const locale = readFileSync(new URL('../../ui/src/locale/en.ts', import.meta.url), 'utf8');
+    const sentences = [...locale.matchAll(/'fullAccess\.why\.[a-z_.]+':\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g)].map((match) => (match[1] ?? match[2] ?? '').replace(/\\'/g, '\''));
+    assert.equal(sentences.length, fullAccessReasons.length);
+    const decided: unknown[] = [];
+    const sent: { why?: FullAccessWhy }[] = [];
+    let next = 0;
+    const broker = new PermissionBroker({ emit: (_chat, event) => sent.push(event.kind === 'permission' ? event : {}), decided: (each) => decided.push(each), newId: () => `req_${++next}` });
+    made.push(broker);
+    broker.openTurn('chat_a', 'turn_a', scope, 'full_access');
+    const said: unknown[] = [broker.hook('turn_a', 'Bash', { command: 'ls *.md' }, 'tu_1'), broker.hook('turn_a', 'Frobnicate', {}, 'tu_2')];
+    const allowed = broker.ask('turn_a', 'Bash', { command: 'ls *.md' });
+    const refused = broker.ask('turn_a', 'Frobnicate', {});
+    await settle();
+    assert.deepEqual(sent.map((event) => event.why?.reason), ['command.glob', 'request.unknown_tool'], 'the cards carry their why');
+    broker.answer('chat_a', 'req_1', { allow: true, always: false });
+    broker.answer('chat_a', 'req_2', { allow: false, always: false });
+    said.push(await allowed, await refused, ...decided);
+    const given = JSON.stringify(said);
+    assert.ok(!/"why"|command\.|request\.|host_asked/.test(given), given);
+    for (const sentence of sentences) assert.ok(!given.includes(sentence.replace('{tool}', 'Frobnicate')), sentence);
 });

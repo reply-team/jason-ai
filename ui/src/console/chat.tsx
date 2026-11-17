@@ -685,6 +685,8 @@ export const tabLockedSentence = (mode: string): string =>
     mode === 'full_access' ? t('chat.tab.full') : mode === 'auto_edit' ? t('chat.tab.auto') : t('chat.tab.other');
 
 function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 'permission' }>): Html {
+    // What the page has no words for is not drawn: the card stands without the line.
+    const why = entry.why === undefined ? null : fullAccessWhyWords(entry.why);
     const buttons =
         entry.answer === null && inTab()
             ? html`<div class="perm-done">${answeredInDesktop}</div>`
@@ -711,7 +713,7 @@ function permission(chat: Chat, entry: Extract<Chat['entries'][number], { kind: 
               : html`<div class="perm-done">${answerWords[entry.answer]}</div>`;
     return html`<div class="ask perm">
         <div class="ask-h">${svg('shield', 14)}<b>${entry.title}</b></div>
-        ${entry.why === undefined ? null : html`<p class="perm-why">${fullAccessWhyWords(entry.why)}</p>`}
+        ${why === null ? null : html`<p class="perm-why">${why}</p>`}
         <pre class="perm-detail">${entry.detail}</pre>
         ${buttons}
     </div>`;

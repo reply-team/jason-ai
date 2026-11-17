@@ -763,8 +763,9 @@ also lists Full access. Full access is chosen only after a confirmation, with Ca
 Cancel, unless you gave the standing choice (below). In Full access the AI runs commands and changes files on this computer without
 asking, except a command Jason cannot read plainly or one that changes what the AI loads: that is a card titled "Full
 access asks about this one", which waits thirty minutes and then is not run, and the turn goes on. One line under its
-title says why it asks: what in the command Jason could not read plainly, what the request would change, a tool of one
-of your own MCP servers, a tool Jason does not know, or that Claude Code asked about it itself. A held card offers no
+title says why it asks, for example what in the command Jason could not read plainly, what it would run or change, a
+tool of one of your own MCP servers, a tool Jason does not know, or that Claude Code asked about it itself; a page older
+than the desktop draws the card without a line it has no words for. A held card offers no
 "Always", and an earlier "Always" grant from Ask first never lets a held command through: each hold is yours to answer
 every time. A deletion on a critical path and a tool Jason never saw are cards too. Whatever Ask first refuses is
 refused in Full access, with no card, and every `reply` command is among them but its exact no-card forms. PowerShell is

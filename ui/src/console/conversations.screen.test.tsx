@@ -1,3 +1,4 @@
+import type { DesktopFullAccessWhy } from '../platform/desktop';
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ApiProvider } from '../api/context';
@@ -123,6 +124,42 @@ describe('the desktop’s conversations', () => {
         // Shown again, it is brought forward, not read again.
         fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
         expect(calls(desktop, 'chat.open')).toHaveLength(1);
+    });
+
+    it('reopens a kept Full access card with its why, and one this page has no words for without the line', async () => {
+        const desktop = chatDesktop();
+        desktop.keep({
+            id: 'conv_01JDKEPT0000000000000000F1',
+            campaignId: 'cmp_1',
+            title: 'Spring',
+            entries: [
+                {
+                    kind: 'permission',
+                    title: 'Full access asks about this one',
+                    detail: 'ls *.md',
+                    answer: 'deny',
+                    why: { reason: 'command.glob' },
+                },
+                {
+                    kind: 'permission',
+                    title: 'Full access asks about this one',
+                    detail: 'ls ?.md',
+                    answer: 'allow',
+                    why: { reason: 'command.not_known_here' } as unknown as DesktopFullAccessWhy,
+                },
+            ],
+        });
+        renderConsole(desktop);
+        await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+        fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+        await waitFor(() => expect(thread().querySelectorAll('.ask.perm')).toHaveLength(2));
+        const [known, unknown] = [...thread().querySelectorAll<HTMLElement>('.ask.perm')];
+        expect(known!.querySelector('.perm-why')?.textContent).toBe(
+            'This command has a wildcard (*, ? or [ ]), which the shell turns into file names only as it runs, so Jason cannot read plainly what it would touch.',
+        );
+        expect(unknown!.querySelector('.perm-why')).toBeNull();
+        expect(unknown!.querySelector('.ask-h + .perm-detail')?.textContent).toBe('ls ?.md');
+        expect(within(unknown!).getByText('Allowed')).toBeTruthy();
     });
 
     it('reopens on the host, model and effort its last turn was sent with, and the next turn names them again', async () => {

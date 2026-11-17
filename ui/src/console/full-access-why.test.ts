@@ -36,7 +36,7 @@ const rows: [DesktopFullAccessWhy['reason'], string][] = [
     ],
     [
         'command.tilde',
-        'This command has a ~, which the shell can read as a home folder Jason cannot place, so it cannot tell what the command would touch.',
+        'This command has a ~, which Jason does not read plainly in this shell, so it cannot tell what the command would touch.',
     ],
     [
         'command.non_ascii',
@@ -52,7 +52,7 @@ const rows: [DesktopFullAccessWhy['reason'], string][] = [
     ],
     [
         'command.operator',
-        'This command has an operator, a redirection or a line break Jason does not read, so it cannot tell plainly what the command would do.',
+        'This command has an operator, a redirection, a line break or a device path (/dev/...) Jason does not read, so it cannot tell plainly what the command would do.',
     ],
     [
         'command.background',
@@ -102,17 +102,20 @@ const rows: [DesktopFullAccessWhy['reason'], string][] = [
     ],
     [
         'command.builtin',
-        'This command uses a shell built-in that changes how later words are read, so Jason cannot read the rest plainly.',
+        "This command uses a shell built-in that sets aliases, variables, options or modules, or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
     ],
     ['command.servers', 'This command would change the MCP servers or plugins an AI loads, or sign a server in.'],
     [
         'command.directory_change',
         'This command moves to a folder Jason cannot place, so it cannot tell what the commands after it would touch.',
     ],
-    ['command.reply', "This command runs reply, which acts on the provider directly, outside Jason's approvals."],
+    [
+        'command.reply',
+        "This command runs reply in a form Jason does not run on its own, and reply can act on the provider directly, outside Jason's approvals.",
+    ],
     [
         'command.guarded_name',
-        "This command names a file or folder that sets what an AI loads or runs: its settings, its instructions, its skills, or a repository's own files.",
+        "This command names a file or folder Jason guards: an AI's settings, skills or instructions, the MCP servers it loads, a repository's own files, or a folder's Jason marker.",
     ],
     [
         'command.search',
@@ -173,6 +176,24 @@ describe('why Full access asks', () => {
             'request.no_file_named',
             'request.unknown_tool',
         ]);
+    });
+
+    it('says nothing for a why it has no words for, or one not in the declared shape', () => {
+        for (const value of [
+            { reason: 'command.not_known_here' },
+            { reason: 'request.unknown_tool' },
+            { reason: 'request.unknown_tool', tool: '' },
+            { reason: 'request.unknown_tool', tool: 7 },
+            { reason: 'command.glob', tool: 'Bash' },
+            { reason: 'command.glob', words: 'extra' },
+            { reason: 'toString' },
+            { reason: '__proto__' },
+            { reason: 7 },
+            'command.glob',
+            null,
+            [],
+        ])
+            expect(fullAccessWhyWords(value)).toBeNull();
     });
 
     it("keeps a card's why from the live event and from the kept record, and a card with none has none", () => {

@@ -1,7 +1,7 @@
 import { act as flush, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '../api/session';
-import type { DesktopCommand } from '../platform/desktop';
+import type { DesktopCommand, DesktopFullAccessWhy } from '../platform/desktop';
 import { activatePlugins } from '../platform/plugin';
 import { registry } from '../platform/slots';
 import { browserPlugins } from '../plugins';
@@ -955,6 +955,43 @@ describe('the console', () => {
         // The line sits between the title and the request, and a tool's name in it is text, never markup.
         expect(cards[0]!.querySelector('.ask-h + .perm-why + .perm-detail')).toBeTruthy();
         expect(cards[1]!.querySelector('.perm-why b')).toBeNull();
+    });
+
+    it('draws a Full access card whose why this page has no words for exactly as before: no line, the card and its buttons', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        // A code a newer desktop names, and values not in the declared shape, as they could come over the seam.
+        const unknown = [
+            { reason: 'command.not_known_here' },
+            { reason: 'request.unknown_tool' },
+            { reason: 'command.glob', tool: 'Bash' },
+            { reason: 7 },
+            'command.glob',
+        ] as unknown as DesktopFullAccessWhy[];
+        flush(() => {
+            unknown.forEach((why, at) =>
+                desktop.emit(id, {
+                    kind: 'permission',
+                    request: `req_${at + 1}`,
+                    title: 'Full access asks about this one',
+                    detail: `ls ${at}`,
+                    remember: null,
+                    why,
+                }),
+            );
+        });
+        await waitFor(() => expect(document.querySelectorAll('.ask.perm')).toHaveLength(unknown.length));
+        for (const card of document.querySelectorAll<HTMLElement>('.ask.perm')) {
+            expect(card.querySelector('.perm-why')).toBeNull();
+            expect(card.querySelector('.ask-h + .perm-detail')).toBeTruthy();
+            expect(within(card).getByRole('button', { name: 'Allow' })).toBeTruthy();
+            expect(within(card).getByRole('button', { name: "Don't allow" })).toBeTruthy();
+        }
     });
 
     it('says a turn parked on a permission card waits for the person, and thinks again once it is answered', async () => {

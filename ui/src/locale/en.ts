@@ -413,7 +413,7 @@ export const en = {
     'fullAccess.why.command.comment':
         'This command has a #, which the shell can read as the start of a comment that hides the rest, so Jason cannot read plainly what it would do.',
     'fullAccess.why.command.tilde':
-        'This command has a ~, which the shell can read as a home folder Jason cannot place, so it cannot tell what the command would touch.',
+        'This command has a ~, which Jason does not read plainly in this shell, so it cannot tell what the command would touch.',
     'fullAccess.why.command.non_ascii':
         'This command has a character outside plain ASCII, which can look like another character on the card, so Jason does not run it without you.',
     'fullAccess.why.command.control_character':
@@ -421,7 +421,7 @@ export const en = {
     'fullAccess.why.command.character':
         'This command has a character Jason does not know how this shell would read, so it cannot read plainly what the command would do.',
     'fullAccess.why.command.operator':
-        'This command has an operator, a redirection or a line break Jason does not read, so it cannot tell plainly what the command would do.',
+        'This command has an operator, a redirection, a line break or a device path (/dev/...) Jason does not read, so it cannot tell plainly what the command would do.',
     'fullAccess.why.command.background':
         'This command runs something in the background (&), which goes on after the command returns, so Jason does not run it without you.',
     'fullAccess.why.command.assignment':
@@ -447,15 +447,15 @@ export const en = {
     'fullAccess.why.command.runner':
         'This command starts another program to run something, and Jason does not read what that program would run.',
     'fullAccess.why.command.builtin':
-        'This command uses a shell built-in that changes how later words are read, so Jason cannot read the rest plainly.',
+        "This command uses a shell built-in that sets aliases, variables, options or modules, or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
     'fullAccess.why.command.servers':
         'This command would change the MCP servers or plugins an AI loads, or sign a server in.',
     'fullAccess.why.command.directory_change':
         'This command moves to a folder Jason cannot place, so it cannot tell what the commands after it would touch.',
     'fullAccess.why.command.reply':
-        "This command runs reply, which acts on the provider directly, outside Jason's approvals.",
+        "This command runs reply in a form Jason does not run on its own, and reply can act on the provider directly, outside Jason's approvals.",
     'fullAccess.why.command.guarded_name':
-        "This command names a file or folder that sets what an AI loads or runs: its settings, its instructions, its skills, or a repository's own files.",
+        "This command names a file or folder Jason guards: an AI's settings, skills or instructions, the MCP servers it loads, a repository's own files, or a folder's Jason marker.",
     'fullAccess.why.command.search':
         'This command names a variable that decides where the shell looks for programs, which decides what later commands run.',
     'fullAccess.why.command.local_jason':

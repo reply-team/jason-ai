@@ -13,7 +13,7 @@
 // said to the log.
 
 import { randomUUID } from 'node:crypto';
-import { fullAccessWhy, type FullAccessWhy } from './chat-full-access-why.ts';
+import { fullAccessWhy, whyOrNone, type FullAccessWhy } from './chat-full-access-why.ts';
 import type { HeldReason } from './chat-literal.ts';
 import { planExitRefusal, planRefusal, type ChatMode } from './chat-modes.ts';
 import type { HookAnswer } from './chat-permission-endpoint.ts';
@@ -170,7 +170,7 @@ export class PermissionBroker {
             const forget = () => signal?.removeEventListener('abort', withdraw);
             this.#pending.set(request, { chat: turn.chat, turn: turnId, mode, input, remember, timer, settle, forget });
             const title = mode === 'full_access' ? fullAccessCardTitle : judged.title;
-            const why = full === null ? {} : { why: fullAccessWhy(full, judged, tool) };
+            const why = full === null ? {} : whyOrNone(() => fullAccessWhy(full, judged, tool));
             this.#options.emit(turn.chat, { kind: 'permission', request, title, detail: judged.detail, remember: remember === null || judged.remember === null ? null : judged.covers, ...why });
         });
     }

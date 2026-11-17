@@ -17,14 +17,25 @@ import type {
     DesktopLineEntry,
     DesktopModel,
 } from '../platform/desktop';
+import { en, type MessageKey } from '../locale/en';
 import { t } from '../platform/i18n';
 
 /**
  * Why a card of a Full access turn asks, in the page's words for the case the desktop names: the tool's name, where the
- * case carries one, is the one part of the request the sentence holds, drawn as text.
+ * case carries one, is the one part of the request the sentence holds, drawn as text. The value comes over the seam,
+ * from a live card or a kept one, and a desktop may be newer than this page: a code the page has no sentence for, or a
+ * value not in the shape it declares, is null, and the card is drawn without the line, as it was before there was one.
  */
-export const fullAccessWhyWords = (why: DesktopFullAccessWhy): string =>
-    'tool' in why ? t(`fullAccess.why.${why.reason}`, { tool: why.tool }) : t(`fullAccess.why.${why.reason}`);
+export function fullAccessWhyWords(why: unknown): string | null {
+    if (why === null || typeof why !== 'object' || Array.isArray(why)) return null;
+    const { reason, tool, ...rest } = why as Record<string, unknown>;
+    if (typeof reason !== 'string' || Object.keys(rest).length > 0) return null;
+    const key = `fullAccess.why.${reason}`;
+    if (!Object.hasOwn(en, key)) return null;
+    const message = key as MessageKey;
+    if (!en[message].includes('{tool}')) return tool === undefined ? t(message) : null;
+    return typeof tool === 'string' && tool !== '' ? t(message, { tool }) : null;
+}
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
 
