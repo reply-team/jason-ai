@@ -12,6 +12,23 @@ namespace Jason.Cli.Update;
 /// <param name="ExitCode">Its exit code, where it ended.</param>
 public sealed record SetupRun(bool Ended, int ExitCode);
 
+/// <summary>The exit codes of Jason Desktop's installer, run silently, that the move reads as more than a failure.</summary>
+public static class SetupExits
+{
+    /// <summary>A Jason process runs from the place the installer was to replace files in.</summary>
+    public const int ProcessRunsFromPlace = 1;
+
+    /// <summary>Another install of Jason ran at the same time.</summary>
+    public const int AnotherInstall = 2;
+
+    /// <summary>
+    /// Jason Desktop is running, in its window or in the tray, and a silent installer, an update or not, ends with this code
+    /// having changed nothing and ended nothing. The one place this number is written: the installer's own code is to be
+    /// held equal to it.
+    /// </summary>
+    public const int ApplicationRunning = 3;
+}
+
 /// <summary>
 /// What the move asks of the operating system: the machine's architecture, a signature, an unzip, a setup run to its end,
 /// a window. A seam, so a test asks none of it of the machine running the suite.
