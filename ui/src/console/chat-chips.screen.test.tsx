@@ -24,7 +24,8 @@ import { forgetWaiting } from './waiting';
 // The chips under the last answer, as a person meets them: in an agent's chat chosen from the agent's counts as the
 // runtime recorded them (`campaign.summary/card-chips`: Spring launch with two people waiting on the person and work
 // under way, Summer reach with nobody, Winter plan with two people nobody worked on yet, Autumn push with one person
-// worked on and nothing waiting), in the Feed and a set-up chat the opening three; a click sends the chip's words as the
+// worked on and nothing waiting), none in the Feed and a set-up chat, which draw the opening three only while empty; a
+// click sends the chip's words as the
 // person's next message, none stand while a turn runs or a choice is open, and the question just asked is not offered
 // again.
 
@@ -186,24 +187,24 @@ describe('the chips under an agent’s last answer', () => {
         expect(within(row).getByRole('button', { name: 'How is it going?' })).toBe(buttons[0]);
     });
 
-    it('wait while a choice the AI asked stands open, and come back once the person answers it and the AI replies', async () => {
-        const asking: DesktopKeptEntry[] = [...answered];
-        const { desktop } = renderConsole([setUp(asking)]);
-        const pane = await openChat('Sending');
+    it('wait while a choice the AI asked stands open', async () => {
+        const { fake, desktop } = renderConsole([spring()]);
+        // A choice in an agent's chat reads what the agent has done since.
+        fake.answer('journal.list', 'journal.list/card-choice-acts-none');
+        const pane = await openChat('Spring');
         await waitFor(() => expect(chips(pane)).toHaveLength(3));
         flush(() => {
-            desktop.emit(setUp().id, { kind: 'text', text: `Two kinds.\n\n${fenced(choice)}`, at });
-            desktop.emit(setUp().id, { kind: 'done', error: null });
+            desktop.emit(spring().id, {
+                kind: 'text',
+                text: `Two kinds.
+
+${fenced(choice)}`,
+                at,
+            });
+            desktop.emit(spring().id, { kind: 'done', error: null });
         });
-        const asked = await waitFor(() => within(pane).getByRole('group', { name: 'Jason asks' }));
+        await waitFor(() => within(pane).getByRole('group', { name: 'Jason asks' }));
         expect(chips(pane)).toEqual([]);
-        fireEvent.click(within(asked).getByRole('button', { name: /^Founders/ }));
-        await waitFor(() => expect(sends(desktop)).toEqual(['Founders']));
-        flush(() => {
-            desktop.emit(setUp().id, { kind: 'text', text: 'Founders it is.', at });
-            desktop.emit(setUp().id, { kind: 'done', error: null });
-        });
-        await waitFor(() => expect(chips(pane)).toHaveLength(3));
     });
 
     it('do not stand after an error', async () => {
@@ -240,30 +241,27 @@ describe('the chips under an agent’s last answer', () => {
     });
 });
 
-describe('the chips under an answer in a chat of no agent', () => {
-    it('are the opening three in a set-up chat and in the Feed, less the question just asked', async () => {
+describe('the opening chips', () => {
+    const opening = ['What is waiting for me?', 'How are my agents doing?', 'Help me start a new agent.'];
+    const drawn = (pane: HTMLElement) =>
+        Array.from(pane.querySelectorAll<HTMLButtonElement>('.sugs .sug'), (each) => each.textContent);
+
+    it('are drawn in an empty chat only: an answered Feed and an answered set-up chat draw none', async () => {
         // The Feed's row is in the demo's sidebar.
         mode.value = 'demo';
-        const feedChat = 'conv_01JDCHIPS0000000000000000F';
-        const { desktop } = renderConsole([
-            setUp([
-                { kind: 'user', text: 'What is waiting for me?' },
-                { kind: 'text', text: 'Nothing.', at },
-            ]),
-            { id: feedChat, campaignId: null, title: 'Feed', main: true, entries: answered },
+        renderConsole([
+            setUp(),
+            { id: 'conv_01JDCHIPS0000000000000000G', campaignId: null, title: 'Fresh', entries: [] },
+            { id: 'conv_01JDCHIPS0000000000000000F', campaignId: null, title: 'Feed', main: true, entries: answered },
         ]);
+        const fresh = await openChat('Fresh');
+        await waitFor(() => expect(drawn(fresh)).toEqual(opening));
         const setup = await openChat('Sending');
-        await waitFor(() => expect(chips(setup)).toEqual(['How are my agents doing?', 'Help me start a new agent.']));
-        fireEvent.click(chip(setup, 'How are my agents doing?'));
-        await waitFor(() => expect(sends(desktop)).toEqual(['How are my campaigns doing?']));
+        await waitFor(() => within(setup).getByText('Hello.'));
+        expect(drawn(setup)).toEqual([]);
         const feed = await openFeed();
-        await waitFor(() =>
-            expect(chips(feed)).toEqual([
-                'What is waiting for me?',
-                'How are my agents doing?',
-                'Help me start a new agent.',
-            ]),
-        );
+        await waitFor(() => within(feed).getByText('Hello.'));
+        expect(drawn(feed)).toEqual([]);
     });
 });
 
@@ -274,7 +272,7 @@ describe('the chips in a browser tab', () => {
         const tab = tabDesktop(new Bridge({ port: 43210, secret: standInSecret }, stand.fetch));
         setPlace('tab', tab);
         await loadMode(tab);
-        desktop.keep({ ...setUp(), mode: chatMode });
+        desktop.keep({ ...spring(), mode: chatMode });
         const fake = given(
             new FakeApi()
                 .answer('plugin.list', 'plugin.list/none')
@@ -283,7 +281,7 @@ describe('the chips in a browser tab', () => {
         );
         await session.bootstrap();
         render(<Console api={fake} desktop={tab} stream={stubStream().stream} bootstrapped />);
-        const pane = await openChat('Sending');
+        const pane = await openChat('Spring');
         await waitFor(() => expect(stand.asked.some((each) => each.path === '/events')).toBe(true));
         return { pane, sent: () => stand.asked.filter((each) => each.member === 'chat.send').length };
     }
