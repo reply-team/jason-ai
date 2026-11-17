@@ -648,9 +648,10 @@ export function everyWordBack(chat: Chat, sent?: string): Chat {
 
 /**
  * The person asked the running turn to stop. A stopped turn ends with the same `done` as a good one, so the waiting
- * message is given back now, before the desktop is asked, and the end finds nothing to send.
+ * message is given back now, before the desktop is asked, and the end finds nothing to send: every word goes into the
+ * box (`everyWordBack`), the waiting message above what is typed there, so the box is the one place unsent words live.
  */
-export const stopAsked = (chat: Chat): Chat => (chat.running ? released({ ...chat, stopping: true }) : chat);
+export const stopAsked = (chat: Chat): Chat => (chat.running ? everyWordBack({ ...chat, stopping: true }) : chat);
 
 /** The page handed the turn's end's message to the desktop. */
 export const handed = (chat: Chat): Chat => ({ ...chat, outbox: null });

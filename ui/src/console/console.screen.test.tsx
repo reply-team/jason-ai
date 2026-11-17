@@ -720,7 +720,9 @@ describe('the console', () => {
             escape();
             expect(stops(desktop)).toHaveLength(1);
             await waitFor(() => expect(box().value).toBe(['Later', 'More'].join(blank)));
+            // The box is the one place the unsent words are: nothing in the conversation says they are queued.
             expect(queued()).toBeNull();
+            expect(document.querySelector('.chat-scroll')!.textContent).not.toMatch(/Queued|Not sent/);
             expect(screen.queryByText(/Not sent/)).toBeNull();
             // A stop already asked for is asked once.
             escape();
