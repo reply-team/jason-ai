@@ -80,7 +80,7 @@ public static class InstallCommand
              now, and until then the old job stays loaded and idle. Its notice files, and on Windows
              jason.previous.exe, removed. Windows: the executable removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
              own volume and left there, with nothing started to wait for that process; its Path entry taken
-             off where its folder then holds nothing but what install.ps1 writes; the folder once empty.
+             off where its folder then holds nothing but what install.ps1 wrote there before 0.49; the folder once empty.
              macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
              its profile block where its folder then holds nothing but Jason.
           4. The harness skills, both packs, from the skills beside this jason (read where they stand, nothing
@@ -103,7 +103,8 @@ public static class InstallCommand
         moves from.
 
         The document: version, executable (this jason); command {runs (what a new terminal finds: the wrapper on
-        macOS, the folder on the Path on Windows), open_shell, changed, profiles, taken_back}; skills [{root,
+        macOS, the folder on the Path on Windows), placed (whether a new terminal finds this jason, as read back;
+        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.

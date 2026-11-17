@@ -100,6 +100,26 @@
   ${endIf}
 !macroend
 
+; The installer's own last step, once the files are in place, at every install and every update, silent or not: the
+; machine set up for the jason this application carries, through that jason's own `jason install` with no flags. It puts
+; jason in the terminal (this account's Path names the carried file's folder), gives the skills of every agent host found
+; and retires an older command-line install; it writes nothing under the data directory, so a person's first start still
+; opens on the Demo. nsExec runs it with no window and waits for it, and it starts no process that outlives it, so a script
+; that waits for this installer's whole process tree is not held. Nothing here starts a runtime: a runtime started here
+; would be this installer's child and outlive it, and such a script would wait for it for ever. Where a runtime answered
+; before the install and none answers after it - the check above stopped the application's, or the routine one of a
+; command-line install it retired - whoever ran this installer starts one again from the carried file: a person's run
+; and the window's own update (--force-run) start the application once this step is done, and its start brings the
+; runtime up as every start of it does; a run a terminal asked for - the install script's silent run, or that of
+; jason update apply - is that command's, which starts one itself. What it did not get done never fails the
+; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
+; start runs it where its last run was for an older version.
+!macro customInstall
+  DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of every agent host found."
+  nsExec::Exec '"$INSTDIR\resources\bundle\jason.exe" install'
+  Pop $R0
+!macroend
+
 ; The start's exit code says whether to go on: 1 when the runtime this application carries did not stop, or a runtime
 ; did not answer, which the start has already said unless the uninstall is silent. The uninstaller then quits before it
 ; removes a file, so no folder is left half removed. Any other code - a start that crashed, or one that could not be
@@ -138,3 +158,4 @@
     ${endIf}
   ${endIf}
 !macroend
+
