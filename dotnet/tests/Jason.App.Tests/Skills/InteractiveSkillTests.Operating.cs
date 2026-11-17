@@ -438,16 +438,18 @@ public partial class InteractiveSkillTests
         // A session that installs takes the routes the page gives an agent, in its order, never pipes a download into a
         // shell, and hands the one-liners to the person where neither route is open to it.
         Assert.Contains(
-            "a package where the page names one for this platform and its package manager is already there, otherwise the steps it gives by hand",
+            "a package where the page names one for this platform and its package manager is already there, otherwise the install script on macOS and Windows, and on Linux the steps it gives by hand",
             skill,
             StringComparison.Ordinal);
         Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
         Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
 
-        // Jason installs two ways, and the skill names both: a session asked to install offers them as the install page's
-        // section for an agent says, never the command line alone.
-        Assert.Contains("Jason installs two ways: the command line, which a person installs with the two lines below, and Jason", skill, StringComparison.Ordinal);
-        Assert.Contains("That section also says when to offer them the two ways, and what to do when they", skill, StringComparison.Ordinal);
+        // On macOS and Windows, Jason is one installation, in the words every page uses: a session asked to install never
+        // offers the command line alone there. On Linux the desktop's packages stay separate downloads, which the install
+        // page's section for an agent says when to offer.
+        Assert.Contains("On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once,", skill, StringComparison.Ordinal);
+        Assert.Contains("That section also says what to offer them on Linux, and what to do when they take Jason Desktop there.", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("Jason installs two ways", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("A person installs it with the two lines below.", skill, StringComparison.Ordinal);
 
         // After an update the role skills can be another release's. The skill says what `jason status` says about it and

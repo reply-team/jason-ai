@@ -51,7 +51,8 @@ this opens shows the demo, or, while something waits, one page that says Live Mo
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
 `jason decision` commands.
 
-Without Jason Desktop, then, that tab is not where a person watches their work. When they ask what happened, what is
+That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
+draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
 queued or what waits for them, do not send them to it: name **Needs you** in Jason Desktop, or `jason approval list`
 and `jason decision list` in a terminal, and `jason workitem list --campaign <campaign-id>` for the queue.
 
@@ -476,12 +477,14 @@ for every other is 1.0.0; whether that one is behind is `jason status`'s to say,
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
 followed in order, its §4 included: that section teaches the installation its role skills, which the install script
 has already done as its last step unless it said it could not, and without them every role it launches runs
-untaught. Jason installs two ways: the command line, which a person installs with the two lines below, and Jason
-Desktop, one download from `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
-`/desktop/linux-deb` or `/desktop/linux-appimage`. If they ask you to install it, follow that page yourself, by its
-section for an agent: a package where the page names one for this platform and its package manager is already there,
-otherwise the steps it gives by hand. That section also says when to offer them the two ways, and what to do when they
-take Jason Desktop. Never pipe a download into a shell, and
+untaught. On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the
+command line your terminal and your agents use. It is installed once, updated once and removed once, and a person
+installs it with the two lines below. On Linux the two lines install the command line, and Jason Desktop's deb and
+AppImage are separate downloads, `https://get.jasonharness.ai/desktop/linux-deb` and `/desktop/linux-appimage`. If
+they ask you to install it, follow that page yourself, by its section for an agent: a package where the page names one
+for this platform and its package manager is already there, otherwise the install script on macOS and Windows, and on
+Linux the steps it gives by hand. That section also says what to offer them on Linux, and what to do when they take
+Jason Desktop there. Never pipe a download into a shell, and
 ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
 you, hand them the lines to type.
 
@@ -493,12 +496,15 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-Each script works out the platform, verifies the download's SHA-256 before unpacking it, installs the executable
-under the person's own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on Windows —
-and puts that directory on the `PATH` unless `--no-modify-path` is passed. Then the executable it installed deploys
-the role skills from the release's package of them; where that fails, Jason is still installed, one line says so,
-and `jason status` names the line to run. Nothing needs
-administrator rights.
+Each script works out the platform and verifies the download's SHA-256 before it places anything. On macOS and
+Windows it installs Jason Desktop, its signature checked too, opens nothing, and has the `jason` the application
+carries put `jason` in the terminal, give every agent host it finds Jason's skills, retire an older command-line
+install and deploy the role skills; it ends non-zero, saying which act failed, when `jason` is not in the terminal,
+and its last line is the full path of `jason`, which a shell already open, yours included, calls it by. On Linux it
+installs the executable under the person's own account, in `~/.local/bin`, and puts that directory on the `PATH`
+unless `--no-modify-path` is passed; then the executable it installed deploys the role skills from the release's
+package of them; where that fails, Jason is still installed, one line says so, and `jason status` names the line to
+run. Nothing needs administrator rights.
 
 Both lines install the latest release. If either answers 404, the release could not be reached: say that, as it
 stands, and that there is nothing to build instead. Do not paste a line again in the hope of a different answer.
@@ -576,6 +582,12 @@ jason uninstall
 ```
 
 Show the dry run first: it prints exactly what would go and changes nothing.
+
+On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed — the terminal
+command, the skills of every agent host, Open Jason at Login — and an older command-line install, and deletes the
+application last. It is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu on
+macOS. Run from a terminal while Jason Desktop is open, it refuses with `desktop_running` before anything is removed:
+say so, and ask the person to quit Jason, rather than closing it yourself. The harness root is never touched.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and the verb removes those skills and nothing else. **A skill somebody copied into a harness by hand has
