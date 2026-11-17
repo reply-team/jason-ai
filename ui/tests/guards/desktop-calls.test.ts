@@ -24,6 +24,7 @@ describe('the members of the desktop', () => {
         expect([...members.parts.keys()]).toEqual(
             expect.arrayContaining([
                 'theme',
+                'updates',
                 'dailyTrends',
                 'mode',
                 'openIn',

@@ -44,6 +44,19 @@ export const bindings: readonly Binding[] = [
     { label: 'Developer Tools', accelerator: 'F12', does: { window: 'devtools' } },
 ];
 
+/**
+ * The keys of the Jason menu's two items that a window with no menu bar, on a desktop that shows no tray, leaves no
+ * other way to: the update item (Check for Updates…, then Download and Restart to Install as the update goes on) and
+ * Back to Your Own Installation, the way out of the Demo. Each collides with no other key of the window; Ctrl+Shift+U,
+ * the obvious one for an update, is GNOME's input method's own for a Unicode character while a text field has the focus.
+ */
+export const itemKeys = { update: 'CmdOrCtrl+Shift+D', back: 'CmdOrCtrl+Shift+L' } as const;
+
+/** An accelerator as a person reads it on `platform`: Cmd on a Mac, Ctrl elsewhere. */
+export function keyWords(accelerator: string, platform: NodeJS.Platform): string {
+    return accelerator.replace(/^CmdOrCtrl\+/, platform === 'darwin' ? 'Cmd+' : 'Ctrl+');
+}
+
 /** Electron's accelerator grammar, as far as the menu uses it. */
 export const acceleratorPattern = /^(?:(?:CmdOrCtrl|CommandOrControl|Cmd|Command|Ctrl|Control|Alt|Option|Shift|Super)\+)*(?:[A-Za-z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Enter|Escape|Up|Down|Left|Right|Home|End|PageUp|PageDown|Plus|-|=|,|\.|\/|;|\[|\]|\\|`|')$/;
 

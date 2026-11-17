@@ -611,6 +611,14 @@ export interface JasonDesktop {
          */
         set(choice: 'system' | 'light' | 'dark'): Promise<void>;
     };
+    updates: {
+        /**
+         * The key of the desktop's update item as a person reads it ("Ctrl+Shift+D", "Cmd+Shift+D" on a Mac), where the
+         * item can act; null where it says "Updates Come to an Installed Build" or "Updates Come Through the Package", where
+         * the key does nothing. The page names the key only when this says one; a desktop before it names none.
+         */
+        key(): Promise<string | null>;
+    };
     dailyTrends: {
         /** Whether the desktop keeps the Dashboard's daily trends as shown (true) or hidden (false), or null when the person never chose; the page reads null as shown. */
         get(): Promise<boolean | null>;

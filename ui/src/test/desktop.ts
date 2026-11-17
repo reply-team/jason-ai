@@ -372,6 +372,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
+        updates: { key: () => Promise.resolve(null) },
         dailyTrends: {
             get: () => Promise.resolve(stub.dailyTrendsKept),
             set: (on: boolean) => {

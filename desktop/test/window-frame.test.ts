@@ -1,16 +1,15 @@
 // The window's frame: on macOS no title bar, the window's buttons placed in the 26 px band the console leaves over its
-// sidebar; on Windows no title bar either, the system's caption buttons standing over the right end of the console's
-// 38 px strip, their symbols in the theme in force; on Linux the native frame. The window must stay movable whatever
-// page it shows: on macOS and Windows the desktop puts a drag band of its own on every page the window loads, an element
-// drawn by a stylesheet of the user's origin that no page's rule outranks, and the page shown while the installation
-// comes up has one too.
+// sidebar; on Windows and Linux no title bar either, the caption buttons standing over the right end of the console's
+// 38 px strip, their symbols in the theme in force. The window must stay movable whatever page it shows: the desktop
+// puts a drag band of its own on every page the window loads, an element drawn by a stylesheet of the user's origin
+// that no page's rule outranks, and the page shown while the installation comes up has one too.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
-import { bandId, bandScript, bandStyle, bandStyleOf, darkSymbols, followTheme, frameOf, keepMovable, lightSymbols, overlayOf, stripHeight, titleBand, windowsBandStyle, windowsBandWidth } from '../src/window-frame.ts';
+import { bandId, bandScript, bandStyle, bandStyleOf, darkSymbols, followTheme, frameOf, keepMovable, lightSymbols, overlayOf, stripHeight, titleBand, overlayBandStyle, overlayBandWidth } from '../src/window-frame.ts';
 
 const desktop = join(import.meta.dirname, '..');
 
@@ -26,11 +25,13 @@ test('on macOS the window has no title bar, and its buttons sit inside the band 
     assert.deepEqual(Object.keys(frame).sort(), ['titleBarStyle', 'trafficLightPosition']);
 });
 
-test('on Windows the title bar is hidden and the caption buttons stand over the strip, as high as it, on its own ground', () => {
+test('on Windows and Linux the title bar is hidden and the caption buttons stand over the strip, as high as it, on its own ground', () => {
     assert.equal(stripHeight, 38);
-    for (const dark of [false, true]) {
-        const frame = frameOf('win32', dark);
-        assert.deepEqual(frame, { titleBarStyle: 'hidden', titleBarOverlay: overlayOf(dark) });
+    for (const platform of ['win32', 'linux'] as const) {
+        for (const dark of [false, true]) {
+            const frame = frameOf(platform, dark);
+            assert.deepEqual(frame, { titleBarStyle: 'hidden', titleBarOverlay: overlayOf(dark) }, `${platform} ${dark}`);
+        }
     }
     // The overlay's ground is transparent, so the strip it stands on shows through in either mode and theme; its symbols
     // are the theme's ink.
@@ -38,11 +39,6 @@ test('on Windows the title bar is hidden and the caption buttons stand over the 
     assert.deepEqual(overlayOf(true), { color: '#00000000', symbolColor: darkSymbols, height: 38 });
     assert.notEqual(lightSymbols, darkSymbols);
     for (const colour of [lightSymbols, darkSymbols]) assert.match(colour, /^#[0-9a-f]{6}$/);
-});
-
-test('on Linux the window keeps its native frame: nothing is set', () => {
-    assert.deepEqual(frameOf('linux', false), {});
-    assert.deepEqual(frameOf('linux', true), {});
 });
 
 /** The theme as Electron's `nativeTheme` behaves for this: `updated` after each change, and the colours it reads. */
@@ -67,39 +63,41 @@ class Overlaid extends EventEmitter {
     }
 }
 
-test('on Windows the caption buttons follow the theme in force as it changes, while the window is open', () => {
-    const theme = new Theme();
-    const window = new Overlaid();
-    followTheme(window, theme, 'win32');
-    assert.deepEqual(window.given, [], 'the window was made in the theme in force');
-    theme.change(true);
-    theme.change(false);
-    // The system's own change, under the system's theme, reaches it the same way.
-    theme.change(true);
-    assert.deepEqual(window.given, [overlayOf(true), overlayOf(false), overlayOf(true)]);
-    for (const each of window.given) assert.deepEqual(Object.keys(each as object).sort(), ['color', 'height', 'symbolColor']);
-});
-
-test('a window closed stops following the theme, and one already gone is never touched', () => {
-    const theme = new Theme();
-    const window = new Overlaid();
-    followTheme(window, theme, 'win32');
-    window.destroyed = true;
-    theme.change(true);
-    assert.deepEqual(window.given, []);
-    window.emit('closed');
-    assert.equal(theme.listenerCount('updated'), 0);
-});
-
-test('on macOS and Linux nothing follows the theme: there is no overlay to colour', () => {
-    for (const platform of ['darwin', 'linux'] as const) {
+test('on Windows and Linux the caption buttons follow the theme in force as it changes, while the window is open', () => {
+    for (const platform of ['win32', 'linux'] as const) {
         const theme = new Theme();
         const window = new Overlaid();
         followTheme(window, theme, platform);
+        assert.deepEqual(window.given, [], 'the window was made in the theme in force');
         theme.change(true);
-        assert.deepEqual(window.given, []);
-        assert.equal(theme.listenerCount('updated'), 0);
+        theme.change(false);
+        // The system's own change, under the system's theme, reaches it the same way.
+        theme.change(true);
+        assert.deepEqual(window.given, [overlayOf(true), overlayOf(false), overlayOf(true)], platform);
+        for (const each of window.given) assert.deepEqual(Object.keys(each as object).sort(), ['color', 'height', 'symbolColor']);
     }
+});
+
+test('a window closed stops following the theme, and one already gone is never touched', () => {
+    for (const platform of ['win32', 'linux'] as const) {
+        const theme = new Theme();
+        const window = new Overlaid();
+        followTheme(window, theme, platform);
+        window.destroyed = true;
+        theme.change(true);
+        assert.deepEqual(window.given, [], platform);
+        window.emit('closed');
+        assert.equal(theme.listenerCount('updated'), 0, platform);
+    }
+});
+
+test('on macOS nothing follows the theme: there is no overlay to colour', () => {
+    const theme = new Theme();
+    const window = new Overlaid();
+    followTheme(window, theme, 'darwin');
+    theme.change(true);
+    assert.deepEqual(window.given, []);
+    assert.equal(theme.listenerCount('updated'), 0);
 });
 
 test('every window is made with the frame of the platform it runs on, the Demo’s too', () => {
@@ -131,12 +129,12 @@ test('the theme in force is set before the frame’s options are built, in Live 
     }
 });
 
-test('the console leaves the Windows band its width: the strip’s padding names the same number as the band', () => {
+test('the console leaves the band beside the caption buttons its width: the strip’s padding names the same number as the band', () => {
     const css = readFileSync(join(desktop, '..', 'ui', 'src', 'console', 'console.css'), 'utf8');
-    const rule = /\.jc-console\.desktop-win \.mode-strip\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const rule = /\.jc-console\.desktop-overlay \.mode-strip\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     const padding = /padding-right:\s*calc\(12px \+ (\d+)px \+ 100vw - env\(titlebar-area-x, 0px\) - env\(titlebar-area-width, 100vw\)\);/.exec(rule);
     assert.ok(padding, rule);
-    assert.equal(Number(padding[1]), windowsBandWidth);
+    assert.equal(Number(padding[1]), overlayBandWidth);
 });
 
 test('Live’s window follows the theme as it is made; the Demo’s is drawn light and never changes it', () => {
@@ -237,24 +235,26 @@ test('the band is a box over the window buttons’ band, above everything, the d
     });
 });
 
-test('on Windows every document the window loads gets the desktop’s drag band too, in the Windows place', () => {
+test('on Windows and Linux every document the window loads gets the desktop’s drag band too, beside the caption buttons', () => {
     assert.equal(bandStyleOf('darwin'), bandStyle);
-    assert.equal(bandStyleOf('win32'), windowsBandStyle);
-    assert.equal(bandStyleOf('linux'), null);
-    const contents = new Contents();
-    keepMovable({ webContents: contents }, 'win32');
-    contents.emit('dom-ready');
-    contents.emit('dom-ready');
-    assert.deepEqual(contents.inserted, [
-        { css: windowsBandStyle, origin: 'user' },
-        { css: windowsBandStyle, origin: 'user' },
-    ]);
-    assert.deepEqual(contents.ran, [bandScript, bandScript]);
+    assert.equal(bandStyleOf('win32'), overlayBandStyle);
+    assert.equal(bandStyleOf('linux'), overlayBandStyle);
+    for (const platform of ['win32', 'linux'] as const) {
+        const contents = new Contents();
+        keepMovable({ webContents: contents }, platform);
+        contents.emit('dom-ready');
+        contents.emit('dom-ready');
+        assert.deepEqual(contents.inserted, [
+            { css: overlayBandStyle, origin: 'user' },
+            { css: overlayBandStyle, origin: 'user' },
+        ]);
+        assert.deepEqual(contents.ran, [bandScript, bandScript]);
+    }
 });
 
-test('the Windows band stands left of the caption buttons, as high as they are, read from the overlay’s own geometry', () => {
-    const rule = new RegExp(`^#${bandId}\\s*\\{([^}]*)\\}$`).exec(windowsBandStyle.trim());
-    assert.ok(rule, windowsBandStyle);
+test('the band beside the caption buttons stands left of them, as high as they are, read from the overlay’s own geometry', () => {
+    const rule = new RegExp(`^#${bandId}\\s*\\{([^}]*)\\}$`).exec(overlayBandStyle.trim());
+    assert.ok(rule, overlayBandStyle);
     const declarations = rule[1]!
         .split(';')
         .map((each) => each.trim())
@@ -266,15 +266,15 @@ test('the Windows band stands left of the caption buttons, as high as they are, 
             return [each.slice(0, at).trim(), each.slice(at + 1).replace(/\s*!important$/, '').trim()];
         }),
     );
-    assert.equal(windowsBandWidth, 40);
+    assert.equal(overlayBandWidth, 40);
     assert.deepEqual(said, {
         display: 'block',
         visibility: 'visible',
         position: 'fixed',
         // The free title bar area ends where the buttons begin; without an overlay the band falls back to the corner.
         top: 'env(titlebar-area-y, 0px)',
-        left: `calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 100vw) - ${windowsBandWidth}px)`,
-        width: `${windowsBandWidth}px`,
+        left: `calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 100vw) - ${overlayBandWidth}px)`,
+        width: `${overlayBandWidth}px`,
         height: `env(titlebar-area-height, ${stripHeight}px)`,
         margin: '0',
         padding: '0',
@@ -283,15 +283,6 @@ test('the Windows band stands left of the caption buttons, as high as they are, 
         'z-index': '2147483647',
         '-webkit-app-region': 'drag',
     });
-});
-
-test('on Linux, whose window keeps its frame, nothing is added', () => {
-    const contents = new Contents();
-    keepMovable({ webContents: contents }, 'linux');
-    contents.emit('dom-ready');
-    assert.deepEqual(contents.inserted, []);
-    assert.deepEqual(contents.ran, []);
-    assert.equal(contents.listenerCount('dom-ready'), 0);
 });
 
 test('the window keeps itself movable as it is made', () => {

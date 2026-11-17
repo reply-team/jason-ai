@@ -144,14 +144,35 @@ describe('System, the update sentence', () => {
         expect(screen.getByText(/jason update apply/)).toBeTruthy();
     });
 
-    it("in the desktop names the desktop's own update and not the terminal command", async () => {
+    it("in the desktop names the desktop's own update, by its menu item, and by its key where the desktop says the item can act", async () => {
+        for (const key of ['Ctrl+Shift+D', 'Cmd+Shift+D', null]) {
+            recorded.update = update;
+            window.jasonDesktop = { platform: 'linux', updates: { key: async () => key } } as unknown as NonNullable<
+                typeof window.jasonDesktop
+            >;
+            systemFake();
+            await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
+            expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
+            expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
+            expect(screen.queryByText(/jason update apply/)).toBeNull();
+            if (key === null) {
+                // Updates Come to an Installed Build, or Through the Package: the key would do nothing, so none is named.
+                await act(async () => undefined);
+                expect(screen.queryByText(/or press/)).toBeNull();
+            } else {
+                await waitFor(() =>
+                    expect(screen.getByText(new RegExp(`or press ${key.replace(/\+/g, '\\+')}\\.`))).toBeTruthy(),
+                );
+            }
+            cleanup();
+        }
+        // A desktop from before the key says nothing of it, and the notice names none.
         recorded.update = update;
-        window.jasonDesktop = {} as NonNullable<typeof window.jasonDesktop>;
+        window.jasonDesktop = { platform: 'linux' } as NonNullable<typeof window.jasonDesktop>;
         systemFake();
         await waitFor(() => expect(screen.getByText(/Jason 9\.9\.9 is available/)).toBeTruthy());
-        expect(screen.getByText(/Check for Updates…/)).toBeTruthy();
-        expect(screen.getByText(/updates itself and the jason it carries/)).toBeTruthy();
-        expect(screen.queryByText(/jason update apply/)).toBeNull();
+        await act(async () => undefined);
+        expect(screen.queryByText(/or press/)).toBeNull();
     });
 });
 

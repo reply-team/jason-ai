@@ -945,7 +945,7 @@ test('a provider\'s key reaches the host\'s environment only, and an Anthropic-c
     for (const host of [compatible, anthropic]) assert.ok(!host?.args.some((arg) => arg.includes('sk-planted')), 'a key is never on the command line');
 });
 
-test('a key provider\'s turn is started without the provider the desktop inherited, and a plain turn with it; every Claude Code turn scrubs', async (t) => {
+test('a key provider\'s turn is started without the provider the desktop inherited, and a plain turn with it', async (t) => {
     const r = rig(t);
     Object.assign(r.b.env, { ANTHROPIC_API_KEY: 'sk-inherited', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'inherited-haiku', OPENAI_BASE_URL: 'https://inherited.example/v1' });
     r.keys.deepseek = 'sk-planted-deepseek';
@@ -964,8 +964,19 @@ test('a key provider\'s turn is started without the provider the desktop inherit
     assert.equal(openai?.env.CODEX_API_KEY, 'sk-planted-openai');
     assert.equal(openai?.env.OPENAI_API_KEY, undefined);
     assert.equal(codex?.env.OPENAI_BASE_URL, 'https://inherited.example/v1');
-    for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, '1');
     for (const host of [deepseek, claude]) assert.equal(host?.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, '1');
+});
+
+test('a Claude Code turn scrubs the commands it runs on macOS, keyed or not, and on Linux never', async (t) => {
+    for (const platform of ['darwin', 'linux'] as const) {
+        const r = rig(t, { chat: { platform } });
+        Object.assign(r.b.env, { CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0' });
+        r.keys.deepseek = 'sk-planted-deepseek';
+        await r.turn('c1', words, { host: 'deepseek' });
+        await r.turn('c2', words, { host: 'claude' });
+        assert.equal(r.hosts().length, 2, platform);
+        for (const host of r.hosts()) assert.equal(host.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, platform === 'linux' ? undefined : '1', platform);
+    }
 });
 
 test('a keyed turn runs in a host folder of the desktop\'s own with no sign-in in it: per provider for Claude Code, one for Codex', async (t) => {

@@ -236,6 +236,8 @@ export interface SetupDeps {
     runtimeVersion(): string | null;
     /** Whether the runtime runs from the jason the desktop carries (`own-runtime.ts`), as the start found it; absent, it does not. */
     runtimeIsOurs?(): boolean;
+    /** The update item's key as a person reads it where the item can act, null where not (`updateKeyWords`); absent, null. */
+    updateKey?(): string | null;
     settings(): DesktopSettings;
     /**
      * Writes the desktop's own settings whole, and holds them as `settings()` answers from then on: the mark of a profile
@@ -344,14 +346,14 @@ export function settingsUnreadable(stdout: string): string | null {
  * the desktop carries is brought to one version by the desktop's own update, since `jason update` refuses to change a
  * carried file; another installation's runtime by `jason update`.
  */
-export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean): string | null {
+export function versionsDifferSentence(runtimeVersion: string | null, bundleVersion: string, ours: boolean, key: string | null): string | null {
     // A build after a plus names the commit, not another version.
     const bare = (version: string) => version.split('+')[0];
     if (runtimeVersion === null || bare(runtimeVersion) === bare(bundleVersion)) return null;
-    // A Windows or Linux window shows no menu bar, so the tray's menu is named too, in the CLI's own words.
-    const way = ours
-        ? "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray,"
-        : 'Run `jason update`';
+    // A Windows or Linux window shows no menu bar, so the tray's menu is named too, and the item's key, which a desktop
+    // that shows no tray leaves as the one way in; the key only where the item can act (`updateKeyWords`).
+    const menu = "Choose Check for Updates… in the desktop's Jason menu, or in the menu of its icon in the tray";
+    const way = ours ? (key === null ? menu : `${menu}, or press ${key},`) : 'Run `jason update`';
     return `The runtime is ${runtimeVersion} and this desktop carries ${bundleVersion}, so the UI the runtime serves is shown as it is. ${way} to bring them to one version.`;
 }
 
@@ -542,7 +544,7 @@ export class Setup {
             reply: await this.#reply(answered.get('reply')?.valid ?? false),
             runtimeVersion,
             bundleVersion: this.#deps.bundleVersion,
-            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false),
+            versionsDiffer: versionsDifferSentence(runtimeVersion, this.#deps.bundleVersion, this.#deps.runtimeIsOurs?.() ?? false, this.#deps.updateKey?.() ?? null),
             plugins: bundledPlugins.map((plugin) => ({
                 id: plugin.id,
                 label: plugin.label,
