@@ -617,7 +617,8 @@ a card that does not hold what its kind needs is drawn as one line saying so, an
 - **Jason asks**: a question with two to five answers; a click sends that answer's words as your next message.
 - **People**: up to ten people of an agent, or of everyone, as the runtime lists them.
 - **Agent**: how one agent is doing, its counts now and over the last thirty days.
-- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
+- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them; a read
+  that finds nothing waiting is headed **Your decisions** instead.
 - **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
 - **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
   Connect**.

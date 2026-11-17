@@ -130,3 +130,35 @@ export function keptAndMissing<T>(
     }
     return { kept, missing };
 }
+
+/**
+ * An approval this chat's card approved: what it was, who it reaches, and how its work stands as the runtime last said:
+ * `approved` while the work has not ended, then `done` (the work item succeeded), `failed` or `cancelled`.
+ */
+export interface Approved {
+    readonly approvalId: string;
+    readonly workItemId: string;
+    readonly operation: string;
+    readonly what: string;
+    readonly to: string | null;
+    readonly state: 'approved' | 'done' | 'failed' | 'cancelled';
+}
+
+/**
+ * What the chat says of an approval its card approved: what it was and to whom, then how its work stands. Only a
+ * message is said to be sent, and only once its work succeeded; any other act is said done.
+ */
+export function approvedSentence(each: Approved): string {
+    const what = `${each.what}${each.to === null ? '' : ` to ${each.to}`}`;
+    const sends = isMessage(each.operation);
+    switch (each.state) {
+        case 'approved':
+            return `You approved: ${what}. ${sends ? 'Jason is sending it.' : 'Jason is doing it.'}`;
+        case 'done':
+            return `You approved: ${what}. ${sends ? 'It was sent.' : 'It is done.'}`;
+        case 'failed':
+            return `You approved: ${what}. ${sends ? 'It was not sent' : 'It did not complete'}: the work failed.`;
+        case 'cancelled':
+            return `You approved: ${what}. ${sends ? 'It was not sent' : 'It did not complete'}: the work was cancelled.`;
+    }
+}

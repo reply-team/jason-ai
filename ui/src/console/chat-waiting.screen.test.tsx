@@ -746,10 +746,15 @@ describe('what waits in an agent’s chat', () => {
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
-        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
+        // The work item is read at the press, to check the text, and again once approved, to say how its work stands.
+        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }, { work_item_id: 'wi_1' }]);
         expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
         // Approving sends no reason, as Needs you does; the questions still wait.
         expect(card(pane, 'dec_1')).not.toBeNull();
+        // The chat keeps what was approved, and does not say it was sent while the work has not ended.
+        const said = await waitFor(() => within(waiting(pane)).getByText(/^You approved: /));
+        expect(words(said)).toMatch(/^You approved: Message to .+\. Jason is sending it\.$/);
+        expect(words(said)).not.toMatch(/was sent/);
     });
 
     it('does not approve a message whose text moved since it was asked, and says so', async () => {

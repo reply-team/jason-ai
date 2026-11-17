@@ -769,6 +769,58 @@ describe('the console', () => {
         expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull();
     });
 
+    it('says a turn parked on a permission card waits for the person, and thinks again once it is answered', async () => {
+        const fake = pending(new FakeApi());
+        const { desktop } = renderConsole(fake);
+        await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+        await waitFor(() => expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true));
+        const id = desktop.calls.find((each) => each.name === 'chat.send')!.args[0] as string;
+        expect(screen.getByText('Thinking…')).toBeTruthy();
+        flush(() => {
+            desktop.emit(id, {
+                kind: 'permission',
+                request: 'req_1',
+                title: 'Run a command',
+                detail: 'jason x',
+                remember: null,
+            });
+        });
+        await waitFor(() => screen.getByText('Run a command'));
+        const line = document.querySelector<HTMLElement>('.typing')!;
+        expect(line.textContent!.trim()).toBe('Waiting for your answer on the card above.');
+        expect(line.querySelector('.spin')).toBeNull();
+        expect(screen.queryByText('Thinking…')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+        await waitFor(() => screen.getByText('Thinking…'));
+        expect(screen.queryByText(/Waiting for your answer/)).toBeNull();
+    });
+
+    it('brings a sent message into view at the foot of the conversation, and leaves a merely opened thread alone', async () => {
+        const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return this.classList.contains('chat-scroll') ? 900 : 0;
+            },
+        });
+        try {
+            const fake = pending(new FakeApi());
+            const { desktop } = renderConsole(fake);
+            await waitFor(() => screen.getByRole('textbox', { name: 'Your message' }));
+            const box = () => document.querySelector<HTMLElement>('.chat-scroll')!;
+            expect(box().scrollTop).toBe(0);
+            fireEvent.change(screen.getByRole('textbox', { name: 'Your message' }), { target: { value: 'Go' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+            await waitFor(() => expect(box().scrollTop).toBe(900));
+            expect(desktop.calls.some((each) => each.name === 'chat.send')).toBe(true);
+        } finally {
+            if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
+            else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+        }
+    });
+
     it('shows a failed sign-in in the host own words, with how to sign in under it', async () => {
         const fake = pending(new FakeApi());
         const { desktop } = renderConsole(fake);

@@ -10,7 +10,14 @@ import { Doubts } from '../screens/send-modes/doubts';
 import { attention } from './needs';
 import { senderReads, type SenderReads } from './senders';
 import { clock, here } from './state';
-import { approvalGate, readingSentence, toApprovalCard, toQuestionCard, unreadSentence } from './waiting-model';
+import {
+    approvalGate,
+    approvedSentence,
+    readingSentence,
+    toApprovalCard,
+    toQuestionCard,
+    unreadSentence,
+} from './waiting-model';
 import {
     answerWaiting,
     approveWaiting,
@@ -74,7 +81,11 @@ function ApprovalCardView({ waiting, row, senders }: { waiting: Waiting; row: Ap
     // not approved, since the runtime asks again with the new text.
     async function approve() {
         setProblem(null);
-        const why = await approveWhole(api, whole, () => approveWaiting(api, waiting, row.id), setChecking);
+        const act =
+            whole === undefined
+                ? undefined
+                : { workItemId: whole.work_item_id, operation: whole.operation, what: card.what, to: card.to };
+        const why = await approveWhole(api, whole, () => approveWaiting(api, waiting, row.id, act), setChecking);
         if (why !== null) setProblem(why);
     }
 
@@ -349,12 +360,20 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const questions = store.questions.value;
     const refused = waiting.refused.value;
     const reasked = waiting.reasked.value;
+    const approved = waiting.approved.value;
     // What the runtime refused, with its code: an act's refusal stays until the next act; a read that failed, until the
     // next read.
     const failure = store.failure.value;
     const said = refused ?? (failure === null ? null : { code: store.failureCode.value, message: failure });
     const more = store.approvalsCursor.value !== null || store.questionsCursor.value !== null;
-    if (approvals.length === 0 && questions.length === 0 && reasked.length === 0 && said === null) return null;
+    if (
+        approvals.length === 0 &&
+        questions.length === 0 &&
+        reasked.length === 0 &&
+        approved.length === 0 &&
+        said === null
+    )
+        return null;
     return (
         <section className="chat-waiting-for" aria-label="Waiting for you">
             <div className="lab">Waiting for you</div>
@@ -368,6 +387,11 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
             ))}
             {approvals.map((row) => (
                 <ApprovalCardView key={row.id} waiting={waiting} row={row} senders={senders} />
+            ))}
+            {approved.map((each) => (
+                <div key={each.approvalId} className="note chat-note approved-line" role="status">
+                    {approvedSentence(each)}
+                </div>
             ))}
             {reasked.length > 0 && (
                 <div className="note chat-note" role="status">
