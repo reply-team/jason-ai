@@ -61,6 +61,36 @@ public static partial class CommandFiles
     /// <summary>Whether a file's text is one of the application's command files, of either shape.</summary>
     public static bool IsOurs(string text) => WrapperTarget(text) is not null || ShimTarget(text) is not null;
 
+    /// <summary>Whether a path is a regular file, no link: what a command file of the application's is.</summary>
+    public static bool IsRegularFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists && file.LinkTarget is null;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The text of a small file, or null for one that is larger than a command file ever is, or cannot be read.</summary>
+    public static string? ReadSmall(string path)
+    {
+        try
+        {
+            return new FileInfo(path).Length > 64 * 1024 ? null : File.ReadAllText(path);
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a path is a regular file holding the application's wrapper.</summary>
+    public static bool IsWrapperFile(string path) => IsRegularFile(path) && ReadSmall(path) is { } text && WrapperTarget(text) is not null;
+
     private static string ShellQuote(string value) => "'" + value.Replace("'", @"'\''", StringComparison.Ordinal) + "'";
 
     private static string Unquote(string value) => value.Replace(@"'\''", "'", StringComparison.Ordinal);
