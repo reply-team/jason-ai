@@ -529,17 +529,15 @@ public static class UpdateCommands
         }
 
         // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop,
-        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more. The
-        // lock is taken only where an update could hold it, as `jason install` takes it: its folder is never made for it.
+        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more. A
+        // fresh machine was turned away above, so here an installation is there, and the lock is always taken, its folder made
+        // for it where it is not there yet: the finish writes into the installation, and nothing else may beside it.
         if (finish && !continuing && unread is null && inFlight is null)
         {
-            UpdateLock? held = null;
+            UpdateLock held;
             try
             {
-                if (Directory.Exists(paths.Root))
-                {
-                    held = UpdateLock.Take(paths, "the finishing step", handed);
-                }
+                held = UpdateLock.Take(paths, "the finishing step", handed);
             }
             catch (UpdateException refused)
             {

@@ -171,26 +171,50 @@ public sealed class UpdateFinishInstalledTests
     }
 
     /// <summary>
-    /// An installation whose data directory has no <c>update/</c> folder yet: the finishing step does its parts and takes no
-    /// lock there, so it makes no <c>update/</c> for one, as <c>jason install</c> does not.
+    /// An installation whose data directory has no <c>update/</c> folder yet: the finishing step writes into the installation,
+    /// so it takes the update's lock all the same, making the folder for it, and holds it while it reads the release; an update
+    /// beside it could not take it in that moment. Only a data directory holding nothing but the Desktop's own is left as it is.
     /// </summary>
     [Fact]
-    public async Task An_installation_with_no_update_folder_is_finished_without_making_one()
+    public async Task An_installation_with_no_update_folder_is_finished_under_the_lock()
     {
         var (installation, desktop) = FakeDesktop.Carried(to: SemanticVersion.Current);
         using var _ = installation;
         using var __ = desktop;
-        var update = Path.Combine(installation.Paths.Root, "update");
-        if (Directory.Exists(update))
+        var update = new UpdatePaths(installation.Paths);
+        if (Directory.Exists(update.Root))
         {
-            Directory.Delete(update, recursive: true);
+            Directory.Delete(update.Root, recursive: true);
         }
+
+        var heldWhileAsked = new List<bool>();
+        installation.Release.OnRequest = _ => heldWhileAsked.Add(Held(update.Lock));
 
         var report = await FinishAsync(installation);
 
         Assert.True(report.DataDirFound);
-        Assert.NotEmpty(installation.Release.Requested);
-        Assert.False(Directory.Exists(update), "the finishing step made the update folder for its lock");
+        Assert.NotEmpty(heldWhileAsked);
+        Assert.All(heldWhileAsked, held => Assert.True(held, "the release was read with the update's lock not held"));
+        Assert.False(Held(update.Lock), "the lock outlived the finishing step");
+    }
+
+    /// <summary>Whether another process holds the lock: an open that shares nothing is refused while it does.</summary>
+    private static bool Held(string file)
+    {
+        if (!File.Exists(file))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var _ = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return false;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
     }
 
     private static string[] Listing(string root) =>

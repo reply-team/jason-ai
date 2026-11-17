@@ -1208,8 +1208,8 @@ It starts and stops no runtime: where a package changed and a runtime answers, i
 asks, and where none answers the package loads at the runtime's next start. Run again it changes nothing and says each
 part is there already. Where no data directory exists — a machine that only ever opened the Demo — it does nothing,
 makes nothing under one, asks nothing of the network, and says so; and so it does where the data directory holds nothing
-of an installation but Jason Desktop's own folder and its log, as on the Desktop's first start. It takes the update's lock
-only where `<data>/update` exists, as `jason install` does, and never makes that folder for it. Where the release cannot be read, it says what it
+of an installation but Jason Desktop's own folder and its log, as on the Desktop's first start. Wherever an installation
+is there it runs under the update's lock, making `<data>/update` for it where that is not there yet. Where the release cannot be read, it says what it
 could not do and changes nothing of that part. It exits 0 with one document whenever it could run, and the document says
 what became of each part:
 
