@@ -111,21 +111,15 @@ stand-in)
     # A copy of install.sh whose one line naming what a signature must satisfy names this test build's own ad hoc
     # signature instead of the release's team, and differs from install.sh in nothing else: counted, or nothing is written.
     app="$1"; copy="$2"
-    line="$(grep -n 'BD8M7U5YBV' install/install.sh || true)"
-    [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || fail "install.sh does not name the release's team in exactly one line"
+    line="$(grep -n 'anchor apple generic' install/install.sh || true)"
+    [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || fail "install.sh does not name what a signature must satisfy in exactly one line"
     number="${line%%:*}"
     text="${line#*:}"
-    team="$(codesign --display --verbose=2 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+    printf '%s\n' "$text" | grep -Eq "^[A-Z_]+='[^'\$]*'\$" || fail "install.sh names what a signature must satisfy in a line that is not one plain assignment: $text"
     cdhash="$(codesign --display --verbose=3 "$app" 2>&1 | sed -n 's/^CDHash=//p' | head -n 1)"
     [ -n "$cdhash" ] || fail "codesign names no CDHash for $app"
-    case "$text" in
-        # The team alone, compared with what codesign names: the ad hoc signature's own word for none.
-        APP_TEAM=*) standin="APP_TEAM=\"$team\"" ;;
-        # A requirement held in a variable: this build's own code, by its hash.
-        [A-Z_]*=*) standin="${text%%=*}='cdhash H\"$cdhash\"'" ;;
-        # A requirement written into the codesign call: the same, in its place.
-        *) standin="$(STANDIN="cdhash H\"$cdhash\"" perl -pe 's/-R=(["\x27]).*?BD8M7U5YBV.*?\1/-R=\x27$ENV{STANDIN}\x27/' <<< "$text")" ;;
-    esac
+    # This build's own code, by its hash: the one requirement its ad hoc signature satisfies.
+    standin="${text%%=*}='cdhash H\"$cdhash\"'"
     awk -v n="$number" -v s="$standin" 'NR == n { print s; next } { print }' install/install.sh > "$copy"
     diff install/install.sh "$copy" || true
     [ "$(diff install/install.sh "$copy" | grep -c '^[<>]' || true)" = 2 ] || fail "the copy differs from install.sh in more than the one line naming the signature"
