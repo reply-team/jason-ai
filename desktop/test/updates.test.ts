@@ -20,12 +20,13 @@ import {
     parseRollbackState,
     readRollback,
     rollbackStateFile,
+    settleByRequest,
     settleFailedStart,
     settleStart,
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -101,13 +102,14 @@ function fakeUpdater(answers: { latest?: string; fails?: () => boolean; inactive
             if (answers.fails?.()) throw new Error('planted-download-error');
             return ['planted-download-path'];
         },
-        quitAndInstall() {
-            calls.push('quitAndInstall');
+        quitAndInstall(...args: unknown[]) {
+            // The person's click calls it with nothing; a terminal's request names the silent install and no start after it.
+            calls.push(args.length === 0 ? 'quitAndInstall' : `quitAndInstall(${args.join(', ')})`);
             // electron-updater's install() returning false: it dispatches the error synchronously and does not quit.
             if (answers.installFails) for (const listener of [...listeners]) listener(new Error('planted-install-error'));
         },
     };
-    for (const name of ['autoDownload', 'autoInstallOnAppQuit', 'allowPrerelease', 'allowDowngrade', 'channel', 'logger']) {
+    for (const name of ['autoDownload', 'autoInstallOnAppQuit', 'allowPrerelease', 'allowDowngrade', 'channel', 'logger', 'autoRunAppAfterInstall']) {
         Object.defineProperty(updater, name, {
             get: () => fields[name],
             set: (value: unknown) => {
@@ -700,4 +702,196 @@ test('the updater’s log lines, read back, carry versions, steps and counts, ne
         'update_downloaded',
         'update_installing',
     ]);
+});
+
+// ---- A terminal's request (`update-request.ts`): `take` ------------------------------------------------------------
+
+/** Runs `take` on an updater that never started its cadence, as a window-less start's, recording each step heard. */
+async function taking(s: ReturnType<typeof scratch>, updater: ReturnType<typeof fakeUpdater>, request: { to: string; feed: string | null }, how: { install: boolean; late?: () => void }, extra: Parameters<typeof updaterOn>[2] = {}) {
+    const on = updaterOn(s, updater, extra);
+    on.updates.prepare();
+    const steps: TakenStep[] = [];
+    const outcome = await on.updates.take(request, how, (step) => void steps.push(step));
+    return { ...on, steps, outcome, updater };
+}
+
+test('a request installs the version it names silently, with no start after it: the runtime stopped, the copy kept, then the installer', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { outcome, steps, order, told, updates } = await taking(s, updater, { to: '0.35.0', feed: null }, { install: true });
+    const copy = join(s.rollback, '0.34.0', 'Jason');
+    assert.deepEqual(outcome, { state: 'installing', offered: '0.35.0', runtimeStopped: false, kept: copy });
+    assert.deepEqual(steps, [{ step: 'checking' }, { step: 'downloading', offered: '0.35.0' }, { step: 'installing', runtimeStopped: false, kept: copy }]);
+    // electron-updater's quitAndInstall(isSilent, isForceRunAfter): on Windows --updated /S and no --force-run; on macOS
+    // autoRunAppAfterInstall off quits the application once Squirrel has the update, and starts nothing.
+    assert.deepEqual(updater.calls, ['check', 'download', 'quitAndInstall(true, false)']);
+    assert.equal(updater.autoRunAppAfterInstall, false);
+    assert.deepEqual(order, ['stopRuntime', 'beforeInstall'], 'the runtime is stopped before anything closes');
+    assert.deepEqual(readRollback(s.rollback), { pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy }, rejected: [] });
+    assert.deepEqual(told, [], 'nothing is shown to a person: the request file is the answer');
+    assert.deepEqual(updates.current, { step: 'installing', version: '0.35.0' });
+});
+
+test('a request names its own feed for its look, and the releases are read again after a refusal', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const loop = 'http://127.0.0.1:8123/';
+    const { outcome } = await taking(s, updater, { to: '0.36.0', feed: loop }, { install: true });
+    assert.deepEqual(updater.feeds, [feed, loop, feed], 'the feed is the request one for the look, and the releases after it');
+    assert.deepEqual(outcome, { state: 'refused', reason: 'version_mismatch', offered: '0.35.0', runtimeStopped: false, kept: null });
+    assert.deepEqual(updater.calls, ['check'], 'nothing is downloaded when the feed offers another version');
+});
+
+test('a feed that offers no newer version, a request for the version that runs, and a version that failed here before', async (t) => {
+    const none = await taking(scratch(t), fakeUpdater({ latest: '0.34.0' }), { to: '0.35.0', feed: null }, { install: true });
+    assert.deepEqual(none.outcome, { state: 'refused', reason: 'version_mismatch', offered: '0.34.0', runtimeStopped: false, kept: null });
+    const current = await taking(scratch(t), fakeUpdater({ latest: '0.35.0' }), { to: '0.34.0', feed: null }, { install: true });
+    assert.deepEqual(current.outcome, { state: 'current' });
+    assert.deepEqual(current.steps, []);
+    const s = scratch(t);
+    writeRollback(s.rollback, { rejected: ['0.35.0'] });
+    const rejected = await taking(s, fakeUpdater({ latest: '0.35.0' }), { to: '0.35.0', feed: null }, { install: true });
+    assert.deepEqual(rejected.outcome, { state: 'refused', reason: 'version_rejected', offered: null, runtimeStopped: false, kept: null });
+    const inactive = await taking(scratch(t), fakeUpdater({ latest: '0.35.0', inactive: true }), { to: '0.35.0', feed: null }, { install: true });
+    assert.deepEqual(inactive.outcome, { state: 'refused', reason: 'updater_inactive', offered: null, runtimeStopped: false, kept: null });
+});
+
+test('a look or a download that fails refuses the request, logged by its step and never by its text', async (t) => {
+    const look = await taking(scratch(t), fakeUpdater({ latest: '0.35.0', fails: () => true }), { to: '0.35.0', feed: null }, { install: true });
+    assert.deepEqual(look.outcome, { state: 'refused', reason: 'check_failed', offered: null, runtimeStopped: false, kept: null });
+    assert.deepEqual(look.updates.current, { step: 'idle' });
+    let calls = 0;
+    const updater = fakeUpdater({ latest: '0.35.0', fails: () => (calls += 1) > 1 });
+    const download = await taking(scratch(t), updater, { to: '0.35.0', feed: null }, { install: true });
+    assert.deepEqual(download.outcome, { state: 'refused', reason: 'download_failed', offered: '0.35.0', runtimeStopped: false, kept: null });
+    assert.deepEqual(download.updates.current, { step: 'offered', version: '0.35.0' });
+    for (const line of [...look.log.lines, ...download.log.lines]) assert.doesNotMatch(JSON.stringify(line), /planted|https?:/);
+});
+
+test('a window that may not close stops at the download: the update waits under its install item, and nothing is stopped or kept', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { outcome, order, updates } = await taking(s, updater, { to: '0.35.0', feed: null }, { install: false });
+    assert.deepEqual(outcome, { state: 'refused', reason: 'window_open', offered: '0.35.0', runtimeStopped: false, kept: null });
+    assert.deepEqual(order, [], 'the runtime is not stopped and nothing closes');
+    assert.equal(existsSync(s.rollback), false, 'nothing is kept aside');
+    assert.deepEqual(updates.current, { step: 'downloaded', version: '0.35.0' });
+    assert.deepEqual(menuItemOf(updates.current, true, true), { label: 'Restart Jason and Its Runtime to Install 0.35.0', enabled: true, act: 'install' });
+    // The person's click then installs as it always did: no silent switch, the application started again after it.
+    assert.equal(await updates.install(), true);
+    assert.equal(updater.calls.at(-1), 'quitAndInstall');
+});
+
+test('a request for the version already downloaded takes the download as it is', async (t) => {
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const again = updaterOn(scratch(t), updater);
+    again.updates.start();
+    await again.timers.fire();
+    await again.updates.download();
+    const outcome = await again.updates.take({ to: '0.35.0', feed: null }, { install: true }, () => undefined);
+    assert.equal(outcome.state, 'installing');
+    assert.deepEqual(updater.calls, ['check', 'download', 'quitAndInstall(true, false)']);
+});
+
+test('a window cadence is held while a request is taken and looks again after a refusal; a request meets a step under way as busy', async (t) => {
+    const s = scratch(t);
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const { updates, timers } = updaterOn(s, updater);
+    updates.start();
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [firstCheckMs]);
+    const outcome = await updates.take({ to: '0.36.0', feed: null }, { install: true }, () => undefined);
+    assert.equal(outcome.state, 'refused');
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [updateCheckInterval], 'one look scheduled again, none left from before');
+    let release!: () => void;
+    const slow = fakeUpdater({ latest: '0.35.0' });
+    slow.downloadUpdate = () => new Promise<string[]>((resolve) => (release = () => resolve([])));
+    const busy = updaterOn(scratch(t), slow);
+    busy.updates.prepare();
+    const first = busy.updates.take({ to: '0.35.0', feed: null }, { install: false }, () => undefined);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(await busy.updates.take({ to: '0.35.0', feed: null }, { install: true }, () => undefined), { state: 'refused', reason: 'busy', offered: null, runtimeStopped: false, kept: null });
+    release();
+    assert.equal((await first).state, 'refused');
+});
+
+test('a runtime that does not stop, a copy that cannot be kept, and an installer that stops refuse a request with what was done', async (t) => {
+    const runtime = await taking(scratch(t), fakeUpdater({ latest: '0.35.0' }), { to: '0.35.0', feed: null }, { install: true }, { stop: async () => ({ kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' }) });
+    assert.deepEqual(runtime.outcome, { state: 'refused', reason: 'runtime_not_stopped', offered: '0.35.0', runtimeStopped: false, kept: null, runtime: { kind: 'unanswered', pid: 4242, runFile: '/data/run/runtime.json' } });
+    assert.equal(runtime.updater.calls.some((call) => call.startsWith('quitAndInstall')), false);
+
+    const s = scratch(t);
+    mkdirSync(join(s.rollback, '..'), { recursive: true });
+    writeFileSync(s.rollback, 'a file where the rollback folder goes');
+    const keep = await taking(s, fakeUpdater({ latest: '0.35.0' }), { to: '0.35.0', feed: null }, { install: true }, { stop: async () => ({ kind: 'stopped' }) });
+    assert.deepEqual(keep.outcome, { state: 'refused', reason: 'keep_failed', offered: '0.35.0', runtimeStopped: true, kept: null });
+
+    const install = await taking(scratch(t), fakeUpdater({ latest: '0.35.0', installFails: true }), { to: '0.35.0', feed: null }, { install: true }, { stop: async () => ({ kind: 'stopped' }) });
+    assert.equal(install.outcome.state === 'refused' && install.outcome.reason, 'install_failed');
+    assert.equal(install.outcome.state === 'refused' && install.outcome.runtimeStopped, true);
+    assert.deepEqual(install.order, ['stopRuntime', 'beforeInstall', 'afterRefused'], 'what closed for the installer comes back');
+    assert.equal(install.updater.autoRunAppAfterInstall, true, 'a later click starts the application after its install, as it always did');
+    assert.deepEqual(install.updater.listeners, []);
+});
+
+test('a throw out of a request puts the releases’ feed back, leaves no step under way and looks again', async (t) => {
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const timers = handTimers();
+    const throwing = new Updater({
+        updater,
+        version: '0.34.0',
+        application: null,
+        rollback: scratch(t).rollback,
+        log: memoryLog(),
+        timers,
+        stopRuntime: async () => ({ kind: 'stopped' }),
+        refused: () => undefined,
+        beforeInstall: async () => {
+            throw new Error('planted-before-install');
+        },
+        afterRefused: async () => undefined,
+        changed: () => undefined,
+    });
+    throwing.start();
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [firstCheckMs]);
+    const loop = 'http://127.0.0.1:8123/';
+    await assert.rejects(throwing.take({ to: '0.35.0', feed: loop }, { install: true }, () => undefined), /planted-before-install/);
+    assert.equal(updater.feeds.at(-1), feed, 'the releases’ feed is put back');
+    assert.deepEqual(throwing.current, { step: 'downloaded', version: '0.35.0' }, 'not installing: the download waits');
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [updateCheckInterval], 'the cadence looks again');
+    // A request that ends in the installer puts the releases' feed back too.
+    const handed = fakeUpdater({ latest: '0.35.0' });
+    const ok = await taking(scratch(t), handed, { to: '0.35.0', feed: loop }, { install: true });
+    assert.equal(ok.outcome.state, 'installing');
+    assert.deepEqual(handed.feeds, [feed, loop, feed]);
+});
+
+test('an install that fails after quitAndInstall returned, as Squirrel says it on macOS, is heard once', async (t) => {
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    let heard = 0;
+    const { outcome, log } = await taking(scratch(t), updater, { to: '0.35.0', feed: null }, { install: true, late: () => void (heard += 1) });
+    assert.equal(outcome.state, 'installing');
+    assert.equal(updater.listeners.length, 1, 'one listener waits for an error after the install began');
+    for (const listener of [...updater.listeners]) listener(new Error('planted-squirrel-error'));
+    for (const listener of [...updater.listeners]) listener(new Error('planted-squirrel-error'));
+    assert.equal(heard, 1);
+    assert.deepEqual(updater.listeners, []);
+    assert.deepEqual(log.lines.at(-1), { level: 'error', name: 'update_failed', fields: { Step: 'install', Failures: 1 } });
+});
+
+test('the terminal settle records the update that installed this version as kept, once, and leaves any other record as it is', (t) => {
+    const s = scratch(t);
+    const log = memoryLog();
+    const copy = join(s.rollback, '0.34.0', 'Jason');
+    writeRollback(s.rollback, { pending: { fromVersion: '0.34.0', toVersion: '0.35.0', directory: copy }, rejected: ['0.33.9'] });
+    assert.equal(settleByRequest(s.rollback, '0.34.0', log), false, 'the version an update came from settles nothing');
+    assert.equal(settleByRequest(s.rollback, '0.35.0', log), true);
+    assert.deepEqual(readRollback(s.rollback), { pending: undefined, kept: { version: '0.34.0', directory: copy }, rejected: ['0.33.9'] });
+    assert.equal(settleByRequest(s.rollback, '0.35.0', log), false, 'a second settle changes nothing');
+    assert.equal(settleStart(s.rollback, '0.35.0', true, log), null, 'nor does the first window start after it');
+    assert.deepEqual(log.lines, [{ level: 'info', name: 'update_settled_by_request', fields: { Version: '0.35.0' } }]);
+    assert.equal(keptLine(readRollback(s.rollback), '0.35.0', () => true), `The previous version 0.34.0 is kept at ${copy}; put it back by hand.`);
+    // A record with no copy (the deb's) settles into nothing kept.
+    writeRollback(s.rollback, { pending: { fromVersion: '0.35.0', toVersion: '0.36.0', directory: null }, rejected: [] });
+    assert.equal(settleByRequest(s.rollback, '0.36.0', log), true);
+    assert.deepEqual(readRollback(s.rollback), { pending: undefined, rejected: [] });
 });
