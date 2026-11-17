@@ -176,7 +176,7 @@ describe('the card that opens Accounts', () => {
         const before = acting(desktop);
         fireEvent.click(within(shown).getByRole('button', { name: 'Open Accounts' }));
         await waitFor(() => expect(route.value).toEqual({ screen: 'accounts' }));
-        await waitFor(() => expect(within(shownPane()).getByRole('heading', { name: 'Provider' })).toBeTruthy());
+        await waitFor(() => expect(within(shownPane()).getByRole('region', { name: 'Reply accounts' })).toBeTruthy());
         expect(acting(desktop)).toEqual(before);
     });
 });
@@ -280,7 +280,9 @@ describe('the two cards in a browser tab', () => {
             await waitFor(() => expect(route.value).toEqual({ screen: 'accounts' }));
             // Each place says itself what only the desktop's window does.
             const offHere = "Done in Jason Desktop's own window.";
-            await waitFor(() => expect(within(shownPane()).getByRole('heading', { name: 'Provider' })).toBeTruthy());
+            await waitFor(() =>
+                expect(within(shownPane()).getByRole('region', { name: 'Reply accounts' })).toBeTruthy(),
+            );
             await waitFor(() => expect(within(shownPane()).getAllByText(offHere).length).toBeGreaterThan(0));
             const again = await openChat('Setting up');
             fireEvent.click(within(await card(again, 'AI')).getByRole('button', { name: 'Open Connect' }));

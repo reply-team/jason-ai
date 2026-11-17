@@ -27,17 +27,19 @@ export function AccountsScreen() {
                 />
                 {store.failure.value && <Notice danger>{store.failure.value}</Notice>}
                 <div className="sys">
-                    <section className="card wide">
-                        <h2>Provider</h2>
-                        {provider ? (
+                    {provider ? (
+                        <section className="wide provider">
                             <Painted className="painted" view={provider.view} onGone={provider.gone} />
-                        ) : (
+                        </section>
+                    ) : (
+                        <section className="card wide">
+                            <h2>Provider</h2>
                             <p className="empty">
                                 Connecting, reconnecting, pausing and removing a provider’s accounts are done in Jason
                                 Desktop; a browser cannot do them.
                             </p>
-                        )}
-                    </section>
+                        </section>
+                    )}
 
                     <section className="card wide">
                         <h2>
