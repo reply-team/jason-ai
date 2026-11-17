@@ -93,8 +93,10 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
 
 - **In Jason Desktop's Demo, the repository's address is a link.** The note in the Demo window says where Jason's code
   is, github.com/reply-team/jason-ai; a click on it, or Enter on it, opens https://github.com/reply-team/jason-ai in
-  your browser, at most once in two seconds. The Demo page still reaches nothing and opens no window, and any other
-  address, this one with a path or a query added included, opens nothing. In a browser tab the address stays text.
+  your browser. It opens only right after a click or Enter of yours in the Demo: any real click or Enter in the page
+  gives it one second in which that one address may open, at most one tab for each act, and at most once in two seconds.
+  The Demo page still reaches nothing and opens no window, and any other address, this one with a path, a query, a
+  fragment or another scheme included, opens nothing. In a browser tab the address stays text.
 
 - **Jason Desktop on Linux has no title bar of its own.** As on Windows, the window's minimize, maximize and close
   buttons stand over the right end of the console's top strip, drawn in your desktop's own style, as many as its button
