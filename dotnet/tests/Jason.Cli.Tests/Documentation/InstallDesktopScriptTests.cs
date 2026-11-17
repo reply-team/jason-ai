@@ -90,7 +90,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.Contains("sysctl -n hw.optional.arm64", sh, StringComparison.Ordinal);
         Assert.Contains("ditto -x -k", sh, StringComparison.Ordinal);
         var ps1 = Code("install.ps1");
-        Assert.DoesNotContain("Jason.exe", ps1, StringComparison.Ordinal);
+        // The application's own executable is named once, to look for its window, and never started.
+        Assert.Equal(1, Count(ps1, "Jason.exe"));
+        Assert.DoesNotMatch(new Regex(@"(Start-Process|Invoke-Item|&)\s+(-FilePath\s+)?\$window"), ps1);
         Assert.DoesNotContain("--force-run", ps1, StringComparison.Ordinal);
         Assert.Contains("Start-Process -FilePath $setup -ArgumentList \"/S /D=$app\" -Wait -PassThru", ps1, StringComparison.Ordinal);
     }
@@ -130,6 +132,65 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
         Assert.Contains($"Jason Desktop {Version} is already installed at {windows.App}; nothing to download.", run.Stdout, StringComparison.Ordinal);
         Assert.Equal([$"runtime status|{windows.Data}", $"install --roles|{windows.Data}"], windows.Calls());
+    }
+
+    /// <summary>The ruling on an application already there: a later one is kept as it is and set up, never taken back.</summary>
+    [Fact]
+    public void Windows_a_later_version_already_installed_is_kept_and_set_up()
+    {
+        var windows = Windows.Start(_tree);
+        Assert.True(windows.Run(windows.Feed("0.49.5")).Exit == 0);
+        File.Delete(windows.Log);
+
+        var run = windows.Run(windows.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains($"Jason Desktop 0.49.5 is already installed at {windows.App}, later than {Version}; it is kept as it is", run.Stdout, StringComparison.Ordinal);
+        Assert.Equal([$"runtime status|{windows.Data}", $"install --roles|{windows.Data}"], windows.Calls());
+        Assert.Contains("Jason 0.49.5 is licensed under the MIT licence", run.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>An earlier one is installed over, as its own update does, while its window is closed.</summary>
+    [Fact]
+    public void Windows_an_earlier_version_is_installed_over_while_its_window_is_closed()
+    {
+        var windows = Windows.Start(_tree);
+        Assert.True(windows.Run(windows.Feed()).Exit == 0);
+        File.Delete(windows.Log);
+
+        var run = windows.Run(windows.Feed("0.49.1"));
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Equal([$"runtime status|{windows.Data}", $"setup /S /D={windows.App}", $"install --roles|{windows.Data}"], windows.Calls());
+    }
+
+    /// <summary>
+    /// And never while it is open: a silent installer closes the window without asking, so the script installs nothing and
+    /// says to close it and run the line again.
+    /// </summary>
+    [Fact]
+    public void Windows_an_earlier_version_is_never_installed_over_while_its_window_is_open()
+    {
+        var windows = Windows.Start(_tree);
+        Assert.True(windows.Run(windows.Feed()).Exit == 0);
+        File.Delete(windows.Log);
+        var window = Path.Combine(windows.App, "Jason.exe");
+        File.WriteAllBytes(window, StandIn.Value);
+        using var open = System.Diagnostics.Process.Start(new ProcessStartInfo(window) { UseShellExecute = false, CreateNoWindow = true })!;
+        try
+        {
+            var run = windows.Run(windows.Feed("0.49.1"));
+
+            Assert.Equal(1, run.Exit);
+            AssertSaid("Close Jason Desktop and run this line again.", run.Stderr);
+            Assert.DoesNotContain(windows.Calls(), call => call.StartsWith("setup", StringComparison.Ordinal));
+            Assert.Contains(Version, File.ReadAllText(Path.Combine(windows.App, "resources", "bundle", "version.json")), StringComparison.Ordinal);
+        }
+        finally
+        {
+            open.Kill();
+            open.WaitForExit();
+        }
     }
 
     [Fact]
@@ -353,20 +414,82 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.DoesNotContain(mac.Calls(), call => call.StartsWith("install", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The ruling on an application already there: never renamed, replaced or deleted from a terminal. One before 0.49.0
+    /// cannot be driven from one: the script touches nothing, says to update it from its own menu, and ends non-zero.
+    /// </summary>
     [Fact]
-    public void Macos_an_application_of_another_version_already_there_is_never_replaced()
+    public void Macos_an_application_before_0_49_0_already_there_is_left_as_it_is_and_the_script_ends_non_zero()
     {
         var mac = Mac.Start(_tree);
         var bundle = Path.Combine(mac.Shared, "Jason.app", "Contents", "Resources", "bundle");
         Directory.CreateDirectory(bundle);
-        File.WriteAllText(Path.Combine(bundle, "version.json"), "{\"version\": \"0.49.5\"}\n");
+        File.WriteAllText(Path.Combine(bundle, "version.json"), "{\"version\": \"0.48.2\"}\n");
 
         var run = mac.Run(mac.Feed());
 
         Assert.NotEqual(0, run.Exit);
-        Assert.Contains("Jason Desktop 0.49.5 is already at", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("Jason Desktop 0.48.2 at", run.Stderr, StringComparison.Ordinal);
+        Assert.Contains("Update Jason Desktop from its own menu (Check for Updates), then run the install line again.", run.Stderr, StringComparison.Ordinal);
         Assert.Equal(["version.json"], Directory.EnumerateFileSystemEntries(bundle).Select(Path.GetFileName));
         Assert.Empty(mac.Calls());
+    }
+
+    /// <summary>One of 0.49.0 or later carries the routine and the update: it is kept, never replaced, and its routine run.</summary>
+    [Fact]
+    public void Macos_a_later_application_already_there_is_kept_and_set_up()
+    {
+        var mac = Mac.Start(_tree);
+        Assert.True(mac.Run(mac.Feed("0.49.5")).Exit == 0);
+        File.Delete(mac.Log);
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains($"Jason Desktop 0.49.5 is already installed at {Path.Combine(mac.Shared, "Jason.app")}; it is kept as it is", run.Stdout, StringComparison.Ordinal);
+        Assert.Equal([$"runtime status|{mac.Data}", $"install --roles|{mac.Data}"], mac.Calls());
+        Assert.DoesNotContain("update apply", run.Stdout, StringComparison.Ordinal);
+        Assert.StartsWith("A terminal opened from now on", Lines(run.Stdout)[^1], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// One older than the release asked for is kept as well, and the script's last line names the update, still ending with
+    /// the full path of jason.
+    /// </summary>
+    [Fact]
+    public void Macos_an_earlier_application_already_there_is_kept_and_the_last_line_names_the_update()
+    {
+        var mac = Mac.Start(_tree);
+        Assert.True(mac.Run(mac.Feed()).Exit == 0);
+        File.Delete(mac.Log);
+
+        var run = mac.Run(mac.Feed("0.49.1"));
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.DoesNotContain(mac.Calls(), call => call.StartsWith("ditto", StringComparison.Ordinal));
+        var jason = Path.Combine(mac.Home, ".local", "bin", "jason");
+        var last = Lines(run.Stdout)[^1];
+        Assert.StartsWith($"Jason Desktop {Version} is kept, older than 0.49.1: `{jason} update apply` updates it.", last, StringComparison.Ordinal);
+        Assert.EndsWith("call it by its full path: " + jason, last, StringComparison.Ordinal);
+    }
+
+    /// <summary>The script looks in both folders before it chooses: an application in the account's own is the place.</summary>
+    [Fact]
+    public void Macos_an_application_in_the_account_s_own_folder_is_the_place()
+    {
+        var mac = Mac.Start(_tree);
+        var feed = mac.Feed();
+        Assert.True(mac.Run(feed).Exit == 0);
+        var own = Path.Combine(mac.Home, "Applications");
+        Directory.CreateDirectory(own);
+        Directory.Move(Path.Combine(mac.Shared, "Jason.app"), Path.Combine(own, "Jason.app"));
+        File.Delete(mac.Log);
+
+        var run = mac.Run(feed);
+
+        Assert.True(run.Exit == 0, run.Stdout + run.Stderr);
+        Assert.Contains($"Jason Desktop {Version} is already installed at {Path.Combine(own, "Jason.app")}; nothing to download.", run.Stdout, StringComparison.Ordinal);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(mac.Shared));
     }
 
     [Fact]
@@ -668,6 +791,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             var self = System.Reflection.Assembly.GetEntryAssembly().Location;
             var log = E("JASON_STANDIN_LOG");
             var running = E("JASON_STANDIN_RUNNING");
+            if (Path.GetFileName(self) == "Jason.exe") { System.Threading.Thread.Sleep(120000); return 0; }
             if (Path.GetFileName(self).Contains("setup")) {
               if (log != null) File.AppendAllText(log, "setup " + string.Join(" ", a) + "\n");
               var code = E("JASON_STANDIN_SETUP_EXIT");

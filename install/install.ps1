@@ -12,7 +12,8 @@ host found, Claude Code and Codex, retires an older command-line install of Jaso
 Jason's data directory. It opens no window. Where a runtime answered before the install and none answers after it, or
 the report says it stopped one, a runtime is started again from the application's jason. Run again over the version
 already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in
-place. It says where Jason will keep what it learns about your business - Jason in your home directory, unless
+place. A later version already installed is kept as it is; an earlier one is installed over, as its own update does,
+but not while Jason Desktop is open: then it says to close it and run the line again, and installs nothing. It says where Jason will keep what it learns about your business - Jason in your home directory, unless
 Harness:Root in the settings names another folder - and makes no folder for it.
 
 It ends non-zero, saying which act failed, when jason was not put in the terminal. On success its last line is the
@@ -128,10 +129,26 @@ function Install-Jason {
         }
     }
 
+    # A version's numbers, the pre-release part ignored, to compare field by field; nothing where they are not numbers.
+    function Get-Core([string] $version) {
+        $core = $null
+        if ([version]::TryParse(($version -split '[-+]')[0], [ref] $core)) { return $core }
+        return $null
+    }
+
     # True when $version is $floor or later, the pre-release part ignored, compared field by field.
     function Test-From([string] $version, [string] $floor) {
-        $core = $null
-        [version]::TryParse(($version -split '[-+]')[0], [ref] $core) -and $core -ge [version] $floor
+        $core = Get-Core $version
+        $null -ne $core -and $core -ge [version] $floor
+    }
+
+    # Whether the application's window is open: a program running from its own executable, found by its exact path, as
+    # its installer looks for it.
+    function Test-WindowOpen {
+        $window = Join-Path $app 'Jason.exe'
+        if (-not (Test-Path -LiteralPath $window -PathType Leaf)) { return $false }
+        $open = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $window, [StringComparison]::OrdinalIgnoreCase) })
+        return $open.Count -gt 0
     }
 
     # The installer is run only when it carries a valid Authenticode signature whose signer is the release's publisher,
@@ -206,9 +223,20 @@ function Install-Jason {
 
         $answered = (Test-Answers $carried) -or (Test-Answers $commandLine)
 
-        if ((Get-Carried $carried) -eq $latest) {
+        # An application already here of the release asked for is set up again; one of a later release is kept as it
+        # is, as an installer run over it would take it back. An earlier one is installed over, as its own update does,
+        # but never while its window is open: a silent installer closes it without asking.
+        $placed = Get-Carried $carried
+        $installed = $latest
+        if ($placed -eq $latest) {
             Write-Host "Jason Desktop $latest is already installed at $app; nothing to download."
+        } elseif ($placed -and (Get-Core $placed) -and (Get-Core $latest) -and (Get-Core $placed) -gt (Get-Core $latest)) {
+            $installed = $placed
+            Write-Host "Jason Desktop $placed is already installed at $app, later than $latest; it is kept as it is, and nothing is downloaded."
         } else {
+            if (Test-WindowOpen) {
+                throw "Jason Desktop is open, and installing $latest over it would close it without asking; nothing was installed. Close Jason Desktop and run this line again."
+            }
             # --- download, and check before running -------------------------------------------------------------
 
             Write-Host "Downloading Jason Desktop $latest for Windows from $base ..."
@@ -221,6 +249,10 @@ function Install-Jason {
             $actual = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $expected) { throw "$asset does not match checksums.txt (sha256 $actual, expected $expected); nothing was installed." }
             Assert-Signed $setup
+            # PowerShell's own download marks nothing, but a feed in a directory may hold a setup a browser downloaded,
+            # which carries the mark of the web, and the copy keeps it: SmartScreen would hold a silent install on it
+            # with a dialog nobody sees. The signer is checked above, so the mark says nothing more.
+            Unblock-File -LiteralPath $setup
 
             # --- install, silently, and wait for it ---------------------------------------------------------
 
@@ -294,7 +326,7 @@ function Install-Jason {
     # that says what this installation still needs, and the full path to run it by in a shell that was already open,
     # which reads no Path again: this one, and an agent's session that ran this script. The text is in single quotes
     # where it carries backticks, so they are text and not an escape.
-    Write-Host "Jason $latest is licensed under the MIT licence: $licenceBase/v$latest/LICENSE"
+    Write-Host "Jason $installed is licensed under the MIT licence: $licenceBase/v$installed/LICENSE"
     Write-Host 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
     Write-Host "A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: $openShell"
 }

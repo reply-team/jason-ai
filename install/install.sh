@@ -4,8 +4,9 @@
 # On macOS it installs Jason Desktop, with jason in the terminal: the application's zip for this Mac's architecture from
 # the latest release, or from the one --version names, checked against checksums.txt, unpacked with ditto into a staging
 # folder beside its place, its signature verified as the release's own, and moved into place by one rename -
-# /Applications where this account may write there and to any Jason.app already there, else ~/Applications. Nothing is
-# opened, and no password is asked. Then the jason the application carries sets the machine up, `jason install --roles`:
+# /Applications where this account may write there, else ~/Applications. Nothing is opened, and no password is asked.
+# A Jason.app already in either folder is never renamed, replaced or deleted: one of 0.49.0 or later is kept as it is,
+# and an earlier one is left for its own Check for Updates, and the script ends non-zero saying so. Then the jason the application carries sets the machine up, `jason install --roles`:
 # the wrapper ~/.local/bin/jason and the PATH lines in the profiles, the skills for every agent host found, an older
 # command-line install retired, and the role skills in Jason's data directory. Where a runtime answered before and none
 # answers after, or the report says it stopped one, a runtime is started again from the application's jason. It ends
@@ -52,7 +53,8 @@ Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL] [--install-dir DIR
   --no-modify-path       Linux: do not add the install directory to the PATH in your profile; not taken on macOS
 
 On macOS it installs Jason Desktop into /Applications, or ~/Applications where this account may not write to
-/Applications, opens nothing, and puts jason in the terminal through the application's own jason install.
+/Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
+already in either folder is kept as it is, never replaced; one before 0.49.0 is updated from its own menu first.
 EOF
 }
 
@@ -267,6 +269,22 @@ app_version() {
     sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$1/Contents/Resources/bundle/version.json" 2>/dev/null | head -n 1
 }
 
+# True when the version in $1 is earlier than the one in $2, their pre-release parts ignored, field by field; false
+# where either is not three numbers.
+older_than() {
+    A="${1%%[-+]*}"
+    B="${2%%[-+]*}"
+    for I in 1 2 3; do
+        X="$(echo "$A" | cut -d. -f$I)"
+        Y="$(echo "$B" | cut -d. -f$I)"
+        case "$X" in ''|*[!0-9]*) return 1 ;; esac
+        case "$Y" in ''|*[!0-9]*) return 1 ;; esac
+        [ "$X" -lt "$Y" ] && return 0
+        [ "$X" -gt "$Y" ] && return 1
+    done
+    return 1
+}
+
 # Whether a runtime answers on this installation's data directory, asked of the jason that may have started it.
 answers() {
     [ -n "$1" ] && [ -f "$1" ] && "$1" runtime status >/dev/null 2>&1
@@ -300,12 +318,14 @@ install_desktop() {
     # A release before 0.49.0 carries a jason that cannot set the machine up; its own script installs it.
     from_minor 49 "$LATEST" || fail "Jason $LATEST is installed by its own release's script, not this one, which installs Jason Desktop 0.49.0 and later; nothing was installed"
 
-    # The place: this account's own copy where it has one; else the shared folder where this account may write to it and
-    # to any Jason.app already there, as the application's updater needs both or every update would ask for a password;
-    # else the account's own folder.
-    if [ -d "$HOME/Applications/Jason.app" ]; then
+    # The place: an application already in either folder, this account's own first; else, for a new one, the shared
+    # folder where this account may write to it, as the application's updater needs or every update would ask for a
+    # password; else the account's own folder.
+    if [ -e "$HOME/Applications/Jason.app" ]; then
         PLACE="$HOME/Applications"
-    elif [ -d "$SYSTEM_APPLICATIONS" ] && [ -w "$SYSTEM_APPLICATIONS" ] && { [ ! -e "$SYSTEM_APPLICATIONS/Jason.app" ] || [ -w "$SYSTEM_APPLICATIONS/Jason.app" ]; }; then
+    elif [ -e "$SYSTEM_APPLICATIONS/Jason.app" ]; then
+        PLACE="$SYSTEM_APPLICATIONS"
+    elif [ -d "$SYSTEM_APPLICATIONS" ] && [ -w "$SYSTEM_APPLICATIONS" ]; then
         PLACE="$SYSTEM_APPLICATIONS"
     else
         PLACE="$HOME/Applications"
@@ -319,13 +339,22 @@ install_desktop() {
     fi
     if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
 
+    INSTALLED="$LATEST"
+    BEHIND=""
     if [ -e "$DEST" ]; then
-        # An application already there is never replaced from here: its own updater moves it, which no terminal's rename
-        # of a signed application stands in for. The same version is what this install already made.
+        # An application already there is never renamed, replaced or deleted from here: its own updater moves it, which no
+        # terminal's rename of a signed application stands in for. One of 0.49.0 or later carries the routine and the
+        # update, so it is kept and its routine run; an earlier one cannot be set up from a terminal at all.
         PLACED_VERSION="$(app_version "$DEST")"
-        [ "$PLACED_VERSION" = "$LATEST" ] || fail "Jason Desktop ${PLACED_VERSION:-of an unknown version} is already at $DEST, and this script does not replace an application already there; nothing was installed. Update it with Check for Updates in its Jason menu, or take it off to install $LATEST, then run this again."
-        [ -w "$DEST" ] || fail "Jason Desktop $LATEST is at $DEST, which this account may not write to, so its updates could not be installed; nothing was changed."
-        echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
+        if [ "$PLACED_VERSION" = "$LATEST" ]; then
+            echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
+        elif [ -n "$PLACED_VERSION" ] && from_minor 49 "$PLACED_VERSION" && [ -f "$CARRIED" ]; then
+            INSTALLED="$PLACED_VERSION"
+            echo "Jason Desktop $PLACED_VERSION is already installed at $DEST; it is kept as it is, and nothing is downloaded."
+            if older_than "$PLACED_VERSION" "$LATEST"; then BEHIND=1; fi
+        else
+            fail "Jason Desktop ${PLACED_VERSION:-of an unknown version} at $DEST is older than 0.49.0 and cannot be set up from a terminal; nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again."
+        fi
     else
         # The download says "Downloading Jason <version> for <this machine> from <the feed>".
         RID="macOS on $ARCH"
@@ -379,9 +408,15 @@ install_desktop() {
     done
     printf 'Jason keeps what it learns about your business in plain files you can read and edit, one folder per project and campaign, in `%s` by default; to keep them somewhere else, set `Harness:Root` in the settings before your first campaign.\n' "$ROOT_HOME/Jason"
     printf '%s\n' 'Campaigns you create without naming a project go to the project `Default`; rename it, or make one project per product.'
-    echo "Jason $LATEST is licensed under the MIT licence: $LICENCE_BASE/v$LATEST/LICENSE"
+    echo "Jason $INSTALLED is licensed under the MIT licence: $LICENCE_BASE/v$INSTALLED/LICENSE"
     echo 'Next, run `jason status`: it says what this installation still needs, and the command for each.'
-    echo "A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: $OPEN_SHELL"
+    # An application kept at an older version than the release asked for is named on the same last line, with the
+    # command that updates it: the line still ends with the full path.
+    if [ -n "$BEHIND" ]; then
+        echo "Jason Desktop $INSTALLED is kept, older than $LATEST: \`$OPEN_SHELL update apply\` updates it. A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: $OPEN_SHELL"
+    else
+        echo "A terminal opened from now on finds jason by name; this one, and an agent's session already running, call it by its full path: $OPEN_SHELL"
+    fi
 }
 
 if [ "$RID" = macos ]; then

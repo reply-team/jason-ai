@@ -193,7 +193,7 @@ public sealed partial class InstallNoticesTests : IDisposable
 
         Assert.Contains("$LICENCE_BASE/v$LATEST/LICENSE-RUNTIME.md", sh, StringComparison.Ordinal);
         Assert.Contains("$LICENCE_BASE/v$LATEST/LICENSE\"", sh, StringComparison.Ordinal);
-        Assert.Contains("$licenceBase/v$latest/LICENSE\"", ps1, StringComparison.Ordinal);
+        Assert.Contains("$licenceBase/v$installed/LICENSE\"", ps1, StringComparison.Ordinal);
         Assert.DoesNotContain("RELEASES_URL", shBase.Value, StringComparison.Ordinal);
         Assert.DoesNotContain("releasesUrl", ps1Base.Value, StringComparison.Ordinal);
     }
