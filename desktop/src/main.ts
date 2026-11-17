@@ -39,6 +39,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, setupOffered, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -261,7 +262,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
     const inherited = pathOf(process.env);
-    const shellRead = shellPath();
+    const shellRead = askedShell();
     const pathRead = loginPath(inherited, home, shellRead);
     process.env.PATH = await pathRead;
     // What a new terminal has: the login shell's own PATH, before the usual places, never the PATH above. Placing the
@@ -416,7 +417,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         account: { home, shellNamed: accountShell(process.env), terminalPath: () => terminalPath },
         log,
     };
-    const command = offers.command && carried.outlives ? new PathCommand(commandDeps) : null;
+    // On Linux the Command Line item places the PATH command; on macOS and Windows it is the machine set-up's status
+    // (`machine-setup.ts`), which `jason install` places and the desktop's start runs.
+    const command = offers.command && carried.outlives && !commandIsSetup(process.platform) ? new PathCommand(commandDeps) : null;
     // What the person set up from an earlier version's copy, the PATH command and the start at logon, follows this
     // start's; the copies of other versions are removed only after that, by what then still names them.
     const otherCopy = carried.repoints ? (named: string) => isOtherCopy(named, paths.bundle, executable) : null;
@@ -454,7 +457,24 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
     // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
     const modeDeps = modeSwitch(log, form);
-    const desk = new Desk({ window: () => current, origin, cli: jason, log, reload: () => void repairer.reload(), login, autostart, updates, kept: keptCopy, command, removal, demo: demoMenu(runOn.mode), back: () => backToLive(modeDeps) });
+    const desk = new Desk({
+        window: () => current,
+        origin,
+        cli: jason,
+        log,
+        reload: () => void repairer.reload(),
+        login,
+        autostart,
+        updates,
+        kept: keptCopy,
+        // On macOS, where the application is and whether its update can write there; it copies itself nowhere.
+        place: updates === null ? () => null : () => placeLine(process.platform, applicationFolder(process.platform, process.execPath), writable),
+        command,
+        setup: offers.command && carried.outlives ? machineSetup : null,
+        removal,
+        demo: demoMenu(runOn.mode),
+        back: () => backToLive(modeDeps),
+    });
     desk.open();
     showWindow = () => desk.show();
     const repointed = (async () => {
@@ -638,9 +658,14 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         chatFolder: () => paths.chat,
         continueFlags,
         logContinue: (event, fields) => log.info(event, fields),
-        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look; none told where
-        // this run offers no command (the demo, a start that carries no copy).
-        ...(command === null ? {} : { jason: () => command.onPath() }),
+        // Which `jason` the PATH an editor is started with finds, read from the PATH command's own look on Linux and by
+        // the same lookup on macOS and Windows, where the item's one act is put back; none told where this run offers no
+        // command (the demo, a start that carries no copy).
+        ...(command !== null
+            ? { jason: () => command.onPath() }
+            : machineSetup !== null && offers.command && carried.outlives
+              ? { jason: () => jasonOnPath({ platform: process.platform, path: process.env.PATH ?? '', pathext: process.env['PATHEXT'], executable, dataDirectory: process.env['JASON_DATA_DIR'] || null, isProgram: (file) => isProgramFile(file, process.platform), read: readText }) }
+              : {}),
         icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
@@ -677,6 +702,11 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         await showStarting(window, 'This build carries no jason executable. Run npm run prepare:bundle in desktop/, then start it again.', true);
         return;
     }
+
+    // The machine set-up this start runs, where it runs one, ends before the installation is brought up: it may stop the
+    // runtime of a command-line install it retires, which `jason runtime start` then starts from the carried jason. The
+    // window is up meanwhile, and the routine's own time limit bounds the wait.
+    await machineSetup?.settled();
 
     try {
         const started = await startInstallation({
@@ -832,7 +862,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     const noJason: Cli = { run: () => Promise.reject(new Error('The demo runs no jason.')) };
     let views: DemoViews | null = null;
     const login = new LoginItem({ platform: process.platform, home: homedir(), executable: form === null ? process.execPath : launcherOf(form, process.execPath), electron: app, pathRead: Promise.resolve(), log, env: process.env });
-    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
+    const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, setup: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
     // A terminal's update request: the Demo has no updater, so one is made for the request when one comes, and only then.
@@ -898,6 +928,35 @@ let earlierPageWasFound!: boolean;
 // Where a terminal's update request waits for the window's run that takes it (`update-request.ts`), made by the start that
 // holds the lock: one at a time, and one that comes while another is taken is refused as busy, in its own file.
 let windowRequests: UpdateRequests | null = null;
+// The machine set-up of a windowed start on macOS and Windows (`machine-setup.ts`): made once the single-instance lock is
+// held, run once Electron is ready, before the Demo's or Live's run goes on; null on Linux and for every other start.
+let machineSetup: MachineSetup | null = null;
+// The login shell's own PATH, asked once a start: the window's run and the machine set-up read the same answer.
+let shellAsked: Promise<string | null> | null = null;
+function askedShell(): Promise<string | null> {
+    shellAsked ??= shellPath();
+    return shellAsked;
+}
+
+/**
+ * The machine set-up a windowed start runs on macOS and Windows: the carried `jason install`, with the person's own
+ * environment, its record in the person's directory; null on Linux, whose Command Line item is the PATH command.
+ */
+function makeMachineSetup(log: Logger): MachineSetup | null {
+    if (!commandIsSetup(process.platform)) return null;
+    const bundle = bundleDirectory();
+    const executable = join(bundle, process.platform === 'win32' ? 'jason.exe' : 'jason');
+    return new MachineSetup({
+        cli: cliAt(executable, withPath(process.env, pathOf(process.env))),
+        executable,
+        version: bundleVersion(bundle),
+        platform: process.platform,
+        offered: setupOffered(process.platform, app.isPackaged),
+        record: desktopPaths(runOn.person).machineSetup,
+        terminalPath: () => askedShell(),
+        log,
+    });
+}
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -995,6 +1054,9 @@ function startDesktop(): void {
     } else {
         const early = startLog();
         windowRequests = new UpdateRequests((request) => refuseBusy(request, true));
+        // The machine set-up, where the routine has not run for this version yet: in a Demo start as in Live, before the
+        // person chooses, and writing nothing under the data directory but its own record (`machine-setup.ts`).
+        machineSetup = makeMachineSetup(early);
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
         // carry what Chromium added (electron.d.ts, `second-instance`).
@@ -1021,6 +1083,7 @@ function startDesktop(): void {
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
+        void app.whenReady().then(() => machineSetup?.atStart());
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }
 }

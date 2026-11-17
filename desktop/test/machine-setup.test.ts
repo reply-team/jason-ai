@@ -325,3 +325,51 @@ test('on macOS the update item says where Jason is and whether an update can wri
     assert.equal(placeLine('win32', 'C:\\J', () => false), null);
     assert.equal(placeLine('linux', '/opt/Jason', () => false), null);
 });
+
+// What runs around Electron's own start cannot be run here: how a start reaches the routine is held on the main module's text.
+test('a windowed start runs the routine before the Demo or Live run goes on, and Live waits for it before it brings the installation up', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = main.slice(main.indexOf('function startDesktop('));
+    const lock = start.indexOf('const early = startLog();');
+    const made = start.indexOf('machineSetup = makeMachineSetup(early);');
+    const ran = start.indexOf('void app.whenReady().then(() => machineSetup?.atStart());');
+    const chosen = start.indexOf("void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));");
+    assert.ok(lock > 0 && made > lock && ran > made && chosen > ran, 'made once the lock is held, and run before the mode’s run');
+    // The installer's, the uninstaller's and a terminal's update starts run none: the routine is made in the windowed branch alone.
+    assert.equal(main.split('makeMachineSetup(').length - 1, 2, 'declared once, called once');
+    const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
+    const waited = run.indexOf('await machineSetup?.settled();');
+    assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startInstallation({'), 'the window is up first, and the installation after the routine');
+    // The Demo's run itself still makes no jason and touches no set-up.
+    const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
+    for (const never of ['machineSetup', 'cliAt(', 'MachineSetup']) assert.equal(demo.includes(never), false, never);
+    // The routine is told the login shell's PATH from the one read every start shares, never the desktop's own.
+    const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
+    assert.ok(factory.includes('terminalPath: () => askedShell(),'));
+    assert.ok(run.includes('const shellRead = askedShell();'));
+    assert.equal(main.includes('shellPath()'), true);
+    assert.equal(main.split('shellPath()').length - 1, 1, 'the login shell is asked once a start');
+});
+
+test('on Linux the PATH command and its menu stay as they are; on macOS and Windows the item is the routine’s status', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes('const command = offers.command && carried.outlives && !commandIsSetup(process.platform) ? new PathCommand(commandDeps) : null;'));
+    const desk = readFileSync(new URL('../src/desk.ts', import.meta.url), 'utf8');
+    const items = desk.slice(desk.indexOf('private commandItems('), desk.indexOf('private async commandAct('));
+    // The routine's item where a set-up is given, and the PATH command's own, exactly as before, where none is.
+    assert.ok(items.indexOf('if (this.deps.setup !== null) return this.setupItems(this.deps.setup);') < items.indexOf('const command = this.deps.command;'));
+    assert.ok(items.includes('const menu = commandMenuOf(status);'));
+    assert.ok(main.includes('setup: offers.command && carried.outlives ? machineSetup : null,'));
+});
+
+test('nothing on macOS or Windows places the PATH command any more: the WindowsApps shims and the 0.48 wrapper are jason install’s to take back', () => {
+    const sources = readdirSync(new URL('../src/', import.meta.url)).filter((name) => name.endsWith('.ts'));
+    // The one act that writes a command is the Linux menu's, through the one PathCommand a start makes, which only a
+    // system whose item is not the routine's makes; the others only look, remove, or re-point an AppImage's copy.
+    const placing = sources.filter((name) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8').includes('.place()'));
+    assert.deepEqual(placing, ['desk.ts']);
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const made = [...main.matchAll(/new PathCommand\(/g)].length;
+    assert.equal(made, 2, 'the menu’s, behind !commandIsSetup, and Remove What Jason Placed’s, which only removes');
+    assert.ok(main.includes('if (otherCopy !== null && command !== null) {'), 'a re-point needs the menu’s command, which macOS and Windows do not make');
+});
