@@ -1,10 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { REASON_CLASS } from './reason-field';
 
 /**
- * What a dialog focuses as it opens: its first field or picker, so Escape and typing reach it at once; a dialog with no
- * field focuses its way out, so Escape reaches it all the same.
+ * What a dialog focuses as it opens: its first field or picker that can take a key, so Escape and typing reach it at
+ * once, never an optional reason, which is not the thing a dialog asks for, and never the button that acts, so Enter
+ * as it opens does nothing; a dialog with no other field focuses its way out, so Escape reaches it all the same. The
+ * browser's own modal focus, on the first thing that can take it, is replaced by this one as the dialog opens.
  */
-const firstControl = 'button.select, input, textarea';
+const firstControl = ['button.select', 'input', 'textarea']
+    .map((control) => `${control}:not(:disabled):not(.${REASON_CLASS})`)
+    .join(', ');
 const wayOut = 'button[data-dismiss]';
 
 /**
