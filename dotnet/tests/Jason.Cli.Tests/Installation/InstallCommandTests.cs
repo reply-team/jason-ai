@@ -112,6 +112,30 @@ public sealed class InstallCommandTests : IDisposable
         Assert.True(report.GetProperty("completed").GetBoolean());
     }
 
+    /// <summary>
+    /// The routine records each profile it brings into being, and none it finds there, so the uninstall can tell a file Jason
+    /// made from one the person had (CreatedProfiles).
+    /// </summary>
+    [Fact]
+    public async Task The_profiles_the_routine_creates_are_recorded_and_the_ones_it_finds_are_not()
+    {
+        var zshrc = Path.Combine(Home, ".zshrc");
+        File.WriteAllText(zshrc, "alias ll='ls -l'\n");
+        var (env, _) = Environment(MacPlaces(), Carried());
+
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct));
+
+        var created = CreatedProfiles.Read(Home);
+        Assert.Contains(Path.GetFullPath(Path.Combine(Home, ".zprofile")), created);
+        Assert.DoesNotContain(Path.GetFullPath(zshrc), created);
+        Assert.Equal(Path.Combine(Home, "Library", "Application Support", "ai.jasonharness.desktop", "created-profiles.json"), CreatedProfiles.RecordFile(Home));
+        Assert.False(Directory.Exists(_data.Paths.Root), "the record went under the data directory");
+
+        // A second run finds the file it made and records nothing new, losing nothing.
+        Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct));
+        Assert.Equal(created, CreatedProfiles.Read(Home));
+    }
+
     [Fact]
     public async Task A_second_run_changes_nothing()
     {
@@ -433,6 +457,48 @@ public sealed class InstallCommandTests : IDisposable
 
         Assert.True(StartOwed.Read(_data.Paths).Stands, "the note that a start is owed was taken back with no runtime started");
         Assert.Empty(processes.Launches);
+    }
+
+    /// <summary>
+    /// The Demo case. Jason Desktop's mode record says demo while a runtime a terminal started runs on that data directory, from
+    /// the command-line install being retired. A person's install, or the window's own update, runs this routine, which stops
+    /// that runtime; the application then comes back in the Demo, which starts no runtime. The note that a start is owed is
+    /// what is left to say one is owed, and it stands, for the application to read at its start.
+    /// </summary>
+    [Fact]
+    public async Task The_Demo_case_a_runtime_stopped_under_a_demo_mode_record_leaves_the_start_owed()
+    {
+        var old = PlantMacCommandLineInstall();
+        Directory.CreateDirectory(_data.Paths.Root);
+        var mode = Path.Combine(_data.Paths.Root, "desktop", "mode");
+        Directory.CreateDirectory(Path.GetDirectoryName(mode)!);
+        File.WriteAllText(mode, "demo\n");
+        _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
+        var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
+        var handler = new FakeHandler(request =>
+        {
+            var operation = request.RequestUri!.AbsolutePath.Split('/')[^1];
+            if (operation == Operations.SystemShutdown)
+            {
+                File.Delete(_data.Paths.DescriptorFile);
+                processes.RunningPids.Clear();
+                return RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_OLD"));
+            }
+
+            return operation == Operations.SystemDrain
+                ? RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(new DrainResponse(DispatcherState.Draining, 0), JasonJson.Options))
+                : RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD"));
+        });
+        var (env, output) = Environment(MacPlaces(), Carried());
+        env = env with { HttpHandler = handler, Processes = processes };
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal("stopped", Report(output).GetProperty("runtime").GetString());
+        Assert.Empty(processes.Launches);
+        Assert.Equal("demo\n", File.ReadAllText(mode));
+        Assert.True(StartOwed.Read(_data.Paths) is (true, { }), "the Demo case: no note says a start is owed, and nothing in the Demo starts one");
     }
 
     [Fact]

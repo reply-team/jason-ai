@@ -192,6 +192,15 @@ public interface IInstallationRemover
     }
 
     /// <summary>
+    /// macOS: deletes the preferences domain <paramref name="domain"/> through the preferences system
+    /// (<c>defaults delete</c>, "Removes all default information for domain"), so a copy it holds is not written back over
+    /// the file's removal. A domain that is not there is not an error. Nothing elsewhere.
+    /// </summary>
+    void DeletePreferences(string domain)
+    {
+    }
+
+    /// <summary>
     /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
     /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
     /// application's steps are done. Its id, or null where it could not be started.
@@ -784,6 +793,25 @@ public static class InstallationRemovers
             catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
             {
                 return null;
+            }
+        }
+
+        public void DeletePreferences(string domain)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(domain);
+            if (!OperatingSystem.IsMacOS())
+            {
+                return;
+            }
+
+            // Its answer is not read: a domain with nothing in it is the ordinary case, and the file goes either way.
+            try
+            {
+                Jason.Cli.Autostart.AutostartRegistrars.Run(["/usr/bin/defaults", "delete", domain], LaunchctlLimit);
+            }
+            catch (Jason.Cli.Autostart.AutostartException)
+            {
+                // defaults could not be started, or did not answer in time; the file is removed all the same.
             }
         }
 

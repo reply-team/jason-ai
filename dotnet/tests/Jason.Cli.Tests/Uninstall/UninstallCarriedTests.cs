@@ -115,6 +115,128 @@ public sealed class UninstallCarriedTests : IDisposable
         Assert.DoesNotContain(remover.Calls, call => call.StartsWith("executable.remove", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A profile file goes with Jason's lines only where <c>jason install</c> recorded that it created it and nothing but
+    /// whitespace is left once the lines are out; a file it found, one the person has written into since, and any where
+    /// there is no record stay, without Jason's lines.
+    /// </summary>
+    [Theory]
+    [InlineData("created and still empty", true, true, "", false)]
+    [InlineData("created and written into by the person", true, true, "export EDITOR=vi\n", true)]
+    [InlineData("there before", true, false, "", true)]
+    [InlineData("no record", false, false, "", true)]
+    public async Task A_profile_goes_only_where_jason_install_created_it_and_nothing_else_is_left(string row, bool record, bool recorded, string persons, bool stays)
+    {
+        var executable = MacApplication();
+        var bin = Path.Combine(Home, ".local", "bin");
+        Directory.CreateDirectory(bin);
+        File.WriteAllText(Path.Combine(bin, "jason"), CommandFiles.Wrapper(executable, null));
+        var zprofile = Path.Combine(Home, ".zprofile");
+        PathEntry.AddToProfile(zprofile, bin);
+        File.AppendAllText(zprofile, persons);
+        if (record)
+        {
+            CreatedProfiles.Add(Home, recorded ? zprofile : Path.Combine(Home, ".zshrc"));
+        }
+
+        var (env, output, _) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, $"{row}: {output}");
+        Assert.True(File.Exists(zprofile) == stays, $"{row}: the profile {(stays ? "went" : "stayed")}");
+        if (stays)
+        {
+            Assert.DoesNotContain(PathEntry.Marker, File.ReadAllText(zprofile), StringComparison.Ordinal);
+            Assert.Equal(persons, File.ReadAllText(zprofile).Trim('\n') + (persons.Length > 0 ? "\n" : string.Empty));
+        }
+    }
+
+    /// <summary>
+    /// What the application of this bundle identifier leaves under <c>~/Library</c> goes with it, just before it, the
+    /// preferences through the preferences system first; Electron's default profile, which may hold the person's work, stays
+    /// without <c>--purge-data</c>, goes with it, and stays even then where it does not carry Chromium's mark.
+    /// </summary>
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task On_macOS_the_applications_own_state_goes_with_it_and_the_persons_profile_only_on_the_purge(bool purge, bool marked)
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var places = DesktopRemoval.ApplicationStatePlaces(Home);
+        foreach (var place in places)
+        {
+            if (place.EndsWith(".plist", StringComparison.Ordinal) || place.EndsWith(".binarycookies", StringComparison.Ordinal))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(place)!);
+                File.WriteAllText(place, "state");
+            }
+            else
+            {
+                Plant(place);
+            }
+        }
+
+        var profile = Plant(DesktopRemoval.ElectronDefaultProfile(Home));
+        if (marked)
+        {
+            File.WriteAllText(Path.Combine(profile, DesktopRemoval.ChromiumProfileMarker), "{}");
+        }
+
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, purge, Yes: true, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.Equal(
+            [
+                Path.Combine(Home, "Library", "Preferences", "ai.jasonharness.desktop.plist"),
+                Path.Combine(Home, "Library", "Saved Application State", "ai.jasonharness.desktop.savedState"),
+                Path.Combine(Home, "Library", "Caches", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "HTTPStorages", "ai.jasonharness.desktop.binarycookies"),
+                Path.Combine(Home, "Library", "WebKit", "ai.jasonharness.desktop"),
+                Path.Combine(Home, "Library", "Logs", "Jason"),
+                Path.Combine(Home, "Library", "Application Support", "ai.jasonharness.desktop"),
+            ],
+            places);
+        foreach (var place in places)
+        {
+            Assert.False(File.Exists(place) || Directory.Exists(place), $"{place} is still there");
+        }
+
+        Assert.True(Directory.Exists(profile) == !(purge && marked), $"Electron's default profile, purge {purge}, marked {marked}");
+        var preferences = remover.Calls.IndexOf("preferences.delete ai.jasonharness.desktop");
+        Assert.True(preferences >= 0 && preferences < remover.Calls.IndexOf($"file.remove {places[0]}"), string.Join(" | ", remover.Calls));
+        Assert.Equal($"tree.remove {application}", remover.Calls[^1]);
+        if (purge && !marked)
+        {
+            var left = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("plan").GetProperty("desktop").GetProperty("left");
+            Assert.Contains(left.EnumerateArray(), line => line.GetString()!.Contains("Local State", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary><c>--keep-application</c> keeps all of the application's state: it stays where the application stays.</summary>
+    [Fact]
+    public async Task Keep_application_keeps_the_applications_own_state()
+    {
+        var executable = MacApplication();
+        var preferences = DesktopRemoval.PreferencesFile(Home);
+        Directory.CreateDirectory(Path.GetDirectoryName(preferences)!);
+        File.WriteAllText(preferences, "state");
+        var saved = Plant(Path.Combine(Home, "Library", "Saved Application State", "ai.jasonharness.desktop.savedState"));
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        Assert.True(File.Exists(preferences));
+        Assert.True(Directory.Exists(saved));
+        Assert.DoesNotContain(remover.Calls, call => call.StartsWith("preferences.delete", StringComparison.Ordinal));
+    }
+
     [Fact]
     [Critical(Family.I3, "a purge runs before the application goes, never after it from inside it")]
     public async Task The_data_directory_goes_on_the_word_before_the_application_and_the_harness_root_never()

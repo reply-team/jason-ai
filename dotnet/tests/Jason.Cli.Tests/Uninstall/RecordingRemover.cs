@@ -278,6 +278,8 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
 
     public void UnloadLaunchAgent(string file) => Record("launchagent.unload", file);
 
+    public void DeletePreferences(string domain) => Record("preferences.delete", domain);
+
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;
 

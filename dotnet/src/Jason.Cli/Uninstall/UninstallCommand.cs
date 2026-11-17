@@ -104,13 +104,23 @@ public static class UninstallCommand
           - in place of steps 5 and 6: the terminal command jason install placed, by the rules it placed it by:
             on macOS ~/.local/bin/jason and jason-desktop where each is the application's wrapper running this
             jason (or a jason that is gone), then install.sh's lines for ~/.local/bin where it then holds nothing
-            but Jason, then the folder once empty; on Windows the application's jason and jason-desktop command
+            but Jason, a profile file removed only where jason install recorded that it created it and nothing
+            but whitespace is left, then the folder once empty; on Windows the application's jason and jason-desktop command
             files in WindowsApps, and the entry in this account's Path naming the application's resources\bundle,
             where that folder holds nothing but what the application carries there. An older command-line install
             of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
             profile block and its folder. Then the folders an earlier version's demo made, each only where it
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
             ai.jasonharness.desktop.ShipIt).
+          - macOS, just before the application and only where it goes: its own state under ~/Library, each
+            where found as itself: Preferences/ai.jasonharness.desktop.plist (through defaults delete, then
+            the file), Saved Application State/ai.jasonharness.desktop.savedState, Caches/
+            ai.jasonharness.desktop (Squirrel's), HTTPStorages/ai.jasonharness.desktop and its
+            .binarycookies, WebKit/ai.jasonharness.desktop, Logs/Jason (Electron's default log folder) and
+            Application Support/ai.jasonharness.desktop (jason install's record of the profiles it created).
+            Electron's default profile, Application Support/Jason, which may hold the person's work, goes only
+            with --purge-data and only where it carries Chromium's Local State file. --keep-application
+            keeps all of it.
           - last, after the data directory: the application. macOS: the Jason.app it is inside, deleted.
             Windows: a waiter is started, which once this command has ended runs the application's own
             uninstaller silently on its folder, so the folder goes after this ends; the report says so.
@@ -254,7 +264,7 @@ public static class UninstallCommand
         {
             // The plan is read after the application that asked has quit, so it is the machine as the uninstall finds it.
             await WaitForAsync(env, options, cancellationToken).ConfigureAwait(false);
-            desktop = DesktopRemoval.Read(env, carried, places, options.KeepApplication);
+            desktop = DesktopRemoval.Read(env, carried, places, options.KeepApplication, options.PurgeData);
             if (DesktopOpen(env, desktop, places, options) is { } open)
             {
                 return Refuse(env, options.Human, CliErrors.DesktopRunning, open);

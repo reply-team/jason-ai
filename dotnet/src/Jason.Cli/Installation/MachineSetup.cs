@@ -455,9 +455,16 @@ public static class MachineSetup
 
                     try
                     {
+                        // Whether this run brings the file into being, recorded so the uninstall takes away only a file Jason
+                        // made and that holds nothing else by then (CreatedProfiles).
+                        var created = !File.Exists(profile) && !IsLink(profile);
                         if (PathEntry.AddToProfile(profile, places.LocalBin))
                         {
                             added.Add(profile);
+                            if (created)
+                            {
+                                RecordCreated(profile);
+                            }
                         }
                     }
                     catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
@@ -813,6 +820,22 @@ public static class MachineSetup
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Records a profile this run created. One that cannot be recorded is said, and stays at an uninstall like a file the
+        /// person had: the safe direction.
+        /// </summary>
+        private void RecordCreated(string profile)
+        {
+            try
+            {
+                CreatedProfiles.Add(places.Home, profile);
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places.Home)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
             }
         }
 
