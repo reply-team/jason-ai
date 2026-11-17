@@ -235,6 +235,34 @@ public class AutostartArtifactsTests
 
         Assert.Equal([["launchctl", "load", "-w", agent.ArtifactPath]], agent.Apply);
         Assert.Equal([["launchctl", "unload", "-w", agent.ArtifactPath]], agent.Remove);
+        Assert.Empty(agent.Forget);
+    }
+
+    /// <summary>
+    /// The uninstall's removal leaves no mark for the label: on macOS it unloads through the file without <c>-w</c>, which
+    /// would leave the label disabled for a later install's job, and clears a disabled state an earlier removal left, in the
+    /// account's login domain; where the user id is not known it clears nothing. <c>disable</c>'s removal keeps <c>-w</c>,
+    /// and on Windows and Linux the uninstall's removal is <c>disable</c>'s.
+    /// </summary>
+    [Fact]
+    public void The_uninstalls_removal_leaves_no_mark_for_the_label()
+    {
+        var agent = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/usr/local/bin/jason"], Unix, Home, "ada");
+
+        var leaving = AutostartArtifacts.LeavingNoMark(agent, 501);
+
+        Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], leaving.Remove);
+        Assert.Equal([["/bin/launchctl", "enable", "gui/501/ai.jason.runtime"]], leaving.Forget);
+        Assert.Equal(agent.Apply, leaving.Apply);
+        Assert.Equal(agent.Artifact, leaving.Artifact);
+        Assert.Empty(AutostartArtifacts.LeavingNoMark(agent, null).Forget);
+        Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], AutostartArtifacts.LeavingNoMark(agent, null).Remove);
+
+        foreach (var platform in new[] { AutostartPlatform.Windows, AutostartPlatform.Linux })
+        {
+            var other = AutostartArtifacts.Compose(platform, ["/usr/local/bin/jason"], Unix, Home, "ada");
+            Assert.Same(other, AutostartArtifacts.LeavingNoMark(other, 501));
+        }
     }
 
     /// <summary>

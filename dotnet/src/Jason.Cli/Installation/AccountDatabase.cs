@@ -30,6 +30,24 @@ internal static class AccountDatabase
         }
     }
 
+    /// <summary>This process's real user id on macOS, which names the account's launchd domains; null on every other system.</summary>
+    public static uint? UserId()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return null;
+        }
+
+        try
+        {
+            return GetUserId();
+        }
+        catch (Exception unread) when (unread is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>macOS's <c>struct passwd</c>, up to the home directory.</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct PasswordEntry

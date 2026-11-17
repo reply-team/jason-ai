@@ -28,14 +28,17 @@ internal static class LaunchdJobs
     /// <summary>launchctl, by the path macOS keeps it at.</summary>
     public const string Launchctl = "/bin/launchctl";
 
-    /// <summary>Runs each unload given, then removes the job by <paramref name="label"/>; nothing it is answered is an error.</summary>
-    public static void TakeOut(IEnumerable<IReadOnlyList<string>> unloads, string label, BoundedRun? run = null)
+    /// <summary>
+    /// Runs each unload given, then removes the job by <paramref name="label"/>, then runs each of <paramref name="after"/>;
+    /// nothing it is answered is an error.
+    /// </summary>
+    public static void TakeOut(IEnumerable<IReadOnlyList<string>> unloads, string label, BoundedRun? run = null, IEnumerable<IReadOnlyList<string>>? after = null)
     {
         ArgumentNullException.ThrowIfNull(unloads);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
 
         run ??= AutostartRegistrars.Run;
-        foreach (var command in unloads.Append([Launchctl, "remove", label]))
+        foreach (var command in unloads.Append([Launchctl, "remove", label]).Concat(after ?? []))
         {
             try
             {
