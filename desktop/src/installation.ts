@@ -13,7 +13,7 @@ import type { SkillsGate } from './skills-gate.ts';
 import type { Cli, CliResult } from './cli.ts';
 import { pairingLink, runtimeOrigin } from './descriptor.ts';
 import type { Logger } from './log.ts';
-import { layoutNewerCode, layoutUnreadableCode, type DesktopPaths } from './paths.ts';
+import { dataNewerCode, layoutNewerCode, layoutUnreadableCode, type DesktopPaths } from './paths.ts';
 import type { DesktopSettings } from './settings.ts';
 import { runtimeVersionIn, statusFacts } from './setup-model.ts';
 
@@ -61,8 +61,20 @@ export class LayoutRefused extends StartFailed {
     }
 }
 
-/** The layout refusal a failed `jason runtime start` printed as its error on stdout, or null for any other failure. */
-export function layoutRefusalIn(stdout: string): { code: typeof layoutNewerCode | typeof layoutUnreadableCode; message: string } | null {
+/**
+ * `jason runtime start` answered that the runtime refused the database, which a newer Jason migrated (`data_newer`): no
+ * runtime was started and nothing was changed. The message is the CLI's own sentence, which says to update.
+ */
+export class DataNewerRefused extends StartFailed {
+    readonly code: typeof dataNewerCode = dataNewerCode;
+
+    constructor(result: CliResult, message: string) {
+        super('data', result, message);
+    }
+}
+
+/** The error a failed CLI run printed on stdout, where its code is one of `codes` and it says a sentence; null otherwise. */
+function refusalIn<Code extends string>(stdout: string, codes: readonly Code[]): { code: Code; message: string } | null {
     let parsed: unknown;
     try {
         parsed = JSON.parse(stdout);
@@ -71,7 +83,17 @@ export function layoutRefusalIn(stdout: string): { code: typeof layoutNewerCode 
     }
     const error = (parsed as { error?: unknown } | null)?.error as { code?: unknown; message?: unknown } | undefined;
     if (typeof error !== 'object' || error === null || typeof error.message !== 'string' || error.message === '') return null;
-    return error.code === layoutNewerCode || error.code === layoutUnreadableCode ? { code: error.code, message: error.message } : null;
+    return (codes as readonly unknown[]).includes(error.code) ? { code: error.code as Code, message: error.message } : null;
+}
+
+/** The layout refusal a failed `jason runtime start` printed as its error on stdout, or null for any other failure. */
+export function layoutRefusalIn(stdout: string): { code: typeof layoutNewerCode | typeof layoutUnreadableCode; message: string } | null {
+    return refusalIn(stdout, [layoutNewerCode, layoutUnreadableCode] as const);
+}
+
+/** The sentence of a `data_newer` refusal a failed `jason runtime start` printed on stdout, or null for any other failure. */
+export function dataNewerRefusalIn(stdout: string): string | null {
+    return refusalIn(stdout, [dataNewerCode] as const)?.message ?? null;
 }
 
 export interface Started {
@@ -131,6 +153,12 @@ export async function startInstallation(deps: InstallationDeps): Promise<Started
             if (layout !== null) {
                 log.error('layout_refused', { Code: layout.code });
                 throw new LayoutRefused(start, layout.code, layout.message);
+            }
+            // So is a database a newer Jason migrated, which the runtime refused before it wrote anything.
+            const newer = dataNewerRefusalIn(start.stdout);
+            if (newer !== null) {
+                log.error('data_newer_refused', { Code: dataNewerCode });
+                throw new DataNewerRefused(start, newer);
             }
             throw new StartFailed('runtime start', start, said(start) || 'jason runtime start did not start a runtime.');
         }

@@ -36,7 +36,7 @@ import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
-import { LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
+import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -709,7 +709,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         const step = error instanceof StartFailed ? error.step : 'load';
         const exit = error instanceof StartFailed ? error.exit : -1;
         log.error('window_load_failed', { Step: step, Exit: exit });
-        const layoutRefused = error instanceof LayoutRefused;
+        // A layout or a database the start refused is the data directory's cause, not this version's: going back is not
+        // offered, since an older version knows that directory no better.
+        const layoutRefused = error instanceof LayoutRefused || error instanceof DataNewerRefused;
         const kept = settleFailedStart(rollback, app.getVersion(), layoutRefused, log);
         const said = error instanceof Error ? error.message : String(error);
         const notice = failedStartNotice(

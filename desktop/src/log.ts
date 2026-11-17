@@ -19,6 +19,7 @@ export const templates = {
     runtime_starting: 'No runtime was up; starting one with jason runtime start',
     runtime_start_failed: 'jason runtime start exited {Exit}',
     layout_refused: 'jason runtime start refused the data directory’s layout with {Code}; no runtime was started',
+    data_newer_refused: 'jason runtime start refused a database a newer Jason migrated with {Code}; no runtime was started',
     versions_differ: 'The runtime is {RuntimeVersion} and this desktop carries {BundleVersion}; the UI the runtime serves is loaded',
     ui_installed: 'jason ui install exited {Exit}',
     skills_deployed: 'jason skills install for {Target} exited {Exit}',
