@@ -1015,7 +1015,13 @@ there is not taken, and nothing is written over that file; a request whose file 
 file, say) is refused as `failed` and taken no further, with no file to answer it. A `busy` or `usage` refusal is written the same way, so it is
 never written over the file of a request under way with the same id. Each step is written before it is taken, by a file
 renamed over it, so a reader meets no file, an empty one, a whole one or the one before; on Windows a read that meets the
-rename is tried again. The verb makes a fresh id for each request and reads a file that was there before it started the
+rename is tried again. On Windows a rename over the file is refused while the verb's read holds it: the Desktop tries it
+again for half a second, and then writes the step in place, which a read may meet half written and takes for no answer,
+the next poll reading it whole; the rename stays the normal way, and on macOS it is the only one. Two steps are ones the
+verb acts on, `downloaded`, after which it gives the go, and `installing`, before which it lets the installer have the
+application, and neither is passed over unwritten: where one is written neither way, the Desktop goes no further, waits
+for no go and starts no installer, and ends the request `failed` where that can still be written, else with the file at
+the step before and the verb given no answer. A lost `checking` or `downloading` only says less. The verb makes a fresh id for each request and reads a file that was there before it started the
 application as no answer. Every member is always there:
 
 | Member | What it holds |
@@ -1060,7 +1066,7 @@ application as no answer. Every member is always there:
 | `keep_failed` | the copy could not be kept; `runtime_stopped` says whether the runtime was stopped first |
 | `install_failed` | the installer stopped before it finished, at once or, on macOS, when Squirrel said so later |
 | `timed_out` | a start of its own did not end within 30 minutes, the install included, or 45 where it waited for a go |
-| `failed` | an error the Desktop did not expect |
+| `failed` | an error the Desktop did not expect, or a `downloaded` or `installing` it could not write, so it went no further; `runtime_stopped` says whether the runtime was stopped first |
 
 | Exit of `--update-apply` | Meaning |
 |---|---|

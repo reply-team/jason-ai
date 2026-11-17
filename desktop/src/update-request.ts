@@ -256,17 +256,65 @@ export interface RequestRecord {
     updated_at: string;
 }
 
-/** Writes a request's file through a file beside it renamed over it, so a reader never meets half of it. */
-export function writeRequestFile(file: string, record: RequestRecord): void {
+/** The file operations a request's file is written through; the disk's unless a test names others. */
+export interface RequestFileIo {
+    write(file: string, text: string): void;
+    rename(from: string, to: string): void;
+    remove(file: string): void;
+    /** Waits `ms` on this thread: the write is synchronous, and a reader holds the file for one read at most. */
+    sleep(ms: number): void;
+}
+
+const diskIo: RequestFileIo = {
+    write: (file, text) => writeFileSync(file, text),
+    rename: (from, to) => renameSync(from, to),
+    remove: (file) => rmSync(file, { force: true }),
+    sleep: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+};
+
+/**
+ * How long a refused rename over the request's file is tried again on Windows before the file is written in place: the
+ * verb's poll holds the file for the length of one read, and Windows refuses a rename over a file another process has
+ * open, whatever share mode it opened it with (EPERM; EBUSY and EACCES alike).
+ */
+export const renameTries = 20;
+export const renamePauseMs = 25;
+
+const refusedRename = (error: unknown): boolean => ['EPERM', 'EBUSY', 'EACCES'].includes(String((error as NodeJS.ErrnoException).code));
+
+/**
+ * Writes a request's file through a file beside it renamed over it, so a reader never meets half of it. On Windows a
+ * rename the verb's read refuses is tried again for `renameTries` × `renamePauseMs`, and if still refused the file is
+ * written in place: the verb's read lets that through and takes a half-written file for no answer, so the next poll reads
+ * the step whole. The rename stays the normal case; the in-place write is the fallback, never the first choice. macOS
+ * renames once, as before. Throws where neither way wrote it: the caller decides what an unwritten step means.
+ */
+export function writeRequestFile(file: string, record: RequestRecord, io: RequestFileIo = diskIo, platform: NodeJS.Platform = process.platform): 'renamed' | 'in_place' {
     mkdirSync(dirname(file), { recursive: true });
+    const text = `${JSON.stringify(record, null, 2)}\n`;
     const temporary = `${file}.${process.pid}.tmp`;
     try {
-        writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`);
-        renameSync(temporary, file);
+        io.write(temporary, text);
     } catch (error) {
-        rmSync(temporary, { force: true });
+        io.remove(temporary);
         throw error;
     }
+    for (let attempt = 1; ; attempt++) {
+        try {
+            io.rename(temporary, file);
+            return 'renamed';
+        } catch (error) {
+            if (platform !== 'win32' || !refusedRename(error)) {
+                io.remove(temporary);
+                throw error;
+            }
+            if (attempt >= renameTries) break;
+            io.sleep(renamePauseMs);
+        }
+    }
+    io.remove(temporary);
+    io.write(file, text);
+    return 'in_place';
 }
 
 /**
@@ -359,7 +407,7 @@ export function refusalMessage(
         case 'timed_out':
             return `Jason Desktop did not finish the update within ${(at.limitMs ?? headlessLimitMs) / 60_000} minutes and stopped waiting. If it had begun installing, the application may still be replaced once it has ended: jason --version says which version runs.`;
         case 'failed':
-            return 'Jason Desktop met an error it did not expect while it took the update request, and ended.';
+            return `Jason Desktop met an error it did not expect while it took the update request, and ended.${stopped}`;
     }
 }
 
@@ -520,11 +568,15 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         updated_at: '',
     };
     let ended = false;
+    // Whether the last step put reached the file: a step that did not is never passed over in silence (`progress`).
+    let written = true;
     const put = (next: Partial<RequestRecord>): RequestRecord => {
         last = { ...last, ...next, updated_at: (deps.now?.() ?? new Date()).toISOString() };
         try {
             write(file, last);
+            written = true;
         } catch {
+            written = false;
             deps.log.warn('update_request_unwritten', { State: last.state });
         }
         return last;
@@ -594,14 +646,23 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     // so a go dated before it is one the verb did not make.
     let downloadedAt: number | null = null;
     let early = false;
-    const progress = (step: TakenStep): void => {
-        if (ended) return;
+    // Answers whether the step is on disk. Two steps the verb acts on are dangerous to lose, and the updater goes no
+    // further where they are not written: `installing`, which the verb reads before it lets the installer have the
+    // application, and `downloaded`, the one the verb gives its go after. `checking` and `downloading` say only where the
+    // request stands; a refusal that cannot be written is the end in any case, the verb then seeing no answer.
+    const progress = (step: TakenStep): boolean => {
+        if (ended) return false;
         if (step.step === 'checking') put({ state: 'checking' });
         else if (step.step === 'downloading') put({ state: 'downloading', offered: step.offered });
         else if (step.step === 'downloaded') {
             put({ state: 'downloaded', offered: request.to });
+            if (!written) return false;
             downloadedAt = waiting.made?.(file) ?? null;
-        } else put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
+        } else {
+            put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
+            return written;
+        }
+        return true;
     };
     const awaitGo = async (): Promise<boolean> => {
         if (!(await waitForGo(go, waiting, () => ended))) return false;
@@ -641,7 +702,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     ended = true;
     if (outcome.state === 'current') return end(put({ state: 'current' }));
     // A go older than `downloaded` stopped the request where no go would have: nothing was stopped, kept or installed.
-    const reason = early && outcome.reason === 'go_timed_out' ? 'go_there' : outcome.reason;
+    const reason = early && outcome.reason === 'go_timed_out' ? 'go_there' : outcome.reason === 'step_unwritten' ? 'failed' : outcome.reason;
     return end(refuse(reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
 }
 
