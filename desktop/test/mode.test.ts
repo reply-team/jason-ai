@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyMode, defaultMode, demoDirectory, demoMenu, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, opensOnDemo, parseMode, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Environment, type Mode } from '../src/mode.ts';
+import { applyMode, defaultMode, demoDirectory, demoMenu, demoUnshownSentence, isSettingsVariable, keepFirstStart, modeUnkept, offersOf, opensOnDemo, parseMode, personEnvironmentOf, readMode, relaunchAsPerson, relaunchOptions, startRun, writeMode, type Environment, type Mode } from '../src/mode.ts';
 import { dataDirectory, desktopPaths } from '../src/paths.ts';
 import { isNewInstallation } from '../src/theme.ts';
 
@@ -282,6 +282,16 @@ test('nothing of the person’s installation exists before they choose Live but 
 test('a demo run’s menu holds the way back alone: no Start the Demo Over, no line where an act of the installation would be', () => {
     assert.deepEqual(demoMenu('demo'), { back: { label: 'Back to Your Own Installation', enabled: true } });
     assert.equal(demoMenu('live'), null);
+});
+
+test('a Demo that could not be shown names the way back by its menu item and by its key, which needs no menu bar and no tray', () => {
+    assert.equal(
+        demoUnshownSentence('linux'),
+        'The demo could not be shown. Choose Back to Your Own Installation in the Jason menu or the tray, or press Ctrl+Shift+L.',
+    );
+    assert.match(demoUnshownSentence('darwin'), /, or press Cmd\+Shift\+L\.$/);
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes('const unshown = demoUnshownSentence(process.platform);'));
 });
 
 /**

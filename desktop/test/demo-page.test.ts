@@ -751,10 +751,12 @@ test('every request from the page’s view to an address the page holds, or to a
     }
 });
 
-// ---- The strip on Windows, where the caption buttons stand over its right end -------------------------------------------
+// ---- The strip on Windows and Linux, where the caption buttons stand over its right end ---------------------------------
 
-// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%.
+// The caption buttons' width, in the view's own pixels, as the overlay's geometry gives it at a scale of 100% and of 150%:
+// on Windows, and on Linux as GNOME draws them, and at 100% as Plasma does.
 const captions = [138, 137.33];
+const linuxCaptions = [114, 113.33, 72];
 
 test('the page’s strip, as the desktop’s sheet names it, is still in the page: the selectors, the strip’s padding and its breakpoint', () => {
     const page = pageText();
@@ -774,9 +776,14 @@ test('the page’s strip, as the desktop’s sheet names it, is still in the pag
     assert.ok(page.includes("say('an example of what you can build on Jason. The data is samples, and nothing is sent.','an example of what you can build. Nothing is sent.')"));
 });
 
-test('on Windows the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
+test('on Windows and Linux the sheets are the desktop’s: the strip inset by the caption buttons’ width read from the overlay, never a number', () => {
     const sheets = demoStripSheets('win32');
     assert.ok(sheets);
+    // Linux takes the same sheets, but for the font of the switch's words: Segoe UI is a Windows font, so on Linux the
+    // words stay in the system's own font, the switch page's.
+    const font = '.switch a, .switch span { font-family: "Segoe UI", sans-serif !important; } ';
+    assert.deepEqual(demoStripSheets('linux'), { page: sheets.page, switch: sheets.switch.replace(font, '') });
+    assert.doesNotMatch(demoStripSheets('linux')!.switch, /font/);
     const caption = '100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)';
     assert.ok(sheets.page.includes(`padding-right: calc(${demoStrip.inset}px + ${caption}) !important;`));
     assert.ok(sheets.page.includes(`container: jason-strip / inline-size !important;`));
@@ -819,25 +826,28 @@ test('on Windows from 900 to 933 pixels our switch takes its tighter form and th
     }
 });
 
-test('on Windows at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
-    for (const caption of captions) {
-        for (let width = 900; width <= 2600; width++) {
-            const at = demoStripAt('win32', width, caption);
-            assert.ok(at.whole, `${width} whole`);
-            assert.ok(at.textEnd <= at.coveredFrom, `${width}`);
+test('on Windows and Linux at every width from 900 up no word of the strip is under our switch, and the sentence is whole', () => {
+    for (const [platform, widths] of [
+        ['win32', captions],
+        ['linux', linuxCaptions],
+    ] as const) {
+        for (const caption of widths) {
+            for (let width = 900; width <= 2600; width++) {
+                const at = demoStripAt(platform, width, caption);
+                assert.ok(at.whole, `${platform} ${width} whole`);
+                assert.ok(at.textEnd <= at.coveredFrom, `${platform} ${width}`);
+            }
         }
     }
 });
 
-test('on macOS and Linux nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
-    for (const platform of ['darwin', 'linux'] as const) {
-        assert.equal(demoStripSheets(platform), null);
-        for (let width = 900; width <= 2600; width++) {
-            const at = demoStripAt(platform, width, 0);
-            assert.equal(at.form, width <= 1100 ? 'short' : 'long');
-            assert.equal(at.switchForm, 'normal');
-            assert.ok(at.whole && at.textEnd <= at.coveredFrom, `${platform} ${width}`);
-        }
+test('on macOS nothing changes: no sheet, the page’s own sentence, the switch in its own form at every width', () => {
+    assert.equal(demoStripSheets('darwin'), null);
+    for (let width = 900; width <= 2600; width++) {
+        const at = demoStripAt('darwin', width, 0);
+        assert.equal(at.form, width <= 1100 ? 'short' : 'long');
+        assert.equal(at.switchForm, 'normal');
+        assert.ok(at.whole && at.textEnd <= at.coveredFrom, `darwin ${width}`);
     }
     const window = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
     assert.ok(window.includes('const sheets = demoStripSheets(deps.platform);'));

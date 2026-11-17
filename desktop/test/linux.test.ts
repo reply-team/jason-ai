@@ -2,6 +2,8 @@
 // behaves with no tray to fall back on.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount } from '../src/linux-package.ts';
 import { windowConduct } from '../src/login-item.ts';
@@ -22,11 +24,23 @@ test('the session starts the AppImage file itself, and the executable for any ot
     assert.equal(launcherOf({ form: 'folder' }, '/home/a/linux-unpacked/jason-desktop-app'), '/home/a/linux-unpacked/jason-desktop-app');
 });
 
-test('on Linux, where no tray can be counted on, the menu bar shows, closing the window quits, and a start at login opens minimized', () => {
-    assert.deepEqual(windowConduct('linux'), { menuBar: true, closeQuits: true, atLogin: 'minimized' });
+test('on Linux, where no tray can be counted on, closing the window quits, and a start at login opens minimized', () => {
+    assert.deepEqual(windowConduct('linux'), { closeQuits: true, atLogin: 'minimized' });
     for (const platform of ['win32', 'darwin'] as const) {
-        assert.deepEqual(windowConduct(platform), { menuBar: false, closeQuits: false, atLogin: 'hidden' }, `${platform} keeps the tray`);
+        assert.deepEqual(windowConduct(platform), { closeQuits: false, atLogin: 'hidden' }, `${platform} keeps the tray`);
     }
+});
+
+test('no window shows a menu bar, Linux’s included: Live’s window and the Demo’s each hide it, on every platform', () => {
+    const main = readFileSync(join(import.meta.dirname, '..', 'src', 'main.ts'), 'utf8');
+    for (const start of ['async function run(', 'async function runDemo(']) {
+        const from = main.indexOf(start);
+        assert.ok(from >= 0, start);
+        const body = main.slice(from, main.indexOf('\n}\n', from));
+        assert.equal(body.split('new BrowserWindow({').length - 1, 1, `${start} makes one window`);
+        assert.equal(body.split('window.setMenuBarVisibility(false);').length - 1, 1, `${start} hides its menu bar`);
+    }
+    assert.doesNotMatch(main, /setMenuBarVisibility\((?!false\))|autoHideMenuBar|setAutoHideMenuBar/);
 });
 
 test('what an update keeps aside: the AppImage file, nothing for the deb, the installed folder for any other form', () => {

@@ -13,6 +13,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { itemKeys, keyWords } from './keybindings.ts';
 
 export type Mode = 'live' | 'demo';
 
@@ -206,6 +207,15 @@ export interface DemoMenu {
 
 export function demoMenu(mode: Mode): DemoMenu | null {
     return mode === 'demo' ? { back: { label: backLabel, enabled: true } } : null;
+}
+
+/**
+ * Pure: what the window says when the Demo could not be shown. It names the way back by its item and by its key, since a
+ * window with no menu bar, on a desktop that shows no tray, has no other: closing the window quits, and the next start
+ * opens the Demo again.
+ */
+export function demoUnshownSentence(platform: NodeJS.Platform): string {
+    return `The demo could not be shown. Choose ${backLabel} in the Jason menu or the tray, or press ${keyWords(itemKeys.back, platform)}.`;
 }
 
 /**

@@ -22,6 +22,7 @@ export const invokeChannels = {
     'setup.replyDelete': 'jason:setup.replyDelete',
     'theme.get': 'jason:theme.get',
     'theme.set': 'jason:theme.set',
+    'updates.key': 'jason:updates.key',
     'dailyTrends.get': 'jason:dailyTrends.get',
     'dailyTrends.set': 'jason:dailyTrends.set',
     'mode.get': 'jason:mode.get',

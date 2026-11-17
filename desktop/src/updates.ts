@@ -23,6 +23,7 @@
  */
 
 import { nextCheckDelay } from './backoff.ts';
+import { itemKeys, keyWords } from './keybindings.ts';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
@@ -97,6 +98,50 @@ export function menuItemOf(state: UpdateState, installed: boolean, active: boole
         case 'installing':
             return { label: `Installing Jason ${state.version}…`, enabled: false, act: null };
     }
+}
+
+/**
+ * A press of the update item, on the act of the step its menu showed. The key acts as a click does but for the install:
+ * a hand on the key sees no label, and the install stops the runtime, which ends a running turn and the work in
+ * progress, and restarts the desktop, so the key asks first (`installQuestion`; `ask` answers the index of the button
+ * chosen) and installs only on yes; a click on the item, whose label says so, installs at once. The question reads the
+ * step again, so a press the menu showed before the step moved on asks nothing.
+ */
+export async function pressItem(
+    updates: Pick<Updater, 'current' | 'check' | 'download' | 'install'>,
+    act: MenuItem['act'],
+    byKey: boolean,
+    ask: (question: ReturnType<typeof installQuestion>) => Promise<number>,
+): Promise<void> {
+    if (act === 'check') await updates.check();
+    else if (act === 'download') await updates.download();
+    else if (act === 'install' && !byKey) await updates.install();
+    else if (act === 'install') {
+        const state = updates.current;
+        if (state.step !== 'downloaded') return;
+        if ((await ask(installQuestion(state.version))) === 0) await updates.install();
+    }
+}
+
+/** Pure: the question the update item's key asks before it installs, naming the version; its default does nothing. */
+export function installQuestion(version: string): { type: 'question'; message: string; detail: string; buttons: string[]; defaultId: number; cancelId: number } {
+    return {
+        type: 'question',
+        message: `Restart Jason and its runtime to install Jason ${version}?`,
+        detail: 'The runtime stops first, which ends a running turn and the work in progress, and Jason starts again on the new version.',
+        buttons: ['Restart and Install', 'Not Now'],
+        defaultId: 1,
+        cancelId: 1,
+    };
+}
+
+/**
+ * Pure: the update item's key as a person reads it, where the item can act; null where it says "Updates Come to an
+ * Installed Build" or "Updates Come Through the Package" (`menuItemOf`), where the key would do nothing, so no sentence
+ * names it there.
+ */
+export function updateKeyWords(installed: boolean, active: boolean, platform: NodeJS.Platform): string | null {
+    return installed && active ? keyWords(itemKeys.update, platform) : null;
 }
 
 /** What the person is told when the runtime this application carries did not stop, or did not answer, so the update was not installed. */

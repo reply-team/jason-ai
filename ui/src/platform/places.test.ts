@@ -153,7 +153,7 @@ describe('the object of a tab with a bridge', () => {
                 expect(typeof at(desktop, member)(() => undefined), member).toBe('function');
                 continue;
             }
-            if (member === 'links.take' || member === 'dailyTrends.get') {
+            if (member === 'links.take' || member === 'dailyTrends.get' || member === 'updates.key') {
                 await expect(at(desktop, member)()).resolves.toBeNull();
                 continue;
             }
@@ -203,11 +203,20 @@ describe('the object of a tab with no desktop', () => {
         expect(await desktop.theme.get()).toBeNull();
         expect(await desktop.links.take()).toBeNull();
         expect(await desktop.dailyTrends.get()).toBeNull();
+        expect(await desktop.updates.key()).toBeNull();
     });
 
     it('refuses every act in the one sentence, and says nothing of what only the desktop knows', async () => {
         const desktop = noDesktop();
-        const reads = ['mode.get', 'chat.list', 'fullAccess.standing', 'theme.get', 'links.take', 'dailyTrends.get'];
+        const reads = [
+            'mode.get',
+            'chat.list',
+            'fullAccess.standing',
+            'theme.get',
+            'links.take',
+            'dailyTrends.get',
+            'updates.key',
+        ];
         const subscriptions = [
             'onCommand',
             'mode.onPreparing',
