@@ -59,6 +59,7 @@ public static class ConfinedVerbs
         (Kind.Installation, "plugin install"),
         (Kind.Installation, "plugin reload"),
         (Kind.Installation, "profile"),
+        (Kind.Installation, "notification"),
         (Kind.Installation, "skills"),
         (Kind.Installation, "update"),
         (Kind.Installation, "uninstall"),

@@ -254,6 +254,7 @@ public static class CliApp
         root.Subcommands.Add(RoleCommands.Build(env, actor));
         root.Subcommands.Add(RoleNoteCommands.Build(env, actor));
         root.Subcommands.Add(ProfileCommands.Build(env, actor));
+        root.Subcommands.Add(NotificationCommands.Build(env, actor));
         root.Subcommands.Add(ApprovalCommands.Build(env, actor));
         root.Subcommands.Add(BlockCommands.Build(env, actor));
         root.Subcommands.Add(DecisionCommands.Build(env, actor));

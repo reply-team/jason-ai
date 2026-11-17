@@ -31,6 +31,7 @@ public class ConfinedVerbsTests
         ["plugin install"] = ["plugin", "install", "fake-provider"],
         ["plugin reload"] = ["plugin", "reload"],
         ["profile"] = ["profile", "list"],
+        ["notification"] = ["notification", "disable", "toast"],
         ["skills"] = ["skills", "update", "--dry-run"],
         ["update"] = ["update", "check"],
         ["uninstall"] = ["uninstall"],

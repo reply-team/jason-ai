@@ -29,6 +29,7 @@ runtime
 plugin install
 plugin reload
 profile
+notification
 skills
 update
 uninstall
@@ -95,6 +96,8 @@ profile.disable
 profile.enable
 profile.set_default
 profile.unset_default
+notification.enable
+notification.disable
 ui.open
 ui.tokens
 ui.revoke

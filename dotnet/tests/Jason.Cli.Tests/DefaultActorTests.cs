@@ -382,6 +382,8 @@ public class DefaultActorTests
         ["profile", "enable", "local-codex"],
         ["profile", "set-default", "local-codex"],
         ["profile", "unset-default"],
+        ["notification", "enable", "toast"],
+        ["notification", "disable", "toast"],
         ["approval", "list"],
         ["approval", "get", "apr_A"],
         ["approval", "list-standing", "cmp_A"],
