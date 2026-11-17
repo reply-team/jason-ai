@@ -67,13 +67,15 @@ export const templates = {
     machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}',
     machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
     machine_setup_runtime: 'A runtime answered before jason install ran at {Why} and none after it; one was started again {Started}',
-    // Taking off what the desktop placed: the menu's Remove What Jason Placed, and the Windows uninstaller's start.
+    // Taking off what the desktop placed: the menu's Remove What Jason Placed on Linux, and Uninstall Jason on macOS.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
+    uninstall_asked: 'Uninstall Jason was answered with {Answer}',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',
     // The updater.
     update_checked: 'The releases were read; a newer one to offer: {Available}',
     update_offered: 'Jason {Version} is offered',
     update_downloaded: 'Jason {Version} was downloaded',
+    update_go_missed: 'Jason {Version} was downloaded and no go came for it, so nothing was installed',
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',

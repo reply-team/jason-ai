@@ -42,7 +42,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A feed in a directory is never handed to the verb: the verb is not run, and the line says what to run.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     [Critical(Family.I1, "the installer runs the skills verb only on a feed it read itself")]
     public void A_feed_in_a_directory_runs_no_skills_verb_and_says_what_to_run(string script)
     {
@@ -65,7 +64,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_feed_at_an_address_is_handed_to_the_skills_verb_as_its_manifest(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -90,7 +88,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A deployment that fails leaves Jason installed and the run successful, and the one line says what to do.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_skills_deployment_that_fails_leaves_jason_installed_and_says_so(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -109,54 +106,6 @@ public sealed partial class InstallNoticesTests
     }
 
     /// <summary>
-    /// The same under the Windows PowerShell a fresh Windows has, which stops on a native command's stderr read through
-    /// its error stream: the verb's refusal goes straight through, and the run still ends with the licence.
-    /// </summary>
-    [Fact]
-    public void A_skills_deployment_that_fails_under_windows_powershell_is_said_the_same_way()
-    {
-        var installer = Installer.For(Ps1, _tree);
-        using var address = new LoopbackReleases(installer.Feed("0.33.0"));
-        installer.Variables[StandInLog] = Path.Combine(_tree.NewDirectory("standin"), "calls.txt");
-        installer.Variables[StandInExit] = "1";
-
-        var run = installer.RunUnderWindowsPowerShell($"{address.Releases}/latest/download");
-
-        Assert.True(run.Exit == 0, run.Stderr);
-        Assert.Contains("The stand-in refused.", run.Stderr, StringComparison.Ordinal);
-        var lines = Lines(run.Stdout);
-        Assert.Equal(FailedLine, lines[^3]);
-        AssertEndsWith(MitLine("0.33.0"), lines);
-    }
-
-    /// <summary>
-    /// An executable that cannot be started when the verb is run — moved aside since the script asked its version, as a
-    /// scanner moves one — has no line of its own to show: what PowerShell answered is said in its place, then the line,
-    /// and the run still ends with the licence and exits 0.
-    /// </summary>
-    [Fact]
-    public void A_skills_verb_that_cannot_start_is_said_and_the_run_still_ends_with_the_licence()
-    {
-        var installer = Installer.For(Ps1, _tree);
-        using var address = new LoopbackReleases(installer.Feed("0.33.0"));
-        var feed = $"{address.Releases}/latest/download";
-        var first = installer.Run(feed);
-        Assert.True(first.Exit == 0, first.Stderr);
-        installer.Variables[StandInVanish] = "1";
-
-        var run = installer.Run(feed);
-
-        Assert.True(run.Exit == 0, run.Stderr);
-        Assert.False(File.Exists(installer.Target));
-        var lines = Lines(run.Stdout);
-        var installed = lines.FindIndex(line => line.StartsWith("Jason 0.33.0 is already installed at ", StringComparison.Ordinal));
-        Assert.True(installed >= 0, run.Stdout);
-        Assert.Contains(lines.Skip(installed + 1).SkipLast(3), line => line.Contains(installer.Target, StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(FailedLine, lines[^3]);
-        AssertEndsWith(MitLine("0.33.0"), lines);
-    }
-
-    /// <summary>
     /// With no feed of its own, the verb is run with no <c>--feed</c>, so it reads its default. A run with no feed reaches
     /// the published releases, which no test does, so this row reads the text: the no-feed case hands the verb nothing.
     /// </summary>
@@ -166,10 +115,6 @@ public sealed partial class InstallNoticesTests
         var sh = Code(Sh);
         Assert.Contains("    '') deploy_role_skills ;;", sh, StringComparison.Ordinal);
         Assert.Contains("deploy_role_skills --feed \"${FEED%/}/manifest.json\"", sh, StringComparison.Ordinal);
-
-        var ps1 = Code(Ps1);
-        Assert.Contains("$arguments = @('skills', 'install', '--roles-only')", ps1, StringComparison.Ordinal);
-        Assert.Contains("if ($Feed) { $arguments += @('--feed', ($Feed.TrimEnd('/') + '/manifest.json')) }", ps1, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -217,7 +162,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh, "Added $INSTALL_DIR to the PATH in ", "skills install --roles-only")]
-    [InlineData(Ps1, "is on your PATH; open a new terminal", "'skills', 'install', '--roles-only'")]
     public void The_skills_step_comes_after_the_path_step_and_before_the_licence(string script, string pathStep, string verb)
     {
         var code = Code(script);

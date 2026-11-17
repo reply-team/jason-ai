@@ -104,19 +104,6 @@ export function toQuestionCard(row: DecisionSummary, whole: Decision | undefined
     return { id: row.id, question: row.question, age: ageOf(row.raised_at, now), options: whole?.options ?? [] };
 }
 
-/** A message edited from a card: the approval the edit withdrew, and the work item the runtime asks about again. */
-export interface Reasked {
-    workItemId: string;
-    approvalId: string;
-}
-
-/** The edits still waiting for the runtime to ask again: one is let go once another approval of its work item is listed. */
-export function stillAsking(reasked: readonly Reasked[], pending: readonly ApprovalSummary[]): Reasked[] {
-    return reasked.filter(
-        (each) => !pending.some((row) => row.work_item_id === each.workItemId && row.id !== each.approvalId),
-    );
-}
-
 /** The whole reads kept for the rows a list still holds, and the ids of the rows not read yet. */
 export function keptAndMissing<T>(
     read: Readonly<Record<string, T>>,

@@ -157,9 +157,18 @@ is made of. One sentence under it says what is not shown: the sender's signature
 provider's tracking, which are added when it sends. A reply in a thread shows who it goes to, the channel and the text.
 A message written as text (not a template) and a reply can be edited there, a message's subject and body or a reply's
 body and nothing else: **Edit message**, then **Save**, which is `jason workitem update` of the message's input with
-you as the actor and a reason the page words. Saving approves nothing: the old card is gone, the page says "Jason asks
-again with the new text when it next takes this work" and shows the new approval when it arrives, and Approve belongs
-to that one; if it does not arrive while the page waits, the sentence stays true and the next refresh shows it. If the
+you as the actor and a reason the page words. Saving approves nothing, and the runtime withdraws the approval it was
+asked under, but the row stays where it was in the list, chosen, with the new text, and says the text is saved and that
+Jason asks again with it when it next takes this work; where a read of the work item fails it says it could not be read,
+and where the work ended another way it says how. No control acts on the withdrawn approval again while the page is
+open. When a pending approval of the same work item is listed, matched by the work item alone, the row becomes it in
+place, still chosen, and Approve belongs to that one; if its text is not the one saved, because something changed the
+work item after the save, its panel says so. If that approval was decided before the list held it, or the work ended
+another way, the row goes as a row decided elsewhere does. The list's counts do not fall because of the edit. The
+browser's page has no journal stream: it learns that the runtime asked again from its panel, which watches for the new
+approval for half a minute after the save, then from **Refresh**. The kept row is the page's own memory, the same in
+Attention, a campaign's Sequence, Needs you and an agent's chat: a reload of the page forgets it, and the row comes back
+when the runtime has asked again. If the
 text changed while you were editing, Save writes nothing: the page says so, shows the new text and keeps yours in the
 box. A card is checked against its work item before it offers **Approve**, and again at the press: the approval's
 subject, the arguments the runtime parked, is compared, as whole documents and whatever the order of their keys,

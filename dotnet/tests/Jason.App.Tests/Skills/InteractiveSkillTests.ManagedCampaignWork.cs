@@ -796,4 +796,40 @@ public partial class InteractiveSkillTests
         Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind approval_standing_applied", printed);
         Assert.Equal("approval_standing_applied", Jason.Runtime.Journal.JournalKinds.ApprovalStandingApplied);
     }
+
+    /// <summary>
+    /// Asked whether somebody answered, an agent reads the provider now and says what it shows, instead of answering
+    /// "nothing yet" and waiting for the runtime's own read. The two cadences it names are the options' real defaults.
+    /// </summary>
+    [Fact]
+    public void Asked_whether_somebody_answered_the_agent_reads_now_and_names_the_real_cadences()
+    {
+        foreach (var pack in new[] { "managed-campaign-work", "inbox-triage" })
+        {
+            var skill = pack == "inbox-triage"
+                ? string.Join(' ', File.ReadAllText(Path.Combine(SkillPack.BusinessRoot(), pack, "SKILL.md")).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                : Flattened(pack);
+
+            Assert.Contains("such a read records nothing", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("Jason has not noticed that reply", skill, StringComparison.Ordinal);
+            Assert.Contains("Whether Jason has noticed the reply is in the lines below", skill, StringComparison.Ordinal);
+            Assert.Contains("only then wakes its responder", skill, StringComparison.Ordinal);
+            Assert.Contains("`Dispatcher:EventsCadenceSeconds`", skill, StringComparison.Ordinal);
+            Assert.Contains("`Inbound:SyncSeconds`", skill, StringComparison.Ordinal);
+            Assert.Contains("600", skill, StringComparison.Ordinal);
+            Assert.Contains("900", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("events signal", skill, StringComparison.Ordinal);
+
+            var printed = pack == "inbox-triage"
+                ? SkillPack.PrintedCommands(Path.Combine(SkillPack.BusinessRoot(), pack, "SKILL.md"))
+                : SkillPack.PrintedCommands(SkillPack.Find(pack).File);
+            Assert.Contains("jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
+            Assert.Contains("jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812", printed);
+            Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed", printed);
+            Assert.Contains("jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder", printed);
+        }
+
+        Assert.Equal(600, new Jason.Runtime.Configuration.DispatcherOptions().EventsCadenceSeconds);
+        Assert.Equal(900, new Jason.Runtime.Configuration.InboundOptions().SyncSeconds);
+    }
 }

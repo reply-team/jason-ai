@@ -103,6 +103,12 @@ public sealed class JasonPaths
     public string RunDirectory => Path.Combine(Root, "run");
     public string DescriptorFile => Path.Combine(RunDirectory, "runtime.json");
     public string LockFile => Path.Combine(RunDirectory, "runtime.lock");
+
+    /// <summary>
+    /// The note <c>jason install</c> leaves when it stops this data directory's runtime: a start is owed. A runtime's own start
+    /// removes it, <c>jason status</c> names it while no runtime answers, and Jason Desktop starts one when it finds it standing.
+    /// </summary>
+    public string StartOwedFile => Path.Combine(RunDirectory, "start-owed.json");
     public string LogsDirectory => Path.Combine(Root, "logs");
     public string WorkDirectory => Path.Combine(Root, "work");
 

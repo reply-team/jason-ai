@@ -59,6 +59,18 @@ public class NeedsExchangesTests
         Assert.True(JsonNode.DeepEquals(edited, patched.Context["input"]));
         var after = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-after-edit", new { }, Ct);
         Assert.Equal([ReplyApproval], after.Items.Select(a => a.Id));
+        // What a list that kept the edited row reads of it: the item, back in the queue until the claim asks again.
+        var requeued = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-message-requeued", new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Created, requeued.Status);
+        // And every approval of that item, in every status: the withdrawn one alone, superseded, none asked again yet.
+        var history = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-message-all-after-edit", new { work_item_id = item, statuses = new[] { "pending", "approved", "rejected", "superseded", "cancelled" } }, Ct);
+        Assert.Equal([(EmailApproval, ApprovalStatus.Superseded)], history.Items.Select(a => (a.Id, a.Status)));
+        // The work then cancelled before the runtime asked again: what the list that kept the row reads of it then.
+        await api.PostOkAsync<WorkItemDto>(Operations.WorkItemCancel, new { work_item_id = item, actor = new { type = "human", id = "ada" } }, Ct);
+        var cancelled = await api.RecordAsync<WorkItemDto>(Operations.WorkItemGet, "needs-message-cancelled", new { work_item_id = item }, Ct);
+        Assert.Equal(WorkItemStatus.Cancelled, cancelled.Status);
+        var afterCancel = await api.RecordAsync<Page<ApprovalSummaryDto>>(Operations.ApprovalList, "needs-message-all-cancelled", new { work_item_id = item, statuses = new[] { "pending", "approved", "rejected", "superseded", "cancelled" } }, Ct);
+        Assert.DoesNotContain(afterCancel.Items, a => a.Status == ApprovalStatus.Pending);
 
         // A question the autumn campaign's AI raised, with its options: what waits on a person beside the approvals.
         var questions = await api.RecordAsync<Page<DecisionSummaryDto>>(Operations.DecisionList, "needs-questions", new { }, Ct);

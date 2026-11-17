@@ -610,13 +610,19 @@ test('our switch’s view is transparent, so the page’s strip shows through it
 
 // The band's document is the window's own contents, which fill the whole window under the two views, and Electron asks
 // the window's own contents first whether a point is in a drag region, whichever view is drawn over it: so only the band's
-// own height drags, never the document as a whole.
-test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the strip’s beyond, and drags over its own height alone', () => {
+// own height drags, never the document as a whole. Beyond the sidebar it is the page's own ground, not the Demo strip's
+// yellow, so the yellow is the strip's own line and no more.
+test('our band on macOS holds no script and nothing to click, is the sidebar’s colour over 284 and the page’s ground beyond, and drags over its own height alone', () => {
     const page = readFileSync(join(root, 'shell', 'demo-band.html'), 'utf8');
     assert.ok(!/<script|on[a-z]+\s*=|javascript:|href=|<a\b|<button|<input/i.test(page), 'no script and nothing to follow');
     assert.ok(!/src=|url\(|@import/i.test(page), 'it loads nothing');
     const css = page.replace(/\s+/g, ' ');
-    assert.ok(/background: linear-gradient\(to right, #f3f5f9 0 284px, #fff4d6 284px\);/.test(css));
+    assert.ok(/background: linear-gradient\(to right, #f3f5f9 0 284px, #fff 284px\);/.test(css));
+    // The two colours are the page's own: its sidebar's and its ground's, never the strip's yellow.
+    const demo = readFileSync(join(root, 'demo', 'index.html'), 'utf8');
+    assert.equal(/--side-bg:(#[0-9a-f]+)/.exec(demo)?.[1], '#f3f5f9');
+    assert.equal(/--bg:(#[0-9a-f]+)/.exec(demo)?.[1], '#fff');
+    assert.ok(!/#fff4d6/i.test(page), 'no yellow in the band');
     assert.ok(/html \{[^}]*\}/.test(css) && !/html \{[^}]*-webkit-app-region/.test(css), 'the document as a whole carries no drag region');
     assert.equal(css.split('-webkit-app-region').length - 1, 1, 'one drag region');
     assert.ok(css.includes(`body { margin: 0; height: ${demoGeometry.macBand}px; -webkit-app-region: drag; }`), 'the body drags, as high as the band');

@@ -15,6 +15,7 @@ import { bringForward, type LoginItem, type RuntimeAutostart } from './login-ite
 import { putBackQuestion, putBackTold, setupMenuOf, type MachineSetup } from './machine-setup.ts';
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
+import { uninstallJason, uninstallLabel, type UninstallDoorDeps } from './uninstall-door.ts';
 import type { DemoMenu } from './mode.ts';
 import { menuItemOf, pressItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
@@ -53,6 +54,8 @@ export interface DeskDeps {
      * Windows keeps its uninstaller.
      */
     removal: Pick<RemovalDeps, 'scope' | 'remove'> | null;
+    /** Uninstall Jason…, on macOS, offered by an installed build only; null where it is not offered. */
+    uninstall?: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'> | null;
     /**
      * In a demo run, the way back (`demoMenu`), and nothing where the update, the start at logon, the jason command and
      * Remove What Jason Placed would be; null in Live.
@@ -321,8 +324,29 @@ export class Desk {
 
     private removalItems(): MenuItemConstructorOptions[] {
         if (this.demo !== null) return [];
+        const door = this.deps.uninstall ?? null;
+        if (door !== null) return [{ label: uninstallLabel, enabled: app.isPackaged, click: () => void this.uninstallAct(door) }];
         if (this.removal === null) return [];
         return [{ label: removeLabel, enabled: app.isPackaged && !this.removing(), click: () => void this.removeAct() }];
+    }
+
+    /** Uninstall Jason…: asks, and on the person's word starts the one uninstall and quits. */
+    private async uninstallAct(door: Pick<UninstallDoorDeps, 'scope' | 'start' | 'pid'>): Promise<void> {
+        try {
+            await uninstallJason({
+                ...door,
+                ask: async (question) => {
+                    const window = this.deps.window();
+                    const options = { type: 'question' as const, title: windowTitle, ...question };
+                    const { response, checkboxChecked } = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
+                    return { response, checkboxChecked };
+                },
+                quit: () => app.quit(),
+                log: this.deps.log,
+            });
+        } catch (error) {
+            dialog.showErrorBox(windowTitle, error instanceof Error ? error.message : String(error));
+        }
     }
 
     /** Runs the act, then reads again what the menu shows of the installation, which the act changed. */

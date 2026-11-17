@@ -44,8 +44,33 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// </summary>
     internal Action<string> Delete { get; init; } = File.Delete;
 
+    /// <summary>
+    /// The key under <c>HKEY_CURRENT_USER</c> whose values start programs at sign-in, where Electron writes "Open Jason at
+    /// Login" on Windows; a key of a test's own in a test.
+    /// </summary>
+    internal string RunKey { get; init; } = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    /// <summary>Where Electron writes each <see cref="RunKey"/> value's state, under the same name.</summary>
+    internal string StartupApprovedKey { get; init; } = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    /// <summary>The key under <c>HKEY_CURRENT_USER</c> link schemes are registered under: <c>Software\Classes</c>, except in a test.</summary>
+    internal string ClassesKey { get; init; } = @"Software\Classes";
+
+    /// <summary>
+    /// macOS: the account's own home as the account database names it (<c>getpwuid</c>), which <c>HOME</c> may differ from;
+    /// null where it cannot be read and everywhere else. A test's own home in a test.
+    /// </summary>
+    internal Func<string?> AccountHome { get; init; } = AccountDatabase.Home;
+
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
+
+    /// <summary>
+    /// Whether this process runs elevated (<see cref="Elevation"/>): on Windows a token elevated above the account's ordinary
+    /// one, or another account than the session's; on macOS root. A carried update refuses there (<c>update_elevated</c>);
+    /// read from the process for this machine's places, and set by a test.
+    /// </summary>
+    public bool Elevated { get; init; }
 
     /// <summary>This machine's, on macOS and Windows; null anywhere else.</summary>
     public static SetupPlaces? ForThisMachine()
@@ -53,11 +78,14 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (OperatingSystem.IsWindows())
         {
-            return new SetupPlaces(SetupSystem.Windows, home, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserPathValue.EnvironmentKey, null);
+            return new SetupPlaces(SetupSystem.Windows, home, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserPathValue.EnvironmentKey, null)
+            {
+                Elevated = Elevation.OfThisProcess(),
+            };
         }
 
         return OperatingSystem.IsMacOS()
-            ? new SetupPlaces(SetupSystem.MacOs, home, null, UserPathValue.EnvironmentKey, Environment.GetEnvironmentVariable("SHELL"))
+            ? new SetupPlaces(SetupSystem.MacOs, home, null, UserPathValue.EnvironmentKey, Environment.GetEnvironmentVariable("SHELL")) { Elevated = Elevation.OfThisProcess() }
             : null;
     }
 

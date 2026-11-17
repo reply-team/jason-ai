@@ -107,6 +107,17 @@
 .segmented:focus-within { box-shadow: var(--focus); }
 .search { width: 240px; color: var(--text-muted); display: inline-flex; align-items: center; }
 .textarea { height: auto; min-height: 72px; padding: var(--space-2); width: 100%; resize: vertical; }
+/* An optional reason: one line at rest, as high as a field of one line, growing with what is typed to about six lines,
+   then scrolling; it grows by itself, so it has no handle. A browser without field-sizing keeps it one line, and it
+   scrolls. */
+.textarea.reason {
+  min-height: var(--control-h);
+  max-height: calc(6lh + 2 * var(--space-1) + 2px);
+  padding: var(--space-1) var(--space-2);
+  field-sizing: content;
+  overflow-y: auto;
+  resize: none;
+}
 .check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .check .box { width: 14px; height: 14px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--bg); }
 
@@ -304,8 +315,10 @@ details.fold pre {
 .dialog h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; }
 .dialog .btn-row { justify-content: flex-end; }
 
+/* A dialog's layer: over every layer of the page (menus 20-30, the narrow sidebar 39-40, and anything that stacks by an
+   opacity or a transform), under the search palette (60), which may open over it. */
 .overlay {
-  position: fixed; inset: 0;
+  position: fixed; inset: 0; z-index: 50;
   background: rgba(9, 9, 11, .45);
   display: flex; align-items: center; justify-content: center;
 }

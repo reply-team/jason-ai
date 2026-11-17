@@ -54,8 +54,9 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The pages say what an executable another program holds open meets: the update's and the rollback's moves, and the
-    /// Windows installer's, wait for it, and the wait they name is the uninstall's own rule's.
+    /// The pages say what an executable another program holds open meets: the update's and the rollback's moves wait for
+    /// it, and the wait they name is the uninstall's own rule's. The install page no longer says it of install.ps1, which
+    /// moves no executable of its own any more: the application's installer places it.
     /// </summary>
     [Fact]
     public void The_pages_say_how_long_a_held_executable_is_waited_for()
@@ -66,18 +67,7 @@ public partial class PageClaimsTests
             $"On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for {wait} first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable",
             Flat(Page("docs", "release-and-update.md")),
             StringComparison.Ordinal);
-
-        var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains($"On Windows, `install.ps1` waits up to {wait} for a file another program holds open", install, StringComparison.Ordinal);
-
-        // A file held while the archive unpacks is said by the directory it unpacks into, "or a file in it": the script
-        // cannot know which file it was, so "says which file" is no longer what it does.
-        Assert.Contains("before it gives up and names the file, or the directory it was unpacking into.", install, StringComparison.Ordinal);
-        Assert.DoesNotContain("before it gives up and says which file.", install, StringComparison.Ordinal);
-        Assert.Contains(
-            "if the new `jason.exe` cannot move in, it puts the one you had back — or, when it cannot, says where it is — so an install that fails never leaves you without the version you started with.",
-            install,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain("`install.ps1` waits up to", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -889,21 +879,45 @@ public partial class PageClaimsTests
     /// <summary>
     /// An agent installs by the first route that fits: a package, where the page names one for the platform and its
     /// package manager is already there — installing a package manager to reach it would be installing something else —
-    /// then the steps by hand. It never pipes a download into a shell, and the install scripts are the person's, handed
-    /// to them where even the steps by hand are refused. The order is what is held, as well as the words.
+    /// though not Homebrew's formula on a Mac, which is the command line alone; then, on macOS and Windows, the release's
+    /// install script downloaded into a file and run from it, which installs Jason Desktop and sets the machine up, and
+    /// refuses an Intel Mac; and on Linux the steps by hand. It never pipes a download into a shell, and
+    /// the one-liner is the person's, handed to them where the script or the steps by hand are refused. The order is
+    /// what is held, as well as the words.
     /// </summary>
     [Fact]
-    public void The_agent_section_takes_a_package_then_the_route_by_hand()
+    public void The_agent_section_takes_a_package_then_the_script_or_the_route_by_hand()
     {
         var agent = Flat(Agent());
 
         var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*).", StringComparison.Ordinal);
-        var byHand = agent.IndexOf("say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
-        var person = agent.IndexOf("The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
+        // On a Mac the package is not the route for a new install: the formula is the command line alone.
+        var homebrew = agent.IndexOf("On macOS, Homebrew's formula is not that package for a new install: it installs the command line alone, without Jason Desktop, so on a Mac the route is the install script even where Homebrew is there.", StringComparison.Ordinal);
+        var script = agent.IndexOf("On macOS and Windows that is this release's install script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file", StringComparison.Ordinal);
+        // And an Intel Mac is refused by the script, as the package subsection says no build for one is published.
+        var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since no Jason Desktop for one is published: report that as it stands.", StringComparison.Ordinal);
+        var byHand = agent.IndexOf("On Linux it is §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
+        var person = agent.IndexOf("Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
 
         Assert.True(package >= 0, "The section for an agent does not take a package first, where its package manager is already on this machine.");
-        Assert.True(byHand > package, "The section for an agent does not take §2 by hand after the package.");
+        Assert.True(homebrew > package, "The section for an agent does not say that on a Mac Homebrew's formula is not the route for a new install.");
+        Assert.True(script > homebrew, "The section for an agent does not take the install script on macOS and Windows after the package.");
+        Assert.True(intel > script, "The section for an agent does not say the script refuses an Intel Mac.");
+        Assert.True(byHand > script, "The section for an agent does not take §2 by hand on Linux.");
         Assert.True(person > byHand, "The section for an agent does not hand the person the one-liner after the route by hand.");
+    }
+
+    /// <summary>
+    /// The script route says what an agent needs from the script: that it opens nothing, ends non-zero when jason is not in
+    /// the terminal, and ends with the full path of jason, which the agent's own session calls it by.
+    /// </summary>
+    [Fact]
+    public void The_agent_section_says_what_the_install_script_does_and_how_its_last_line_is_used()
+    {
+        var agent = Flat(Agent());
+
+        Assert.Contains("It installs Jason Desktop and opens nothing, puts `jason` in the terminal, deploys the skills of every agent host it finds and the role skills, and ends non-zero, saying which act failed, when `jason` is not in the terminal.", agent, StringComparison.Ordinal);
+        Assert.Contains("Its last line is the full path of `jason`: call `jason` by that path for the rest of your session, which does not see the new PATH.", agent, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1009,7 +1023,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// A package manager that is there and refuses — or fails, or that the agent's harness will not run — is the same
-    /// case for the person as one that is not there: the agent says so once and takes the steps by hand, which is the
+    /// case for the person as one that is not there: the agent says so once and takes the script or the steps by hand, which is the
     /// next route rather than a way around the refusal.
     /// </summary>
     [Fact]
@@ -1017,7 +1031,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("Where it is not, where it fails, or where it or your harness refuses it, say so once and take §2 *By hand*", agent, StringComparison.Ordinal);
+        Assert.Contains("Where it is not, where it fails, or where it or your harness refuses it, say so once and take the next route.", agent, StringComparison.Ordinal);
         Assert.Contains("That is the next route, not a way around the refusal.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("no other way of running the same code", agent, StringComparison.Ordinal);
     }
@@ -1028,13 +1042,13 @@ public partial class PageClaimsTests
         Assert.Contains("Never pipe a download into a shell.", Flat(Agent()), StringComparison.Ordinal);
 
     /// <summary>
-    /// The route by hand is the last an agent takes. Where even that is refused, the install is the person's to type, and
-    /// the agent hands them the line rather than finding another way to run it.
+    /// The script, or on Linux the route by hand, is the last an agent takes. Where that is refused, the install is the
+    /// person's to type, and the agent hands them the line rather than finding another way to run it.
     /// </summary>
     [Fact]
     public void The_agent_section_gives_the_person_the_one_liner_where_even_the_route_by_hand_is_refused() =>
         Assert.Contains(
-            "The install scripts are the person's: where your harness refuses even the route by hand, say so and give the person the one-liner to type themselves.",
+            "Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.",
             Flat(Agent()),
             StringComparison.Ordinal);
 
@@ -2362,19 +2376,20 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// Where the install page says what the scripts do, it shows the two lines they print about where Jason will keep what
-    /// it learns, word for word as the scripts' runs are held to them, for a made-up account's home on Windows.
+    /// it learns, word for word as the scripts' runs are held to them, for a made-up account's home on Windows, between what the
+    /// scripts do and the table of where they put Jason.
     /// </summary>
     [Fact]
     public void The_install_page_shows_the_lines_the_scripts_print_about_the_files()
     {
         var install = Section(Page("docs", "INSTALL.md"), "## 2. ");
-        var does = install.IndexOf("Each script works out your platform", StringComparison.Ordinal);
+        var does = install.IndexOf("**On macOS and Windows each script installs Jason Desktop**", StringComparison.Ordinal);
         var lines = install.IndexOf(
             "```text\n" + HarnessRootLines.Where(@"C:\Users\Marta\Jason") + "\n" + HarnessRootLines.DefaultProject + "\n```\n",
             StringComparison.Ordinal);
-        var held = install.IndexOf("On Windows, `install.ps1` waits", StringComparison.Ordinal);
+        var held = install.IndexOf("| Where it goes | Platform |", StringComparison.Ordinal);
 
-        Assert.True(does >= 0 && lines > does && held > lines, $"§2 does not show, after what each script does and before what install.ps1 waits for, the two lines the scripts print (at {does}, {lines}, {held}).");
+        Assert.True(does >= 0 && lines > does && held > lines, $"§2 does not show, after what each script does and before where it puts Jason, the two lines the scripts print (at {does}, {lines}, {held}).");
     }
 
     /// <summary>
@@ -2514,7 +2529,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:88e09da81b3b21870e542d046d82c4a57636c2565f694b54a1bbc7ffd5c009f6";
+    private const string AgentSectionDigest = "sha256:5e3f5eac6c30996c2cf37873717d9a7892579cf820fd8a5a01ba0f766e99e1be";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

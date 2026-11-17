@@ -4,12 +4,14 @@
 // electron-builder's own check does that where PowerShell is not available, and where it is, closes every program whose
 // path merely begins with the installation folder, the runtime this application carries among them. These rows hold the
 // check that replaces it to the one file it may close, the application's own executable by its exact path, and to the
-// one it looks for and never closes, the carried jason executable by its exact path, of whichever data directory;
-// neither the installer nor the uninstaller is run here.
+// one it looks for and never closes, the carried jason executable by its exact path, of whichever data directory, passing
+// over only the one process a carried `jason update apply` records while it waits for the installer; neither the installer
+// nor the uninstaller is run here.
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { copyFileSync, linkSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -62,6 +64,13 @@ function filterText(name: 'JASON_OWN_APP' | 'JASON_OWN_RUNTIME'): string {
     return found[1]!;
 }
 
+/** A command the script defines between backticks, as the script writes it. */
+function define_(name: string): string {
+    const found = new RegExp(`^!define ${name} \`([^\`]+)\`$`, 'm').exec(script);
+    assert.ok(found !== null, `installer/uninstall.nsh defines no ${name}.`);
+    return found[1]!;
+}
+
 /** A sentence the script defines once and shows where it is named. */
 function define(name: string): string {
     const found = new RegExp(`^!define ${name} "([^"]*)"$`, 'm').exec(script);
@@ -74,10 +83,29 @@ function codeLines(text: string): string[] {
     return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '' && !line.startsWith(';'));
 }
 
-/** The look whether a program runs from the carried executable, by its filter. */
-const runtimeLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"';
-/** The look whether the application runs. */
-const appLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 }"';
+/** The look whether a program runs from the carried executable, by its filter, failing closed. */
+const runtimeLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"';
+
+/**
+ * The PowerShell the installer runs for a runtime look, as PowerShell reads it once nsis has expanded the filter into it
+ * and turned each `$$` into `$`: the command that ships, with `filter` standing in for the runtime filter where a row says.
+ */
+function runtimeFound(filterText: string = filter('JASON_OWN_RUNTIME')): string {
+    const found = /^!define JASON_RUNTIME_FOUND `([^`]+)`$/m.exec(script);
+    assert.ok(found !== null, 'installer/uninstall.nsh defines no JASON_RUNTIME_FOUND look.');
+    const [before, after, ...more] = found[1]!.split('${JASON_OWN_RUNTIME}');
+    assert.equal(more.length, 0, 'the look names the filter more than once');
+    return `${before!.replaceAll('$$', '$')}${filterText}${after!.replaceAll('$$', '$')}`;
+}
+/** The look whether the application runs, by its filter, failing closed as the runtime's does. */
+const appLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"';
+
+/** The PowerShell the installer runs for an application look, as PowerShell reads it, with `filter` where a row says. */
+function appFound(filterText: string = filter('JASON_OWN_APP')): string {
+    const [before, after, ...more] = define_('JASON_APP_FOUND').split('${JASON_OWN_APP}');
+    assert.equal(more.length, 0, 'the look names the filter more than once');
+    return `${before!.replaceAll('$$', '$')}${filterText}${after!.replaceAll('$$', '$')}`;
+}
 /** The one stop of the whole include: the application's, by its filter. */
 const appStop = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_OWN_APP} | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"';
 /** The application's own start that stops the runtime it carries, through jason runtime stop. */
@@ -124,8 +152,14 @@ test('the custom check closes the application by its exact path and never a prog
     // Every PowerShell command it runs reads the processes through one of the two filters; only one stops any, and
     // that one reads the application's.
     const commands = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!);
-    assert.equal(commands.length, 5);
-    for (const command of commands) assert.ok(command.includes('${JASON_OWN_APP}') || command.includes('${JASON_OWN_RUNTIME}'), `A command reads processes another way: ${command}`);
+    assert.equal(commands.length, 6);
+    // Each filter is read through a look that fails closed, which holds it once (JASON_RUNTIME_FOUND, JASON_APP_FOUND);
+    // the one stop reads the application's filter itself.
+    for (const command of commands) assert.ok(command.includes('${JASON_APP_FOUND}') || command.includes('${JASON_RUNTIME_FOUND}') || command === appStop, `A command reads processes another way: ${command}`);
+    assert.equal(define_('JASON_RUNTIME_FOUND').split('${JASON_OWN_RUNTIME}').length, 2);
+    assert.equal(define_('JASON_APP_FOUND').split('${JASON_OWN_APP}').length, 2);
+    // The two looks are one wrap around two filters.
+    assert.equal(define_('JASON_APP_FOUND').replace('${JASON_OWN_APP}', '${JASON_OWN_RUNTIME}'), define_('JASON_RUNTIME_FOUND'));
     const stopping = commands.filter((command) => /Stop-Process/.test(command));
     assert.deepEqual(stopping, [appStop]);
     assert.equal(filter('JASON_OWN_APP'), 'Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase) }');
@@ -140,9 +174,11 @@ test('the whole include runs only the commands these rows name, stops only the a
         `nsExec::Exec \`${runtimeLook}\``,
         `nsExec::Exec \`${appLook}\``,
         `nsExec::Exec \`${appStop}\``,
+        `nsExec::Exec \`${appLook}\``,
         `nsExec::Exec \`${runtimeLook}\``,
         stopRuntimeLine,
         `nsExec::Exec \`${runtimeLook}\``,
+        `nsExec::Exec '"$INSTDIR\\resources\\bundle\\jason.exe" install'`,
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2`,
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2`,
     ]);
@@ -160,32 +196,57 @@ test('the whole include runs only the commands these rows name, stops only the a
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
     ]);
+    // The record of the one process the runtime's filter passes over is named once, beside the carried executable, and
+    // read by that filter alone.
+    assert.deepEqual(naming('JASON_DESKTOP_UPDATING'), [
+        `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", i 0)'`,
+    ]);
     assert.deepEqual(naming('JASON_OWN_RUNTIME'), [
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
+        `!define JASON_RUNTIME_FOUND \`${define_('JASON_RUNTIME_FOUND')}\``,
+    ]);
+    assert.deepEqual(naming('JASON_RUNTIME_FOUND'), [
+        `!define JASON_RUNTIME_FOUND \`${define_('JASON_RUNTIME_FOUND')}\``,
         `nsExec::Exec \`${runtimeLook}\``,
         `nsExec::Exec \`${runtimeLook}\``,
         `nsExec::Exec \`${runtimeLook}\``,
     ]);
-    assert.deepEqual(naming('JASON_OWN_APP'), [`!define JASON_OWN_APP \`${filterText('JASON_OWN_APP')}\``, `nsExec::Exec \`${appLook}\``, `nsExec::Exec \`${appStop}\``]);
+    assert.deepEqual(naming('JASON_OWN_APP'), [
+        `!define JASON_OWN_APP \`${filterText('JASON_OWN_APP')}\``,
+        `!define JASON_APP_FOUND \`${define_('JASON_APP_FOUND')}\``,
+        `nsExec::Exec \`${appStop}\``,
+    ]);
+    assert.deepEqual(naming('JASON_APP_FOUND'), [
+        `!define JASON_APP_FOUND \`${define_('JASON_APP_FOUND')}\``,
+        `nsExec::Exec \`${appLook}\``,
+        `nsExec::Exec \`${appLook}\``,
+    ]);
     // The uninstaller's own part is the last macro, so the rows over it in uninstall.test.ts read it to the end.
     const unInstall = macroIn(script, 'customUnInstall', 'installer/uninstall.nsh');
     assert.equal(script.slice(unInstall.end).trim(), '');
     assert.ok(unInstall.start > macroIn(script, 'customCheckAppRunning', 'installer/uninstall.nsh').end);
 });
 
-test('the carried jason executable is looked for by its exact path, in a filter that no stop reads, and otherwise only named to a person', () => {
+test('the carried jason executable is looked for by its exact path, in a filter that no stop reads, and otherwise only named to a person or run to set the machine up', () => {
     const check = macro('customCheckAppRunning');
-    // The folder's resources appear in two places: the words a person is shown when a process is still found, which only
-    // a message box reads, and the path handed to the runtime's filter through the environment.
+    // The folder's resources appear in four places: the words a person is shown when a process is still found, which
+    // only a message box reads, the path handed to the runtime's filter through the environment, the record that filter
+    // reads under the update's own installer, and the installer's last step, which runs that jason's own `jason install`
+    // (installer-setup.test.ts holds it).
     assert.deepEqual([...script.matchAll(/\$INSTDIR\\resources/gi)].map((found) => script.slice(script.lastIndexOf('\n', found.index) + 1, script.indexOf('\n', found.index)).trim()), [
         `!define JASON_RUNTIME_STILL "${define('JASON_RUNTIME_STILL')}"`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        `nsExec::Exec '"$INSTDIR\\resources\\bundle\\jason.exe" install'`,
+        'DetailPrint "jason install did not set everything up (it answered $R0). Run $INSTDIR\\resources\\bundle\\jason.exe install in a terminal to see what it says."',
     ]);
     assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
-        'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
+        'StrCpy $R1 "${JASON_RUNTIME_STILL}"',
     ]);
-    assert.equal(filter('JASON_OWN_RUNTIME'), 'Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) }');
-    const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_OWN_RUNTIME}'));
+    assert.equal(filter('JASON_OWN_RUNTIME'), "& { $skip = -1; try { $named = @((Get-Content -LiteralPath $env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $found = Get-Process -Id ([int]$named[0]) -ErrorAction Stop; $asked = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + $found.Id); if ($found.StartTime.ToFileTimeUtc() -eq [long]$named[1] -and $asked.CommandLine.Contains(' update apply')) { $skip = $found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $skip } }");
+    const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_RUNTIME_FOUND}'));
     assert.deepEqual(looks, Array(3).fill(runtimeLook));
 });
 
@@ -199,8 +260,14 @@ test('a person is asked about a runtime before the application is closed, so a C
         '${AndIfNot} ${Silent}',
         `nsExec::Exec \`${runtimeLook}\``,
         'Pop $R0',
-        '${if} $R0 == 0',
-        'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3',
+        // Every exit but the one clean "nothing found" is a process found; a look that failed is said as such.
+        '${if} $R0 != 1',
+        '${if} $R0 S== 0',
+        'StrCpy $R1 "${JASON_RUNTIME_ASK}"',
+        '${else}',
+        'StrCpy $R1 "${JASON_LOOK_ASK}"',
+        '${endIf}',
+        'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3',
         'SetErrorLevel 1',
         'Quit',
         'StrCpy $JasonRuntimeAsked "asked"',
@@ -220,7 +287,7 @@ test('a runtime running from the carried executable is stopped through the appli
     const runtime = after.slice(after.indexOf(runtimeLook) + runtimeLook.length + 1);
     assert.deepEqual(codeLines(runtime), [
         'Pop $R0',
-        '${if} $R0 == 0',
+        '${if} $R0 != 1',
         // A person not asked before the application was closed is asked now; nobody else is asked.
         '${ifNot} ${isUpdated}',
         '${AndIfNot} ${Silent}',
@@ -235,10 +302,15 @@ test('a runtime running from the carried executable is stopped through the appli
         // The look decides, never the start's exit code.
         `nsExec::Exec \`${runtimeLook}\``,
         'Pop $R0',
-        '${if} $R0 == 0',
+        '${if} $R0 != 1',
         '${ifNot} ${isUpdated}',
         '${AndIfNot} ${Silent}',
-        'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
+        '${if} $R0 S== 0',
+        'StrCpy $R1 "${JASON_RUNTIME_STILL}"',
+        '${else}',
+        'StrCpy $R1 "${JASON_LOOK_FAILED}"',
+        '${endIf}',
+        'MessageBox MB_OK|MB_ICONSTOP "$R1" /SD IDOK',
         '${endIf}',
         'SetErrorLevel 1',
         'Quit',
@@ -262,7 +334,73 @@ test('a runtime running from the carried executable is stopped through the appli
 
 test('the uninstall an update runs closes the application without asking; a person is asked first', () => {
     const check = macro('customCheckAppRunning');
-    assert.match(check, /\$\{ifNot\} \$\{isUpdated\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$\(appRunning\)" \/SD IDOK IDOK \+2\s+Quit\s+\$\{endIf\}/);
+    assert.match(check, /\$\{ifNot\} \$\{isUpdated\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+\$\{endIf\}/);
+});
+
+test('the application look fails closed, is made again after the application was closed, and a run where it is still found or that look failed ends with error level 1', () => {
+    const check = macro('customCheckAppRunning');
+    const app = check.slice(check.indexOf(`nsExec::Exec \`${appLook}\``), check.indexOf(`nsExec::Exec \`${runtimeLook}\``, check.indexOf('Stop-Process')));
+    assert.deepEqual(codeLines(app), [
+        `nsExec::Exec \`${appLook}\``,
+        'Pop $R0',
+        // Every exit but the one clean "nothing found" is the application found, a failed look and nsExec's own error included.
+        '${if} $R0 != 1',
+        '${ifNot} ${isUpdated}',
+        '${if} $R0 S== 0',
+        'StrCpy $R1 "$(appRunning)"',
+        '${else}',
+        'StrCpy $R1 "${JASON_APP_UNSURE}"',
+        '${endIf}',
+        'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2',
+        'Quit',
+        '${endIf}',
+        'DetailPrint "$(appClosing)"',
+        `nsExec::Exec \`${appStop}\``,
+        'Pop $R0',
+        'Sleep 1000',
+        // The look decides, never the stop's exit code.
+        `nsExec::Exec \`${appLook}\``,
+        'Pop $R0',
+        '${if} $R0 != 1',
+        '${ifNot} ${isUpdated}',
+        '${AndIfNot} ${Silent}',
+        '${if} $R0 S== 0',
+        'StrCpy $R1 "${JASON_APP_STILL}"',
+        '${else}',
+        'StrCpy $R1 "${JASON_LOOK_FAILED}"',
+        '${endIf}',
+        'MessageBox MB_OK|MB_ICONSTOP "$R1" /SD IDOK',
+        '${endIf}',
+        'SetErrorLevel 1',
+        'Quit',
+        '${endIf}',
+        '${endIf}',
+    ]);
+    // Before a file is replaced: the runtime's own look and the files come after this.
+    assert.ok(check.indexOf('SetErrorLevel 1', check.indexOf('JASON_APP_STILL')) < check.indexOf(stopRuntimeLine));
+});
+
+test('a look that could not be made says so in words of its own, never that Jason is running, and every box a silent run can reach answers itself', () => {
+    assert.equal(define('JASON_LOOK_ASK'), "Jason could not look for its own processes, so it cannot tell whether a Jason runtime is running from this application's folder. Choose OK to stop it if it is, and go on.");
+    assert.equal(define('JASON_APP_UNSURE'), 'Jason could not look for its own processes, so it cannot tell whether Jason is open. Choose OK to close it if it is, and go on.');
+    assert.equal(define('JASON_APP_STILL'), 'Jason is still open, so nothing was changed. Close it, then run this again.');
+    assert.equal(define('JASON_LOOK_FAILED'), "Jason could not look for its own processes, so it cannot tell whether Jason is running from this application's folder, and nothing was changed. Run this again.");
+    for (const name of ['JASON_LOOK_ASK', 'JASON_APP_UNSURE', 'JASON_LOOK_FAILED']) assert.ok(define(name).startsWith('Jason could not look for its own processes, so it cannot tell whether '), `${name} says a process runs`);
+    // Each sentence a failed look chooses is chosen only where the exit is not the clean 0 of a process found.
+    const check = macro('customCheckAppRunning');
+    for (const name of ['JASON_LOOK_ASK', 'JASON_APP_UNSURE', 'JASON_LOOK_FAILED']) {
+        for (const found of check.matchAll(new RegExp(`StrCpy \\$R1 "\\$\\{${name}\\}"`, 'g'))) {
+            assert.match(check.slice(0, found.index).trimEnd(), /\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "[^"]+"\s+\$\{else\}$/, `${name} is chosen without the found test before it`);
+        }
+    }
+    // A box without a silent answer is shown only where the run is not silent.
+    const lines = codeLines(check);
+    lines.forEach((line, index) => {
+        if (line.startsWith('MessageBox') && !line.includes('/SD ')) {
+            const before = lines.slice(0, index).reverse();
+            assert.ok(before.includes('${AndIfNot} ${Silent}'), `a box a silent run reaches has no answer: ${line}`);
+        }
+    });
 });
 
 test('the filters find a running program by its exact path, whatever the case, and not by a path it only begins', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, () => {
@@ -287,4 +425,155 @@ test('the filters find a running program by its exact path, whatever the case, a
         assert.equal(running(`${self}.old`), false, name);
         assert.equal(running(join(dirname(self), 'jason', basename(self))), false, name);
     }
+});
+
+test('the runtime filter passes over only the live jason update apply the record names, by its id and its start, and every other process is still found', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, async () => {
+    // Processes of the test's own, from a path no other process runs from, so that what the filter finds is theirs alone:
+    // node itself, linked under a folder of the test's own, waiting until it is ended. One is started as a carried jason's
+    // update apply is, its command line carrying ` update apply`; the other is not.
+    const folder = mkdtempSync(join(tmpdir(), 'jason-update-pid-'));
+    const image = join(folder, 'jason.exe');
+    try {
+        linkSync(process.execPath, image);
+    } catch {
+        copyFileSync(process.execPath, image);
+    }
+    const children: ChildProcess[] = [];
+    const start = async (...extra: string[]): Promise<ChildProcess> => {
+        const child = spawn(image, ['-e', 'setInterval(() => {}, 1000)', ...extra], { stdio: 'ignore', windowsHide: true });
+        children.push(child);
+        await new Promise<void>((resolve, reject) => {
+            child.once('spawn', () => resolve());
+            child.once('error', reject);
+        });
+        return child;
+    };
+    try {
+        const record = join(folder, 'jason-update.pid');
+        const found = (updating: string) => {
+            try {
+                execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', runtimeFound()], {
+                    env: { ...process.env, JASON_DESKTOP_RUNTIME: image, JASON_DESKTOP_UPDATING: updating },
+                    stdio: 'ignore',
+                    windowsHide: true,
+                });
+                return true;
+            } catch {
+                return false;
+            }
+        };
+        // A process's start as Windows reads it, which is what the carried jason writes (Process.StartTime, as file time).
+        const startOf = (child: ChildProcess) => {
+            const started = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${child.pid}).StartTime.ToFileTimeUtc()`], { encoding: 'utf8', windowsHide: true }).trim();
+            assert.match(started, /^\d+$/);
+            return started;
+        };
+
+        const applying = await start('update', 'apply');
+        const started = startOf(applying);
+        // No record, an empty one, a malformed one: nothing is passed over, and the process is found.
+        assert.equal(found(join(folder, 'none.pid')), true);
+        writeFileSync(record, '');
+        assert.equal(found(record), true);
+        writeFileSync(record, 'not a pid');
+        assert.equal(found(record), true);
+        // A stale record: the id with a start that is not the process's, as a record left behind once its id is reused.
+        writeFileSync(record, `${applying.pid} ${BigInt(started) - 1n}`);
+        assert.equal(found(record), true, 'a record whose start does not match passed a process over');
+        // The update apply the record names, alive, by its id and its start, is passed over.
+        writeFileSync(record, `${applying.pid} ${started}`);
+        assert.equal(found(record), false, 'the update apply the record names was not passed over');
+
+        // A planted record: a live process at the path, named by its true id and start, that is no update apply.
+        const other = await start();
+        writeFileSync(record, `${other.pid} ${startOf(other)}`);
+        assert.equal(found(record), true, 'a process that is no update apply was passed over');
+        // Every other process at the path is still found while the record passes the one over.
+        writeFileSync(record, `${applying.pid} ${started}`);
+        assert.equal(found(record), true, 'a second process at the carried path was passed over with the first');
+
+        // A record that names a process that has ended passes nothing over: the other process is still found.
+        applying.kill();
+        await new Promise<void>((resolve) => (applying.exitCode !== null || applying.signalCode !== null ? resolve() : applying.once('exit', () => resolve())));
+        assert.equal(found(record), true, 'a record naming a process that has ended passed a process over');
+    } finally {
+        for (const child of children) {
+            child.kill();
+            await new Promise<void>((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve() : child.once('exit', () => resolve())));
+        }
+        rmSync(folder, { recursive: true, force: true });
+    }
+});
+
+test('the runtime look fails closed: a query the system does not answer is asked again, then exits 2, which is read as found', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, () => {
+    // The command that ships, with a query Windows refuses in place of the filter: the class does not exist.
+    const failing = runtimeFound('Get-CimInstance -ClassName Jason_No_Such_Class');
+    const began = Date.now();
+    let exit = -1;
+    try {
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', failing], { stdio: 'ignore', windowsHide: true });
+        exit = 0;
+    } catch (error) {
+        exit = (error as { status: number }).status;
+    }
+    assert.equal(exit, 2, 'a look whose query failed did not exit 2');
+    assert.ok(Date.now() - began >= 4 * 500, 'the failed query was not asked again');
+    // And the installer reads that exit, as every exit but 1, as a process found: each runtime look is followed by that test.
+    const check = macro('customCheckAppRunning');
+    const after = [...check.matchAll(/nsExec::Exec `([^`]*)`\s+Pop \$R0\s+\$\{if\} \$R0 (\S+) (\S+)/g)].filter((found) => found[1] === runtimeLook);
+    assert.equal(after.length, 3);
+    for (const found of after) assert.deepEqual([found[2], found[3]], ['!=', '1']);
+});
+
+test('the application look fails closed the same way: a query the system does not answer exits 2, which is read as found', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, () => {
+    const failing = appFound('Get-CimInstance -ClassName Jason_No_Such_Class');
+    const began = Date.now();
+    let exit = -1;
+    try {
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', failing], { stdio: 'ignore', windowsHide: true });
+        exit = 0;
+    } catch (error) {
+        exit = (error as { status: number }).status;
+    }
+    assert.equal(exit, 2, 'an application look whose query failed did not exit 2');
+    assert.ok(Date.now() - began >= 4 * 500, 'the failed query was not asked again');
+    // A query that answers, with nothing found, is the one clean exit 1.
+    let clean = -1;
+    try {
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', appFound('@()')], { stdio: 'ignore', windowsHide: true });
+        clean = 0;
+    } catch (error) {
+        clean = (error as { status: number }).status;
+    }
+    assert.equal(clean, 1);
+    const check = macro('customCheckAppRunning');
+    const after = [...check.matchAll(/nsExec::Exec `([^`]*)`\s+Pop \$R0\s+\$\{if\} \$R0 (\S+) (\S+)/g)].filter((found) => found[1] === appLook);
+    assert.equal(after.length, 2);
+    for (const found of after) assert.deepEqual([found[2], found[3]], ['!=', '1']);
+});
+
+test('only the update’s own installer and the uninstaller it runs read the record; a person’s install or uninstall reads none, whatever it was started with', () => {
+    const check = macro('customCheckAppRunning');
+    // electron-builder runs this check in a person's install and uninstall too (`CHECK_APP_RUNNING`), and passes --updated
+    // to the old uninstaller an update runs (installUtil.nsh, uninstallOldVersion): only those pass a process over.
+    const naming = check.slice(0, check.indexOf('!insertmacro IS_POWERSHELL_AVAILABLE'));
+    const underUpdate = naming.indexOf('${if} ${isUpdated}');
+    assert.ok(underUpdate >= 0, 'the record is named outside the update’s own word');
+    assert.deepEqual(codeLines(naming.slice(underUpdate)), [
+        '${if} ${isUpdated}',
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        '${else}',
+        `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", i 0)'`,
+        '${endIf}',
+    ]);
+    assert.ok(!naming.slice(0, underUpdate).includes('JASON_DESKTOP_UPDATING'), 'the record is named before the update’s own word');
+});
+
+test('the record the runtime filter reads is named once, inside the installation folder, and read by that filter alone', () => {
+    const check = macro('customCheckAppRunning');
+    assert.deepEqual([...check.matchAll(/JASON_DESKTOP_UPDATING", t "([^"]*)"/g)].map((found) => found[1]), ['$INSTDIR\\resources\\bundle\\jason-update.pid']);
+    assert.ok(check.indexOf('JASON_DESKTOP_UPDATING') < check.indexOf('IS_POWERSHELL_AVAILABLE'), 'the record is named after a look may read it');
+    assert.deepEqual([...script.matchAll(/\$\$?env:JASON_DESKTOP_UPDATING/g)].length, 1);
+    // NSIS holds a string to 1024 characters; the longest command it runs is the runtime look with its filter.
+    assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "${define_('JASON_RUNTIME_FOUND').replace('${JASON_OWN_RUNTIME}', filterText('JASON_OWN_RUNTIME'))}"`.length < 1024);
 });

@@ -28,7 +28,7 @@ Each release publishes Jason Desktop beside the runtime's downloads ([release-an
 | --- | --- | --- |
 | Windows on x64 | `jason-desktop-windows-x64-setup.exe` | Run it. It installs for your account, with no administrator rights. The installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are signed. |
 | macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications. Signed, notarized and stapled. |
-| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application moves only with the desktop's own update, so `jason update apply` there answers `update_carried_by_desktop`. |
+| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application is updated through the application's own updater, which `jason update apply` there hands the update to, as on Apple silicon. |
 | Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
 | Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
 
@@ -108,8 +108,11 @@ shows before anything is typed and what you send waits, while the window is open
   channel, and narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
   that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
-  for that mailbox now, in the words an agent's chat's card uses below. With nothing waiting it says you are caught up
-  and offers **Open your agents**.
+  for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
+  chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
+  and nothing on it can be approved or rejected; when the new approval is listed it takes the row's place, and says so
+  if its text is not the one you saved. Its card in an agent's chat does the same. With nothing waiting it says you are caught up and offers **Open your
+  agents**.
 - An agent's chat shows, under its conversation, that agent's approvals and questions waiting for you as cards, read
   from the runtime and never from what the AI wrote. An approval's card says who it reaches, from which mailbox, on which
   channel, and the subject and text, with **Approve**, **Edit** (a message written as text), **Reject**, which asks once,
@@ -978,9 +981,13 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 The desktop's update item reads the latest release's `latest.yml`, `latest-mac.yml` or `latest-linux.yml` through
 electron-updater, straight from GitHub, on stable releases only: a release with a pre-release part is never offered, and
 a candidate is installed by hand. It checks on a back-off, offers what it found, downloads only on your word and installs
-only on your word again. The download is kept in the updater's cache under your profile, outside `<data>`:
+only on your word again. `jason update apply` typed into the `jason` the application carries is such a word too: it hands the update
+to the same updater with no window, and the new `jason` then replaces the plugin packages, starts the runtime, redeploys
+the skills, sets the terminal command up and places the UI ([release and update](release-and-update.md) §7, "Handing the
+update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
-`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
+`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
+also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
 the package names.
 
@@ -1024,11 +1031,16 @@ Take off what Jason placed first, then the application. What stays in every case
 updater's cache named above. The two folders an earlier version's demo made (see [the demo](#the-demo)) are not your
 data: the removal takes them off too.
 
-- **Windows.** Remove Jason from Installed apps in Settings. The uninstaller stops the runtime the application carries and
-  removes nothing when it does not stop, then takes off the PATH command's files that are its own, Open Jason at Login,
-  the `jason-desktop://` link registration when it names this application, and the runtime's logon start when that start
-  names this application's `jason`, then an earlier demo's two folders and any marked `<folder>.removing-*` copy beside them, and names what it leaves.
-- **macOS and Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
+- **Windows.** Remove Jason from Installed apps in Settings, or run `jason uninstall` in a terminal. Either is the one
+  uninstall, the `jason` the application carries (`docs/release-and-update.md` §9): it stops the runtime and removes
+  nothing when it does not stop, then takes off Open Jason at Login, the `jason-desktop://` link registration when it
+  names this application, the `jason` command and the skills `jason install` placed, an older command-line install, an
+  earlier demo's marked folders and the updater's cache, and names what it leaves; then the application's folder goes.
+  `jason uninstall --purge-data --yes` takes the data directory too; the harness root always stays.
+- **macOS.** Choose **Uninstall Jason…** in the Jason menu, or the tray's, or run `jason uninstall` in a terminal with
+  Jason quit. The menu item asks first, with a box for deleting the data directory too, quits Jason and runs the same
+  uninstall, which deletes Jason.app last and writes what it did to the file the dialog names.
+- **Linux.** Choose **Remove What Jason Placed…** in the Jason menu, or the tray's. Once you confirm, it takes the
   Windows uninstall's steps: it stops the runtime first, going no further when it does not stop, turns off Open Jason at
   Login and the runtime's start at logon when that start names this application's `jason`, removes the PATH command's
   files that are its own and, on an AppImage, removes the copies under `<data>/desktop/bundle/` once nothing runs from
@@ -1036,7 +1048,7 @@ data: the removal takes them off too.
   after them (`~/.jason-demo` and `~/Jason-demo`): the demo's own runtime is stopped first through its own run file, and
   one that does not stop keeps both folders; a link in place of either, or a folder without the desktop's mark, is left and named. It also takes off any `<folder>.removing-*` copy a start over left beside either folder, when that copy carries the mark. If you changed `Harness:Root` since that demo was set up, it takes off the `-demo` folder of the new root, and the old `-demo` folder stays. It says what came of each step, what to do by hand for one that failed, and offers to quit Jason. Then remove
   the application: move Jason.app to the Trash, or `sudo apt remove jason-desktop` for the deb, or delete the AppImage file.
-- **On macOS and Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
+- **On macOS, when Jason will not start**, run `Jason.app/Contents/Resources/bundle/jason uninstall`. **On Linux, when Jason will not start**, take off by hand what it placed. Its `jason` is `Contents/Resources/bundle/jason` inside
   Jason.app on macOS, `/opt/Jason/resources/bundle/jason` for the deb and each `<data>/desktop/bundle/<version>/jason`
   for an AppImage.
   1. Read `installed_image` in `<data>/run/runtime.json`. Only when it names that `jason` is the runtime this

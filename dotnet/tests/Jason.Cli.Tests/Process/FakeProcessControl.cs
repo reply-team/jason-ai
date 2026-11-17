@@ -63,17 +63,41 @@ public sealed class FakeProcessControl : IRuntimeProcessControl
     /// What running a command to its end does and hands back. Null refuses: a test that runs a command says what it does,
     /// and every other test runs none.
     /// </summary>
-    public Func<JasonPaths, IReadOnlyList<string>, TextWriter, CancellationToken, Task<FinishedCommand>>? OnRun { get; set; }
+    /// <remarks>Setting it replaces <see cref="OnRunUnder"/>: a test that says what a run does says it for every run.</remarks>
+    public Func<JasonPaths, IReadOnlyList<string>, TextWriter, CancellationToken, Task<FinishedCommand>>? OnRun
+    {
+        get => _onRun;
+        set
+        {
+            _onRun = value;
+            OnRunUnder = null;
+        }
+    }
+
+    private Func<JasonPaths, IReadOnlyList<string>, TextWriter, CancellationToken, Task<FinishedCommand>>? _onRun;
 
     /// <summary>Every command run to its end, in order, with the data directory it was run against.</summary>
     public List<(string DataDirectory, IReadOnlyList<string> Command)> Runs { get; } = [];
 
-    public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken)
+    /// <summary>
+    /// What running a command handed the update's lock does, where a test says; else <see cref="OnRun"/>, the lock not handed.
+    /// </summary>
+    public Func<JasonPaths, IReadOnlyList<string>, TextWriter, string?, CancellationToken, Task<FinishedCommand>>? OnRunUnder { get; set; }
+
+    /// <summary>The update's lock each command run to its end was handed, in the order of <see cref="Runs"/>; null where none.</summary>
+    public List<string?> RunLocks { get; } = [];
+
+    public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, CancellationToken cancellationToken) =>
+        RunAsync(paths, command, error, null, cancellationToken);
+
+    public Task<FinishedCommand> RunAsync(JasonPaths paths, IReadOnlyList<string> command, TextWriter error, string? updateLock, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(command);
         Runs.Add((paths.Root, command));
-        return OnRun?.Invoke(paths, command, error, cancellationToken)
+        RunLocks.Add(updateLock);
+        return OnRunUnder?.Invoke(paths, command, error, updateLock, cancellationToken)
+            ?? OnRun?.Invoke(paths, command, error, cancellationToken)
             ?? throw new InvalidOperationException($"This test runs no command, and '{string.Join(' ', command)}' was run.");
     }
 

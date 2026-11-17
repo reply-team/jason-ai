@@ -52,6 +52,47 @@ public class StatusCommandTests
         Assert.Equal("jason runtime start", runtime.Fix);
     }
 
+    /// <summary>
+    /// <c>jason install</c> stopped this data directory's runtime and none has started since: the note it left is named by
+    /// the runtime check with the one command that pays it, and the verb still answers 1, never 3. With no note it says
+    /// nothing of one, and a runtime that answers has paid it, so a note left beside one is not named.
+    /// </summary>
+    [Fact]
+    public async Task A_start_owed_by_jason_install_is_named_with_the_command_that_pays_it()
+    {
+        using var dir = new TempPaths();
+        Directory.CreateDirectory(dir.Paths.RunDirectory);
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        var output = new StringWriter();
+
+        var exit = await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var runtime = Assert.Single(Read(output).Checks, check => check.Name == "runtime");
+        Assert.Equal(CheckState.Failed, runtime.State);
+        Assert.Contains("`jason install` stopped the runtime on this data directory at 2026-11-17T15:05:35Z and none has started since, so a start is owed: `jason runtime start` starts one.", runtime.Fact, StringComparison.Ordinal);
+        Assert.Equal("jason runtime start", runtime.Fix);
+
+        // A note whose moment cannot be read still stands.
+        File.WriteAllText(dir.Paths.StartOwedFile, "not json");
+        output.GetStringBuilder().Clear();
+        Assert.Equal(ExitCodes.ApiError, await CliApp.RunAsync(["status"], Machine(dir, output), Ct));
+        Assert.Contains("`jason install` stopped the runtime on this data directory and none has started since", Assert.Single(Read(output).Checks, check => check.Name == "runtime").Fact, StringComparison.Ordinal);
+
+        File.Delete(dir.Paths.StartOwedFile);
+        output.GetStringBuilder().Clear();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+        Assert.DoesNotContain("owed", Assert.Single(Read(output).Checks, check => check.Name == "runtime").Fact, StringComparison.Ordinal);
+
+        File.WriteAllText(dir.Paths.StartOwedFile, "{\"stopped_at\":\"2026-11-17T15:05:35Z\"}");
+        Running(dir);
+        output.GetStringBuilder().Clear();
+        await CliApp.RunAsync(["status"], Machine(dir, output), Ct);
+        var answering = Assert.Single(Read(output).Checks, check => check.Name == "runtime");
+        Assert.Equal(CheckState.Ok, answering.State);
+        Assert.DoesNotContain("owed", answering.Fact, StringComparison.Ordinal);
+    }
+
     // The autostart check says what a logon registration does at the next sign-in, and nothing of whether the runtime runs now.
 
     private static async Task<StatusCheck> AutostartCheckAsync(bool registered)
@@ -1497,6 +1538,11 @@ public class StatusCommandTests
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendModesInForce> SendModeAnswers = [];
 
+    /// <summary>The dispatcher the runtime's <c>system.info</c> answers with; without it, running with nothing in flight.</summary>
+    internal static void Dispatcher(TempPaths dir, DispatcherInfo dispatcher) => DispatcherAnswers[dir.Paths.Root] = dispatcher;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DispatcherInfo> DispatcherAnswers = [];
+
     /// <summary>
     /// A role of the person's own on the roster beside the seeded ones: not shipped, and with the entry command it was added
     /// with, where it was added with one.
@@ -1616,7 +1662,7 @@ public class StatusCommandTests
         var route = request.RequestUri!.AbsolutePath;
         if (route.EndsWith(Operations.SystemInfo, StringComparison.Ordinal))
         {
-            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root) }, JasonJson.Options));
+            return RuntimeVerbs.Response(HttpStatusCode.OK, JsonSerializer.Serialize(Info(answers.Skills) with { RuntimeVersion = answers.Version, Notifications = answers.Notifications, StartedAt = answers.StartedAt, Ui = answers.Ui, Listening = answers.Listening, Harness = answers.Harness, ReleasedPlugins = answers.ReleasedPlugins, Setup = answers.Setup, SendModes = SendModeAnswers.GetValueOrDefault(dir.Paths.Root), Dispatcher = DispatcherAnswers.GetValueOrDefault(dir.Paths.Root) ?? Info(answers.Skills).Dispatcher }, JasonJson.Options));
         }
 
         if (route.EndsWith(Operations.RoleList, StringComparison.Ordinal))

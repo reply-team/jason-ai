@@ -177,6 +177,10 @@ public static class MachineSetup
             await run.Step("Deploying the role skills", async () => roles = await run.RoleSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        // The images earlier updates moved out of the application, taken away where nothing runs from them any more; quietly,
+        // and never while an update is in flight.
+        CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
+
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
 
@@ -260,85 +264,8 @@ public static class MachineSetup
 
         // --- the command-line install --------------------------------------------------------------------------
 
-        /// <summary>
-        /// The executable an older command-line install placed, or null where none is here: the one <c>--retire</c> names,
-        /// else the one the last <c>jason update apply</c> recorded, else the installer's default place. A file is that only
-        /// where it is not the application's (no <c>version.json</c> beside it), not the application's wrapper, and Jason's
-        /// by a sign of its own: named by the flag or the record, a notice file of Jason's beside it, or on Windows the
-        /// installer's own folder.
-        /// </summary>
-        public string? FindCommandLineInstall()
-        {
-            var recorded = Recorded();
-            if (options.Retire is { } named)
-            {
-                var full = Path.GetFullPath(named);
-                var name = Windows ? "jason.exe" : "jason";
-                if (!IsRegularFile(full))
-                {
-                    Problems.Add($"--retire names {full}, and there is no regular file there (nothing, a folder or a link), so nothing was retired.");
-                    return null;
-                }
-
-                if (CarriedExecutable.Of(full) is not null)
-                {
-                    Problems.Add($"--retire names {full}, which an application carries (a version.json beside it), so it was not retired.");
-                    return null;
-                }
-
-                if (!string.Equals(Path.GetFileName(full), name, PathCase) || IsWrapper(full))
-                {
-                    Problems.Add($"--retire names {full}, which is not a command-line install's {name}, so it was left as it is.");
-                    return null;
-                }
-
-                if (!Signed(full, recorded))
-                {
-                    Problems.Add($"--retire names {full}, and nothing says it is Jason's (no {string.Join(" or ", ReleaseAssets.Notices.Select(notice => Path.GetFileName(ReleaseAssets.NoticeBeside(full, notice))))} beside it, and it is neither the one the last `jason update apply` recorded nor the installer's own place), so it was left as it is.");
-                    return null;
-                }
-
-                return full;
-            }
-
-            foreach (var candidate in new[] { recorded, places.DefaultCommandLineExecutable }.OfType<string>())
-            {
-                var full = Path.GetFullPath(candidate);
-                if (!IsRegularFile(full) || CarriedExecutable.Of(full) is not null || IsWrapper(full))
-                {
-                    continue;
-                }
-
-                if (Signed(full, recorded))
-                {
-                    return full;
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Whether a file is Jason's by a sign of its own: the one the update ledger records, a notice file of Jason's beside
-        /// it, or on Windows the installer's own place.
-        /// </summary>
-        private bool Signed(string full, string? recorded) =>
-            string.Equals(full, recorded, PathCase)
-            || ReleaseAssets.Notices.Any(notice => File.Exists(ReleaseAssets.NoticeBeside(full, notice)))
-            || (Windows && string.Equals(full, Path.GetFullPath(places.DefaultCommandLineExecutable), PathCase));
-
-        /// <summary>The install path the update ledger names, where there is a readable one; reading it writes nothing.</summary>
-        private string? Recorded()
-        {
-            try
-            {
-                return UpdateLedger.ReadFile(new UpdatePaths(env.Paths).Ledger)?.InstallPath is { Length: > 0 } path ? Path.GetFullPath(path) : null;
-            }
-            catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or UpdateLedgerException or JsonException or ArgumentException)
-            {
-                return null;
-            }
-        }
+        /// <summary>The command-line install to retire, by the rule <see cref="CommandLineInstalls.Find"/> keeps for install and uninstall alike.</summary>
+        public string? FindCommandLineInstall() => CommandLineInstalls.Find(env, places, options.Retire, Problems);
 
         /// <summary>What runs on this data directory, where nothing is retired: said, and left as it is.</summary>
         public string RuntimeOutside() =>
@@ -371,6 +298,20 @@ public static class MachineSetup
                 return (RuntimeStates.Running, false);
             }
 
+            // The stop owes a start, and this routine starts none: the note says so from before the drain, so a routine killed
+            // or timed out during the stop's wait, or a caller that quits before it starts one, leaves it standing for the
+            // next to find. It is taken back where the runtime does not stop; a runtime's own start removes it, and so does a
+            // stop through `jason runtime stop`.
+            string? unwritten = null;
+            try
+            {
+                StartOwed.Write(env.Paths, (env.Clock ?? TimeProvider.System).GetUtcNow());
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                unwritten = refused.Message;
+            }
+
             using var said = new StringWriter();
             var quiet = env with { Out = said };
             var (_, drain) = await OperationRunner.SendAsync(quiet, Operations.SystemDrain, RequestBody.Empty(), cancellationToken).ConfigureAwait(false);
@@ -383,15 +324,25 @@ public static class MachineSetup
             var exit = await RuntimeStopCommand.RunAsync(quiet, human: false, cancellationToken, options.StopTimeout, options.StopPoll).ConfigureAwait(false);
             if (exit != ExitCodes.Success)
             {
+                // Still running, so no start is owed.
+                StartOwed.Remove(env.Paths);
+
                 // A runtime left draining claims nothing new: it is resumed, and goes on as it was.
                 var resumed = drained && (await OperationRunner.SendAsync(quiet, Operations.SystemResume, RequestBody.Empty(), cancellationToken).ConfigureAwait(false)).Item2 is { IsSuccess: true };
                 env.Error.Write(said.ToString());
-                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason system resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
+                Problems.Add($"The runtime running from {old} would not stop, so nothing of that install was retired{(resumed ? "; it was resumed and goes on as it was" : drained ? "; it could not be resumed, and `jason runtime resume` resumes it" : string.Empty)}. Stop it with `jason runtime stop` and run this again.");
                 return (RuntimeStates.WouldNotStop, true);
             }
 
             Done.Add($"Stopped the runtime that ran from {old}.");
-            Left.Add($"No runtime was started: `jason runtime start` starts one from {carried.Executable}.");
+            Left.Add(unwritten is null
+                ? $"No runtime was started: `jason runtime start` starts one from {carried.Executable}. Until one starts, {env.Paths.StartOwedFile} says a start is owed."
+                : $"No runtime was started: `jason runtime start` starts one from {carried.Executable}.");
+            if (unwritten is not null)
+            {
+                Problems.Add($"The note that a start is owed could not be written at {env.Paths.StartOwedFile} ({unwritten}), so nothing that reads it will start the runtime this stopped: `jason runtime start` starts one.");
+            }
+
             return (RuntimeStates.Stopped, false);
         }
 
@@ -509,9 +460,16 @@ public static class MachineSetup
 
                     try
                     {
+                        // Whether this run brings the file into being, recorded so the uninstall takes away only a file Jason
+                        // made and that holds nothing else by then (CreatedProfiles).
+                        var created = !File.Exists(profile) && !IsLink(profile);
                         if (PathEntry.AddToProfile(profile, places.LocalBin))
                         {
                             added.Add(profile);
+                            if (created)
+                            {
+                                RecordCreated(profile);
+                            }
                         }
                     }
                     catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
@@ -619,178 +577,13 @@ public static class MachineSetup
 
         public InstallRetired Retire(string old)
         {
-            var removed = new List<string>();
             var reregistered = Reregister(old);
-            string? aside = null;
-
             var replacedByWrapper = !Windows && string.Equals(old, Path.GetFullPath(Path.Combine(places.LocalBin, "jason")), StringComparison.Ordinal);
-            if (!replacedByWrapper)
-            {
-                aside = RemoveExecutable(old, removed);
-            }
-
-            var beside = ReleaseAssets.Notices.Select(notice => ReleaseAssets.NoticeBeside(old, notice)).ToList();
-            if (Windows)
-            {
-                beside.Add(Path.Combine(Path.GetDirectoryName(old)!, "jason.previous.exe"));
-            }
-
-            foreach (var file in beside.Where(File.Exists))
-            {
-                try
-                {
-                    places.Delete(file);
-                    removed.Add(file);
-                }
-                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-                {
-                    Problems.Add($"{file} could not be removed: {refused.Message}");
-                }
-            }
-
-            var directory = Path.GetDirectoryName(old)!;
-            if (Windows)
-            {
-                TakePathEntry(directory, removed);
-            }
-            else if (!replacedByWrapper)
-            {
-                TakeProfileBlock(directory, removed);
-            }
-
-            if (!replacedByWrapper && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
-            {
-                try
-                {
-                    Directory.Delete(directory);
-                    removed.Add(directory);
-                }
-                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-                {
-                    Left.Add($"{directory} is empty and was left: {refused.Message}");
-                }
-            }
-
+            var (aside, removed) = new CommandLineRemoval(places, Left, Problems).Remove(old, replacedByWrapper);
             Done.Add(removed.Count > 0 || replacedByWrapper
                 ? $"Retired the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}."
                 : $"Retired the command-line install at {old}.");
             return new InstallRetired(old, aside, removed, reregistered);
-        }
-
-        /// <summary>
-        /// Deleted where nothing runs from it; on Windows, where a running process holds it, renamed into a folder of its
-        /// own on its own volume and left there, with nothing started to wait for that process.
-        /// </summary>
-        private string? RemoveExecutable(string old, List<string> removed)
-        {
-            try
-            {
-                places.Delete(old);
-                removed.Add(old);
-                return null;
-            }
-            catch (Exception held) when (Windows && held is IOException or UnauthorizedAccessException)
-            {
-                var folder = AsideFolder(old);
-                try
-                {
-                    Directory.CreateDirectory(folder);
-                    var aside = Path.Combine(folder, Path.GetFileName(old));
-                    File.Move(old, aside);
-                    Left.Add($"{old} is held by a running process, so it was renamed to {aside}; nothing waits to remove it, and it can be deleted once nothing runs from it.");
-                    return aside;
-                }
-                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-                {
-                    Problems.Add($"{old} could neither be removed nor renamed aside: {refused.Message}");
-                    return null;
-                }
-            }
-            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-            {
-                Problems.Add($"{old} could not be removed: {refused.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>The temporary directory where it is on the executable's volume, else beside its folder: a rename never crosses one.</summary>
-        private string AsideFolder(string old)
-        {
-            var name = $"jason-retired-{Guid.NewGuid():N}";
-            if (string.Equals(Path.GetPathRoot(old), Path.GetPathRoot(Path.GetFullPath(places.Temporary)), StringComparison.OrdinalIgnoreCase))
-            {
-                return Path.Combine(places.Temporary, name);
-            }
-
-            var folder = Path.GetDirectoryName(old)!;
-            return Path.Combine(Path.GetDirectoryName(folder) ?? folder, "." + name);
-        }
-
-        /// <summary>The old folder's Path entry, by the uninstall's rule: only where the folder holds nothing but what <c>install.ps1</c> writes.</summary>
-        private void TakePathEntry(string directory, List<string> removed)
-        {
-            if (!OperatingSystem.IsWindows())
-            {
-                return;
-            }
-
-            try
-            {
-                var value = new UserPathValue(places.PathKey);
-                var stored = value.Read();
-                var expand = PathEntry.ReadAs(stored?.Kind != Microsoft.Win32.RegistryValueKind.String);
-                if (stored is null || !PathEntry.Carries(stored.Raw, directory, expand))
-                {
-                    return;
-                }
-
-                if (!PathEntry.JasonsOwn(directory, windows: true))
-                {
-                    Left.Add(PathEntry.WhyLeft(new PathEntryPlan(directory, [], stored.Raw, false, "this account's Path value"), windows: true));
-                    return;
-                }
-
-                value.Write(PathEntry.WithoutDirectory(stored.Raw, directory, expand), stored.Kind);
-                removed.Add($"the Path entry {directory}");
-            }
-            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or System.Security.SecurityException)
-            {
-                Problems.Add($"The Path entry {directory} could not be taken off: {refused.Message}");
-            }
-        }
-
-        /// <summary>A retired folder's profile block on macOS, by the uninstall's rule, where it was not <c>~/.local/bin</c>.</summary>
-        private void TakeProfileBlock(string directory, List<string> removed)
-        {
-            var plan = PathEntry.ReadProfiles(directory, places.Home, places.Shell);
-            if (plan.Profiles.Count == 0)
-            {
-                return;
-            }
-
-            if (!plan.Ours)
-            {
-                Left.Add(PathEntry.WhyLeft(plan, windows: false));
-                return;
-            }
-
-            foreach (var profile in plan.Profiles)
-            {
-                try
-                {
-                    var bytes = File.ReadAllBytes(profile);
-                    var without = PathEntry.WithoutEntry(bytes, directory);
-                    if (!ReferenceEquals(without, bytes))
-                    {
-                        File.WriteAllBytes(profile, without);
-                        removed.Add($"the block for {directory} in {profile}");
-                    }
-                }
-                catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
-                {
-                    Problems.Add($"{profile} could not be rewritten ({refused.Message}): take the line {PathEntry.ExportLine(directory)} and the line {PathEntry.Marker} above it out by hand.");
-                }
-            }
         }
 
         /// <summary>
@@ -1032,6 +825,22 @@ public static class MachineSetup
             catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Records a profile this run created. One that cannot be recorded is said, and stays at an uninstall like a file the
+        /// person had: the safe direction.
+        /// </summary>
+        private void RecordCreated(string profile)
+        {
+            try
+            {
+                CreatedProfiles.Add(places.Home, profile);
+            }
+            catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+            {
+                Left.Add($"{profile} was created here, and that could not be recorded at {CreatedProfiles.RecordFile(places.Home)} ({refused.Message}), so an uninstall takes Jason's lines out of it and leaves the file.");
             }
         }
 

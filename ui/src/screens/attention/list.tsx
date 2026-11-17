@@ -5,6 +5,8 @@ import { relative } from '../../time/format';
 import type { ApprovalSummary, DecisionSummary } from '../../api/types';
 import { approvalMark, approvalNote, title } from './labels';
 import type { Kind } from './store';
+import { asking } from './reasking';
+import { ASKING_MARK } from './reasking-model';
 
 type Props = {
     approvals: ApprovalSummary[];
@@ -37,6 +39,7 @@ export function AttentionList({ approvals, questions, moreApprovals, moreQuestio
                         <span className="in">in {a.campaign_name}</span>
                     </span>
                     <span className="meta">
+                        {asking(a.id) !== undefined && <span className="reasking">{ASKING_MARK}</span>}
                         {approvalNote(a.status, a.decided_by?.id) && (
                             <span>{approvalNote(a.status, a.decided_by?.id)}</span>
                         )}
