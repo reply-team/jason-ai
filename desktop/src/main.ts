@@ -64,7 +64,7 @@ import { accountShell, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart, updaterCache } from './uninstall.ts';
 import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
-import { runStopRuntime, runUninstall } from './uninstall-start.ts';
+import { runStopRuntime, runUninstall, runUninstallBusy } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
 import { keepWindowTitle, windowTitle } from './window-title.ts';
 import { followTheme, frameOf, keepMovable } from './window-frame.ts';
@@ -1100,8 +1100,15 @@ function startDesktop(): void {
     keepElectronUnderData();
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
-        // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`).
-        void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));
+        // Its exit code tells the uninstaller whether to go on and remove the files (`uninstallExit`). It holds the
+        // single-instance lock while it runs, so an update asked for meanwhile is handed to a start that never answers it
+        // rather than racing the removal; where another start holds the lock, a window or an update, it takes nothing off
+        // and exits 1, which the uninstaller reads as go no further (`uninstallBusyExit`).
+        const held = app.requestSingleInstanceLock();
+        void app
+            .whenReady()
+            .then(() => (held ? runUninstall(uninstalling.quiet) : runUninstallBusy(uninstalling.quiet)))
+            .then((code) => app.exit(code), () => app.exit(2));
     } else if (stoppingRuntime) {
         // The nsis installer's and uninstaller's start when a runtime runs from the carried jason.exe: it stops that
         // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read

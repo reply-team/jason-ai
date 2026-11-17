@@ -75,6 +75,7 @@ export const templates = {
     // Taking off what the desktop placed: the menu's Remove What Jason Placed on Linux, and Uninstall Jason on macOS.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
     uninstall_asked: 'Uninstall Jason was answered with {Answer}',
+    uninstall_busy: 'The uninstaller started Jason Desktop while another start held its lock; nothing was taken off',
     removal_step: 'Taking off what Jason placed: the step {Step} ended {Outcome}',
     // The updater.
     update_checked: 'The releases were read; a newer one to offer: {Available}',

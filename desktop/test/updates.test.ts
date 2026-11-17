@@ -26,7 +26,7 @@ import {
     writeRollback,
 } from '../src/rollback.ts';
 import type { StopOutcome } from '../src/own-runtime.ts';
-import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
+import { debFile, feed, firstCheckMs, installQuestion, installRefusal, keepRefusal, menuItemOf, pressItem, previousRelease, requestUnderWayRefusal, runtimeRefusal, updateKeyWords, Updater, type FeedUpdater, type TakenStep, type UpdateState } from '../src/updates.ts';
 import { memoryLog, snapshot, written } from './harness.ts';
 
 function scratch(t: { after(fn: () => void): void }) {
@@ -894,4 +894,30 @@ test('the terminal settle records the update that installed this version as kept
     writeRollback(s.rollback, { pending: { fromVersion: '0.35.0', toVersion: '0.36.0', directory: null }, rejected: [] });
     assert.equal(settleByRequest(s.rollback, '0.36.0', log), true);
     assert.deepEqual(readRollback(s.rollback), { pending: undefined, rejected: [] });
+});
+
+test('under the close switch, the menu’s install refuses while a terminal’s request that installs is under way; under stop, the request never installs and the menu is the person’s', async (t) => {
+    // A window that already holds the download, and a request for it that installs: its runtime stop held open.
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    let release!: () => void;
+    const on = updaterOn(scratch(t), updater, { stop: () => new Promise<StopOutcome>((resolve) => (release = () => resolve({ kind: 'none' }))) });
+    on.updates.start();
+    await on.timers.fire();
+    await on.updates.download();
+    const request = on.updates.take({ to: '0.35.0', feed: null }, { install: true }, () => undefined);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(await on.updates.install(), false);
+    assert.deepEqual(on.told, [requestUnderWayRefusal]);
+    release();
+    assert.equal((await request).state, 'installing');
+    assert.deepEqual(updater.calls.filter((call) => call.startsWith('quitAndInstall')), ['quitAndInstall(true, false)'], 'the request’s install alone');
+    // A request that does not install (a window under `stop`) leaves the menu's install as it was once it has ended.
+    const stopped = updaterOn(scratch(t), fakeUpdater({ latest: '0.35.0' }));
+    stopped.updates.prepare();
+    assert.equal((await stopped.updates.take({ to: '0.35.0', feed: null }, { install: false }, () => undefined)).state, 'refused');
+    assert.equal(await stopped.updates.install(), true);
+    assert.deepEqual(stopped.told, []);
+    // A window's request installs only under the close switch: the switch is what makes `how.install` true there.
+    const requests = readFileSync(new URL('../src/update-request.ts', import.meta.url), 'utf8');
+    assert.ok(requests.includes("install: !window || deps.windowOpen === 'close',"));
 });

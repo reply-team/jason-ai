@@ -133,7 +133,25 @@ test('the start that stops the carried runtime exits 0 when none of its own runs
 test('an uninstall start that fails exits 2, never 0, so the uninstaller says what may be left', () => {
     // app.quit() exits 0, which the uninstaller reads as everything taken off.
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
-    assert.ok(main.includes('void app.whenReady().then(() => runUninstall(uninstalling.quiet)).then((code) => app.exit(code), () => app.exit(2));'));
+    assert.ok(main.includes('.then(() => (held ? runUninstall(uninstalling.quiet) : runUninstallBusy(uninstalling.quiet)))\n            .then((code) => app.exit(code), () => app.exit(2));'));
+});
+
+test('the uninstall start holds the single-instance lock while it runs; where another start holds it, nothing is taken off and the uninstaller goes no further', () => {
+    const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
+    const branch = main.slice(main.indexOf('if (uninstalling !== null) {'), main.indexOf('} else if (stoppingRuntime) {'));
+    // Taken before Electron is ready, before anything is run, in this branch alone of the installer's two starts.
+    assert.ok(branch.includes('const held = app.requestSingleInstanceLock();'));
+    assert.ok(branch.indexOf('const held = app.requestSingleInstanceLock();') < branch.indexOf('.whenReady()'));
+    const stop = main.slice(main.indexOf('} else if (stoppingRuntime) {'), main.indexOf('} else if (updating !== null) {'));
+    assert.equal(stop.includes('requestSingleInstanceLock'), false);
+    // Busy: exit 1, which customUnInstall reads as quit before a file is removed; said unless silent, and nothing run.
+    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
+    const busy = start.slice(start.indexOf('export async function runUninstallBusy('));
+    assert.match(start, /export const uninstallBusyExit = 1;/);
+    assert.ok(busy.includes('if (!quiet) await dialog.showMessageBox('));
+    assert.equal(/cli\.run|carriedUninstallArgs/.test(busy), false, 'nothing is run');
+    const nsis = readFileSync(join(desktop, 'installer', 'uninstall.nsh'), 'utf8');
+    assert.ok(/\$\{if\} \$R2 == "1"\r?\n\s+SetErrorLevel 1\r?\n\s+Quit/.test(nsis));
 });
 
 test('the uninstall start is honoured only in a packaged application on Windows, where an uninstaller makes it', () => {

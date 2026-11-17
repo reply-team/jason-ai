@@ -170,6 +170,10 @@ export function keepRefusal(stopped: boolean): string {
     return stopped ? `${why} The runtime this application carries was stopped for the update: jason runtime start starts it again.` : `${why} Jason was left as it was.`;
 }
 
+/** What the person is told when the menu's install is chosen while a terminal's request installs the update itself. */
+export const requestUnderWayRefusal =
+    'An update asked for from a terminal is under way and installs itself: Jason closes for it once it is ready. Nothing was done from the menu.';
+
 /** What the person is told when the installer stopped before it finished, so Jason stayed open. */
 export function installRefusal(stopped: boolean, kept: string | null): string {
     return [
@@ -267,6 +271,11 @@ export class Updater {
     private handle: unknown = null;
     /** Whether the cadence was started (`start`): a window's updater. One built for a request alone never looks by itself. */
     private looking = false;
+    /**
+     * Whether a terminal's request that installs is under way (`take` with `how.install`): in a window only under the
+     * `close` switch (`windowOpenUpdate`), where the menu's install would race the request's own; refused while it lasts.
+     */
+    private requestInstalls = false;
 
     constructor(deps: UpdaterDeps) {
         this.deps = deps;
@@ -366,6 +375,10 @@ export class Updater {
      * before anything is kept, replaced or closed; a copy that cannot be kept ends it before anything is closed.
      */
     async install(): Promise<boolean> {
+        if (this.requestInstalls) {
+            this.deps.refused(requestUnderWayRefusal);
+            return false;
+        }
         if (this.state.step !== 'downloaded') return false;
         const result = await this.installing(this.state.version, null);
         if (result.ok) return true;
@@ -405,6 +418,7 @@ export class Updater {
         const before = this.state;
         const back: UpdateState = before.step === 'downloaded' || before.step === 'offered' ? before : { step: 'idle' };
         let handed = false;
+        this.requestInstalls = how.install;
         try {
             const outcome = await this.taking(request, how, progress, back, refused);
             handed = outcome.state === 'installing';
@@ -413,6 +427,7 @@ export class Updater {
             // On every path, a throw included: the releases' feed put back, and short of the installer no step left under
             // way and the cadence looking again.
             this.deps.updater.setFeedURL(feed);
+            this.requestInstalls = false;
             if (!handed) {
                 const now = this.current;
                 if (now.step === 'installing') this.show({ step: 'downloaded', version: now.version });
