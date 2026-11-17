@@ -46,6 +46,34 @@ public sealed class DispatcherCheckTests
         Assert.Contains("jason runtime resume", text[text.IndexOf("To repair:", StringComparison.Ordinal)..].Split(Environment.NewLine).Select(line => line.Trim()));
     }
 
+    /// <summary>
+    /// While an update's ledger stands unfinished the drain is the update's: the check says the runtime is draining for the
+    /// update and its repair is the apply that carries it on, never a resume in the middle of it. Still not ready.
+    /// </summary>
+    [Fact]
+    public async Task A_drain_during_an_unfinished_update_names_the_updates_repair_and_never_the_resume()
+    {
+        using var dir = new TempPaths();
+        var output = new StringWriter();
+        StatusCommandTests.Running(dir);
+        StatusCommandTests.Dispatcher(dir, new DispatcherInfo(DispatcherState.Draining, 10, 4, 1, null, 0, 0));
+        UpdateInFlightCheckTests.Ledger(dir, Contracts.Update.UpdateStep.Drained).Write(new Jason.Cli.Update.UpdatePaths(dir.Paths).Ledger);
+
+        var exit = await CliApp.RunAsync(["status"], StatusCommandTests.Machine(dir, output), Ct);
+
+        var report = StatusCommandTests.Read(output);
+        Assert.False(report.Ready);
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var check = Assert.Single(report.Checks, check => check.Name == "dispatcher");
+        Assert.True(check.Required);
+        Assert.Equal(CheckState.Failed, check.State);
+        Assert.Equal(
+            "The runtime is draining for the update: an update from 0.1.0 to 9.9.9 stopped at 'drained' and is not finished, and `jason update apply` carries it on; 1 attempt is still running.",
+            check.Fact);
+        Assert.Equal("jason update apply", check.Fix);
+        Assert.DoesNotContain("jason runtime resume", output.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>A runtime that claims work passes, and so does one whose settings turned its dispatcher off, which is said.</summary>
     [Theory]
     [InlineData(DispatcherState.Running, "The runtime claims work.")]

@@ -569,8 +569,9 @@ Jason from 0.49.0 on refuses to start on (`data_newer`).
 
 `dispatcher` fails while the runtime is draining: it answers every question and claims no new work. A drain is what
 `jason runtime drain` does, and what an update or an install leaves where it ended part-way; it lasts until
-`jason runtime resume`, the check's repair, or a restart of the runtime. A dispatcher the settings turn off
-(`Dispatcher:Enabled`) is said there and never failed.
+`jason runtime resume`, the check's repair, or a restart of the runtime. While an update stands unfinished the drain
+is the update's: the check says the runtime is draining for the update, and its repair is `jason update apply`, never a
+resume in the middle of it. A dispatcher the settings turn off (`Dispatcher:Enabled`) is said there and never failed.
 
 `plugin_package` compares each plugin package the release you run publishes — today the Reply plugin's, the journal
 forwarder's, ntfy's, Slack's and Telegram's — with the package

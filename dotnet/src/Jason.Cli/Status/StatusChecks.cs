@@ -273,7 +273,7 @@ internal static partial class StatusChecks
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
             checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
-            checks.Add(Dispatcher(info));
+            checks.Add(Dispatcher(info, unfinished));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
@@ -448,10 +448,12 @@ internal static partial class StatusChecks
     /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
     /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
     /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
-    /// restarts nothing. A dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never
-    /// failed; a runtime that did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
+    /// restarts nothing. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
+    /// of it is never offered: the check says the runtime is draining for the update and names the update's own repair. A
+    /// dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never failed; a runtime that
+    /// did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
     /// </summary>
-    private static StatusCheck Dispatcher(SystemInfoResponse? info)
+    private static StatusCheck Dispatcher(SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
     {
         const string Name = "dispatcher";
         if (info is null)
@@ -464,6 +466,18 @@ internal static partial class StatusChecks
             : string.Create(CultureInfo.InvariantCulture, $"{info.Dispatcher.RunningAttempts} attempts are still running");
         return info.Dispatcher.State switch
         {
+            DispatcherState.Draining when unfinished is { Ledger: not null } => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining for the update: {char.ToLowerInvariant(unfinished.Said()[0])}{unfinished.Said()[1..]}, and `{Repair.FinishUpdate}` carries it on; {running}.",
+                Repair.FinishUpdate),
+            DispatcherState.Draining when unfinished is not null => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining, and an update may be under way: {unfinished.Said()}; {running}.",
+                null),
             DispatcherState.Draining => new StatusCheck(
                 Name,
                 true,
