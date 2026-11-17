@@ -130,6 +130,72 @@ public sealed class UpdateFinishInstalledTests
         Assert.Empty(installation.Release.Requested);
     }
 
+    /// <summary>
+    /// Jason Desktop's first start: the data directory holds its own folder, <c>desktop/mode</c>, and maybe its log, and
+    /// nothing of an installation. The real verb reads no release, takes no lock and makes nothing: the listing after is the
+    /// listing before, with no <c>update/</c>, and the feed was asked nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task With_only_the_desktops_own_folder_nothing_is_read_or_made(bool withItsLog)
+    {
+        var (installation, desktop) = FakeDesktop.Carried(withRuntime: false, to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        Directory.Delete(installation.Paths.Root, recursive: true);
+        Directory.CreateDirectory(Path.Combine(installation.Paths.Root, "desktop"));
+        File.WriteAllText(Path.Combine(installation.Paths.Root, "desktop", "mode"), "demo");
+        if (withItsLog)
+        {
+            Directory.CreateDirectory(installation.Paths.LogsDirectory);
+            File.WriteAllText(Path.Combine(installation.Paths.LogsDirectory, "desktop-20261117.jsonl"), "{}\n");
+        }
+
+        var before = Listing(installation.Paths.Root);
+
+        var exit = await CliApp.RunAsync(["update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var report = JsonSerializer.Deserialize<UpdateFinishResponse>(installation.Out.ToString(), JasonJson.Options)!;
+        Assert.True(report.DataDirFound);
+        Assert.False(report.Complete);
+        Assert.All(report.Parts, part =>
+        {
+            Assert.Equal(UpdateFinishStates.NotDone, part.State);
+            Assert.Contains("holds nothing of an installation but Jason Desktop's own", part.Reason, StringComparison.Ordinal);
+        });
+        Assert.Equal(before, Listing(installation.Paths.Root));
+        Assert.False(Directory.Exists(Path.Combine(installation.Paths.Root, "update")), "the finishing step made the update folder");
+        Assert.Empty(installation.Release.Requested);
+    }
+
+    /// <summary>
+    /// An installation whose data directory has no <c>update/</c> folder yet: the finishing step does its parts and takes no
+    /// lock there, so it makes no <c>update/</c> for one, as <c>jason install</c> does not.
+    /// </summary>
+    [Fact]
+    public async Task An_installation_with_no_update_folder_is_finished_without_making_one()
+    {
+        var (installation, desktop) = FakeDesktop.Carried(to: SemanticVersion.Current);
+        using var _ = installation;
+        using var __ = desktop;
+        var update = Path.Combine(installation.Paths.Root, "update");
+        if (Directory.Exists(update))
+        {
+            Directory.Delete(update, recursive: true);
+        }
+
+        var report = await FinishAsync(installation);
+
+        Assert.True(report.DataDirFound);
+        Assert.NotEmpty(installation.Release.Requested);
+        Assert.False(Directory.Exists(update), "the finishing step made the update folder for its lock");
+    }
+
+    private static string[] Listing(string root) =>
+        [.. Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories).Select(entry => Path.GetRelativePath(root, entry)).Order(StringComparer.Ordinal)];
+
     /// <summary>A release that cannot be read changes nothing of the parts it is read for, and says what was not done.</summary>
     [Fact]
     public async Task A_release_that_cannot_be_read_changes_nothing_and_says_what_was_not_done()
