@@ -1135,6 +1135,13 @@ public partial class PageClaimsTests
         Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("The full experience is still a session with your agent", readme, StringComparison.Ordinal);
+        Assert.Contains("on Windows, only where the PATH holds the folder it uses", readme, StringComparison.Ordinal);
+
+        // The desktop's own page says the same as the README's section, with no ranking of one way above the other.
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.DoesNotContain("The full experience is still a session with your agent", desktop, StringComparison.Ordinal);
+        Assert.Contains("a chat that is a session with your own agent, started for you on this computer", desktop, StringComparison.Ordinal);
+        Assert.Contains("The terminal stays open to you at any time", desktop, StringComparison.Ordinal);
 
         foreach (var text in new[] { install, readme })
         {
