@@ -396,11 +396,11 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             case 0:
                 break;
             case SetupExits.ProcessRunsFromPlace:
-                return End(MoveStates.Failed, $"The installer stopped before it replaced a file: a Jason process runs from {application}. Stop it, then run `jason update apply` to carry the move on; the command-line install was not touched.");
+                return End(MoveStates.Failed, $"The installer stopped before it replaced a file: a Jason process still runs from {application}, a runtime that did not stop say, or its look for one failed and could not tell. Stop a process that runs from there, if one does, then run `jason update apply` to carry the move on; the command-line install was not touched.");
             case SetupExits.StoppedBeforeInstalling:
                 return End(MoveStates.Failed, $"The installer stopped before Jason Desktop {version} was installed: another installer of Jason Desktop was running at the same time, or the uninstaller of the Jason Desktop already installed refused, a file of it held, and left that version as it was. The command-line install was not touched. Once no other installer of Jason Desktop runs and Jason Desktop is quit, run `jason update apply` to carry the move on.");
             case SetupExits.ApplicationRunning:
-                return End(MoveStates.Pending, $"Jason Desktop is running, in its window or in the tray, and its installer changes nothing while it runs, so Jason Desktop {version} was not installed and nothing was ended; the command-line install answers as jason as it did. Quit Jason Desktop, then run `jason update apply` again to carry the move on.");
+                return End(MoveStates.Pending, $"The installer of Jason Desktop {version} found Jason Desktop running at {application}, in its window or in the tray, or its look for it failed and could not tell whether it runs, and a silent installer then changes nothing and ends nothing, so Jason Desktop {version} was not installed; the command-line install answers as jason as it did. Quit Jason Desktop if it runs, then run `jason update apply` again to carry the move on.");
             default:
                 return End(MoveStates.Failed, string.Create(CultureInfo.InvariantCulture, $"The installer exited with {run.ExitCode}, and Jason Desktop was not installed; the command-line install was not touched. `jason update apply` carries the move on."));
         }
@@ -644,6 +644,18 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     /// </summary>
     private (string Application, SemanticVersion? Version, string? Refusal, string? Waits) Look(SetupPlaces places)
     {
+        // The setup this move downloaded, left running by an earlier run past its bound or after a kill, may be writing the
+        // application now: nothing at its place is used, reused or installed over until it has ended.
+        if (places.Platform is SetupSystem.Windows && System.Runs(Path.Combine(update.MoveDownloads, WindowsAsset)))
+        {
+            var place = WindowsApplication(places);
+            return (
+                place,
+                null,
+                $"The installer of Jason Desktop this move began earlier is still running, installing to {place}, so nothing it may be writing there is used and nothing was changed; the command-line install answers as jason as it did. Once that installer has ended, `jason update apply` carries the move on.",
+                null);
+        }
+
         foreach (var application in Places(places))
         {
             var windows = places.Platform is SetupSystem.Windows;

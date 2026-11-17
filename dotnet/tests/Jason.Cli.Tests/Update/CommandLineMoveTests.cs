@@ -269,6 +269,55 @@ public sealed class CommandLineMoveTests
     }
 
     /// <summary>
+    /// While the installer this move downloaded still runs, left by an earlier run past its bound or after a kill, nothing at
+    /// its place is used: not an application of this version it may be writing, not a half-written one, and no second
+    /// installer is fetched or run. The move is pending, and `jason update apply` carries it on once that installer has ended.
+    /// </summary>
+    [Theory]
+    [InlineData("reusable")]
+    [InlineData("half")]
+    [InlineData("nothing")]
+    public async Task While_the_moves_own_setup_still_runs_nothing_at_its_place_is_used(string there)
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        var ledger = rig.Complete();
+        new MoveRecord(SemanticVersion.Current.ToString(), Path.GetFullPath(rig.Old), MoveStates.Pending, MoveSteps.Verified, null, rig.Application, "left running", rig.Installation.Feed.AbsoluteUri, DateTimeOffset.UtcNow, "the-moves-marker").Write(rig.Update.Move);
+        switch (there)
+        {
+            case "reusable":
+                MoveRig.PlantApplication(rig.Application, windows: true, SemanticVersion.Current.ToString());
+                break;
+            case "half":
+                File.WriteAllText(Path.Combine(Directory.CreateDirectory(rig.Application).FullName, "Jason.exe"), "half");
+                break;
+        }
+
+        var setup = Path.Combine(rig.Update.MoveDownloads, CommandLineMove.WindowsAsset);
+        rig.System.Running.Add(setup);
+
+        var answer = await rig.Move().RunAsync(ledger, rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Pending, answer.State);
+        Assert.Contains("this move began earlier is still running", answer.Reason!, StringComparison.Ordinal);
+        Assert.Empty(rig.Acts);
+        Assert.True(File.Exists(rig.Old));
+        Assert.True(rig.Installation.Running);
+        Assert.Equal("the-moves-marker", rig.Record()!.Marker);
+        Assert.Equal("jason update apply", StatusChecks.Move(rig.Env).Fix);
+
+        // Once it has ended, the next apply carries the move on.
+        rig.System.Running.Remove(setup);
+        if (there == "half")
+        {
+            MoveRig.PlantApplication(rig.Application, windows: true, SemanticVersion.Current.ToString());
+        }
+
+        var again = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+        Assert.Equal(MoveStates.Done, again.State);
+    }
+
+    /// <summary>
     /// On Windows an application of this version or later already there has its jason held to the publisher before anything of
     /// it runs, as a downloaded installer is and as macOS holds a found application: one signed by another is never run.
     /// </summary>
@@ -367,7 +416,8 @@ public sealed class CommandLineMoveTests
 
     /// <summary>The setup's own refusals fail the move and leave the command-line install as it was.</summary>
     [Theory]
-    [InlineData(1, "a Jason process runs from")]
+    [InlineData(1, "a Jason process still runs from")]
+    [InlineData(1, "or its look for one failed and could not tell")]
     [InlineData(2, "another installer of Jason Desktop was running at the same time, or the uninstaller of the Jason Desktop already installed refused")]
     [InlineData(5, "exited with 5")]
     public async Task A_setup_that_refuses_fails_the_move_and_touches_nothing(int code, string said)
@@ -400,7 +450,9 @@ public sealed class CommandLineMoveTests
 
         Assert.Equal(MoveStates.Pending, answer.State);
         Assert.Equal(MoveSteps.Verified, answer.Step);
-        Assert.Contains("Quit Jason Desktop, then run `jason update apply` again", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains("found Jason Desktop running at", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains("or its look for it failed and could not tell whether it runs", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains("Quit Jason Desktop if it runs, then run `jason update apply` again", answer.Reason!, StringComparison.Ordinal);
         Assert.DoesNotContain("routine", rig.Acts);
         Assert.True(File.Exists(rig.Old));
         Assert.True(rig.Installation.Running);
@@ -719,7 +771,9 @@ public sealed class CommandLineMoveTests
 
     /// <summary>
     /// A test build's signer comes from the environment only in a build made with JasonTestBuild, which no release makes:
-    /// this one is not, and the release workflow and the package action never name the property.
+    /// this one is not, and the release workflow and the package action never name the property. One symbol says it: only
+    /// Jason.Contracts defines <c>JASON_TEST_BUILD</c>, and the move's relaxed checks read <c>JasonVersion.TestBuild</c> and
+    /// nothing else, so no build relaxes them without saying it is a test build.
     /// </summary>
     [Fact]
     public void No_released_build_is_a_test_build()
@@ -738,15 +792,25 @@ public sealed class CommandLineMoveTests
             Assert.DoesNotContain("JASON_TEST_BUILD", text, StringComparison.Ordinal);
         }
 
+        // The symbol is defined in one project, and read in source in one file.
+        var defining = Directory.EnumerateFiles(Path.Combine(root, "dotnet", "src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(project => File.ReadAllText(project).Contains("JASON_TEST_BUILD", StringComparison.Ordinal))
+            .Select(project => Path.GetFileName(project));
+        Assert.Equal(["Jason.Contracts.csproj"], defining);
+        var testing = Directory.EnumerateFiles(Path.Combine(root, "dotnet", "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Where(file => File.ReadAllText(file).Contains("#if JASON_TEST_BUILD", StringComparison.Ordinal))
+            .Select(file => Path.GetFileName(file));
+        Assert.Equal(["JasonVersion.cs"], testing);
+
         var source = File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.Cli", "Update", "MoveSystem.cs"));
-        var opened = source.IndexOf("#if JASON_TEST_BUILD", StringComparison.Ordinal);
-        var closed = source.IndexOf("#else", opened, StringComparison.Ordinal);
-        Assert.True(opened >= 0 && closed > opened);
+        Assert.Contains("public static bool TestBuild => Jason.Contracts.JasonVersion.TestBuild;", source, StringComparison.Ordinal);
         foreach (var variable in new[] { "JASON_TEST_BUILD_SIGNER", "JASON_TEST_BUILD_REQUIREMENT" })
         {
             var at = source.IndexOf($"\"{variable}\"", StringComparison.Ordinal);
-            Assert.True(at > opened && at < closed, $"{variable} is read outside the test build's block");
+            Assert.True(at >= 0, $"{variable} is not read");
             Assert.Equal(at, source.LastIndexOf($"\"{variable}\"", StringComparison.Ordinal));
+            Assert.Contains($"TestBuild && Environment.GetEnvironmentVariable(\"{variable}\")", source, StringComparison.Ordinal);
         }
     }
 

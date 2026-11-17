@@ -82,8 +82,9 @@ public interface IMoveSystem
 /// <c>install/install.ps1</c>'s signer and <c>install/install.sh</c>'s requirement.
 /// </summary>
 /// <remarks>
-/// A test build of the command line (built with <c>-p:JasonTestBuild=true</c>, which defines <c>JASON_TEST_BUILD</c>) reads
-/// another signer from <c>JASON_TEST_BUILD_SIGNER</c> and another requirement from <c>JASON_TEST_BUILD_REQUIREMENT</c>, so a
+/// A test build (built with <c>-p:JasonTestBuild=true</c>, which defines <c>JASON_TEST_BUILD</c> in <c>Jason.Contracts</c> alone,
+/// read here through <see cref="Jason.Contracts.JasonVersion.TestBuild"/> and nothing else, so a build that relaxes these
+/// checks is always one that says it is a test build) reads another signer from <c>JASON_TEST_BUILD_SIGNER</c> and another requirement from <c>JASON_TEST_BUILD_REQUIREMENT</c>, so a
 /// proof on a runner can move an install into an application signed by that runner's own certificate. No released build
 /// is a test build: a guard holds the property out of the release workflow and the package action.
 /// </remarks>
@@ -99,27 +100,16 @@ public static class MoveSignatures
     /// </summary>
     public const string Requirement = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"BD8M7U5YBV\"";
 
-#if JASON_TEST_BUILD
-    /// <summary>Whether this build is a test build, whose checks may be pointed at another signer.</summary>
-    public static bool TestBuild => true;
+    /// <summary>Whether this build is a test build, whose checks may be pointed at another signer: the build's one symbol for it.</summary>
+    public static bool TestBuild => Jason.Contracts.JasonVersion.TestBuild;
 
     /// <summary>The publisher the move holds an installer to: in a test build, the one <c>JASON_TEST_BUILD_SIGNER</c> names.</summary>
     public static string PublisherInForce =>
-        Environment.GetEnvironmentVariable("JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : Publisher;
+        TestBuild && Environment.GetEnvironmentVariable("JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : Publisher;
 
     /// <summary>The requirement the move holds an application to: in a test build, the one <c>JASON_TEST_BUILD_REQUIREMENT</c> names.</summary>
     public static string RequirementInForce =>
-        Environment.GetEnvironmentVariable("JASON_TEST_BUILD_REQUIREMENT") is { Length: > 0 } named ? named : Requirement;
-#else
-    /// <summary>Whether this build is a test build: never a released one.</summary>
-    public static bool TestBuild => false;
-
-    /// <summary>The publisher the move holds an installer to.</summary>
-    public static string PublisherInForce => Publisher;
-
-    /// <summary>The requirement the move holds an application to.</summary>
-    public static string RequirementInForce => Requirement;
-#endif
+        TestBuild && Environment.GetEnvironmentVariable("JASON_TEST_BUILD_REQUIREMENT") is { Length: > 0 } named ? named : Requirement;
 }
 
 /// <summary>This machine's: the programs the move runs, each started by <see cref="ChildProcess"/>.</summary>
