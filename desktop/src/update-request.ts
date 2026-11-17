@@ -293,11 +293,15 @@ export function refusalMessage(
 
 /**
  * What a window-less start on Windows sets in its own environment before electron-updater runs anything: `ComSpec`, the
- * shell Node's `execFile` runs with `shell: true`, as the system's `cmd.exe`, and the system's folders first on `PATH`.
- * The pinned electron-updater checks an installer's publisher by running `powershell.exe` through that shell, and lets
- * the check pass where PowerShell cannot be run at all (`windowsExecutableCodeSignatureVerifier.js`, `handleError`), so
- * the shell and the PowerShell it finds are not the caller's to choose. The system's folder is `SystemRoot`'s; null
- * elsewhere, and where `SystemRoot` is not a drive's absolute path.
+ * command interpreter Node's `execFile` runs when its shell option is on, as the system's own, and the system's folders
+ * first on `PATH`. The pinned electron-updater checks an installer's publisher by running PowerShell through that
+ * interpreter, and lets the check pass where PowerShell cannot be run at all (`windowsExecutableCodeSignatureVerifier.js`,
+ * `handleError`), so the interpreter and the PowerShell it finds are not the caller's to choose. The working directory
+ * stays the caller's, and the interpreter looks there before `PATH` unless `NoDefaultCurrentDirectoryInExePath` is set
+ * (Microsoft's `NeedCurrentDirectoryForExePath`: "the existence of the NoDefaultCurrentDirectoryInExePath environment
+ * variable is checked, and not its value"), so it is set. The system's folder is `SystemRoot`'s, whose value is the
+ * caller's too: this closes the working directory and the order of `PATH`, not a `SystemRoot` the caller pointed
+ * elsewhere. Null elsewhere, and where `SystemRoot` is not a drive's absolute path.
  */
 export function systemShell(env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform): Record<string, string> | null {
     if (platform !== 'win32') return null;
@@ -307,7 +311,11 @@ export function systemShell(env: Readonly<Record<string, string | undefined>>, p
     const system = `${root}\\System32`;
     const folders = [system, root, `${system}\\Wbem`, `${system}\\WindowsPowerShell\\v1.0`];
     const rest = valueOf('PATH');
-    return { ComSpec: `${system}\\cmd.exe`, PATH: [...folders, ...(rest === undefined || rest === '' ? [] : [rest])].join(';') };
+    return {
+        ComSpec: `${system}\\cmd.exe`,
+        PATH: [...folders, ...(rest === undefined || rest === '' ? [] : [rest])].join(';'),
+        NoDefaultCurrentDirectoryInExePath: '1',
+    };
 }
 
 /**
@@ -379,8 +387,8 @@ export interface TakeDeps {
 /**
  * Takes one request to its end: its file made with the first step, each step written before it is taken, the end last.
  * Returns the end it wrote, or null, having written and taken nothing, when the request's file was already there: that
- * file is another's, and is never written over. A file that cannot be written is logged and the request goes on: its
- * process's exit then says less.
+ * file is another's, and is never written over. A file that cannot be made refuses the request as `failed`, taken no
+ * further and written nowhere; a step that cannot be written after it was made is logged and the request goes on.
  */
 export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promise<RequestRecord | null> {
     const file = requestFile(deps.data, request.id);
@@ -435,7 +443,11 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
             return null;
         }
     } catch {
+        // No file can answer for this request (`<data>/update` a file, say): it is refused and taken no further, its end
+        // written nowhere, and a window-less start exits 1.
         deps.log.warn('update_request_unwritten', { State: last.state });
+        const message = refusalMessage('failed', { to: last.to, from: last.from, offered: null, runtimeStopped: false, kept: null, menu });
+        return end({ ...last, state: 'refused', reason: 'failed', message });
     }
     deps.log.info('update_request_taken', { To: request.to, Where: window ? 'window' : 'headless' });
     // A window takes the releases' feed alone: a feed a terminal names is refused before anything is checked or set.

@@ -8,8 +8,8 @@
  * - `--update-apply` holds the single-instance lock of its data directory (the main module took it) and takes its request
  *   to its end; its exit says what `applyExit` says, and while the installer has the update it exits as electron-updater
  *   quits it.
- * - `--update-settle` holds the same lock (the main module took it, or exited 0 where another Jason Desktop holds it and
- *   settles at its own start), records a window-less update as kept (`settleByRequest`) and exits: 0 when it settled one
+ * - `--update-settle` holds the same lock (the main module took it, or exited 0 where another Jason Desktop holds it,
+ *   leaving the record to the next Live window's start), records a window-less update as kept (`settleByRequest`) and exits: 0 when it settled one
  *   or there was none to settle, 1 when the record could not be written.
  */
 

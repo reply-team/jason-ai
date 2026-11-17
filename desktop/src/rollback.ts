@@ -225,8 +225,8 @@ export function settleFailedStart(rollback: string, currentVersion: string, layo
  * start of the new version, made once that version's runtime answered, records it as a start that worked records it,
  * the copy kept and the version not refused. Only the update that installed this version is settled, and once: a record
  * that names no such update is left as it is, so a second settle or one after a window's changes nothing. An update whose
- * runtime did not come up is not settled here: it stays pending, and the next start of a window settles it and says
- * where the copy is. Answers whether it settled.
+ * runtime did not come up is not settled here: it stays pending, and the next start of a Live window settles it and
+ * says where the copy is. Answers whether it settled.
  */
 export function settleByRequest(rollback: string, currentVersion: string, log: Logger): boolean {
     const state = readRollback(rollback);

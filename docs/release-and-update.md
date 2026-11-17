@@ -948,8 +948,11 @@ are the new carried `jason`'s to finish. A Demo window has no updater of its own
 Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's folders first on its `PATH`,
 the PowerShell folder among them, before it reads the feed: the updater checks the installer's publisher by running
 PowerShell through that shell, and lets the check pass where PowerShell cannot be run at all, so the shell and the
-PowerShell are found where the system keeps them rather than where the caller's `PATH` says. The system's folder is the
-one `SystemRoot` names; where that is not a drive's absolute path nothing is changed.
+PowerShell are found where the system keeps them rather than where the caller's `PATH` says. The working directory stays
+the caller's, and the command interpreter looks there before `PATH` unless `NoDefaultCurrentDirectoryInExePath` is set, so
+the start sets it. The system's folder is the one `SystemRoot` names, and that value is the caller's too: what is closed
+is the working directory and the order of `PATH`, not a `SystemRoot` the caller pointed at a folder of its own. Where
+`SystemRoot` is not a drive's absolute path nothing is changed.
 
 **What a feed binds, and what it does not.** The address binds where the feed's file is read, and nothing more. The files
 that file names may be absolute addresses on any host, and a redirect is followed to any host, so the package may come
@@ -968,7 +971,8 @@ anything, so no feed is set and nothing is downloaded, and its install item only
 
 **The request file** is `<data>/update/desktop-<id>.json`. The process that takes the request makes it, with its first
 step, only where no file of that name is there, and only that process writes it after; a request whose file is already
-there is not taken, and nothing is written over that file. A `busy` or `usage` refusal is written the same way, so it is
+there is not taken, and nothing is written over that file; a request whose file cannot be made (`<data>/update` is a
+file, say) is refused as `failed` and taken no further, with no file to answer it. A `busy` or `usage` refusal is written the same way, so it is
 never written over the file of a request under way with the same id. Each step is written before it is taken, by a file
 renamed over it, so a reader meets no file, an empty one, a whole one or the one before; on Windows a read that meets the
 rename is tried again. The verb makes a fresh id for each request and reads a file that was there before it started the
@@ -1018,7 +1022,7 @@ application as no answer. Every member is always there:
 | Exit of `--update-apply` | Meaning |
 |---|---|
 | 0 | the request file names the end: `installing`, `current` or `refused`. While the installer has the update, the start ends as the updater quits it, and on Windows the installer may end it first, so any exit after `installing` is read the same way |
-| 1 | the start ended in a way it did not expect, or its bound passed (`failed`, `timed_out`, where the file could be written) |
+| 1 | the start ended in a way it did not expect, or its bound passed (`failed`, `timed_out`, where the file could be written), or the request's file could not be made, so nothing was taken or written |
 | 2 | the arguments could not be read (`usage`, where the id could be and no file of that id was there), or the request's file was already there, so nothing was taken or written |
 | 3 | a running Jason Desktop of this data directory took the request; that one writes the file |
 
@@ -1034,9 +1038,10 @@ the new carried `jason` finishes the update with no window, and once its runtime
 the copy stays at `kept` until the next update, and the version is not refused. It settles only that update and only
 once. It takes the single-instance lock of its data directory, so it never writes the record while a window settles its
 own start; where another Jason Desktop holds the lock it exits 0 having written nothing, and the record is settled by a
-window's start, as it is after an update from the menu. It shows nothing and brings no window forward, and exits 0, or 1
-when the record could not be written. An update whose runtime did not come up is not settled: the next window says where
-the copy is. Putting the previous application back is one step by hand, as it is after an update from the menu.
+Live window's start, as it is after an update from the menu. A Demo window and a start that takes a request do not settle
+it: it stays pending until the next Live window starts. It shows nothing and brings no window forward, and exits 0, or 1
+when the record could not be written. An update whose runtime did not come up is not settled: the next Live window says
+where the copy is. Putting the previous application back is one step by hand, as it is after an update from the menu.
 
 ## 8. Starting at logon
 

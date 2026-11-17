@@ -1031,7 +1031,8 @@ function startDesktop(): void {
  * single-instance lock of its data directory, or hands its request to the Jason Desktop that holds it and exits 3; while
  * it holds the lock, a second start's request is refused as busy and anything else a second start asks is let go.
  * `--update-settle` takes the same lock, so it never writes the rollback record while a window settles its own start;
- * where another Jason Desktop holds it, that one settles at its own start, and this one exits 0 having written nothing.
+ * where another Jason Desktop holds it, this one exits 0 having written nothing, and the next Live window's start settles
+ * it (a Demo window does not).
  */
 function startUpdate(updating: UpdateStart): void {
     const headless = (): void => {

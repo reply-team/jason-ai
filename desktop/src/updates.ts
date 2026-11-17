@@ -223,10 +223,10 @@ export interface TakenHow {
 /** A step of a request under way, heard before it is taken. */
 export type TakenStep = { step: 'checking' } | { step: 'downloading'; offered: string } | { step: 'installing'; runtimeStopped: boolean; kept: string | null };
 
-/** Why the updater refused a request: codes of the request's file (`update-request.ts`). */
 /** How `take` words a refusal: the reason, the version the feed offered, and what was done before it. */
 type Refuse = (reason: TakenRefusal, offered?: string | null, done?: { runtimeStopped?: boolean; kept?: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered }) => TakenOutcome;
 
+/** Why the updater refused a request: codes of the request's file (`update-request.ts`). */
 export type TakenRefusal =
     | 'updater_inactive'
     | 'busy'

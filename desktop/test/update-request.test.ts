@@ -151,6 +151,26 @@ test('a request whose file is already there is not taken: nothing is written, no
     assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['update_request_file_there', { To: '0.49.1' }]]);
 });
 
+test('a request whose file cannot be made is refused as failed: nothing is taken or written, no updater is made, and the start exits 1', async (t) => {
+    const data = scratch(t);
+    mkdirSync(data, { recursive: true });
+    writeFileSync(join(data, 'update'), 'a file where the folder goes');
+    const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: null });
+    const { all, log, written } = deps(data, u.updater);
+    const end = await takeRequest(request, all);
+    assert.ok(end !== null);
+    assert.equal(end.state, 'refused');
+    assert.equal(end.reason, 'failed');
+    assert.equal(applyExit(end), applyExits.failed);
+    assert.equal(u.made(), 0, 'no updater is made');
+    assert.equal(written.length, 1, 'only the exclusive create was tried');
+    assert.equal(readFileSync(join(data, 'update'), 'utf8'), 'a file where the folder goes');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [
+        ['update_request_unwritten', { State: 'checking' }],
+        ['update_request_ended', { To: '0.49.1', State: 'refused', Code: 'failed' }],
+    ]);
+});
+
 test('every refusal has a sentence for the person, naming the versions where it knows them', () => {
     for (const reason of requestRefusals) {
         const message = refusalMessage(reason, { to: '0.49.1', from: '0.49.0', offered: '0.49.2', runtimeStopped: true, kept: '/data/desktop/rollback/0.49.0/Jason.app', menu: true });
@@ -436,11 +456,12 @@ test('a window-less start is bounded: past the bound while installing it writes 
     assert.deepEqual(ended.pending, [], 'the bound is cleared once the request ended short of an install');
 });
 
-test('on Windows a window-less start runs the system’s command interpreter, the system’s folders first on its PATH', () => {
+test('on Windows a window-less start runs the system’s command interpreter, the system’s folders first on its PATH, and never the working directory’s', () => {
     const root = 'C:\\Windows';
     assert.deepEqual(systemShell({ SystemRoot: root, Path: 'D:\\planted;C:\\Tools', ComSpec: 'D:\\planted\\cmd.exe' }, 'win32'), {
         ComSpec: 'C:\\Windows\\System32\\cmd.exe',
         PATH: 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;D:\\planted;C:\\Tools',
+        NoDefaultCurrentDirectoryInExePath: '1',
     });
     assert.deepEqual(systemShell({ SYSTEMROOT: root }, 'win32')?.PATH, 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0', 'no PATH: the system’s alone');
     for (const bad of [undefined, '', 'Windows', '\\\\server\\share', 'C:\\Win;D:\\x', 'C:\\%x%', 'C:\\Windows\\']) {
