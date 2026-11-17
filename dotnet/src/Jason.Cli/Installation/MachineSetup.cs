@@ -177,6 +177,10 @@ public static class MachineSetup
             await run.Step("Deploying the role skills", async () => roles = await run.RoleSkillsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        // The images earlier updates moved out of the application, taken away where nothing runs from them any more; quietly,
+        // and never while an update is in flight.
+        CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
+
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
 

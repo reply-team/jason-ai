@@ -65,17 +65,27 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
 
+    /// <summary>
+    /// Whether this process runs elevated (<see cref="Elevation"/>): on Windows a token elevated above the account's ordinary
+    /// one, or another account than the session's; on macOS root. A carried update refuses there (<c>update_elevated</c>);
+    /// read from the process for this machine's places, and set by a test.
+    /// </summary>
+    public bool Elevated { get; init; }
+
     /// <summary>This machine's, on macOS and Windows; null anywhere else.</summary>
     public static SetupPlaces? ForThisMachine()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (OperatingSystem.IsWindows())
         {
-            return new SetupPlaces(SetupSystem.Windows, home, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserPathValue.EnvironmentKey, null);
+            return new SetupPlaces(SetupSystem.Windows, home, Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UserPathValue.EnvironmentKey, null)
+            {
+                Elevated = Elevation.OfThisProcess(),
+            };
         }
 
         return OperatingSystem.IsMacOS()
-            ? new SetupPlaces(SetupSystem.MacOs, home, null, UserPathValue.EnvironmentKey, Environment.GetEnvironmentVariable("SHELL"))
+            ? new SetupPlaces(SetupSystem.MacOs, home, null, UserPathValue.EnvironmentKey, Environment.GetEnvironmentVariable("SHELL")) { Elevated = Elevation.OfThisProcess() }
             : null;
     }
 

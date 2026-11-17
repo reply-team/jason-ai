@@ -140,6 +140,39 @@ public class UpdateLaunchEnvironmentTests
             Environment.SetEnvironmentVariable(UpdateLaunch.Variable, original);
         }
     }
+
+    /// <summary>
+    /// The update's lock goes to the one child a part of the update runs and waits for, in its environment and never on its
+    /// command line; never to any other run or to a runtime, even where this process has one set; and a process that was
+    /// handed one takes it out of its own environment as it reads it, so nothing it starts carries it on.
+    /// </summary>
+    [Fact]
+    public void The_updates_lock_goes_only_to_the_child_it_is_handed_to()
+    {
+        using var dir = new TempPaths();
+        var original = Environment.GetEnvironmentVariable(UpdateLock.Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(UpdateLock.Variable, "inherited");
+
+            var handed = RuntimeProcessControl.RunStart(dir.Paths, ["jason", "update", "apply", "--finish"], "the-nonce");
+            Assert.Equal("the-nonce", handed.Environment[UpdateLock.Variable]);
+            Assert.DoesNotContain(handed.ArgumentList, argument => argument.Contains("the-nonce", StringComparison.Ordinal));
+
+            var plain = RuntimeProcessControl.RunStart(dir.Paths, ["Jason", "--update-settle"]);
+            Assert.False(plain.Environment.ContainsKey(UpdateLock.Variable), "a run the lock was not handed to inherited it");
+            var launch = RuntimeProcessControl.LaunchStart(dir.Paths, ["jason"], "started");
+            Assert.False(launch.Environment.ContainsKey(UpdateLock.Variable), "a runtime was handed the update's lock");
+
+            Assert.Equal("inherited", UpdateLock.Handed(null));
+            Assert.Null(Environment.GetEnvironmentVariable(UpdateLock.Variable));
+            Assert.Equal("given", UpdateLock.Handed(new Dictionary<string, string> { [UpdateLock.Variable] = "given" }));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UpdateLock.Variable, original);
+        }
+    }
 }
 
 /// <summary>The tests that change this process's own update mark, kept away from everything else while they run.</summary>

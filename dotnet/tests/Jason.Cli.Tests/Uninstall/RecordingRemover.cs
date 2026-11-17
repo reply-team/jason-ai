@@ -253,10 +253,13 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     /// <summary>The processes said to run each executable: the application open, for the uninstall that must not remove it from under itself.</summary>
     public Dictionary<string, int[]> Running { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>What a look at an executable answers, where a test says, given how many looks came before it; else <see cref="Running"/>.</summary>
+    public Func<string, int, IReadOnlyList<int>>? Looks { get; set; }
+
     public IReadOnlyList<int> RunningFrom(string executable)
     {
         Reads.Add(executable);
-        return Running.GetValueOrDefault(executable) ?? [];
+        return Looks?.Invoke(executable, Reads.Count - 1) ?? Running.GetValueOrDefault(executable) ?? [];
     }
 
     /// <summary>
