@@ -470,8 +470,9 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   global default). Where the route is Reply, where no route exists yet (signing in is what writes the first one) and
   where the route cannot be read, the card shows; nothing shows while it is being read, and a campaign that is already
   running shows none. **Not now** hides it for that chat until the window is closed.
-  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts,
-  beside the notification channels as the runtime reports them; see [the browser UI](ui.md#accounts).
+  The Accounts page of the browser's screens shows the same card, drawn by the same code and acting through the same acts;
+  the notification channels as the runtime reports them are in Settings, under Notifications; see
+  [the browser UI](ui.md#notifications-in-settings).
 - **Notification channels** (Slack, Telegram, ntfy, the journal forwarder). One act configures a plugin, and Disconnect, on the Slack, Telegram
   and ntfy cards, removes what it wrote.
 

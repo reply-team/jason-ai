@@ -359,6 +359,7 @@
 .jc-console .harness .settings[data-chosen='appearance'] > [data-section]:not([data-section='appearance']),
 .jc-console .harness .settings[data-chosen='voice'] > [data-section]:not([data-section='voice']),
 .jc-console .harness .settings[data-chosen='modes'] > [data-section]:not([data-section='modes']),
+.jc-console .harness .settings[data-chosen='notifications'] > [data-section]:not([data-section='notifications']),
 .jc-console .harness .settings[data-chosen='models'] > [data-section]:not([data-section='models']),
 .jc-console .harness .settings[data-chosen='runtime'] > [data-section]:not([data-section='runtime']) {
     display: none;
