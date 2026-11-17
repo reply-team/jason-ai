@@ -318,11 +318,13 @@ export function CampaignsScreen() {
                     }
                     onSkip={() => (store.waiting.value = null)}
                     onClose={() => (store.waiting.value = null)}
-                    onReasked={(id) =>
+                    onSuperseded={() => void store.loadPending(api, waiting.campaignId)}
+                    onReasked={(id) => {
+                        void store.loadPending(api, waiting.campaignId);
                         void api
                             .call<Approval>('approval.get', { approval_id: id })
-                            .then((approval) => (store.waiting.value = { campaignId: waiting.campaignId, approval }))
-                    }
+                            .then((approval) => (store.waiting.value = { campaignId: waiting.campaignId, approval }));
+                    }}
                 />
             )}
             {selected && waiting && 'decision' in waiting && (

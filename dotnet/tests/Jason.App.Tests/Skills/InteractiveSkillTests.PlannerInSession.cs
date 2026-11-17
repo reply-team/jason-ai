@@ -547,6 +547,11 @@ public partial class InteractiveSkillTests
         Assert.Contains("What do you sell, and who should buy it? One sentence is enough, and a link to your site works too.", skill, StringComparison.Ordinal);
         Assert.Contains("If you like, add a line about yourself and how you write. You can also do that later.", skill, StringComparison.Ordinal);
         Assert.Contains("End it with exactly: \"Say what to change, or say go.\"", skill, StringComparison.Ordinal);
+
+        // The plan says once, as a fact and never as a question, that messages can later go on their own, in the product's
+        // own terms: the two kinds of contact, and where a person sets it.
+        Assert.Contains("Say once, as a fact and never as a question, how messages go: \"Every message waits for your yes. Later you can let messages go on their own, for people who have not answered yet and for people who have; in Jason Desktop that is Settings, \\\"How messages go\\\", and anywhere else tell me when you want it.\"", skill, StringComparison.Ordinal);
+        Assert.Contains("and you never ask it here or set it: step 3 has said the fact, once.", skill, StringComparison.Ordinal);
         Assert.Contains("\"Email goes out through {provider}.\" and \"LinkedIn goes out through {provider}.\"", skill, StringComparison.Ordinal);
         Assert.DoesNotContain("I read as soon as you say go", skill, StringComparison.Ordinal);
         Assert.Contains("\"{Channel} is not connected.\"", skill, StringComparison.Ordinal);

@@ -45,6 +45,7 @@ import * as dashboard from './dashboard';
 import { linkPlace } from './links';
 import * as needs from './needs';
 import { reloadWaiting } from './waiting';
+import { heardOf } from '../screens/attention/reasking';
 import { heardLine, readActsAgain } from './card-acts';
 import { followStanding } from '../platform/full-access';
 import { Painted } from './painted';
@@ -645,11 +646,13 @@ function Shell({ api, desktop, stream }: { api: Api; desktop: JasonDesktop; stre
                 handLine(line);
                 // A person's act on an agent locks its chat's open choice at once, before any list is read again.
                 heardLine(line);
+                // A message edited here is read again only on a line about its own work item (`reasking.ts`).
+                heardOf(line.work_item_id);
                 if (pending !== null) return;
                 pending = setTimeout(() => {
                     pending = null;
-                    void needs.reload();
-                    reloadWaiting(api);
+                    void needs.reload(true);
+                    reloadWaiting(api, true);
                     void campaigns.reload();
                     dashboard.reloadIfOpen();
                     // The agent shown follows the journal: started, paused or archived anywhere, its header says so.
