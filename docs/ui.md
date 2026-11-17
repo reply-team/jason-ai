@@ -565,13 +565,21 @@ here: they are the **Notifications** section of Settings.
 
 ## Notifications in Settings
 
-**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows, read only, what
+**Notifications** is a section of Settings, listed after Your name and tone and How messages go. It shows what
 `system.info` says of the channels, from the answer the page already holds, so it reads nothing of its own: whether
 notifications are on, and for each channel whether it is on and what it did with the last notification (delivered, failed
 with its code and class, not attempted with its reason, or nothing sent yet). The text a failure carried is not drawn.
-The section says in two sentences what the channels are for, that Jason tells the person this way when an approval or a
-question is waiting, and how a channel is turned on or off: by asking the AI, and in Jason Desktop a provider's channel can also be connected or
-disconnected on the Connect panel, which never changes the desktop toast; a browser has no Connect panel. The section writes no setting.
+Each channel has a switch, its on or off pill, which turns that one channel on or off as `jason notification enable` and
+`disable` do (`notification.enable`, `notification.disable`), as the paired person; the section then shows the channels as
+the answer says them, and a refusal in the runtime's own sentence, with the switch where it was. There is no switch for
+every notification at once: while `Notifications:Enabled` is `false` in the settings file every switch is off and inert,
+and the section says that line is the one to change. A plugin channel that could not deliver (the runtime's `readiness`)
+has an inert switch and says what is missing, unless it is on, when it can still be turned off. What the operating
+system itself holds off stays words: a toast Windows did not show keeps its own switch, with the words beside it. In the
+Demo every switch is inert. The section says in two sentences what the channels are for, that Jason tells the person
+this way when an approval or a question is waiting, and how one channel is switched, there or with the command; in Jason
+Desktop a provider's channel is connected or disconnected on the Connect panel, which never changes the desktop toast; a
+browser has no Connect panel.
 
 ## Inside Jason Desktop
 
