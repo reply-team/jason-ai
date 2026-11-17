@@ -1054,9 +1054,18 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                         </button>`
                       : null
               }`;
-    return html`<div class="card" ${label ? html`role="region" aria-label="${label}"` : null}>
-        <div class="hd"><b>Reply</b></div>
+    return html`<div class="card reply-card" ${label ? html`role="region" aria-label="${label}"` : null}>
         <div class="bd">
+            <div class="reply-top">
+                <div class="grow">
+                    <div class="reply-name"><b>Reply</b> <span class="pillc green">Recommended</span></div>
+                    <p class="meta reply-why">
+                        Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox
+                        and your LinkedIn account to it, and Jason sends from them once you approve.
+                    </p>
+                </div>
+                ${state.cli.found ? html`<button class="btn p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
+            </div>
             ${notInDemo()} ${cli === null ? null : html`<div class="setrow"><div class="grow">${cli}</div></div>`}
             ${
                 state.cli.found && below !== null
@@ -1077,27 +1086,26 @@ function reply(state: DesktopSetup['reply'], busy: Html | null, label?: string, 
                       </div>`
                     : null
             }
-            <div class="setrow">
+            <div class="setrow reply-state">
                 <div class="grow">
                     ${state.signedIn ? html`Signed in as <b>${state.user ?? ''}</b>` : 'Not signed in'}
                     <span class="meta">${state.wired ? 'Jason uses this sign-in' : 'Jason does not use it yet'}</span>
                 </div>
-                ${state.cli.found ? html`<button class="btn sm p" type="button" ${unlessCan(real, 'setup.connectReply')} ${act('connect.reply')}>Sign in with Reply</button>` : null}
             </div>
             ${
                 state.cli.found
-                    ? html`<div class="setrow">
-                          <div class="grow meta">Or an API key, for an account the browser sign-in does not reach:</div>
-                          ${secret('reply', 'Reply API key')}
-                          <button
-                              class="btn sm"
-                              type="button"
-                              ${unlessCan(real, 'setup.connectReplyWithKey')}
-                              ${act('connect.replyKey')}
-                          >
-                              Connect
-                          </button>
-                      </div>`
+                    ? html`<div class="reply-key">
+                              ${secret('reply', 'Or paste a Reply API key')}
+                              <button
+                                  class="btn"
+                                  type="button"
+                                  ${unlessCan(real, 'setup.connectReplyWithKey')}
+                                  ${act('connect.replyKey')}
+                              >
+                                  Use key
+                              </button>
+                          </div>
+                          <div class="meta reply-key-why">For an account the browser sign-in does not reach.</div>`
                     : null
             }
             ${grouped(state.accounts, pending).map(

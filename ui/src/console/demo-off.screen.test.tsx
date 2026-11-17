@@ -110,7 +110,7 @@ describe('The Connect panel in the demo', () => {
         const desktop = await renderAt('demo', 'Connect');
         const card = replyCard();
         expect(words(card)).toContain('Sales inbox');
-        for (const name of ['Sign in with Reply', 'Connect', 'Add account'])
+        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
             expect(button(card, name).disabled).toBe(true);
         const acts = within(rowOf(card)).getAllByRole('button') as HTMLButtonElement[];
         expect(acts.map(words)).toEqual(['Limits', 'Unblock', 'Delete']);
@@ -211,7 +211,7 @@ describe('The same screens in Live', () => {
         expect(screen.queryByText(/nothing is sent/)).toBeNull();
         expect(notes()).toHaveLength(0);
         const card = replyCard();
-        for (const name of ['Sign in with Reply', 'Connect', 'Add account'])
+        for (const name of ['Sign in with Reply', 'Use key', 'Add account'])
             expect(button(card, name).disabled).toBe(false);
         const plugin = document.querySelector<HTMLElement>('.plugin[data-id="ntfy"]')!;
         for (const name of ['Configure', 'Disconnect']) expect(button(plugin, name).disabled).toBe(false);

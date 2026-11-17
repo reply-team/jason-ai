@@ -367,7 +367,31 @@ describe('the Reply card, its acts', () => {
         fireEvent.click(within(card()).getByRole('button', { name: 'Add account' }));
         const offered = await waitFor(() => card().querySelector<HTMLElement>('.add-account')!);
         expect(within(offered).getAllByRole('button').map(words)).toEqual(['Gmail', 'Outlook', 'LinkedIn', 'Cancel']);
-        expect(card().querySelector('input[type="password"]:not([aria-label="Reply API key"])')).toBeNull();
+        expect(card().querySelector('input[type="password"]:not([aria-label="Or paste a Reply API key"])')).toBeNull();
+    });
+
+    it('draws the card as a recommended service, one sentence, the sign-in, and a key field with its button', async () => {
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: false, user: null, accounts: [] } });
+        const connect = await openConnect();
+        const card = replyCard(connect);
+        expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
+        expect(words(card.querySelector('.reply-why')!)).toBe(
+            'Reply.io is the service Jason sends through. You connect your Gmail, Outlook or other mailbox and your LinkedIn account to it, and Jason sends from them once you approve.',
+        );
+        expect(words(card)).toContain('Not signed in');
+        expect(within(card).getByRole('button', { name: 'Sign in with Reply' })).toBeTruthy();
+        const key = within(card).getByPlaceholderText('Or paste a Reply API key');
+        expect(key.getAttribute('type')).toBe('password');
+        expect(within(card).getByRole('button', { name: 'Use key' })).toBeTruthy();
+        expect(within(card).queryByRole('button', { name: 'Connect' })).toBeNull();
+        expect(within(card).getByRole('link', { name: 'Manage accounts in Reply' })).toBeTruthy();
+    });
+
+    it('keeps who is signed in beside the same card', async () => {
+        renderConnect({ ...setupFound, reply: { ...setupFound.reply, signedIn: true, user: 'ann@example.test' } });
+        const card = replyCard(await openConnect());
+        expect(words(card)).toContain('Signed in as ann@example.test');
+        expect(words(card.querySelector('.reply-name')!)).toBe('Reply Recommended');
     });
 
     it('offers no channel the CLI says is not in the plan or role, and nothing before a sign-in', async () => {
