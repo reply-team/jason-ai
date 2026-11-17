@@ -957,10 +957,12 @@ started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself, because the
-runtime has no guard against a data directory a newer version migrated: if the new version does not start, the
-starting page says what went wrong and where the kept version is, and going back is quitting Jason and putting that
-folder back in the place of the installed application. That puts back the previous application and the Jason it carried;
+`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself: if the new
+version does not start, the starting page says what went wrong and where the kept version is, and going back is
+quitting Jason and putting that folder back in the place of the installed application. A version from 0.49.0 on does
+not start a runtime on a database a newer version migrated: the runtime refuses it with `data_newer` before it changes
+anything, and the starting page says so in `jason runtime start`'s own words, which say to update, and offers no going
+back. A kept version before 0.49.0 has no such check. That puts back the previous application and the Jason it carried;
 the data directory stays as the newer version left it. On Linux an AppImage update keeps the AppImage file itself; a deb
 update keeps nothing, and the page names the previous release's deb and `sudo apt install ./jason-desktop-linux-x64.deb`.
 On Windows the system's list of installed programs keeps showing the newer version's number after a folder is put back.
