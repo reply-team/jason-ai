@@ -1803,11 +1803,11 @@ jobs:
   # anything was installed; the listings are uploaded, and they are what a person reads. The scripts are
   # .github/scripts/Test-InstallationWindows.ps1, which the release's proof job runs on the signed packages too.
   union-windows:
-    name: one installation on windows
+    name: install.ps1 on windows
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: windows-latest
-    # Its token reads the repository for the checkout and the previous release's assets, and nothing more.
+    # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
     env:
@@ -1846,14 +1846,7 @@ jobs:
         env:
           EXECUTABLE: ${{ steps.package.outputs.executable }}
           JASON_DESKTOP_TEST_BUILD: '1'
-        run: |
-          npm ci --ignore-scripts
-          if ($LASTEXITCODE -ne 0) { throw "npm ci exited with $LASTEXITCODE" }
-          node scripts/prepare.mjs --rid win-x64 --output bundles/x64 --version $env:VERSION --executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
-          if ($LASTEXITCODE -ne 0) { throw "prepare.mjs exited with $LASTEXITCODE" }
-          $env:JASON_VERSION = $env:VERSION
-          npm run package -- --win --x64
-          if ($LASTEXITCODE -ne 0) { throw "electron-builder exited with $LASTEXITCODE" }
+        run: ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version $env:VERSION -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
 
       # The feed a release would carry for this platform: the archive and its fragment, the skills' package, the installer,
       # its block map and its update feed, with the manifest and the checksums written over them as a release writes them.
@@ -1864,7 +1857,7 @@ jobs:
           Copy-Item artifacts/release/* $env:FEED
           Copy-Item desktop/dist/jason-desktop-windows-x64-setup.exe, desktop/dist/jason-desktop-windows-x64-setup.exe.blockmap, desktop/dist/latest.yml $env:FEED
           ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive (Join-Path $env:FEED 'jason-skills.zip') -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ($env:VERSION -replace '-.*$', '')) -Commit "${{ github.sha }}"
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml -MinUpgradeFrom 0.19.0
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
           Get-Content (Join-Path $env:FEED 'manifest.json')
 
       # The released script, unchanged, holds the test build to the release's signer and refuses it, every run: the
@@ -1901,7 +1894,7 @@ jobs:
           $setup = Join-Path $env:FEED 'jason-desktop-windows-x64-setup.exe'
           $signed = Set-AuthenticodeSignature -FilePath $setup -Certificate $certificate -HashAlgorithm SHA256
           if ($signed.Status -ne 'Valid') { throw "the stand-in signature is $($signed.Status)" }
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml -MinUpgradeFrom 0.19.0
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
 
           # The released script refuses the stand-in's signature by its signer's name.
           $said = (& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$env:JASON_INSTALL_FEED = '$env:FEED'; & ./install/install.ps1" 2>&1 | ForEach-Object { "$_" }) -join "`n"
@@ -1945,24 +1938,28 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
 
-      # The previous release, resolved now: the newest published release that is not the one this tree is on the way to.
+      # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
+      # to until that is published, read from where the public releases' latest redirects, and its files from its public
+      # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
       - name: Fetch the previous release
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $release = "v$($env:VERSION -replace '-.*$', '')"
-          $tag = @(gh release list -R reply-team/jason-ai --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName') | Where-Object { $_ -cne $release } | Select-Object -First 1
-          if (-not $tag) { throw "no published release other than $release was found" }
-          gh release download $tag -R reply-team/jason-ai -D $env:PREVIOUS -p install.ps1 -p jason-win-x64.zip -p manifest.json -p checksums.txt -p jason-desktop-windows-x64-setup.exe
-          if ($LASTEXITCODE -ne 0) { throw "gh release download $tag exited with $LASTEXITCODE" }
+          $latest = Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -MaximumRedirection 0 -SkipHttpErrorCheck -UseBasicParsing
+          $tag = ([string]$latest.Headers.Location) -replace '^.*/releases/tag/', ''
+          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$($latest.Headers.Location)'" }
+          if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
+          New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
+          foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
+            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing
+          }
           foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
             $hash, $name = $line -split '  ', 2
             $file = Join-Path $env:PREVIOUS $name
             if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
           }
           Write-Host "the previous release is $tag"
-          if ($env:GITHUB_STEP_SUMMARY) { "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY }
+          "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Install this build over the previous release's Jason Desktop, as its updater runs an installer
         shell: pwsh
@@ -2020,11 +2017,11 @@ jobs:
   # uninstalled by what the application's Uninstall Jason item starts, and the previous release's command-line Jason
   # updated by its own `jason update apply`. The scripts are .github/scripts/test-installation-macos.sh.
   union-macos:
-    name: one installation on macos
+    name: install.sh on macos
     needs: version
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
-    # Its token reads the repository for the checkout and the previous release's assets, and nothing more.
+    # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
     env:
@@ -2057,18 +2054,14 @@ jobs:
       # CSC_FOR_PULL_REQUEST: electron-builder skips every signature on a pull request's build, the ad hoc one included,
       # and an arm64 Mac runs no program without one. CSC_IDENTITY_AUTO_DISCOVERY: no identity of this runner is looked for.
       - name: Build Jason Desktop around it as a test build
-        shell: bash
+        shell: pwsh
         working-directory: desktop
         env:
           EXECUTABLE: ${{ steps.package.outputs.executable }}
           JASON_DESKTOP_TEST_BUILD: '1'
           CSC_FOR_PULL_REQUEST: 'true'
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: |
-          npm ci --ignore-scripts
-          node scripts/prepare.mjs --rid osx-arm64 --output bundles/arm64 --version "$VERSION" --executable "$GITHUB_WORKSPACE/$EXECUTABLE"
-          JASON_VERSION="$VERSION" npm run package -- --mac --arm64
-          codesign --verify --deep --strict --verbose=2 dist/mac-arm64/Jason.app
+        run: ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid osx-arm64 -Version $env:VERSION -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
 
       - name: Assemble the feed the way a release is assembled
         shell: pwsh
@@ -2077,7 +2070,7 @@ jobs:
           Copy-Item artifacts/release/* $env:FEED
           Copy-Item desktop/dist/jason-desktop-macos-arm64.zip, desktop/dist/jason-desktop-macos-arm64.zip.blockmap, desktop/dist/latest-mac.yml $env:FEED
           ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive (Join-Path $env:FEED 'jason-skills.zip') -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ($env:VERSION -replace '-.*$', '')) -Commit "${{ github.sha }}"
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require osx-arm64 -Plugins jason-skills.zip,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,latest-mac.yml -MinUpgradeFrom 0.19.0
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require osx-arm64 -Plugins jason-skills.zip,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,latest-mac.yml
           Get-Content (Join-Path $env:FEED 'manifest.json')
 
       # The released script, unchanged, holds the test build to the release's team and refuses it, every run. The copy the
@@ -2093,23 +2086,8 @@ jobs:
           [ "$status" -ne 0 ] || { echo "::error::the released install.sh installed an ad hoc signed application"; exit 1; }
           grep -qi 'sign' "$RUNNER_TEMP/refused.txt" || { echo "::error::the released install.sh failed for another reason than the signature"; exit 1; }
           [ ! -e /Applications/Jason.app ] && [ ! -e "$HOME/Applications/Jason.app" ] || { echo "::error::the refused install left an application"; exit 1; }
-
-          app=desktop/dist/mac-arm64/Jason.app
-          line="$(grep -n 'BD8M7U5YBV' install/install.sh)"
-          [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || { echo "::error::install.sh does not name the release's team in exactly one line"; exit 1; }
-          number="${line%%:*}"
-          text="${line#*:}"
-          case "$text" in
-            APP_TEAM=*) standin="APP_TEAM=\"$(codesign --display --verbose=2 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')\"" ;;
-            *) cdhash="$(codesign --display --verbose=3 "$app" 2>&1 | sed -n 's/^CDHash=//p' | head -n 1)"
-               standin="$(printf '%s\n' "$text" | sed -E "s/'[^']*BD8M7U5YBV[^']*'/'cdhash H\"$cdhash\"'/; s/\"[^\"]*BD8M7U5YBV[^\"]*\"/\"cdhash H\\\\\"$cdhash\\\\\"\"/")" ;;
-          esac
-          copy="$RUNNER_TEMP/install-stand-in-signer.sh"
-          awk -v n="$number" -v s="$standin" 'NR == n { print s; next } { print }' install/install.sh > "$copy"
-          changed="$(diff install/install.sh "$copy" | grep -c '^[<>]' || true)"
-          [ "$changed" = 2 ] || { echo "::error::the copy differs from install.sh in more than the one line naming the signature"; diff install/install.sh "$copy"; exit 1; }
-          diff install/install.sh "$copy" || true
-          echo "script=$copy" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/test-installation-macos.sh stand-in desktop/dist/mac-arm64/Jason.app "$RUNNER_TEMP/install-stand-in-signer.sh"
+          echo "script=$RUNNER_TEMP/install-stand-in-signer.sh" >> "$GITHUB_OUTPUT"
 
       - name: The machine before anything is installed
         shell: bash
@@ -2140,13 +2118,15 @@ jobs:
 
       - name: Fetch the previous release
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           release="v${VERSION%%-*}"
-          tag="$(gh release list -R reply-team/jason-ai --exclude-drafts --exclude-pre-releases --limit 20 --json tagName --jq '.[].tagName' | grep -vx "$release" | head -n 1)"
-          [ -n "$tag" ] || { echo "::error::no published release other than $release was found"; exit 1; }
-          gh release download "$tag" -R reply-team/jason-ai -D "$PREVIOUS" -p install.sh -p jason-osx-arm64.tar.gz -p manifest.json -p checksums.txt
+          tag="$(curl -sS -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
+          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
+          [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
+          mkdir -p "$PREVIOUS"
+          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json; do
+            curl -fsSL -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
           (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"

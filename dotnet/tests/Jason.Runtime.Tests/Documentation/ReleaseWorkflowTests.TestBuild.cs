@@ -27,15 +27,21 @@ public partial class ReleaseWorkflowTests
     {
         Assert.DoesNotContain(TestBuildSwitch, Read(Release), StringComparison.Ordinal);
         Assert.DoesNotContain(TestBuildSwitch, Read(Action), StringComparison.Ordinal);
+        // The one script the proof jobs build the test build with checks that its step asked for one, and never sets it.
         foreach (var other in Directory.GetFiles(Path.Combine(RepositoryRoot(), ".github"), "*", SearchOption.AllDirectories))
         {
-            if (Path.GetFileName(other) is "ci.yml")
+            if (Path.GetFileName(other) is "ci.yml" or "Build-DesktopTestBuild.ps1")
             {
                 continue;
             }
 
             Assert.False(File.ReadAllText(other).Contains(TestBuildSwitch, StringComparison.Ordinal), $"{other} names {TestBuildSwitch}");
         }
+
+        var building = Read([".github", "scripts", "Build-DesktopTestBuild.ps1"]);
+        Assert.Contains("if ($env:JASON_DESKTOP_TEST_BUILD -ne '1') { throw", building, StringComparison.Ordinal);
+        Assert.DoesNotContain("$env:JASON_DESKTOP_TEST_BUILD =", building, StringComparison.Ordinal);
+        Assert.DoesNotContain("Build-DesktopTestBuild", Read(Release) + Read(Action), StringComparison.Ordinal);
 
         var jobs = Mapping(Parse(Read(Ci)), "jobs");
         var naming = jobs.Children
@@ -47,7 +53,7 @@ public partial class ReleaseWorkflowTests
         Assert.All(naming, found =>
         {
             Assert.Equal("1", Scalar(Mapping(found.Step, "env"), TestBuildSwitch));
-            Assert.Contains("npm run package", Scalar(found.Step, "run"), StringComparison.Ordinal);
+            Assert.StartsWith("../.github/scripts/Build-DesktopTestBuild.ps1 ", Scalar(found.Step, "run"), StringComparison.Ordinal);
         });
 
         var configuration = Read(["desktop", "electron-builder.config.mjs"]);
@@ -117,16 +123,18 @@ public partial class ReleaseWorkflowTests
         Assert.Contains("Join-Path $env:RUNNER_TEMP 'install-stand-in-signer.ps1'", step, StringComparison.Ordinal);
 
         var macos = Job(ci, "union-macos");
-        Assert.Contains("sh install/install.sh > \"$RUNNER_TEMP/refused.txt\"", macos, StringComparison.Ordinal);
-        Assert.Contains("[ \"$changed\" = 2 ]", macos, StringComparison.Ordinal);
-        Assert.Contains("copy=\"$RUNNER_TEMP/install-stand-in-signer.sh\"", macos, StringComparison.Ordinal);
+        var refused = macos.IndexOf("sh install/install.sh > \"$RUNNER_TEMP/refused.txt\"", StringComparison.Ordinal);
+        var copied = macos.IndexOf("test-installation-macos.sh stand-in desktop/dist/mac-arm64/Jason.app \"$RUNNER_TEMP/install-stand-in-signer.sh\"", StringComparison.Ordinal);
+        Assert.True(refused >= 0 && copied > refused, "union-macos does not let the released install.sh refuse the test build before it copies it");
+        var standing = Read([".github", "scripts", "test-installation-macos.sh"]);
+        Assert.Contains("[ \"$(diff install/install.sh \"$copy\" | grep -c '^[<>]' || true)\" = 2 ] || fail", standing, StringComparison.Ordinal);
 
         // The copies live in the runner's temporary folder, which no upload names.
         Assert.DoesNotContain("install-stand-in-signer", string.Join('\n', Regex.Matches(ci, @"path: [^\n]+").Select(match => match.Value)), StringComparison.Ordinal);
 
         foreach (var released in new[] { Read(Release), Read(Action) })
         {
-            foreach (var never in new[] { "install-stand-in-signer", "New-SelfSignedCertificate", "LocalMachine\\Root", "Cert:\\", "Jason CI test build" })
+            foreach (var never in new[] { "install-stand-in-signer", "New-SelfSignedCertificate", "LocalMachine\\Root", "Cert:\\", "Jason CI test build", "test-installation-macos.sh stand-in" })
             {
                 Assert.DoesNotContain(never, released, StringComparison.Ordinal);
             }

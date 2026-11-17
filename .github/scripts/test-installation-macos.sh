@@ -107,6 +107,31 @@ write_listing() {
 
 step="${1:-}"; shift || true
 case "$step" in
+stand-in)
+    # A copy of install.sh whose one line naming what a signature must satisfy names this test build's own ad hoc
+    # signature instead of the release's team, and differs from install.sh in nothing else: counted, or nothing is written.
+    app="$1"; copy="$2"
+    line="$(grep -n 'BD8M7U5YBV' install/install.sh || true)"
+    [ "$(printf '%s\n' "$line" | grep -c .)" = 1 ] || fail "install.sh does not name the release's team in exactly one line"
+    number="${line%%:*}"
+    text="${line#*:}"
+    team="$(codesign --display --verbose=2 "$app" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+    cdhash="$(codesign --display --verbose=3 "$app" 2>&1 | sed -n 's/^CDHash=//p' | head -n 1)"
+    [ -n "$cdhash" ] || fail "codesign names no CDHash for $app"
+    case "$text" in
+        # The team alone, compared with what codesign names: the ad hoc signature's own word for none.
+        APP_TEAM=*) standin="APP_TEAM=\"$team\"" ;;
+        # A requirement held in a variable: this build's own code, by its hash.
+        [A-Z_]*=*) standin="${text%%=*}='cdhash H\"$cdhash\"'" ;;
+        # A requirement written into the codesign call: the same, in its place.
+        *) standin="$(STANDIN="cdhash H\"$cdhash\"" perl -pe 's/-R=(["\x27]).*?BD8M7U5YBV.*?\1/-R=\x27$ENV{STANDIN}\x27/' <<< "$text")" ;;
+    esac
+    awk -v n="$number" -v s="$standin" 'NR == n { print s; next } { print }' install/install.sh > "$copy"
+    diff install/install.sh "$copy" || true
+    [ "$(diff install/install.sh "$copy" | grep -c '^[<>]' || true)" = 2 ] || fail "the copy differs from install.sh in more than the one line naming the signature"
+    say "install.sh refused the ad hoc test build; the copy run here differs from it in line $number alone, naming this build's own signature"
+    ;;
+
 listing)
     write_listing "$OUT/$1.txt"
     ;;
@@ -184,7 +209,7 @@ refuse-while-open)
 
 uninstall-terminal)
     placed="$(app)"
-    "$placed/Contents/Resources/bundle/jason" runtime start > /dev/null || fail "no runtime could be started before the uninstall"
+    "$placed/Contents/Resources/bundle/jason" runtime start > "$OUT/runtime-start.txt" 2>&1 || { cat "$OUT/runtime-start.txt"; ps -axo pid,command | grep -i jason | grep -v grep || true; fail "no runtime could be started before the uninstall"; }
     status=0
     fresh 'jason uninstall --purge-data --yes' > "$OUT/uninstall-terminal.json" || status=$?
     cat "$OUT/uninstall-terminal.json"
