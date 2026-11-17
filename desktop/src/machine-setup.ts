@@ -263,6 +263,9 @@ export class MachineSetup {
     }
 }
 
+/** What the starting page says while Live waits for the start's run. */
+export const settingUpSentence = 'Putting jason where a terminal finds it, and the skills where your agents read them…';
+
 /** The act's label in the Command Line submenu. */
 export const putBackLabel = 'Put Back jason and the Skills…';
 
@@ -293,7 +296,7 @@ export function setupMenuOf(state: SetupState, executable: string): { lines: str
         case 'unoffered':
             return { lines: [...lines, 'A development build sets nothing up: its jason is the checkout’s.'], acts: [] };
         case 'running':
-            return { lines: [...lines, 'Putting jason where a terminal finds it, and the skills where your agents read them…'], acts: [] };
+            return { lines: [...lines, settingUpSentence], acts: [] };
         case 'idle':
             return { lines: [...lines, 'No set-up of this version is recorded.'], acts: putBack };
         case 'refused':

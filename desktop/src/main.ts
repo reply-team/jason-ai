@@ -39,7 +39,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, setupOffered, writable } from './machine-setup.ts';
+import { commandIsSetup, jasonOnPath, MachineSetup, placeLine, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -705,7 +705,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
 
     // The machine set-up this start runs, where it runs one, ends before the installation is brought up: it may stop the
     // runtime of a command-line install it retires, which `jason runtime start` then starts from the carried jason. The
-    // window is up meanwhile, and the routine's own time limit bounds the wait.
+    // window is up meanwhile, saying so, and the routine's own time limit bounds the wait.
+    if (machineSetup?.state.state === 'running') await showStarting(window, settingUpSentence, false);
     await machineSetup?.settled();
 
     try {
