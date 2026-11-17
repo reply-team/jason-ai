@@ -13,7 +13,7 @@ Jason's data directory. It opens no window. Where a runtime answered before the 
 the report says it stopped one, a runtime is started again from the application's jason. Run again over the version
 already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in
 place. A later version already installed is kept as it is; an earlier one is installed over, as its own update does,
-but not while Jason Desktop is open: then it says to close it and run the line again, and installs nothing. It says where Jason will keep what it learns about your business - Jason in your home directory, unless
+but not while Jason Desktop is running, in its window or in the tray: then it says to quit it and run the line again, and installs nothing. It says where Jason will keep what it learns about your business - Jason in your home directory, unless
 Harness:Root in the settings names another folder - and makes no folder for it.
 
 It ends non-zero, saying which act failed, when jason was not put in the terminal. On success its last line is the
@@ -142,14 +142,18 @@ function Install-Jason {
         $null -ne $core -and $core -ge [version] $floor
     }
 
-    # Whether the application's window is open: a program running from its own executable, found by its exact path, as
-    # its installer looks for it.
-    function Test-WindowOpen {
-        $window = Join-Path $app 'Jason.exe'
-        if (-not (Test-Path -LiteralPath $window -PathType Leaf)) { return $false }
-        $open = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $window, [StringComparison]::OrdinalIgnoreCase) })
-        return $open.Count -gt 0
+    # Whether Jason Desktop is running: a program running from its own executable, found by its exact path, as its
+    # installer looks for it - the process, not a window, so a Desktop left in the tray, which has no window, is found as
+    # surely as one whose window is open. A query that fails here reads as not running; the installer's own look fails
+    # closed instead. A silent installer never closes it: where it finds it, or cannot look, it ends with 3, said in the
+    # same sentence as this look's, which names both.
+    function Test-DesktopRunning {
+        $application = Join-Path $app 'Jason.exe'
+        if (-not (Test-Path -LiteralPath $application -PathType Leaf)) { return $false }
+        $running = @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $application, [StringComparison]::OrdinalIgnoreCase) })
+        return $running.Count -gt 0
     }
+    $desktopRunning = 'Jason Desktop is running, in its window or in the tray, or Jason could not tell whether it is, so nothing was installed: quit it - Quit in its tray menu - and run this line again.'
 
     # The installer is run only when it carries a valid Authenticode signature whose signer is the release's publisher,
     # by the simple name of the certificate the file's own signature names, in full and in the same case: a valid
@@ -238,7 +242,7 @@ function Install-Jason {
 
         # An application already here of the release asked for is set up again; one of a later release is kept as it
         # is, as an installer run over it would take it back. An earlier one is installed over, as its own update does,
-        # but never while its window is open: a silent installer closes it without asking.
+        # but never while it is running, in its window or in the tray: a person's application is never closed from here.
         $placed = Get-Carried $carried
         $installed = $latest
         if ($placed -eq $latest) {
@@ -247,8 +251,8 @@ function Install-Jason {
             $installed = $placed
             Write-Host "Jason Desktop $placed is already installed at $app, later than $latest; it is kept as it is, and nothing is downloaded."
         } else {
-            if (Test-WindowOpen) {
-                throw "Jason Desktop is open, and installing $latest over it would close it without asking; nothing was installed. Close Jason Desktop and run this line again."
+            if (Test-DesktopRunning) {
+                throw $desktopRunning
             }
             # --- download, and check before running -------------------------------------------------------------
 
@@ -269,10 +273,10 @@ function Install-Jason {
 
             # --- install, silently, and wait for it ---------------------------------------------------------
 
-            # Looked for again at the last moment: a window opened while the setup was downloaded and checked would be
-            # closed by it without asking as surely as one open before.
-            if (Test-WindowOpen) {
-                throw "Jason Desktop is open, and installing $latest over it would close it without asking; nothing was installed. Close Jason Desktop and run this line again."
+            # Looked for again at the last moment, for a Desktop started while the setup was downloaded and checked; one
+            # started after this look is found by the installer itself, which then ends with 3.
+            if (Test-DesktopRunning) {
+                throw $desktopRunning
             }
             # A GUI program typed bare does not hold PowerShell, and gives it no exit code: Start-Process -Wait waits for
             # it and everything it starts, and the installer starts nothing that outlives it. /D= is the last argument,
@@ -283,6 +287,7 @@ function Install-Jason {
                 0 { }
                 1 { throw "The installer stopped before replacing a file: a Jason process runs from $app that did not stop - a runtime started with another data directory, say. Stop it with ``$carried runtime stop``, with JASON_DATA_DIR set as it was started, and run this again." }
                 2 { throw "The installer stopped before it installed: another install of Jason ran at the same time, or the version already there could not be removed. Run this again." }
+                3 { throw $desktopRunning }
                 default { throw "The installer exited with $($installer.ExitCode), and Jason Desktop was not installed." }
             }
             if ((Get-Carried $carried) -ne $latest) { throw "The installer exited 0, and $carried is not Jason $latest." }

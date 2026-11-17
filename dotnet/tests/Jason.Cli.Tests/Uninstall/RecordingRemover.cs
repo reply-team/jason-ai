@@ -286,9 +286,13 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;
 
-    public int? HandToUninstaller(string application, int waitFor)
+    /// <summary>The log folder the uninstall handed the waiter, once it did.</summary>
+    public string? WaiterLogs { get; private set; }
+
+    public int? HandToUninstaller(string application, int waitFor, string logs)
     {
         Record("application.uninstaller", application);
+        WaiterLogs = logs;
         return Waiter;
     }
 

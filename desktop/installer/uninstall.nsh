@@ -11,11 +11,13 @@
 ; --uninstall start stops the runtime of its own data directory again, in case one was started in between.
 
 ; Which running programs the installer and the uninstaller close before they replace or remove the files: the
-; application's own executable, found by its exact path, and nothing else. electron-builder's own check, which this
+; application's own executable, found by its exact path, and nothing else, and only after a person who watches the run
+; chose OK; a silent run closes no application (below). electron-builder's own check, which this
 ; replaces, closes every program whose path begins with the installation folder - the runtime this application carries
 ; among them, with its work - and where PowerShell is not available every program named Jason.exe, which on Windows is
 ; every jason.exe, a runtime of another installation included. The path is handed to PowerShell in the environment, so
-; no character of it is read as PowerShell's. Without PowerShell nothing is closed, and a person is asked to close Jason.
+; no character of it is read as PowerShell's. Without PowerShell nothing is closed: a person is asked to close Jason,
+; and a silent run ends with 3.
 !define JASON_OWN_APP `Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase) }`
 
 ; A runtime started from the jason executable this application carries, by whichever data directory or run file, is
@@ -27,7 +29,8 @@
 ; runtime that did not stop, one started with another data directory say, or other Jason work from this folder - ends
 ; the run before a file is replaced, with error level 1, and a person is told to stop a runtime with the carried
 ; executable by its full path, since the PATH command may set a data directory of its own. Without PowerShell nothing
-; can be looked for: a person is asked to stop it, and an update goes on without a look.
+; can be looked for: a person is asked to stop it, an update a person watches goes on without a look, and a silent run
+; ends with 3, as where a look failed.
 ; One process is passed over, and only while it says so: the carried jason that asked for this update with
 ; jason update apply. It moved its own file out of this folder and goes on running, waiting for the installer, and
 ; Windows still reports the path it was started from. Right before it starts the application it writes its process id
@@ -46,10 +49,20 @@
 ; a failed start of PowerShell included, is read as a process found.
 !define JASON_RUNTIME_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
 
-; The application is looked for the same way, failing closed: only exit 1 says it is not running. It is looked for again
-; after it was closed, and a run where it is still found, or where that look failed, ends with error level 1 before a file
-; is replaced.
+; The application is looked for the same way, failing closed: only exit 1 says it is not running. A silent run that finds
+; it, or whose look failed, ends there with error level 3: the application is running, in its window or in the tray, and
+; nothing was changed. A run a person watches is asked; it is looked for again after it was closed, and where it is still
+; found, or that look failed, the run ends with error level 1 before a file is replaced.
 !define JASON_APP_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
+
+; An update closes nothing it has not asked about: the application quits itself before an update, and the update waits
+; for it, looking twice a second, until no process runs from its executable or a minute has passed - three times the
+; twenty seconds late a slow quit is proven at, and well inside the ten minutes jason update apply gives the installer.
+; The wait answers as the look does: exit 1 as soon as nothing is found, and at the bound 0 where the application is still
+; found or 2 where the last look failed, both read as found. The old version's uninstaller the update then runs closes
+; any application it finds, and refuses with 2 while a file of the folder is held, so it is never run while one is found.
+!define JASON_APP_WAIT_SECONDS 60
+!define JASON_APP_GONE `$$ErrorActionPreference = 'Stop'; $$clock = [Diagnostics.Stopwatch]::StartNew(); while ($$true) { try { if (@(${JASON_OWN_APP}).Count -eq 0) { exit 1 }; $$failed = $$false } catch { $$failed = $$true }; if ($$clock.Elapsed.TotalSeconds -ge ${JASON_APP_WAIT_SECONDS}) { if ($$failed) { exit 2 }; exit 0 }; Start-Sleep -Milliseconds 500 }`
 
 ; What a person is told: exit 0 is a process found; any other exit but 1 is a look that could not be made, said as such.
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
@@ -89,21 +102,27 @@
       ${endIf}
     ${endIf}
     ${if} ${isUpdated}
-      ; The application quits itself before an update; this gives it the moment to.
-      Sleep 300
+      ; The application quits itself before an update; it is given the bound above to.
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_GONE}"`
+    ${else}
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
     ${endIf}
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
     Pop $R0
     ${if} $R0 != 1
-      ${ifNot} ${isUpdated}
-        ${if} $R0 S== 0
-          StrCpy $R1 "$(appRunning)"
-        ${else}
-          StrCpy $R1 "${JASON_APP_UNSURE}"
-        ${endIf}
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2
+      ; A silent run never closes a person's running application, an update or not: what a terminal or an updater runs
+      ; with no one watching ends before a file is replaced, with error level 3, its own, and shows nothing, and what was
+      ; installed stays as it was. A run a person watches - an install, an uninstall, the window's own update - asks them.
+      ${if} ${Silent}
+        SetErrorLevel 3
         Quit
       ${endIf}
+      ${if} $R0 S== 0
+        StrCpy $R1 "$(appRunning)"
+      ${else}
+        StrCpy $R1 "${JASON_APP_UNSURE}"
+      ${endIf}
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2
+      Quit
       DetailPrint "$(appClosing)"
       nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_OWN_APP} | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"`
       Pop $R0
@@ -113,8 +132,7 @@
       nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_FOUND}"`
       Pop $R0
       ${if} $R0 != 1
-        ${ifNot} ${isUpdated}
-        ${AndIfNot} ${Silent}
+        ${ifNot} ${Silent}
           ${if} $R0 S== 0
             StrCpy $R1 "${JASON_APP_STILL}"
           ${else}
@@ -132,7 +150,12 @@
       ${ifNot} ${isUpdated}
       ${AndIfNot} ${Silent}
       ${AndIf} $JasonRuntimeAsked == ""
-        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3
+        ${if} $R0 S== 0
+          StrCpy $R1 "${JASON_RUNTIME_ASK}"
+        ${else}
+          StrCpy $R1 "${JASON_LOOK_ASK}"
+        ${endIf}
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3
         SetErrorLevel 1
         Quit
       ${endIf}
@@ -156,11 +179,44 @@
       ${endIf}
     ${endIf}
   ${else}
+    ; No look can be made, which is a look that failed: a silent run, an update included, ends here with error level 3, as
+    ; it does where the application is found, before electron-builder's extraction would write over a running Jason.exe.
+    ${if} ${Silent}
+      SetErrorLevel 3
+      Quit
+    ${endIf}
     ${ifNot} ${isUpdated}
       MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, and stop its runtime with jason runtime stop if it runs, then choose OK." /SD IDOK IDOK +2
       Quit
     ${endIf}
   ${endIf}
+!macroend
+
+; What an update does with the old version's uninstaller's answer, which electron-builder hands to these two hooks, for
+; the shell context and for the current user, in place of its own handling (installUtil.nsh, handleUninstallResult). Its
+; own shows a box with no silent answer when the old uninstaller refuses - and one refuses with 2 while a file of the
+; folder is held, a moment after it put back what it had moved - so a silent update would wait for a click no one gives,
+; holding the installer's mutex against every later setup. Here it is the same: the same sentence to a person who
+; watches, the same lines of details, the same error level 2 before a file is replaced, and the old version left
+; installed as its uninstaller put it back; a silent run is shown nothing and only ends. An old uninstaller that could not
+; be started at all is said, and the install goes on over its files, as electron-builder's own does.
+!macro jasonOldUninstallerResult
+  ${if} ${Errors}
+    DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
+  ${elseIf} $R0 != 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0" /SD IDOK
+    DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    SetErrorLevel 2
+    Quit
+  ${endIf}
+!macroend
+
+!macro customUnInstallCheck
+  !insertmacro jasonOldUninstallerResult
+!macroend
+
+!macro customUnInstallCheckCurrentUser
+  !insertmacro jasonOldUninstallerResult
 !macroend
 
 ; The installer's own last step, once the files are in place, at every install and every update, silent or not: the
@@ -181,13 +237,14 @@
 ; starts a runtime from the carried file when it finds the note standing and none answering; jason status names it
 ; meanwhile. What it did not get done never fails the
 ; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
-; start runs it where its last run was for an older version. A run a person watches says so in one line of its details.
+; start runs it where its last run was for an older version. A run a person watches says so in a box, since a one-click
+; installer shows no details; a silent run answers the box itself and shows nothing.
 !macro customInstall
   DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of Claude Code and Codex where each is found."
   nsExec::Exec '"$INSTDIR\resources\bundle\jason.exe" install'
   Pop $R0
   ${if} $R0 S!= 0
-    DetailPrint "jason install did not set everything up (it answered $R0). Run $INSTDIR\resources\bundle\jason.exe install in a terminal to see what it says."
+    MessageBox MB_OK|MB_ICONEXCLAMATION "jason install did not set everything up (it answered $R0). Run $INSTDIR\resources\bundle\jason.exe install in a terminal to see what it says." /SD IDOK
   ${endIf}
 !macroend
 
