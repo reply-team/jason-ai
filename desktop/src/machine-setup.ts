@@ -320,6 +320,11 @@ export interface MachineSetupDeps {
      * answers, one is started from the carried file (`payOwedStart`). Absent, no note is read.
      */
     startOwed?: string;
+    /**
+     * Whether the installation is new (`isNewInstallation`): its data directory absent, empty, or holding the desktop's
+     * own records alone. Read just before the finishing step, which is not run where it answers true. Absent, never new.
+     */
+    isNew?(): boolean;
     /** Whether a path is there; `existsSync` unless a test names another. */
     exists?(path: string): boolean;
 }
@@ -355,6 +360,8 @@ export function finishingOf(result: CliResult): FinishingStep {
     } catch {
         parsed = null;
     }
+    // No installation to bring up is nothing left undone.
+    if (result.exit === 0 && isObject(parsed) && parsed.data_dir_found === false && Array.isArray(parsed.parts)) return { completed: true, problems: [] };
     if (result.exit === 0 && isObject(parsed) && typeof parsed.complete === 'boolean' && Array.isArray(parsed.parts)) {
         const problems = parsed.parts.flatMap((part: unknown) =>
             isObject(part) && part.state === 'not_done' ? [`${isText(part.part) ? part.part : 'a part'}: ${isText(part.reason) ? part.reason : 'not done'}`] : [],
@@ -510,7 +517,12 @@ export class MachineSetup {
             return { state: 'later', why: answer.later };
         }
         let finishing: FinishingStep | null = null;
-        if (this.#deps.finishingStep !== undefined) {
+        if (this.#deps.finishingStep !== undefined && this.#deps.isNew?.() === true) {
+            // A new installation, the desktop's own records alone, has nothing for the finishing step to bring up, and a
+            // first start writes nothing more under the data directory and asks no network: it is not run, and is done.
+            finishing = { completed: true, problems: [] };
+            log.info('machine_setup_finish_new', { Why: why });
+        } else if (this.#deps.finishingStep !== undefined) {
             finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${messageOf(error)}`] }));
             log.info('machine_setup_finished', { Why: why, Completed: finishing.completed, Later: finishing.later !== undefined });
         }
@@ -538,18 +550,22 @@ export class MachineSetup {
 /**
  * Live's bringing up of the installation, given once more where it failed while the start's set-up still ran: a carried
  * update in flight refuses a runtime's start from `kept` on, and the finishing step that finishes it may outlast the bound
- * Live waits, so a start refused meanwhile is tried again once that run has ended. A failure with no run going on is
- * Live's own, as before.
+ * Live waits, so a start refused meanwhile is tried again once that run has ended, the page saying first what it waits
+ * for (`waiting`, `finishWaitSentence`). A failure with no run going on is Live's own, as before.
  */
-export async function startAfterSetup<T>(start: () => Promise<T>, setup: { readonly state: SetupState; settled(): Promise<void> } | null): Promise<T> {
+export async function startAfterSetup<T>(start: () => Promise<T>, setup: { readonly state: SetupState; settled(): Promise<void> } | null, waiting: () => Promise<void> = async () => undefined): Promise<T> {
     try {
         return await start();
     } catch (error) {
         if (setup === null || setup.state.state !== 'running') throw error;
+        await waiting().catch(() => undefined);
         await setup.settled();
         return start();
     }
 }
+
+/** What the page says while Live waits for the set-up's finishing step before it starts the runtime again. */
+export const finishWaitSentence = 'Waiting for the set-up to finish updating this installation, which starts the runtime; Jason opens once it has.';
 
 /**
  * The mode switch's relaunch, held for the set-up's run up to `liveWaitMs` where one runs, the page saying so first: a

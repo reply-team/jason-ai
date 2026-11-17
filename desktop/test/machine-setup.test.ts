@@ -9,6 +9,7 @@ import {
     beforeRelaunch,
     commandIsSetup,
     finishArguments,
+    finishWaitSentence,
     finishingOf,
     jasonOnPath,
     linuxOwedJason,
@@ -680,6 +681,17 @@ test('Live’s start is tried once more after the set-up ends where it failed wh
         return 'started';
     }, running);
     assert.deepEqual([answered, tries], ['started', 2]);
+    // The page says what it waits for, once, before the wait.
+    const said: string[] = [];
+    let settledNow = false;
+    await startAfterSetup(async () => {
+        if (!settledNow) throw new Error('update_in_progress');
+        return 'started';
+    }, { state: { state: 'running' }, settled: async () => void (said.push('settled'), (settledNow = true)) }, async () => void said.push('said'));
+    assert.deepEqual(said, ['said', 'settled']);
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes('            machineSetup,\n            () => showStarting(window, finishWaitSentence, false),\n        );'));
+    assert.match(finishWaitSentence, /^Waiting for the set-up to finish updating this installation/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, { state: { state: 'idle' }, settled: async () => undefined }), /refused/);
     await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, null), /refused/);
 });
@@ -938,4 +950,21 @@ test('the mode switch’s relaunch waits for the set-up’s run up to the bound,
     assert.ok(swap.includes('await showStarting(window, relaunchWaitSentence, false);'));
     for (const quit of main.split("app.on('before-quit'").slice(1)) assert.equal(quit.slice(0, 300).includes('machineSetup'), false);
     assert.equal(main.split('modeSwitch(log, form, () => current)').length - 1, 2, 'Live’s run and the Demo’s');
+});
+
+test('L1: on a new installation the finishing step is not run and counts as done; on one that is not new it runs; main asks the desktop’s own test of new', async () => {
+    for (const isNew of [true, false]) {
+        const data = join(folder(), '.jason');
+        const cli = installationCli({ up: false, inFlight: false });
+        const { setup, log } = wiredOn(data, cli, { isNew: () => isNew });
+        await setup.atStart();
+        assert.deepEqual(cli.calls, isNew ? ['install --terminal-path /usr/bin:/bin'] : ['install --terminal-path /usr/bin:/bin', 'update apply --finish'], String(isNew));
+        assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
+        assert.equal(log.lines.some((line) => line.name === 'machine_setup_finish_new'), isNew);
+    }
+    // A finishing step that found no installation to bring up left nothing undone.
+    assert.deepEqual(finishingOf(printed({ ...finishDoc(false, [{ part: 'plugins', state: 'not_done', reason: 'No data directory.' }]), data_dir_found: false })), { completed: true, problems: [] });
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('\n}\n', main.indexOf('function makeMachineSetup(')));
+    assert.ok(factory.includes('isNew: () => isNewInstallation(runOn.person),'));
 });

@@ -40,7 +40,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { beforeRelaunch, commandIsSetup, finishArguments, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
+import { beforeRelaunch, commandIsSetup, finishArguments, finishWaitSentence, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -749,6 +749,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
                     },
                 }),
             machineSetup,
+            () => showStarting(window, finishWaitSentence, false),
         );
         runtimeVersion = started.runtimeVersion;
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
@@ -1004,6 +1005,8 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
         // The command line's finishing step after the routine, with no time limit: with a carried update in flight and the
         // application at its version it finishes that update, the runtime's start included (`docs/release-and-update.md` §7).
         finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),
+        // Not on a new installation, whose first start writes nothing more under the data directory and asks no network.
+        isNew: () => isNewInstallation(runOn.person),
         // The note that a start is owed, read at every start of a window, Demo or Live; the desktop writes none.
         startOwed: desktopPaths(runOn.person).startOwed,
     });

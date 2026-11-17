@@ -65,6 +65,7 @@ export const templates = {
     // The machine set-up, macOS and Windows: jason install at a start of a new version, or put back from the menu.
     machine_setup_ran: 'jason install ran at {Why} and exited {Exit}; completed {Completed}',
     machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}, later {Later}',
+    machine_setup_finish_new: 'The finishing step was not run at {Why}: the installation is new and has nothing to bring up',
     machine_setup_later: 'jason install ran at {Why} and found the update lock held; it is run again at the next start',
     machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
     machine_setup_runtime: 'A runtime answered before jason install ran at {Why}, or a start was owed, and none after it; one was started again {Started}',
