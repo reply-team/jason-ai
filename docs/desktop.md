@@ -10,8 +10,10 @@ It adds three things the browser cannot do: a chat that is a session with your o
 computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
 what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
 else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
-the Command Line item of its menu puts a command there, `jason`, or `jason-desktop` where another `jason` already
-stands, and on macOS and Linux puts its folder on your terminal's PATH where it is not yet, as the installer does
+on macOS and Windows the first start of each version puts `jason` where a new terminal finds it and gives your agents
+Jason's skills, by the `jason install` the application carries, and the Command Line item of its menu says what that
+placed and puts it back; on Linux that item puts a command there, `jason`, or `jason-desktop` where another `jason`
+already stands, and puts its folder on your terminal's PATH where it is not yet, as the installer does
 ([The command line, and the login items](#the-command-line-and-the-login-items)).
 
 This page is for the person using it. [desktop/README.md](../desktop/README.md) is the builder's view of the same
@@ -206,6 +208,9 @@ them on.
   once. If the revoke fails, nothing is removed and the next start tries again. A start whose runtime does not start
   does none of this, and neither does a reload of the window later in that run: what the earlier page kept stays here,
   its tokens still valid, until a start that starts the runtime.
+- `<data>/desktop/machine-setup.json`: on macOS and Windows, the version `jason install` last completed for at a start or
+  from the Command Line item, and what it reported, which the item shows (below). It counts among the desktop's own
+  records, so a new installation's first start, which writes it, still opens on the demo.
 - `<data>/desktop/window-pairing.json`: whether that clearing is done, and the id of the UI token the window's page
   holds now, never the token. The page reports the id once it has paired, and the desktop revokes the token the window
   held before, so the paired list keeps one row for the window.
@@ -269,7 +274,7 @@ and no more than that:
   whose data that other one works with is not something the desktop can tell;
 - none: "jason is not on your PATH, so a terminal there does not find Jason.".
 
-Where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
+On Linux, where the Command Line item offers an act that would help, the sentence names it by its label: the one that puts `jason`
 on the PATH where there is none; where another `jason` is found, the one that gives this window's Jason the name
 `jason-desktop`, the other keeping `jason`; where a command of the desktop's points elsewhere, the one that points it
 back at this window's Jason, and to type `jason-desktop` afterwards where that is its name; and where a `jason-desktop`
@@ -349,8 +354,8 @@ The demo is a page: a mock of Jason at work on sample data, so you can see what 
 your own. The application carries it as one static file ([`desktop/demo/`](../desktop/demo/README.md)), and the window
 shows it as it was built. It is not an installation and has nothing to do with the runtime: in Demo no runtime is
 started, no folder of an installation is made and nothing of your own installation is read or written; the desktop
-writes only its own records in your data directory (the record of the mode, Electron's profile under `desktop/electron/`
-and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
+writes only its own records in your data directory (the record of the mode, the record of the machine set-up below,
+Electron's profile under `desktop/electron/` and its own log under `logs/`). While the desktop runs in Demo it resolves no host name at all, so nothing of the desktop
 reaches the network there: Demo runs no runtime, checks for no update and loads nothing but the application's own files,
 and needs no name. Nothing the page shows is sent anywhere, and nothing you do in it is kept; the page starts from its
 beginning each time it is shown.
@@ -360,6 +365,15 @@ directory of yours, or one holding nothing but the desktop's own records (the re
 the desktop's own log), and no record of a mode writes the record as the demo and shows the page. Nothing of your own
 installation is made until you choose **Live**. An installation that already existed, with a record or without, and one
 updated from an earlier version open where they did.
+
+**The machine set-up at a start.** On macOS and Windows, a start of a version for which it has not yet completed runs the
+application's own `jason install` ([release-and-update.md](release-and-update.md) §9) once, in Demo as in Live and before
+you choose: it puts `jason` where a new terminal finds it, deploys Jason's skills for Claude Code and Codex where they are
+installed, and retires an older command-line install of Jason. It writes nothing under your data directory but the
+desktop's record of it, so the demo still opens first. It never keeps the window from you: a run that fails or does not
+end within five minutes is said in the Command Line item, which offers to put it back, and it is tried again only at the
+next start. In Live, the window's start waits for it before it brings the runtime up, since a runtime of the install it
+retires is stopped by it and then started from the application's `jason`.
 
 **The switch.** The page's top strip, right of its sidebar, carries the page's own words, and its right end is left free
 for a switch: there the desktop draws its **Demo | Live** switch over the page, on the strip's colour, and nothing else. On Windows and Linux the window has no title bar of its
@@ -897,8 +911,20 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
 
 ## The command line, and the login items
 
-- **Command Line** places a `jason` that your terminal finds and that runs the executable the application carries. On
-  macOS and Linux it is a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
+- **Command Line**, on macOS and Windows, shows what the machine set-up placed, by its report: where a new terminal finds
+  `jason` (on macOS the wrapper `~/.local/bin/jason`, with the installer's two lines in your shell profiles where a new
+  terminal's PATH lacked that folder; on Windows the application's `resources\bundle` folder on your account's Path), the
+  full path a terminal already open types instead, the folders Jason's skills were deployed to and for which programs, and
+  what was left alone and why, a skill of your own under a name Jason ships among them, or what was not done. **Put Back
+  jason and the Skills…** runs `jason install` again on your word, after a confirmation that says what it writes, and then
+  tells what it did in its own sentences. The application places no command of its own there any more; the `jason.cmd`
+  shim and the Git Bash wrapper an earlier version put in `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the
+  `~/.local/bin/jason-desktop` wrapper of 0.48 on macOS, are taken back by `jason install`. On macOS the update item also
+  says where the application is and whether its update can write there: where the application or the folder it is in is
+  not writable by your account, an update asks for an administrator's password. The menu always shows the executable's
+  full path.
+- **Command Line**, on Linux, places a `jason` that your terminal finds and that runs the executable the application
+  carries: a wrapper in `~/.local/bin`, and where a new terminal's PATH does not hold that folder (the PATH
   your login shell gave when the window started, or, where it gave none, taken as not holding it), the same act puts it
   there by the installer's own rule: the line `# added by jason install` and under it
   `export PATH="$HOME/.local/bin:$PATH"` (with your home spelled out) go into the file a login shell of your account
@@ -912,15 +938,9 @@ registration off. [desktop/README.md](../desktop/README.md) has the table and th
   `~/.local/bin` then holds nothing but what Jason's installer or the application writes there (`jason`,
   `jason-desktop`, `jason-LICENSE`, `jason-THIRD-PARTY-NOTICES`), the rule `jason uninstall` keeps: that folder is shared,
   and where the line puts it on the PATH, the other programs in it are found through it too. While it holds anything
-  else, or another `jason`, the lines stay, and the item says why. On Windows it is a `jason.cmd` shim and, beside it, an extensionless
-  `jason` for Git Bash (which finds a `.cmd` only by its full name) in `%LOCALAPPDATA%\Microsoft\WindowsApps`, placed only
-  when that folder is on your PATH, since no PATH entry is ever written. It is placed and removed on your word, read back
+  else, or another `jason`, the lines stay, and the item says why. It is placed and removed on your word, read back
   on every look, never rewritten silently, and never put in the place of a `jason` that is not ours: it is then named
   `jason-desktop`. The menu always shows the executable's full path.
-- The Windows shim hands its arguments to cmd.exe's parser a second time, with `%*`, so a quoted argument beside `&`, `|`,
-  `<`, `>` or `^` (JSON passed from PowerShell 7.3 or later, which hands a `.cmd` its arguments in its legacy way) can be
-  split, or run as a command of its own. The shim is for a person typing; a script or an agent passes such arguments to the
-  executable's full path, or runs `jason` from Git Bash, where the wrapper beside the shim passes them whole.
 - **Open Jason at Login** is a Windows login item, a macOS LaunchAgent (`~/Library/LaunchAgents/ai.jasonharness.desktop.plist`)
   or a Linux autostart entry (`~/.config/autostart/ai.jasonharness.desktop.desktop`), and opens the window only.
   **Start the Runtime at Logon** is `jason runtime autostart` for the `jason` the application carries.
