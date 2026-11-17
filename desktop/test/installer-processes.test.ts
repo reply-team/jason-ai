@@ -145,6 +145,7 @@ test('the whole include runs only the commands these rows name, stops only the a
         `nsExec::Exec \`${runtimeLook}\``,
         stopRuntimeLine,
         `nsExec::Exec \`${runtimeLook}\``,
+        `nsExec::Exec '"$INSTDIR\\resources\\bundle\\jason.exe" install'`,
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall' $R2`,
         `ExecWait '"$INSTDIR\\\${APP_EXECUTABLE_FILENAME}" --uninstall --quiet' $R2`,
     ]);
@@ -182,14 +183,17 @@ test('the whole include runs only the commands these rows name, stops only the a
     assert.ok(unInstall.start > macroIn(script, 'customCheckAppRunning', 'installer/uninstall.nsh').end);
 });
 
-test('the carried jason executable is looked for by its exact path, in a filter that no stop reads, and otherwise only named to a person', () => {
+test('the carried jason executable is looked for by its exact path, in a filter that no stop reads, and otherwise only named to a person or run to set the machine up', () => {
     const check = macro('customCheckAppRunning');
-    // The folder's resources appear in two places: the words a person is shown when a process is still found, which only
-    // a message box reads, and the path handed to the runtime's filter through the environment.
+    // The folder's resources appear in four places: the words a person is shown when a process is still found, which
+    // only a message box reads, the path handed to the runtime's filter through the environment, the record that filter
+    // reads under the update's own installer, and the installer's last step, which runs that jason's own `jason install`
+    // (installer-setup.test.ts holds it).
     assert.deepEqual([...script.matchAll(/\$INSTDIR\\resources/gi)].map((found) => script.slice(script.lastIndexOf('\n', found.index) + 1, script.indexOf('\n', found.index)).trim()), [
         `!define JASON_RUNTIME_STILL "${define('JASON_RUNTIME_STILL')}"`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
+        `nsExec::Exec '"$INSTDIR\\resources\\bundle\\jason.exe" install'`,
     ]);
     assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
         'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',

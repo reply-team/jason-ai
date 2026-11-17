@@ -106,6 +106,7 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(wrapper, report.GetProperty("command").GetProperty("open_shell").GetString());
         Assert.True(report.GetProperty("command").GetProperty("changed").GetBoolean());
         Assert.Equal(2, report.GetProperty("command").GetProperty("profiles").GetArrayLength());
+        Assert.True(report.GetProperty("command").GetProperty("placed").GetBoolean());
         Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
         Assert.Equal("not_running", report.GetProperty("runtime").GetString());
         Assert.True(report.GetProperty("completed").GetBoolean());
@@ -128,6 +129,7 @@ public sealed class InstallCommandTests : IDisposable
         var report = Report(output);
         Assert.False(report.GetProperty("command").GetProperty("changed").GetBoolean());
         Assert.Equal(0, report.GetProperty("command").GetProperty("profiles").GetArrayLength());
+        Assert.True(report.GetProperty("command").GetProperty("placed").GetBoolean(), "a second run that finds the command in place reports it not placed");
         Assert.All(report.GetProperty("skills").EnumerateArray(), root => Assert.Equal(0, root.GetProperty("written").GetInt32()));
     }
 
@@ -500,6 +502,7 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(bundle, command.GetProperty("runs").GetString());
         Assert.Equal(executable, command.GetProperty("open_shell").GetString());
         Assert.Equal(2, command.GetProperty("taken_back").GetArrayLength());
+        Assert.True(command.GetProperty("placed").GetBoolean());
 
         var (again, second) = Environment(WindowsPlaces(key.SubKey), executable);
         Assert.Equal(ExitCodes.Success, await InstallCommand.RunAsync(again, new InstallOptions(false, false, null), Ct));
@@ -625,6 +628,7 @@ public sealed class InstallCommandTests : IDisposable
         var report = Report(output);
         Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
         Assert.Equal(0, report.GetProperty("command").GetProperty("taken_back").GetArrayLength());
+        Assert.False(report.GetProperty("command").GetProperty("placed").GetBoolean(), "a Path that was never written reads as placed, and the install scripts would end saying jason is in the terminal");
     }
 
     /// <summary>B2: on macOS the registration is moved on disk and takes effect at the next logon: no load, which would start a runtime now (RunAtLoad), and no unload.</summary>
@@ -977,7 +981,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }

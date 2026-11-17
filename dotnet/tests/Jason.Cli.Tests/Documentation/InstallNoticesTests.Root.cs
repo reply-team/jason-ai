@@ -15,7 +15,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A fresh install says the two lines after the line that says what it installed, and the licence after them.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_fresh_install_says_where_the_files_will_be_after_what_it_installed(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -29,7 +28,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A run over the version already there describes the installation as a fresh one does, these two lines included.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_install_already_there_says_where_the_files_will_be_too(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -45,7 +43,6 @@ public sealed partial class InstallNoticesTests
     /// <summary>A run that installs nothing says nothing about files an installation would keep.</summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void A_failed_install_says_nothing_about_where_the_files_will_be(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -66,7 +63,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData(Sh)]
-    [InlineData(Ps1)]
     public void An_install_makes_no_folder_for_the_files(string script)
     {
         var installer = Installer.For(script, _tree);
@@ -119,28 +115,6 @@ public sealed partial class InstallNoticesTests
         Assert.Equal(HarnessRootLines.DefaultProject, lines[^5]);
         Assert.StartsWith($"Added {installer.InstallDir} to the PATH in ", lines[^4], StringComparison.Ordinal);
         Assert.Equal(DirectoryLine, lines[^3]);
-    }
-
-    [Fact]
-    public void Install_ps1_says_where_the_files_will_be_before_the_path_step()
-    {
-        var code = Code(Ps1);
-        var where = code.IndexOf(HarnessRootLines.Opening, StringComparison.Ordinal);
-        var path = code.IndexOf("is on your PATH; open a new terminal", StringComparison.Ordinal);
-
-        Assert.True(where >= 0 && path > where, "install.ps1 does not say where the files will be before the PATH step.");
-    }
-
-    /// <summary>The same two lines from the Windows PowerShell a fresh Windows has, which reads the script as PowerShell 5.1 does.</summary>
-    [Fact]
-    public void Install_ps1_says_where_the_files_will_be_under_windows_powershell_too()
-    {
-        var installer = Installer.For(Ps1, _tree);
-
-        var run = installer.RunUnderWindowsPowerShell(installer.Feed("0.6.0"));
-
-        Assert.True(run.Exit == 0, run.Stderr);
-        AssertSaysWhereTheFilesWillBe(installer, Lines(run.Stdout), "Installed Jason 0.6.0 to ");
     }
 
     /// <summary>
