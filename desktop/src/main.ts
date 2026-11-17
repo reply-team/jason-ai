@@ -40,7 +40,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { commandIsSetup, finishArguments, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
+import { beforeRelaunch, commandIsSetup, finishArguments, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, relaunchWaitSentence, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -459,7 +459,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         : null;
     // Live or Demo: the page reads this run's mode once as it loads. A mode set is written to the record in the person's
     // directory, and the desktop then starts again on what it names; a write that fails starts nothing.
-    const modeDeps = modeSwitch(log, form);
+    const modeDeps = modeSwitch(log, form, () => current);
     const uninstall = offers.removal && uninstallOffered(process.platform) && version !== null && carried.outlives
         ? {
               scope: () => ({
@@ -884,7 +884,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
     window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     window.webContents.session.setPermissionCheckHandler(() => false);
 
-    const modeDeps = modeSwitch(log, form);
+    const modeDeps = modeSwitch(log, form, () => current);
     // The Demo runs no jason: the tray's count is never read here, and anything that asked would be refused.
     const noJason: Cli = { run: () => Promise.reject(new Error('The demo runs no jason.')) };
     let views: DemoViews | null = null;
@@ -1024,7 +1024,7 @@ if (unsandboxed !== null) {
  * The switch between Live and Demo, the page's and the menu's: the record written in the person's directory, then the
  * desktop started again with the person's environment, which a run no longer changes (`relaunchAsPerson`).
  */
-function modeSwitch(log: Logger, form: LinuxPackage | null): { write(mode: Mode): void; relaunch(): void } {
+function modeSwitch(log: Logger, form: LinuxPackage | null, window: () => BrowserWindow | null): { write(mode: Mode): void; relaunch(): void } {
     return {
         write: (mode: Mode) => {
             try {
@@ -1035,14 +1035,24 @@ function modeSwitch(log: Logger, form: LinuxPackage | null): { write(mode: Mode)
             }
             log.info('mode_set', { Mode: mode });
         },
+        // Held for the machine set-up's run up to its bound, the page saying so (`beforeRelaunch`); a person's Quit is not.
         relaunch: () =>
-            relaunchAsPerson({
-                env: process.env,
-                person: personEnvironment,
-                relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
-                quit: () => app.quit(),
-            }),
+            void beforeRelaunch(machineSetup, () => sayBeforeRelaunch(window())).then(() =>
+                relaunchAsPerson({
+                    env: process.env,
+                    person: personEnvironment,
+                    relaunch: () => app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath))),
+                    quit: () => app.quit(),
+                }),
+            ),
     };
+}
+
+/** The page the mode switch shows while its relaunch waits: the window's own, the Demo's views taken off it first. */
+async function sayBeforeRelaunch(window: BrowserWindow | null): Promise<void> {
+    if (window === null || window.isDestroyed()) return;
+    for (const child of [...window.contentView.children]) window.contentView.removeChildView(child);
+    await showStarting(window, relaunchWaitSentence, false);
 }
 
 /** Back to Your Own Installation, in a demo run's tray and menu: what Live on the switch does. */

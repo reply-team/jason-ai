@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { Cli, CliResult } from '../src/cli.ts';
 import { wrapperScript } from '../src/command-line.ts';
 import {
+    beforeRelaunch,
     commandIsSetup,
     finishArguments,
     finishingOf,
@@ -902,4 +903,39 @@ test('a fresh machine holding only the set-up’s record still counts as new', (
     writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
     assert.deepEqual(readdirSync(data), ['desktop']);
     assert.equal(isNewInstallation(data), true);
+});
+
+test('the mode switch’s relaunch waits for the set-up’s run up to the bound, the page saying so first; with none running it waits for nothing, and a person’s Quit is never held', async () => {
+    const said: string[] = [];
+    const bounds: number[] = [];
+    const say = async () => void said.push('said');
+    // None running: nothing said, nothing waited for.
+    await beforeRelaunch({ state: { state: 'reported', report: reportOf(report())! }, settledWithin: async (bound) => (bounds.push(bound), 'ended') }, say);
+    await beforeRelaunch(null, say);
+    assert.deepEqual([said, bounds], [[], []]);
+    // One running: said, then waited for at most the bound Live waits.
+    await beforeRelaunch({ state: { state: 'running' }, settledWithin: async (bound) => (bounds.push(bound), 'running') }, say);
+    assert.deepEqual([said, bounds], [['said'], [liveWaitMs]]);
+    // A page that cannot be drawn does not keep the relaunch.
+    await beforeRelaunch({ state: { state: 'running' }, settledWithin: async () => 'ended' }, async () => { throw new Error('destroyed'); });
+    // The real set-up: the relaunch goes on once a put back run under way ends, and the run is never ended for it.
+    const cli = hangingCli();
+    const { setup } = setupOn(join(folder(), '.jason'), cli);
+    const running = setup.putBack();
+    let relaunched = false;
+    const waiting = beforeRelaunch(setup, say).then(() => (relaunched = true));
+    await tick(10);
+    assert.equal(relaunched, false, 'held while the routine runs');
+    cli.finish(printed(report()));
+    await running;
+    await waiting;
+    assert.equal(relaunched, true);
+    // main: the switch's relaunch alone goes through it; the page is the window's own, the Demo's views taken off first.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.equal(main.split('beforeRelaunch(').length - 1, 1);
+    const swap = main.slice(main.indexOf('function modeSwitch('), main.indexOf('function backToLive('));
+    assert.ok(swap.includes('void beforeRelaunch(machineSetup, () => sayBeforeRelaunch(window())).then(() =>'));
+    assert.ok(swap.includes('await showStarting(window, relaunchWaitSentence, false);'));
+    for (const quit of main.split("app.on('before-quit'").slice(1)) assert.equal(quit.slice(0, 300).includes('machineSetup'), false);
+    assert.equal(main.split('modeSwitch(log, form, () => current)').length - 1, 2, 'Live’s run and the Demo’s');
 });

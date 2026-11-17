@@ -428,11 +428,11 @@ export class MachineSetup {
     }
 
     /**
-     * Resolves once the start's run has ended (`ended`), or once `boundMs` has passed with it still running (`running`),
-     * whichever is first; the run itself goes on either way.
+     * Resolves once the run under way has ended (`ended`), the start's or a put back's, or once `boundMs` has passed with it
+     * still running (`running`), whichever is first; the run itself goes on either way.
      */
     async settledWithin(boundMs: number): Promise<'ended' | 'running'> {
-        const run = this.#atStart;
+        const run = this.#running ?? this.#atStart;
         if (run === null) return 'ended';
         let timer: ReturnType<typeof setTimeout> | undefined;
         const bound = new Promise<'running'>((resolve) => {
@@ -545,6 +545,20 @@ export async function startAfterSetup<T>(start: () => Promise<T>, setup: { reado
         return start();
     }
 }
+
+/**
+ * The mode switch's relaunch, held for the set-up's run up to `liveWaitMs` where one runs, the page saying so first: a
+ * relaunch quits this process, and a routine that is its child would otherwise be cut off mid-write. Past the bound the
+ * relaunch goes on and the routine is left to end on its own. A person's Quit is never held.
+ */
+export async function beforeRelaunch(setup: { readonly state: SetupState; settledWithin(boundMs: number): Promise<'ended' | 'running'> } | null, say: () => Promise<void>): Promise<void> {
+    if (setup === null || setup.state.state !== 'running') return;
+    await say().catch(() => undefined);
+    await setup.settledWithin(liveWaitMs);
+}
+
+/** What the page says while the mode switch's relaunch waits for the set-up. */
+export const relaunchWaitSentence = 'Finishing the set-up of jason and the skills before Jason starts again; this waits thirty seconds at most…';
 
 /** What the starting page says while Live waits for the start's run. */
 export const settingUpSentence = 'Putting jason where a terminal finds it, and the skills where your agents read them…';
