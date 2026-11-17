@@ -7,8 +7,8 @@ Downloads jason-desktop-windows-x64-setup.exe from the latest release, or from t
 against checksums.txt and its Authenticode signature, ReplyApp Inc.'s, before it runs it, and runs it silently,
 waiting for its exit code. The installer puts the application in %LOCALAPPDATA%\Programs\jason-desktop and sets the
 machine up through the jason it carries. This script then runs that jason's `jason install --roles` once more and reads
-its report: it puts the application's resources\bundle folder on this account's Path, deploys the skills for every agent
-host found, Claude Code and Codex, retires an older command-line install of Jason, and deploys the role skills into
+its report: it puts the application's resources\bundle folder on this account's Path, deploys the skills for Claude Code
+and Codex where each is found, retires an older command-line install of Jason, and deploys the role skills into
 Jason's data directory. It opens no window. Where a runtime answered before the install and none answers after it, or
 the report says it stopped one, a runtime is started again from the application's jason. Run again over the version
 already installed, it downloads nothing and says so, and sets the machine up again, which changes nothing that is in

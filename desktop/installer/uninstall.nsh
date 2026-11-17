@@ -165,8 +165,8 @@
 
 ; The installer's own last step, once the files are in place, at every install and every update, silent or not: the
 ; machine set up for the jason this application carries, through that jason's own `jason install` with no flags. It puts
-; jason in the terminal (this account's Path names the carried file's folder), gives the skills of every agent host found
-; and retires an older command-line install; it writes nothing under the data directory, so a person's first start still
+; jason in the terminal (this account's Path names the carried file's folder), gives the skills of Claude Code and Codex
+; where each is found and retires an older command-line install; it writes nothing under the data directory, so a person's first start still
 ; opens on the Demo. nsExec runs it with no window and waits for it, and it starts no process that outlives it, so a script
 ; that waits for this installer's whole process tree is not held. Nothing here starts a runtime: a runtime started here
 ; would be this installer's child and outlive it, and such a script would wait for it for ever. Where a runtime answered
@@ -183,7 +183,7 @@
 ; install, whose files are in place by now: the install scripts run it again and read its report, and the application's
 ; start runs it where its last run was for an older version. A run a person watches says so in one line of its details.
 !macro customInstall
-  DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of every agent host found."
+  DetailPrint "Setting this machine up for Jason: the jason command in the terminal and the skills of Claude Code and Codex where each is found."
   nsExec::Exec '"$INSTDIR\resources\bundle\jason.exe" install'
   Pop $R0
   ${if} $R0 S!= 0
