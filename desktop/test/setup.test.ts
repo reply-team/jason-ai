@@ -488,6 +488,12 @@ test('each act of the desk’s menu writes what it names and nothing else: under
     await act('The PATH command, removed, Windows', async () => command('win32', windowsApps).remove(), ['AppData/Local/Microsoft/WindowsApps/jason', 'AppData/Local/Microsoft/WindowsApps/jason.cmd']);
     await act('The PATH command, placed, macOS', async () => command('darwin', join(home, '.local', 'bin')).place(), ['.local/bin/jason']);
     await act('The PATH command, removed, macOS', async () => command('darwin', join(home, '.local', 'bin')).remove(), ['.local/bin/jason']);
+    // With the account given, as a start gives it: a new terminal's PATH without the folder, so the act writes the PATH
+    // lines into the zsh account's two files, and the removal takes them back out of the same two.
+    const withLines = () =>
+        new PathCommand({ platform: 'darwin', folder: join(home, '.local', 'bin'), executable: '/J/jason', dataDirectory: null, path: () => '/usr/bin', isProgram: () => false, account: { home, shellNamed: '/bin/zsh', terminalPath: () => '/usr/bin:/bin' }, log });
+    await act('The PATH command and its PATH lines, placed, macOS', async () => withLines().place(), ['.local/bin/jason', '.zprofile', '.zshrc']);
+    await act('The PATH command and its PATH lines, removed, macOS', async () => withLines().remove(), ['.local/bin/jason', '.zprofile', '.zshrc']);
 
     assert.deepEqual(registered, [{ openAtLogin: true, args: [loginFlag] }, { openAtLogin: false, args: [loginFlag] }]);
     assert.deepEqual(b.record().map((run) => run.args), [['runtime', 'autostart', 'status'], ['runtime', 'autostart', 'enable'], ['runtime', 'autostart', 'disable']]);

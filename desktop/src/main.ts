@@ -56,7 +56,7 @@ import { rolesMoments } from './roles-moments.ts';
 import { SkillsGate } from './skills-gate.ts';
 import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
-import { loginPath } from './shell-path.ts';
+import { accountShell, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
 import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
@@ -247,8 +247,13 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     const home = homedir();
     // The login shell's PATH is read before anything is started or registered, so every program is found as a terminal
     // finds it.
-    const pathRead = loginPath(pathOf(process.env), home);
+    const inherited = pathOf(process.env);
+    const shellRead = shellPath();
+    const pathRead = loginPath(inherited, home, shellRead);
     process.env.PATH = await pathRead;
+    // What a new terminal has: the login shell's own PATH, before the usual places, or the inherited one where it said
+    // none. Placing the PATH command writes the PATH lines only where its folder is not on this one.
+    const terminalPath = (await shellRead) ?? inherited;
     const form = linuxForm();
     // Every child gets the person's PATH and libraries: nothing of an AppImage's mount, which the AppRun put on them.
     const env = withoutMount(withPath(process.env, process.env.PATH), mountOf(form, process.env));
@@ -395,6 +400,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         path: () => process.env.PATH ?? '',
         pathext: process.env['PATHEXT'],
         isProgram: (file) => isProgramFile(file, process.platform),
+        account: { home, shellNamed: accountShell(process.env), terminalPath: () => terminalPath },
         log,
     };
     const command = offers.command && carried.outlives ? new PathCommand(commandDeps) : null;

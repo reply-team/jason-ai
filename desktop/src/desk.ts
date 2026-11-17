@@ -241,8 +241,15 @@ export class Desk {
         const answer = window === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options);
         if (answer.response !== 0) return;
         try {
-            if (act === 'place') this.deps.command?.place();
-            else this.deps.command?.remove();
+            if (act === 'place') {
+                // Where the act wrote the PATH lines, or could not, it says so in the installer's own words.
+                const said = this.deps.command?.place().said ?? null;
+                if (said !== null) {
+                    const told = { type: said.added ? ('info' as const) : ('warning' as const), buttons: ['OK'], message: `The ${'name' in status ? status.name : 'jason'} command is placed.`, detail: said.words };
+                    if (window === null) await dialog.showMessageBox(told);
+                    else await dialog.showMessageBox(window, told);
+                }
+            } else this.deps.command?.remove();
         } catch (error) {
             dialog.showErrorBox('The jason command', error instanceof Error ? error.message : String(error));
         }

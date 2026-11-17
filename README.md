@@ -296,7 +296,8 @@ the runtime, not a second Jason: it works on the data directory the CLI uses, st
 agent, started for you on this computer: Claude Code, which by default asks you before it acts, or Codex, which reads
 and advises. Beside it are a tray that counts what waits for you and one-step setup of Reply, your notification
 channels and your AI provider's key. The terminal stays open to you at any time: the Command Line item of its menu
-puts a command there, `jason`, or `jason-desktop` where another `jason` already stands.
+puts a command there, `jason`, or `jason-desktop` where another `jason` already stands, and on macOS and Linux puts its
+folder on your terminal's PATH where it is not yet, as the installer does.
 
 It is published with every release, from the [releases page](https://github.com/reply-team/jason-ai/releases), as
 `jason-desktop-windows-x64-setup.exe` for Windows on x64, `jason-desktop-macos-arm64.dmg` and

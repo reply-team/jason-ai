@@ -20,7 +20,9 @@
  *    (`resolved-path.ts`). One that starts another executable stays, and is named; so does one whose executable cannot be
  *    told to be this application's or not.
  * 4. The PATH command's files that are ours, by the same read-back the menu makes (`PathCommand.remove`), by the name
- *    they were put there with; a file of either name another program wrote stays, and is named.
+ *    they were put there with; a file of either name another program wrote stays, and is named. On macOS and Linux the
+ *    PATH lines come back out of the shell profiles with them, the marker and the line the installer's rule writes, once
+ *    the folder holds no jason or jason-desktop of any installation; while it holds one they stay, and are named.
  * 5. For an AppImage, the copies of its jason under `<data>/desktop/bundle/`: only the real folders named as a version,
  *    and this desktop's temporaries, the one selection the removal of other versions' copies makes (`bundleEntries`);
  *    only when no process runs from them, read from `/proc` on resolved paths; never while a hand act above runs the
@@ -49,6 +51,7 @@ import { inert } from './inert.ts';
 import type { Logger } from './log.ts';
 import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type StopOutcome, type Unanswered } from './own-runtime.ts';
 import type { CommandStatus } from './path-command.ts';
+import { profileMarker } from './path-profile.ts';
 import { containedIn, lexicallyInside, resolveReal, type Resolve } from './resolved-path.ts';
 
 /** On the command line of the start the uninstaller makes. */
@@ -193,7 +196,8 @@ export interface UninstallDeps {
     platform: NodeJS.Platform;
     /** The folder the PATH command goes in (`commandFolder`), or null where none is offered. */
     folder: string | null;
-    command: { status(): CommandStatus; remove(): CommandStatus };
+    /** `marked` names the shell profiles carrying the PATH lines (`PathCommand.marked`), on macOS and Linux. */
+    command: { status(): CommandStatus; remove(): CommandStatus; marked?(): string[] };
     /** Open Jason at login; `elsewhere` reads the desktop's own file when it starts another path (`LoginItem.elsewhere`). */
     login: { isOn(): boolean; set(on: boolean): Promise<void>; elsewhere?(): LoginElsewhere | null };
     /** Stopping the runtime this application carries when it is the one running (`stopOwnRuntime`); null when the bundle carries no CLI. */
@@ -392,6 +396,7 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
     if (deps.folder !== null) {
         const files = commandFiles(deps.platform, deps.folder);
         const before = files.filter((file) => existsSync(file));
+        const marked = deps.command.marked?.() ?? [];
         let threw = false;
         try {
             deps.command.remove();
@@ -405,6 +410,14 @@ export async function uninstall(deps: UninstallDeps): Promise<UninstallReport> {
                 took += 1;
             } else if (threw) failed.push(`${inert(file)}, which could not be taken off: deleting the file takes it off`);
             else left.push(`${inert(file)}, which another program wrote`);
+        }
+        // The PATH lines, on macOS and Linux: taken back once the folder holds no jason of any installation.
+        const still = deps.command.marked?.() ?? [];
+        for (const profile of marked) {
+            const where = `The line that put ${inert(deps.folder)} on the PATH, in ${inert(profile)}`;
+            if (!still.includes(profile)) removed.push(where);
+            else if (threw) failed.push(`${where}, which could not be taken out: deleting it and the line ${profileMarker} above it takes it out`);
+            else left.push(`${where}, which stays while that folder holds a jason or jason-desktop`);
         }
         if (before.length === 0) untouched.push('No jason command of this application’s was on the PATH');
         ended('command', threw ? 'failed' : took > 0 ? 'removed' : before.length > 0 ? 'another' : 'was_off');

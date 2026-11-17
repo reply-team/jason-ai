@@ -26,6 +26,7 @@ import { demoDirectory } from './mode.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { applicationFolder } from './rollback.ts';
+import { accountShell } from './shell-path.ts';
 import { harnessRoot, stopRuntimeCode, uninstall, uninstallExit, uninstallText, updaterCache } from './uninstall.ts';
 import { windowTitle } from './window-title.ts';
 
@@ -85,6 +86,8 @@ export async function runUninstall(quiet: boolean): Promise<number> {
             path: () => process.env.PATH ?? '',
             pathext: process.env['PATHEXT'],
             isProgram: (file) => isProgramFile(file, process.platform),
+            // Its PATH lines come back out of the profiles with it; a removal never asks a terminal's PATH.
+            account: { home, shellNamed: accountShell(process.env), terminalPath: () => process.env.PATH ?? '' },
             log,
         }),
         login: new LoginItem({ platform: process.platform, home, executable: process.execPath, electron: app, pathRead: Promise.resolve(), log }),
