@@ -242,7 +242,6 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         }
 
         Done(MoveSteps.Started);
-        RetiredSweep.Sweep(places, old);
         return End(MoveStates.Done, null);
     }
 
@@ -848,10 +847,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
     {
         try
         {
-            if (Directory.Exists(folder))
-            {
-                Directory.Delete(folder, recursive: true);
-            }
+            Files.DirectoryTrees.Delete(folder);
         }
         catch (Exception left) when (left is IOException or UnauthorizedAccessException)
         {

@@ -125,6 +125,10 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(places);
         ArgumentNullException.ThrowIfNull(options);
 
+        // The command-line executables an earlier run renamed aside while a process held them, once that process ended: before
+        // this run renames any, whose process still runs.
+        RetiredSweep.Sweep(places, options.Retire);
+
         var run = new Run(env, carried, places, options);
         string? old = null;
         var runtime = RuntimeStates.NotRunning;
@@ -180,9 +184,6 @@ public static class MachineSetup
         // The images earlier updates moved out of the application, taken away where nothing runs from them any more; quietly,
         // and never while an update is in flight.
         CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
-
-        // And the command-line executables an earlier run renamed aside while a process held them, once that process ended.
-        RetiredSweep.Sweep(places, old);
 
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }

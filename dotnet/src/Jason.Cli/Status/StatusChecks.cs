@@ -86,6 +86,13 @@ internal static partial class StatusChecks
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 
+        /// <summary>
+        /// The repair for a move into Jason Desktop that has not ended, where the jason that reads it is the application's: its own
+        /// setup, which retires the command-line install it finds. From the command-line install the move is carried on by
+        /// <see cref="FinishUpdate"/> instead.
+        /// </summary>
+        public const string SetUpMachine = "jason install";
+
         public const string ReloadPlugins = "jason plugin reload";
 
         /// <summary>
@@ -435,7 +442,8 @@ internal static partial class StatusChecks
                 null);
         }
 
-        var repair = CarriedExecutable.Of(env) is not null ? "jason install" : Repair.FinishUpdate;
+        var carried = CarriedExecutable.Of(env) is not null;
+        var repair = carried ? Repair.SetUpMachine : Repair.FinishUpdate;
         var fact = record.State == Jason.Cli.Update.MoveStates.Moving
             ? $"The move of the command-line install at {record.From} into Jason Desktop was begun and has not ended: it runs now, or it was stopped at '{record.Doing ?? "the beginning"}'"
               + (record.Step is { } done ? $", after '{done}'" : string.Empty)
@@ -443,7 +451,9 @@ internal static partial class StatusChecks
             : $"The move of the command-line install at {record.From} into Jason Desktop is {record.State}"
               + (record.Step is { } last ? $" after '{last}'" : string.Empty)
               + $": {record.Reason ?? "it says no more."}";
-        return new StatusCheck(Name, false, CheckState.Failed, fact, repair);
+        return carried
+            ? new StatusCheck(Name, false, CheckState.Failed, fact, Repair.SetUpMachine)
+            : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
     }
 
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch

@@ -1284,7 +1284,8 @@ than refuse with `update_up_to_date`, and answers with `from` and `to` both that
 carried on again, and a command-line install the application's routine retired is reported as moved, whatever the
 record says.
 
-**The steps**, each recorded before it is taken:
+**The steps**, each recorded before it is taken, after the folders an earlier routine renamed a still-running executable
+into are removed where their process has ended:
 
 | Step | What it does |
 |---|---|
@@ -1293,7 +1294,7 @@ record says.
 | `verified` | the SHA-256 against its line in `checksums.txt`, then the publisher: on Windows the installer's Authenticode signature, valid and naming the signer `install.ps1` holds it to; on macOS `codesign --verify --deep --strict` with the designated requirement `install.sh` holds it to, on the application unpacked from the zip, before anything of it runs. A refusal is `failed`, and the download is removed |
 | `placed` | Windows: the place looked at again, then the setup run as `/S /D=<place>`, with no window, and waited for at most ten minutes; one that has not ended then is left running and never killed, and the move is `pending`. Its exit 1 or 2 is the include's refusal and is `failed`. macOS: the zip unpacked with `ditto -x -k` into a folder beside the place, so that putting it there is one rename on one volume, and renamed into the place only while it is empty; the shared folder is chosen where this account may write in it, as the updater needs, else the account's own |
 | `set_up` | the application's own `jason install --retire <the command-line install>`, handed the update's lock and read by its report (§9): it places the application's `jason` in the terminal before it retires anything, stops the command-line install's runtime, leaving the note that a start is owed, and retires that install |
-| `started` | where the routine stopped a runtime, or the note stands and nothing answers, one started from the application's `jason` and waited for for a minute; then the folders a retired executable was renamed into, once their process has ended, removed |
+| `started` | where the routine stopped a runtime, or the note stands and nothing answers, one started from the application's `jason` and waited for for a minute |
 
 **One at a time, and one stop.** The move takes `<data>/update/update.lock` and holds it to its end; a move that finds it
 held is `pending` and writes nothing. The installer's own last step, `jason install` with no flags, finds the lock held and

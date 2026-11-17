@@ -35,7 +35,7 @@ public static partial class RetiredSweep
 
         foreach (var parent in parents.Where(parent => parent.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            SweepIn(parent);
+            SweepIn(places, parent);
         }
     }
 
@@ -53,7 +53,7 @@ public static partial class RetiredSweep
         }
     }
 
-    private static void SweepIn(string parent)
+    private static void SweepIn(SetupPlaces places, string parent)
     {
         IEnumerable<string> folders;
         try
@@ -81,9 +81,10 @@ public static partial class RetiredSweep
                     continue;
                 }
 
+                // Through the setup's own delete, which a test stands a running process's image in for.
                 foreach (var entry in entries)
                 {
-                    entry.Delete();
+                    places.Delete(entry.FullName);
                 }
 
                 info.Delete();
