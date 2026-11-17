@@ -833,6 +833,38 @@ test('a runtime that does not stop, a copy that cannot be kept, and an installer
     assert.deepEqual(install.updater.listeners, []);
 });
 
+test('a throw out of a request puts the releases’ feed back, leaves no step under way and looks again', async (t) => {
+    const updater = fakeUpdater({ latest: '0.35.0' });
+    const timers = handTimers();
+    const throwing = new Updater({
+        updater,
+        version: '0.34.0',
+        application: null,
+        rollback: scratch(t).rollback,
+        log: memoryLog(),
+        timers,
+        stopRuntime: async () => ({ kind: 'stopped' }),
+        refused: () => undefined,
+        beforeInstall: async () => {
+            throw new Error('planted-before-install');
+        },
+        afterRefused: async () => undefined,
+        changed: () => undefined,
+    });
+    throwing.start();
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [firstCheckMs]);
+    const loop = 'http://127.0.0.1:8123/';
+    await assert.rejects(throwing.take({ to: '0.35.0', feed: loop }, { install: true }, () => undefined), /planted-before-install/);
+    assert.equal(updater.feeds.at(-1), feed, 'the releases’ feed is put back');
+    assert.deepEqual(throwing.current, { step: 'downloaded', version: '0.35.0' }, 'not installing: the download waits');
+    assert.deepEqual(timers.pending.map((entry) => entry.ms), [updateCheckInterval], 'the cadence looks again');
+    // A request that ends in the installer puts the releases' feed back too.
+    const handed = fakeUpdater({ latest: '0.35.0' });
+    const ok = await taking(scratch(t), handed, { to: '0.35.0', feed: loop }, { install: true });
+    assert.equal(ok.outcome.state, 'installing');
+    assert.deepEqual(handed.feeds, [feed, loop, feed]);
+});
+
 test('an install that fails after quitAndInstall returned, as Squirrel says it on macOS, is heard once', async (t) => {
     const updater = fakeUpdater({ latest: '0.35.0' });
     let heard = 0;

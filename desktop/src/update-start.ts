@@ -1,14 +1,16 @@
 /**
  * The starts a terminal's `jason update apply` makes (`update-request.ts`), and the updater a request is taken by where no
- * window's is there. Neither start makes a window, starts a runtime or reads the Live or Demo record; on macOS the main
- * module has set the activation policy to `accessory` before Electron is ready, so no Dock icon shows (`app.md`,
+ * window's is there. Neither start makes a window, starts a runtime, or is ruled by or writes the Live or Demo record (the
+ * main module reads the mode file and ignores it, as for an installer's start); on macOS the main module has set the
+ * activation policy to `accessory` before Electron is ready, so no Dock icon shows (`app.md`,
  * `setActivationPolicy`: "The application doesn’t appear in the Dock and doesn’t have a menu bar").
  *
  * - `--update-apply` holds the single-instance lock of its data directory (the main module took it) and takes its request
  *   to its end; its exit says what `applyExit` says, and while the installer has the update it exits as electron-updater
  *   quits it.
- * - `--update-settle` records a window-less update as kept (`settleByRequest`) and exits: 0 when it settled one or there was
- *   none to settle, 1 when the record could not be written.
+ * - `--update-settle` holds the same lock (the main module took it, or exited 0 where another Jason Desktop holds it and
+ *   settles at its own start), records a window-less update as kept (`settleByRequest`) and exits: 0 when it settled one
+ *   or there was none to settle, 1 when the record could not be written.
  */
 
 import { app } from 'electron';
@@ -25,7 +27,7 @@ import { ownRuntimeDeps, stopOwnRuntime } from './own-runtime.ts';
 import { dataDirectory, dataLayout, desktopPaths } from './paths.ts';
 import { pathOf, withPath } from './programs.ts';
 import { settleByRequest } from './rollback.ts';
-import { applyExit, applyExits, busyRecord, headlessLimitMs, requestFile, requestSupport, takeRequest, usageRecord, windowOpenUpdate, writeRequestFile, type UpdateRequest, type UpdateRequests } from './update-request.ts';
+import { applyExit, applyExits, busyRecord, createRequestFile, headlessLimitMs, requestFile, requestSupport, systemShell, takeRequest, usageRecord, windowOpenUpdate, type UpdateRequest, type UpdateRequests } from './update-request.ts';
 import { Updater, type UpdateState } from './updates.ts';
 
 function readText(file: string): string | null {
@@ -83,11 +85,14 @@ export function requestUpdater(deps: RequestUpdaterDeps): Updater {
     return updater;
 }
 
-/** Writes the end of a request this application refused because it was taking another; a file that cannot be written is let go. */
+/**
+ * Writes the end of a request this application refused because it was taking another, never over a file already there,
+ * the one of a request under way with the same id included; a file that cannot be written is let go.
+ */
 export function refuseBusy(request: UpdateRequest, window: boolean): void {
     const { data } = installation();
     try {
-        writeRequestFile(requestFile(data, request.id), busyRecord(request, app.getVersion(), window));
+        createRequestFile(requestFile(data, request.id), busyRecord(request, app.getVersion(), window));
     } catch {
         // The caller waits out its bound and says the request had no answer.
     }
@@ -99,6 +104,12 @@ export function refuseBusy(request: UpdateRequest, window: boolean): void {
  */
 export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests): Promise<number> {
     const { data, log } = installation();
+    // On Windows electron-updater checks the installer's publisher through a shell (`systemShell`): the system's, not the caller's.
+    const shell = systemShell(process.env, process.platform);
+    if (shell !== null) {
+        Object.assign(process.env, shell);
+        log.info('update_request_shell', { Platform: process.platform });
+    }
     return new Promise((resolve) => {
         requests.serve(async (taken) => {
             const record = await takeRequest(taken, {
@@ -123,12 +134,12 @@ export function runUpdateApply(request: UpdateRequest, requests: UpdateRequests)
     });
 }
 
-/** The start whose arguments were not read: writes the refusal where the id was read, and exits 2. */
+/** The start whose arguments were not read: writes the refusal where the id was read and no file is there yet, and exits 2. */
 export function runUpdateUsage(id: string | null, why: string): number {
     if (id !== null) {
         const { data } = installation();
         try {
-            writeRequestFile(requestFile(data, id), usageRecord(id, why, app.getVersion()));
+            createRequestFile(requestFile(data, id), usageRecord(id, why, app.getVersion()));
         } catch {
             // The exit says it all the same.
         }

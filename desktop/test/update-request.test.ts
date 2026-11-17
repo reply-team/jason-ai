@@ -2,7 +2,7 @@
 // loopback feed, the request's file and its steps, the switch a window obeys, and how the main module starts it.
 
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -10,6 +10,7 @@ import {
     applyExit,
     applyExits,
     busyRecord,
+    createRequestFile,
     handedData,
     headlessLimitMs,
     isRequestId,
@@ -21,6 +22,7 @@ import {
     requestOf,
     requestRefusals,
     requestSupport,
+    systemShell,
     takeRequest,
     UpdateRequests,
     updateStart,
@@ -121,6 +123,34 @@ test('the request’s file is <data>/update/desktop-<id>.json, written whole, ev
     assert.equal(busy.window, true);
 });
 
+test('the request’s file is made only where none is there, and a file already there is never written over', (t) => {
+    const data = scratch(t);
+    const file = requestFile(data, 'req_01JA');
+    const first = usageRecord('req_01JA', 'its arguments are not the ones it takes', '0.49.0', new Date('2026-11-17T10:00:00Z'));
+    assert.equal(createRequestFile(file, first), true);
+    assert.deepEqual(readRequestFile(file), first);
+    assert.deepEqual(readdirSync(join(data, 'update')), ['desktop-req_01JA.json'], 'no temporary file is left');
+    // A busy or usage refusal for the same id, made by a second start, finds the file of the request under way.
+    assert.equal(createRequestFile(file, busyRecord(request, '0.49.0', true)), false);
+    assert.deepEqual(readRequestFile(file), first, 'the request under way keeps its file');
+});
+
+test('a request whose file is already there is not taken: nothing is written, no updater is made, and the start exits 2', async (t) => {
+    const data = scratch(t);
+    const file = requestFile(data, request.id);
+    mkdirSync(join(data, 'update'), { recursive: true });
+    writeFileSync(file, 'a file the verb did not make');
+    const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: null });
+    const { all, log, written } = deps(data, u.updater);
+    const end = await takeRequest(request, all);
+    assert.equal(end, null);
+    assert.equal(applyExit(end), applyExits.usage);
+    assert.equal(u.made(), 0, 'no updater is made');
+    assert.equal(readFileSync(file, 'utf8'), 'a file the verb did not make');
+    assert.equal(written.length, 1, 'only the exclusive create was tried');
+    assert.deepEqual(log.lines.map((line) => [line.name, line.fields]), [['update_request_file_there', { To: '0.49.1' }]]);
+});
+
 test('every refusal has a sentence for the person, naming the versions where it knows them', () => {
     for (const reason of requestRefusals) {
         const message = refusalMessage(reason, { to: '0.49.1', from: '0.49.0', offered: '0.49.2', runtimeStopped: true, kept: '/data/desktop/rollback/0.49.0/Jason.app', menu: true });
@@ -189,10 +219,45 @@ function deps(data: string, updater: TakeDeps['updater'], extra: Partial<TakeDep
             written.push(record);
             writeRequestFile(file, record);
         },
+        create: (file, record) => {
+            written.push(record);
+            return createRequestFile(file, record);
+        },
         now: () => new Date('2026-11-17T10:00:00Z'),
         ...extra,
     };
     return { all, log, written };
+}
+
+/** `takeRequest` where the request's file was not there before: it always ends with a record. */
+async function taken(request: UpdateRequest, all: TakeDeps): Promise<RequestRecord> {
+    const end = await takeRequest(request, all);
+    assert.ok(end !== null, 'the request was taken');
+    return end;
+}
+
+/** electron-updater's autoUpdater as far as `Updater` uses it, recording every feed it is given and every call. */
+function recordingUpdater(version: string) {
+    const calls: string[] = [];
+    const fields: Record<string, unknown> = {};
+    const electron = {
+        ...fields,
+        autoDownload: false, autoInstallOnAppQuit: false, allowPrerelease: false, allowDowngrade: false, logger: null as unknown, autoRunAppAfterInstall: true,
+        isUpdaterActive: () => true,
+        on: () => electron,
+        removeListener: () => electron,
+        setFeedURL: (url: unknown) => void calls.push(`setFeedURL(${String(url)})`),
+        async checkForUpdates() {
+            calls.push('check');
+            return { isUpdateAvailable: true, updateInfo: { version } };
+        },
+        async downloadUpdate() {
+            calls.push('download');
+            return [];
+        },
+        quitAndInstall: (...args: unknown[]) => void calls.push(`quitAndInstall(${args.join(', ')})`),
+    };
+    return { electron, calls };
 }
 
 test('a window-less start writes each step before it is taken and ends at installing, the copy and the stop named; it exits as the installer quits it', async (t) => {
@@ -200,7 +265,7 @@ test('a window-less start writes each step before it is taken and ends at instal
     const kept = '/data/desktop/rollback/0.49.0/Jason.app';
     const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept }, [{ step: 'checking' }, { step: 'downloading', offered: '0.49.1' }, { step: 'installing', runtimeStopped: true, kept }]);
     const { all, written, log } = deps(data, u.updater);
-    const end = await takeRequest(request, all);
+    const end = await taken(request, all);
     assert.deepEqual(written.map((record) => record.state), ['checking', 'checking', 'downloading', 'installing']);
     assert.deepEqual(end, { request: 'req_01JA', state: 'installing', from: '0.49.0', to: '0.49.1', reason: null, message: null, offered: '0.49.1', window: false, runtime_stopped: true, kept, updated_at: '2026-11-17T10:00:00.000Z' });
     assert.deepEqual(readRequestFile(requestFile(data, 'req_01JA')), end);
@@ -220,7 +285,7 @@ test('the switch: a window that takes a request stops at the download by default
         const data = scratch(t);
         const u = planted({ state: 'refused', reason: 'window_open', offered: '0.49.1', runtimeStopped: false, kept: null });
         const { all } = deps(data, u.updater, { where: { window: { menu: true } }, windowOpen });
-        const end = await takeRequest(request, all);
+        const end = await taken(request, all);
         assert.equal(u.asked[0]?.how.install, windowOpen === 'close', windowOpen);
         assert.equal(end.window, true);
         assert.equal(end.reason, 'window_open');
@@ -251,7 +316,7 @@ test('the switch: a window that takes a request stops at the download by default
         const updater = new Updater({ updater: electron, version: '0.49.0', application: null, rollback: join(data, 'desktop', 'rollback'), log: memoryLog(), stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
         updater.prepare();
         const { all } = deps(data, () => updater, { where: { window: { menu: true } }, windowOpen });
-        const end = await takeRequest(request, all);
+        const end = await taken(request, all);
         if (windowOpen === 'stop') {
             assert.equal(end.reason, 'window_open');
             assert.deepEqual(calls, ['check', 'download']);
@@ -262,11 +327,47 @@ test('the switch: a window that takes a request stops at the download by default
     }
 });
 
+test('a window refuses a request that names a feed before it checks anything: no feed set, no look, no download', async (t) => {
+    const fed: UpdateRequest = { ...request, feed: 'http://127.0.0.1:8123/feed/' };
+    for (const windowOpen of ['stop', 'close'] as const) {
+        for (const menu of [true, false]) {
+            const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: true, kept: null });
+            const end = await taken(fed, deps(scratch(t), u.updater, { where: { window: { menu } }, windowOpen }).all);
+            assert.equal(end.state, 'refused');
+            assert.equal(end.reason, 'window_feed');
+            assert.equal(end.window, true);
+            assert.match(end.message ?? '', /never from a feed a terminal names/);
+            assert.equal(u.made(), 0, 'no updater is made, its own included');
+        }
+    }
+    // The window's own updater, the Live one, which a window would otherwise take the request with.
+    const data = scratch(t);
+    const { electron, calls } = recordingUpdater('0.49.1');
+    const updater = new Updater({ updater: electron, version: '0.49.0', application: null, rollback: join(data, 'desktop', 'rollback'), log: memoryLog(), stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
+    updater.prepare();
+    const prepared = [...calls];
+    const end = await taken(fed, deps(data, () => updater, { where: { window: { menu: true } }, windowOpen: 'stop' }).all);
+    assert.equal(end.reason, 'window_feed');
+    assert.deepEqual(calls, prepared, 'no setFeedURL, no check, no download');
+    assert.deepEqual(updater.current, { step: 'idle' }, 'nothing waits under the install item');
+    // A window-less start takes the same request; the log says the version and the step, never the feed or the id.
+    const headless = scratch(t);
+    const own = recordingUpdater('0.49.1');
+    const ownUpdater = new Updater({ updater: own.electron, version: '0.49.0', application: null, rollback: join(headless, 'desktop', 'rollback'), log: memoryLog(), stopRuntime: async () => ({ kind: 'none' }), refused: () => undefined, beforeInstall: async () => undefined, afterRefused: async () => undefined, changed: () => undefined });
+    ownUpdater.prepare();
+    const { all, log } = deps(headless, () => ownUpdater);
+    const installed = await taken(fed, all);
+    assert.equal(installed.state, 'installing');
+    assert.ok(own.calls.includes('setFeedURL(http://127.0.0.1:8123/feed/)'), 'the feed is read by a start of its own');
+    assert.ok(log.lines.length > 0);
+    assert.doesNotMatch(JSON.stringify(log.lines), /127\.0\.0\.1|8123|feed\/|req_01JA/);
+});
+
 test('an application that takes no request says why and makes no updater', async (t) => {
     for (const unsupported of ['not_installed', 'unsupported_platform'] as const) {
         const u = planted({ state: 'current' });
         const { all } = deps(scratch(t), u.updater, { unsupported });
-        const end = await takeRequest(request, all);
+        const end = await taken(request, all);
         assert.equal(end.state, 'refused');
         assert.equal(end.reason, unsupported);
         assert.equal(u.made(), 0);
@@ -276,13 +377,13 @@ test('an application that takes no request says why and makes no updater', async
 
 test('a refusal ends with its reason and a sentence, the version the feed offered, and exit 0; current is no refusal', async (t) => {
     const u = planted({ state: 'refused', reason: 'version_mismatch', offered: '0.49.2', runtimeStopped: false, kept: null });
-    const end = await takeRequest(request, deps(scratch(t), u.updater).all);
+    const end = await taken(request, deps(scratch(t), u.updater).all);
     assert.equal(end.state, 'refused');
     assert.equal(end.reason, 'version_mismatch');
     assert.equal(end.offered, '0.49.2');
     assert.match(end.message ?? '', /offers Jason 0\.49\.2/);
     assert.equal(applyExit(end), 0);
-    const current = await takeRequest(request, deps(scratch(t), planted({ state: 'current' }).updater).all);
+    const current = await taken(request, deps(scratch(t), planted({ state: 'current' }).updater).all);
     assert.equal(current.state, 'current');
     assert.equal(current.reason, null);
     assert.equal(applyExit(current), 0);
@@ -291,7 +392,7 @@ test('a refusal ends with its reason and a sentence, the version the feed offere
 test('an updater that throws ends as failed, exit 1, its text in neither the file nor the log', async (t) => {
     const data = scratch(t);
     const { all, log } = deps(data, planted({ state: 'current' }, [], { throws: true }).updater);
-    const end = await takeRequest(request, all);
+    const end = await taken(request, all);
     assert.equal(end.reason, 'failed');
     assert.equal(applyExit(end), 1);
     assert.doesNotMatch(readFileSync(requestFile(data, request.id), 'utf8'), /planted/);
@@ -310,7 +411,7 @@ test('an install that fails late is written over installing, and heard once', as
     });
     const heard: RequestRecord[] = [];
     const { all } = deps(data, updater, { late: (record) => void heard.push(record) });
-    assert.equal((await takeRequest(request, all)).state, 'installing');
+    assert.equal((await taken(request, all)).state, 'installing');
     late?.();
     late?.();
     assert.equal(heard.length, 1);
@@ -325,14 +426,31 @@ test('a window-less start is bounded: past the bound while installing it writes 
     const expired: RequestRecord[] = [];
     const u = planted({ state: 'installing', offered: '0.49.1', runtimeStopped: false, kept: null });
     const { all } = deps(data, u.updater, { limit: { ms: headlessLimitMs, timers, expired: (record) => void expired.push(record) } });
-    await takeRequest(request, all);
+    await taken(request, all);
     assert.deepEqual(timers.pending.map((entry) => entry.ms), [headlessLimitMs]);
     timers.pending[0]?.run();
     assert.equal(expired[0]?.reason, 'timed_out');
     assert.equal(applyExit(expired[0]!), 1);
     const ended = handTimers();
-    await takeRequest(request, deps(scratch(t), planted({ state: 'current' }).updater, { limit: { ms: headlessLimitMs, timers: ended, expired: () => assert.fail('a request that ended is not timed out') } }).all);
+    await taken(request, deps(scratch(t), planted({ state: 'current' }).updater, { limit: { ms: headlessLimitMs, timers: ended, expired: () => assert.fail('a request that ended is not timed out') } }).all);
     assert.deepEqual(ended.pending, [], 'the bound is cleared once the request ended short of an install');
+});
+
+test('on Windows a window-less start runs the system’s command interpreter, the system’s folders first on its PATH', () => {
+    const root = 'C:\\Windows';
+    assert.deepEqual(systemShell({ SystemRoot: root, Path: 'D:\\planted;C:\\Tools', ComSpec: 'D:\\planted\\cmd.exe' }, 'win32'), {
+        ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+        PATH: 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;D:\\planted;C:\\Tools',
+    });
+    assert.deepEqual(systemShell({ SYSTEMROOT: root }, 'win32')?.PATH, 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0', 'no PATH: the system’s alone');
+    for (const bad of [undefined, '', 'Windows', '\\\\server\\share', 'C:\\Win;D:\\x', 'C:\\%x%', 'C:\\Windows\\']) {
+        assert.equal(systemShell({ SystemRoot: bad, PATH: 'x' }, 'win32'), null, String(bad));
+    }
+    assert.equal(systemShell({ SystemRoot: root }, 'darwin'), null);
+    assert.equal(systemShell({ SystemRoot: root }, 'linux'), null);
+    const start = readFileSync(new URL('../src/update-start.ts', import.meta.url), 'utf8');
+    const apply = start.slice(start.indexOf('export function runUpdateApply('), start.indexOf('export function runUpdateUsage('));
+    assert.ok(apply.indexOf('Object.assign(process.env, shell);') > 0 && apply.indexOf('Object.assign(process.env, shell);') < apply.indexOf('requests.serve('), 'set before any updater is made');
 });
 
 test('requests wait for the run that serves them, one at a time; one that comes meanwhile is refused as busy', async () => {
@@ -390,6 +508,25 @@ test('the main module decides the update starts after the uninstaller’s, as an
     // While it holds the lock, a second start's request is refused as busy.
     assert.ok(update.includes("app.on('second-instance', (_event, _argv, _directory, data) => {\n        const other = requestOf(data);\n        if (other !== null) requests.arrived(other);"));
     assert.ok(update.includes('const requests = new UpdateRequests((other) => refuseBusy(other, false));'));
+});
+
+test('the settling start takes the single-instance lock, and leaves the record to a Jason Desktop that holds it', () => {
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const update = main.slice(main.indexOf('function startUpdate('));
+    const settle = update.slice(update.indexOf("if (updating.kind === 'settle') {"), update.indexOf('const { request } = updating;'));
+    const lock = settle.indexOf('if (!app.requestSingleInstanceLock()) {');
+    assert.ok(lock > 0, 'the settle takes the lock');
+    assert.ok(settle.indexOf("startLog().info('update_settle_left', {});") > lock);
+    assert.ok(settle.indexOf('app.exit(0);') > lock && settle.indexOf('app.exit(0);') < settle.indexOf('ready.then(runUpdateSettle)'), 'exits 0 before it settles anything');
+    // A window that holds the lock is not brought forward by it, or by any start of the update.
+    const start = main.slice(main.indexOf('function startDesktop('), main.indexOf('function startUpdate('));
+    const second = start.slice(start.indexOf("app.on('second-instance'"));
+    assert.ok(second.indexOf('if (updateStart(argv) !== null) return;') > second.indexOf('return windowRequests?.arrived(request);'));
+    assert.ok(second.indexOf('if (updateStart(argv) !== null) return;') < second.indexOf('if (showsOnSecondStart(argv)) showWindow();'));
+    // A busy or usage refusal is made only where no file is there: never over a request under way with the same id.
+    const starts = readFileSync(new URL('../src/update-start.ts', import.meta.url), 'utf8');
+    assert.equal(starts.includes('writeRequestFile('), false);
+    assert.equal(starts.split('createRequestFile(requestFile(data, ').length - 1, 2);
 });
 
 test('a window’s run takes requests with its own updater; the Demo makes one for the request', () => {

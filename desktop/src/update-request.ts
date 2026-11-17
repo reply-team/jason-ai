@@ -9,14 +9,16 @@
  * and this start exits 3. Whichever process takes it checks the feed for exactly that version, downloads it, stops the
  * runtime it carries, keeps the application aside and hands the update to the installer, silently and with no start
  * after it; or refuses, with a reason. Each step is written to `<data>/update/desktop-<id>.json` before it is taken, so
- * the file is the answer, read after the process has ended, whatever ended it. A window that takes a request goes as far
- * as the download and stops there unless one switch says it may close to install (`windowOpenUpdate`).
+ * the file is the answer, read after the process has ended, whatever ended it. The file is made by the process that
+ * takes the request, never over one already there, and only that process writes it after. A window that takes a request
+ * goes as far as the download and stops there unless one switch says it may close to install (`windowOpenUpdate`), and
+ * takes none that names a feed.
  *
  * `--update-settle` is the other start: once the new version's runtime answered, it records the update the window-less
- * install left pending as kept (`rollback.ts`), as a window's first start would.
+ * install left pending as kept (`rollback.ts`), as a window's first start would, under the single-instance lock.
  */
 
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
@@ -145,12 +147,13 @@ export function requestFile(data: string, id: string): string {
 export type RequestState = 'checking' | 'downloading' | 'installing' | 'current' | 'refused';
 
 /** Why a request was refused: the updater's codes, and the ones a start decides before it reaches the updater. */
-export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'timed_out' | 'failed';
+export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'window_feed' | 'timed_out' | 'failed';
 
 export const requestRefusals: readonly RequestRefusal[] = [
     'usage',
     'not_installed',
     'unsupported_platform',
+    'window_feed',
     'updater_inactive',
     'busy',
     'version_rejected',
@@ -200,6 +203,23 @@ export function writeRequestFile(file: string, record: RequestRecord): void {
     }
 }
 
+/**
+ * Makes a request's file, its first step in it, only where no file of that name is there: the name is claimed by an
+ * exclusive create, then written as `writeRequestFile` writes, so a reader meets nothing, an empty file or a whole one.
+ * Returns false, writing nothing, when the file was already there: another request's, or one the verb did not make.
+ */
+export function createRequestFile(file: string, record: RequestRecord): boolean {
+    mkdirSync(dirname(file), { recursive: true });
+    try {
+        closeSync(openSync(file, 'wx'));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+        throw error;
+    }
+    writeRequestFile(file, record);
+    return true;
+}
+
 /** A request's file as written, or null where there is none or it cannot be read. */
 export function readRequestFile(file: string): RequestRecord | null {
     try {
@@ -230,6 +250,8 @@ export function refusalMessage(
             return 'This Jason Desktop is a development build, which no installer updates, so nothing was changed.';
         case 'unsupported_platform':
             return 'On this system Jason Desktop takes no update request from a terminal: update it from its own menu, or through the package it came in. Nothing was changed.';
+        case 'window_feed':
+            return 'Jason Desktop is open, and an open window updates from the releases alone, never from a feed a terminal names, so nothing was checked or downloaded. Quit Jason Desktop and run jason update apply again.';
         case 'updater_inactive':
             return 'Jason Desktop’s updater cannot replace the application where it is installed, so nothing was changed.';
         case 'busy':
@@ -267,6 +289,25 @@ export function refusalMessage(
         case 'failed':
             return 'Jason Desktop met an error it did not expect while it took the update request, and ended.';
     }
+}
+
+/**
+ * What a window-less start on Windows sets in its own environment before electron-updater runs anything: `ComSpec`, the
+ * shell Node's `execFile` runs with `shell: true`, as the system's `cmd.exe`, and the system's folders first on `PATH`.
+ * The pinned electron-updater checks an installer's publisher by running `powershell.exe` through that shell, and lets
+ * the check pass where PowerShell cannot be run at all (`windowsExecutableCodeSignatureVerifier.js`, `handleError`), so
+ * the shell and the PowerShell it finds are not the caller's to choose. The system's folder is `SystemRoot`'s; null
+ * elsewhere, and where `SystemRoot` is not a drive's absolute path.
+ */
+export function systemShell(env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform): Record<string, string> | null {
+    if (platform !== 'win32') return null;
+    const valueOf = (name: string): string | undefined => env[Object.keys(env).find((key) => key.toLowerCase() === name.toLowerCase()) ?? name];
+    const root = valueOf('SystemRoot');
+    if (root === undefined || !/^[A-Za-z]:\\[^;"%]*[^;"%\\]$/.test(root)) return null;
+    const system = `${root}\\System32`;
+    const folders = [system, root, `${system}\\Wbem`, `${system}\\WindowsPowerShell\\v1.0`];
+    const rest = valueOf('PATH');
+    return { ComSpec: `${system}\\cmd.exe`, PATH: [...folders, ...(rest === undefined || rest === '' ? [] : [rest])].join(';') };
 }
 
 /**
@@ -330,16 +371,21 @@ export interface TakeDeps {
     /** Bounds the whole request, a window-less start's alone; hears the record it wrote when the bound passed. */
     limit?: { ms: number; timers: Timers; expired(record: RequestRecord): void };
     write?(file: string, record: RequestRecord): void;
+    /** Makes the request's file with its first step; false when one was already there (`createRequestFile`). */
+    create?(file: string, record: RequestRecord): boolean;
     now?(): Date;
 }
 
 /**
- * Takes one request to its end: each step written to the request's file before it is taken, the end last. Returns the
- * end it wrote. A file that cannot be written is logged and the request goes on: its process's exit then says less.
+ * Takes one request to its end: its file made with the first step, each step written before it is taken, the end last.
+ * Returns the end it wrote, or null, having written and taken nothing, when the request's file was already there: that
+ * file is another's, and is never written over. A file that cannot be written is logged and the request goes on: its
+ * process's exit then says less.
  */
-export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promise<RequestRecord> {
+export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promise<RequestRecord | null> {
     const file = requestFile(deps.data, request.id);
     const write = deps.write ?? writeRequestFile;
+    const create = deps.create ?? createRequestFile;
     const window = deps.where !== 'headless';
     const menu = deps.where !== 'headless' && deps.where.window.menu;
     let last: RequestRecord = {
@@ -382,7 +428,21 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         deps.log.info('update_request_ended', { To: request.to, State: record.state, Code: record.reason ?? 'none' });
         return record;
     };
+    last = { ...last, updated_at: (deps.now?.() ?? new Date()).toISOString() };
+    try {
+        if (!create(file, last)) {
+            deps.log.warn('update_request_file_there', { To: request.to });
+            return null;
+        }
+    } catch {
+        deps.log.warn('update_request_unwritten', { State: last.state });
+    }
     deps.log.info('update_request_taken', { To: request.to, Where: window ? 'window' : 'headless' });
+    // A window takes the releases' feed alone: a feed a terminal names is refused before anything is checked or set.
+    if (window && request.feed !== null) {
+        ended = true;
+        return end(refuse('window_feed'));
+    }
     if (deps.unsupported !== null) {
         ended = true;
         return end(refuse(deps.unsupported));
@@ -400,7 +460,6 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         if (handle !== null) deps.limit?.timers.clearTimeout(handle);
         handle = null;
     };
-    put({ state: 'checking' });
     const progress = (step: TakenStep): void => {
         if (ended) return;
         if (step.step === 'checking') put({ state: 'checking' });
@@ -436,8 +495,12 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     return end(refuse(outcome.reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
 }
 
-/** The exit of a window-less start once its request ended: none while the installer has it (it quits), 1 for an end it did not expect, else 0. */
-export function applyExit(record: RequestRecord): number | null {
+/**
+ * The exit of a window-less start once its request ended: none while the installer has it (it quits), 1 for an end it did
+ * not expect, 2 for a request whose file was already there, else 0.
+ */
+export function applyExit(record: RequestRecord | null): number | null {
+    if (record === null) return applyExits.usage;
     if (record.state === 'installing') return null;
     return record.reason === 'failed' || record.reason === 'timed_out' ? 1 : 0;
 }

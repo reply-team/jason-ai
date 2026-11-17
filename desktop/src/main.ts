@@ -1006,6 +1006,8 @@ function startDesktop(): void {
             // A terminal's update request, handed over by its start: taken by the window's run, and it brings nothing forward.
             const request = requestOf(data);
             if (request !== null) return windowRequests?.arrived(request);
+            // A terminal's settling start, or a request that could not be read: it brings nothing forward.
+            if (updateStart(argv) !== null) return;
             if (showsOnSecondStart(argv)) showWindow();
         });
         // macOS hands a link by open-url, at a cold start before ready as at a running one, so it is listened for now.
@@ -1028,6 +1030,8 @@ function startDesktop(): void {
  * activation policy being set to `accessory` before Electron is ready and once more when it is. `--update-apply` takes the
  * single-instance lock of its data directory, or hands its request to the Jason Desktop that holds it and exits 3; while
  * it holds the lock, a second start's request is refused as busy and anything else a second start asks is let go.
+ * `--update-settle` takes the same lock, so it never writes the rollback record while a window settles its own start;
+ * where another Jason Desktop holds it, that one settles at its own start, and this one exits 0 having written nothing.
  */
 function startUpdate(updating: UpdateStart): void {
     const headless = (): void => {
@@ -1040,6 +1044,11 @@ function startUpdate(updating: UpdateStart): void {
     }
     const ready = app.whenReady().then(headless);
     if (updating.kind === 'settle') {
+        if (!app.requestSingleInstanceLock()) {
+            startLog().info('update_settle_left', {});
+            app.exit(0);
+            return;
+        }
         void ready.then(runUpdateSettle).then((code) => app.exit(code), () => app.exit(1));
         return;
     }

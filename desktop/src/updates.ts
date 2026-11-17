@@ -224,6 +224,9 @@ export interface TakenHow {
 export type TakenStep = { step: 'checking' } | { step: 'downloading'; offered: string } | { step: 'installing'; runtimeStopped: boolean; kept: string | null };
 
 /** Why the updater refused a request: codes of the request's file (`update-request.ts`). */
+/** How `take` words a refusal: the reason, the version the feed offered, and what was done before it. */
+type Refuse = (reason: TakenRefusal, offered?: string | null, done?: { runtimeStopped?: boolean; kept?: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered }) => TakenOutcome;
+
 export type TakenRefusal =
     | 'updater_inactive'
     | 'busy'
@@ -378,8 +381,7 @@ export class Updater {
      * here, which the cadence never offers either. Nothing is shown to a person: the reason is the answer.
      */
     async take(request: TakenRequest, how: TakenHow, progress: (step: TakenStep) => void): Promise<TakenOutcome> {
-        type Done = { runtimeStopped?: boolean; kept?: string | null; runtime?: { kind: 'failed'; exit: number; demo?: true } | Unanswered };
-        const refused = (reason: TakenRefusal, offered: string | null = null, done: Done = {}): TakenOutcome => ({
+        const refused: Refuse = (reason, offered = null, done = {}) => ({
             state: 'refused',
             reason,
             offered,
@@ -394,16 +396,32 @@ export class Updater {
         if (isRejected(readRollback(this.deps.rollback), request.to)) return refused('version_rejected');
         // No look of the cadence runs while the request is under way; one is scheduled again when it ends short of an install.
         this.stop();
-        const after = (outcome: TakenOutcome): TakenOutcome => {
-            this.deps.updater.setFeedURL(feed);
-            if (this.looking) this.schedule(nextCheckDelay(this.failures));
+        const before = this.state;
+        const back: UpdateState = before.step === 'downloaded' || before.step === 'offered' ? before : { step: 'idle' };
+        let handed = false;
+        try {
+            const outcome = await this.taking(request, how, progress, back, refused);
+            handed = outcome.state === 'installing';
             return outcome;
-        };
+        } finally {
+            // On every path, a throw included: the releases' feed put back, and short of the installer no step left under
+            // way and the cadence looking again.
+            this.deps.updater.setFeedURL(feed);
+            if (!handed) {
+                const now = this.current;
+                if (now.step === 'installing') this.show({ step: 'downloaded', version: now.version });
+                else if (now.step === 'downloading') this.show({ step: 'offered', version: now.version });
+                else if (now.step === 'checking') this.show(back);
+                if (this.looking) this.schedule(nextCheckDelay(this.failures));
+            }
+        }
+    }
+
+    /** `take` once the cadence is held: its look, its download and its install, the feed and the cadence being `take`'s. */
+    private async taking(request: TakenRequest, how: TakenHow, progress: (step: TakenStep) => void, back: UpdateState, refused: Refuse): Promise<TakenOutcome> {
         const ready = this.state.step === 'downloaded' && this.state.version === request.to && request.feed === null;
         if (!ready) {
             progress({ step: 'checking' });
-            const before = this.state;
-            const back: UpdateState = before.step === 'downloaded' || before.step === 'offered' ? before : { step: 'idle' };
             this.show({ step: 'checking' });
             this.deps.updater.setFeedURL(request.feed ?? feed);
             let seen: string | null;
@@ -415,12 +433,12 @@ export class Updater {
             } catch {
                 this.deps.log.warn('update_failed', { Step: 'check', Failures: 1 });
                 this.show(back);
-                return after(refused('check_failed'));
+                return refused('check_failed');
             }
             if (offered !== request.to) {
                 this.deps.log.info('update_checked', { Available: offered !== null });
                 this.show(back);
-                return after(refused('version_mismatch', seen));
+                return refused('version_mismatch', seen);
             }
             this.deps.log.info('update_offered', { Version: offered });
             progress({ step: 'downloading', offered });
@@ -431,19 +449,19 @@ export class Updater {
                 this.downloadFailures += 1;
                 this.deps.log.warn('update_failed', { Step: 'download', Failures: this.downloadFailures });
                 this.show({ step: 'offered', version: offered });
-                return after(refused('download_failed', offered));
+                return refused('download_failed', offered);
             }
             this.downloadFailures = 0;
             this.deps.log.info('update_downloaded', { Version: offered });
             this.show({ step: 'downloaded', version: offered });
         }
         // A window that may not close stops here: the update waits under its menu's install item.
-        if (!how.install) return after(refused('window_open', request.to));
+        if (!how.install) return refused('window_open', request.to);
         const result = await this.installing(request.to, { late: how.late, progress });
         if (result.ok) return { state: 'installing', offered: request.to, runtimeStopped: result.runtimeStopped, kept: result.kept };
-        if (result.step === 'runtime') return after(refused('runtime_not_stopped', request.to, { runtime: result.outcome }));
-        if (result.step === 'keep') return after(refused('keep_failed', request.to, { runtimeStopped: result.runtimeStopped }));
-        return after(refused('install_failed', request.to, { runtimeStopped: result.runtimeStopped, kept: result.kept }));
+        if (result.step === 'runtime') return refused('runtime_not_stopped', request.to, { runtime: result.outcome });
+        if (result.step === 'keep') return refused('keep_failed', request.to, { runtimeStopped: result.runtimeStopped });
+        return refused('install_failed', request.to, { runtimeStopped: result.runtimeStopped, kept: result.kept });
     }
 
     /**

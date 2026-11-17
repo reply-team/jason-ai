@@ -930,30 +930,49 @@ Windows installer refuses while any process runs from the carried `jason.exe`.
 |---|---|
 | `--update-apply` | update the application to one version, with no window |
 | `--to <version>` | that version, as the feeds name it: `0.49.1`, or with a pre-release part, `0.49.1-ci.7` |
-| `--request <id>` | the request's id, made by the verb: letters, digits, `-` and `_`, at most 64, never a path |
-| `--feed <address>` | optional: read the Desktop's update files (`latest.yml`, `latest-mac.yml` and what they name) from this address instead of the releases. Only `http` on the loopback address is taken (`localhost`, `127.0.0.0/8`, `[::1]`), with no credentials, query or fragment: it is for a test's own server |
+| `--request <id>` | the request's id, made by the verb afresh for each request: letters, digits, `-` and `_`, at most 64, never a path |
+| `--feed <address>` | optional, and taken only by a start of its own: read the Desktop's update file (`latest.yml`, `latest-mac.yml`) from this address instead of the releases. Only `http` on the loopback address is taken (`localhost`, `127.0.0.0/8`, `[::1]`), with no credentials, query or fragment: it is for a test's own server. What the address binds is below |
 | `--update-settle` | alone: record the update as kept, once the new version's runtime answered (below) |
 
 **What the start does.** It shows no window, and on macOS no Dock icon: the activation policy is set to `accessory`
-before Electron is ready. It reads neither the Live nor the Demo record and writes neither. It takes the single-instance
-lock of its data directory. Where a running Jason Desktop of that data directory holds the lock, Live or Demo, the request
-goes to that one in the lock's additional data and the start exits 3; otherwise it takes the request itself. Whichever
-process takes it reads the feed; refuses unless the feed offers exactly `--to`; downloads it; stops the runtime the
-application carries when that is the one running, through `jason runtime stop`, as a click on the menu's install item
-does; keeps the application aside under `<data>/desktop/rollback/<from>/`; and hands the update to the installer with no
-start of the application after it: on Windows the installer runs as `--updated /S`, and on macOS the application quits
-once Squirrel has the update, and ShipIt installs it after the application has ended. It never starts a runtime, and
-touches no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window has no updater of its own and
-makes one for the request.
+before Electron is ready. It reads the file that records whether the Desktop opens on Live or on the Demo and is not ruled
+by it, and writes neither record. It takes the single-instance lock of its data directory. Where a running Jason Desktop
+of that data directory holds the lock, Live or Demo, the request goes to that one in the lock's additional data and the
+start exits 3; otherwise it takes the request itself. Whichever process takes it reads the feed; refuses unless the
+version the feed's file names is exactly `--to`; downloads it; stops the runtime the application carries when that is
+the one running, through `jason runtime stop`, as a click on the menu's install item does; keeps the application aside
+under `<data>/desktop/rollback/<from>/`; and hands the update to the installer with no start of the application after
+it: on Windows the installer runs as `--updated /S`, and on macOS the application quits once Squirrel has the update, and
+ShipIt installs it after the application has ended. It never starts a runtime, and touches no plugin, skill or UI: those
+are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes one for the request. On
+Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's folders first on its `PATH`,
+the PowerShell folder among them, before it reads the feed: the updater checks the installer's publisher by running
+PowerShell through that shell, and lets the check pass where PowerShell cannot be run at all, so the shell and the
+PowerShell are found where the system keeps them rather than where the caller's `PATH` says. The system's folder is the
+one `SystemRoot` names; where that is not a drive's absolute path nothing is changed.
+
+**What a feed binds, and what it does not.** The address binds where the feed's file is read, and nothing more. The files
+that file names may be absolute addresses on any host, and a redirect is followed to any host, so the package may come
+from anywhere the file or a redirect says. The version compared with `--to`, and refused where it is older than the one
+running, is the file's own word: nothing reads the version of the package itself. The one check on the package is the
+publisher's signature: on Windows the updater refuses an installer not signed by the publisher the application carries in
+its own `app-update.yml`, never one a feed names; on macOS Squirrel refuses a bundle whose code signature does not satisfy
+the running application's. A package signed by the publisher of any version therefore passes, a pre-release included: a
+feed is for a test's own server, and only a start of its own takes one.
 
 **A window that takes a request** goes as far as the download and stops there: the update waits under its menu's install
 item, nothing is stopped or kept, and the request is refused with `window_open`. One switch in the Desktop,
 `windowOpenUpdate`, decides whether an open window may instead close to install, silently and without starting again;
-it is set to stop.
+it is set to stop. A window takes no request that names a feed: it refuses it with `window_feed` before it checks
+anything, so no feed is set and nothing is downloaded, and its install item only ever offers what the releases offer.
 
-**The request file** is `<data>/update/desktop-<id>.json`. Each step is written before it is taken, by a file renamed
-over it, so a reader meets a whole file or the one before; on Windows a read that meets the rename is tried again. Every
-member is always there:
+**The request file** is `<data>/update/desktop-<id>.json`. The process that takes the request makes it, with its first
+step, only where no file of that name is there, and only that process writes it after; a request whose file is already
+there is not taken, and nothing is written over that file. A `busy` or `usage` refusal is written the same way, so it is
+never written over the file of a request under way with the same id. Each step is written before it is taken, by a file
+renamed over it, so a reader meets no file, an empty one, a whole one or the one before; on Windows a read that meets the
+rename is tried again. The verb makes a fresh id for each request and reads a file that was there before it started the
+application as no answer. Every member is always there:
 
 | Member | What it holds |
 |---|---|
@@ -982,6 +1001,7 @@ member is always there:
 | `usage` | the arguments could not be read; written only where the id could be |
 | `not_installed` | a development build, which no installer updates |
 | `unsupported_platform` | not Windows or macOS |
+| `window_feed` | a window took a request that names a feed; nothing was checked, set or downloaded |
 | `updater_inactive` | the updater cannot replace the application where it is installed |
 | `busy` | the Desktop was already checking for, downloading or installing an update, or taking another request |
 | `version_rejected` | `to` failed its first start on this machine before |
@@ -999,7 +1019,7 @@ member is always there:
 |---|---|
 | 0 | the request file names the end: `installing`, `current` or `refused`. While the installer has the update, the start ends as the updater quits it, and on Windows the installer may end it first, so any exit after `installing` is read the same way |
 | 1 | the start ended in a way it did not expect, or its bound passed (`failed`, `timed_out`, where the file could be written) |
-| 2 | the arguments could not be read (`usage`, where the id could be) |
+| 2 | the arguments could not be read (`usage`, where the id could be and no file of that id was there), or the request's file was already there, so nothing was taken or written |
 | 3 | a running Jason Desktop of this data directory took the request; that one writes the file |
 
 **What the verb does with it.** It waits for the process to end, then reads the file, whatever the exit. After exit 3
@@ -1012,9 +1032,11 @@ the new carried `jason` finishes the update with no window, and once its runtime
 
 **`--update-settle`** records the update that installed the version it runs as kept, as a window's first start would:
 the copy stays at `kept` until the next update, and the version is not refused. It settles only that update and only
-once; it takes no lock, shows nothing and exits 0, or 1 when the record could not be written. An update whose runtime did
-not come up is not settled: the next window says where the copy is. Putting the previous application back is one step by
-hand, as it is after an update from the menu.
+once. It takes the single-instance lock of its data directory, so it never writes the record while a window settles its
+own start; where another Jason Desktop holds the lock it exits 0 having written nothing, and the record is settled by a
+window's start, as it is after an update from the menu. It shows nothing and brings no window forward, and exits 0, or 1
+when the record could not be written. An update whose runtime did not come up is not settled: the next window says where
+the copy is. Putting the previous application back is one step by hand, as it is after an update from the menu.
 
 ## 8. Starting at logon
 
