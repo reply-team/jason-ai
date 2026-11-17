@@ -16,7 +16,8 @@
 ; replaces, closes every program whose path begins with the installation folder - the runtime this application carries
 ; among them, with its work - and where PowerShell is not available every program named Jason.exe, which on Windows is
 ; every jason.exe, a runtime of another installation included. The path is handed to PowerShell in the environment, so
-; no character of it is read as PowerShell's. Without PowerShell nothing is closed, and a person is asked to close Jason.
+; no character of it is read as PowerShell's. Without PowerShell nothing is closed: a person is asked to close Jason,
+; and a silent run ends with 3.
 !define JASON_OWN_APP `Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase) }`
 
 ; A runtime started from the jason executable this application carries, by whichever data directory or run file, is
@@ -28,7 +29,8 @@
 ; runtime that did not stop, one started with another data directory say, or other Jason work from this folder - ends
 ; the run before a file is replaced, with error level 1, and a person is told to stop a runtime with the carried
 ; executable by its full path, since the PATH command may set a data directory of its own. Without PowerShell nothing
-; can be looked for: a person is asked to stop it, and an update goes on without a look.
+; can be looked for: a person is asked to stop it, an update a person watches goes on without a look, and a silent run
+; ends with 3, as where a look failed.
 ; One process is passed over, and only while it says so: the carried jason that asked for this update with
 ; jason update apply. It moved its own file out of this folder and goes on running, waiting for the installer, and
 ; Windows still reports the path it was started from. Right before it starts the application it writes its process id
@@ -177,6 +179,12 @@
       ${endIf}
     ${endIf}
   ${else}
+    ; No look can be made, which is a look that failed: a silent run, an update included, ends here with error level 3, as
+    ; it does where the application is found, before electron-builder's extraction would write over a running Jason.exe.
+    ${if} ${Silent}
+      SetErrorLevel 3
+      Quit
+    ${endIf}
     ${ifNot} ${isUpdated}
       MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, and stop its runtime with jason runtime stop if it runs, then choose OK." /SD IDOK IDOK +2
       Quit

@@ -339,6 +339,13 @@ test('a runtime running from the carried executable is stopped through the appli
         '${endIf}',
         '${endIf}',
         '${else}',
+        // No PowerShell, or a policy that refuses it: no look can be made, which is a look that failed. A silent run, an
+        // update included, ends with 3 before electron-builder's extraction, whose own retry box answers itself and writes
+        // over a running Jason.exe; a person who watches is asked, and an update they watch goes on, as before.
+        '${if} ${Silent}',
+        'SetErrorLevel 3',
+        'Quit',
+        '${endIf}',
         '${ifNot} ${isUpdated}',
         'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, and stop its runtime with jason runtime stop if it runs, then choose OK." /SD IDOK IDOK +2',
         'Quit',
@@ -360,11 +367,13 @@ test('an update waits for the application to quit; a silent run, updated or not,
     // bound of an update's wait, or at a plain install's look - or could not look, ends with error level 3, its own, with
     // no box and nothing closed.
     assert.match(codeLines(check).join('\n'), /\$\{if\} \$\{isUpdated\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_GONE\}[^`]+`\s+\$\{else\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_FOUND\}[^`]+`\s+\$\{endIf\}\s+Pop \$R0\s+\$\{if\} \$R0 != 1\s+\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+DetailPrint "\$\(appClosing\)"/);
-    // The one stop comes after that way out, so no silent run reaches it; 3 is said there alone, so a caller that reads
-    // it - the install script, a move - knows the application was running and nothing was changed.
+    // The one stop comes after that way out, so no silent run reaches it; 3 is said there and where no look can be made
+    // alone, so a caller that reads it - the install script, a move, jason uninstall's waiter - knows the application was
+    // running, or could not be looked for, and nothing was changed.
     assert.ok(check.indexOf('SetErrorLevel 3') < check.indexOf('Stop-Process'));
-    assert.equal([...script.matchAll(/SetErrorLevel 3\b/g)].length, 1);
-    assert.equal([...script.matchAll(/SetErrorLevel (\d+)/g)].map((found) => found[1]).sort().join(','), '1,1,1,1,1,2,3');
+    assert.equal([...script.matchAll(/SetErrorLevel 3\b/g)].length, 2);
+    assert.equal([...codeLines(check).join('\n').matchAll(/\$\{if\} \$\{Silent\}\nSetErrorLevel 3\nQuit\n\$\{endIf\}/g)].length, 2);
+    assert.equal([...script.matchAll(/SetErrorLevel (\d+)/g)].map((found) => found[1]).sort().join(','), '1,1,1,1,1,2,3,3');
     // No fixed pause stands in for the wait any more.
     assert.doesNotMatch(check, /Sleep 300\b/);
     // The bound: a minute, three times the twenty seconds late a slow quit is proven at, looked at twice a second.
@@ -734,7 +743,7 @@ test('the old version’s uninstaller refusing ends a silent setup with error le
     }
 });
 
-test('the template’s two other boxes with no silent answer cannot be reached by this installer', () => {
+test('the template’s other boxes with no silent answer cannot be reached by a silent run of this installer', () => {
     // installUtil.nsh's "Unsupported" box is readReg's answer to a root it does not know; every caller passes the root
     // uninstallOldVersion was given, which is only ever SHELL_CONTEXT or HKEY_CURRENT_USER (the row above).
     const util = template(join('include', 'installUtil.nsh'));
@@ -749,6 +758,22 @@ test('the template’s two other boxes with no silent answer cannot be reached b
     assert.match(extract, /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDRETRY IDCANCEL AbortExtract7za/);
     const nsis = configuration({ version: '0.49.0' }).nsis as { useZip?: boolean };
     assert.equal(nsis.useZip, undefined, 'the installer is built with a zip payload, which reaches a box with no silent answer');
+    // common.nsh's two boxes, in check64BitAndSetRegView, which .onInit and un.onInit run, are the last the template has with
+    // no silent answer; neither is reached by a silent run of this installer. win7Required stands only on Windows 2000, ME,
+    // XP and Vista, and x64WinRequired only on a Windows that is not 64-bit, where this build carries no 32-bit payload.
+    // Who runs it silently: install.ps1, which refuses every architecture but AMD64 before it downloads anything, and the
+    // Desktop's own update and a move, both made by an x64 Electron build already running here, which Electron supports on
+    // Windows 10 and later alone ("Windows (Windows 10 and up): Electron provides x64 (amd64) and arm64 binaries for
+    // Windows", github.com/electron/electron, README.md); and jason uninstall's waiter, run by a carried jason of the same
+    // x64 build.
+    const common = template('common.nsh');
+    const check64 = macroIn(common, 'check64BitAndSetRegView', 'common.nsh').body;
+    assert.match(check64, /\$\{If\} \$\{IsWin2000\}\s+\$\{OrIf\} \$\{IsWinME\}\s+\$\{OrIf\} \$\{IsWinXP\}\s+\$\{OrIf\} \$\{IsWinVista\}\s+MessageBox MB_OK "\$\(win7Required\)"\s+Quit/);
+    assert.match(check64, /\$\{If\} \$\{RunningX64\}\s+SetRegView 64\s+\$\{Else\}\s+!ifndef APP_32\s+MessageBox MB_OK\|MB_ICONEXCLAMATION "\$\(x64WinRequired\)"\s+Quit/);
+    assert.equal([...check64.matchAll(/MessageBox/g)].length, 2);
+    const ps1 = readFileSync(join(desktop, '..', 'install', 'install.ps1'), 'utf8');
+    assert.match(ps1, /if \(\$architecture -ne 'AMD64'\) \{\s+throw "No release is built for Windows on \$architecture; Jason Desktop for Windows is built for x64\."/);
+    assert.ok(ps1.indexOf("$architecture -ne 'AMD64'") < ps1.indexOf('Fetch '), 'install.ps1 downloads before it refuses another architecture');
 });
 
 test('no box of the include waits for a click in a silent run', () => {
