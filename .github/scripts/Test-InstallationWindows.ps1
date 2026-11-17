@@ -32,7 +32,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -106,6 +106,38 @@ function Write-ProcessTree([System.Diagnostics.Process] $process) {
     foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
         Write-Host "    $($running.ProcessId), started by $($running.ParentProcessId): $("$($running.CommandLine)".Substring(0, [Math]::Min(200, "$($running.CommandLine)".Length)))"
     }
+}
+
+# Every top-level window a process owns, visible or not, with its class and title and the text of each of its child
+# controls: what a setup that waits with no child shows, a message box naming itself. Read on a hosted runner only.
+function Write-ProcessWindows([int] $id) {
+    if (-not ('JasonProof.Windows' -as [type])) {
+        Add-Type -Namespace JasonProof -Name Windows -MemberDefinition @'
+public delegate bool EnumProc(System.IntPtr hwnd, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool EnumChildWindows(System.IntPtr parent, EnumProc callback, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint pid);
+[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hwnd);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetClassName(System.IntPtr hwnd, System.Text.StringBuilder text, int count);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetWindowText(System.IntPtr hwnd, System.Text.StringBuilder text, int count);
+public static System.Collections.Generic.List<string> Describe(uint owner) {
+    var lines = new System.Collections.Generic.List<string>();
+    EnumWindows((hwnd, _) => {
+        uint pid; GetWindowThreadProcessId(hwnd, out pid);
+        if (pid != owner) return true;
+        lines.Add("window " + hwnd + ": class '" + ClassOf(hwnd) + "', title '" + TextOf(hwnd) + "', visible " + IsWindowVisible(hwnd));
+        EnumChildWindows(hwnd, (child, __) => { lines.Add("  control " + child + ": class '" + ClassOf(child) + "', text '" + TextOf(child) + "', visible " + IsWindowVisible(child)); return true; }, System.IntPtr.Zero);
+        return true;
+    }, System.IntPtr.Zero);
+    return lines;
+}
+static string ClassOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(256); GetClassName(hwnd, b, b.Capacity); return b.ToString(); }
+static string TextOf(System.IntPtr hwnd) { var b = new System.Text.StringBuilder(1024); GetWindowText(hwnd, b, b.Capacity); return b.ToString(); }
+'@
+    }
+    $lines = [JasonProof.Windows]::Describe([uint32] $id)
+    Write-Host "  the windows of process $($id): $($lines.Count) line(s)"
+    foreach ($line in $lines) { Write-Host "    $line" }
 }
 
 function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [int] $seconds = 300) {
@@ -469,6 +501,77 @@ switch ($Step) {
         Say "this build's setup with --updated /S --force-run, run by hand over an open window, put $Version in place"
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window closing'
+    }
+
+    'SilentUpdateLegs' {
+        # Three legs over an open 0.48.2 window, each from 0.48.2 installed and its window open on the Demo:
+        #  1. the hung state, run 8's: --updated /S --force-run with the window left open; at 120 s the setup's own windows,
+        #     then the setup and the window ended, for the next leg;
+        #  2. the arguments 0.49's window-less update hands the installer (updates.ts quitAndInstall(true, false):
+        #     --updated /S), the old application ending at once;
+        #  3. the same, the old application ending five seconds late.
+        # A leg's setup that has not ended 300 s after the window is described and ended, and the step fails once all ran.
+        if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
+        $old = Join-Path $Previous 'jason-desktop-windows-x64-setup.exe'
+        $new = Join-Path $Feed 'jason-desktop-windows-x64-setup.exe'
+        $hung = [System.Collections.Generic.List[string]]::new()
+        function End-Window {
+            Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+            Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window''s processes ending'
+        }
+        function From-Previous {
+            if (Test-Path -LiteralPath $carried) {
+                if ((Read-Version $carried) -ne '0.48.2' -or $true) {
+                    $entry = @(Get-JasonUninstallEntries)
+                    if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
+                        $null = Wait-Program $Matches['file'] @($Matches['arguments'])
+                        Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
+                    }
+                }
+            }
+            $installed = Wait-Program $old @('/S')
+            if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
+            $null = Open-Window
+            Say "0.48.2 $(Read-Version $carried) installed, its window open; a runtime answering: $(Test-Runtime)"
+        }
+        function Run-Leg([string] $name, [string[]] $arguments, [int] $quitAfter, [int] $describeAt) {
+            Write-Host "--- $name"
+            $installer = Start-Process -FilePath $new -ArgumentList $arguments -PassThru
+            $null = $installer.Handle
+            $started = Get-Date
+            if ($quitAfter -ge 0) {
+                if ($quitAfter -gt 0) { Start-Sleep -Seconds $quitAfter }
+                End-Window
+                Say "$name - the 0.48.2 window ended $([int]((Get-Date) - $started).TotalSeconds) s after the setup started"
+            }
+            $ended = Get-Date
+            if ($describeAt -gt 0 -and -not $installer.WaitForExit($describeAt * 1000)) {
+                Write-Host "$name - at $describeAt s:"
+                Write-ProcessTree $installer
+                Write-ProcessWindows $installer.Id
+                End-Window
+                $ended = Get-Date
+            }
+            if ($installer.WaitForExit(300000)) {
+                Say "$name - the setup ended $([int]((Get-Date) - $ended).TotalSeconds) s after the window ended, exit $($installer.ExitCode), version now $(Read-Version $carried)"
+                if ($installer.ExitCode -ne 0) { $hung.Add("$name exited $($installer.ExitCode)") }
+            } else {
+                Write-Host "$name - 300 s after the window ended:"
+                Write-ProcessTree $installer
+                Write-ProcessWindows $installer.Id
+                Stop-Process -Id $installer.Id -Force -ErrorAction SilentlyContinue
+                $hung.Add("$name did not end within 300 s after the window ended")
+            }
+            End-Window
+        }
+
+        From-Previous
+        Run-Leg 'leg 1, by hand: --updated /S --force-run, the window left open' @('--updated', '/S', '--force-run') -1 120
+        From-Previous
+        Run-Leg 'leg 2, the window-less update''s arguments: --updated /S, the old application ending at once' @('--updated', '/S') 0 0
+        From-Previous
+        Run-Leg 'leg 3, the window-less update''s arguments: --updated /S, the old application ending 5 s late' @('--updated', '/S') 5 0
+        if ($hung.Count -gt 0) { Fail ($hung -join '; ') }
     }
 
     'UpdateApply' {
