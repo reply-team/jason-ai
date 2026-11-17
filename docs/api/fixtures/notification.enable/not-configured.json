@@ -1,0 +1,22 @@
+{
+  "operation": "notification.enable",
+  "case": "not-configured",
+  "request": {
+    "channel": "chat-room"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "notification_channel_not_configured",
+      "message": "The notification channel chat-room cannot be turned on: its binding does not satisfy the plugin's own schema (/chat required). Mend Notifications:Plugins:chat-room in the settings file, or set it up again on the Connect panel of Jason Desktop, then run the command again.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "channel",
+          "code": "binding_invalid",
+          "message": "its binding does not satisfy the plugin's own schema (/chat required)"
+        }
+      ]
+    }
+  }
+}

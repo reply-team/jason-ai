@@ -1,0 +1,22 @@
+{
+  "operation": "notification.enable",
+  "case": "not-named",
+  "request": {
+    "channel": "fake-provider"
+  },
+  "status": 409,
+  "response": {
+    "error": {
+      "code": "notification_channel_not_configured",
+      "message": "The plugin fake-provider is not a notification channel: nothing names it under Notifications:Plugins:fake-provider in the settings file, with the binding that says where it delivers. Set it up there, or on the Connect panel of Jason Desktop, then run the command again.",
+      "retryable": false,
+      "details": [
+        {
+          "field": "channel",
+          "code": "not_named",
+          "message": "Nothing names the plugin under Notifications:Plugins."
+        }
+      ]
+    }
+  }
+}

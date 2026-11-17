@@ -1531,8 +1531,8 @@ family, or in none:
 
 No grant opens the rest: the installation's and the UI's own doors (every `system.` and `ui.` operation,
 `plugin.reload`, `plugin.grant`, `plugin.revoke`, `route.set`, `route.unset`, `project.create`, `project.update`, `project.link`, `preference.set`,
-`preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `events.backfill`,
-`events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
+`preference.unset`, `role.add`, `role.set_profile`, `rolenote.set`, the profiles' writes, `notification.enable`,
+`notification.disable`, `events.backfill`, `events.signal`, `subscription.rewind`), a person's decisions (`approval.approve`, `approval.reject`, `approval.set_standing`,
 `approval.unset_standing`, `decision.raise`, `decision.answer`, `block.clear`, `reply.record`, `workitem.resume`,
 `suppression.remove`, `campaign.set_send_mode`), a send's review (`workitem.review`), which a run or a person makes, an
 executor's fenced verbs (`workitem.heartbeat`, `workitem.set_result`, `workitem.complete`, `workitem.wait`), and the

@@ -422,6 +422,67 @@ public static class DomainErrors
             $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and which profile agent work runs on by default is part of it: leave it to the person, or raise it as a decision.");
 
     /// <summary>
+    /// A notification channel turned on or off from inside a run, refused by the run's header with the code the run gate
+    /// gives, before the body is read: which channels tell the person is Jason's own setting.
+    /// </summary>
+    public static ForbiddenException NotificationInsideARun(string attempt) =>
+        new(
+            "decided_inside_a_run",
+            $"This request comes from inside attempt `{attempt}`. Nothing inside a run changes Jason itself, and which channels tell the person that something waits for them is part of it: leave it to the person, or raise it as a decision.");
+
+    /// <summary>
+    /// A channel no switch could turn: neither the toast nor a plugin installed in this data directory. A plugin that is
+    /// installed and is not a channel is <see cref="NotificationChannelNotNamed"/>.
+    /// </summary>
+    public static NotFoundException NotificationChannelNotFound(string channel) =>
+        new(
+            "notification_channel_not_found",
+            $"No notification channel is called {channel}: a channel is the toast, or a notification plugin installed in this data directory, by its id. jason runtime status --human says each on its Notify: line.");
+
+    /// <summary>
+    /// An installed plugin nothing names under <c>Notifications:Plugins</c>: no channel, and no binding saying where it would
+    /// deliver, which a switch cannot write. Not retryable: the channel is set up first.
+    /// </summary>
+    public static DomainException NotificationChannelNotNamed(string channel) =>
+        new(
+            StatusCodes.Status409Conflict,
+            "notification_channel_not_configured",
+            $"The plugin {channel} is not a notification channel: nothing names it under Notifications:Plugins:{channel} in the settings file, with the binding that says where it delivers. Set it up there, or on the Connect panel of Jason Desktop, then run the command again.",
+            details: [new ErrorDetail("channel", "not_named", "Nothing names the plugin under Notifications:Plugins.")]);
+
+    /// <summary>
+    /// A channel named in the settings that a notification would not be tried on, for a reason decided before anything is
+    /// launched: the plugin is not loaded or cannot run here, does not declare the delivery contract, or its binding does not
+    /// satisfy the plugin's own schema. The reason is the word a notification's line would carry, under the field
+    /// <c>channel</c>, and the message says what is missing.
+    /// </summary>
+    public static DomainException NotificationChannelNotConfigured(string channel, string reason, string? detail)
+    {
+        var why = reason switch
+        {
+            Contracts.Notifications.NotAttemptedReasons.Unavailable => "its plugin is not loaded, or cannot run on this machine",
+            Contracts.Notifications.NotAttemptedReasons.NotDeclared => "its plugin does not declare the delivery contract",
+            _ => "its binding does not satisfy the plugin's own schema",
+        };
+        var said = detail is null ? why : $"{why} ({detail})";
+        return new DomainException(
+            StatusCodes.Status409Conflict,
+            "notification_channel_not_configured",
+            $"The notification channel {channel} cannot be turned on: {said}. Mend Notifications:Plugins:{channel} in the settings file, or set it up again on the Connect panel of Jason Desktop, then run the command again.",
+            details: [new ErrorDetail("channel", reason, said)]);
+    }
+
+    /// <summary>
+    /// A channel turned on while every notification is held off by <c>Notifications:Enabled</c>, which no channel's switch
+    /// overrides and which is no switch of this API's: the one line to change is named. Not retryable.
+    /// </summary>
+    public static DomainException NotificationsOff() =>
+        new(
+            StatusCodes.Status409Conflict,
+            "notifications_off",
+            "Every notification is off: Notifications:Enabled is false in the settings file, and no channel is turned on while it is. Take that line out of the settings file to turn notifications back on as a whole.");
+
+    /// <summary>
     /// The configured default execution profile could not be put in force: the Roles section of the settings file does not
     /// validate (another of its settings a person broke by hand), so the runtime keeps working from the last Roles settings
     /// that did, which the log names (<see cref="Configuration.LiveSettings{TOptions}"/>). Not retryable: the file is mended first.
