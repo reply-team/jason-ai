@@ -569,6 +569,32 @@ describe.each<Place>(['window', 'tab'])('An agent with no conversation yet, in t
         expect(creates(desktop)).toEqual([]);
     });
 
+    it('keeps the words of both sides when it gives way to a conversation that holds words of its own', async () => {
+        const blank = String.fromCharCode(10, 10);
+        const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
+        await autumnChatShown();
+        fireEvent.change(shownBox(), { target: { value: 'typed in the unmade chat' } });
+        fireEvent.click(await waitFor(() => within(recent()).getByRole('button', { name: 'Set-up' })));
+        await waitFor(() => expect(activePanel.value).toBe(`chat:${setupChat}`));
+        fireEvent.change(shownBox(), { target: { value: 'typed in the set-up chat' } });
+        // Each holds a message that waits, too.
+        const unmade = Object.keys(chats.value).find((id) => id.startsWith('unmade:'))!;
+        flush(() => {
+            chats.value = {
+                ...chats.value,
+                [unmade]: { ...chats.value[unmade]!, waiting: 'queued in the unmade chat' },
+                [setupChat]: { ...chats.value[setupChat]!, waiting: 'queued in the set-up chat' },
+            };
+        });
+        desktop.kept.get(setupChat)!.campaignId = 'cmp_2';
+        flush(() => desktop.emit(setupChat, { kind: 'attached', campaignId: 'cmp_2', title: 'Autumn' }));
+        await waitFor(() => expect(Object.keys(chats.value).filter((id) => id.startsWith('unmade:'))).toEqual([]));
+        expect(chats.value[setupChat]).toMatchObject({
+            draft: ['typed in the unmade chat', 'typed in the set-up chat'].join(blank),
+            waiting: ['queued in the unmade chat', 'queued in the set-up chat'].join(blank),
+        });
+    });
+
     it('a create refused leaves the words in the box and says why in the chat', async () => {
         const { desktop } = await renderAt(place, '#/campaigns/cmp_2/chat', autumnApi());
         desktop.refuse.set('chat.create', 'The desktop could not make the conversation.');

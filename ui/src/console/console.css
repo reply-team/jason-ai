@@ -1330,6 +1330,15 @@ body,
     width: 100%;
     margin: 0 auto;
 }
+/* The region a screen reader hears queuing from: in the page, never on the screen. */
+.jc-console .chat-announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
 .jc-console .chat-queued .queued-line {
     display: flex;
     flex-wrap: wrap;

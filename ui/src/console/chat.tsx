@@ -62,6 +62,7 @@ import {
     planLine,
     codexPlanLine,
     planModeMoved,
+    joined,
     queued,
     said,
     shown,
@@ -351,11 +352,12 @@ function retire(id: string, real: string): void {
         focused instanceof HTMLTextAreaElement &&
         focused.closest('.chat-panel')?.getAttribute('data-chat') === id &&
         focused.matches(composerBox);
+    // Where the conversation holds words of its own too, both are kept, the unmade chat's first: nothing typed is lost.
     if (now)
         changeChat(real, (each) => ({
             ...each,
-            draft: each.draft.trim() ? each.draft : now.draft,
-            waiting: each.waiting ?? now.waiting,
+            draft: joined([now.draft, each.draft]),
+            waiting: joined([now.waiting, each.waiting]) || null,
         }));
     const rest = { ...chats.value };
     delete rest[id];
@@ -554,8 +556,12 @@ export function sendTurn(id: string, text: string, resent = false, mode?: Deskto
         });
         return;
     }
-    // A chat a tab may not send to takes no message from it, whichever way the message came.
-    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) return;
+    // A chat a tab may not send to takes no message from it, whichever way the message came. Words that waited for the
+    // turn's end are nowhere else: they go back to the box, with the sentence that says why they were not sent.
+    if (inTab() && !tabMaySend(chats.value[id]?.mode ?? '')) {
+        if (resent) changeChat(id, (each) => told(everyWordBack(each, text), tabLockedSentence(each.mode)));
+        return;
+    }
     const chat = chats.value[id];
     const words = text.trim();
     if (!chat || chat.running || !words) return;
@@ -1366,9 +1372,12 @@ function threadOf(chatId: string) {
  */
 const escapeTakers = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"], dialog[open]';
 
-/** Whether anything on the page takes an Escape before the message box does (`escapeTakers`). */
+/**
+ * Whether anything shown on the page takes an Escape before the message box does (`escapeTakers`). What stands in a pane
+ * that is hidden, a Needs you question or a Connect question left open, takes nothing: it is not on the screen.
+ */
 function escapeTaken(): boolean {
-    return document.querySelector(escapeTakers) !== null;
+    return Array.from(document.querySelectorAll(escapeTakers)).some((each) => each.closest('[hidden]') === null);
 }
 
 /**
@@ -1686,6 +1695,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
         }
         if (event.key === 'Enter' && !event.shiftKey) send(event);
     };
+    // While a turn runs the round button sends only where the words typed can wait for its end: typed, not held for a
+    // model's name, not in a tab locked out of the chat, no stop asked for and no removal asked.
+    const queues = chat.draft.trim() !== '' && !nameMissing && !tabLocked && !chat.stopping && !chat.removing;
     const underHead = headed && chat.campaignId !== null && !chat.main;
     return (
         <div className="chat-panel" ref={panel} data-chat={chatId}>
@@ -1877,9 +1889,9 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             takeBack={() => takeBackChoice(chatId)}
                             modeMenu={modeMenu}
                         />
-                        {/* One round button. While a turn runs it stops the turn with the box empty, and with words typed
-                            sends them to wait for the turn's end; Escape in the box still stops the turn then. */}
-                        {chat.running && chat.draft.trim() === '' ? (
+                        {/* One round button. While a turn runs it is the arrow only where it can send the words typed to
+                            wait for the turn's end, and Stop in every other state; Escape in the box stops the turn too. */}
+                        {chat.running && !queues ? (
                             <button
                                 className="send"
                                 type="button"
@@ -1894,13 +1906,8 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             <button
                                 className="send"
                                 type="submit"
-                                title={
-                                    nameMissing
-                                        ? 'Type the model name, or choose another model'
-                                        : t('chat.queue.sendTitle')
-                                }
+                                title={t('chat.queue.sendTitle')}
                                 aria-label={t('chat.queue.send')}
-                                disabled={chat.removing || chat.stopping || nameMissing || tabLocked}
                             >
                                 <Glyph name="up" size={16} />
                             </button>
@@ -1917,6 +1924,10 @@ export function ChatPanel({ chatId, headed = false }: { chatId: string; headed?:
                             </button>
                         )}
                     </div>
+                </div>
+                {/* Queuing is said to a screen reader: the region stands empty and takes the queued line's words. */}
+                <div className="chat-announce" role="status">
+                    {chat.waiting !== null ? t('chat.queue.line') : ''}
                 </div>
                 <ChatNotes chat={chat} />
             </form>

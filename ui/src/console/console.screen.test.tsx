@@ -606,15 +606,36 @@ describe('the console', () => {
             await waitFor(() => expect(queued()).toBeTruthy());
             expect(round().map((each) => each.getAttribute('aria-label'))).toEqual(['Stop']);
             expect(stops(desktop)).toHaveLength(0);
-            // While the stop is asked for, words typed cannot be queued: the arrow is there and does nothing.
+            // While the stop is asked for, words typed cannot be queued: the button stays Stop, and Enter keeps them.
             fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
             type('More');
-            expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([
-                ['Send when this turn ends', true],
-            ]);
+            expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([['Stop', false]]);
             enter();
             expect(box().value).toBe('More');
             expect(queued()).toBeNull();
+        });
+
+        it('is Stop, never an arrow that cannot send, while the model name is still to be typed', async () => {
+            const { desktop } = await running();
+            fireEvent.click(within(openMenu('Model')).getByRole('menuitemradio', { name: 'Another model…' }));
+            await waitFor(() => screen.getByRole('textbox', { name: 'Model name' }));
+            type('More');
+            expect(round().map((each) => [each.getAttribute('aria-label'), each.disabled])).toEqual([['Stop', false]]);
+            fireEvent.click(round()[0]!);
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+        });
+
+        it('says that a message is queued to a screen reader, in the queued line’s words', async () => {
+            await running();
+            const region = () => document.querySelector<HTMLElement>('.chat-panel .chat-announce')!;
+            expect(region().getAttribute('role')).toBe('status');
+            expect(region().textContent).toBe('');
+            type('And then?');
+            enter();
+            await waitFor(() => expect(region().textContent).toBe('Queued · Jason takes it when this turn ends'));
+            fireEvent.click(within(queued()!).getByRole('button', { name: 'Take back' }));
+            await waitFor(() => expect(region().textContent).toBe(''));
         });
 
         it('is drawn in the conversation as a message sent, with a line that it is queued, and sent once when the turn ends', async () => {
@@ -732,6 +753,32 @@ describe('the console', () => {
             expect(box().value).toBe(['Later', 'More'].join(blank));
             expect(sends(desktop)).toHaveLength(1);
             // With no turn running Escape does nothing.
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+        });
+
+        it('stops by Escape while a dialog stands open only in a pane that is hidden, as panes not shown are', async () => {
+            const { desktop } = await running();
+            type('More');
+            const pane = document.createElement('section');
+            pane.hidden = true;
+            pane.innerHTML = '<div role="alertdialog" aria-label="Reject this?"></div>';
+            document.querySelector('.jc-console')!.append(pane);
+            escape();
+            expect(stops(desktop)).toHaveLength(1);
+            expect(box().value).toBe('More');
+            pane.remove();
+        });
+
+        it('leaves the turn running while a dialog is shown, which takes the Escape', async () => {
+            const { desktop } = await running();
+            type('More');
+            const pane = document.createElement('section');
+            pane.innerHTML = '<div role="alertdialog" aria-label="Reject this?"></div>';
+            document.querySelector('.jc-console')!.append(pane);
+            escape();
+            expect(stops(desktop)).toHaveLength(0);
+            pane.remove();
             escape();
             expect(stops(desktop)).toHaveLength(1);
         });

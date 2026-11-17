@@ -583,7 +583,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
 }
 
 /** Words joined as one message: each trimmed, the empty ones left out, a blank line between. */
-const joined = (words: readonly (string | null | undefined)[]): string =>
+export const joined = (words: readonly (string | null | undefined)[]): string =>
     words
         .map((each) => each?.trim() ?? '')
         .filter((each) => each !== '')
