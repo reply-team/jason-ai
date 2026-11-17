@@ -1066,16 +1066,22 @@ export class Setup {
         return { kind: 'made', name };
     }
 
-    /** Every profile the runtime holds, a disabled one included, page after page; the answer of a page not read. */
+    /**
+     * Every profile the runtime holds, a disabled one included, page after page; the answer of a page not read. A cursor
+     * the runtime already gave is not followed again: the pages stop there, so a runtime that answers the same cursor
+     * twice cannot keep the act asking.
+     */
     async #everyProfile(): Promise<{ profiles: ListedProfile[] } | { unread: CliResult }> {
         const profiles: ListedProfile[] = [];
+        const followed = new Set<string>();
         let cursor: string | null = null;
         do {
             const listed = await this.#deps.cli.run(['profile', 'list', '--include-disabled', '--limit', '1000', ...(cursor === null ? [] : ['--cursor', cursor])]);
             const page = listed.exit === 0 ? readProfilePage(listed.stdout) : null;
             if (page === null) return { unread: listed };
             profiles.push(...page.profiles);
-            cursor = page.cursor;
+            if (cursor !== null) followed.add(cursor);
+            cursor = page.cursor !== null && !followed.has(page.cursor) ? page.cursor : null;
         } while (cursor !== null);
         return { profiles };
     }
@@ -1118,7 +1124,12 @@ export class Setup {
         const nameOne = 'Name the one to use with `jason profile set-default <name>`.';
         if (pick.kind === 'several') throw new Refused(`Several execution profiles run on ${label}: ${pick.names.join(', ')}. ${nameOne}`);
         if (pick.kind === 'disabled') throw new Refused(`The execution profile ${pick.name} runs on ${label} and is disabled; \`jason profile enable ${pick.name}\` puts it back in service.`);
-        if (pick.kind === 'taken') throw new Refused(`The execution profile ${pick.name} is there and runs another program, so none was made for ${label}. ${nameOne}`);
+        if (pick.kind === 'taken') {
+            const { host: word } = roleProfiles[roleHost];
+            throw new Refused(
+                `The execution profile ${pick.name} is there and runs another program, so none was made for ${label}. Make one under another name with \`jason profile create <name> --host ${word} --program ${roleHost}\`, then name it with \`jason profile set-default <name>\`.`,
+            );
+        }
         let name: string;
         let made = false;
         if (pick.kind === 'create') {

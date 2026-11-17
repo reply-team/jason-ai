@@ -222,6 +222,10 @@ describe('what the console draws from the runtime', () => {
         expect(signInSentence(host({}))).toBe(
             'Sign in once by running `claude` in a terminal; the chat uses that sign-in.',
         );
+        // A program that drives no chat says what its sign-in is used for: the campaign work it runs.
+        expect(signInSentence(host({ id: 'gemini', drivesChat: false }))).toBe(
+            'Sign in once by running `gemini` in a terminal; the campaign work it runs uses that sign-in.',
+        );
         expect(signInSentence(host({ kind: 'provider' }))).toBeNull();
         expect(signInSentence(host({ found: false }))).toBeNull();
         expect(isSignInFailure('Invalid API key · Please run /login')).toBe(true);

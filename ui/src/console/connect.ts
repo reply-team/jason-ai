@@ -871,11 +871,12 @@ export const usable = (host: DesktopHost): boolean =>
 const used = signal<string | null>(null);
 
 /**
- * The line a program's card says after a person's Use, while the card reads that program in use again: only what the
- * act changed, and what it did not.
+ * The line a program's card says after a person's Use, while the card reads that program in use again: what the act did
+ * not change. What it changed, that the roles run on this program, is the runs-roles line the card already draws, since
+ * In use and that line are one fact, so it is never said twice.
  */
 export function usedLine(host: DesktopHost): string | null {
-    return used.value === host.id && inUse(host) ? t('connect.used', { host: host.label }) : null;
+    return used.value === host.id && inUse(host) ? t('connect.used') : null;
 }
 
 define('connect.use', ([id]) => {

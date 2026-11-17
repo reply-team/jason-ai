@@ -217,10 +217,15 @@ export function chatHosts(hosts: readonly DesktopHost[]): {
     };
 }
 
-/** How a program found on this machine is signed in to: once, in a terminal, by its own command. */
+/**
+ * How a program found on this machine is signed in to: once, in a terminal, by its own command. The chat runs on that
+ * sign-in where the program drives it; a program that does not runs campaign work alone, an execution profile's child
+ * started on this machine under the person's own sign-in.
+ */
 export function signInSentence(host: DesktopHost): string | null {
     if (host.kind !== 'program' || !host.found) return null;
-    return `Sign in once by running \`${host.id}\` in a terminal; the chat uses that sign-in.`;
+    const uses = host.drivesChat ? 'the chat uses that sign-in' : 'the campaign work it runs uses that sign-in';
+    return `Sign in once by running \`${host.id}\` in a terminal; ${uses}.`;
 }
 
 /** Whether a turn's error, in the host's own words, says the host is not signed in. */

@@ -606,6 +606,22 @@ test("Use reads every page of the profiles, so the desktop's own on a later page
     assert.deepEqual(await inUseOn(b), [['codex', 'codex']]);
 });
 
+test('a cursor the runtime gives again is not followed again: the pages stop there and Use goes on with what they held', async (t) => {
+    const b = await linked(t);
+    b.env.STUB_PROFILE_LIST_CURSOR = 'same';
+    const before = asked(b, 'profile list').length;
+    await setupOn(b).useProgram('codex');
+    delete b.env.STUB_PROFILE_LIST_CURSOR;
+    // The first page, then the cursor once; its answer names the same cursor, which is not asked for a second time.
+    assert.deepEqual(
+        asked(b, 'profile list')
+            .slice(before)
+            .map((entry) => entry.args.slice(5)),
+        [[], ['--cursor', 'same']],
+    );
+    assert.deepEqual(await inUseOn(b), [['codex', 'codex']]);
+});
+
 test("a default a JASON_ variable sets, or one the runtime refuses to put in force, keeps the card as it was and is said in the runtime's words", async (t) => {
     const b = await linked(t);
     b.env.STUB_DEFAULT_IN_FORCE = 'claude-code';
@@ -642,7 +658,8 @@ test("a refused create is said in the runtime's words, and a profile of the desk
     const taken = await linked(t);
     holdProfiles(taken, [...profiles(taken), { name: 'codex', disabled: false, revision: { host: 'gemini_cli', program: 'gemini' } }]);
     await assert.rejects(setupOn(taken).useProgram('codex'), {
-        message: 'The execution profile codex is there and runs another program, so none was made for Codex. Name the one to use with `jason profile set-default <name>`.',
+        message:
+            'The execution profile codex is there and runs another program, so none was made for Codex. Make one under another name with `jason profile create <name> --host codex --program codex`, then name it with `jason profile set-default <name>`.',
     });
     for (const each of [off, taken]) assert.equal(asked(each, 'profile create').length, 1);
 });

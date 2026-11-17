@@ -122,7 +122,7 @@ export const en = {
     'connect.runsRoles': "Your agents' roles run on {host}, by the execution profile {profile}.",
     'connect.using': "Putting your agents' roles on {host}…",
     'connect.used':
-        "Your agents' roles now run on {host} by default. Work already running finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model menu.",
+        "Work already running finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model menu.",
     'mode.unopened': 'Demo not opened',
     'mode.unopened.close': 'Close',
     'mode.preparing': 'Preparing the demo…',

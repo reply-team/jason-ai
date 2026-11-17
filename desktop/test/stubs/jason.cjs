@@ -142,7 +142,8 @@ if (args[0] === 'status') {
     // person editing the file at that moment would. A made profile gets an id of the runtime's shape.
     // The default in force is the one the settings file names, as the runtime binds it (any case of the keys; null or
     // absent is none), or STUB_DEFAULT_IN_FORCE=<name>, as a JASON_ variable sets it; every page of the list says it, and
-    // STUB_PROFILE_LIST_NO_DEFAULT=yes leaves it out, as a runtime older than the field does. set-default writes it into
+    // STUB_PROFILE_LIST_NO_DEFAULT=yes leaves it out, as a runtime older than the field does; --cursor continues a list
+    // where the last page's next_cursor said, and STUB_PROFILE_LIST_CURSOR=<cursor> answers that cursor on every page. set-default writes it into
     // the settings file, keeping every other key, and answers it; STUB_PROFILE_SET_DEFAULT_REFUSED=<code> refuses it with
     // that code, STUB_PROFILE_SET_DEFAULT_ANSWERS=<name> answers that name instead, STUB_PROFILE_SET_DEFAULT_LOST=yes writes
     // it and answers request_timed_out, as a request the runtime took and did not answer in time does, and
@@ -189,7 +190,8 @@ if (args[0] === 'status') {
         const listed = args.includes('--include-disabled') ? profiles : profiles.filter((profile) => !profile.disabled);
         const size = args.includes('--limit') ? Number(args[args.indexOf('--limit') + 1]) : 50;
         const from = args.includes('--cursor') ? Number(args[args.indexOf('--cursor') + 1]) : 0;
-        const page = { items: listed.slice(from, from + size), next_cursor: listed.length > from + size ? String(from + size) : null };
+        const next = process.env.STUB_PROFILE_LIST_CURSOR || (listed.length > from + size ? String(from + size) : null);
+        const page = { items: listed.slice(from, from + size), next_cursor: next };
         print(process.env.STUB_PROFILE_LIST_NO_DEFAULT === 'yes' ? page : { ...page, default_execution_profile: inForce() });
     } else if (verb === 'profile set-default') {
         if (process.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE === 'yes') {

@@ -394,7 +394,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
 - **Agent hosts.** The cards detect the agent hosts (Claude Code, Codex, Gemini CLI, Antigravity CLI, Cursor CLI and GitHub Copilot CLI), `reply` and `node`. A missing program is explained with its install
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
-  sign-in.
+  sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
   runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a

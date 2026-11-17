@@ -267,9 +267,15 @@ describe('Models, Use on a program found and not in use', () => {
         ]);
         const line = section.querySelector<HTMLElement>('.used-program')!;
         expect(line.closest('.host-row')?.querySelector('b')?.textContent).toBe('Codex');
+        // The runs-roles line already says the roles run on Codex: the line says only what the act did not change.
         expect(line.textContent).toBe(
-            "Your agents' roles now run on Codex by default. Work already running finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model menu.",
+            "Work already running finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model menu.",
         );
+        const codexCard = line.closest<HTMLElement>('.host-row')!;
+        expect(codexCard.querySelector('.runs-roles')?.textContent).toBe(
+            "Your agents' roles run on Codex, by the execution profile codex.",
+        );
+        expect(codexCard.textContent?.match(/roles (now )?run on Codex/g)).toHaveLength(1);
         expect(section.querySelector('[role="alert"]')).toBeNull();
     });
 
