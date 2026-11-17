@@ -1,4 +1,5 @@
 using Jason.Cli;
+using Jason.Cli.Tests.Process;
 using Jason.Runtime.Tests;
 
 namespace Jason.Cli.Tests;
@@ -259,6 +260,84 @@ public class VerbMapTests
     }
 
     /// <summary>
+    /// The operations no verb sends, each with why. Empty is the rule: the map is one to one both ways, so an operation
+    /// arrives with the verb that sends it, or here, in the open, with its reason.
+    /// </summary>
+    internal static readonly Dictionary<string, string> SentByNoVerb = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The other direction of the map: every operation of <c>Operations</c> is sent by a verb, or stands in
+    /// <see cref="SentByNoVerb"/> with its reason. Held by what the verbs send — each verb that reaches the runtime is run
+    /// against a recording handler, as <see cref="DefaultActorTests"/> runs them, and the operations it posts are read off
+    /// the wire — and never by the name standing somewhere in the CLI's sources: a routine that sends an operation on its
+    /// own way (an update's drain, an install's resume) is no verb a person or an agent can type.
+    /// </summary>
+    [Fact]
+    [Critical(Family.R2, "every operation has its verb")]
+    public async Task Every_operation_is_sent_by_a_verb_or_declared_with_its_reason()
+    {
+        var sent = await SentByTheVerbsAsync();
+
+        Assert.Equal([], Unsent(AllOperations(), sent, SentByNoVerb));
+
+        // And the declared list holds only what no verb sends, so an entry outlives its reason here and nowhere else.
+        Assert.Equal([], SentByNoVerb.Keys.Where(sent.Contains).Order(StringComparer.Ordinal));
+        Assert.Equal([], SentByNoVerb.Keys.Except(AllOperations(), StringComparer.Ordinal).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The guard fails on what it is for: an operation no verb sends and no line declares is named, and one declared is
+    /// not. Proved on a fixture, never by taking a verb away.
+    /// </summary>
+    [Fact]
+    public void The_second_direction_names_an_operation_no_verb_sends_and_none_declares()
+    {
+        var operations = new[] { "widget.get", "widget.frobnicate", "widget.purge" };
+        var sent = new HashSet<string>(["widget.get"], StringComparer.Ordinal);
+        var declared = new Dictionary<string, string>(StringComparer.Ordinal) { ["widget.purge"] = "sent only by a routine" };
+
+        Assert.Equal(["widget.frobnicate"], Unsent(operations, sent, declared));
+        Assert.Equal([], Unsent(operations, new HashSet<string>(operations, StringComparer.Ordinal), declared));
+    }
+
+    /// <summary>The operations neither sent nor declared, in order.</summary>
+    internal static List<string> Unsent(IEnumerable<string> operations, IReadOnlySet<string> sent, IReadOnlyDictionary<string, string> declared) =>
+        [.. operations.Where(operation => !sent.Contains(operation) && !declared.ContainsKey(operation)).Order(StringComparer.Ordinal)];
+
+    private static string[] AllOperations() =>
+        [.. typeof(Contracts.Api.Operations).GetFields().Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()!)];
+
+    /// <summary>
+    /// Verbs <see cref="DefaultActorTests"/> does not run, run here for what they send: <c>runtime stop</c> waits for the
+    /// process it stopped to leave, so it is run against a machine where no process is running.
+    /// </summary>
+    private static readonly string[][] RunHereOnly = [["runtime", "stop"]];
+
+    /// <summary>Every operation a verb posts: each verb run once against a runtime that answers <c>{}</c>.</summary>
+    private static async Task<HashSet<string>> SentByTheVerbsAsync()
+    {
+        var sent = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var args in DefaultActorTests.Runs)
+        {
+            sent.UnionWith((await DefaultActorTests.RunEachAsync(args)).Requests.Select(request => request.Operation));
+        }
+
+        foreach (var args in DefaultActorTests.NoDefaultActor)
+        {
+            sent.UnionWith((await DefaultActorTests.RunEachAsync(["--actor", "human:ada", .. args])).Requests.Select(request => request.Operation));
+        }
+
+        foreach (var args in RunHereOnly)
+        {
+            var run = await DefaultActorTests.RunEachAsync(args, processes: new FakeProcessControl());
+            Assert.True(run.Requests.Count > 0, $"'jason {string.Join(' ', args)}' sent nothing: exit {run.Exit}, saying:{Environment.NewLine}{run.Error}");
+            sent.UnionWith(run.Requests.Select(request => request.Operation));
+        }
+
+        return sent;
+    }
+
+    /// <summary>
     /// What an operation calls the noun a command spells differently. Two of them differ on purpose, and this
     /// is the whole of that list rather than a rule with exceptions nobody wrote down.
     /// </summary>
@@ -266,7 +345,8 @@ public class VerbMapTests
     {
         // The one noun the API spells differently. `jason runtime status` is `system.info` and
         // `jason runtime stop` is `system.shutdown`: the operations exist, under the name the runtime uses
-        // for itself rather than the one a person types.
+        // for itself rather than the one a person types; so are `jason runtime drain` and `jason runtime resume`,
+        // `system.drain` and `system.resume`. One CLI spelling per API noun.
         "runtime" => "system",
         _ => noun,
     };
