@@ -57,6 +57,16 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
   - **The button that saves a typed key says Save key,** where it said Keep.
   - In Settings, the card's own "AI" heading is left out under the section's "Models" heading.
 
+- **A program on the Models card can be put in use.** A program found on this computer that is not the one in use
+  (Claude Code, at the version the chat needs, or Codex) has a **Use** button, which makes it the program the agents'
+  roles run on by default. After it the card says: "Your agents' roles now run on Codex by default. Work already running
+  finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model
+  menu." Where the program has one enabled execution profile, Use names it the default; where it has none, Use makes one
+  first, as the desktop does for a first start. Where several are there and none is the desktop's own, Use refuses,
+  names them and says to name one with `jason profile set-default <name>`. Where a settings file or an environment
+  variable decides the default, the runtime refuses, the card shows the runtime's own words and nothing moves. A model
+  key has no Use.
+
 - **The Reply card says what Reply is for, and its button reads Sign in with Reply.** On the Reply card of Settings'
   Accounts and of the chat's Connect card, which are one control, the card shows the name "Reply" with a **Recommended**
   mark, and under it one sentence: Reply.io is the service Jason sends through, your mailbox and LinkedIn account are
