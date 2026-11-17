@@ -134,39 +134,53 @@ again, since the tag is the tree that run tested. `.github/workflows/ci.yml` say
 migration, no contract document, no CLI verb or Runtime API change, nothing of the installers or of the update path.
 Anything wider is an ordinary patch, made through a release branch. A hotfix is made on a branch `hotfix/<name>` of this
 repository, cut from `main`, and lands through one pull request into `main` that carries all of it: the failing test,
-then the fix, and the release notes of the version `main` builds. No release branch is opened for it. One reviewer
-reads the change while CI runs. A draft's push runs the Linux set; once the pull request is ready, CI runs the hotfix
-set: every platform's package and, on Linux, Windows and macOS, the critical tier under the platform's own check, with
-the install script on Ubuntu, an update on linux-x64, the UI's checks and the desktop's. On Linux that is less than any
-other pull request into `main` runs, which tests the whole suite there: a hotfix trades the whole suite before its merge
-for the tier on every platform. Every other check the ruleset on `main` requires reports as skipped by rule: the suite
-under a release's version, the executable on a Windows older than 24H2, the install script on Windows and an update on
-win-x64, which run on `main` after the merge. Each test job's summary says how many minutes its tests took. After the squash, `main` passes over the hotfix's record of the tree it tested,
-so the push the squash makes is decided as one no run recorded, and a change to code runs every check there, the whole
-suite on every platform included. That run blocks nothing: whoever leads the release watches it, and starts every check
-by hand where the push ran less, and a check red there is the next hotfix. Then the merge is tagged and the release
-runs. No dry run comes before the tag, since a hotfix touches nothing of building or packaging, and a release run that
-fails costs a version number — the next hotfix carries the next one — and never moves a tag.
+then the fix, and the release notes of the version `main` builds. No release branch is opened for it. A hotfix cannot
+move the version, since the version prefix's file is on the list below, so the version pull request that moves `main` to
+the next version after a release comes before the next hotfix, as it does after every release. One reviewer reads the
+change while CI runs. A draft's push runs the Linux set; once the pull request is ready, CI runs the hotfix set: every
+platform's package and, on Linux, Windows and macOS, the critical tier under the platform's own check, with the install
+script on Ubuntu, an update on linux-x64, the UI's checks and the desktop's. On Linux that is less than any other pull
+request into `main` runs, which tests the whole suite there: a hotfix trades the whole suite before its merge for the
+tier on every platform. Of the other checks the ruleset on `main` requires, an update on win-x64 reports as skipped by
+rule, and the suite under a release's version, the executable on a Windows older than 24H2 and the install script on
+Windows skip by their own condition, which reports success as well; all four run on `main` after the merge. Each test
+job's summary says how many minutes its tests took. After the squash, `main` passes over the hotfix's record of the tree
+it tested, so the push the squash makes is decided as one no run recorded, and a change to code runs every check there,
+the whole suite on every platform included. That run blocks nothing: whoever leads the release watches it, and starts
+every check by hand where the push ran less, and a check red there is the next hotfix. Then the merge is tagged and the
+release runs. No dry run comes before the tag, since a hotfix touches nothing of building or packaging, and a release
+run that fails costs a version number — the version pull request moves `main` to the next one, and the fix is released
+under it — and never moves a tag.
 
 The version check refuses a hotfix's pull request, draft or ready, that changes, adds or removes a path of the list
-below, in one sentence naming the first such path, and nothing else of its run starts: such a change goes through a
-release branch. The list is the one the workflow reads, kind by kind; a path is matched whole, `**/` standing for any
-number of folders, none included, `/**` at the end for everything under a folder, and `*` for any run of characters
-within one name.
+below — a path renamed into or out of the list, and a file whose mode alone changed, among them — in one sentence naming
+the first such path, and nothing else of its run starts: such a change goes through a release branch. A name git prints
+quoted, one with a character outside ASCII, a tab, a quote or a backslash in it, cannot be judged against the list, and
+is refused the same way. The list is the one the workflow reads, kind by kind; a path is matched whole, `**/` standing
+for any number of folders, none included, `/**` at the end for everything under a folder, and `*` for any run of
+characters within one name.
 
 - the database's shape: `dotnet/src/Jason.Runtime/Persistence/Migrations/**`
 - the contract documents and the operation catalog: `docs/contracts/**`, `dotnet/src/Jason.Contracts/Api/Operations.cs`
 - CI and the release's machinery: `.github/**`
 - installing, updating and uninstalling: `install/**`, `desktop/installer/**`, `dotnet/src/Jason.Cli/Update/**`,
-  `dotnet/src/Jason.Cli/Installation/**`, `dotnet/src/Jason.Cli/Uninstall/**`, `dotnet/src/Jason.Contracts/Update/**`,
-  `dotnet/src/Jason.Runtime/Update/**`, `desktop/src/update*.ts`, `desktop/src/uninstall*.ts`
-- the build and what it depends on: `**/*.csproj`, `**/*.props`, `**/*.targets`, `**/*.slnx`, `global.json`,
-  `**/package.json`, `**/package-lock.json`, `desktop/electron-builder.config.mjs`,
-  `desktop/electron-builder.config.d.mts`, `desktop/scripts/**`, `**/THIRD-PARTY-NOTICES`
+  `dotnet/src/Jason.Cli/Installation/**`, `dotnet/src/Jason.Cli/Uninstall/**`, `dotnet/src/Jason.Cli/Ui/**`,
+  `dotnet/src/Jason.Cli/Skills/**`, `dotnet/src/Jason.Cli/Autostart/**`, `dotnet/src/Jason.Cli/Plugins/**`,
+  `dotnet/src/Jason.Contracts/Update/**`, `dotnet/src/Jason.Runtime/Update/**`, `desktop/src/update*.ts`,
+  `desktop/src/uninstall*.ts`, `desktop/src/rollback*.ts`, `desktop/src/installation*.ts`,
+  `desktop/src/machine-setup*.ts`, `desktop/src/carried-*.ts`, `desktop/src/own-runtime*.ts`, `desktop/src/path-*.ts`,
+  `desktop/src/remove-placed*.ts`, `desktop/src/bundle-copy*.ts`, `desktop/src/linux-package*.ts`,
+  `desktop/src/login-item*.ts`
+- the build and what it depends on: `**/*.csproj`, `**/*.props`, `**/*.targets`, `**/*.slnx`, `**/*.manifest`,
+  `**/*.entitlements`, `global.json`, `**/dotnet-tools.json`, `**/package.json`, `**/package-lock.json`,
+  `desktop/electron-builder.config.mjs`, `desktop/electron-builder.config.d.mts`, `desktop/scripts/**`, `ui/scripts/**`,
+  `**/THIRD-PARTY-NOTICES`
 
 `RELEASE-NOTES.md` and the recorded exchanges under `docs/api/fixtures/` are a hotfix's to change; whether a change adds
-or alters a CLI verb or the Runtime API is the reviewer's to read, not a path's. A branch of that name from a fork is any
-other pull request into `main`, and its paths are not judged.
+or alters a CLI verb or the Runtime API is the reviewer's to read, not a path's. The check is a rail for the lane's honest
+use, not a wall: a pull request into `main` from any other branch still runs the Linux set with no such check, as before,
+and what stands behind every pull request into `main` is that whoever leads the release reads it and merges it. A branch
+of that name from a fork is any other pull request into `main`, and its paths are not judged.
 
 **Nothing internal in what reaches this repository.** Every branch here is public. Commit messages and pull request
 bodies carry no tracker key, no link to a private system, no pointer to a plan or a note outside the repository, and no

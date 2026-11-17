@@ -235,6 +235,13 @@ public class CiRunsTests
         ["a push to a hotfix's pull request into main while it is a draft"] = (AHotfix("synchronize", "true"), "linux"),
         ["marking a pull request from a hotfix's branch into a release branch ready"] = (AHotfix(target: ReleaseBranch), "linux"),
         ["marking a fork's pull request from a branch named as a hotfix's ready"] = (AHotfix(headRepository: AFork), "not-the-release"),
+        ["reopening a hotfix's pull request into main"] = (AHotfix("reopened"), Hotfix),
+        ["marking a pull request into main from Hotfix/<name> ready"] = (AHotfix() with { Branch = "Hotfix/the-fix" }, "not-the-release"),
+        ["marking a pull request into main from a branch named hotfix ready"] = (AHotfix() with { Branch = "hotfix" }, "not-the-release"),
+        ["marking a pull request into main from release/hotfix/<name> ready"] = (AHotfix() with { Branch = "release/hotfix/the-fix" }, "everything"),
+        ["marking a pull request into main from <name>/hotfix/<name> ready"] = (AHotfix() with { Branch = "feature/hotfix/the-fix" }, "not-the-release"),
+        ["a run started by hand on a hotfix's branch"] = (new Run("workflow_dispatch", Target: HotfixBranch), "everything"),
+        ["a push to a release branch of the tree a hotfix tested"] = (new Run("push", TestedTree: Tree, TestedSet: Hotfix, Target: ReleaseBranch), "none"),
         ["a push to main"] = (new Run("push", TestedTree: AnotherTree), "everything"),
         ["a push to main of a tree a run that passed recorded"] = (new Run("push", TestedTree: Tree), "tested"),
         ["a push to main of the tree another pull request into main tested when it was ready"] = (new Run("push", TestedTree: Tree, TestedSet: "not-the-release"), "tested"),
@@ -1017,6 +1024,21 @@ public class CiRunsTests
     [InlineData("desktop/src/update-feed.ts", "installing, updating and uninstalling")]
     [InlineData("desktop/src/uninstall.ts", "installing, updating and uninstalling")]
     [InlineData("desktop/src/uninstall-start.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/rollback.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/installation.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/machine-setup.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/carried-jason.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/own-runtime.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/path-command.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/path-profile.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/remove-placed.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/bundle-copy.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/linux-package.ts", "installing, updating and uninstalling")]
+    [InlineData("desktop/src/login-item.ts", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Ui/UiInstaller.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Skills/SkillsDeployer.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Autostart/WindowsTasks.cs", "installing, updating and uninstalling")]
+    [InlineData("dotnet/src/Jason.Cli/Plugins/PluginInstaller.cs", "installing, updating and uninstalling")]
     [InlineData("dotnet/src/Jason.App/Jason.App.csproj", "the build and what it depends on")]
     [InlineData("dotnet/tests/Jason.New.Tests/Jason.New.Tests.csproj", "the build and what it depends on")]
     [InlineData("dotnet/Directory.Packages.props", "the build and what it depends on")]
@@ -1024,6 +1046,10 @@ public class CiRunsTests
     [InlineData("dotnet/src/Jason.App/Native.targets", "the build and what it depends on")]
     [InlineData("dotnet/Jason.slnx", "the build and what it depends on")]
     [InlineData("global.json", "the build and what it depends on")]
+    [InlineData("dotnet/src/Jason.App/jason.manifest", "the build and what it depends on")]
+    [InlineData("dotnet/src/Jason.App/jason.entitlements", "the build and what it depends on")]
+    [InlineData("dotnet-tools.json", "the build and what it depends on")]
+    [InlineData("ui/scripts/package.mjs", "the build and what it depends on")]
     [InlineData("ui/package.json", "the build and what it depends on")]
     [InlineData("get/package.json", "the build and what it depends on")]
     [InlineData("desktop/package-lock.json", "the build and what it depends on")]
@@ -1054,6 +1080,50 @@ public class CiRunsTests
         var decided = Decide(AHotfix() with { Listing = Changed("install/install.sh", removed: true) }, refused: true);
 
         Assert.Contains("this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)", decided.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A path renamed out of the list or into it is refused by the listed side, a file whose mode alone changed by its
+    /// path, and a name git prints quoted — whatever it names — because it matches no pattern as it is printed.
+    /// </summary>
+    [Theory]
+    [InlineData("a rename out of the list", "this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)")]
+    [InlineData("a rename into the list", "this hotfix changes dotnet/src/Jason.Cli/Update/Program.cs, which is installing, updating and uninstalling (dotnet/src/Jason.Cli/Update/**)")]
+    [InlineData("a mode alone", "this hotfix changes install/install.sh, which is installing, updating and uninstalling (install/**)")]
+    [InlineData("a quoted name under the contracts", "this hotfix changes \"docs/contracts/operations/\\303\\251.json\", a name git prints quoted, which cannot be judged against the list")]
+    [InlineData("a quoted name anywhere", "this hotfix changes \"docs/caf\\303\\251.md\", a name git prints quoted, which cannot be judged against the list")]
+    public void A_hotfix_that_renames_changes_a_mode_or_names_a_path_git_quotes_is_refused(string change, string said)
+    {
+        string Entry(string mode, string blob, string path) => $"{mode} blob {blob}\t{path}";
+        var install = "4444444444444444444444444444444444444444";
+        var program = "3333333333333333333333333333333333333333";
+        string[] listing = change switch
+        {
+            "a rename out of the list" => [.. Tested.Where(line => !line.EndsWith("\tinstall/install.sh", StringComparison.Ordinal)), Entry("100755", install, "docs/install.sh")],
+            "a rename into the list" => [.. Tested.Where(line => !line.EndsWith("\tdotnet/src/Jason.App/Program.cs", StringComparison.Ordinal)), Entry("100644", program, "dotnet/src/Jason.Cli/Update/Program.cs")],
+            "a mode alone" => [.. Tested.Select(line => line.EndsWith("\tinstall/install.sh", StringComparison.Ordinal) ? Entry("100644", install, "install/install.sh") : line)],
+            "a quoted name under the contracts" => [.. Tested, Entry("100644", "5555555555555555555555555555555555555555", "\"docs/contracts/operations/\\303\\251.json\"")],
+            "a quoted name anywhere" => [.. Tested, Entry("100644", "5555555555555555555555555555555555555555", "\"docs/caf\\303\\251.md\"")],
+            _ => throw new ArgumentOutOfRangeException(nameof(change), change, "no such change"),
+        };
+
+        var decided = Decide(AHotfix() with { Listing = listing }, refused: true);
+
+        Assert.Contains(said, decided.Stdout, StringComparison.Ordinal);
+        Assert.Contains("goes through a release branch, not a hotfix", decided.Stdout, StringComparison.Ordinal);
+        Assert.Empty(decided.Outputs);
+    }
+
+    /// <summary>
+    /// A hotfix cannot move the version: the version pull request's change from a hotfix's branch is refused by the version
+    /// prefix's file, so the version pull request comes from a branch of another name, before the next hotfix.
+    /// </summary>
+    [Fact]
+    public void The_version_pull_request_from_a_hotfix_s_branch_is_refused_by_the_version_prefix_s_file()
+    {
+        var decided = Decide(TheVersionPullRequest() with { Branch = HotfixBranch }, refused: true);
+
+        Assert.Contains($"this hotfix changes {VersionProps}, which is the build and what it depends on (**/*.props)", decided.Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>Of several paths on the list, the refusal names the first, in the order of their names, and no other.</summary>
@@ -1099,7 +1169,6 @@ public class CiRunsTests
             "dotnet/src/Jason.Runtime/Persistence/JasonDbContext.cs",
             "dotnet/tests/Jason.Runtime.Tests/Dispatch/DispatcherTests.cs",
             "desktop/src/main.ts",
-            "desktop/src/installation.ts",
             "desktop/test/updates.test.ts",
             "docs/contracts.md",
             "skills/runtime/operating-the-installation/SKILL.md",
