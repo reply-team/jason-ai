@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ipcModule, listeningModules, listingCallers, navigationOpeners, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
+import { demoOpener, ipcModule, listeningModules, listingCallers, navigationOpeners, processModules, processViolations, runFileCalls, signalLines, startDetachedCallers } from './process-rules.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -150,7 +150,7 @@ test('shell.openPath is refused everywhere, and shell.openExternal anywhere but 
 test('inside the navigation lock a URL reaches the system browser only through its two named openers, each once', () => {
     assert.deepEqual(Object.keys(navigationOpeners).sort(), ['leave', 'ownPage']);
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
-    assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 2, 'main.ts hands a URL to the system browser in two places');
+    assert.equal([...main.matchAll(/\bshell\s*\.\s*openExternal\b/g)].length, 3, 'main.ts hands a URL to the system browser in two places, and the Demo its one address in a third');
     assert.match(main, /const ownPage = \(url: string\): Promise<void> => openOwnPage\(url, \{ origin, log, open: \(held\) => shell\.openExternal\(held\) \}\);/, 'ownPage hands the system opener to openOwnPage, which holds the address itself');
     const lock = (body: string) => `function lockNavigation(contents) {\n${body}\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n`;
     const both = '    const leave = (url) => void shell.openExternal(url);\n    const ownPage = (url) => void shell.openExternal(url);';
@@ -163,6 +163,55 @@ test('inside the navigation lock a URL reaches the system browser only through i
     ]) {
         assert.notDeepEqual(processViolations('src/main.ts', lock(planted)), [], planted);
     }
+});
+
+test('outside the navigation lock only the Demo’s opener reaches the system browser, with the repository’s address alone and once', () => {
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    assert.ok(main.includes(`${demoOpener.definition}\n    ${demoOpener.call}.then(`), 'the Demo’s opener takes no address and opens the constant');
+    assert.match(main, /open: \(\) => openDemoRepository\(log\),/);
+    assert.deepEqual(processViolations('src/main.ts', main), []);
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\nimport { demoRepository } from './demo-page.ts';\n";
+    const opener = (body: string) => `${demoOpener.definition}\n${body}\n}\n`;
+    const called = '            open: () => openDemoRepository(log),\n';
+    assert.deepEqual(processViolations('src/main.ts', lock + opener(`    ${demoOpener.call}.then(() => 0);`) + called), []);
+    for (const planted of [
+        '    shell.openExternal(url).then(() => 0);',
+        "    shell.openExternal('https://github.com/reply-team/jason-ai/releases');",
+        `    ${demoOpener.call};\n    ${demoOpener.call};`,
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', lock + opener(planted) + called), [], planted);
+    }
+    // The same function anywhere but main.ts, or a call beside it in main.ts, is outside every allowed place.
+    assert.notDeepEqual(processViolations('src/desk.ts', opener(`    ${demoOpener.call};`)), []);
+    assert.notDeepEqual(processViolations('src/main.ts', `${lock}${opener(`    ${demoOpener.call};`)}${called}function other() {\n    ${demoOpener.call};\n}\n`), []);
+});
+
+test('the Demo’s opener has one caller, the Demo window’s open, and main.ts binds no name of its own to the address', () => {
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    const defined = `${lock}import { demoBeforeReady, demoRepository } from './demo-page.ts';\n${demoOpener.definition}\n    ${demoOpener.call}.then(() => 0);\n}\n`;
+    const called = '            open: () => openDemoRepository(log),\n';
+    assert.deepEqual(processViolations('src/main.ts', defined + called), []);
+    for (const planted of [
+        '',
+        `${called}${called}`,
+        `${called}    reload: () => openDemoRepository(log),\n`,
+        `${called}const again = openDemoRepository;\n`,
+        `${called}const demoRepository = 'https://example.com/';\n`,
+        `${called}let demoRepository = other;\n`,
+        `${called}import { other as demoRepository } from './other.ts';\n`,
+        `${called}const { other: demoRepository } = values;\n`,
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', defined + planted), [], planted);
+    }
+    // Without the import, a binding the patterns do not read (an array's or a parameter's) could stand for the address.
+    const unimported = defined.replace("import { demoBeforeReady, demoRepository } from './demo-page.ts';\n", '');
+    for (const planted of ['', 'const [demoRepository] = ["https://example.com/"];\n', 'function at(demoRepository) {}\n']) {
+        assert.ok(processViolations('src/main.ts', unimported + called + planted).some((line) => /without importing demoRepository/.test(line)), planted);
+    }
+    assert.notDeepEqual(processViolations('src/main.ts', defined.replace("from './demo-page.ts'", "from './other.ts'") + called), []);
+    // A comment names the opener and calls nothing; any other module naming it fires the rule.
+    assert.deepEqual(processViolations('src/main.ts', `${defined}${called}// openDemoRepository opens the repository.\n`), []);
+    assert.notDeepEqual(processViolations('src/demo-window.ts', 'void openDemoRepository(log);\n'), []);
 });
 
 test('the opener of the runtime\'s own page is called only by the bridge\'s opening act, and a planted call anywhere else fires the rule', () => {

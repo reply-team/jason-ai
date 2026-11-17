@@ -587,7 +587,24 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   device chooser and screen capture is denied. Every document of the page's view gets a sheet of the user's origin that
   makes each element no-drag (`noDragSheet`), so no region the page marks is the window's drag region, which in a window
   without a frame would take the clicks of our switch over it. Each kind refused is logged once a run (`demo_refused`), by
-  its name alone; the person's click on Live is a choice and is not. A Demo start appends, before Electron is ready, the
+  its name alone; the person's click on Live is a choice and is not. The page's note names the repository as text,
+  `github.com/reply-team/jason-ai`, and the page's view draws it as a link of the desktop's own: a sheet of the user's
+  origin (`demoLinkSheet`: the colour of the page's own links, a pointer, an underline on hover and focus) and a script
+  run in a world of its own beside the page's (`demoLinkScript`), which marks the element whose whole text is the address,
+  keeps marking it as the page draws its note again, makes it focusable with the link role, and on a person's click or
+  Enter there, never on load, asks for the address as a navigation of the view. The view's guard refuses that navigation
+  as it refuses every other, and its reader (`demoLinkOpener`), asked of the main frame's navigations alone (a frame's
+  within the page and a redirect ask nothing), for `https://github.com/reply-team/jason-ai` (`demoRepository`) compared
+  whole, calls `openDemoRepository` in `src/main.ts`, which is handed no address and gives `shell.openExternal` that
+  constant. It does so only within a second (`demoLinkGestureMs`) of a person's left click let go or Enter pressed in the
+  page's view, which the main process sees as input reaching the view (`watchDemoGestures`, by `input-event` and
+  `before-input-event`), so a page that asks for the address on load or on its own opens nothing; and at most once in two
+  seconds (`demoLinkSpanMs`), so a person clicking again and again opens one tab. Said plainly: any real click or Enter
+  in the page, on the link or anywhere else, gives the page one second in which that one address may open, at most one
+  tab per act. Both moments are read from a monotonic clock (`performance.now()`), and a moment before the gesture is
+  refused. Any other address opens nothing. The view's pop-ups stay denied, the policy is
+  unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
+  `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
   all: a name the page names ahead (`<link rel="dns-prefetch">`) is looked up below every guard above, and this is what
   stops it. Nothing of the desktop in Demo needs a name: no runtime, no update check, no deep-link registration, only the
@@ -680,7 +697,9 @@ only, the login shell's PATH, read before anything is started) and `scripts/prep
 On Windows, a program npm installed is a batch file; the desktop reads which script it hands to Node and starts that
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
-outside the navigation lock in `src/main.ts`.
+outside the navigation lock in `src/main.ts`, but for the Demo's opener there, `openDemoRepository`, which hands it the
+repository's address alone, once, and is called once, by the Demo window; `src/main.ts` binds no name of its own to that
+address.
 
 What the desktop tells Reply about itself is one label in the User-Agent of reply-cli's requests and nothing else:
 `REPLY_CLIENT=jason-harness/<the bundle's version, less any build metadata after a plus sign>`, set in the environment of

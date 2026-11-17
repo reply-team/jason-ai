@@ -4,13 +4,29 @@
  * end the page leaves free for one (`demoLayout`); that view is transparent but for the switch. Nothing of an installation is here: no jason, no runtime, no chat, no
  * bridge, no folder made. The window's own contents are empty under the two views, but on macOS, where they show our band
  * above the page (`shell/demo-band.html`, no script). Electron asks the window's own contents first whether a point is in
- * a drag region, whichever view is drawn over it, so the band's document drags over the band's height alone.
+ * a drag region, whichever view is drawn over it, so the band's document drags over the band's height alone. The page's
+ * view also carries the desktop's link on the repository's address in the page's note, and that address alone leaves it,
+ * to the person's browser (`demoRepository`).
  */
 
 import { WebContentsView, type BrowserWindow } from 'electron';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { demoLayout, demoPage, demoStripSheets, demoSwitch, demoViewPreferences, onceEach, sealView, switchChoice, type DemoRefusal } from './demo-page.ts';
+import {
+    demoLayout,
+    demoLinkOpener,
+    demoLinkScript,
+    demoLinkSheet,
+    demoPage,
+    demoStripSheets,
+    demoSwitch,
+    demoViewPreferences,
+    onceEach,
+    sealView,
+    switchChoice,
+    watchDemoGestures,
+    type DemoRefusal,
+} from './demo-page.ts';
 
 export interface DemoWindowDeps {
     /** The application's folder, where `demo/index.html`, `shell/demo-switch.html` and `shell/demo-band.html` are. */
@@ -21,6 +37,8 @@ export interface DemoWindowDeps {
     refused(view: 'page' | 'switch', kind: DemoRefusal): void;
     /** The person chose Live on our switch. */
     live(): void;
+    /** Opens the repository's address, the one the note names (`demoRepository`), in the person's browser; it is handed no address. */
+    open(): void;
     /** The page could not be read or loaded: its views are taken off, and the window says so instead. */
     unshown(): void;
 }
@@ -52,7 +70,14 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
     const ours = new WebContentsView({ webPreferences: demoViewPreferences(demoSwitch) });
     // On Windows and Linux, the strip kept clear of the caption buttons (`demoStripSheets`); on macOS nothing.
     const sheets = demoStripSheets(deps.platform);
-    await sealView(page.webContents, demoPage, { read: fileOf(pageFile), refused: onceEach((kind) => deps.refused('page', kind)), sheet: sheets?.page });
+    // The note's repository address drawn as a link, and the one address the page's view hands to the browser.
+    await sealView(page.webContents, demoPage, {
+        read: fileOf(pageFile),
+        refused: onceEach((kind) => deps.refused('page', kind)),
+        sheet: sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`,
+        script: demoLinkScript,
+        asked: demoLinkOpener(deps.open, watchDemoGestures(page.webContents)),
+    });
     await sealView(ours.webContents, demoSwitch, {
         read: fileOf(switchFile),
         sheet: sheets?.switch,
