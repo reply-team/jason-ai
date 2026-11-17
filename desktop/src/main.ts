@@ -175,6 +175,7 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
         ['setup.connectReplyWithKey', (key) => setup.connectReplyWithKey(key)],
         ['setup.setProviderKey', (id, key) => setup.setProviderKey(id, key)],
         ['setup.installProgram', (id) => setup.installProgram(id)],
+        ['setup.useProgram', (id) => setup.useProgram(id)],
         ['setup.configurePlugin', (id, values) => setup.configurePlugin(id, values)],
         ['setup.disconnectPlugin', (id) => setup.disconnectPlugin(id)],
         // The Reply card's acts, each a verb of the Reply CLI on the person's click; a link goes to the browser, never here.

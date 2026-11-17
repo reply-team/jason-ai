@@ -203,6 +203,12 @@ describe('Connect in a tab', () => {
         const ai = screen.getAllByText('AI', { selector: 'b' })[0]!.closest<HTMLElement>('.card')!;
         for (const each of within(ai).queryAllByRole('button') as HTMLButtonElement[])
             expect(each.disabled, words(each)).toBe(true);
+        // Use, on Claude Code found and not in use, is the window's act: drawn off, with the card's one sentence.
+        const use = within(ai).getByRole<HTMLButtonElement>('button', { name: 'Use' });
+        expect(use.disabled).toBe(true);
+        fireEvent.click(use);
+        expect(within(ai).getByText("Done in Jason Desktop's own window.")).toBeTruthy();
+        expect(calls(stand, 'setup.useProgram')).toEqual([]);
         expect(calls(stand, 'setup.installProgram')).toEqual([]);
         expect(calls(stand, 'setup.configurePlugin')).toEqual([]);
     });

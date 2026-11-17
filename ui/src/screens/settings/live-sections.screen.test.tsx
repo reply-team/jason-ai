@@ -196,3 +196,96 @@ describe('Settings in Live', () => {
         expect(document.querySelector('[data-section="runtime"]')).toBeNull();
     });
 });
+
+describe('Models, Use on a program found and not in use', () => {
+    const [claude, codex, gemini, deepseek] = setupFound.hosts as [DesktopHost, DesktopHost, DesktopHost, DesktopHost];
+    const codexFound: DesktopHost = { ...codex, found: true, version: '0.130.0', install: null };
+    /** Claude Code in use, Codex found beside it, Gemini CLI found, and a key set. */
+    const both = (inUse: 'claude' | 'codex'): DesktopSetup => ({
+        ...setupFound,
+        hosts: [
+            { ...claude, runsRoles: inUse === 'claude' ? 'claude-code' : null },
+            { ...codexFound, runsRoles: inUse === 'codex' ? 'codex' : null },
+            gemini,
+            { ...deepseek, found: true },
+        ],
+    });
+    const models = async () => {
+        await settings();
+        const section = document.querySelector<HTMLElement>('[data-section="models"]')!;
+        await waitFor(() => expect(section.querySelector('.ai-here')).toBeTruthy());
+        return section;
+    };
+    /** Each card on this computer: its name, whether it carries In use, and whether it offers Use. */
+    const cards = (section: HTMLElement) =>
+        Array.from(section.querySelectorAll<HTMLElement>('.ai-here .host-row'), (card) => [
+            card.querySelector('b')?.textContent,
+            card.querySelector('.in-use') !== null,
+            within(card).queryByRole('button', { name: 'Use' }) !== null,
+        ]);
+
+    it('offers Use on a program that could carry In use and does not, never on the one in use, a program that drives no chat or the keys', async () => {
+        renderSettings('live', both('claude'));
+        const section = await models();
+        expect(cards(section)).toEqual([
+            ['Claude Code', true, false],
+            ['Codex', false, true],
+            ['Gemini CLI', false, false],
+        ]);
+        expect(
+            within(section.querySelector<HTMLElement>('.keys-set')!).queryByRole('button', { name: 'Use' }),
+        ).toBeNull();
+    });
+
+    it('offers none on a Claude Code below its floor', async () => {
+        const below = { ...claude, belowFloor: 'Claude Code 2.1.200 is older than 2.1.257.', runsRoles: null };
+        renderSettings('live', { ...setupFound, hosts: [below, { ...codexFound, runsRoles: 'codex' }] });
+        const section = await models();
+        expect(cards(section)).toEqual([
+            ['Claude Code', false, false],
+            ['Codex', true, false],
+        ]);
+    });
+
+    it('asks the desktop, then draws what the card reads again: In use moved, and one line of what changed and what did not', async () => {
+        const { desktop } = renderSettings('live', both('claude'));
+        const section = await models();
+        const asked = desktop.setup.useProgram;
+        desktop.setup.useProgram = async (id) => {
+            await asked(id);
+            desktop.status = both('codex');
+        };
+        fireEvent.click(within(section).getByRole('button', { name: 'Use' }));
+        await waitFor(() => expect(section.querySelector('.used-program')).not.toBeNull());
+        expect(desktop.calls.filter((each) => each.name === 'setup.useProgram').map((each) => each.args)).toEqual([
+            ['codex'],
+        ]);
+        expect(cards(section)).toEqual([
+            ['Claude Code', false, true],
+            ['Codex', true, false],
+            ['Gemini CLI', false, false],
+        ]);
+        const line = section.querySelector<HTMLElement>('.used-program')!;
+        expect(line.closest('.host-row')?.querySelector('b')?.textContent).toBe('Codex');
+        expect(line.textContent).toBe(
+            "Your agents' roles now run on Codex by default. Work already running finishes on the program it started on, and open chats are unchanged: each chat's program is chosen in its own model menu.",
+        );
+        expect(section.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('says a refusal in the desktop’s words in the alert note, and the card stays as the desktop reads it', async () => {
+        const { desktop } = renderSettings('live', both('claude'));
+        const refusal =
+            'Roles:DefaultExecutionProfile is set by the environment variable JASON_Roles__DefaultExecutionProfile, which overrides the settings file, so nothing was written; remove the variable or change it, then restart the runtime.';
+        desktop.refuse.set('setup.useProgram', refusal);
+        const section = await models();
+        fireEvent.click(within(section).getByRole('button', { name: 'Use' }));
+        await waitFor(() => expect(section.querySelector('[role="alert"]')?.textContent).toBe(refusal));
+        expect(cards(section)).toEqual([
+            ['Claude Code', true, false],
+            ['Codex', false, true],
+            ['Gemini CLI', false, false],
+        ]);
+        expect(section.querySelector('.used-program')).toBeNull();
+    });
+});

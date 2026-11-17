@@ -91,6 +91,7 @@ export const controlWords: readonly string[] = [
     'Update',
     'Remove the key',
     'Use the public server',
+    'Use',
     'Configure',
     'Reload',
     'Unblock',

@@ -188,7 +188,8 @@ if (args[0] === 'status') {
         }
         const listed = args.includes('--include-disabled') ? profiles : profiles.filter((profile) => !profile.disabled);
         const size = args.includes('--limit') ? Number(args[args.indexOf('--limit') + 1]) : 50;
-        const page = { items: listed.slice(0, size), next_cursor: listed.length > size ? String(size) : null };
+        const from = args.includes('--cursor') ? Number(args[args.indexOf('--cursor') + 1]) : 0;
+        const page = { items: listed.slice(from, from + size), next_cursor: listed.length > from + size ? String(from + size) : null };
         print(process.env.STUB_PROFILE_LIST_NO_DEFAULT === 'yes' ? page : { ...page, default_execution_profile: inForce() });
     } else if (verb === 'profile set-default') {
         if (process.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE === 'yes') {

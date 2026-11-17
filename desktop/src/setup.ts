@@ -21,7 +21,19 @@ import { settingsTemporary } from './settings-temporary.ts';
 import { isProgramName, type ProgramName, type Programs, type RunResult } from './programs.ts';
 import { hosts, keyProvider, keyProviders } from './providers-model.ts';
 import { OwnServers, type UnreadKind } from './own-servers.ts';
-import { hostWords, profileProgram, readDefaultAnswer, readProfile, readProfilePage, roleHostOf, roleProfiles, rolesNext, type RoleHost } from './roles-profile.ts';
+import {
+    hostWords,
+    profileProgram,
+    profileToUse,
+    readDefaultAnswer,
+    readProfile,
+    readProfilePage,
+    roleHostOf,
+    roleProfiles,
+    rolesNext,
+    type ListedProfile,
+    type RoleHost,
+} from './roles-profile.ts';
 import type { ProviderKeys } from './providers.ts';
 import {
     actBox,
@@ -272,6 +284,8 @@ const signInLimit = 5 * 60_000;
 const profileLimit = 60_000;
 /** The reason the runtime journals with the default the desktop names; fixed text, never a person's. */
 export const namingReason = 'Jason Desktop named the profile it made for the agents’ roles';
+/** The reason the runtime journals with the default a person's Use names; fixed text, never a person's. */
+export const usingReason = 'Chosen for the agents’ roles with Use in Jason Desktop';
 
 /**
  * What one call of `connectRoles` came to: already settled in this run, a default already in force, profiles or the
@@ -327,6 +341,24 @@ const editByHand = 'Edit it by hand, then press Reload.';
 
 function words(result: RunResult, otherwise: string): string {
     return (result.stderr.trim() || result.stdout.trim() || otherwise).slice(-1000);
+}
+
+/**
+ * The runtime's own words for a verb it refused: the error's message and the message of each detail it carries (what
+ * became of the settings file, say), as the CLI prints them on stdout; the program's words otherwise.
+ */
+export function runtimeWords(result: CliResult, otherwise: string): string {
+    try {
+        const error = (JSON.parse(result.stdout) as { error?: { message?: unknown; details?: unknown } } | null)?.error;
+        if (typeof error?.message === 'string') {
+            const details = Array.isArray(error.details) ? error.details : [];
+            const said = details.map((each) => (each as { message?: unknown } | null)?.message).filter((each): each is string => typeof each === 'string');
+            return [error.message, ...said].join(' ').slice(0, 1000);
+        }
+    } catch {
+        // Not the CLI's JSON: the program's own words.
+    }
+    return words(result, otherwise);
 }
 
 /** The words of a reload refused because the settings file could not be read, or null for any other answer. */
@@ -1003,16 +1035,11 @@ export class Setup {
             return named === 'written' ? 'named' : named === 'theirs' ? 'default_named' : named === 'unanswered' ? 'default_unanswered' : 'default_unwritten';
         }
 
-        const { name, host } = roleProfiles[next.host];
         const found = this.#deps.programs.find(next.host);
         if (found === null) return 'no_host';
-        // The mark first: a profile made and never named is finished by the next start, and only then.
-        if (!this.#mark({ name })) return 'unmarked';
-        const made = await this.#deps.cli.run(['profile', 'create', name, '--host', host, '--program', profileProgram(next.host, found)], { timeoutMs: profileLimit });
-        if (made.exit !== 0) return 'create_refused';
-        // Then the id it answered, the one proof a later start has that the profile there is the desktop's own.
-        const id = readProfile(made.stdout)?.id ?? null;
-        if (id !== null) this.#mark({ name, id });
+        const made = await this.#makeRolesProfile(next.host, found);
+        if (made.kind !== 'made') return made.kind === 'unmarked' ? 'unmarked' : 'create_refused';
+        const { name } = made;
         const named = await this.#nameDefault(name);
         return named === 'written' ? 'made' : named === 'theirs' ? 'made_unnamed' : named === 'unanswered' ? 'default_unanswered' : 'default_unwritten';
     }
@@ -1021,6 +1048,94 @@ export class Setup {
     async #rolesConnected(): Promise<Record<RoleHost, boolean>> {
         const claude = this.#deps.programs.find('claude') !== null && (await this.#claude()).belowFloor === null;
         return { claude, codex: this.#deps.programs.find('codex') !== null };
+    }
+
+    /**
+     * The desktop's own profile for a host, made with `jason profile create` under its name (`roleProfiles`), its host
+     * word and the program found here: the one routine both the fresh installation's link (`connectRoles`) and a person's
+     * Use (`useProgram`) make it by. The mark first, so a profile made and never named is finished by the next start, and
+     * only then; then the id the create answered, the one proof a later start has that the profile there is the desktop's.
+     */
+    async #makeRolesProfile(roleHost: RoleHost, found: string): Promise<{ kind: 'made'; name: string } | { kind: 'unmarked' } | { kind: 'refused'; result: CliResult }> {
+        const { name, host } = roleProfiles[roleHost];
+        if (!this.#mark({ name })) return { kind: 'unmarked' };
+        const made = await this.#deps.cli.run(['profile', 'create', name, '--host', host, '--program', profileProgram(roleHost, found)], { timeoutMs: profileLimit });
+        if (made.exit !== 0) return { kind: 'refused', result: made };
+        const id = readProfile(made.stdout)?.id ?? null;
+        if (id !== null) this.#mark({ name, id });
+        return { kind: 'made', name };
+    }
+
+    /** Every profile the runtime holds, a disabled one included, page after page; the answer of a page not read. */
+    async #everyProfile(): Promise<{ profiles: ListedProfile[] } | { unread: CliResult }> {
+        const profiles: ListedProfile[] = [];
+        let cursor: string | null = null;
+        do {
+            const listed = await this.#deps.cli.run(['profile', 'list', '--include-disabled', '--limit', '1000', ...(cursor === null ? [] : ['--cursor', cursor])]);
+            const page = listed.exit === 0 ? readProfilePage(listed.stdout) : null;
+            if (page === null) return { unread: listed };
+            profiles.push(...page.profiles);
+            cursor = page.cursor;
+        } while (cursor !== null);
+        return { profiles };
+    }
+
+    /**
+     * A person's Use on a program's card: the agents' roles put on Claude Code or Codex by default. The program must be
+     * found here, and Claude Code at its floor, as the card's In use needs. The profile is an enabled one on that host —
+     * the desktop's own name first, else the one there is; several, none of them the desktop's own, are refused naming
+     * them, never guessed between — or, where there is none, one made by the routine the fresh installation's link makes
+     * it by. Then the runtime is asked to name it the default, `jason profile set-default`, with the desktop's fixed
+     * reason, and the cards are read again: what they show is the default the runtime answers in force, never this act's
+     * wish. A refusal of the runtime's, a default a JASON_ variable sets or a Roles section it refuses included, is said in
+     * its own words, and nothing is asked again.
+     */
+    useProgram(programId: unknown): Promise<void> {
+        return this.#serial(async () => {
+            if (programId !== 'claude' && programId !== 'codex') throw new Refused('The agents’ roles are put on Claude Code or Codex from here, and on no other program.');
+            const roleHost: RoleHost = programId;
+            const label = roleHost === 'claude' ? 'Claude Code' : 'Codex';
+            const outcome = await this.#useProgram(roleHost, label).catch((error: unknown) => {
+                this.#deps.log.info('program_used', { Program: roleHost, Outcome: 'refused' });
+                this.#changed();
+                throw error;
+            });
+            this.#deps.log.info('program_used', { Program: roleHost, Outcome: outcome });
+            this.#changed();
+        });
+    }
+
+    async #useProgram(roleHost: RoleHost, label: string): Promise<'named' | 'made'> {
+        const found = this.#deps.programs.find(roleHost);
+        if (found === null) throw new Refused(`${label} is not found on this computer, so the agents’ roles were left where they are.`);
+        if (roleHost === 'claude') {
+            const below = (await this.#claude()).belowFloor;
+            if (below !== null) throw new Refused(below);
+        }
+        const every = await this.#everyProfile();
+        if ('unread' in every) throw new Refused(runtimeWords(every.unread, 'The runtime did not list its execution profiles, so nothing was changed.'));
+        const pick = profileToUse(every.profiles, roleHost);
+        const nameOne = 'Name the one to use with `jason profile set-default <name>`.';
+        if (pick.kind === 'several') throw new Refused(`Several execution profiles run on ${label}: ${pick.names.join(', ')}. ${nameOne}`);
+        if (pick.kind === 'disabled') throw new Refused(`The execution profile ${pick.name} runs on ${label} and is disabled; \`jason profile enable ${pick.name}\` puts it back in service.`);
+        if (pick.kind === 'taken') throw new Refused(`The execution profile ${pick.name} is there and runs another program, so none was made for ${label}. ${nameOne}`);
+        let name: string;
+        let made = false;
+        if (pick.kind === 'create') {
+            const result = await this.#makeRolesProfile(roleHost, found);
+            if (result.kind === 'unmarked') throw new Refused('The desktop could not write its own settings, so no profile was made.');
+            if (result.kind === 'refused') throw new Refused(runtimeWords(result.result, `jason profile create ended with code ${result.result.exit}.`));
+            name = result.name;
+            made = true;
+        } else {
+            name = pick.name;
+        }
+        const named = await this.#deps.cli.run(['profile', 'set-default', name, '--reason', usingReason]);
+        if (named.exit !== 0) throw new Refused(runtimeWords(named, `jason profile set-default ended with code ${named.exit}.`));
+        const answered = readDefaultAnswer(named.stdout);
+        if (answered !== name) throw new Refused(`The runtime answered ${answered ?? 'no default'} in force, not ${name}.`);
+        if (made) this.#mark(null);
+        return made ? 'made' : 'named';
     }
 
     /**

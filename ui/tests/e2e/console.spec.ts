@@ -126,6 +126,7 @@ function standInDesktop(): void {
             connectReplyWithKey: done,
             setProviderKey: done,
             installProgram: done,
+            useProgram: done,
             configurePlugin: done,
             onChanged: quiet,
         },
