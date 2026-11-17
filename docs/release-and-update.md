@@ -968,7 +968,11 @@ the application after it: on Windows the installer runs as `--updated /S`, and o
 Squirrel has the update, and ShipIt installs it after the application has ended. On Windows an installer that refuses —
 the application still running a minute after it was told to quit, a Jason process still found at the carried path, or
 the old version's uninstaller refusing to let go of its files — replaces no file, ends with a code other than 0 and, run
-silently, shows no window, so it leaves the old version installed and working. It never starts a runtime, and touches
+silently, shows no window, so it leaves the old version installed and working. On the terminal's update nobody reads
+that exit: `jason update apply` sees a setup that ended 3, Jason Desktop still running, only as an application whose
+`version.json` did not name the new version within its ten-minute wait, after which, the old version still named, it
+puts a `jason` back at the carried path and the record that stood, starts the runtime again and answers
+`update_desktop_not_installed` (below). The Desktop's start never starts a runtime, and touches
 no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes
 one for the request. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
 folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
