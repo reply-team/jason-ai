@@ -1,6 +1,6 @@
 // What the Windows installer does once the files are in place: it sets the machine up through the jason the application
 // carries, `jason install` with no flags, at every install and every update, silent or not. That routine puts jason in the
-// terminal, gives every agent host found its skills and retires an older command-line install; it writes nothing under
+// terminal, gives Claude Code and Codex, where each is found, their skills and retires an older command-line install; it writes nothing under
 // the data directory without --roles, so a person's first start still opens on the Demo, and it starts no process that
 // outlives it, so a script that waits for the installer's whole process tree is not held. Nothing here starts a runtime:
 // the caller that asked for an install starts one where the routine stopped one. The installer is not run here; these
@@ -73,17 +73,21 @@ test('a setup that did not get everything done never fails the install, and noth
     // The files are in place by now: an install that ended with an error here would leave the application installed
     // and say it was not. The routine's own report is what the install scripts read, and the application's start runs
     // it again where its last run was for an older version.
-    assert.ok(!lines.some((line) => /SetErrorLevel|Quit|Abort|MessageBox/i.test(line)), lines.join('\n'));
+    assert.ok(!lines.some((line) => /SetErrorLevel|Quit|Abort/i.test(line)), lines.join('\n'));
+    // The one box it shows answers itself in a silent run, so no silent install waits on it.
+    assert.ok(lines.filter((line) => /MessageBox/i.test(line)).every((line) => line.startsWith('MessageBox MB_OK|') && line.endsWith(' /SD IDOK')), lines.join('\n'));
     assert.ok(!lines.some((line) => /runtime/i.test(line)), 'the installer starts or stops a runtime itself');
 });
 
-test('a setup that did not set everything up is said in one line of a run a person watches, naming jason install', () => {
+test('a setup that did not set everything up is said in a box of a run a person watches, naming jason install, and to nobody in a silent run', () => {
     const lines = macroLines('customInstall');
     const ran = lines.indexOf('Pop $R0');
     assert.deepEqual(lines.slice(ran + 1), [
         // A string test: nsExec leaves "error" or "timeout" where the program could not be run, which is no answer of 0.
         '${if} $R0 S!= 0',
-        `DetailPrint "jason install did not set everything up (it answered $R0). Run ${carried} install in a terminal to see what it says."`,
+        // A one-click installer shows no details, so a line there is never seen: a person is shown a box, which a silent
+        // run answers itself.
+        `MessageBox MB_OK|MB_ICONEXCLAMATION "jason install did not set everything up (it answered $R0). Run ${carried} install in a terminal to see what it says." /SD IDOK`,
         '${endIf}',
     ]);
 });

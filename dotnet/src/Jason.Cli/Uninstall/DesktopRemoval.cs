@@ -949,7 +949,7 @@ public static partial class DesktopRemoval
                     return;
                 }
 
-                if (env.Removes!.HandToUninstaller(application, Environment.ProcessId) is { } waiter)
+                if (env.Removes!.HandToUninstaller(application, Environment.ProcessId, env.Paths.LogsDirectory) is { } waiter)
                 {
                     done.Add(string.Create(CultureInfo.InvariantCulture, $"Handed the application at {application} to its own uninstaller, which removes it once this command has ended: process {waiter} waits for that. ")
                         + "If Jason is still listed in Installed apps in Settings afterwards, a jason started from its folder in the meantime kept the uninstaller from removing it: uninstall Jason there.");

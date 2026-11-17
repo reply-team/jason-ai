@@ -150,6 +150,9 @@ public sealed class FakeRelease : HttpMessageHandler
     /// </summary>
     public long? UiLengthSays { get; set; }
 
+    /// <summary>Called with each address as it is asked for, before it is answered: a test's look at the machine in that moment.</summary>
+    public Action<string>? OnRequest { get; set; }
+
     /// <summary>Set to fail the next download in the way a network does.</summary>
     public HttpStatusCode? FailWith { get; set; }
 
@@ -206,6 +209,7 @@ public sealed class FakeRelease : HttpMessageHandler
         Requested.Add(path);
         Hosts.Add(request.RequestUri.Host);
         UserAgents[path] = request.Headers.UserAgent.ToString();
+        OnRequest?.Invoke(path);
 
         if (FailWith is { } failure)
         {

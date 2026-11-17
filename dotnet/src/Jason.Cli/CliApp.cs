@@ -98,8 +98,8 @@ namespace Jason.Cli;
 /// </para>
 /// <para>
 /// <c>install</c> is the twelfth, the other half of <c>uninstall</c>. Run by the jason the desktop application carries, it
-/// sets this machine up for it — the terminal command, the skills of every agent host found, an older command-line install
-/// retired — none of which the runtime performs or is asked about; of the runtime it asks only to drain and to stop, and
+/// sets this machine up for it — the terminal command, the skills of Claude Code and Codex where each is found, an older
+/// command-line install retired — none of which the runtime performs or is asked about; of the runtime it asks only to drain and to stop, and
 /// only one running from the executable it retires.
 /// </para>
 /// <para>

@@ -79,7 +79,7 @@ public static class UpdateCommands
         };
         var finish = new Option<bool>("--finish")
         {
-            Description = "The finishing step of a jason Jason Desktop carries. With an update past 'swapped' in flight, it finishes that update, as the update's own hand-over runs it. With none in flight, it brings what belongs to the installed version up to it - the plugin packages its release publishes, by the update's own plan (an edited package is left as it is), every skills deployment this installation records, and the UI - starts and stops no runtime, asks a running one to reload where a package changed, and answers one document: version, data_dir, data_dir_found, complete, and parts (plugins, skills, ui), each with state done, already_there or not_done, a reason where not_done, and its lines. Run again it changes nothing. With no data directory it makes none and says so. Refused with update_in_progress while an update stands before 'swapped'; a usage error for a jason the application does not carry.",
+            Description = "The finishing step of a jason Jason Desktop carries. With an update past 'swapped' in flight, it finishes that update, as the update's own hand-over runs it. With none in flight, it brings what belongs to the installed version up to it - the plugin packages its release publishes, by the update's own plan (an edited package is left as it is), every skills deployment this installation records, and the UI - starts and stops no runtime, asks a running one to reload where a package changed, and answers one document: version, data_dir, data_dir_found, complete, and parts (plugins, skills, ui), each with state done, already_there or not_done, a reason where not_done, and its lines. Run again it changes nothing. With no data directory, or one holding nothing but Jason Desktop's own, it reads no release, makes nothing and says so. Refused with update_in_progress while an update stands before 'swapped'; a usage error for a jason the application does not carry.",
         };
         var human = VerbOptions.Human();
         command.Options.Add(feed);
@@ -475,6 +475,14 @@ public static class UpdateCommands
             return ExitCodes.Success;
         }
 
+        // Nor where the data directory holds nothing of an installation but Jason Desktop's own, as on its first start: it
+        // reads no release and makes nothing, so a fresh machine stays new.
+        if (finish && !continuing && HoldsOnlyTheDesktops(env.Paths.Root))
+        {
+            PrintFinish(env, human, UpdateApplier.NothingInstalled(SemanticVersion.Current, env.Paths.Root));
+            return ExitCodes.Success;
+        }
+
         // A console's close ends this process soon after it is told, and nothing else tells a .NET program of it: it cancels
         // the update as Ctrl+C does, and holds the close until the way out has run (Closing).
         using var closing = new Closing(cancellationToken);
@@ -603,7 +611,9 @@ public static class UpdateCommands
         }
 
         // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop,
-        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more.
+        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more. A
+        // fresh machine was turned away above, so here an installation is there, and the lock is always taken, its folder made
+        // for it where it is not there yet: the finish writes into the installation, and nothing else may beside it.
         if (finish && !continuing && unread is null && inFlight is null)
         {
             UpdateLock held;
@@ -813,6 +823,43 @@ public static class UpdateCommands
                 $"The update to {inFlight.ToVersion} was cancelled while it was finished. The application is {inFlight.ToVersion}, and {handing.RuntimeSaid()} `jason update apply` finishes the update.",
                 cancelled,
                 retryable: true);
+        }
+    }
+
+    /// <summary>
+    /// Whether the data directory holds nothing of an installation but Jason Desktop's own: its folder, <c>desktop/</c>, and
+    /// its log, <c>logs/desktop-*.jsonl</c>, which it writes from its first start. Anything else there, or a directory that
+    /// cannot be listed, is an installation's.
+    /// </summary>
+    internal static bool HoldsOnlyTheDesktops(string root)
+    {
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+            {
+                var name = Path.GetFileName(entry);
+                if (name == "desktop" && Directory.Exists(entry))
+                {
+                    continue;
+                }
+
+                if (name == "logs"
+                    && Directory.Exists(entry)
+                    && Directory.EnumerateFileSystemEntries(entry).All(log => File.Exists(log)
+                        && Path.GetFileName(log).StartsWith("desktop-", StringComparison.Ordinal)
+                        && log.EndsWith(".jsonl", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 

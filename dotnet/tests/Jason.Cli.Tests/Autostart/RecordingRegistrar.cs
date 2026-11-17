@@ -15,6 +15,9 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
     /// <summary>How many times something was taken away, including the times there was nothing to take.</summary>
     public int Removals { get; private set; }
 
+    /// <summary>Every removal asked of this machine, as it was composed, in order.</summary>
+    public List<AutostartRegistration> Removed { get; } = [];
+
     /// <summary>What this machine holds, which `enable` and `disable` change and `status` reads.</summary>
     public AutostartState State { get; set; } = new(false, [], null);
 
@@ -54,6 +57,7 @@ public sealed class RecordingRegistrar(AutostartPlatform platform = AutostartPla
         }
 
         Removals++;
+        Removed.Add(registration);
         var removed = Removes ?? new AutostartRemoval(State.Registered, Legacy: false);
         State = new AutostartState(false, [], null);
         return removed;

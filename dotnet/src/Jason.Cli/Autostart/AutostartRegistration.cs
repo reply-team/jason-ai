@@ -47,7 +47,15 @@ public sealed record AutostartRegistration(
     IReadOnlyList<IReadOnlyList<string>> Remove,
     IReadOnlyList<string> Query,
     IReadOnlyList<string> Run,
-    string? SearchPath = null);
+    string? SearchPath = null)
+{
+    /// <summary>
+    /// The commands that clear what an earlier removal left standing for <see cref="Name"/>, run after <see cref="Remove"/>
+    /// whether or not anything was registered: on macOS, for an uninstall, the label's disabled state
+    /// (<see cref="AutostartArtifacts.LeavingNoMark"/>). Empty for every other removal.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>> Forget { get; init; } = [];
+}
 
 /// <summary>What a machine says is registered: whether anything is, and the command line it names.</summary>
 /// <param name="Registered">Whether this account has a registration at all.</param>
