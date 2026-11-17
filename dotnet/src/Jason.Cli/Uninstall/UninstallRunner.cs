@@ -227,7 +227,8 @@ public static class UninstallRunner
         {
             // Composed the one way this product composes a removal, the way `disable` does. A second place that knew
             // how this machine registers things would be a second place to be wrong about how it unregisters them.
-            removed = registrar.Remove(RuntimeAutostartCommands.Removal(env, registrar.Platform));
+            // One difference: an uninstall leaves no mark for the name, where `disable` leaves the label disabled on macOS.
+            removed = registrar.Remove(RuntimeAutostartCommands.Removal(env, registrar.Platform, leavesNoMark: true));
         }
         catch (AutostartException refusal)
         {
