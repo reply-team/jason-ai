@@ -16,7 +16,7 @@ const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as
  */
 const allowed: Readonly<Record<string, string>> = {
     'electron-updater':
-        'the updater: the stable releases of this repository, downloaded and installed on the person’s word; its quitAndInstall starts the installer from inside node_modules, the one start the process guard cannot see',
+        'the updater: the stable releases of this repository, downloaded and installed on the person’s word or on a terminal’s request for one version; its quitAndInstall starts the installer from inside node_modules, the one start the process guard cannot see',
 };
 
 test('the desktop’s runtime dependencies are the allowed ones, each pinned to one version', () => {

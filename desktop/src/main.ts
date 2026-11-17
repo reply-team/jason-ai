@@ -34,6 +34,8 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
+import { applyExits, handedData, requestOf, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
+import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
@@ -206,6 +208,17 @@ function registerSetup(seam: IpcRegistrar, setup: Setup, origin: () => string | 
 
 /** Brings the window forward; the desk's own once it is open. */
 let showWindow: () => void = () => bringForward(BrowserWindow.getAllWindows()[0] ?? null);
+
+/**
+ * A terminal's update requests, taken by the run whose window is open: by the updater `updater` gives, which Live's
+ * window has and the Demo's makes for the request alone. Up to the download in either; on, to the install, only where the
+ * switch says a window may close (`windowOpenUpdate`). `menu` says whether the window has an install item to wait under.
+ */
+function serveRequests(log: Logger, data: string, menu: boolean, updater: () => Pick<Updater, 'take'>): void {
+    windowRequests?.serve((request) =>
+        takeRequest(request, { data, from: app.getVersion(), where: { window: { menu } }, unsupported: requestSupport(app.isPackaged, process.platform), updater, windowOpen: windowOpenUpdate, log }),
+    );
+}
 
 /** The desktop's log before run() makes its own, under the data directory this start was given. */
 function startLog(): Logger {
@@ -457,6 +470,8 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         }
     });
     updates?.start();
+    // A terminal's update request, taken by this window's own updater (a build that has none takes none: `requestSupport`).
+    serveRequests(log, paths.data, updates !== null, () => updates ?? requestUpdater({ data: paths.data, log }));
     let runtimeVersion: string | null = null;
     let runtimeIsOurs = false;
     const keys = new ProviderKeys(paths.providerKeys, safeStorage, process.platform);
@@ -820,6 +835,22 @@ async function runDemo(_links: LinkPost): Promise<void> {
     const desk = new Desk({ window: () => current, origin: () => null, cli: noJason, log, reload: () => views?.reload(), login, autostart: null, updates: null, kept: () => null, command: null, removal: null, demo: demoMenu('demo'), back: () => backToLive(modeDeps) });
     desk.open();
     showWindow = () => desk.show();
+    // A terminal's update request: the Demo has no updater, so one is made for the request when one comes, and only then.
+    serveRequests(log, runOn.person, false, () =>
+        requestUpdater({
+            data: runOn.person,
+            log,
+            async beforeInstall() {
+                quitting = true;
+                desk.close();
+            },
+            async afterRefused() {
+                quitting = false;
+                desk.open();
+                desk.show();
+            },
+        }),
+    );
 
     const unshown = demoUnshownSentence(process.platform);
     try {
@@ -864,6 +895,9 @@ let runOn!: StartRun;
 let personEnvironment!: PersonEnvironment;
 let installationWasNew!: boolean;
 let earlierPageWasFound!: boolean;
+// Where a terminal's update request waits for the window's run that takes it (`update-request.ts`), made by the start that
+// holds the lock: one at a time, and one that comes while another is taken is refused as busy, in its own file.
+let windowRequests: UpdateRequests | null = null;
 if (unsandboxed !== null) {
     keepElectronUnderData();
     void refuseStart(unsandboxed, {
@@ -941,7 +975,8 @@ function startDesktop(): void {
 
     const uninstalling = uninstallStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
     const stoppingRuntime = uninstalling === null && stopRuntimeStart(process.argv, { packaged: app.isPackaged, platform: process.platform });
-    chooseInstallation(uninstalling !== null || stoppingRuntime);
+    const updating = uninstalling === null && !stoppingRuntime ? updateStart(process.argv) : null;
+    chooseInstallation(uninstalling !== null || stoppingRuntime || updating !== null);
     keepElectronUnderData();
     if (uninstalling !== null) {
         // The nsis uninstaller's start: it takes off what the desktop placed and quits, and opens no window.
@@ -952,10 +987,14 @@ function startDesktop(): void {
         // runtime through jason runtime stop and exits, and opens no window; the installer looks again rather than read
         // the code.
         void app.whenReady().then(runStopRuntime).then((code) => app.exit(code), () => app.exit(2));
+    } else if (updating !== null) {
+        // A terminal's update request, or its settling start: no window, no runtime started (`update-start.ts`).
+        startUpdate(updating);
     } else if (!app.requestSingleInstanceLock(fromArgs.kind === 'link' ? { link: fromArgs.raw } : undefined)) {
         app.quit();
     } else {
         const early = startLog();
+        windowRequests = new UpdateRequests((request) => refuseBusy(request, true));
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
         // carry what Chromium added (electron.d.ts, `second-instance`).
@@ -964,6 +1003,9 @@ function startDesktop(): void {
         app.on('second-instance', (_event, argv, _directory, data) => {
             const link = linkOf(data);
             if (link !== null) return linkArrived(link, links, early);
+            // A terminal's update request, handed over by its start: taken by the window's run, and it brings nothing forward.
+            const request = requestOf(data);
+            if (request !== null) return windowRequests?.arrived(request);
             if (showsOnSecondStart(argv)) showWindow();
         });
         // macOS hands a link by open-url, at a cold start before ready as at a running one, so it is listened for now.
@@ -979,4 +1021,38 @@ function startDesktop(): void {
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }
+}
+
+/**
+ * The starts a terminal's `jason update apply` makes (`update-request.ts`): no window, and on macOS no Dock icon, the
+ * activation policy being set to `accessory` before Electron is ready and once more when it is. `--update-apply` takes the
+ * single-instance lock of its data directory, or hands its request to the Jason Desktop that holds it and exits 3; while
+ * it holds the lock, a second start's request is refused as busy and anything else a second start asks is let go.
+ */
+function startUpdate(updating: UpdateStart): void {
+    const headless = (): void => {
+        if (process.platform === 'darwin') app.setActivationPolicy('accessory');
+    };
+    headless();
+    if (updating.kind === 'usage') {
+        app.exit(runUpdateUsage(updating.id, updating.why));
+        return;
+    }
+    const ready = app.whenReady().then(headless);
+    if (updating.kind === 'settle') {
+        void ready.then(runUpdateSettle).then((code) => app.exit(code), () => app.exit(1));
+        return;
+    }
+    const { request } = updating;
+    if (!app.requestSingleInstanceLock(handedData(request))) {
+        startLog().info('update_request_handed', { To: request.to });
+        app.exit(applyExits.handedOver);
+        return;
+    }
+    const requests = new UpdateRequests((other) => refuseBusy(other, false));
+    app.on('second-instance', (_event, _argv, _directory, data) => {
+        const other = requestOf(data);
+        if (other !== null) requests.arrived(other);
+    });
+    void ready.then(() => runUpdateApply(request, requests)).then((code) => app.exit(code), () => app.exit(applyExits.failed));
 }

@@ -221,6 +221,22 @@ export function settleFailedStart(rollback: string, currentVersion: string, layo
 }
 
 /**
+ * Settles an update a terminal asked for and the installer made with no window (`update-request.ts`): the `--update-settle`
+ * start of the new version, made once that version's runtime answered, records it as a start that worked records it,
+ * the copy kept and the version not refused. Only the update that installed this version is settled, and once: a record
+ * that names no such update is left as it is, so a second settle or one after a window's changes nothing. An update whose
+ * runtime did not come up is not settled here: it stays pending, and the next start of a window settles it and says
+ * where the copy is. Answers whether it settled.
+ */
+export function settleByRequest(rollback: string, currentVersion: string, log: Logger): boolean {
+    const state = readRollback(rollback);
+    if (!isFirstLaunchOfUpdate(state, currentVersion)) return false;
+    writeRollback(rollback, afterSuccessfulStart(state));
+    log.info('update_settled_by_request', { Version: currentVersion });
+    return true;
+}
+
+/**
  * Settles an update's first launch with whether the window loaded; the copy is kept either way. Returns the pending
  * record, the version it came from and its copy, when that start failed, null otherwise.
  */

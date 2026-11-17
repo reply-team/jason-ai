@@ -1,0 +1,480 @@
+/**
+ * A terminal's update request: how `jason update apply`, run as the `jason` this application carries, hands the update of
+ * the application to it and reads what came of it. The contract is `docs/release-and-update.md`, "Handing the update to
+ * Jason Desktop"; this module is the Desktop's side of it, and nothing here needs Electron to be tested.
+ *
+ * The verb starts the application with `--update-apply --to <version> --request <id>`, and `--feed <url>` where it was
+ * given a loopback feed. The start shows no window (on macOS no Dock icon either) and takes the single-instance lock of
+ * its data directory; where a running Jason Desktop holds it, the request goes to that one in the lock's additional data
+ * and this start exits 3. Whichever process takes it checks the feed for exactly that version, downloads it, stops the
+ * runtime it carries, keeps the application aside and hands the update to the installer, silently and with no start
+ * after it; or refuses, with a reason. Each step is written to `<data>/update/desktop-<id>.json` before it is taken, so
+ * the file is the answer, read after the process has ended, whatever ended it. A window that takes a request goes as far
+ * as the download and stops there unless one switch says it may close to install (`windowOpenUpdate`).
+ *
+ * `--update-settle` is the other start: once the new version's runtime answered, it records the update the window-less
+ * install left pending as kept (`rollback.ts`), as a window's first start would.
+ */
+
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type { Timers } from './attention.ts';
+import type { Logger } from './log.ts';
+import { demoRuntimeNext, demoRuntimeWords, unansweredWords, type Unanswered } from './own-runtime.ts';
+import type { TakenOutcome, TakenRefusal, TakenRequest, TakenStep, Updater } from './updates.ts';
+
+/** A runtime that did not stop for the install: what the person is told to look at. */
+type StoppedShort = { kind: 'failed'; exit: number; demo?: true } | Unanswered;
+
+/** The start a terminal's `jason update apply` makes, with no window, to update the application to one version. */
+export const updateApplyFlag = '--update-apply';
+/** The start that records a window-less update as kept once the new version's runtime answered. */
+export const updateSettleFlag = '--update-settle';
+export const toFlag = '--to';
+export const requestFlag = '--request';
+export const feedFlag = '--feed';
+
+/**
+ * What a window does with a terminal's request once the update is downloaded: `stop` there, leaving it under the menu's
+ * install item and refusing the request with `window_open`, or `close` to install as a person's click would. Whether an
+ * open Jason Desktop may close itself for an update asked from a terminal is still to be decided; until it is, it stops.
+ */
+export type WindowOpenUpdate = 'stop' | 'close';
+export const windowOpenUpdate: WindowOpenUpdate = 'stop';
+
+/** How long a window-less start waits for its request to end, the install included, before it says so and exits. */
+export const headlessLimitMs = 30 * 60_000;
+
+/** The request the verb names: an id of its own, the version it planned for, and a loopback feed or none. */
+export interface UpdateRequest {
+    id: string;
+    to: string;
+    feed: string | null;
+}
+
+/** What a start's arguments ask: a request, the settling start, or neither read, with the id when that one was. */
+export type UpdateStart = { kind: 'apply'; request: UpdateRequest } | { kind: 'settle' } | { kind: 'usage'; id: string | null; why: string };
+
+/** A request's id: a file name's worth of letters, digits, `-` and `_`, never a path. */
+export function isRequestId(value: string): boolean {
+    return /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+}
+
+/** A release's version as the feeds name it: three numbers and an optional pre-release part. */
+export function isVersion(value: string): boolean {
+    return /^(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})\.(?:0|[1-9]\d{0,8})(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value);
+}
+
+/**
+ * The feed a request may name: http on the loopback address alone, the address the runtime's own feed allows besides
+ * https (`UpdateFeed.IsAllowed`): `localhost`, `127.0.0.0/8` or `[::1]`, with no credentials, query or fragment. Returns
+ * the address as the URL parser wrote it, or null for anything else, https included: a feed of another host is the
+ * releases' to serve, and this one is for a test's own server.
+ */
+export function loopbackFeed(raw: string): string | null {
+    let url: URL;
+    try {
+        url = new URL(raw);
+    } catch {
+        return null;
+    }
+    if (url.protocol !== 'http:' || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') return null;
+    const host = url.hostname;
+    const loopback = host === 'localhost' || host === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+    return loopback ? url.href : null;
+}
+
+/** The value after a flag given once, never another flag; null when it is not there, `false` when it is there wrongly. */
+function valueOf(argv: readonly string[], flag: string): string | null | false {
+    const at = argv.indexOf(flag);
+    if (at < 0) return null;
+    if (argv.indexOf(flag, at + 1) >= 0) return false;
+    const value = argv[at + 1];
+    return value === undefined || value.startsWith('--') ? false : value;
+}
+
+/**
+ * Pure: what a start's arguments ask of the update, or null when they ask nothing of it. Read on every system and in
+ * every build, so a start a terminal made never opens a window: what cannot take a request says so in its file.
+ */
+export function updateStart(argv: readonly string[]): UpdateStart | null {
+    const applying = argv.includes(updateApplyFlag);
+    const settling = argv.includes(updateSettleFlag);
+    if (!applying && !settling) return null;
+    const rawId = valueOf(argv, requestFlag);
+    const id = typeof rawId === 'string' && isRequestId(rawId) ? rawId : null;
+    const usage = (why: string): UpdateStart => ({ kind: 'usage', id, why });
+    if (applying && settling) return usage(`${updateApplyFlag} and ${updateSettleFlag} are two starts, not one`);
+    if (settling) {
+        return [toFlag, requestFlag, feedFlag].some((flag) => argv.includes(flag)) ? usage(`${updateSettleFlag} takes nothing beside it`) : { kind: 'settle' };
+    }
+    if (argv.indexOf(updateApplyFlag) !== argv.lastIndexOf(updateApplyFlag)) return usage(`${updateApplyFlag} is given once`);
+    if (id === null) return usage(`${requestFlag} names the request: letters, digits, - and _, at most 64`);
+    const to = valueOf(argv, toFlag);
+    if (typeof to !== 'string' || !isVersion(to)) return usage(`${toFlag} names the version to install, such as 0.49.1`);
+    const rawFeed = valueOf(argv, feedFlag);
+    if (rawFeed === false) return usage(`${feedFlag} names the feed's address once`);
+    const feed = rawFeed === null ? null : loopbackFeed(rawFeed);
+    if (rawFeed !== null && feed === null) return usage(`${feedFlag} is an http address on the loopback address, and no other`);
+    return { kind: 'apply', request: { id, to, feed } };
+}
+
+/** What a start that could not take the lock hands the running application, in the lock's additional data. */
+export function handedData(request: UpdateRequest): { update: UpdateRequest } {
+    return { update: { id: request.id, to: request.to, feed: request.feed } };
+}
+
+/** The request a second start handed over, read again here and never trusted; null when there is none or it is not one. */
+export function requestOf(data: unknown): UpdateRequest | null {
+    if (data === null || typeof data !== 'object' || !('update' in data)) return null;
+    const raw = (data as { update: unknown }).update;
+    if (raw === null || typeof raw !== 'object') return null;
+    const { id, to, feed } = raw as Record<string, unknown>;
+    if (typeof id !== 'string' || !isRequestId(id) || typeof to !== 'string' || !isVersion(to)) return null;
+    if (feed === null || feed === undefined) return { id, to, feed: null };
+    const loopback = typeof feed === 'string' ? loopbackFeed(feed) : null;
+    return loopback === null ? null : { id, to, feed: loopback };
+}
+
+/** Where a request's answer is written: `<data>/update/desktop-<id>.json`. */
+export function requestFile(data: string, id: string): string {
+    return join(data, 'update', `desktop-${id}.json`);
+}
+
+/** A request's step while it is taken (`checking`, `downloading`), and its end: `installing`, `current` or `refused`. */
+export type RequestState = 'checking' | 'downloading' | 'installing' | 'current' | 'refused';
+
+/** Why a request was refused: the updater's codes, and the ones a start decides before it reaches the updater. */
+export type RequestRefusal = TakenRefusal | 'usage' | 'not_installed' | 'unsupported_platform' | 'timed_out' | 'failed';
+
+export const requestRefusals: readonly RequestRefusal[] = [
+    'usage',
+    'not_installed',
+    'unsupported_platform',
+    'updater_inactive',
+    'busy',
+    'version_rejected',
+    'check_failed',
+    'version_mismatch',
+    'download_failed',
+    'window_open',
+    'runtime_not_stopped',
+    'keep_failed',
+    'install_failed',
+    'timed_out',
+    'failed',
+];
+
+/** The request's file, as written: snake_case, every member always there. */
+export interface RequestRecord {
+    request: string;
+    state: RequestState;
+    /** The version of the application that took the request. */
+    from: string;
+    /** The version the request named; null only for a request whose version could not be read. */
+    to: string | null;
+    reason: RequestRefusal | null;
+    /** What a person is told of a refusal, in a sentence; null otherwise. */
+    message: string | null;
+    /** The version the feed offered, where it was read. */
+    offered: string | null;
+    /** Whether a running window took the request rather than a start of its own. */
+    window: boolean;
+    /** Whether the runtime this application carries was stopped for it; nothing here starts it again. */
+    runtime_stopped: boolean;
+    /** The copy of the application kept aside under `<data>/desktop/rollback/<from>/`, where one was. */
+    kept: string | null;
+    updated_at: string;
+}
+
+/** Writes a request's file through a file beside it renamed over it, so a reader never meets half of it. */
+export function writeRequestFile(file: string, record: RequestRecord): void {
+    mkdirSync(dirname(file), { recursive: true });
+    const temporary = `${file}.${process.pid}.tmp`;
+    try {
+        writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`);
+        renameSync(temporary, file);
+    } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+    }
+}
+
+/** A request's file as written, or null where there is none or it cannot be read. */
+export function readRequestFile(file: string): RequestRecord | null {
+    try {
+        return JSON.parse(readFileSync(file, 'utf8')) as RequestRecord;
+    } catch {
+        return null;
+    }
+}
+
+/** Where this application cannot take a request at all: a development build, or a system it is not updated on so. */
+export function requestSupport(packaged: boolean, platform: NodeJS.Platform): 'not_installed' | 'unsupported_platform' | null {
+    if (!packaged) return 'not_installed';
+    return platform === 'win32' || platform === 'darwin' ? null : 'unsupported_platform';
+}
+
+/** What the person at the terminal is told of a refusal. */
+export function refusalMessage(
+    reason: RequestRefusal,
+    at: { to: string | null; from: string; offered: string | null; runtimeStopped: boolean; kept: string | null; menu: boolean; why?: string; runtime?: StoppedShort },
+): string {
+    const to = at.to ?? 'the version asked for';
+    const stopped = at.runtimeStopped ? ' The runtime this application carries was stopped for the update: jason runtime start starts it again.' : '';
+    const unchanged = at.runtimeStopped ? stopped : ' Nothing was changed.';
+    switch (reason) {
+        case 'usage':
+            return `Jason Desktop could not read the update request: ${at.why ?? 'its arguments are not the ones it takes'}.`;
+        case 'not_installed':
+            return 'This Jason Desktop is a development build, which no installer updates, so nothing was changed.';
+        case 'unsupported_platform':
+            return 'On this system Jason Desktop takes no update request from a terminal: update it from its own menu, or through the package it came in. Nothing was changed.';
+        case 'updater_inactive':
+            return 'Jason Desktop’s updater cannot replace the application where it is installed, so nothing was changed.';
+        case 'busy':
+            return 'Jason Desktop is already checking for, downloading or installing an update, so this request was not taken. Run jason update apply again once that has finished.';
+        case 'version_rejected':
+            return `Jason ${to} failed its first start on this machine before, so Jason Desktop does not install it again. Nothing was changed.`;
+        case 'check_failed':
+            return 'Jason Desktop could not read its update feed, so nothing was changed.';
+        case 'version_mismatch':
+            return at.offered === null || at.offered === at.from
+                ? `The update feed offers no Jason newer than ${at.from}, while Jason ${to} was asked for, so nothing was changed.`
+                : `The update feed offers Jason ${at.offered}, not the Jason ${to} that was asked for, so nothing was changed. Run jason update apply again to plan from what the feeds say now.`;
+        case 'download_failed':
+            return `Jason ${to} could not be downloaded, so nothing was changed.`;
+        case 'window_open':
+            return at.menu
+                ? `Jason Desktop is open, so Jason ${to} was downloaded and waits there: choose Restart Jason and Its Runtime to Install ${to} in its Jason menu, or quit Jason Desktop and run jason update apply again.`
+                : `Jason Desktop is open, so Jason ${to} was downloaded and not installed: quit Jason Desktop and run jason update apply again.`;
+        case 'runtime_not_stopped': {
+            const runtime = at.runtime;
+            if (runtime?.demo) return `Jason ${to} was not installed, because ${demoRuntimeWords}. Nothing was replaced. ${demoRuntimeNext}`;
+            if (runtime?.kind === 'unanswered') {
+                const { why, next } = unansweredWords(runtime);
+                return `Jason ${to} was not installed, because ${why}. Nothing was replaced. ${next}`;
+            }
+            const how = runtime === undefined || runtime.exit === -1 ? 'jason runtime stop did not finish' : `jason runtime stop exited ${runtime.exit}`;
+            return `Jason ${to} was not installed, because the runtime this application carries did not stop (${how}). Nothing was replaced. Stop the runtime with jason runtime stop, then run jason update apply again.`;
+        }
+        case 'keep_failed':
+            return `Jason ${to} was not installed, because a copy of this version could not be kept aside to go back to.${unchanged}`;
+        case 'install_failed':
+            return `The installer stopped before Jason ${to} was installed.${stopped}${at.kept === null ? '' : ` A copy of this version is kept at ${at.kept}.`}`;
+        case 'timed_out':
+            return `Jason Desktop did not finish the update within ${headlessLimitMs / 60_000} minutes and stopped waiting. If it had begun installing, the application may still be replaced once it has ended: jason --version says which version runs.`;
+        case 'failed':
+            return 'Jason Desktop met an error it did not expect while it took the update request, and ended.';
+    }
+}
+
+/**
+ * Where requests wait for the run that takes them, one at a time: one that arrives before a run serves them is held, and
+ * one that arrives while another is held or taken is refused as `busy`, by `refuseBusy`.
+ */
+export class UpdateRequests {
+    #serve: ((request: UpdateRequest) => Promise<unknown>) | null = null;
+    #held: UpdateRequest | null = null;
+    #busy = false;
+    readonly #refuseBusy: (request: UpdateRequest) => void;
+
+    constructor(refuseBusy: (request: UpdateRequest) => void) {
+        this.#refuseBusy = refuseBusy;
+    }
+
+    arrived(request: UpdateRequest): void {
+        if (this.#busy || this.#held !== null) {
+            this.#refuseBusy(request);
+            return;
+        }
+        if (this.#serve === null) this.#held = request;
+        else this.#run(request);
+    }
+
+    serve(serve: (request: UpdateRequest) => Promise<unknown>): void {
+        this.#serve = serve;
+        const held = this.#held;
+        this.#held = null;
+        if (held !== null) this.#run(held);
+    }
+
+    #run(request: UpdateRequest): void {
+        const serve = this.#serve;
+        if (serve === null) return;
+        this.#busy = true;
+        void serve(request)
+            .catch(() => undefined)
+            .finally(() => {
+                this.#busy = false;
+            });
+    }
+}
+
+export interface TakeDeps {
+    /** The data directory the request's file is written under: the one this application runs on. */
+    data: string;
+    /** This application's version. */
+    from: string;
+    /** Where the request is taken: by a start of its own, or by a running window, which has an install item or not (the Demo). */
+    where: 'headless' | { window: { menu: boolean } };
+    /** Why this application takes no request at all (`requestSupport`), or null. */
+    unsupported: 'not_installed' | 'unsupported_platform' | null;
+    /** The updater the request is taken by, made only when one is needed. */
+    updater(): Pick<Updater, 'take'>;
+    /** The switch, read by a window only. */
+    windowOpen: WindowOpenUpdate;
+    log: Logger;
+    /** Hears the end an install that failed late wrote (`TakenHow.late`). */
+    late?(record: RequestRecord): void;
+    /** Bounds the whole request, a window-less start's alone; hears the record it wrote when the bound passed. */
+    limit?: { ms: number; timers: Timers; expired(record: RequestRecord): void };
+    write?(file: string, record: RequestRecord): void;
+    now?(): Date;
+}
+
+/**
+ * Takes one request to its end: each step written to the request's file before it is taken, the end last. Returns the
+ * end it wrote. A file that cannot be written is logged and the request goes on: its process's exit then says less.
+ */
+export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promise<RequestRecord> {
+    const file = requestFile(deps.data, request.id);
+    const write = deps.write ?? writeRequestFile;
+    const window = deps.where !== 'headless';
+    const menu = deps.where !== 'headless' && deps.where.window.menu;
+    let last: RequestRecord = {
+        request: request.id,
+        state: 'checking',
+        from: deps.from,
+        to: request.to,
+        reason: null,
+        message: null,
+        offered: null,
+        window,
+        runtime_stopped: false,
+        kept: null,
+        updated_at: '',
+    };
+    let ended = false;
+    const put = (next: Partial<RequestRecord>): RequestRecord => {
+        last = { ...last, ...next, updated_at: (deps.now?.() ?? new Date()).toISOString() };
+        try {
+            write(file, last);
+        } catch {
+            deps.log.warn('update_request_unwritten', { State: last.state });
+        }
+        return last;
+    };
+    const refuse = (reason: RequestRefusal, at: Partial<RequestRecord> = {}, runtime?: StoppedShort): RequestRecord => {
+        const merged = { ...last, ...at };
+        const message = refusalMessage(reason, {
+            to: merged.to,
+            from: merged.from,
+            offered: merged.offered,
+            runtimeStopped: merged.runtime_stopped,
+            kept: merged.kept,
+            menu,
+            ...(runtime === undefined ? {} : { runtime }),
+        });
+        return put({ ...at, state: 'refused', reason, message });
+    };
+    const end = (record: RequestRecord): RequestRecord => {
+        deps.log.info('update_request_ended', { To: request.to, State: record.state, Code: record.reason ?? 'none' });
+        return record;
+    };
+    deps.log.info('update_request_taken', { To: request.to, Where: window ? 'window' : 'headless' });
+    if (deps.unsupported !== null) {
+        ended = true;
+        return end(refuse(deps.unsupported));
+    }
+    let handle: unknown = null;
+    if (deps.limit !== undefined) {
+        const { limit } = deps;
+        handle = limit.timers.setTimeout(() => {
+            if (ended && last.state !== 'installing') return;
+            ended = true;
+            limit.expired(end(refuse('timed_out')));
+        }, limit.ms);
+    }
+    const clear = (): void => {
+        if (handle !== null) deps.limit?.timers.clearTimeout(handle);
+        handle = null;
+    };
+    put({ state: 'checking' });
+    const progress = (step: TakenStep): void => {
+        if (ended) return;
+        if (step.step === 'checking') put({ state: 'checking' });
+        else if (step.step === 'downloading') put({ state: 'downloading', offered: step.offered });
+        else put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
+    };
+    const taken: TakenRequest = { to: request.to, feed: request.feed };
+    let outcome: TakenOutcome;
+    try {
+        outcome = await deps.updater().take(taken, {
+            install: !window || deps.windowOpen === 'close',
+            late: () => {
+                if (ended && last.state !== 'installing') return;
+                ended = true;
+                clear();
+                const record = end(refuse('install_failed'));
+                deps.late?.(record);
+            },
+        }, progress);
+    } catch {
+        clear();
+        ended = true;
+        return end(refuse('failed'));
+    }
+    if (outcome.state === 'installing') {
+        // The install's own end is the process quitting, or a late error; the bound keeps running for a window-less start.
+        ended = true;
+        return end(last.state === 'installing' ? last : put({ state: 'installing', offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }));
+    }
+    clear();
+    ended = true;
+    if (outcome.state === 'current') return end(put({ state: 'current' }));
+    return end(refuse(outcome.reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
+}
+
+/** The exit of a window-less start once its request ended: none while the installer has it (it quits), 1 for an end it did not expect, else 0. */
+export function applyExit(record: RequestRecord): number | null {
+    if (record.state === 'installing') return null;
+    return record.reason === 'failed' || record.reason === 'timed_out' ? 1 : 0;
+}
+
+/** The exits a start of `--update-apply` makes: the file names the end, the arguments were not read, the request was handed on, or it failed. */
+export const applyExits = { answered: 0, failed: 1, usage: 2, handedOver: 3 } as const;
+
+/** The end a start whose arguments were not read writes, where the id was read; it reaches no updater. */
+export function usageRecord(id: string, why: string, from: string, now: Date = new Date()): RequestRecord {
+    return {
+        request: id,
+        state: 'refused',
+        from,
+        to: null,
+        reason: 'usage',
+        message: refusalMessage('usage', { to: null, from, offered: null, runtimeStopped: false, kept: null, menu: false, why }),
+        offered: null,
+        window: false,
+        runtime_stopped: false,
+        kept: null,
+        updated_at: now.toISOString(),
+    };
+}
+
+/** The end of a request a running application refused because it was taking another: written by that application. */
+export function busyRecord(request: UpdateRequest, from: string, window: boolean, now: Date = new Date()): RequestRecord {
+    return {
+        request: request.id,
+        state: 'refused',
+        from,
+        to: request.to,
+        reason: 'busy',
+        message: refusalMessage('busy', { to: request.to, from, offered: null, runtimeStopped: false, kept: null, menu: false }),
+        offered: null,
+        window,
+        runtime_stopped: false,
+        kept: null,
+        updated_at: now.toISOString(),
+    };
+}
