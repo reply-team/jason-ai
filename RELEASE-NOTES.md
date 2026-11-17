@@ -23,21 +23,24 @@ replaces the title and the body together.
 
 ## What is new since 0.47.2
 
-This release changes what a browser tab with no desktop shows, and how the Models and Connect card, the Open in menu,
-the chat's bar and its choice card look. It also corrects the Demo's clicks on macOS and the words the window says after
-an editor is opened.
+This release changes what a browser tab with no desktop shows, and how the Models and Connect card, the Reply card, the
+Open in menu, the chat's bar and its choice card look. It gives Jason Desktop on Linux a frame of the console's own. It
+also corrects the Demo's clicks on macOS and the words the window says after an editor is opened.
 
-- **A browser tab with no desktop shows one page, never the console.** A tab that no desktop opened, as `jason ui open`
-  opens it, draws one centred page: "Live Mode is only available in Jason Desktop.", then "To access Live Mode, download
-  Jason Desktop. The desktop app starts an AI session locally on your computer." with a link to the releases page, then
-  that you can build your own web interface or work directly with Jason from a terminal session with your AI using the
-  installed Jason skills. The console's **Demo | Live** switch stands at the top right: **Demo** opens the demo in that
-  tab, and **Live** brings the page back.
+- **A browser tab with no desktop never draws the console.** A tab that no desktop opened, as `jason ui open` opens it,
+  reads what waits on its first load. With nothing waiting it opens on the Demo, as a press of **Demo** does. With
+  something waiting, or when the read cannot be made, it opens on one centred page: "Live Mode is only available in
+  Jason Desktop.", then "To access Live Mode, download Jason Desktop. The desktop app starts an AI session locally on
+  your computer." with a link to the releases page, then that you can build your own web interface or work directly with
+  Jason from a terminal session with your AI using the installed Jason skills. The console's **Demo | Live** switch
+  stands at the top right: **Demo** opens the demo in that tab, and **Live** brings the page back. Until the read
+  answers, only the switch is drawn. A press of **Live** or **Demo** is your choice for that tab, kept for as long as
+  the tab's session lasts, so a reload keeps it; `#/demo` in the address still means the Demo.
   - **While approvals or questions wait,** a quiet line under the words counts them and says where to decide: in Jason
     Desktop, or ask your agent what Jason is waiting for, or run `jason approval list` and `jason decision list`. With
     nothing waiting, or when the read fails, there is no line.
   - **The console is drawn in two places:** Jason Desktop's window, and a tab the desktop opens. An unpaired tab still
-    shows the pair-again page, and the address in the tab is left as it is.
+    shows the pair-again page.
   - **`jason ui open`** still opens and pairs whatever UI is installed, a build of your own included, and `jason ui`
     and `jason ui open --help` say where this release's console is drawn.
 
@@ -54,9 +57,35 @@ an editor is opened.
   - **The button that saves a typed key says Save key,** where it said Keep.
   - In Settings, the card's own "AI" heading is left out under the section's "Models" heading.
 
-- **The Reply card no longer draws the CLI's version, and its button reads Sign in with Reply.** On the Reply card of
-  Settings' Accounts and of the chat's Connect card, which are one control, the plain "Reply CLI" line with its version
-  is gone. The sentences a person acts on stay: the CLI not found, and the CLI older than the account acts need.
+- **The Reply card says what Reply is for, and its button reads Sign in with Reply.** On the Reply card of Settings'
+  Accounts and of the chat's Connect card, which are one control, the card shows the name "Reply" with a **Recommended**
+  mark, and under it one sentence: Reply.io is the service Jason sends through, your mailbox and LinkedIn account are
+  connected to it, and Jason sends from them once you approve. At the right stands **Sign in with Reply**, which is the
+  primary button only while nobody is signed in. Below it one row has a field, "Or paste a Reply API key", and **Use
+  key**. The plain "Reply CLI" line with its version is gone. The sentences a person acts on stay: the CLI not found,
+  and the CLI older than the account acts need. Settings' Accounts no longer draws a "Provider" heading around the card,
+  since the card carries its own name; the browser page without the desktop keeps its heading.
+
+- **The chat's opening chips are drawn in an empty chat only.** "What is waiting for me?", "How are my agents doing?"
+  and "Help me start a new agent." no longer stand under an answer in the Feed or in a set-up chat. An agent's chat
+  keeps the chips that follow the agent's state.
+
+- **Settings' Accounts says what the notification channels are for.** The line under the table reads: "This is how Jason
+  tells you that an approval or a question is waiting for you. To turn a channel on or off, use the Connect panel or ask
+  your AI." In a browser tab, which has no Connect panel, the second sentence says "ask your AI" alone.
+
+- **Jason Desktop on Linux has no title bar of its own.** As on Windows, the window's minimize, maximize and close
+  buttons stand over the right end of the console's top strip, drawn in your desktop's own style, as many as its button
+  layout names for windows, and in the console's ink in the theme in force. A layout that puts them at the left stands
+  them over the sidebar's brand.
+  - **Two keys,** for a window with no menu bar and a desktop that shows no tray icon (Cmd instead of Ctrl on a Mac):
+  **Ctrl+Shift+D** for the update item, which asks, naming the version, before it installs, since the install stops the
+  runtime and restarts the desktop; and **Ctrl+Shift+L** for Back to Your Own Installation, in the Demo. The sentences
+  that send you to them name them.
+  - **The chat's commands on Linux run without Claude Code's environment scrub,** so `jason` in a chat there reaches the
+  runtime, which the scrub's sandbox hid. macOS and Windows keep the scrub. What this lets through: a key connected on a
+  Connect card, and the credentials the turn carries from the desktop's environment, reach the commands the agent runs,
+  as in a terminal; `docs/desktop.md` says what reaches them.
 
 - **The Open in menu has an icon column, one-line hints and dividers, and stays inside the window.** Every item starts
   with an icon. On Windows and macOS a row for an installed application shows that application's own icon, read from the
@@ -111,8 +140,9 @@ Nothing stops, no setting is renamed and no migration runs.
 
 - **The executable:** `jason update apply`, or run the install line again. After it, `jason ui install` brings the
   console's changes.
-- **A bookmark, a link or a notification's click into the browser UI** now opens the one page described above, in a tab
-  no desktop opened; the console is in Jason Desktop. A build of your own in `ui/custom` draws whatever it draws.
+- **A bookmark, a link or a notification's click into the browser UI** now opens the Demo in a tab no desktop opened,
+  or, while something waits, the one page described above; the console is in Jason Desktop. A build of your own in
+  `ui/custom` draws whatever it draws.
 - **The desktop is a separate install:** `jason update` does not install it. Download the installer or the disk image
   for your machine from this release, or let an installed desktop offer the update.
 - **From 0.47.1 or earlier,** the notes of each release in between apply as well.
