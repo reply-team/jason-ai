@@ -7,6 +7,7 @@ import {
     cardHead,
     drawn,
     frame,
+    type Held,
     metaLine,
     type Said,
     saidOf,
@@ -121,6 +122,13 @@ function needsFacts(chat: Chat, campaignId: string | null, read: NeedsRead, at: 
         }`;
 }
 
+/** Whether the card's read, as held, found no approval and no question waiting. */
+const none = (held: Held<NeedsRead> | null): boolean =>
+    held?.state === 'read' &&
+    held.facts.state === 'read' &&
+    held.facts.approvals.items.length === 0 &&
+    held.facts.questions.items.length === 0;
+
 /** The needs card, read when it is drawn as the conversation's last card that reads, and on its Refresh. */
 export function needsCard(chat: Chat, index: number, card: NeedsCard, last: number | null): Html {
     const campaignId = campaignOf(card, chat);
@@ -128,7 +136,8 @@ export function needsCard(chat: Chat, index: number, card: NeedsCard, last: numb
     return frame<NeedsRead>({
         chatId: chat.id,
         index,
-        head: cardHead('Waiting for your decision'),
+        // The heading says only what the read found: a card whose read lists nothing is not headed "Waiting".
+        head: cardHead(none(held) ? 'Your decisions' : 'Waiting for your decision'),
         action: 'card.needs',
         held,
         stub,

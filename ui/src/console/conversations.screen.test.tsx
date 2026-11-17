@@ -1,5 +1,6 @@
 import { act as flush, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ApiProvider } from '../api/context';
 import { session } from '../api/session';
 import { activatePlugins } from '../platform/plugin';
 import { browserPlugins } from '../plugins';
@@ -11,6 +12,7 @@ import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { nothingWaitsInChats } from '../test/waiting';
 import * as consoleCampaigns from './campaigns';
+import { ChatPanel } from './chat';
 import { Console } from './console';
 import { chats, conversations } from './state';
 import { choicesOf, currentOf, menuButton, waitForMenus } from '../test/menus';
@@ -462,6 +464,65 @@ describe('the desktop’s conversations', () => {
             ),
         );
         expect(chats.value[id]).toBeDefined();
+    });
+
+    it('leaves the place of a panel alone when it is given another chat with more turns', async () => {
+        const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return this.classList.contains('chat-scroll') ? 900 : 0;
+            },
+        });
+        try {
+            const desktop = chatDesktop();
+            const one = 'conv_01JDKEPT0000000000000000A1';
+            const three = 'conv_01JDKEPT0000000000000000A2';
+            desktop.keep({
+                id: one,
+                campaignId: 'cmp_1',
+                title: 'Spring',
+                entries: [{ kind: 'user', text: 'One turn only' }],
+            });
+            desktop.keep({
+                id: three,
+                campaignId: 'cmp_2',
+                title: 'Autumn',
+                entries: [
+                    { kind: 'user', text: 'First' },
+                    { kind: 'user', text: 'Second' },
+                    { kind: 'user', text: 'Third' },
+                ],
+            });
+            const { fake } = renderConsole(desktop);
+            // Both chats are held by opening them from the sidebar, as a person does.
+            await waitFor(() => within(listed()).getByRole('button', { name: 'Spring' }));
+            fireEvent.click(within(listed()).getByRole('button', { name: 'Spring' }));
+            await waitFor(() => screen.getByText('One turn only'));
+            fireEvent.click(within(listed()).getByRole('button', { name: 'Autumn' }));
+            await waitFor(() => screen.getByText('Third'));
+            // One panel, drawn with one chat and then given the other at the same place: React keeps the panel, as the
+            // console does where a pane's chat changes under it.
+            const view = render(
+                <ApiProvider api={fake}>
+                    <ChatPanel chatId={one} headed />
+                </ApiProvider>,
+            );
+            const box = view.container.querySelector<HTMLElement>('.chat-scroll')!;
+            await waitFor(() => within(box).getByText('One turn only'));
+            box.scrollTop = 50;
+            view.rerender(
+                <ApiProvider api={fake}>
+                    <ChatPanel chatId={three} headed />
+                </ApiProvider>,
+            );
+            await waitFor(() => within(box).getByText('Third'));
+            expect(view.container.querySelector('.chat-scroll')).toBe(box);
+            expect(box.scrollTop).toBe(50);
+        } finally {
+            if (height) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', height);
+            else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+        }
     });
 
     it('opens a conversation whose turn still runs as running, with Stop, and the turn’s events reach it', async () => {

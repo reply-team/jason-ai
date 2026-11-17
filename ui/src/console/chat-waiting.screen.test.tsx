@@ -746,10 +746,48 @@ describe('what waits in an agent’s chat', () => {
         springApprovals = 'approval.list/empty';
         fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
         await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
-        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }]);
+        // The work item is read at the press, to check the text, and again once approved, to say how its work stands.
+        expect(sent(fake, 'workitem.get')).toEqual([{ work_item_id: 'wi_1' }, { work_item_id: 'wi_1' }]);
         expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_1' }]);
         // Approving sends no reason, as Needs you does; the questions still wait.
         expect(card(pane, 'dec_1')).not.toBeNull();
+        // The chat keeps what was approved. The recorded work item still reads as parked for approval, so the line says
+        // it is not sent yet and why, never that it is being sent or was sent.
+        const said = await waitFor(() => within(waiting(pane)).getByText(/^You approved: /));
+        expect(words(said)).toMatch(
+            /^You approved: Message to .+\. It is not sent yet: it waits for a person to approve it again\.$/,
+        );
+        expect(words(said)).not.toMatch(/Jason is sending it|was sent/);
+    });
+
+    it('says a read that failed alone without labelling anything as waiting', async () => {
+        const fake = new FakeApi();
+        fake.unreachable('approval.list', (body) => (body as { campaign_id?: string }).campaign_id === 'cmp_1');
+        renderConsole(fake);
+        const pane = await openChat('Spring');
+        const kept = await waitFor(() => within(pane).getByRole('region', { name: 'Not read' }));
+        expect(within(kept).getByRole('alert')).toBeTruthy();
+        expect(kept.querySelector('.lab')).toBeNull();
+        expect(within(pane).queryByRole('region', { name: 'Waiting for you' })).toBeNull();
+    });
+
+    it('does not label what was approved as waiting once nothing waits on the person', async () => {
+        const fake = new FakeApi()
+            .answer('approval.approve', 'approval.approve/approved')
+            .answerAnyRequest('decision.list', (body) =>
+                (body as { campaign_id?: string }).campaign_id === 'cmp_1' ? 'decision.list/summer-pending' : undefined,
+            );
+        fake.answer('workitem.get', 'workitem.get/parked-send');
+        renderConsole(fake);
+        const pane = await openChat('Spring');
+        const email = await drawn(pane, 'apr_1');
+        springApprovals = 'approval.list/empty';
+        fireEvent.click(within(email).getByRole('button', { name: 'Approve' }));
+        await waitFor(() => expect(card(pane, 'apr_1')).toBeNull());
+        const kept = await waitFor(() => within(pane).getByRole('region', { name: 'Approved' }));
+        expect(kept.querySelector('.lab')).toBeNull();
+        expect(words(kept)).toMatch(/^You approved: /);
+        expect(within(pane).queryByRole('region', { name: 'Waiting for you' })).toBeNull();
     });
 
     it('does not approve a message whose text moved since it was asked, and says so', async () => {

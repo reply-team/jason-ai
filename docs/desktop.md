@@ -1,16 +1,17 @@
 # Jason Desktop
 
-Jason Desktop is a window onto the installation the `jason` command line already uses. It is one more client of that
+Jason Desktop is a window onto the installation the `jason` command line uses. It is one more client of that
 installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
 and the settings file a person would edit. It runs on one installation, yours; in [the demo](#the-demo) it shows a page of sample data instead and runs
 no installation. Nothing in the runtime exists for the desktop.
 
-The full experience is still a session with your agent, by text or by voice, with the skills loaded; the desktop is for
-the moments you want to see a screen, and what a screen shows is never all there is. It adds three things the browser
-cannot do: a chat that starts an agent on your computer and asks you before the agent acts, a tray that counts what
-waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything else
-it shows is the browser's UI, served by the runtime ([ui.md](ui.md)).
+It adds three things the browser cannot do: a chat that is a session with your own agent, started for you on this
+computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
+what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
+else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
+the Command Line item of its menu puts a command there, `jason`, or `jason-desktop` where another `jason` already
+stands ([The command line, and the login items](#the-command-line-and-the-login-items)).
 
 This page is for the person using it. [desktop/README.md](../desktop/README.md) is the builder's view of the same
 program: its modules, its guards and how a package is made.
@@ -113,7 +114,16 @@ shows before anything is typed and what you send waits, while the window is open
   answer. Under the mailbox an email goes from, the card says the sending name the provider holds for that mailbox now,
   that it holds none, that the provider does not list the mailbox now, or that the name could not be read and why: read
   when the card is drawn, never from what the AI wrote, and not part of what you approve, so it changes no button. A
-  card leaves once the item is decided, there or anywhere else.
+  card leaves once the item is decided, there or anywhere else. An approval decided on its card stays in the chat as a
+  line, "You approved: Message to the person." and then how its work stands, read again as the journal moves: "Jason will
+  send it." while the work is queued, "Jason is sending it." once a handler runs it, "It is not sent yet:" and why if it parked again, "It was sent." once
+  the work succeeded, and "It was not sent:" with "the work failed", "was cancelled" or "expired" otherwise; an act that
+  is no message says "will do it", "is doing it", "not done yet", "is done" or "did not complete". The line is kept while the chat is
+  open; the "Waiting for you" label is drawn only over what waits, never over a read that failed alone.
+- While a turn runs, the line under the conversation says "Thinking…" with a spinner. While a permission card of that
+  turn has no answer it says "Waiting for your answer on the card above." instead, without a spinner, since the turn is
+  waiting for you and not working. A message you send, and a permission card that asks you something, scroll the
+  conversation to its foot above the box; opening a chat leaves its place alone.
 - **Agents** and **Activity** follow the journal as it is written. A campaign's Start, Pause and Resume are in its
   header, beside Add people, so they are there from every tab. The header names the agent's kind beside its state, **Sequence** or **Adaptive** or nothing, by the rule `docs/ui.md` states for a campaign's page.
 - In the console's Live (the browser shell is not the console and is unchanged) the sidebar draws the essentials, under **New GTM agent**: **Search**, whose box also opens with Ctrl K (⌘K on
@@ -582,6 +592,30 @@ starts a fresh one with a recap of the last words. The conversation is no bounda
 campaign, and a command that names another campaign is not refused for that. What a turn may do is the permission
 model's to decide.
 
+### Your memory files in the chat
+
+The `AGENTS.md` files you keep for all of your work, for a project and for a campaign ([projects.md](projects.md)) are
+handed to the chat by the desktop, as Jason's roles read them by path: every chat is given the client's, the one at the
+harness root, and a campaign's conversation the project's and the campaign's as well, in that order, on every host and
+in every access mode. A Claude Code turn cannot open the client's file itself, since no folder outside the ones it works
+in is readable to it, and the root is never added: the desktop reads the files and puts them after its first paragraph,
+each under a line naming its level and its path, its words quoted. A file is read only from the folder the runtime
+records, the root it reports as marked and the folder on the project and on the campaign, and only where that folder
+carries the marker of that level and that id; a level whose folder is not that, or a link, or whose `.jason` is a link,
+says nothing. A file that is itself a link, or a name with more than one link (a hard link), one that is not UTF-8
+text, and one that does not answer within three seconds, as on a share that hangs, are not given: the chat is told on
+one line why, so it can tell you, and a file over 32 KiB is given its first 32 KiB with a line saying so. A host session
+is given the files once, when it is new, and again only a file that changed since, or a line saying that one is now
+empty or gone, said only where its folder was read and the file was not there or empty at two looks a moment apart; a
+level the desktop could not read this time, the runtime not answering say, is said nothing of and given again at the
+next turn that reads it. **Start conversation fresh** gives them all again. The desktop's own record of the conversation
+keeps a digest of what each session was given and its log only the level and whether it was given, changed, gone or not
+given, never a word or a path of a file; the host keeps the turn's input, these words with it, in its own transcript, as
+it keeps every turn's.
+
+The chat does not write these files. When you state a rule that should hold beyond one message, it says the line to add
+and the file it belongs in, by its path; the file is yours to edit, at that path or in its folder from Open in.
+
 ### The Feed
 
 One conversation is of its own kind: the **Feed**, your main chat, about no campaign, drawn first in the sidebar above
@@ -617,7 +651,8 @@ a card that does not hold what its kind needs is drawn as one line saying so, an
 - **Jason asks**: a question with two to five answers; a click sends that answer's words as your next message.
 - **People**: up to ten people of an agent, or of everyone, as the runtime lists them.
 - **Agent**: how one agent is doing, its counts now and over the last thirty days.
-- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them.
+- **Waiting for your decision**: how many approvals and questions wait for you, in one agent or in all of them; a read
+  that finds nothing waiting is headed **Your decisions** instead.
 - **Accounts**: the accounts Reply holds now and the plugin the runtime sends messages through.
 - **AI**, the card that opens Connect: it only leads there, where the AI hosts and the model keys are, with **Open
   Connect**.

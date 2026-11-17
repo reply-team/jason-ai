@@ -79,8 +79,9 @@ test('the chat’s log carries none of a turn’s words, commands, paths or keys
     assert.equal(text.includes(folder), false, 'the campaign folder is not logged');
     const names = text.split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { EventName: string }).EventName);
     assert.deepEqual(names.filter((name) => name.startsWith('chat_')), ['chat_conversations_read', 'chat_turn_started', 'chat_request_decided', 'chat_request_decided', 'chat_request_decided', 'chat_turn_ended']);
-    // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project.
-    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get']);
+    // The campaign's conversation is made by reading the campaign; its turn reads it again, with its project, and asks the
+    // runtime where the harness root is, for the client's memory file.
+    assert.deepEqual(lines0(text).filter((line) => line.EventName === 'cli_exited').map((line) => line.Verb), ['campaign get', 'campaign get', 'project get', 'runtime status']);
     const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
     const { '@t': _at, ...startLine } = lines.find((line) => line.EventName === 'chat_turn_started') ?? {};
     assert.deepEqual(startLine, {

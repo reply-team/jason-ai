@@ -12,6 +12,7 @@ import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, read
 import { join } from 'node:path';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
 import { givenUpTo, isJournalId, keptLineOf, type LineEntry } from './feed.ts';
+import { digestShape, memoryLevels, type GivenDigests } from './chat-memory.ts';
 
 export type KeptAnswer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -68,6 +69,12 @@ export interface Conversation {
      * record an earlier desktop wrote, so a session no mark covers is never one to continue in a terminal.
      */
     plain_sessions?: string[];
+    /**
+     * By host id, the session the person's memory files were last given to and, by level, the digest of each file it was
+     * given (`chat-memory.ts`): never the words. Absent until a session has been given one, and in a record an earlier
+     * desktop wrote, so that session is given them again.
+     */
+    memory_given?: Record<string, MemoryGiven>;
     entries: KeptEntry[];
     /** How many of the oldest entries were dropped to keep the record within its bound. */
     dropped: number;
@@ -78,6 +85,12 @@ export interface Conversation {
      * held in memory alone, so a record never opens a chat in it.
      */
     mode?: 'plan_only';
+}
+
+/** What one host session was given of the memory files: the session's id, and by level the digest of each file. */
+export interface MemoryGiven {
+    session: string;
+    files: GivenDigests;
 }
 
 /** The most a record takes on disk; the oldest entries go first to keep within it. */
@@ -177,6 +190,27 @@ function chosenOf(value: unknown): Chosen | undefined {
     return { host, model: model === null ? null : currentModel(host, model), effort };
 }
 
+/**
+ * What a record says each host session was given of the memory files: only a host whose session the record keeps, under
+ * that very session, with digests of their shape; anything else is nothing given, never a reason to refuse the record.
+ */
+function memoryGivenOf(value: unknown, sessions: Readonly<Record<string, string>>): Record<string, MemoryGiven> {
+    const out: Record<string, MemoryGiven> = {};
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return out;
+    for (const [host, given] of Object.entries(value as Record<string, unknown>)) {
+        if (!hostIdShape.test(host) || given === null || typeof given !== 'object' || Array.isArray(given)) continue;
+        const { session, files } = given as Record<string, unknown>;
+        if (!isText(session) || sessions[host] !== session || files === null || typeof files !== 'object' || Array.isArray(files)) continue;
+        const digests: GivenDigests = {};
+        for (const level of memoryLevels) {
+            const digest = (files as Record<string, unknown>)[level];
+            if (isText(digest) && digestShape.test(digest)) digests[level] = digest;
+        }
+        out[host] = { session, files: digests };
+    }
+    return out;
+}
+
 /** A record read from its file, or null when the text is not one, or not the one its name says. */
 export function parseConversation(text: string, id: string): Conversation | null {
     let value: unknown;
@@ -199,6 +233,7 @@ export function parseConversation(text: string, id: string): Conversation | null
     }
     // The mark is read only for a host whose session is kept; anything else there is no mark, never a reason to refuse.
     const plain = Array.isArray(raw.plain_sessions) ? Object.keys(sessions).filter((host) => (raw.plain_sessions as unknown[]).includes(host)).sort() : [];
+    const memory = memoryGivenOf(raw.memory_given, sessions);
     if (!Array.isArray(raw.entries)) return null;
     const main = raw.main === true && raw.campaign_id === null;
     const entries: KeptEntry[] = [];
@@ -232,6 +267,7 @@ export function parseConversation(text: string, id: string): Conversation | null
         updated_at: raw.updated_at,
         sessions,
         ...(plain.length === 0 ? {} : { plain_sessions: plain }),
+        ...(Object.keys(memory).length === 0 ? {} : { memory_given: memory }),
         entries,
         dropped,
     };
@@ -245,12 +281,13 @@ export function parseConversation(text: string, id: string): Conversation | null
  * the mode only when it is Plan only.
  */
 export function serialize(conversation: Conversation): string {
-    const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, entries, dropped, chosen } = conversation;
+    const { id, campaign_id, title, created_at, updated_at, sessions, plain_sessions, memory_given, entries, dropped, chosen } = conversation;
     const main = conversation.main === true ? { main: true, ...(conversation.taken === undefined ? {} : { taken: conversation.taken }) } : {};
     const mark = conversation.named_by_person === true ? { named_by_person: true } : {};
     const planned = conversation.mode === 'plan_only' ? { mode: 'plan_only' } : {};
     const plain = plain_sessions === undefined || plain_sessions.length === 0 ? {} : { plain_sessions };
-    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
+    const memory = memory_given === undefined || Object.keys(memory_given).length === 0 ? {} : { memory_given };
+    return JSON.stringify({ id, campaign_id, ...main, title, ...mark, created_at, updated_at, sessions, ...plain, ...memory, entries, dropped, ...(chosen === undefined ? {} : { chosen }), ...planned });
 }
 
 /**
@@ -267,6 +304,24 @@ export function nameSession(conversation: Conversation, host: string, session: s
     if (next.length === 0) delete conversation.plain_sessions;
     else conversation.plain_sessions = next;
     return true;
+}
+
+/**
+ * Keeps what a host session was given of the memory files: the session's id, and the digest of each file it now holds.
+ * Answers whether the record changed.
+ */
+export function noteMemoryGiven(conversation: Conversation, host: string, session: string, files: GivenDigests): boolean {
+    const kept = conversation.memory_given?.[host];
+    const same = kept !== undefined && kept.session === session && memoryLevels.every((level) => kept.files[level] === files[level]);
+    if (same) return false;
+    conversation.memory_given = { ...(conversation.memory_given ?? {}), [host]: { session, files: { ...files } } };
+    return true;
+}
+
+/** What a host session was given of the memory files, or null when the record holds nothing for that very session. */
+export function memoryGivenTo(conversation: Conversation, host: string, session: string | undefined): GivenDigests | null {
+    const kept = conversation.memory_given?.[host];
+    return session === undefined || kept === undefined || kept.session !== session ? null : kept.files;
 }
 
 /** The hosts whose own conversation a terminal can continue, by the id the chat keeps for each. */
