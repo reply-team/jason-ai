@@ -186,6 +186,19 @@ function Install-Jason {
         try { return [string](Get-Content -LiteralPath $record -Raw | ConvertFrom-Json).version } catch { return $null }
     }
 
+    # A jason run with what it writes on stdout returned and what it writes on stderr passed on to stderr as it wrote it.
+    # Windows PowerShell 5.1 makes an error record of every line a program writes on stderr once this script's own
+    # streams are redirected, as they are when an agent runs it, and the preference above would stop on the first one:
+    # a good install would end as a failure for a line of diagnostics. So the preference here is Continue, the two
+    # streams are taken apart, and the exit code is left in $LASTEXITCODE for the caller.
+    function Invoke-Jason([string] $jason, [string[]] $arguments) {
+        if (-not (Test-Path -LiteralPath $jason -PathType Leaf)) { throw "$jason is not there." }
+        $ErrorActionPreference = 'Continue'
+        & $jason @arguments 2>&1 | ForEach-Object {
+            if ($_ -is [Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($_.ToString()) } else { $_ }
+        }
+    }
+
     # A runtime started again from the application's jason, where it is in place, else from the command-line install's:
     # whichever is whole at this step, on success and on failure alike. What it says is shown.
     function Start-Again {
@@ -193,7 +206,7 @@ function Install-Jason {
         if (-not $from) { return }
         Write-Host "A runtime answered before the install and none answers now, so one is started again from $from."
         try {
-            & $from runtime start | ForEach-Object { Write-Host $_ }
+            Invoke-Jason $from @('runtime', 'start') | ForEach-Object { Write-Host $_ }
             if ($LASTEXITCODE -ne 0) { Write-Host "The runtime did not start; the lines above say why. Run ``$from runtime start`` once that is dealt with." }
         } catch {
             Write-Host "The runtime could not be started: $($_.Exception.Message)"
@@ -256,6 +269,11 @@ function Install-Jason {
 
             # --- install, silently, and wait for it ---------------------------------------------------------
 
+            # Looked for again at the last moment: a window opened while the setup was downloaded and checked would be
+            # closed by it without asking as surely as one open before.
+            if (Test-WindowOpen) {
+                throw "Jason Desktop is open, and installing $latest over it would close it without asking; nothing was installed. Close Jason Desktop and run this line again."
+            }
             # A GUI program typed bare does not hold PowerShell, and gives it no exit code: Start-Process -Wait waits for
             # it and everything it starts, and the installer starts nothing that outlives it. /D= is the last argument,
             # unquoted, as the installer reads it to the end of the line.
@@ -278,7 +296,7 @@ function Install-Jason {
         # straight through, never through PowerShell's error stream, where Windows PowerShell would stop on it.
         $document = $null
         try {
-            $document = (& $carried install --roles) -join "`n"
+            $document = @(Invoke-Jason $carried @('install', '--roles')) -join "`n"
         } catch {
             throw "``jason install`` could not be started ($($_.Exception.Message)), so jason was not put in the terminal."
         }

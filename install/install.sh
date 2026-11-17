@@ -1,12 +1,14 @@
 #!/bin/sh
 # Installs Jason on macOS and Linux.
 #
-# On macOS it installs Jason Desktop, with jason in the terminal: the application's zip for this Mac's architecture from
-# the latest release, or from the one --version names, checked against checksums.txt, unpacked with ditto into a staging
-# folder beside its place, its signature verified as the release's own, and moved into place by one rename -
-# /Applications where this account may write there, else ~/Applications. Nothing is opened, and no password is asked.
+# On macOS it installs Jason Desktop, with jason in the terminal: the application's zip for Apple silicon from the latest
+# release, or from the one --version names, checked against checksums.txt, unpacked with ditto into a staging folder
+# beside its place, its signature verified as a Developer ID signature of the team that signs Jason, and moved into place
+# by one rename - /Applications where this account may write there, else ~/Applications. Nothing is opened, and no
+# password is asked. An Intel Mac is refused before anything is downloaded: no build for one is published.
 # A Jason.app already in either folder is never renamed, replaced or deleted: one of 0.49.0 or later is kept as it is,
-# and an earlier one is left for its own Check for Updates, and the script ends non-zero saying so. Then the jason the application carries sets the machine up, `jason install --roles`:
+# once its signature verifies the same way, and an earlier one is left for its own Check for Updates, and the script ends
+# non-zero saying so. Then the jason the application carries sets the machine up, `jason install --roles`:
 # the wrapper ~/.local/bin/jason and the PATH lines in the profiles, the skills for every agent host found, an older
 # command-line install retired, and the role skills in Jason's data directory. Where a runtime answered before and none
 # answers after, or the report says it stopped one, a runtime is started again from the application's jason. It ends
@@ -55,6 +57,9 @@ Usage: install.sh [--version X.Y.Z] [--feed DIRECTORY-OR-URL] [--install-dir DIR
 On macOS it installs Jason Desktop into /Applications, or ~/Applications where this account may not write to
 /Applications, opens nothing, and puts jason in the terminal through the application's own jason install. A Jason.app
 already in either folder is kept as it is, never replaced; one before 0.49.0 is updated from its own menu first.
+Jason Desktop for macOS is built for Apple silicon: on an Intel Mac it stops before it downloads anything, since no
+build for one is published. On a Mac this script is the way to install Jason; Homebrew's formula is the command line
+alone, without Jason Desktop.
 EOF
 }
 
@@ -86,7 +91,7 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) fail "this is a Windows shell; run install.ps1 in PowerShell instead, which installs Jason Desktop for Windows" ;;
 esac
 
-# A Mac of either architecture installs Jason Desktop, whose architecture is read further down; Linux the archive.
+# A Mac installs Jason Desktop, whose architecture is read further down; Linux the archive.
 case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) RID="linux-x64"; ASSET="jason-linux-x64.tar.gz" ;;
     Darwin-*) RID="macos"; ASSET="" ;;
@@ -261,6 +266,11 @@ mit() {
 # The team whose Developer ID signs every application a release publishes, as codesign names it: the signature, and not
 # the checksum, says who made it, and a notarized signature of any other team would verify as well.
 APP_TEAM="BD8M7U5YBV"
+# The requirement an application of that team's satisfies, which codesign --verify -R tests: a chain to Apple's own root,
+# an intermediate that is Apple's Developer ID certification authority, a leaf that is a Developer ID Application
+# certificate, and that leaf's team. Without it codesign checks a bundle only against the requirement its own signature
+# carries, and the team that signature names is a claim any chain can make. Kept on one line.
+APP_REQUIREMENT='anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "BD8M7U5YBV"'
 # The folder every account's applications share, used where this account may write there; else the account's own.
 SYSTEM_APPLICATIONS="/Applications"
 
@@ -300,9 +310,22 @@ start_again() {
     "$FROM" runtime start || echo "The runtime did not start; the lines above say why. Run $FROM runtime start once that is dealt with."
 }
 
+# True when the application at $1 is signed as Jason's: its integrity, and the requirement above. What codesign says
+# goes to stderr.
+signed_as_jason() {
+    codesign --verify --deep --strict -R="$APP_REQUIREMENT" "$1"
+}
+
 install_desktop() {
+    # Stopped by a signal - an agent that times the script out, say - it still goes through its exit, which removes what
+    # it downloaded and the staging folder beside the application's place.
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     # The architecture of the machine, not of this shell: under Rosetta uname answers x86_64 on Apple silicon.
     if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || true)" = 1 ]; then ARCH="arm64"; else ARCH="x64"; fi
+    # Jason Desktop for an Intel Mac is not published yet; this one line is what lets it through once it is.
+    [ "$ARCH" = arm64 ] || fail "Jason Desktop for macOS is built for Apple silicon, and this is an Intel Mac, for which no build is published; nothing was installed. The releases are built for Linux x64, Windows x64 and Apple silicon Macs."
     ASSET="jason-desktop-macos-$ARCH.zip"
     ANSWERED=""
     CARRIED=""
@@ -337,25 +360,34 @@ install_desktop() {
     if [ -f "$HOME/.local/bin/jason" ] && { [ -f "$HOME/.local/bin/jason-LICENSE" ] || [ -f "$HOME/.local/bin/jason-THIRD-PARTY-NOTICES" ]; }; then
         COMMAND_LINE="$HOME/.local/bin/jason"
     fi
-    if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
 
     INSTALLED="$LATEST"
     BEHIND=""
+    KEPT=""
     if [ -e "$DEST" ]; then
         # An application already there is never renamed, replaced or deleted from here: its own updater moves it, which no
         # terminal's rename of a signed application stands in for. One of 0.49.0 or later carries the routine and the
-        # update, so it is kept and its routine run; an earlier one cannot be set up from a terminal at all.
+        # update, so it is kept and its routine run, once its signature verifies as a new one's does: its jason is run
+        # only then. An earlier one cannot be set up from a terminal at all.
         PLACED_VERSION="$(app_version "$DEST")"
-        if [ "$PLACED_VERSION" = "$LATEST" ]; then
-            echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
-        elif [ -n "$PLACED_VERSION" ] && from_minor 49 "$PLACED_VERSION" && [ -f "$CARRIED" ]; then
-            INSTALLED="$PLACED_VERSION"
-            echo "Jason Desktop $PLACED_VERSION is already installed at $DEST; it is kept as it is, and nothing is downloaded."
-            if older_than "$PLACED_VERSION" "$LATEST"; then BEHIND=1; fi
+        if [ -n "$PLACED_VERSION" ] && from_minor 49 "$PLACED_VERSION" && [ -f "$CARRIED" ]; then
+            signed_as_jason "$DEST" || fail "the Jason.app at $DEST does not verify as signed by $APP_TEAM, the team that signs Jason (said above), so its jason was not run; nothing was changed"
+            KEPT=1
+            if [ "$PLACED_VERSION" = "$LATEST" ]; then
+                echo "Jason Desktop $LATEST is already installed at $DEST; nothing to download."
+            else
+                INSTALLED="$PLACED_VERSION"
+                echo "Jason Desktop $PLACED_VERSION is already installed at $DEST; it is kept as it is, and nothing is downloaded."
+                if older_than "$PLACED_VERSION" "$LATEST"; then BEHIND=1; fi
+            fi
         else
             fail "Jason Desktop ${PLACED_VERSION:-of an unknown version} at $DEST is older than 0.49.0 and cannot be set up from a terminal; nothing was changed. Update Jason Desktop from its own menu (Check for Updates), then run the install line again."
         fi
-    else
+    fi
+    # Asked before anything is placed, and of no application's jason but one kept above.
+    if answers "$CARRIED" || answers "$COMMAND_LINE"; then ANSWERED=1; fi
+
+    if [ -z "$KEPT" ]; then
         # The download says "Downloading Jason <version> for <this machine> from <the feed>".
         RID="macOS on $ARCH"
         download_archive
@@ -367,12 +399,22 @@ install_desktop() {
         trap 'rm -rf "$TMP" "$STAGE"' EXIT
         ditto -x -k "$TMP/$ASSET" "$STAGE" || fail "$ASSET could not be unpacked into $STAGE; nothing was installed"
         [ -d "$STAGE/Jason.app" ] || fail "$ASSET holds no Jason.app; nothing was installed"
-        codesign --verify --deep --strict "$STAGE/Jason.app" || fail "the signature of the Jason.app in $ASSET does not verify (said above); nothing was installed"
-        TEAM="$(codesign --display --verbose=2 "$STAGE/Jason.app" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
-        [ "$TEAM" = "$APP_TEAM" ] || fail "the Jason.app in $ASSET is signed by the team '$TEAM', not by $APP_TEAM, the team that signs Jason; nothing was installed"
+        if ! signed_as_jason "$STAGE/Jason.app"; then
+            # Which team the signature names, read only to say it in words: the requirement above is the check.
+            TEAM="$(codesign --display --verbose=2 "$STAGE/Jason.app" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+            [ "$TEAM" = "$APP_TEAM" ] || fail "the Jason.app in $ASSET is signed by the team '$TEAM', not by $APP_TEAM, the team that signs Jason; nothing was installed"
+            fail "the signature of the Jason.app in $ASSET does not verify as a Developer ID signature of $APP_TEAM, the team that signs Jason (said above); nothing was installed"
+        fi
         [ "$(app_version "$STAGE/Jason.app")" = "$LATEST" ] || fail "the Jason.app in $ASSET is not Jason $LATEST; nothing was installed"
         [ ! -e "$DEST" ] || fail "$DEST appeared while this ran; nothing was installed"
         mv "$STAGE/Jason.app" "$DEST" || fail "$DEST could not be put in place; nothing was installed"
+        # The check and the rename are two steps: a Jason.app that appeared between them would have taken this one inside
+        # it. It is moved back out, and that one is left as it was.
+        if [ ! -e "$STAGE/Jason.app" ] && [ -e "$DEST/Jason.app" ]; then
+            mv "$DEST/Jason.app" "$STAGE/Jason.app" 2>/dev/null || true
+            fail "$DEST appeared while this ran and is left as it was; nothing was installed"
+        fi
+        [ -f "$CARRIED" ] && [ "$(app_version "$DEST")" = "$LATEST" ] || fail "$DEST is not Jason $LATEST once it was put in place, so jason was not put in the terminal"
         rm -rf "$STAGE"
         echo "Installed Jason Desktop $LATEST to $DEST"
     fi

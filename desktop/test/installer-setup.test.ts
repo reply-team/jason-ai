@@ -73,3 +73,20 @@ test('a setup that did not get everything done never fails the install, and noth
     assert.ok(!lines.some((line) => /SetErrorLevel|Quit|Abort|MessageBox/i.test(line)), lines.join('\n'));
     assert.ok(!lines.some((line) => /runtime/i.test(line)), 'the installer starts or stops a runtime itself');
 });
+
+test('a runtime the install stopped is started again by whoever ran the installer, never by the installer itself', () => {
+    // The rule every caller keeps - a runtime that answered before the install and none after is started again from the
+    // carried jason - is not the installer's: a runtime it started would be its child and outlive it, and a script that
+    // waits for the installer's whole process tree would wait for it for ever. A person's run and the window's own update
+    // (--force-run) start the application once the setup is done, and its start brings the runtime up as every start of
+    // it does; a run a terminal asked for - the install script's, or jason update apply's - is that command's to restart.
+    const nsis = configuration({ version: '0.49.0' }).nsis as { oneClick?: boolean; runAfterFinish?: boolean };
+    assert.equal(nsis.oneClick, true, 'the installer is no longer one-click');
+    assert.notEqual(nsis.runAfterFinish, false, 'the installer no longer starts the application when it ends');
+    const oneClick = section.indexOf('!ifdef ONE_CLICK', section.indexOf('!ifmacrodef customInstall'));
+    const runAfter = section.indexOf('!ifdef RUN_AFTER_FINISH', oneClick);
+    assert.ok(oneClick >= 0 && runAfter > oneClick, 'electron-builder no longer decides under RUN_AFTER_FINISH whether to start the application');
+    assert.match(section.slice(runAfter), /^!ifdef RUN_AFTER_FINISH\s+\$\{ifNot\} \$\{Silent\}\s+\$\{orIf\} \$\{isForceRun\}\s+!insertmacro doStartApp/,
+        'a one-click installer no longer starts the application after a run that is not silent, or one with --force-run');
+    assert.ok(script.includes('Nothing here starts a runtime'), 'the include no longer says that it starts no runtime');
+});

@@ -879,8 +879,9 @@ public partial class PageClaimsTests
     /// <summary>
     /// An agent installs by the first route that fits: a package, where the page names one for the platform and its
     /// package manager is already there — installing a package manager to reach it would be installing something else —
-    /// then, on macOS and Windows, the release's install script downloaded into a file and run from it, which installs
-    /// Jason Desktop and sets the machine up, and on Linux the steps by hand. It never pipes a download into a shell, and
+    /// though not Homebrew's formula on a Mac, which is the command line alone; then, on macOS and Windows, the release's
+    /// install script downloaded into a file and run from it, which installs Jason Desktop and sets the machine up, and
+    /// refuses an Intel Mac; and on Linux the steps by hand. It never pipes a download into a shell, and
     /// the one-liner is the person's, handed to them where the script or the steps by hand are refused. The order is
     /// what is held, as well as the words.
     /// </summary>
@@ -890,12 +891,18 @@ public partial class PageClaimsTests
         var agent = Flat(Agent());
 
         var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*).", StringComparison.Ordinal);
+        // On a Mac the package is not the route for a new install: the formula is the command line alone.
+        var homebrew = agent.IndexOf("On macOS, Homebrew's formula is not that package for a new install: it installs the command line alone, without Jason Desktop, so on a Mac the route is the install script even where Homebrew is there.", StringComparison.Ordinal);
         var script = agent.IndexOf("On macOS and Windows that is this release's install script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file", StringComparison.Ordinal);
+        // And an Intel Mac is refused by the script, as the package subsection says no build for one is published.
+        var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since no Jason Desktop for one is published: report that as it stands.", StringComparison.Ordinal);
         var byHand = agent.IndexOf("On Linux it is §2 *By hand*: download the archive and `checksums.txt` from the release, check the digest and stop on a mismatch, unpack, keep the two notice files beside the executable, and run `jason --version` by its full path.", StringComparison.Ordinal);
         var person = agent.IndexOf("Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
 
         Assert.True(package >= 0, "The section for an agent does not take a package first, where its package manager is already on this machine.");
-        Assert.True(script > package, "The section for an agent does not take the install script on macOS and Windows after the package.");
+        Assert.True(homebrew > package, "The section for an agent does not say that on a Mac Homebrew's formula is not the route for a new install.");
+        Assert.True(script > homebrew, "The section for an agent does not take the install script on macOS and Windows after the package.");
+        Assert.True(intel > script, "The section for an agent does not say the script refuses an Intel Mac.");
         Assert.True(byHand > script, "The section for an agent does not take §2 by hand on Linux.");
         Assert.True(person > byHand, "The section for an agent does not hand the person the one-liner after the route by hand.");
     }
@@ -2522,7 +2529,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:000673f79accb300bb6367e7a8bcf881e9da1de24dc496247d3de791a4eeda18";
+    private const string AgentSectionDigest = "sha256:5e3f5eac6c30996c2cf37873717d9a7892579cf820fd8a5a01ba0f766e99e1be";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";
