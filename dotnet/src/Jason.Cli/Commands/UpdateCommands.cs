@@ -62,8 +62,8 @@ public static class UpdateCommands
         var command = new Command(
             "apply",
             "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. "
-            + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window: this jason copies itself under the data directory and continues from there, drains the runtime, starts the application with --update-apply and waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
-            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, and the runtime as it was found. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
+            + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window, and this command still ends with one JSON document and its exit code: this jason steps out of the application's folder and goes on from there (on Windows it moves its own file out and keeps running, on macOS a copy of it under the data directory goes on), drains the runtime, starts the application with --update-apply and waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
+            + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
         var feed = new Option<string?>("--feed")
         {
             Description = "Read a different feed: the https address of a manifest.json, or http on this machine. Default: the public release feed.",
@@ -328,14 +328,16 @@ public static class UpdateCommands
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     /// <summary>
-    /// The update of a jason Jason Desktop carries (<see cref="CarriedUpdate"/>), from wherever it stands: planned and handed
-    /// to the copy of this jason; carried on by that copy through the Desktop's install to <c>swapped</c> and handed to the new
-    /// carried jason; or finished by the new carried jason, which is this process.
+    /// The update of a jason Jason Desktop carries (<see cref="CarriedUpdate"/>), from wherever it stands: planned, carried
+    /// through the Desktop's install to <c>swapped</c> — on Windows by this process, its image moved out of the application's
+    /// folder, on macOS by a copy of this jason it waits for — and handed to the new carried jason; or finished by the new
+    /// carried jason, which is this process.
     /// </summary>
     /// <remarks>
-    /// The copy continues because the Windows installer refuses while any process runs from the carried file, and on macOS
-    /// the file is replaced under it. A refusal of the Desktop's, or no answer, leaves the runtime as it was found and puts
-    /// back the record that stood; a hand-over that ends with no answer starts the runtime again where one was running.
+    /// The Windows installer refuses while any process runs from the carried file or holds a file in the folder, and on
+    /// macOS the file is replaced under a running process. A refusal of the Desktop's, or no answer, leaves a jason at the
+    /// carried path and the runtime as it was found, and puts back the record that stood; a hand-over that ends with no
+    /// answer starts the runtime again where one was running.
     /// </remarks>
     private static async Task<int> CarriedApplyAsync(
         CliEnvironment env,
@@ -349,7 +351,11 @@ public static class UpdateCommands
         CancellationToken cancellationToken)
     {
         var paths = new UpdatePaths(env.Paths);
-        var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform);
+        var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform)
+        {
+            // On Windows the carried process itself carries the update, its own image moved out of the application's folder.
+            MovesItself = !continuing && env.Setup?.Platform is SetupSystem.Windows && carried.Is(env.InstallPath ?? SelfExecutable.InstalledImage),
+        };
 
         // The record first, and only to know whether this jason was handed an update past the swap, which it finishes with
         // or without a Desktop to ask; a record that cannot be read hands nothing over.
@@ -423,8 +429,17 @@ public static class UpdateCommands
                 return await HandToFinishAsync(env, handing, installed, request, human, wasLive, cancellationToken).ConfigureAwait(false);
             }
 
-            // This jason plans, puts its copy aside and ends its part there: the copy drains, asks the Desktop and waits.
             var planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+
+            // Windows: this process carries the update itself, its image moved out of the folder right before the Desktop
+            // starts, and hands the new jason the rest as a child it waits for.
+            if (handing.MovesItself)
+            {
+                var swapped = await handing.InstallAsync(planned, request, cancellationToken).ConfigureAwait(false);
+                return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+            }
+
+            // macOS: this jason puts its copy aside and ends its part there: the copy drains, asks the Desktop and waits.
             handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
             return await HandOverAsync(
                 env,

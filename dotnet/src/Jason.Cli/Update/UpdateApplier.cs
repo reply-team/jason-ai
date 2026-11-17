@@ -622,7 +622,7 @@ public sealed class UpdateApplier(CliEnvironment env, UpdatePaths update, TimePr
         }
     }
 
-    private async Task<UpdateLedger> StopAsync(UpdateLedger ledger, CancellationToken cancellationToken)
+    internal async Task<UpdateLedger> StopAsync(UpdateLedger ledger, CancellationToken cancellationToken)
     {
         if (Live() is null)
         {

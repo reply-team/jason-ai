@@ -12,10 +12,11 @@ namespace Jason.Cli.Tests.Update;
 
 /// <summary>
 /// <c>jason update apply</c> run as the jason Jason Desktop carries: the update handed to the Desktop's updater with no
-/// window, as <c>docs/release-and-update.md</c> §7, "Handing the update to Jason Desktop", says. The carried jason plans,
-/// copies itself aside and hands the rest to that copy; the copy drains the runtime, starts the application with the request,
-/// reads its answer and waits for the application's <c>version.json</c>; the new carried jason finishes. A refusal, no
-/// answer, or an install that does not land leaves the runtime as it was found.
+/// window, as <c>docs/release-and-update.md</c> §7, "Handing the update to Jason Desktop", says, on macOS: the carried jason
+/// plans, copies itself aside and hands the rest to that copy; the copy drains the runtime, starts the application with the
+/// request, reads its answer and waits for the application's <c>version.json</c>; the new carried jason finishes. A refusal,
+/// no answer, or an install that does not land leaves the runtime as it was found. Windows, where the carried process moves
+/// its own image out of the folder instead, is <see cref="UpdateCarriedWindowsTests"/>.
 /// </summary>
 public sealed class UpdateCarriedHandOverTests
 {

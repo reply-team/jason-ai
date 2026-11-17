@@ -957,7 +957,8 @@ to the same updater with no window, and the new `jason` then replaces the plugin
 the skills, sets the terminal command up and places the UI ([release and update](release-and-update.md) §7, "Handing the
 update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
-`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
+`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
+also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
 the package names.
 

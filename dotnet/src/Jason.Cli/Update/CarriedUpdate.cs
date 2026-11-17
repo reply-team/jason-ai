@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json;
 using Jason.Cli.Discovery;
+using Jason.Cli.Files;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Contracts.Api;
@@ -89,9 +90,19 @@ public sealed record DesktopAnswer(string State, string? Reason, string? Message
 /// <remarks>
 /// <para>
 /// <b>The shape of the command line's own hand-over.</b> The jason being replaced does what only it can do — it plans,
-/// copies itself aside, drains the runtime and asks the Desktop to install — and the new carried jason does the rest from a
-/// file that is its own: <c>plugins</c>, <c>started</c>, <c>healthy</c>, <c>complete</c>, the skills, the machine setup and the
-/// UI, then the application's own record of the update settled with no window.
+/// steps out of the application's folder, drains the runtime and asks the Desktop to install — and the new carried jason
+/// does the rest from a file that is its own: <c>plugins</c>, <c>started</c>, <c>healthy</c>, <c>complete</c>, the skills, the
+/// machine setup and the UI, then the application's own record of the update settled with no window. The caller waits on the
+/// process it started and gets one document on both systems.
+/// </para>
+/// <para>
+/// <b>Stepping out of the folder.</b> On Windows the installer refuses while a process runs from the carried path or holds a
+/// file in the application's folder, so the carried process moves its own image out, to a folder of the updater's store on
+/// the same volume, and goes on running from there (<see cref="MovesItself"/>); Windows still reports the old path for it,
+/// so it records its id and start beside the carried file, which the installer's look passes over, and nothing else. Every
+/// way it ends where the installer put no new jason at the carried path puts one back first, a copy of its own image. On
+/// macOS the application is replaced under a running process without a refusal, and the update goes on from a copy of this
+/// jason under the data directory, which the carried process waits for.
 /// </para>
 /// <para>
 /// <b>The ledger is the command line's ledger</b>, written before each step as every update's is, with the steps' own
@@ -144,6 +155,45 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
     /// <summary>What loads every assembly this process may still need, before the application it runs from is replaced.</summary>
     internal Action WarmUp { get; init; } = AssemblyWarmUp.Run;
+
+    /// <summary>
+    /// Whether this process moves its own image out of the application's folder before the application is started: on
+    /// Windows, where it runs from the carried file. Set by the caller, which knows what it runs from.
+    /// </summary>
+    internal bool MovesItself { get; init; }
+
+    /// <summary>This process as the installer's look reads it: its id, and its start in Windows file time.</summary>
+    internal Func<(int Id, long Started)> Self { get; init; } = () =>
+    {
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        return (self.Id, self.StartTime.ToFileTimeUtc());
+    };
+
+    /// <summary>Where the image is moved for a request, where a test says; else <see cref="MovedImage"/>'s own place.</summary>
+    internal Func<string, string>? MovedImageFor { get; init; }
+
+    /// <summary>
+    /// The file beside the carried jason that names the one process the installer's look passes over: this one, by its id
+    /// and its start, written right before the application is started and taken away once the install has ended.
+    /// </summary>
+    public const string PidFileName = "jason-update.pid";
+
+    /// <summary>The record for the installer's look: <see cref="PidFileName"/> beside the carried file.</summary>
+    public string PidFile => Path.Combine(Path.GetDirectoryName(carried.Executable)!, PidFileName);
+
+    /// <summary>Where this process's image went, once it moved; null before, and on macOS.</summary>
+    public string? Moved { get; private set; }
+
+    /// <summary>
+    /// Where this process's image is moved for a request: a folder of its own in the updater's store under the local
+    /// application data, which is on the application's volume, outside the folder the installer replaces.
+    /// </summary>
+    public string MovedImage(string id) =>
+        MovedImageFor?.Invoke(id)
+        ?? Path.Combine(
+            env.Setup?.LocalApplicationData is { Length: > 0 } local ? Path.Combine(local, "jason-desktop-updater", "jason-carried") : Path.Combine(update.Root, "carried"),
+            id,
+            ReleaseAssets.ExecutableName);
 
     /// <summary>The carried jason this update replaces, and the new one finishes it.</summary>
     public CarriedExecutable Carried => carried;
@@ -311,7 +361,41 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
         ledger = ledger.At(UpdateStep.Stopped) with { StoppedAt = clock.GetUtcNow() };
         Record(ledger);
-        var (answer, why) = await AskAsync(ledger, request, cancellationToken).ConfigureAwait(false);
+        if (MovesItself)
+        {
+            // The Desktop stops a runtime through the carried jason, whose file is moved before the Desktop starts; so this
+            // jason stops it, and is the one that starts it again on every way the update does not complete.
+            var said = drain.Steps.Count;
+            try
+            {
+                ledger = await drain.StopAsync(ledger, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UpdateException refused)
+            {
+                Steps.AddRange(drain.Steps.Skip(said));
+                await PutBackAsync(ledger, wasLive, cancellationToken).ConfigureAwait(false);
+                throw new UpdateException(refused.Code, $"{refused.Message} Nothing was asked of Jason Desktop, and {RuntimeSaid()}", refused, refused.Retryable);
+            }
+
+            Steps.AddRange(drain.Steps.Skip(said));
+            Record(ledger);
+        }
+
+        try
+        {
+            return await AskAndWaitAsync(ledger, request, wasLive, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Every way this ends — an answer, a refusal, a wait that passed, a cancel — leaves a jason at the carried path.
+            PutImageBack();
+        }
+    }
+
+    /// <summary>The request and the wait for the installer, from <c>stopped</c> to <c>swapped</c>.</summary>
+    private async Task<UpdateLedger> AskAndWaitAsync(UpdateLedger ledger, UpdateRequest request, bool wasLive, CancellationToken cancellationToken)
+    {
+        var (answer, why) = await AskAsync(ledger, request, wasLive, cancellationToken).ConfigureAwait(false);
 
         if (answer is null)
         {
@@ -344,6 +428,10 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             Say(UpdateStep.Kept, answer.Kept is { } kept
                 ? $"Jason Desktop kept the application at {kept} and handed {ledger.ToVersion} to its installer"
                 : $"Jason Desktop handed {ledger.ToVersion} to its installer");
+            if (answer.Kept is { } copy)
+            {
+                MakeKeptWhole(copy, ledger.FromVersion);
+            }
         }
         else
         {
@@ -352,6 +440,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
 
         if (!await InstalledAsync(ledger.ToVersion, cancellationToken).ConfigureAwait(false))
         {
+            PutImageBack();
             var named = CarriedExecutable.Of(carried.Executable)?.Version;
             var shipIt = platform is SetupSystem.MacOs ? ShipItSaid() : null;
             if (named is not null && SemanticVersion.TryParse(named, out var still) && still == ledger.FromVersion)
@@ -361,9 +450,9 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             }
             else
             {
-                // Neither version can be read from the application, so the copy of this jason, which is whole, runs the
-                // runtime, and the update stays in flight for the next apply.
-                await StartAgainAsync(Copy, ledger, wasLive, cancellationToken).ConfigureAwait(false);
+                // Neither version can be read from the application, so a jason that is whole — the one at the carried path
+                // where there is one, else this one — runs the runtime, and the update stays in flight for the next apply.
+                await StartAgainAsync(Whole, ledger, wasLive, cancellationToken).ConfigureAwait(false);
             }
 
             throw new UpdateException(
@@ -372,7 +461,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
                 + $"{CarriedExecutable.RecordName} at {carried.Record} names {named ?? "no version"}. "
                 + (shipIt is null ? string.Empty : $"ShipIt said: {shipIt} ")
                 + $"{RuntimeSaid()} Run `jason update apply` again"
-                + (named is null ? $", from {Copy} if jason does not answer" : string.Empty)
+                + (named is null ? $", from {Moved ?? Copy} if jason does not answer" : string.Empty)
                 + ".",
                 null,
                 retryable: true);
@@ -442,13 +531,14 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             ledger = null;
         }
 
-        var whole = CarriedExecutable.Of(carried.Executable) is not null && File.Exists(carried.Executable) ? carried.Executable : Copy;
+        var whole = CarriedExecutable.Of(carried.Executable) is not null && File.Exists(carried.Executable) ? carried.Executable : Moved ?? Copy;
         await StartAgainAsync(whole, ledger, wasLive, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>A refused or unanswered request: nothing was installed, so the record that stood is put back, and the runtime.</summary>
     private async Task PutBackAsync(UpdateLedger ledger, bool wasLive, CancellationToken cancellationToken)
     {
+        PutImageBack();
         try
         {
             if (File.Exists(Before))
@@ -466,7 +556,171 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
             Say("put back", $"the record of this update at {update.Ledger} could not be taken back ({error.Message}); `jason update apply` carries it on");
         }
 
-        await StartAgainAsync(carried.Executable, ledger, wasLive, cancellationToken).ConfigureAwait(false);
+        await StartAgainAsync(Whole, ledger, wasLive, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The jason a runtime is started again from: the one at the carried path, else this one where it moved.</summary>
+    private string Whole => File.Exists(carried.Executable) || Moved is null ? carried.Executable : Moved;
+
+    /// <summary>
+    /// Windows, right before the application is started: this process's own image moved out of the application's folder to
+    /// <see cref="MovedImage"/>, on the same volume, where it goes on running, and its id and start recorded in
+    /// <see cref="PidFile"/> for the installer's look to pass over. Last of all, so that the folder is without a jason for as
+    /// short a time as the code allows.
+    /// </summary>
+    private void StepOut(string id)
+    {
+        if (!MovesItself)
+        {
+            return;
+        }
+
+        WarmUp();
+        var target = Path.GetFullPath(MovedImage(id));
+        var from = Path.GetFullPath(carried.Executable);
+        if (!string.Equals(Path.GetPathRoot(target), Path.GetPathRoot(from), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UpdateException(
+                UpdateCodes.FileRefused,
+                $"This jason moves its own file out of the application's folder for the installer, and {target} is not on the volume of {from}, so it was not moved.");
+        }
+
+        var store = Path.GetDirectoryName(Path.GetDirectoryName(target)!)!;
+        Sweep(store);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(from, target);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            if (File.Exists(from))
+            {
+                TryDelete(target);
+            }
+            else if (File.Exists(target))
+            {
+                Moved = target;
+            }
+
+            throw new UpdateException(
+                UpdateCodes.FileRefused,
+                $"This jason could not move its own file from {from} to {target}: {error.Message}",
+                error);
+        }
+
+        Moved = target;
+        Say("moved", $"this jason's own file to {target}, where it goes on running, so the installer finds none in the application's folder");
+        var (pid, started) = Self();
+        try
+        {
+            File.WriteAllText(PidFile, string.Create(CultureInfo.InvariantCulture, $"{pid} {started}"));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new UpdateException(
+                UpdateCodes.FileRefused,
+                $"This jason could not record itself at {PidFile}, which the installer's look reads to pass over it: {error.Message}",
+                error);
+        }
+    }
+
+    /// <summary>
+    /// Windows: the record for the installer's look taken away, and a jason put back at the carried path where the installer
+    /// put none there, copied from this process's own image, so every way this verb ends leaves a working installation.
+    /// </summary>
+    private void PutImageBack()
+    {
+        if (Moved is null)
+        {
+            return;
+        }
+
+        TryDelete(PidFile);
+        if (File.Exists(carried.Executable))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(carried.Executable)!);
+            File.Copy(Moved, carried.Executable);
+            Say("put back", $"a jason at {carried.Executable}, copied from this one at {Moved}, since no new one was installed there");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            env.Error.WriteLine(error.Message);
+            Say("put back", $"no jason could be put at {carried.Executable} ({error.Message}); this one is at {Moved}. Choose Check for Updates in Jason Desktop, or run its installer again, to put one there");
+        }
+    }
+
+    /// <summary>
+    /// Windows: the application the Desktop kept was copied while this process's file was out of the folder, so the copy is
+    /// given this jason, which is the version it was kept as, and none of the record for the installer's look.
+    /// </summary>
+    private void MakeKeptWhole(string kept, SemanticVersion from)
+    {
+        if (Moved is null || platform is not SetupSystem.Windows)
+        {
+            return;
+        }
+
+        var inKept = Path.Combine(kept, Path.GetRelativePath(ApplicationFolderOf(carried.Executable, SetupSystem.Windows), carried.Executable));
+        try
+        {
+            if (!Directory.Exists(kept))
+            {
+                return;
+            }
+
+            TryDelete(Path.Combine(Path.GetDirectoryName(inKept)!, PidFileName));
+            if (!File.Exists(inKept))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(inKept)!);
+                File.Copy(Moved, inKept);
+                Say(UpdateStep.Kept, $"this jason's {from} put at {inKept}, since the application was kept while its file was out of the folder");
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Say(UpdateStep.Kept, $"the application kept at {kept} has no jason at {inKept} ({error.Message}); a copy of {Moved} belongs there before that copy is put back by hand");
+        }
+    }
+
+    /// <summary>The folders earlier requests moved an image to, taken away where nothing runs from them any more.</summary>
+    private static void Sweep(string store)
+    {
+        try
+        {
+            foreach (var folder in Directory.EnumerateDirectories(store))
+            {
+                try
+                {
+                    DirectoryTrees.Delete(folder);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    // An image that still runs, or one this account may not take away: left for the next update.
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // No store yet.
+        }
+    }
+
+    private static void TryDelete(string file)
+    {
+        try
+        {
+            File.Delete(file);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // A file nothing depends on: the look reads it by the process's start, so one left behind names no process.
+        }
     }
 
     /// <summary>What the runtime is now, after the steps above: one sentence for a refusal to end with.</summary>
@@ -543,7 +797,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
     /// The request: the application started with it, waited for, and its file read. Returns the answer that names an end, or
     /// null with why there is none.
     /// </summary>
-    private async Task<(DesktopAnswer? Answer, string Why)> AskAsync(UpdateLedger ledger, UpdateRequest request, CancellationToken cancellationToken)
+    private async Task<(DesktopAnswer? Answer, string Why)> AskAsync(UpdateLedger ledger, UpdateRequest request, bool wasLive, CancellationToken cancellationToken)
     {
         var id = NewRequest();
         var file = RequestFile(id);
@@ -556,6 +810,16 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         if (DesktopFeed(request.Feed) is { } feed)
         {
             command.AddRange(["--feed", feed]);
+        }
+
+        try
+        {
+            StepOut(id);
+        }
+        catch (UpdateException refused)
+        {
+            await PutBackAsync(ledger, wasLive, cancellationToken).ConfigureAwait(false);
+            throw new UpdateException(refused.Code, $"{refused.Message} Nothing was asked of Jason Desktop, and {RuntimeSaid()}", refused, refused.Retryable);
         }
 
         Say(UpdateStep.Stopped, $"Jason Desktop asked to install {ledger.ToVersion}, request {id}");
