@@ -84,9 +84,19 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
   and "Help me start a new agent." no longer stand under an answer in the Feed or in a set-up chat. An agent's chat
   keeps the chips that follow the agent's state.
 
-- **Settings' Accounts says what the notification channels are for.** The line under the table reads: "This is how Jason
-  tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your AI; a provider's
-  channel can also be connected or disconnected on the Connect panel."
+- **Notifications is a section of its own in Settings.** It stands after How messages go and before Models, and it moves
+  out of the Accounts page, which now draws the provider alone. It shows the **on** or **off** mark of notifications and
+  a table with one row for each channel: its name, its state as a pill (on or off) and the words of the last
+  notification it was given, a failure's in the alert tone. Under the table a plain line reads: "This is how Jason tells
+  you that an approval or a question is waiting for you. To turn a channel on or off, ask your AI; a provider's channel
+  can also be connected or disconnected on the Connect panel."
+
+- **In Jason Desktop's Demo, the repository's address is a link.** The note in the Demo window says where Jason's code
+  is, github.com/reply-team/jason-ai; a click on it, or Enter on it, opens https://github.com/reply-team/jason-ai in
+  your browser. It opens only right after a click or Enter of yours in the Demo: any real click or Enter in the page
+  gives it one second in which that one address may open, at most one tab for each act, and at most once in two seconds.
+  The Demo page still reaches nothing and opens no window, and any other address, this one with a path, a query, a
+  fragment or another scheme included, opens nothing. In a browser tab the address stays text.
 
 - **Jason Desktop on Linux has no title bar of its own.** As on Windows, the window's minimize, maximize and close
   buttons stand over the right end of the console's top strip, drawn in your desktop's own style, as many as its button
