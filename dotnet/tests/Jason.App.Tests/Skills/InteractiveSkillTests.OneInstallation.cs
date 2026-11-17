@@ -42,7 +42,7 @@ public partial class InteractiveSkillTests
 
         var catalog = Regex.Replace(File.ReadAllText(SkillPack.Catalog()), @"\s+", " ");
         Assert.Contains(
-            "opening the browser UI (this release's UI build draws its console only in a tab Jason Desktop opened, whether or not the desktop is installed; any other tab opens on the Demo, or, while something waits, on one page of text that says so, and neither is the person's work; a custom build under `ui/custom` is served first)",
+            "opening the browser UI (this release's UI build draws its console only in Jason Desktop and in a tab the desktop opens itself, so a tab `jason ui open` opens shows the Demo, or, while something waits, one page of text that says so, whether Jason Desktop is installed or not, and neither is the person's work; a custom build under `ui/custom` is served first)",
             catalog,
             StringComparison.Ordinal);
     }
