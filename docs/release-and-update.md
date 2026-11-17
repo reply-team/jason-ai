@@ -965,7 +965,10 @@ the version the feed's file names is exactly `--to`; downloads it; where the req
 carries when that is the one running, through `jason runtime stop`, as a click on the menu's install item does; keeps
 the application aside under `<data>/desktop/rollback/<from>/`; and hands the update to the installer with no start of
 the application after it: on Windows the installer runs as `--updated /S`, and on macOS the application quits once
-Squirrel has the update, and ShipIt installs it after the application has ended. It never starts a runtime, and touches
+Squirrel has the update, and ShipIt installs it after the application has ended. On Windows an installer that refuses —
+the application still running a minute after it was told to quit, a Jason process still found at the carried path, or
+the old version's uninstaller refusing to let go of its files — replaces no file, ends with a code other than 0 and, run
+silently, shows no window, so it leaves the old version installed and working. It never starts a runtime, and touches
 no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes
 one for the request. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
 folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
