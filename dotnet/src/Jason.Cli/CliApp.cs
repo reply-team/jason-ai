@@ -204,7 +204,7 @@ public static class CliApp
     /// option's own value is never read here, and after <c>--</c> every word is a value, which is how one that starts with
     /// a dash is given.
     /// </summary>
-    private static List<string> UnknownOptions(ParseResult parseResult)
+    internal static List<string> UnknownOptions(ParseResult parseResult)
     {
         var tokens = parseResult.Tokens;
         var end = tokens.Count;
