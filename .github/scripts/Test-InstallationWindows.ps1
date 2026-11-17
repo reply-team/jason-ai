@@ -32,7 +32,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'ModulePath')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -192,7 +192,18 @@ switch ($Step) {
         Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
         $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
         Say "$Name against ${Against}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
-        if ($gone.Count -gt 0 -or $left.Count -gt 0) { Fail "the machine after '$Name' is not the machine before '$Against': see $diff" }
+        # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
+        # the end fails the job on any divergence recorded.
+        if ($gone.Count -gt 0 -or $left.Count -gt 0) {
+            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $(($gone | ForEach-Object { "- $_" }) + ($left | ForEach-Object { "+ $_" }) -join '; ')"
+            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$Name against ${Against}: see $diff"
+        }
+    }
+
+    'Held' {
+        $divergent = Join-Path $Out 'divergent.txt'
+        if (Test-Path -LiteralPath $divergent) { Fail "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
+        Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
     }
 
     'Install' {

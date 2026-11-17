@@ -175,7 +175,7 @@ public partial class ReleaseWorkflowTests
         }
 
         var held = Regex.Match(requirement, @"^([A-Z_]+)=").Groups[1].Value;
-        var tested = sh.Where(line => line.Contains("-R", StringComparison.Ordinal) && line.Contains("codesign", StringComparison.Ordinal)).ToList();
+        var tested = sh.Where(line => !line.TrimStart().StartsWith('#') && line.Contains("-R", StringComparison.Ordinal) && line.Contains("codesign", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(tested);
         Assert.All(tested, line => Assert.Contains($"-R=\"${held}\"", line, StringComparison.Ordinal));
         Assert.DoesNotContain(sh, line => Regex.IsMatch(line, @"^\s*--[a-z-]*(sign|team|unsigned|requirement)[a-z-]*\)"));

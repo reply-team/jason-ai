@@ -139,7 +139,17 @@ compare)
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
-    [ -z "$left" ] && [ -z "$went" ] || fail "the machine after '$1' is not the machine before '$2': see $diffed"
+    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the held step at the
+    # end fails the job on any divergence recorded.
+    if [ -n "$left" ] || [ -n "$went" ]; then
+        echo "::error title=Uninstall::the machine after '$1' is not the machine before '$2': $(cat "$diffed" | tr '\n' ' ')"
+        echo "$1 against $2: see $diffed" >> "$OUT/divergent.txt"
+    fi
+    ;;
+
+held)
+    [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"
+    say "the machine after every uninstall was the machine before it, the data directory and the harness root aside"
     ;;
 
 install)
