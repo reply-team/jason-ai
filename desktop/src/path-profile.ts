@@ -21,7 +21,7 @@
  * Nothing here starts a process, and nothing reads the person's own home: every function is given the home it works in.
  */
 
-import { accessSync, appendFileSync, chmodSync, constants, lstatSync, readdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, chmodSync, closeSync, constants, lstatSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 
 /** What `install.sh` ever leaves in its folder: the executable and its two notices (`PathEntry.UnixInstallerFiles`). */
@@ -42,7 +42,8 @@ export function heldBy(folder: string, removing: readonly string[]): 'jason' | '
     } catch (error) {
         return (error as NodeJS.ErrnoException).code === 'ENOENT' ? null : 'others';
     }
-    const left = entries.filter((entry) => !removing.includes(entry));
+    // A hidden entry (a Finder's .DS_Store, say) and a temporary file of this application's are no program on the PATH.
+    const left = entries.filter((entry) => !removing.includes(entry) && !entry.startsWith('.') && !entry.endsWith('.jason-desktop.tmp'));
     if (left.some((entry) => desktopFiles.includes(entry))) return 'jason';
     return left.every((entry) => installerFiles.includes(entry)) ? null : 'others';
 }
@@ -134,9 +135,11 @@ export function withoutLines(text: string, folder: string): string {
  * Whether the folder holds a character the shell reads inside the line's double quotes — `"`, `$`, a backtick or a
  * backslash — which would make the line code every login runs, or a line it cannot parse. The machine's own separator
  * is a separator, not a character of a name: on macOS and Linux it is `/`, so a backslash is always one of them there.
+ * A line break as well: it runs nothing, but the whole-line search could never find the line again, so every act would
+ * append another block.
  */
 export function unsafeFolder(folder: string): boolean {
-    return /["$`]/.test(folder) || (sep !== '\\' && folder.includes('\\'));
+    return /["$`\n\r]/.test(folder) || (sep !== '\\' && folder.includes('\\'));
 }
 
 /** The line to add by hand: the script's own, or for a folder it cannot spell, the folder in single quotes. */
@@ -221,7 +224,7 @@ export function pathLines(account: ProfileAccount, folder: string, held: 'jason'
     const interactive = interactiveProfile(account.home, account.shellNamed);
     const targets = [loginProfile(account.home, account.shellNamed), ...(interactive === null ? [] : [interactive])];
     const add = namesFolder(account.terminalPath(), folder) ? [] : targets.filter((file) => !carriesLine(bytesOf(file) ?? '', folder));
-    const unsafe = add.length > 0 && unsafeFolder(folder) ? [`${folder} holds a character the shell would read as code in that line`] : [];
+    const unsafe = add.length > 0 && unsafeFolder(folder) ? [`${folder} holds a character that line cannot carry: a double quote, a dollar sign, a backtick, a backslash or a line break`] : [];
     const refused = [...unsafe, ...add.flatMap((file) => refusal(file) ?? [])];
     const marked = markedIn(account.home, folder);
     return { folder, line, byHand: handLine(folder), add, refused, interactive: interactive !== null, take: held === null ? marked : [], kept: held === null ? [] : marked, held: marked.length > 0 ? held : null };
@@ -271,7 +274,7 @@ export function addLines(lines: PathLines): LinesWritten {
  * mode; a file that is no longer a regular file, or no longer carries them, is left. Returns the files it could not
  * rewrite.
  */
-export function takeLines(lines: PathLines): string[] {
+export function takeLines(lines: PathLines, write: (descriptor: number, data: Buffer) => void = (descriptor, data) => writeFileSync(descriptor, data)): string[] {
     const failed: string[] = [];
     for (const file of lines.take) {
         let mode: number;
@@ -291,13 +294,25 @@ export function takeLines(lines: PathLines): string[] {
         if (without === text) continue;
         // Made exclusively: whatever stands at that name already, a link among them, is never written through or removed.
         const temporary = `${file}.jason-desktop.tmp`;
+        // What this act made is removed on every failure, a write cut short by a full disk among them.
         let made = false;
+        let descriptor: number | null = null;
         try {
-            writeFileSync(temporary, Buffer.from(without, 'latin1'), { mode, flag: 'wx' });
+            descriptor = openSync(temporary, 'wx', mode);
             made = true;
+            write(descriptor, Buffer.from(without, 'latin1'));
+            closeSync(descriptor);
+            descriptor = null;
             chmodSync(temporary, mode);
             renameSync(temporary, file);
         } catch {
+            if (descriptor !== null) {
+                try {
+                    closeSync(descriptor);
+                } catch {
+                    // Closed or not, the file goes next.
+                }
+            }
             if (made) rmSync(temporary, { force: true });
             failed.push(file);
         }

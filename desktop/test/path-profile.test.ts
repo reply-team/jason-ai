@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { commandMenuOf, commandQuestion, PathCommand } from '../src/path-command.ts';
-import { addedWords, desktopFiles, exportLine, installerFiles, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines } from '../src/path-profile.ts';
+import { addedWords, desktopFiles, heldBy, takeLines, unsafeFolder, exportLine, installerFiles, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines } from '../src/path-profile.ts';
 import { memoryLog } from './harness.ts';
 
 const script = readFileSync(join(import.meta.dirname, '..', '..', 'install', 'install.sh'), 'utf8');
@@ -269,7 +269,7 @@ test('a folder holding a character the shell reads in double quotes gets no line
     const { folder, command } = desk(t, { at });
     const status = command.status();
     const lines = status.state === 'absent' ? status.lines : undefined;
-    assert.deepEqual(lines?.refused, [`${folder} holds a character the shell would read as code in that line`]);
+    assert.deepEqual(lines?.refused, [`${folder} holds a character that line cannot carry: a double quote, a dollar sign, a backtick, a backslash or a line break`]);
     assert.ok(lines?.byHand.startsWith("export PATH='") && lines.byHand.endsWith("':\"$PATH\""), lines?.byHand);
     assert.ok(commandMenuOf(status).lines.some((each) => each.includes(lines?.byHand ?? '?') && each.includes('by hand')));
     assert.ok(commandQuestion('place', status).detail.endsWith(`\n${lines?.byHand}`));
@@ -302,6 +302,46 @@ test('the temporary file beside a profile is made exclusively: a link standing a
     assert.equal(lstatSync(`${profile}.jason-desktop.tmp`).isSymbolicLink(), true, 'the link is left where it stood');
     assert.equal(text(profile), block(line), 'the profile is as it was');
     assert.equal(text(join(home, '.zshrc')), '', 'the other profile is still rewritten');
+});
+
+test('a hidden entry or a temporary file of the desktop’s in the folder keeps no line in place', (t) => {
+    const { home, folder, command } = desk(t);
+    command.place();
+    for (const name of ['.DS_Store', '.cache', 'jason.jason-desktop.tmp']) writeFileSync(join(folder, name), '');
+    assert.equal(heldBy(folder, ['jason']), null);
+    const status = command.status();
+    assert.deepEqual(status.state === 'placed' ? status.lines?.take : null, [join(home, '.zprofile'), join(home, '.zshrc')]);
+    command.remove();
+    assert.equal(text(join(home, '.zprofile')), '');
+    assert.equal(heldBy(folder, []), null, 'and a visible program still keeps them');
+    writeFileSync(join(folder, 'uv'), '');
+    assert.equal(heldBy(folder, []), 'others');
+});
+
+test('a line break in the folder’s name is refused like a quote: a block the search could never find again is never written', () => {
+    for (const odd of ['/h/a\nb/.local/bin', '/h/a\rb/.local/bin', '/h/a"b', '/h/a$b', '/h/a`b']) assert.equal(unsafeFolder(odd), true, JSON.stringify(odd));
+    assert.equal(unsafeFolder('/home/someone/.local/bin'), false);
+    assert.equal(unsafeFolder("/home/o'brien/.local/bin"), false, 'a single quote is carried by the double quotes');
+});
+
+test('a rewrite that fails after the temporary file was made removes it, and leaves the profile as it was', (t) => {
+    const { home, folder, command, line } = desk(t);
+    command.place();
+    const status = command.status();
+    const lines = status.state === 'placed' ? status.lines : undefined;
+    assert.ok(lines !== undefined);
+    const profile = join(home, '.zprofile');
+    // A full disk: part of the text is written, then the write throws.
+    const failed = takeLines(lines, (descriptor, data) => {
+        writeFileSync(descriptor, data.subarray(0, 3));
+        throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    });
+    assert.deepEqual(failed, [profile, join(home, '.zshrc')]);
+    for (const file of [profile, join(home, '.zshrc')]) {
+        assert.equal(existsSync(`${file}.jason-desktop.tmp`), false, 'nothing this act made is left');
+        assert.equal(text(file), block(line), 'the profile is as it was');
+    }
+    assert.equal(existsSync(join(folder, 'jason')), true);
 });
 
 test('a profile that is a link, a folder or cannot be written takes nothing, nor does any other; the wrapper is still placed and the line is given', (t) => {
