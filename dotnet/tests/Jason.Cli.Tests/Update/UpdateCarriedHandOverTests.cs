@@ -39,7 +39,7 @@ public sealed class UpdateCarriedHandOverTests
 
         // One document, every part's lines in order: the carried jason's plan, the copy's drain, request, keep and swap, and
         // the new jason's finish, the machine setup and the settling among them.
-        var order = new[] { "staged:", "drained:", "stopped:", "kept:", "swapped:", "plugins:", "started:", "healthy:", "complete:", "skills:", "install:", "ui:", "settle:" };
+        var order = new[] { "staged:", "asked:", "drained:", "stopped:", "kept:", "swapped:", "plugins:", "started:", "healthy:", "complete:", "skills:", "install:", "ui:", "settle:" };
         var at = order.Select(prefix => answer.Steps.ToList().FindIndex(step => step.StartsWith(prefix, StringComparison.Ordinal))).ToList();
         Assert.DoesNotContain(-1, at);
         Assert.Equal(at.Order().ToList(), at);
@@ -58,6 +58,7 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Equal(["--to", installation.To.ToString()], runs[1].Skip(2).Take(2));
         Assert.Equal("--request", runs[1][4]);
         Assert.Matches("^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", runs[1][5]);
+        Assert.Equal("--await-go", runs[1][6]);
         Assert.DoesNotContain("--feed", runs[1]);
         Assert.Equal([installation.InstallPath, "update", "apply", "--finish", "--feed", installation.Feed.AbsoluteUri], runs[2]);
         Assert.Equal([desktop.Executable, "--update-settle"], runs[3]);
@@ -119,8 +120,8 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     /// <summary>
-    /// A refusal ends the verb with the Desktop's reason and sentence, nothing installed, the runtime it drained claiming work
-    /// again, and the record that stood before put back.
+    /// A refusal before the download ends the verb with the Desktop's reason and sentence: nothing was drained, stopped or
+    /// installed, the runtime was never touched, and the record that stood before is put back.
     /// </summary>
     [Fact]
     [Critical(Family.I2, "a refused hand-over leaves the runtime and the record as they were")]
@@ -132,7 +133,8 @@ public sealed class UpdateCarriedHandOverTests
         installation.WithRuntime();
         desktop.Becomes(installation.From);
         var before = File.ReadAllText(installation.Update.Ledger);
-        desktop.Answer = (id, to) =>
+        var found = installation.State;
+        desktop.Before = (id, to) =>
         {
             desktop.Write(id, to, "refused", reason: "version_mismatch", message: "The releases offer 9.9.8, not 9.9.9.", offered: "9.9.8");
             return 0;
@@ -145,12 +147,13 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Equal("update_refused_by_desktop", refusal.Code);
         Assert.Contains("(version_mismatch): The releases offer 9.9.8, not 9.9.9.", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("Its feed offered 9.9.8.", refusal.Message, StringComparison.Ordinal);
-        Assert.Contains("the runtime that was drained claims work again", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Nothing was drained, stopped or installed, and the runtime was not touched.", refusal.Message, StringComparison.Ordinal);
         Assert.False(refusal.Retryable);
 
         Assert.True(installation.Running);
-        Assert.Equal(DispatcherState.Running, installation.State);
-        Assert.Equal("system.resume", installation.Operations.Last());
+        Assert.Equal(found, installation.State);
+        Assert.DoesNotContain("system.drain", installation.Operations);
+        Assert.DoesNotContain("system.resume", installation.Operations);
         Assert.Empty(installation.Processes.Launches);
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
@@ -191,10 +194,11 @@ public sealed class UpdateCarriedHandOverTests
     {
         var (installation, desktop) = FakeDesktop.Carried();
         using var _ = installation;
-        desktop.Answer = (id, to) =>
+        desktop.TakenByAWindow = true;
+        desktop.Before = (id, to) =>
         {
             desktop.Write(id, to, "refused", reason: "window_open", message: "Jason Desktop is open: install from its menu, or quit it and ask again.", window: true);
-            return 3;
+            return 0;
         };
 
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
@@ -205,6 +209,7 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Contains("(window_open)", refusal.Message, StringComparison.Ordinal);
         Assert.True(refusal.Retryable, "a window closed is a request that can be taken");
         Assert.True(installation.Running);
+        Assert.DoesNotContain("system.drain", installation.Operations);
     }
 
     /// <summary>A start that ends and leaves no file is no answer: said, with the runtime as it was found.</summary>
@@ -213,7 +218,7 @@ public sealed class UpdateCarriedHandOverTests
     {
         var (installation, desktop) = FakeDesktop.Carried();
         using var _ = installation;
-        desktop.Answer = (_, _) => 1;
+        desktop.Before = (_, _) => 1;
 
         var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct);
 
@@ -259,7 +264,8 @@ public sealed class UpdateCarriedHandOverTests
     {
         var (installation, desktop) = FakeDesktop.Carried();
         using var _ = installation;
-        desktop.Answer = (_, _) => 3;
+        desktop.TakenByAWindow = true;
+        desktop.Before = (_, _) => 0;
         var carried = new CarriedUpdate(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.MacOs)
         {
             WindowAnswers = TimeSpan.FromMilliseconds(100),
@@ -419,6 +425,38 @@ public sealed class UpdateCarriedHandOverTests
         Assert.Contains("`jason runtime start`", byHand, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A carried rollback of a record that stands before kept puts back nothing, since nothing was put aside yet: where the
+    /// application is still the version the update left it refuses with nothing_to_roll_back, where the installer already
+    /// landed the new one with update_in_progress naming the finish; the record is left as it stood either way.
+    /// </summary>
+    [Theory]
+    [Critical(Family.P2, "a carried rollback before kept is refused")]
+    [InlineData(false, UpdateCodes.NothingToRollBack)]
+    [InlineData(true, UpdateCodes.InProgress)]
+    public async Task A_carried_rollback_of_a_record_before_kept_is_refused(bool landed, string code)
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        installation.Killed(UpdateStep.Stopped);
+        if (landed)
+        {
+            desktop.Names(installation.To);
+        }
+
+        var before = File.ReadAllText(installation.Update.Ledger);
+
+        var exit = await CliApp.RunAsync(["update", "rollback"], installation.Machine!, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(code, refusal.Code);
+        Assert.Contains("stands at 'stopped'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("`jason update apply`", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(before, File.ReadAllText(installation.Update.Ledger));
+        Assert.Empty(desktop.Starts);
+    }
+
     /// <summary>A carried jason does not roll back an update whose record names another jason's file.</summary>
     [Fact]
     public async Task A_carried_rollback_of_another_jasons_record_is_refused()
@@ -443,4 +481,141 @@ public sealed class UpdateCarriedHandOverTests
     }
 
     private static UpdateRequest Request(FakeInstallation installation) => new(installation.Feed, null, TimeSpan.Zero);
+
+    /// <summary>
+    /// A cancel while the copy carries the update: the copy is ended with it, and the carried jason, which asked for the stop,
+    /// puts back the record that stood and launches the runtime from the application's file without a wait, saying so.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I2, "a cancel on macOS puts back the record and launches the runtime")]
+    public async Task A_cancel_while_the_copy_carries_the_update_puts_back_the_record_and_launches_the_runtime()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var copy = Path.Combine(installation.Update.Applier, ReleaseAssets.ExecutableName);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        installation.OnHandOver = command =>
+        {
+            if (command[0] == copy)
+            {
+                // The copy drained and asked, the Desktop stopped the runtime at the go, and the copy is ended with the cancel.
+                var ledger = installation.Ledger()!.At(UpdateStep.Stopped);
+                ledger.Write(installation.Update.Ledger);
+                desktop.StopRuntime();
+                cancel.Cancel();
+                throw new OperationCanceledException(cancel.Token);
+            }
+        };
+
+        var exit = await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, cancel.Token);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(installation.Out.ToString());
+        Assert.Equal(UpdateCodes.Cancelled, refusal.Code);
+        Assert.Contains("and not waited for", refusal.Message, StringComparison.Ordinal);
+        Assert.True(installation.Running);
+        Assert.Equal([installation.InstallPath], installation.Processes.Executables.Single());
+        Assert.Null(installation.Ledger());
+    }
+
+    /// <summary>On macOS an install that did not land carries the end of ShipIt's own log, where ShipIt says why.</summary>
+    [Fact]
+    public async Task An_install_that_never_lands_on_macOS_carries_the_end_of_ShipIts_log()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        var log = Path.Combine(desktop.Home, "Library", "Caches", "ai.jasonharness.desktop.ShipIt", "ShipIt_stderr.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(log)!);
+        File.WriteAllText(log, "earlier lines\nInstallation error: the code signature of the update did not match\n");
+        desktop.Answer = (id, to) =>
+        {
+            desktop.Write(id, to, "installing", runtimeStopped: desktop.StopRuntime(), kept: desktop.Kept);
+            return 0;
+        };
+        var carried = new CarriedUpdate(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.MacOs)
+        {
+            InstallWait = TimeSpan.FromMilliseconds(200),
+            Poll = TimeSpan.FromMilliseconds(10),
+        };
+
+        var ledger = await carried.PlanAsync(Request(installation), Ct);
+        var refused = await Assert.ThrowsAsync<UpdateException>(() => carried.InstallAsync(ledger, Request(installation), Ct));
+
+        Assert.Equal(UpdateCodes.DesktopNotInstalled, refused.Code);
+        Assert.Contains("ShipIt said: earlier lines Installation error: the code signature of the update did not match", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(log, refused.Message, StringComparison.Ordinal);
+        Assert.True(installation.Running);
+    }
+
+    /// <summary>The application's settling start is waited for within a bound, ended past it, and the line says who records it then.</summary>
+    [Fact]
+    public async Task A_settle_that_never_ends_is_ended_within_its_bound()
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        desktop.SettleHangs = true;
+        var carried = new CarriedUpdate(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.MacOs)
+        {
+            SettleWait = TimeSpan.FromMilliseconds(200),
+        };
+
+        await carried.SettleAsync(Ct);
+
+        var line = Assert.Single(carried.Steps);
+        Assert.StartsWith("settle: Jason Desktop did not record the update as kept within", line, StringComparison.Ordinal);
+        Assert.EndsWith("its next Live window's start records it", line, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromMinutes(2), new CarriedUpdate(installation.Machine!, installation.Update, TimeProvider.System, CarriedExecutable.Of(installation.InstallPath)!, SetupSystem.MacOs).SettleWait);
+    }
+
+    /// <summary>
+    /// While one part of an update holds its lock, a second apply, a finishing step and a rollback beside it refuse with
+    /// update_in_progress and touch nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("apply")]
+    [InlineData("finish")]
+    [InlineData("rollback")]
+    public async Task A_second_update_beside_one_that_holds_the_lock_refuses(string verb)
+    {
+        var (installation, desktop) = FakeDesktop.Carried();
+        using var _ = installation;
+        if (verb == "rollback")
+        {
+            Assert.Equal(ExitCodes.Success, await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct));
+            installation.Out.GetStringBuilder().Clear();
+        }
+
+        var before = File.Exists(installation.Update.Ledger) ? File.ReadAllText(installation.Update.Ledger) : null;
+        var starts = desktop.Starts.Count;
+        using var held = UpdateLock.Take(installation.Update, "a test's update");
+
+        var exit = verb switch
+        {
+            "apply" => await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, Ct),
+            "finish" => await UpdateCommands.ApplyAsync(installation.Machine!, installation.Feed.AbsoluteUri, null, 0, human: false, finish: true, Ct),
+            _ => await CliApp.RunAsync(["update", "rollback"], installation.Machine!, Ct),
+        };
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Equal(UpdateCodes.InProgress, RuntimeVerbs.Envelope(installation.Out.ToString()).Code);
+        Assert.Equal(before, File.Exists(installation.Update.Ledger) ? File.ReadAllText(installation.Update.Ledger) : null);
+        Assert.Equal(starts, desktop.Starts.Count);
+    }
+
+    /// <summary>
+    /// A console's close cancels the update as Ctrl+C does and is held until the way out has run, a few seconds at most.
+    /// </summary>
+    [Fact]
+    public async Task A_consoles_close_cancels_the_update_and_is_held_until_it_settled()
+    {
+        using var closing = new UpdateCommands.Closing(Ct);
+        var closed = Task.Run(() => closing.Closed(null), Ct);
+
+        await Task.Delay(200, Ct);
+        Assert.True(closing.Token.IsCancellationRequested);
+        Assert.False(closed.IsCompleted, "the close was let through before the way out ran");
+        closing.Settled();
+        await closed.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+        Assert.True(UpdateCommands.Closing.Hold < TimeSpan.FromSeconds(5), "Windows ends a process five seconds after a close");
+    }
 }

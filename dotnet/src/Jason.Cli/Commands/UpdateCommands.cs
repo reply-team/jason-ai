@@ -839,6 +839,8 @@ public static class UpdateCommands
         var rollback = new UpdateRollback(env, new UpdatePaths(env.Paths), TimeProvider.System) { Application = application };
         try
         {
+            // A carried rollback holds the update's lock, so it never reads the ledger an update or a finish beside it writes.
+            using var held = application is null ? null : UpdateLock.Take(new UpdatePaths(env.Paths), "the rollback");
             var ledger = await rollback.RollBackAsync(cancellationToken).ConfigureAwait(false);
             Print(env, human, rollback.Steps, ledger);
             return ExitCodes.Success;

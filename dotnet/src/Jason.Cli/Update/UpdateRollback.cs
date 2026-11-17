@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Jason.Cli.Commands;
 using Jason.Cli.Discovery;
 using Jason.Cli.Files;
+using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Cli.Ui;
 using Jason.Cli.Uninstall;
@@ -84,6 +85,20 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
             ?? throw new UpdateException(
                 UpdateCodes.NothingToRollBack,
                 $"There is no record of an update at {update.Ledger}, so there is nothing to put back.");
+
+        // A carried update put nothing aside before the Desktop kept the application: a record before that names no copy, and
+        // a rollback of it would write a record naming one that was never made.
+        if (Application is not null && ledger.Step < UpdateStep.Kept)
+        {
+            var step = ledger.Step.ToString().ToLowerInvariant();
+            throw CarriedExecutable.Of(ledger.InstallPath)?.Version is { } named && SemanticVersion.TryParse(named, out var version) && version == ledger.ToVersion
+                ? new UpdateException(
+                    UpdateCodes.InProgress,
+                    $"The update to {ledger.ToVersion} stands at '{step}', and the application is {ledger.ToVersion} already: `jason update apply` finishes it, and `jason update rollback` goes back once it has.")
+                : new UpdateException(
+                    UpdateCodes.NothingToRollBack,
+                    $"The update to {ledger.ToVersion} stands at '{step}': Jason Desktop never kept the application or handed it to its installer, so there is nothing to put back. `jason update apply` carries the update on.");
+        }
 
         if (Application is null && !File.Exists(ledger.PreviousPath))
         {
