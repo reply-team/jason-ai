@@ -63,30 +63,28 @@ also corrects the Demo's clicks on macOS and the words the window says after an 
   connected to it, and Jason sends from them once you approve. At the right stands **Sign in with Reply**, which is the
   primary button only while nobody is signed in. Below it one row has a field, "Or paste a Reply API key", and **Use
   key**. The plain "Reply CLI" line with its version is gone. The sentences a person acts on stay: the CLI not found,
-  and the CLI older than the account acts need. Settings' Accounts no longer draws a "Provider" heading around the card,
-  since the card carries its own name; the browser page without the desktop keeps its heading.
+  and the CLI older than the account acts need.
 
 - **The chat's opening chips are drawn in an empty chat only.** "What is waiting for me?", "How are my agents doing?"
   and "Help me start a new agent." no longer stand under an answer in the Feed or in a set-up chat. An agent's chat
   keeps the chips that follow the agent's state.
 
-- **Settings' Accounts says what the notification channels are for.** The line under the table reads, in Jason Desktop:
-  "This is how Jason tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your
-  AI; a provider's channel can also be connected or disconnected on the Connect panel." In a browser tab, which has no
-  Connect panel, it ends at "To turn a channel on or off, ask your AI."
+- **Settings' Accounts says what the notification channels are for.** The line under the table reads: "This is how Jason
+  tells you that an approval or a question is waiting for you. To turn a channel on or off, ask your AI; a provider's
+  channel can also be connected or disconnected on the Connect panel."
 
 - **Jason Desktop on Linux has no title bar of its own.** As on Windows, the window's minimize, maximize and close
   buttons stand over the right end of the console's top strip, drawn in your desktop's own style, as many as its button
   layout names for windows, and in the console's ink in the theme in force. A layout that puts them at the left stands
   them over the sidebar's brand.
   - **Two keys,** for a window with no menu bar and a desktop that shows no tray icon (Cmd instead of Ctrl on a Mac):
-  **Ctrl+Shift+D** for the update item, which asks, naming the version, before it installs, since the install stops the
-  runtime and restarts the desktop; and **Ctrl+Shift+L** for Back to Your Own Installation, in the Demo. The sentences
-  that send you to them name them.
+    **Ctrl+Shift+D** for the update item, which asks, naming the version, before it installs, since the install stops
+    the runtime and restarts the desktop; and **Ctrl+Shift+L** for Back to Your Own Installation, in the Demo. The
+    sentences that send you to them name them.
   - **The chat's commands on Linux run without Claude Code's environment scrub,** so `jason` in a chat there reaches the
-  runtime, which the scrub's sandbox hid. macOS and Windows keep the scrub. What this lets through: a key connected on a
-  Connect card, and the credentials the turn carries from the desktop's environment, reach the commands the agent runs,
-  as in a terminal; `docs/desktop.md` says what reaches them.
+    runtime, which the scrub's sandbox hid. macOS and Windows keep the scrub. What this lets through: a key connected on
+    a Connect card, and the credentials the turn carries from the desktop's environment, reach the commands the agent
+    runs, as in a terminal; `docs/desktop.md` says what reaches them.
 
 - **The Open in menu has an icon column, one-line hints and dividers, and stays inside the window.** Every item starts
   with an icon. On Windows and macOS a row for an installed application shows that application's own icon, read from the
