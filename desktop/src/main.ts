@@ -17,6 +17,7 @@ import { registerChat } from './chat-ipc.ts';
 import { loggedModels, loggedTurns } from './chat-log.ts';
 import { fullAccessAnswer, fullAccessDialog } from './chat-modes.ts';
 import { carriedOf, isOtherCopy, removeOtherCopies } from './bundle-copy.ts';
+import { restoreAtStart } from './carried-restore.ts';
 import { cliAt, startJasonAlone, type Cli } from './cli.ts';
 import { OpenIn, type PlaceId } from './open-in.ts';
 import { IconReader, readRegularFileAtMost } from './open-in-icons.ts';
@@ -39,7 +40,7 @@ import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateU
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
 import { DataNewerRefused, LayoutRefused, loggedCli, startInstallation, StartFailed } from './installation.ts';
-import { commandIsSetup, jasonOnPath, liveWaitMs, MachineSetup, placeLine, readHead, runtimeDoor, settingUpSentence, setupOffered, writable } from './machine-setup.ts';
+import { commandIsSetup, finishArguments, finishingOf, jasonOnPath, linuxOwedJason, liveWaitMs, MachineSetup, noLimit, payOwedStart, placeLine, readHead, runtimeDoor, settingUpSentence, setupOffered, startAfterSetup, writable } from './machine-setup.ts';
 import { eventChannels, handle, withMembers, type InvokeMember, type IpcRegistrar } from './ipc.ts';
 import { BridgeHolder, BrowserBridge, openOwnPage, openTab } from './browser-bridge.ts';
 import { fileLogger, limitsFrom, type Logger } from './log.ts';
@@ -61,7 +62,7 @@ import { askBox } from './reply-accounts.ts';
 import { codexAsker, ModelLists } from './model-lists.ts';
 import { accountShell, loginPath, shellPath } from './shell-path.ts';
 import { placedRemoval, removalOffered } from './remove-placed.ts';
-import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart } from './uninstall.ts';
+import { harnessRoot, processesRunFrom, stopRuntimeStart, uninstallStart, updaterCache } from './uninstall.ts';
 import { uninstallOffered, uninstallOutput } from './uninstall-door.ts';
 import { runStopRuntime, runUninstall } from './uninstall-start.ts';
 import { earlierPageFound, loadWindow, readWindowPairing, WindowPairing, windowPartition, writeWindowPairing } from './window-pairing.ts';
@@ -729,20 +730,26 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     await machineSetup?.settledWithin(liveWaitMs);
 
     try {
-        const started = await startInstallation({
-            cli,
-            paths,
-            log,
-            programs,
-            bundle,
-            bundleVersion: version,
-            gate: skillsGate,
-            settings,
-            saveSettings(next) {
-                settings = next;
-                writeSettings(paths.settings, next);
-            },
-        });
+        // Brought up once more where it failed while the set-up still ran: a carried update its finishing step finishes
+        // refuses a runtime's start until that step has started one (`startAfterSetup`).
+        const started = await startAfterSetup(
+            () =>
+                startInstallation({
+                    cli,
+                    paths,
+                    log,
+                    programs,
+                    bundle,
+                    bundleVersion: version,
+                    gate: skillsGate,
+                    settings,
+                    saveSettings(next) {
+                        settings = next;
+                        writeSettings(paths.settings, next);
+                    },
+                }),
+            machineSetup,
+        );
         runtimeVersion = started.runtimeVersion;
         // Which way to one version the system screen names: the desktop's own update when the runtime runs from the jason
         // it carries, which `jason update` refuses to change.
@@ -959,6 +966,20 @@ function askedShell(): Promise<string | null> {
 }
 
 /**
+ * A Linux Demo start's payment of the note that a start is owed (`payOwedStart`), from the jason that outlasts the run, with
+ * the person's environment and nothing of an AppImage's mount.
+ */
+async function linuxOwedStart(log: Logger): Promise<void> {
+    const form = linuxForm();
+    if (form === null) return;
+    const bundle = bundleDirectory();
+    const jason = linuxOwedJason(form, bundle, desktopPaths(runOn.person).bundle, bundleVersion(bundle), existsSync);
+    if (jason === null) return;
+    const cli = cliAt(jason, withoutMount(withPath(process.env, pathOf(process.env)), mountOf(form, process.env)));
+    await payOwedStart({ note: desktopPaths(runOn.person).startOwed, exists: existsSync, runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile), log });
+}
+
+/**
  * The machine set-up a windowed start runs on macOS and Windows: the carried `jason install`, with the person's own
  * environment, its record in the person's directory; null on Linux, whose Command Line item is the PATH command.
  */
@@ -976,10 +997,15 @@ function makeMachineSetup(log: Logger): MachineSetup | null {
         record: desktopPaths(runOn.person).machineSetup,
         terminalPath: () => askedShell(),
         // The runtime on the person's data directory, read before and after each run and started again from the carried
-        // jason where the run left none that had answered: in Demo as in Live, the person's installation's, not the Demo's.
+        // jason where the run left none that had answered, or the note says a start is owed: in Demo as in Live, the
+        // person's installation's, not the Demo's.
         runtime: runtimeDoor(cli, desktopPaths(runOn.person).runFile),
         log,
-        // The finishing step's seam (`machine-setup.ts`) stays unset until the command line offers that step.
+        // The command line's finishing step after the routine, with no time limit: with a carried update in flight and the
+        // application at its version it finishes that update, the runtime's start included (`docs/release-and-update.md` §7).
+        finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),
+        // The note that a start is owed, read at every start of a window, Demo or Live; the desktop writes none.
+        startOwed: desktopPaths(runOn.person).startOwed,
     });
 }
 if (unsandboxed !== null) {
@@ -1081,6 +1107,11 @@ function startDesktop(): void {
         windowRequests = new UpdateRequests((request) => refuseBusy(request, true));
         // The machine set-up, where the routine has not run for this version yet: in a Demo start as in Live, before the
         // person chooses, and writing nothing under the data directory but its own record (`machine-setup.ts`).
+        // On Windows, a carried jason.exe an update moved out of the folder and the installer never replaced is put back from
+        // the updater's store where the folder is still the version the stored image came from (`carried-restore.ts`).
+        if (process.platform === 'win32' && app.isPackaged) {
+            restoreAtStart({ executable: join(bundleDirectory(), 'jason.exe'), version: bundleVersion(bundleDirectory()), updaterCache: updaterCache(process.env, homedir(), process.platform), log: early });
+        }
         machineSetup = makeMachineSetup(early);
         // Starting Jason again while it runs, or clicking it in the Dock, brings the window out of the tray. A second
         // start's link comes in its additionalData, which Electron passes as it was given; its argv may be reordered or
@@ -1108,7 +1139,8 @@ function startDesktop(): void {
         // A Demo start, before Electron is ready: its two schemes, its page's and our switch's, are known, and no host name
         // is resolved for the rest of the run (`demo-page.ts`). A Live start is a start of its own and sets neither.
         if (runOn.mode === 'demo') demoBeforeReady(app.commandLine, protocol);
-        void app.whenReady().then(() => machineSetup?.atStart());
+        // On Linux no set-up runs: a Demo start pays the note that a start is owed itself, and a Live start brings a runtime up.
+        void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));
         void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));
     }
 }

@@ -29,6 +29,7 @@ import { dirname, posix } from 'node:path';
 import type { Cli, CliResult } from './cli.ts';
 import { wrapperTarget } from './command-line.ts';
 import type { Logger } from './log.ts';
+import type { LinuxPackage } from './linux-package.ts';
 import { sameFinalFile, type JasonOnPath } from './path-command.ts';
 import { findOnPath } from './program-path.ts';
 import { hosts } from './providers-model.ts';
@@ -116,11 +117,20 @@ export function reportOf(raw: unknown): SetupReport | null {
     return { version, executable, command: placed, skills: roots, runtime, done: doneSaid, left: leftSaid, problems: problemsSaid, completed };
 }
 
-/** What a run of the routine answered: its report, or why there is none, in its own sentence where it said one. */
-export type SetupAnswer = { report: SetupReport } | { refused: string };
+/**
+ * What a run of the routine answered: its report, or why there is none, in its own sentence where it said one, or `later`
+ * where another jason held the update's lock (`laterCodes`), which is no failure: the next start runs it again.
+ */
+export type SetupAnswer = { report: SetupReport } | { refused: string } | { later: string };
 
-/** The error sentence a CLI run printed as its document, or null. */
-function errorSaid(stdout: string): string | null {
+/**
+ * The refusals that mean "later, at the next start", never a failure: another `jason install`, or an update, its finish or
+ * a rollback, holds the update's lock (`docs/release-and-update.md` §7 and §9).
+ */
+export const laterCodes: readonly string[] = ['install_in_progress', 'update_in_progress'];
+
+/** The error a CLI run printed as its document, its code and its sentence, or null. */
+function errorOf(stdout: string): { code: string; message: string } | null {
     let parsed: unknown = null;
     try {
         parsed = JSON.parse(stdout);
@@ -128,14 +138,19 @@ function errorSaid(stdout: string): string | null {
         return null;
     }
     const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null;
-    return error !== null && isText(error.message) && error.message !== '' ? error.message : null;
+    return error !== null && isText(error.message) && error.message !== '' ? { code: isText(error.code) ? error.code : '', message: error.message } : null;
+}
+
+/** The error sentence a CLI run printed as its document, or null. */
+function errorSaid(stdout: string): string | null {
+    return errorOf(stdout)?.message ?? null;
 }
 
 /** Pure: a run's answer from what the CLI gave back. */
 export function answerOf(result: CliResult): SetupAnswer {
     if (result.exit === -1) return { refused: 'jason install could not be started, or ended before it printed a report.' };
-    const said = errorSaid(result.stdout);
-    if (said !== null) return { refused: said };
+    const error = errorOf(result.stdout);
+    if (error !== null) return laterCodes.includes(error.code) ? { later: error.message } : { refused: error.message };
     let parsed: unknown = null;
     try {
         parsed = JSON.parse(result.stdout);
@@ -174,8 +189,50 @@ export function runtimeDoor(cli: Cli, runFile: string, exists: (path: string) =>
     };
 }
 
-/** What the desktop did for a runtime that answered before the routine and did not after it. */
-export type RuntimeAfter = { act: 'started' } | { act: 'not_started'; why: string };
+/**
+ * What the desktop did for a runtime that answered before the routine, or was owed a start by the note, and did not answer
+ * after it: started one, found one answering after its own start was refused (`answering`), or could not. `owed` where
+ * none answered before and the note is what asked.
+ */
+export type RuntimeAfter = { act: 'started'; owed?: true } | { act: 'answering'; owed?: true } | { act: 'not_started'; why: string; owed?: true };
+
+/**
+ * The start of a runtime from the carried file, read again before it is said to have failed: a start refused because a
+ * runtime came up meanwhile, Live's own or the finishing step's, is a runtime answering, not a failure.
+ */
+export async function startAgain(runtime: RuntimeDoor): Promise<{ act: 'started' } | { act: 'answering' } | { act: 'not_started'; why: string }> {
+    const failed = await runtime.start().catch(messageOf);
+    if (failed === null) return { act: 'started' };
+    return (await runtime.answers().catch(() => false)) ? { act: 'answering' } : { act: 'not_started', why: failed };
+}
+
+/**
+ * Pure but for what it is given: the jason a Linux Demo start pays the note from, where no set-up runs: a deb's or a
+ * folder's own, and an AppImage's copy under `<data>/desktop/bundle/<version>/` where an earlier Live start made it, never
+ * its mount's, which ends with the run; null where there is none. A Live start brings a runtime up itself.
+ */
+export function linuxOwedJason(form: LinuxPackage, packaged: string, bundles: string, version: string | null, exists: (path: string) => boolean): string | null {
+    if (form.form !== 'appimage') return posix.join(packaged, 'jason');
+    if (version === null) return null;
+    const copy = posix.join(bundles, version, 'jason');
+    return exists(copy) ? copy : null;
+}
+
+/** What a start did about the note that a start is owed (`docs/release-and-update.md` §9). */
+export type OwedStart = { act: 'none' } | { act: 'answering' } | { act: 'started' } | { act: 'not_started'; why: string };
+
+/**
+ * The note that a start is owed, paid: where `<data>/run/start-owed.json` stands and no runtime answers on the data
+ * directory, one is started from the carried file. The note is the routine's, an installer's stop's or a hand's; the
+ * desktop never writes one, and never removes one: a runtime's own start does.
+ */
+export async function payOwedStart(owed: { note: string; exists(path: string): boolean; runtime: RuntimeDoor; log: Logger }): Promise<OwedStart> {
+    if (!owed.exists(owed.note)) return { act: 'none' };
+    if (await owed.runtime.answers().catch(() => false)) return { act: 'answering' };
+    const after = await startAgain(owed.runtime);
+    owed.log.info('start_owed_paid', { Started: after.act !== 'not_started' });
+    return after;
+}
 
 /** Where the routine last ran, by the desktop's own record: the version and the report of a run that completed. */
 export interface SetupRecord {
@@ -219,8 +276,11 @@ export type SetupState =
     | { state: 'idle' }
     /** `long` once it has run past `setupLongMs`. */
     | { state: 'running'; long?: boolean }
-    | { state: 'reported'; report: SetupReport; runtimeAfter?: RuntimeAfter }
-    | { state: 'refused'; why: string; runtimeAfter?: RuntimeAfter };
+    /** `later` where the routine reported and the finishing step was left for the next start. */
+    | { state: 'reported'; report: SetupReport; runtimeAfter?: RuntimeAfter; later?: string }
+    | { state: 'refused'; why: string; runtimeAfter?: RuntimeAfter }
+    /** The update's lock held by another jason: nothing set up, no record, and the next start runs it again. */
+    | { state: 'later'; why: string; runtimeAfter?: RuntimeAfter };
 
 export interface MachineSetupDeps {
     /** The carried jason. */
@@ -242,19 +302,64 @@ export interface MachineSetupDeps {
     /** Past how long a run is said as taking long; `setupLongMs` unless a test names another. */
     longAfterMs?: number;
     /**
-     * THE FINISHING STEP'S SEAM: the command line's own finishing step of an update (`jason update apply --finish`, run on a
-     * carried install with no update in flight, `docs/release-and-update.md` §7), which brings the plugin packages, the
-     * recorded skills deployments and the UI up to the version installed and starts no runtime. Run after a routine that
-     * completed; the record is written only when both completed. Absent until the command line offers it, and then the
-     * routine alone decides.
+     * The command line's finishing step, `jason update apply --finish` (`docs/release-and-update.md` §7, `finishingOf`):
+     * with no update in flight it brings the plugin packages, the recorded skills deployments and the UI up to the version
+     * installed and starts no runtime; with a carried update in flight and the application at its version it finishes that
+     * update, the runtime's start included. Run after every routine that was not `later`, so an update in flight is
+     * finished even where the routine did not get everywhere; the record is written only when both completed. Absent, the
+     * routine alone decides (a test's set-up).
      */
     finishingStep?(): Promise<FinishingStep>;
+    /**
+     * `<data>/run/start-owed.json`: where it stands after the routine, or at a start that runs none, and no runtime
+     * answers, one is started from the carried file (`payOwedStart`). Absent, no note is read.
+     */
+    startOwed?: string;
+    /** Whether a path is there; `existsSync` unless a test names another. */
+    exists?(path: string): boolean;
 }
 
-/** What the finishing step answered: whether it completed, and its sentences of what it did not do. */
+/**
+ * What the finishing step answered: whether it completed, and its sentences of what it did not do; `later` where another
+ * jason held the update's lock, or an update stands before the swap with the application not yet its version, which is
+ * no failure and is tried again at the next start.
+ */
 export interface FinishingStep {
     completed: boolean;
     problems: string[];
+    later?: string;
+}
+
+/** The finishing step's arguments: the carried jason's own, its feed its default (`docs/release-and-update.md` §7). */
+export const finishArguments: readonly string[] = ['update', 'apply', '--finish'];
+
+/**
+ * Pure: the finishing step's answer from what `jason update apply --finish` gave back. Two documents are a success: with
+ * no update in flight, the finishing step's own (`version`, `data_dir`, `data_dir_found`, `complete`, `parts`), done where
+ * `complete` says so, a part `not_done` said by its reason; with an update in flight past the swap, or the application at
+ * its version, the update's (`from`, `to`, `step`, `steps`), done where it reached `complete`. A refusal by `laterCodes`
+ * is `later`; any other refusal, a usage error and no document are not done.
+ */
+export function finishingOf(result: CliResult): FinishingStep {
+    if (result.exit === -1) return { completed: false, problems: ['jason update apply --finish could not be started, or ended before it printed an answer.'] };
+    const error = errorOf(result.stdout);
+    if (error !== null) return laterCodes.includes(error.code) ? { completed: false, problems: [], later: error.message } : { completed: false, problems: [error.message] };
+    let parsed: unknown = null;
+    try {
+        parsed = JSON.parse(result.stdout);
+    } catch {
+        parsed = null;
+    }
+    if (result.exit === 0 && isObject(parsed) && typeof parsed.complete === 'boolean' && Array.isArray(parsed.parts)) {
+        const problems = parsed.parts.flatMap((part: unknown) =>
+            isObject(part) && part.state === 'not_done' ? [`${isText(part.part) ? part.part : 'a part'}: ${isText(part.reason) ? part.reason : 'not done'}`] : [],
+        );
+        return { completed: parsed.complete && problems.length === 0, problems: parsed.complete || problems.length > 0 ? problems : ['The finishing step did not complete.'] };
+    }
+    if (result.exit === 0 && isObject(parsed) && isText(parsed.step) && isText(parsed.to)) {
+        return parsed.step === 'complete' ? { completed: true, problems: [] } : { completed: false, problems: [`The update to ${parsed.to} stands at '${parsed.step}'.`] };
+    }
+    return { completed: false, problems: [`jason update apply --finish exited ${result.exit} and printed no answer.`] };
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -295,15 +400,26 @@ export class MachineSetup {
 
     /**
      * The start's run: once a start, where it is offered and the record names another version than the one carried, or
-     * none. Anything else runs nothing.
+     * none; that run pays the note that a start is owed after it. A start that runs no routine pays the note alone
+     * (`payOwedStart`), in Demo as in Live.
      */
     atStart(): Promise<void> {
         this.#atStart ??= (async () => {
-            const { offered, version, record } = this.#deps;
-            if (!offered || version === null || readSetupRecord(record).ranFor === version) return;
-            await this.#run('start');
+            const { offered, version, record, startOwed, runtime, log } = this.#deps;
+            if (offered && version !== null && readSetupRecord(record).ranFor !== version) {
+                await this.#run('start');
+                return;
+            }
+            if (startOwed !== undefined) await payOwedStart({ note: startOwed, exists: this.#exists, runtime, log });
         })();
         return this.#atStart;
+    }
+
+    readonly #exists = (path: string): boolean => (this.#deps.exists ?? existsSync)(path);
+
+    /** Whether the note that a start is owed stands. */
+    #owed(): boolean {
+        return this.#deps.startOwed !== undefined && this.#exists(this.#deps.startOwed);
     }
 
     /** Resolves once the start's run has ended, at once where the start runs none. */
@@ -347,17 +463,19 @@ export class MachineSetup {
             const { runtime, log } = this.#deps;
             // Whether a runtime answers on the data directory before the routine, which may stop it.
             const before = await runtime.answers().catch(() => false);
-            let next: Extract<SetupState, { state: 'reported' | 'refused' }>;
+            let next: Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>;
             try {
                 next = await this.#routine(why);
             } catch (error) {
                 next = { state: 'refused', why: messageOf(error) };
             }
-            // After any outcome: one answered before and none answers now, so one is started from the carried file.
-            if (!before || (await runtime.answers().catch(() => false))) return next;
-            const failed = await runtime.start().catch(messageOf);
-            log.info('machine_setup_runtime', { Why: why, Started: failed === null });
-            return { ...next, runtimeAfter: failed === null ? { act: 'started' } : { act: 'not_started', why: failed } };
+            // After any outcome: one answered before, or the note says a start is owed, and none answers now, so one is
+            // started from the carried file.
+            const owed = !before && this.#owed();
+            if ((!before && !owed) || (await runtime.answers().catch(() => false))) return next;
+            const after = await startAgain(runtime);
+            log.info('machine_setup_runtime', { Why: why, Started: after.act !== 'not_started' });
+            return { ...next, runtimeAfter: owed ? { ...after, owed: true } : after };
         })().then((next) => {
             clearTimeout(long);
             this.#running = null;
@@ -367,8 +485,12 @@ export class MachineSetup {
         return this.#running;
     }
 
-    /** One run of the routine and the finishing step after it, the record written where both completed. */
-    async #routine(why: 'start' | 'put_back'): Promise<Extract<SetupState, { state: 'reported' | 'refused' }>> {
+    /**
+     * One run of the routine and the finishing step after it, the record written where both completed. A routine refused
+     * as `later` runs no finishing step, which would meet the same lock; any other outcome runs it, so a carried update in
+     * flight is finished at this start whatever the routine came to.
+     */
+    async #routine(why: 'start' | 'put_back'): Promise<Extract<SetupState, { state: 'reported' | 'refused' | 'later' }>> {
         const { cli, platform, log, record } = this.#deps;
         const version = this.#deps.version ?? '';
         let terminalPath: string | null = null;
@@ -378,10 +500,14 @@ export class MachineSetup {
         const answer = answerOf(result);
         const routineDone = 'report' in answer && answer.report.completed && result.exit === 0;
         log.info('machine_setup_ran', { Why: why, Exit: result.exit, Completed: routineDone });
+        if ('later' in answer) {
+            log.info('machine_setup_later', { Why: why });
+            return { state: 'later', why: answer.later };
+        }
         let finishing: FinishingStep | null = null;
-        if (routineDone && this.#deps.finishingStep !== undefined) {
+        if (this.#deps.finishingStep !== undefined) {
             finishing = await this.#deps.finishingStep().catch((error: unknown) => ({ completed: false, problems: [`The finishing step did not run: ${messageOf(error)}`] }));
-            log.info('machine_setup_finished', { Why: why, Completed: finishing.completed });
+            log.info('machine_setup_finished', { Why: why, Completed: finishing.completed, Later: finishing.later !== undefined });
         }
         const completed = routineDone && (finishing === null || finishing.completed);
         if (completed) {
@@ -391,15 +517,32 @@ export class MachineSetup {
                 log.warn('machine_setup_unrecorded', { Version: version });
             }
         }
-        if (!('report' in answer)) return { state: 'refused', why: answer.refused };
-        // What the finishing step did not do is said beside the routine's own problems.
-        const report = finishing === null || finishing.completed ? answer.report : { ...answer.report, problems: [...answer.report.problems, ...finishing.problems], completed: false };
-        return { state: 'reported', report };
+        const notDone = finishing === null || finishing.completed || finishing.later !== undefined ? [] : finishing.problems;
+        if (!('report' in answer)) return { state: 'refused', why: [answer.refused, ...notDone.map((problem) => `Not done: ${problem}`)].join(' ') };
+        // What the finishing step did not do is said beside the routine's own problems; one left for later, apart.
+        const report = notDone.length === 0 ? answer.report : { ...answer.report, problems: [...answer.report.problems, ...notDone], completed: false };
+        return finishing?.later !== undefined ? { state: 'reported', report, later: finishing.later } : { state: 'reported', report };
     }
 
     #set(next: SetupState): void {
         this.#state = next;
         for (const changed of this.#changed) changed();
+    }
+}
+
+/**
+ * Live's bringing up of the installation, given once more where it failed while the start's set-up still ran: a carried
+ * update in flight refuses a runtime's start from `kept` on, and the finishing step that finishes it may outlast the bound
+ * Live waits, so a start refused meanwhile is tried again once that run has ended. A failure with no run going on is
+ * Live's own, as before.
+ */
+export async function startAfterSetup<T>(start: () => Promise<T>, setup: { readonly state: SetupState; settled(): Promise<void> } | null): Promise<T> {
+    try {
+        return await start();
+    } catch (error) {
+        if (setup === null || setup.state.state !== 'running') throw error;
+        await setup.settled();
+        return start();
     }
 }
 
@@ -436,10 +579,20 @@ export function reportLines(report: SetupReport): string[] {
 /** Pure: what became of a runtime that answered before the run and not after it, where the desktop started one or tried. */
 export function runtimeLines(after: RuntimeAfter | undefined, report: SetupReport | null): string[] {
     if (after === undefined) return [];
-    const stopped = report?.runtime === 'stopped' ? 'The set-up stopped the runtime of the older command-line install' : 'The runtime that was running stopped while the set-up ran';
-    return after.act === 'started'
-        ? [`${stopped}; Jason Desktop started one again from its own jason.`]
-        : [`${stopped}, and starting one again did not work: ${after.why} \`jason runtime start\` starts one.`];
+    const stopped =
+        after.owed === true
+            ? 'A runtime was stopped for an install or an update and was owed a start'
+            : report?.runtime === 'stopped'
+              ? 'The set-up stopped the runtime of the older command-line install'
+              : 'The runtime that was running stopped while the set-up ran';
+    if (after.act === 'started') return [`${stopped}; Jason Desktop started one again from its own jason.`];
+    if (after.act === 'answering') return [`${stopped}; a runtime answers on it again.`];
+    return [`${stopped}, and starting one again did not work: ${after.why} \`jason runtime start\` starts one.`];
+}
+
+/** What the item says of a finishing step, or a whole set-up, left for the next start. */
+export function laterLine(why: string): string {
+    return `Left for the next start, since another jason holds the update: ${why}`;
 }
 
 /** Pure: the Command Line submenu on macOS and Windows: the executable, where the set-up stands, and put back. */
@@ -455,8 +608,13 @@ export function setupMenuOf(state: SetupState, executable: string): { lines: str
             return { lines: [...lines, 'No set-up of this version is recorded.'], acts: putBack };
         case 'refused':
             return { lines: [...lines, `The set-up did not finish: ${state.why}`, ...runtimeLines(state.runtimeAfter, null)], acts: putBack };
+        case 'later':
+            return { lines: [...lines, laterLine(state.why), ...runtimeLines(state.runtimeAfter, null)], acts: putBack };
         case 'reported':
-            return { lines: [...lines, ...reportLines(state.report), ...runtimeLines(state.runtimeAfter, state.report)], acts: putBack };
+            return {
+                lines: [...lines, ...reportLines(state.report), ...(state.later === undefined ? [] : [laterLine(state.later)]), ...runtimeLines(state.runtimeAfter, state.report)],
+                acts: putBack,
+            };
     }
 }
 
@@ -484,10 +642,12 @@ export function putBackTold(state: SetupState): { type: 'info' | 'warning'; mess
         const { report } = state;
         const runtime = runtimeLines(state.runtimeAfter, report);
         const runtimeFailed = state.runtimeAfter?.act === 'not_started';
-        if (report.completed && !runtimeFailed) return { type: 'info', message: 'jason and the skills are in place.', detail: [...report.done, ...report.left, ...runtime].join('\n') };
+        const later = state.later === undefined ? [] : [laterLine(state.later)];
+        if (report.completed && !runtimeFailed) return { type: 'info', message: 'jason and the skills are in place.', detail: [...report.done, ...report.left, ...later, ...runtime].join('\n') };
         return { type: 'warning', message: 'Part of the set-up did not get there.', detail: [...report.problems.map((problem) => `Not done: ${problem}`), ...runtime, ...report.done, ...report.left].join('\n') };
     }
     if (state.state === 'refused') return { type: 'warning', message: 'The set-up did not run.', detail: [state.why, ...runtimeLines(state.runtimeAfter, null)].join('\n') };
+    if (state.state === 'later') return { type: 'info', message: 'The set-up waits for the update.', detail: [laterLine(state.why), ...runtimeLines(state.runtimeAfter, null)].join('\n') };
     return { type: 'warning', message: 'The set-up did not run.', detail: setupMenuOf(state, '').lines.slice(1).join('\n') };
 }
 

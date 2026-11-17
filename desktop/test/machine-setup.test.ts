@@ -7,7 +7,10 @@ import type { Cli, CliResult } from '../src/cli.ts';
 import { wrapperScript } from '../src/command-line.ts';
 import {
     commandIsSetup,
+    finishArguments,
+    finishingOf,
     jasonOnPath,
+    linuxOwedJason,
     MachineSetup,
     placeLine,
     putBackLabel,
@@ -25,6 +28,8 @@ import {
     setupLongMs,
     setupMenuOf,
     setupOffered,
+    startAfterSetup,
+    startAgain,
     takingLongSentence,
     type RuntimeDoor,
     type SetupState,
@@ -362,7 +367,7 @@ test('a windowed start runs the routine before the Demo or Live run goes on, and
     const start = main.slice(main.indexOf('function startDesktop('));
     const lock = start.indexOf('const early = startLog();');
     const made = start.indexOf('machineSetup = makeMachineSetup(early);');
-    const ran = start.indexOf('void app.whenReady().then(() => machineSetup?.atStart());');
+    const ran = start.indexOf("void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));");
     const chosen = start.indexOf("void app.whenReady().then(() => (runOn.mode === 'demo' ? runDemo(links) : run(links, installationWasNew)));");
     assert.ok(lock > 0 && made > lock && ran > made && chosen > ran, 'made once the lock is held, and run before the mode’s run');
     // The installer's, the uninstaller's and a terminal's update starts run none: the routine is made in the windowed branch alone.
@@ -370,12 +375,12 @@ test('a windowed start runs the routine before the Demo or Live run goes on, and
     const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
     const waited = run.indexOf('await machineSetup?.settledWithin(liveWaitMs);');
     assert.equal(run.includes('await machineSetup?.settled();\n\n    try {'), false, 'never the whole run');
-    assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startInstallation({'), 'the window is up first, and the installation after the routine');
+    assert.ok(waited > run.indexOf("await showStarting(window, 'Starting Jason…', false);") && waited < run.indexOf('const started = await startAfterSetup('), 'the window is up first, and the installation after the routine');
     // The Demo's run itself still makes no jason and touches no set-up: the one start a Demo start may make, of a runtime the
     // routine left down, is the set-up's own, through the door the factory gives it on the person's descriptor.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
     for (const never of ['machineSetup', 'cliAt(', 'MachineSetup', 'runtimeDoor(']) assert.equal(demo.includes(never), false, never);
-    assert.equal(main.split('runtimeDoor(').length - 1, 1, 'one door, the factory’s');
+    assert.equal(main.split('runtimeDoor(').length - 1, 2, 'two doors: the factory’s, and a Linux Demo start’s for the note alone');
     // The routine is told the login shell's PATH from the one read every start shares, never the desktop's own.
     const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
     assert.ok(factory.includes('terminalPath: () => askedShell(),'));
@@ -419,38 +424,273 @@ test('the look reads only the head of what the PATH finds: a wrapper whole, an e
     assert.equal(readHead(join(at, 'missing')), null);
 });
 
-test('the finishing step’s seam: run after a routine that completed, and the record written only when both did; no step given, the routine alone decides', async () => {
-    // A routine that completed and a finishing step that did not: no record, and the item says what was not done.
+/** A `jason update apply --finish` document with nothing in flight, `complete` and its parts as a test lays them. */
+function finishDoc(complete: boolean, parts: { part: string; state: string; reason?: string | null }[] = []): Record<string, unknown> {
+    return { version: '0.49.0', data_dir: '/Users/a/.jason', data_dir_found: true, complete, parts: parts.map((part) => ({ reason: null, lines: [], ...part })) };
+}
+
+/**
+ * The installation as the carried jason sees it, for the finish rows: whether a runtime is up, whether a carried update is in
+ * flight, and what each verb answers; every call recorded as its words.
+ */
+function installationCli(state: { up: boolean; inFlight: boolean; install?: CliResult; finish?: () => CliResult }): Cli & { calls: string[] } {
+    const calls: string[] = [];
+    return {
+        calls,
+        async run(args) {
+            const said = args.join(' ');
+            calls.push(said);
+            if (said === 'runtime status') return { exit: state.up ? 0 : 3, stdout: '{}', stderr: '' };
+            if (said === 'runtime start') {
+                if (state.inFlight) return printed({ error: { code: 'update_in_progress', message: 'An update is in flight.', retryable: true } }, 1);
+                state.up = true;
+                return { exit: 0, stdout: '{}', stderr: '' };
+            }
+            if (said === finishArguments.join(' ')) return state.finish?.() ?? printed(finishDoc(true));
+            return state.install ?? printed(report());
+        },
+    };
+}
+
+/** A set-up wired as main wires it: the routine, then the finishing step through the same carried jason, and the note. */
+function wiredOn(data: string, cli: Cli, over: Partial<ConstructorParameters<typeof MachineSetup>[0]> = {}) {
+    mkdirSync(join(data, 'run'), { recursive: true });
+    return setupOn(data, cli, {
+        runtime: runtimeDoor(cli, desktopPaths(data).runFile),
+        finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),
+        startOwed: desktopPaths(data).startOwed,
+        ...over,
+    });
+}
+
+test('THE FINISH CALL: the first start of a version runs jason install, then jason update apply --finish, before a runtime is started; done is recorded only when both succeeded', async () => {
     const data = join(folder(), '.jason');
-    const order: string[] = [];
-    const cli: Cli = { run: async () => (order.push('install'), printed(report())) };
-    const failing = setupOn(data, cli, { finishingStep: async () => (order.push('finish'), { completed: false, problems: ['The plugins were not brought up to 0.49.0.'] }) });
-    await failing.setup.atStart();
-    assert.deepEqual(order, ['install', 'finish']);
-    assert.equal(existsSync(desktopPaths(data).machineSetup), false, 'done for this version only when both reported success');
-    assert.ok(setupMenuOf(failing.setup.state, macExe).lines.includes('Not done: The plugins were not brought up to 0.49.0.'));
-    assert.deepEqual(failing.log.lines.at(-1), { level: 'info', name: 'machine_setup_finished', fields: { Why: 'start', Completed: false } });
-    // The next start tries both again, and with both done the record is written.
-    const next = setupOn(data, fakeCli(printed(report())), { finishingStep: async () => ({ completed: true, problems: [] }) });
-    await next.setup.atStart();
+    const state = { up: false, inFlight: false };
+    const cli = installationCli(state);
+    const { setup, log } = wiredOn(data, cli);
+    await setup.atStart();
+    assert.deepEqual(cli.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish']);
     assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
-    // A routine that did not complete runs no finishing step.
-    let finished = 0;
-    const partly = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ problems: ['x'], completed: false }), 1)), { finishingStep: async () => (finished++, { completed: true, problems: [] }) });
-    await partly.setup.atStart();
-    assert.equal(finished, 0);
+    assert.deepEqual(log.lines.find((line) => line.name === 'machine_setup_finished')?.fields, { Why: 'start', Completed: true, Later: false });
+    // The finishing step is given no time limit, as the routine is not.
+    const timed = fakeCli(printed(report()), printed(finishDoc(true)));
+    await wiredOn(join(folder(), '.jason'), timed).setup.atStart();
+    assert.deepEqual(timed.calls.map((call) => [call.args.join(' '), call.timeoutMs]), [['install --terminal-path /usr/bin:/bin', noLimit], ['update apply --finish', noLimit]]);
+    // The next start of the same version runs neither.
+    const again = installationCli({ up: false, inFlight: false });
+    await wiredOn(data, again).setup.atStart();
+    assert.deepEqual(again.calls, []);
+});
+
+test('THE FINISH CALL: a finishing step that did not complete, or a refused jason install, is not done: no record, said, and both run again at the next start', async () => {
+    const data = join(folder(), '.jason');
+    const parts = [{ part: 'plugins', state: 'not_done', reason: 'The release could not be read.' }, { part: 'skills', state: 'done' }, { part: 'ui', state: 'already_there' }];
+    const first = wiredOn(data, installationCli({ up: false, inFlight: false, finish: () => printed(finishDoc(false, parts)) }));
+    await first.setup.atStart();
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false);
+    assert.ok(setupMenuOf(first.setup.state, macExe).lines.includes('Not done: plugins: The release could not be read.'));
+    assert.equal(putBackTold(first.setup.state).type, 'warning');
+    // A refused jason install: not done, no record; the finishing step still runs, so an update in flight is finished.
+    const refusedCli = installationCli({ up: false, inFlight: false, install: printed({ error: { code: 'install_not_carried', message: 'No.', retryable: false } }, 1) });
+    const refused = wiredOn(data, refusedCli);
+    await refused.setup.atStart();
+    assert.deepEqual(refusedCli.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish']);
+    assert.equal(refused.setup.state.state, 'refused');
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false);
+    // A routine that reported a problem: the finishing step runs too, and still no record.
+    const partlyCli = installationCli({ up: false, inFlight: false, install: printed(report({ problems: ['x'], completed: false }), 1) });
+    await wiredOn(data, partlyCli).setup.atStart();
+    assert.deepEqual(partlyCli.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish']);
+    assert.equal(existsSync(desktopPaths(data).machineSetup), false);
     // A finishing step that throws is a step that did not complete.
     const thrown = setupOn(join(folder(), '.jason'), fakeCli(printed(report())), { finishingStep: async () => { throw new Error('gone'); } });
     await thrown.setup.atStart();
-    assert.equal(thrown.setup.state.state, 'reported');
     assert.ok(setupMenuOf(thrown.setup.state, macExe).lines.includes('Not done: The finishing step did not run: gone'));
+    // Both done at the next start: the record is written.
+    await wiredOn(data, installationCli({ up: false, inFlight: false })).setup.atStart();
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
 });
 
-test('main gives the set-up no finishing step yet: the seam waits for the command line’s one, and no verb is stubbed', () => {
+test('THE FINISH CALL: install_in_progress and update_in_progress mean later, at the next start: never a failure, never a record', async () => {
+    for (const code of ['install_in_progress', 'update_in_progress']) {
+        // The routine refused: no finishing step, which would meet the same lock; nothing set up, nothing recorded.
+        const data = join(folder(), '.jason');
+        const cli = installationCli({ up: false, inFlight: false, install: printed({ error: { code, message: 'Another jason holds the update.', retryable: true } }, 1) });
+        const { setup, log } = wiredOn(data, cli);
+        await setup.atStart();
+        assert.deepEqual(cli.calls, ['install --terminal-path /usr/bin:/bin'], code);
+        assert.equal(setup.state.state, 'later');
+        assert.equal(existsSync(desktopPaths(data).machineSetup), false);
+        assert.ok(setupMenuOf(setup.state, macExe).lines.includes('Left for the next start, since another jason holds the update: Another jason holds the update.'));
+        assert.equal(setupMenuOf(setup.state, macExe).lines.some((line) => line.startsWith('The set-up did not finish') || line.startsWith('Not done')), false);
+        assert.equal(putBackTold(setup.state).type, 'info');
+        assert.ok(log.lines.some((line) => line.name === 'machine_setup_later'));
+        // The finishing step refused the same way after a routine that completed: reported, later said apart, no record.
+        const laterData = join(folder(), '.jason');
+        const finishLater = wiredOn(laterData, installationCli({ up: false, inFlight: false, finish: () => printed({ error: { code, message: 'An update stands before the swap.', retryable: true } }, 1) }));
+        await finishLater.setup.atStart();
+        const after = finishLater.setup.state;
+        assert.equal(after.state === 'reported' && after.report.completed, true, 'the routine’s own report stands, not failed');
+        assert.equal(after.state === 'reported' && after.later, 'An update stands before the swap.');
+        assert.equal(setupMenuOf(after, macExe).lines.some((line) => line.startsWith('Not done')), false);
+        assert.equal(readSetupRecord(desktopPaths(laterData).machineSetup).ranFor, null);
+        // And the next start runs both again.
+        const next = installationCli({ up: false, inFlight: false });
+        await wiredOn(data, next).setup.atStart();
+        assert.deepEqual(next.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish']);
+    }
+});
+
+test('THE FINISH CALL (§7’s third door): with a carried update in flight and the application at its version, the finish completes the update and its runtime start; nothing is started twice', async () => {
+    const data = join(folder(), '.jason');
+    // A runtime answered before the update stopped it; the record holds the update at `kept`, which refuses a runtime start.
+    const state = {
+        up: false,
+        inFlight: true,
+        finish: () => {
+            // The finishing step finishes the update in flight and starts the runtime itself.
+            state.inFlight = false;
+            state.up = true;
+            writeFileSync(desktopPaths(data).runFile, '{}');
+            return printed({ from: '0.48.3', to: '0.49.0', step: 'complete', steps: ['swapped: the application is 0.49.0', 'started', 'healthy', 'complete'] });
+        },
+    };
+    const cli = installationCli(state);
+    const { setup } = wiredOn(data, cli, { startOwed: desktopPaths(data).startOwed });
+    writeFileSync(desktopPaths(data).startOwed, '{"stopped_at":"2026-11-17T15:05:35Z"}\n');
+    await setup.atStart();
+    assert.deepEqual(cli.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish', 'runtime status']);
+    assert.equal(state.up, true);
+    assert.equal(readSetupRecord(desktopPaths(data).machineSetup).ranFor, '0.49.0');
+    assert.equal(setup.state.state === 'reported' ? setup.state.runtimeAfter : 'none', undefined, 'a runtime answers after the finish, so none is started');
+    // An update that stops short of complete is not done.
+    assert.deepEqual(finishingOf(printed({ from: '0.48.3', to: '0.49.0', step: 'healthy', steps: [] })), { completed: false, problems: ['The update to 0.49.0 stands at \'healthy\'.'] });
+});
+
+test('THE FINISH CALL: the finishing step’s answers as the desktop reads them', () => {
+    assert.deepEqual(finishArguments, ['update', 'apply', '--finish']);
+    assert.deepEqual(finishingOf(printed(finishDoc(true, [{ part: 'plugins', state: 'done' }, { part: 'skills', state: 'already_there' }]))), { completed: true, problems: [] });
+    assert.deepEqual(finishingOf(printed(finishDoc(false, [{ part: 'ui', state: 'not_done', reason: 'The UI could not be read.' }]))), { completed: false, problems: ['ui: The UI could not be read.'] });
+    assert.deepEqual(finishingOf(printed(finishDoc(false))), { completed: false, problems: ['The finishing step did not complete.'] });
+    assert.deepEqual(finishingOf(printed({ from: '0.48.3', to: '0.49.0', step: 'complete', steps: [] })), { completed: true, problems: [] });
+    assert.deepEqual(finishingOf(printed({ error: { code: 'update_in_progress', message: 'Held.', retryable: true } }, 1)), { completed: false, problems: [], later: 'Held.' });
+    assert.deepEqual(finishingOf(printed({ error: { code: 'install_in_progress', message: 'Setting up.', retryable: true } }, 1)), { completed: false, problems: [], later: 'Setting up.' });
+    assert.deepEqual(finishingOf(printed({ error: { code: 'update_file_refused', message: 'Refused.', retryable: true } }, 1)), { completed: false, problems: ['Refused.'] });
+    assert.deepEqual(finishingOf({ exit: 2, stdout: '', stderr: 'usage' }), { completed: false, problems: ['jason update apply --finish exited 2 and printed no answer.'] });
+    assert.equal(finishingOf({ exit: -1, stdout: '', stderr: '' }).completed, false);
+    // A document with a non-zero exit is not taken as a success.
+    assert.equal(finishingOf(printed(finishDoc(true), 1)).completed, false);
+});
+
+test('THE FINISH CALL: main wires the finishing step through the carried jason with no time limit, and the note that a start is owed', () => {
     const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-    const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('function makeMachineSetup(') + 1500);
-    assert.equal(factory.includes('finishingStep'), false);
-    assert.equal(main.includes("'--finish'"), false);
+    const factory = main.slice(main.indexOf('function makeMachineSetup('), main.indexOf('\n}\n', main.indexOf('function makeMachineSetup(')));
+    assert.ok(factory.includes('finishingStep: async () => finishingOf(await cli.run(finishArguments, { timeoutMs: noLimit })),'));
+    assert.ok(factory.includes('startOwed: desktopPaths(runOn.person).startOwed,'));
+    // The window waits for neither past the bound: Live waits `liveWaitMs`, the Demo not at all.
+    const run = main.slice(main.indexOf('async function run('), main.indexOf('async function runDemo('));
+    assert.ok(run.includes('await machineSetup?.settledWithin(liveWaitMs);'));
+    assert.equal(main.slice(main.indexOf('async function runDemo(')).slice(0, 4000).includes('machineSetup?.settled'), false);
+});
+
+test('THE OWED START (the Demo case): a terminal-started runtime, an install stops it, the application comes back in the Demo, and a runtime is started from the carried file', async () => {
+    const data = join(folder(), '.jason');
+    // The installation exists, the mode record says demo, and the set-up already ran for this version.
+    mkdirSync(join(data, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(data).mode, 'demo\n');
+    writeFileSync(desktopPaths(data).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    // A runtime a terminal started was stopped by the installer's `jason install`, which left the note; its descriptor is gone.
+    mkdirSync(join(data, 'run'), { recursive: true });
+    const note = '{"stopped_at":"2026-11-17T15:05:35Z"}\n';
+    writeFileSync(desktopPaths(data).startOwed, note);
+    const state = { up: false, inFlight: false };
+    const cli = installationCli(state);
+    const { setup, log } = wiredOn(data, cli);
+    await setup.atStart();
+    assert.deepEqual(cli.calls, ['runtime start'], 'no descriptor, so nothing answers without asking; one start from the carried file');
+    assert.equal(state.up, true);
+    assert.deepEqual(log.lines.at(-1), { level: 'info', name: 'start_owed_paid', fields: { Started: true } });
+    assert.equal(readMode(desktopPaths(data).mode), 'demo');
+    assert.equal(readFileSync(desktopPaths(data).startOwed, 'utf8'), note, 'the desktop never writes or removes the note: a runtime’s own start does');
+});
+
+test('THE OWED START: at every start, Demo or Live, only a standing note with no runtime answering starts one; the desktop writes no note of its own', async () => {
+    // No note: nothing is asked.
+    const quiet = installationCli({ up: false, inFlight: false });
+    const recorded = join(folder(), '.jason');
+    mkdirSync(join(recorded, 'desktop'), { recursive: true });
+    writeFileSync(desktopPaths(recorded).machineSetup, JSON.stringify({ ran_for: '0.49.0', report: report() }));
+    await wiredOn(recorded, quiet).setup.atStart();
+    assert.deepEqual(quiet.calls, []);
+    // A note and a runtime that answers: none is started.
+    writeFileSync(desktopPaths(recorded).startOwed, '{}');
+    writeFileSync(desktopPaths(recorded).runFile, '{}');
+    const answering = installationCli({ up: true, inFlight: false });
+    await wiredOn(recorded, answering).setup.atStart();
+    assert.deepEqual(answering.calls, ['runtime status']);
+    // A note whose content cannot be read stands all the same.
+    writeFileSync(desktopPaths(recorded).startOwed, 'not json');
+    const unreadable = installationCli({ up: false, inFlight: false });
+    await wiredOn(recorded, unreadable).setup.atStart();
+    assert.deepEqual(unreadable.calls, ['runtime status', 'runtime start']);
+    // A start that runs the routine pays the note after it: none answered before, the note stands, one is started, and said.
+    const fresh = join(folder(), '.jason');
+    const routine = installationCli({ up: false, inFlight: false });
+    const ran = wiredOn(fresh, routine);
+    writeFileSync(desktopPaths(fresh).startOwed, '{}');
+    await ran.setup.atStart();
+    assert.deepEqual(routine.calls, ['install --terminal-path /usr/bin:/bin', 'update apply --finish', 'runtime start']);
+    assert.deepEqual(ran.setup.state.state === 'reported' ? ran.setup.state.runtimeAfter : null, { act: 'started', owed: true });
+    assert.ok(setupMenuOf(ran.setup.state, macExe).lines.includes('A runtime was stopped for an install or an update and was owed a start; Jason Desktop started one again from its own jason.'));
+    // No source file of the desktop writes the note: paths.ts names it, and it is only read.
+    for (const name of readdirSync(new URL('../src/', import.meta.url))) {
+        const text = readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+        if (name === 'paths.ts') continue;
+        assert.equal(text.includes("'start-owed.json'"), false, name);
+    }
+});
+
+test('a restart is said to have failed only once a second read finds no runtime answering', async () => {
+    // The start is refused because Live's own start, or the finishing step's, brought one up meanwhile.
+    let up = true;
+    let asked = 0;
+    const raced: RuntimeDoor = {
+        // Up before the routine, down after it, and up again once the refused start has been made.
+        answers: async () => (asked++ === 1 ? false : up),
+        start: async () => ((up = true), 'A runtime is already running.'),
+    };
+    const { setup } = setupOn(join(folder(), '.jason'), fakeCli(printed(report({ runtime: 'stopped' }))), { runtime: raced });
+    await setup.atStart();
+    assert.deepEqual(setup.state.state === 'reported' ? setup.state.runtimeAfter : null, { act: 'answering' });
+    assert.ok(setupMenuOf(setup.state, macExe).lines.includes('The set-up stopped the runtime of the older command-line install; a runtime answers on it again.'));
+    assert.equal(putBackTold(setup.state).type, 'info');
+    // One that is refused and still answers nothing failed.
+    assert.deepEqual(await startAgain({ answers: async () => false, start: async () => 'The port is taken.' }), { act: 'not_started', why: 'The port is taken.' });
+    assert.deepEqual(await startAgain({ answers: async () => false, start: async () => null }), { act: 'started' });
+});
+
+test('Live’s start is tried once more after the set-up ends where it failed while the set-up ran; otherwise a failure is Live’s own', async () => {
+    let tries = 0;
+    let ended = false;
+    const running = { state: { state: 'running' } as SetupState, settled: async () => void (ended = true) };
+    const answered = await startAfterSetup(async () => {
+        tries++;
+        if (!ended) throw new Error('update_in_progress');
+        return 'started';
+    }, running);
+    assert.deepEqual([answered, tries], ['started', 2]);
+    await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, { state: { state: 'idle' }, settled: async () => undefined }), /refused/);
+    await assert.rejects(startAfterSetup(async () => { throw new Error('refused'); }, null), /refused/);
+});
+
+test('a Linux Demo start pays the note from the jason that outlasts the run: a deb’s own, an AppImage’s copy where one was made, never the mount', () => {
+    const there = (paths: string[]) => (path: string) => paths.includes(path);
+    assert.equal(linuxOwedJason({ form: 'deb' }, '/opt/Jason/resources/bundle', '/home/a/.jason/desktop/bundle', '0.49.0', there([])), '/opt/Jason/resources/bundle/jason');
+    assert.equal(linuxOwedJason({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '/tmp/.mount_Jason/resources/bundle', '/home/a/.jason/desktop/bundle', '0.49.0', there(['/home/a/.jason/desktop/bundle/0.49.0/jason'])), '/home/a/.jason/desktop/bundle/0.49.0/jason');
+    assert.equal(linuxOwedJason({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '/tmp/.mount_Jason/resources/bundle', '/home/a/.jason/desktop/bundle', '0.49.0', there([])), null);
+    assert.equal(linuxOwedJason({ form: 'appimage', file: '/home/a/Jason.AppImage' }, '/tmp/.mount_Jason/resources/bundle', '/home/a/.jason/desktop/bundle', null, there([])), null);
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    assert.ok(main.includes("void app.whenReady().then(() => (machineSetup !== null ? machineSetup.atStart() : runOn.mode === 'demo' ? linuxOwedStart(early) : undefined));"));
 });
 
 const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

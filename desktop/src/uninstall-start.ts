@@ -47,8 +47,10 @@ function carried() {
 /** Returns the start's exit code (`stopRuntimeCode`). */
 export async function runStopRuntime(): Promise<number> {
     const { paths, executable, own } = carried();
-    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's.
-    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
+    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's. The person's is always
+    // stopped with --start-owed, since this start is only ever made on an installer's behalf: the next start of the
+    // application, Demo or Live, starts a runtime from the note (`docs/release-and-update.md` §9).
+    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
 }
 
 /**

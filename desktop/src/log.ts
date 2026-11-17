@@ -64,9 +64,14 @@ export const templates = {
     path_lines_set: 'The PATH lines were set to {On} on {Platform}: {Files} profiles written, {Refused} refused',
     // The machine set-up, macOS and Windows: jason install at a start of a new version, or put back from the menu.
     machine_setup_ran: 'jason install ran at {Why} and exited {Exit}; completed {Completed}',
-    machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}',
+    machine_setup_finished: 'The finishing step after jason install ran at {Why}; completed {Completed}, later {Later}',
+    machine_setup_later: 'jason install ran at {Why} and found the update lock held; it is run again at the next start',
     machine_setup_unrecorded: 'The record that jason install ran for {Version} could not be written',
-    machine_setup_runtime: 'A runtime answered before jason install ran at {Why} and none after it; one was started again {Started}',
+    machine_setup_runtime: 'A runtime answered before jason install ran at {Why}, or a start was owed, and none after it; one was started again {Started}',
+    // The note that a start is owed (docs/release-and-update.md §9), paid at a start where the set-up did not run.
+    start_owed_paid: 'A start was owed and no runtime answered; one was started from the carried jason {Started}',
+    // The carried jason.exe put back from the updater's store at a start (docs/release-and-update.md §7).
+    carried_restored: 'The carried jason.exe was missing and was put back from the updater store {Restored}',
     // Taking off what the desktop placed: the menu's Remove What Jason Placed on Linux, and Uninstall Jason on macOS.
     removal_asked: 'Remove What Jason Placed was answered with {Answer}',
     uninstall_asked: 'Uninstall Jason was answered with {Answer}',
