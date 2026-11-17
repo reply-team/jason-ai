@@ -168,9 +168,17 @@ test('a Demo start shows the page and nothing else: no jason, no runtime, no fol
     // The Demo's run makes no jason, starts no runtime and asks no program anything.
     const demo = main.slice(main.indexOf('async function runDemo('), main.indexOf('function keepElectronUnderData('));
     assert.ok(demo.length > 0);
-    for (const never of ['cliAt(', 'startInstallation(', 'loginPath(', 'programsOn(', 'new Chat(', 'new Setup(', 'Repairer', 'WindowPairing', 'carriedOf(', 'handle(seam', 'preload:', 'Updater', 'RuntimeAutostart', 'PathCommand', 'placedRemoval', 'stopOwnRuntime', 'stopDemoRuntime', 'writeSettings(', 'settingsAtStart(']) {
+    for (const never of ['cliAt(', 'startInstallation(', 'loginPath(', 'programsOn(', 'new Chat(', 'new Setup(', 'Repairer', 'WindowPairing', 'carriedOf(', 'handle(seam', 'preload:', 'new Updater(', 'updates.start(', 'RuntimeAutostart', 'PathCommand', 'placedRemoval', 'stopOwnRuntime', 'stopDemoRuntime', 'writeSettings(', 'settingsAtStart(']) {
         assert.equal(demo.includes(never), false, never);
     }
+    // But for a terminal's update request (`update-request.ts`): the Demo has no updater of its own, and one is made for a
+    // request when it comes, by the one function that makes it, inside the request's server and nowhere else in the run.
+    // That updater stops the runtime the application carries only to install, which a window does only where the switch
+    // lets it close (`windowOpenUpdate`).
+    const made = [...demo.matchAll(/requestUpdater\(/g)].map((found) => found.index);
+    assert.equal(made.length, 1, 'the Demo makes one updater, for a request');
+    const served = demo.indexOf('serveRequests(log, runOn.person, false, () =>\n        requestUpdater({');
+    assert.ok(served > 0 && made[0]! > served, 'the Demo’s updater is made inside the request’s server, when a request comes');
     assert.ok(demo.includes('await openDemo(window, {'));
 });
 
