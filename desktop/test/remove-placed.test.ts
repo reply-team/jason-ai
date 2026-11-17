@@ -643,8 +643,8 @@ test('processes are read from /proc by the file each runs, against the folder re
     assert.equal(processesRunFrom(`${root}/home/bundle`, table({ '4242': `${root}/disk/bundle/0.34.0/jason` }), resolvePosix), 'running');
 });
 
-test('the act is offered on macOS and Linux only, in the Jason menu and the tray’s, by an installed build; Windows keeps its uninstaller', () => {
-    assert.equal(removalOffered('darwin'), true);
+test('the act is offered on Linux only, in the Jason menu and the tray’s, by an installed build; Windows keeps its uninstaller and macOS has Uninstall Jason', () => {
+    assert.equal(removalOffered('darwin'), false);
     assert.equal(removalOffered('linux'), true);
     assert.equal(removalOffered('win32'), false);
     assert.equal(removeLabel, 'Remove What Jason Placed…');
@@ -869,10 +869,8 @@ test('the act takes off a copy a start over left beside the demo, only when it c
 test('the desktop gives both removals the demo’s stop, from the person’s directory', () => {
     const main = readFileSync(join(desktop, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes('stopDemo: () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env }),'));
-    const start = readFileSync(join(desktop, 'src', 'uninstall-start.ts'), 'utf8');
-    assert.ok(start.includes('data: demoDirectory(paths.data),'));
-    assert.ok(start.includes('harnessRoot: demoDirectory(harnessRoot(process.env, home, dataLayout(paths.data).userSettingsFile)),'));
-    assert.ok(start.includes('const stopDemo = () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data,'));
+    // The Windows uninstaller's start runs the carried jason's one uninstall, which stops the demo's runtime and takes its
+    // marked folders off itself (`dotnet/src/Jason.Cli/Uninstall/DesktopRemoval.cs`).
 });
 
 test('a demo runtime that does not stop refuses the whole removal before anything is taken off, as the person’s own does', async (t) => {

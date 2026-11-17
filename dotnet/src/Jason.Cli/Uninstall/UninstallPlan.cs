@@ -80,6 +80,10 @@ public sealed record UnknownRoot(string Root, string Reason);
 /// (it may be another installation's or a spelling of this one), untouched where another program's.
 /// </param>
 /// <param name="LinkUnreadable">Why the link registration could not be read, never taken for an account without one.</param>
+/// <param name="Desktop">
+/// Where this jason is the one Jason Desktop carries, on macOS and Windows: the application's own placements and the
+/// application itself, which this uninstall takes off too; null for any other installation.
+/// </param>
 public sealed record UninstallPlan(
     bool AutostartRegistered,
     string? AutostartArtifact,
@@ -101,7 +105,8 @@ public sealed record UninstallPlan(
     IReadOnlyList<string>? OtherExtractedLibraries = null,
     string? OtherExtractedLibrariesLeft = null,
     LinkRegistrationPlan? Link = null,
-    string? LinkUnreadable = null)
+    string? LinkUnreadable = null,
+    DesktopPlan? Desktop = null)
 {
     /// <summary>How many files the receipts name that are still there and still ours.</summary>
     public int Removable => Roots.Sum(root => root.Files.Count(file => file.Present && !file.Edited));

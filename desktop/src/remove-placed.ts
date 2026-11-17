@@ -34,9 +34,12 @@ export const removeLabel = 'Remove What Jason Placed…';
 /** The name dpkg knows the deb by: the package's own name, which electron-builder gives the deb (`linuxPackageName`). */
 export const debPackage = 'jason-desktop';
 
-/** Whether the act is offered: on macOS and Linux, where no uninstaller starts the application; Windows keeps its own. */
+/**
+ * Whether the act is offered: on Linux, where no uninstaller starts the application. Windows keeps its own, and macOS has
+ * Uninstall Jason…, the one uninstall (`uninstall-door.ts`).
+ */
 export function removalOffered(platform: NodeJS.Platform): boolean {
-    return platform === 'darwin' || platform === 'linux';
+    return platform === 'linux';
 }
 
 /**
