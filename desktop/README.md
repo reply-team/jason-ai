@@ -722,7 +722,8 @@ ends the install or the uninstall before a file is replaced, and a person is tol
 `resources\bundle\jason.exe runtime stop` in the application's folder, with `JASON_DATA_DIR` set when it was started
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
 runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
-stops the runtime it carries, takes off the PATH command's files that are its own, Open Jason at Login, the runtime's
+stops the runtime it carries, takes off the PATH command's files that are its own (and on macOS and Linux the PATH lines
+with them, where their folder then holds nothing but what Jason writes there), Open Jason at Login, the runtime's
 start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
 application, and an earlier version's demo's two folders, its data directory and its harness root (the person's with `-demo` after
 each), once the demo's own runtime is stopped, and names what it leaves: the data directory, the harness root
@@ -743,7 +744,11 @@ Jason.app (`/Applications/Jason.app/Contents/Resources/bundle/jason` where it wa
 2. Run `<that jason> runtime autostart status`. When the `executable` it names is that `jason`, run
    `<that jason> runtime autostart disable`.
 3. Delete `~/Library/LaunchAgents/ai.jasonharness.desktop.plist`, which is Open Jason at Login.
-4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
+4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`. Once that
+   folder holds no `jason` or `jason-desktop` and nothing else but Jason's `jason-LICENSE` and
+   `jason-THIRD-PARTY-NOTICES`, take the line `# added by jason install` and the
+   `export PATH="…/.local/bin:$PATH"` line under it out of `~/.zprofile`, `~/.zshrc`, `~/.bash_profile`,
+   `~/.bash_login`, `~/.profile` and `~/.bashrc`, wherever they are.
 
 What stays: the data directory (`~/.jason`, or the one `JASON_DATA_DIR` names), the harness root (`~/Jason`, or the one
 `Harness:Root` names) and the updater's cache, `~/Library/Caches/jason-desktop-updater`. An earlier version's demo's two folders (removed only when they carry the mark the desktop wrote into each when it made them, `.jason-demo-folder`) are not
@@ -772,7 +777,9 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
   on only while that line is there and the entry is neither hidden nor marked `X-GNOME-Autostart-enabled=false`. A path
   the entry cannot spell, one with a `%` or a control character, leaves the item off. An update that installs the
   AppImage under a new file name moves an entry that is on to it.
-- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS.
+- The Command Line submenu places a `jason` wrapper in `~/.local/bin`, as on macOS, and where a new terminal's PATH
+  lacks that folder it writes the installer's PATH lines into the shell profiles by the installer's own rule, as on macOS
+  (`src/path-profile.ts`; [desktop.md](../docs/desktop.md#the-command-line-and-the-login-items)).
 - An AppImage runs from a mount that lasts only while it runs, so each start copies its `jason` to
   `<data>/desktop/bundle/<version>/`, and that copy is the `jason` it runs, starts the runtime from, puts on the PATH and
   gives the chat. A copy already there is used only when every file matches the package's; one that differs, or a link
@@ -812,7 +819,8 @@ the harness root's own names with `-demo` after them), deleted once the demo's r
      `<that jason> runtime autostart disable`, which takes off the runtime's systemd user unit.
   3. Delete `~/.config/autostart/ai.jasonharness.desktop.desktop` (under `$XDG_CONFIG_HOME` when that is set), which is
      Open Jason at Login, when its `Exec` line starts the AppImage file or the deb's executable.
-  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`.
+  4. Delete the `jason` (or `jason-desktop`) wrapper in `~/.local/bin` whose `exec` line runs that `jason`, and the PATH
+     lines on the same condition as on macOS (step 4 above).
   5. For an AppImage, once nothing runs from them, delete the folders named as versions under `<data>/desktop/bundle/`.
 
 ## Building and testing

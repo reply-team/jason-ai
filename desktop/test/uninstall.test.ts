@@ -193,6 +193,45 @@ test('two names both another program’s: nothing is taken off, and both are nam
     assert.equal(report.left.filter((line) => line.endsWith('which another program wrote')).length, 2);
 });
 
+test('on Linux the removal takes the PATH lines back with the wrapper, and leaves them, named, while another jason stands in the folder', async (t) => {
+    // A home of the row's own; on Windows without its drive, so its paths hold no colon, as a Linux path holds none.
+    const root = scratch(t);
+    const home = join(process.platform === 'win32' ? root.replace(/^[A-Za-z]:/, '') : root, 'home');
+    mkdirSync(home);
+    const folder = join(home, '.local', 'bin');
+    const line = `export PATH="${folder}:$PATH"`;
+    const linux = (deps: UninstallDeps) => {
+        const command = new PathCommand({ platform: 'linux', folder, executable: '/opt/Jason/resources/bundle/jason', dataDirectory: null, path: () => '/usr/bin:/bin', isProgram: (file) => existsSync(file), account: { home, shellNamed: '/bin/bash', terminalPath: () => '/usr/bin:/bin' }, log: memoryLog() });
+        return { command, deps: { ...deps, platform: 'linux' as const, folder, command, application: '/opt/Jason' } };
+    };
+
+    const first = linux(bench(t).deps);
+    first.command.place();
+    writeFileSync(join(folder, 'jason-desktop'), '#!/bin/sh\nexec /opt/other/jason "$@"\n');
+    const kept = await uninstall(first.deps);
+    assert.ok(kept.removed.includes(join(folder, 'jason')));
+    for (const profile of ['.profile', '.bashrc']) {
+        assert.ok(kept.left.includes(`The line that put ${folder} on the PATH, in ${join(home, profile)}, which stays: that folder still holds another jason or jason-desktop, found through it`), kept.left.join('\n'));
+        assert.equal(readFileSync(join(home, profile), 'utf8'), `\n# added by jason install\n${line}\n`);
+    }
+
+    rmSync(join(folder, 'jason-desktop'));
+
+    // Another program in the folder: the lines stay, and the report says it is found through them.
+    const shared = linux(bench(t).deps);
+    writeFileSync(join(folder, 'uv'), '#!/bin/sh\n');
+    const sharing = await uninstall(shared.deps);
+    for (const profile of ['.profile', '.bashrc']) {
+        assert.ok(sharing.left.includes(`The line that put ${folder} on the PATH, in ${join(home, profile)}, which stays: that folder still holds other programs, found through it`), sharing.left.join('\n'));
+    }
+    rmSync(join(folder, 'uv'));
+    const second = linux(bench(t).deps);
+    second.command.place();
+    const taken = await uninstall(second.deps);
+    assert.deepEqual(taken.removed.slice(0, 3), [join(folder, 'jason'), `The line that put ${folder} on the PATH, in ${join(home, '.profile')}`, `The line that put ${folder} on the PATH, in ${join(home, '.bashrc')}`]);
+    for (const profile of ['.profile', '.bashrc']) assert.equal(readFileSync(join(home, profile), 'utf8'), '');
+});
+
 test('Open Jason at login is turned off when it is on, and left alone when it is off', async (t) => {
     const on = bench(t, { loginOn: true });
     assert.ok((await uninstall(on.deps)).removed.includes('Open Jason at login'));
