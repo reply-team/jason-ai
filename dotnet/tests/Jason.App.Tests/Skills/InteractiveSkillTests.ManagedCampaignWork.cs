@@ -811,6 +811,9 @@ public partial class InteractiveSkillTests
                 : Flattened(pack);
 
             Assert.Contains("such a read records nothing", skill, StringComparison.Ordinal);
+            Assert.DoesNotContain("Jason has not noticed that reply", skill, StringComparison.Ordinal);
+            Assert.Contains("Whether Jason has noticed the reply is in the lines below", skill, StringComparison.Ordinal);
+            Assert.Contains("only then wakes its responder", skill, StringComparison.Ordinal);
             Assert.Contains("`Dispatcher:EventsCadenceSeconds`", skill, StringComparison.Ordinal);
             Assert.Contains("`Inbound:SyncSeconds`", skill, StringComparison.Ordinal);
             Assert.Contains("600", skill, StringComparison.Ordinal);
@@ -822,13 +825,11 @@ public partial class InteractiveSkillTests
                 : SkillPack.PrintedCommands(SkillPack.Find(pack).File);
             Assert.Contains("jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD", printed);
             Assert.Contains("jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812", printed);
+            Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed", printed);
+            Assert.Contains("jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder", printed);
         }
 
         Assert.Equal(600, new Jason.Runtime.Configuration.DispatcherOptions().EventsCadenceSeconds);
         Assert.Equal(900, new Jason.Runtime.Configuration.InboundOptions().SyncSeconds);
-
-        var runtimePrinted = SkillPack.PrintedCommands(SkillPack.Find("managed-campaign-work").File);
-        Assert.Contains("jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed", runtimePrinted);
-        Assert.Contains("jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder", runtimePrinted);
     }
 }

@@ -459,19 +459,21 @@ jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
 ```
 
-Tell the person that this is what the provider shows now and that such a read records nothing: Jason has not noticed
-that reply yet, and no responder has been raised for it. Jason notices a reply at its own next read, and only then wakes
-its responder. How long that takes depends on how the campaign's plugin is read: a plugin that reads an account's events
-is read every `Dispatcher:EventsCadenceSeconds` (600 by default, `docs/events.md`), and any other plugin by the inbound
-scan, every `Inbound:SyncSeconds` after the last read of the campaign started (900 by default,
-`docs/inbound-sync.md`). The person's settings may differ; the real figure is the one in their settings file, so say
-which way the campaign is read and give the number only as the default unless you have read theirs. To see what Jason
-has done with a reply once it has noticed it, list the two kinds of line and the responder's items:
+Tell the person that this is what the provider shows now and that such a read records nothing. Whether Jason has
+noticed the reply is in the lines below, the two kinds of journal line and the responder's items, so read those too
+and say what they hold:
 
 ```
 jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed
 jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder
 ```
+
+Where it has not, Jason notices the reply at its own next read and only then wakes its responder. How long that takes
+depends on how the campaign's plugin is read: a plugin that reads an account's events is read every
+`Dispatcher:EventsCadenceSeconds` (600 by default, `docs/events.md`), and any other plugin by the inbound scan, every
+`Inbound:SyncSeconds` after the last read of the campaign started (900 by default, `docs/inbound-sync.md`). The
+person's settings may differ; say which way the campaign is read and give the number only as the default unless you
+have read theirs.
 
 **A line that names no person is read by its thread.** Its `contact_id` is null when no contact, or more than one, is
 pinned at that plugin with the identifier the provider gave, so there is nobody to name to `jason contact thread`.

@@ -90,16 +90,24 @@ jason decision list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason approval list-standing cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 ```
 
-**Asked whether somebody has answered, look now.** Do not say "nothing yet" and wait for Jason's next read: Jason
-notices a reply only at its own read of the campaign, which can be minutes away (by default 600 seconds for a plugin
-that reads events, `Dispatcher:EventsCadenceSeconds`, and 900 for the inbound scan, `Inbound:SyncSeconds`; the person's
-settings may differ). Read the provider at this moment, say what it shows, and say that such a read records nothing, so
-Jason has not noticed that reply and no responder has been raised for it yet.
+**Asked whether somebody has answered, look now.** Do not say "nothing yet" and wait for Jason's next read. Read the
+provider at this moment and say what it shows, and say that such a read records nothing:
 
 ```
 jason contact threads cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD
 jason contact thread cnt_01JB6K8TQ2W9V4MZ0C3Y7H5NRD t_99812
 ```
+
+Whether Jason has noticed the reply is in the lines below, so read those too and say what they hold:
+
+```
+jason journal list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind inbound_reply_observed --kind provider_event_observed
+jason workitem list --campaign cmp_01JB6K8TQ2W9V4MZ0C3Y7H5NRD --kind ai_role --role responder
+```
+
+Where it has not, Jason notices the reply at its own next read, which can be minutes away, and only then wakes its
+responder: by default every 600 seconds for a plugin that reads events (`Dispatcher:EventsCadenceSeconds`) and every 900
+for the inbound scan (`Inbound:SyncSeconds`); the person's settings may differ.
 
 ## Planning guidance
 
