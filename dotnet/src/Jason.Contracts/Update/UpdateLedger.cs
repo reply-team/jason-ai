@@ -83,7 +83,8 @@ public sealed record UpdateLedger(
     string? BackupFile = null,
     IReadOnlyList<string>? NewlyApplied = null,
     string? ChronicleId = null,
-    IReadOnlyList<UpdatePluginReplacement>? Plugins = null)
+    IReadOnlyList<UpdatePluginReplacement>? Plugins = null,
+    string? KeptApplication = null)
 {
     /// <summary>The file's name under the update directory, so nothing composes it from a string twice.</summary>
     public const string FileName = "ledger.json";
@@ -142,6 +143,7 @@ public sealed record UpdateLedger(
             ["backup_file"] = BackupFile,
             ["newly_applied"] = new JsonArray([.. NewlyApplied.Select(m => (JsonNode)JsonValue.Create(m)!)]),
             ["chronicle_id"] = ChronicleId,
+            ["kept_application"] = KeptApplication,
             ["plugins"] = new JsonArray([.. Plugins.Select(plugin => (JsonNode)new JsonObject
             {
                 ["id"] = plugin.Id,
@@ -191,7 +193,8 @@ public sealed record UpdateLedger(
             BackupFile: OptionalText(document, "backup_file"),
             NewlyApplied: Migrations(document),
             ChronicleId: OptionalText(document, "chronicle_id"),
-            Plugins: Replacements(document));
+            Plugins: Replacements(document),
+            KeptApplication: OptionalText(document, "kept_application"));
     }
 
     /// <summary>The ledger at this path, or null where there is none: nothing in flight is not a failure.</summary>

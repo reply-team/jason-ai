@@ -31,7 +31,7 @@ separate downloads beside the command line.
 | --- | --- | --- |
 | Windows on x64 | `jason-desktop-windows-x64-setup.exe` | Run it. It installs for your account, with no administrator rights. The installer, its uninstaller, `Jason.exe` and the `jason.exe` it carries are signed. |
 | macOS on Apple silicon | `jason-desktop-macos-arm64.dmg` | Open it and drag Jason into Applications. Signed, notarized and stapled. |
-| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application moves only with the desktop's own update, so `jason update apply` there answers `update_carried_by_desktop`. |
+| macOS on Intel | `jason-desktop-macos-x64.dmg` | The same, with an Intel `jason`. It is built and signed like the Apple silicon one, and the test suite does not run on an Intel Mac. A `jason` carried by the Intel application is updated through the application's own updater, which `jason update apply` there hands the update to, as on Apple silicon. |
 | Linux on x64, Debian and Ubuntu | `jason-desktop-linux-x64.deb` | `sudo apt install ./jason-desktop-linux-x64.deb`. It installs to `/opt/Jason` and puts Jason in the applications menu. This is the package to take on Ubuntu 24.04 and later. Not signed. |
 | Linux on x64, any | `jason-desktop-linux-x64.AppImage` | Make it executable and run it from where you keep it. Not signed. |
 
@@ -963,9 +963,13 @@ What Jason Placed on Linux, takes
 The desktop's update item reads the latest release's `latest.yml`, `latest-mac.yml` or `latest-linux.yml` through
 electron-updater, straight from GitHub, on stable releases only: a release with a pre-release part is never offered, and
 a candidate is installed by hand. It checks on a back-off, offers what it found, downloads only on your word and installs
-only on your word again. The download is kept in the updater's cache under your profile, outside `<data>`:
+only on your word again. `jason update apply` typed into the `jason` the application carries is such a word too: it hands the update
+to the same updater with no window, and the new `jason` then replaces the plugin packages, starts the runtime, redeploys
+the skills, sets the terminal command up and places the UI ([release and update](release-and-update.md) §7, "Handing the
+update to Jason Desktop"). The download is kept in the updater's cache under your profile, outside `<data>`:
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
-`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
+`~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). On Windows a `jason update apply`
+also moves its own file there, under `jason-carried`, while the installer replaces the application's folder. A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
 the package names.
 

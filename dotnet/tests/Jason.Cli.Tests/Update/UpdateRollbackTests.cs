@@ -181,6 +181,28 @@ public class UpdateRollbackTests
     }
 
     /// <summary>
+    /// The same where the backup the update's migration took is gone, so the database is left as it is with no refusal of its
+    /// own: the version put back still does not start on a database the newer one migrated, so the step names putting a
+    /// database back, never another start.
+    /// </summary>
+    [Fact]
+    public async Task A_put_back_start_on_a_migrated_database_whose_backup_is_gone_names_no_start()
+    {
+        using var installation = await UpdatedAsync(migrates: true);
+        File.Delete(installation.Ledger()!.BackupFile!);
+        installation.PutBackRefusesTheDatabase = true;
+        installation.PutBackSays = "something else";
+        var rollback = installation.Rollback();
+
+        await rollback.RollBackAsync(Ct);
+
+        Assert.Contains(rollback.Steps, step => step.Contains("its backup is not at", StringComparison.Ordinal));
+        var step = Assert.Single(rollback.Steps, step => step.Contains("before it answered", StringComparison.Ordinal));
+        Assert.EndsWith($"; it does not start on the database {installation.To} migrated (data_newer) until that database is put back", step, StringComparison.Ordinal);
+        Assert.DoesNotContain(rollback.Steps, said => said.Contains("jason runtime start", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Which side of the guard the version put back is on decides the sentence: from the first version that refuses a
     /// database a newer one migrated, its development builds included, it does not start; before it, it may run on it.
     /// </summary>

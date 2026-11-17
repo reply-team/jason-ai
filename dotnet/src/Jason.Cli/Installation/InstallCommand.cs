@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Update;
 using Jason.Contracts.Json;
 
 namespace Jason.Cli.Installation;
@@ -111,6 +112,15 @@ public static class InstallCommand
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.
 
+        One at a time with an update: where the data directory has an update folder, the setup holds the
+        update's lock, <data>/update/update.lock, while it runs, and names itself beside it. While an update,
+        its finish or a rollback holds it, the setup refuses with update_in_progress, having set nothing up:
+        an update's own finish sets the machine up itself. While another jason install holds it, it refuses
+        with install_in_progress, and so does an update begun then. The lock is the open file, which a killed
+        holder lets go. A setup the holder runs as its waited child, handed the holder's nonce in
+        JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
+        is no update folder, or no data directory at all, it takes no lock and makes none.
+
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
         """;
@@ -169,7 +179,39 @@ public static class InstallCommand
                 + @"%LOCALAPPDATA%\Programs\jason-desktop\resources\bundle\jason.exe.");
         }
 
-        var report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`
+        // can run while it does. The lock is taken only where an update could hold it, so none is made under a data directory
+        // a first start must still find without one. A setup the lock's holder runs as its waited child is handed the
+        // holder's nonce, as the update's own parts are, and goes on under that hold rather than refuse; read here whether a
+        // lock is taken or not, so that nothing this setup starts carries it on.
+        var handed = UpdateLock.Handed(env.Variables);
+        var update = new UpdatePaths(env.Paths);
+        UpdateLock? held = null;
+        if (Directory.Exists(update.Root))
+        {
+            try
+            {
+                held = UpdateLock.Take(update, "the machine setup", handed, UpdateLock.Holder.Install);
+            }
+            catch (UpdateException refused)
+            {
+                return Refuse(
+                    env,
+                    options.Human,
+                    refused.Code,
+                    refused.Code == UpdateCodes.InProgress
+                        ? $"Another jason is updating this installation, or finishing or rolling back an update, and holds {update.Lock}, so nothing was set up: an update's own finish sets the machine up itself. Let that one end, then run `jason install` again; `jason update status` says where the update stands."
+                        : refused.Message,
+                    refused.Retryable);
+            }
+        }
+
+        InstallReport report;
+        using (held)
+        {
+            report = await MachineSetup.RunAsync(env, carried, places, options, cancellationToken).ConfigureAwait(false);
+        }
+
         if (options.Human)
         {
             foreach (var line in report.Done.Concat(report.Left))
@@ -190,7 +232,7 @@ public static class InstallCommand
         return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
     }
 
-    private static int Refuse(CliEnvironment env, bool human, string code, string message)
+    private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)
     {
         if (human)
         {
@@ -198,7 +240,7 @@ public static class InstallCommand
         }
         else
         {
-            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable: false));
+            env.Out.WriteLine(CliErrors.Serialize(code, message, retryable));
         }
 
         return ExitCodes.ApiError;

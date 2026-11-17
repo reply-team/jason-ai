@@ -84,7 +84,8 @@ internal static partial class StatusChecks
 
         /// <summary>
         /// The repair for a runtime newer than this CLI: this jason brought up to the runtime, never the runtime restarted from
-        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason.
+        /// the older build. The same command as <see cref="FinishUpdate"/>, for another reason. On a jason Jason Desktop carries it
+        /// is the same command again, with no hop through the desktop's menu: there it hands the update to the application.
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 
@@ -322,7 +323,13 @@ internal static partial class StatusChecks
         // First, and whether a runtime answers or not, once the update has touched the install path: its last steps are
         // the apply's, and a runtime started any other way runs outside them. A ledger that cannot say which step it is at
         // fails the same way, with no repair this verb can name. Before that step nothing has been replaced, and the
-        // runtime check is the runtime's own; the optional update check names what is waiting.
+        // runtime check is the runtime's own; the optional update check names what is waiting. A carried update whose
+        // application is the new version already landed under a jason that never finished it: the finish is the one way on.
+        if (Landed(unfinished) is { } landed)
+        {
+            return new StatusCheck("runtime", true, CheckState.Failed, landed, Repair.FinishUpdate);
+        }
+
         if (unfinished is { Replacing: true })
         {
             return unfinished.Ledger is { } ledger
@@ -391,6 +398,7 @@ internal static partial class StatusChecks
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),
+        _ when Landed(unfinished) is { } landed => new StatusCheck("update", false, CheckState.Failed, landed, Repair.FinishUpdate),
         { Ledger: null } => new StatusCheck("update", false, CheckState.Unknown, "The update ledger cannot be read; the runtime check says why.", null),
         { Replacing: false } => new StatusCheck(
             "update",
@@ -405,6 +413,19 @@ internal static partial class StatusChecks
             $"{unfinished.Said()}; the runtime check says the two ways on.",
             Repair.FinishUpdate),
     };
+
+    /// <summary>
+    /// The sentence for a carried update the Desktop's installer landed before the jason that asked for it recorded more
+    /// than its stop — that jason ended with the go given, by a kill or a closed console: the application names the new
+    /// version already, and <c>jason update apply</c> finishes the update and starts the runtime. Null for every other.
+    /// </summary>
+    private static string? Landed(Contracts.Update.UnfinishedUpdate? unfinished) =>
+        unfinished?.Ledger is { Step: < UpdateStep.Swapped } ledger
+        && CarriedExecutable.Of(ledger.InstallPath)?.Version is { } named
+        && SemanticVersion.TryParse(named, out var version)
+        && version == ledger.ToVersion
+            ? $"{unfinished.Said()}, and Jason Desktop's installer has put {ledger.ToVersion} in place already: `{Repair.FinishUpdate}` finishes it and starts the runtime."
+            : null;
 
     /// <summary>
     /// Whether the runtime answering is the build this CLI is. Required, because a binary can change under a running
