@@ -367,7 +367,7 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     const said = refused ?? (failure === null ? null : { code: store.failureCode.value, message: failure });
     const more = store.approvalsCursor.value !== null || store.questionsCursor.value !== null;
     // The label is drawn only while something is shown that waits on the person: what was approved is not waiting.
-    const waits = approvals.length > 0 || questions.length > 0 || reasked.length > 0 || said !== null;
+    const waits = approvals.length > 0 || questions.length > 0 || reasked.length > 0 || refused !== null;
     if (
         approvals.length === 0 &&
         questions.length === 0 &&
@@ -377,7 +377,10 @@ export function WaitingCards({ campaignId }: { campaignId: string }) {
     )
         return null;
     return (
-        <section className="chat-waiting-for" aria-label={waits ? 'Waiting for you' : 'Approved'}>
+        <section
+            className="chat-waiting-for"
+            aria-label={waits ? 'Waiting for you' : approved.length > 0 ? 'Approved' : 'Not read'}
+        >
             {waits && <div className="lab">Waiting for you</div>}
             {said !== null && (
                 <div className="note am" role="alert">

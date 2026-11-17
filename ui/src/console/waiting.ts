@@ -256,7 +256,7 @@ export async function readWaiting(api: Api, waiting: Waiting): Promise<void> {
 const standing: Readonly<Record<string, Pick<Approved, 'state' | 'why'>>> = {
     created: { state: 'approved' },
     scheduled: { state: 'approved' },
-    processing: { state: 'approved' },
+    processing: { state: 'running' },
     awaiting_approval: { state: 'held', why: 'it waits for a person to approve it again' },
     waiting: { state: 'held', why: 'it is waiting' },
     succeeded: { state: 'done' },

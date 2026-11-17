@@ -142,10 +142,11 @@ export interface Approved {
     readonly what: string;
     readonly to: string | null;
     /**
-     * How the work stands as the runtime last said: `approved` while it is queued or running, `held` when it parked
-     * again (`why` says how), and `done`, `failed`, `cancelled` or `expired` when it ended.
+     * How the work stands as the runtime last said: `approved` while it is queued (it may still be held at a limit),
+     * `running` once a handler has it, `held` when it parked again (`why` says how), and `done`, `failed`, `cancelled`
+     * or `expired` when it ended.
      */
-    readonly state: 'approved' | 'held' | 'done' | 'failed' | 'cancelled' | 'expired';
+    readonly state: 'approved' | 'running' | 'held' | 'done' | 'failed' | 'cancelled' | 'expired';
     /** Why a held one is not sent yet, in plain words. */
     readonly why?: string | undefined;
 }
@@ -153,7 +154,7 @@ export interface Approved {
 /**
  * What the chat says of an approval its card approved: what it was and to whom, then how its work stands. Only a
  * message is said to be sent, and only once its work succeeded; any other act is said done. "Jason is sending it" is said
- * only while the work is queued or running.
+ * only while a handler runs the work; while it is queued, which a limit may still hold, it "will" send it.
  */
 export function approvedSentence(each: Approved): string {
     const what = `${each.what}${each.to === null ? '' : ` to ${each.to}`}`;
@@ -161,6 +162,8 @@ export function approvedSentence(each: Approved): string {
     const not = sends ? 'It was not sent' : 'It did not complete';
     switch (each.state) {
         case 'approved':
+            return `You approved: ${what}. ${sends ? 'Jason will send it.' : 'Jason will do it.'}`;
+        case 'running':
             return `You approved: ${what}. ${sends ? 'Jason is sending it.' : 'Jason is doing it.'}`;
         case 'held':
             return `You approved: ${what}. ${sends ? 'It is not sent yet' : 'It is not done yet'}: ${each.why ?? 'it is held'}.`;

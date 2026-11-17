@@ -22,7 +22,10 @@ const enrol: Approved = {
 
 describe('what a chat says of an approval its card approved', () => {
     it('says what was approved and to whom, and that a message was sent only once its work succeeded', () => {
-        expect(approvedSentence(message)).toBe('You approved: Message to Ines Duarte. Jason is sending it.');
+        expect(approvedSentence(message)).toBe('You approved: Message to Ines Duarte. Jason will send it.');
+        expect(approvedSentence({ ...message, state: 'running' })).toBe(
+            'You approved: Message to Ines Duarte. Jason is sending it.',
+        );
         expect(approvedSentence({ ...message, state: 'done' })).toBe(
             'You approved: Message to Ines Duarte. It was sent.',
         );
@@ -43,7 +46,7 @@ describe('what a chat says of an approval its card approved', () => {
         );
     });
 
-    it('says Jason is sending it only while the work is queued or running, and otherwise that it is not sent yet', () => {
+    it('says Jason is sending it only while a handler runs the work, will send it while queued, and otherwise that it is not sent yet', () => {
         expect(approvedSentence({ ...message, state: 'held', why: 'it is waiting' })).toBe(
             'You approved: Message to Ines Duarte. It is not sent yet: it is waiting.',
         );
@@ -54,7 +57,7 @@ describe('what a chat says of an approval its card approved', () => {
 
     it('says an act that is no message is done, not sent', () => {
         expect(approvedSentence({ ...enrol, state: 'approved' })).toBe(
-            'You approved: Add to sequence. Jason is doing it.',
+            'You approved: Add to sequence. Jason will do it.',
         );
         expect(approvedSentence({ ...enrol, state: 'done' })).toBe('You approved: Add to sequence. It is done.');
     });
@@ -77,14 +80,14 @@ const reading = (status: Record<string, string>): Api & { reads: string[] } => {
 };
 
 describe('following an approved act to the end of its work', () => {
-    it('moves each approval to the state its work item ended in, and leaves one still running as approved', async () => {
+    it('moves each approval to the state its work item ended in, and leaves one a handler runs as running', async () => {
         const waiting = waitingOf('cmp_follow');
         waiting.approved.value = [message, enrol, { ...message, approvalId: 'apr_3', workItemId: 'wi_3' }];
         const api = reading({ wi_1: 'succeeded', wi_2: 'processing', wi_3: 'failed' });
         await followApproved(api, waiting);
         expect(waiting.approved.value.map((each) => [each.approvalId, each.state])).toEqual([
             ['apr_1', 'done'],
-            ['apr_2', 'approved'],
+            ['apr_2', 'running'],
             ['apr_3', 'failed'],
         ]);
     });
@@ -93,7 +96,7 @@ describe('following an approved act to the end of its work', () => {
         const states = {
             created: 'approved',
             scheduled: 'approved',
-            processing: 'approved',
+            processing: 'running',
             awaiting_approval: 'held',
             waiting: 'held',
             expired: 'expired',

@@ -760,6 +760,17 @@ describe('what waits in an agent’s chat', () => {
         expect(words(said)).not.toMatch(/Jason is sending it|was sent/);
     });
 
+    it('says a read that failed alone without labelling anything as waiting', async () => {
+        const fake = new FakeApi();
+        fake.unreachable('approval.list', (body) => (body as { campaign_id?: string }).campaign_id === 'cmp_1');
+        renderConsole(fake);
+        const pane = await openChat('Spring');
+        const kept = await waitFor(() => within(pane).getByRole('region', { name: 'Not read' }));
+        expect(within(kept).getByRole('alert')).toBeTruthy();
+        expect(kept.querySelector('.lab')).toBeNull();
+        expect(within(pane).queryByRole('region', { name: 'Waiting for you' })).toBeNull();
+    });
+
     it('does not label what was approved as waiting once nothing waits on the person', async () => {
         const fake = new FakeApi()
             .answer('approval.approve', 'approval.approve/approved')
