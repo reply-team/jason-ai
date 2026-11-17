@@ -913,19 +913,20 @@ a code on its own tells nobody what to do next.
 | `update_artifact_corrupt` | what was downloaded is not the digest the manifest published. The bytes are deleted rather than kept for a retry |
 | `update_artifact_unreachable` | the download did not arrive, or the archive could not be read. Worth trying again |
 | `update_artifact_unexpected` | the archive does not hold the executable a release for this platform is supposed to hold, or the release publishes nothing for this platform, or the manifest read for `--version` names another version. That last is said before the manifest's `min_upgrade_from` is read, since a manifest of another release says nothing about this one: no archive is downloaded and no update begins. The same code comes at `staged` when the manifest read again there names another version than the update in flight, which has already begun. Its notice files are taken where the archive holds them, and an archive without one is not refused |
-| `update_in_progress` | a *different* version is already in flight. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
+| `update_in_progress` | a *different* version is already in flight, or, run as the `jason` Jason Desktop carries, another `jason update apply` or `jason update rollback` of this data directory holds the update's lock, `<data>/update/update.lock`, which each part of an update takes while it acts and lets go before it waits on a child. The same version is resumed rather than refused, so re-running `jason update apply` after a kill is always the right move. `jason runtime start` and `restart` refuse with it too from the swap on, from `kept`, starting and stopping nothing: the apply starts the runtime itself as one of its steps, and a runtime started around it would run outside the update. So does `jason runtime run`, which a sign-in registration runs, on stderr with exit 1 and nothing started, unless the start is the apply's or the rollback's own; while the update's own runtime is up, a sign-in is refused instead as a second runtime, and starts nothing either. Before `kept` nothing has been replaced, and `jason runtime start` and a sign-in start the installed build |
 | `update_not_directly_applicable` | the release's `min_upgrade_from` is above the version installed; no archive is downloaded and no update begins. From 0.20.0 the message names both commands, `jason update apply --version <floor>` and then `jason update apply` or `jason update apply --version <to>` when the apply named one; a build before 0.20.0 names the version to install first, which the same two commands reach |
 | `update_not_updatable` | this Jason runs through `dotnet`, so there is no single executable to replace. Install a published release with the one-liner in §6 |
 | `update_managed_by_package_manager` | a package manager — Homebrew or winget — installed this Jason and keeps its own record of the version, so the file is not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message prints the three lines to type instead: `jason runtime stop`, the manager's upgrade, `jason runtime start` |
 | `update_carried_by_desktop` | this `jason` is the one the desktop application carries, known by the `version.json` beside it (§6), and there is no Jason Desktop to hand the update to — on Linux, or where the application is not where this `jason` says — or the update recorded names such a file other than this one, so the file is the application's and not this build's to replace. Nothing is staged, drained or stopped, and `jason update rollback` refuses the same way. The message names the desktop's Check for Updates, which updates the application and its `jason` together |
 | `update_refused_by_desktop` | a carried `jason` handed the update to Jason Desktop and the Desktop refused it: its reason and its sentence are the message, with the version its feed offered where it read one. Nothing was installed, a `jason` is at the carried path (on Windows put back there first), the record that stood before is put back, and the runtime is as it was found. Retryable where the reason is one that passes: `busy`, `window_open`, `check_failed`, `download_failed`, `runtime_not_stopped`, `timed_out` |
-| `update_desktop_unanswered` | a carried `jason` handed the update to Jason Desktop and had no answer: the application could not be started, its start ended with no request file naming an end, a running window that took the request named none within the wait, or a file of the request's id was there before the request was made. A `jason` is at the carried path (on Windows put back there first), the record that stood is put back and the runtime is as it was found; retryable |
+| `update_desktop_unanswered` | a carried `jason` handed the update to Jason Desktop and had no answer: the application could not be started, its start ended with no request file naming an end, a running window that took the request named none within the wait, a file of the request's id was there before the request was made, or a go of the request's id was there before the verb made one. A `jason` is at the carried path (on Windows put back there first), the record that stood is put back and the runtime is as it was found; retryable |
 | `update_desktop_not_installed` | Jason Desktop handed the update to its installer, and ten minutes later the application's `version.json` still did not name the version asked for; on macOS the message carries the end of ShipIt's own log. On Windows a `jason` is put back at the carried path first where the installer left none there. Where the application still names the version the update began from, the record that stood is put back; otherwise the update stays in flight and the runtime is started from the `jason` at the carried path, or, where there is none, from the verb's own file. Retryable |
 | `update_cross_volume` | the staged file and the install path are on different volumes. An update renames rather than copies, because a half-copied executable is the one state nothing can recover from. Point `JASON_DATA_DIR` at the executable's volume, or install Jason on the data directory's |
 | `update_runtime_unreachable` | the runtime would not drain or would not stop, so nothing was replaced |
 | `update_not_healthy` | the new version is in place, but the runtime it starts is not the one this update installed, or the new executable could not be run to finish the update. The executable can be put back |
 | `update_file_refused` | a file could not be moved, copied or written: a directory that is not one, a permission, a lock. It covers every file these two verbs touch — an update's renames and a rollback's, the ledger both are recorded in, and the database restore. The message names the path and what to do — including which executable to run when `jason` is no longer on your PATH. On Windows an executable another program holds open — a scanner reading the one just run or just downloaded — is tried again for 10 seconds first; one still held then is named from `~`, with how long it was tried, and that refusal is retryable: the same command, once the file is free |
-| `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/` |
+| `update_nothing_to_roll_back` | there is no record of an update, or the executable it replaced is no longer under `~/.jason/update/previous/`, or, run as the `jason` Jason Desktop carries, the update stands before `kept` and the application is still the version it began from: nothing was put aside yet. Where the application names the new version already, the refusal is `update_in_progress`, and `jason update apply` finishes the update first |
+| `update_cancelled` | a carried `jason update apply` was cancelled — Ctrl+C, a SIGTERM, its console closed — while it waited for Jason Desktop or before the go. The record that stood is put back, on Windows a `jason` is put back at the carried path, and a runtime it stopped is launched again and not waited for, which the message says, with `jason runtime status` as the way to see it answer. Cancelled once the installer has the update, nothing is put back or started: the folder is the installer's, and the message names `jason update apply` and `jason status` |
 | `update_rollback_unsafe` | the executable was put back and the database was not: work has been recorded since the update, or whether any has cannot be told — no runtime is answering, or the update never reached a healthy runtime and so never recorded where the chronicle stood — and restoring the backup would erase it. A version from 0.49.0 on that was put back does not start on the database the newer one migrated (`data_newer`), and the message says so. "Restoring a database by hand" below is how to go the rest of the way, having decided you want to |
 | `update_ledger_invalid` | there is a file at `~/.jason/update/ledger.json` and it is not a ledger this build can act on. The message names the file. `jason runtime start`, `restart` and `run` refuse with it too and start nothing, as they do when the file cannot be opened at all, and `jason status` fails its `runtime` check with the same words; removing the file is the way on when no update is wanted |
 
@@ -940,36 +941,39 @@ the exits. Both halves are described as they behave.
 `Jason.app/Contents/MacOS/Jason`, three folders above `Contents/Resources/bundle/jason`. It is started as every child of
 `jason` is, with the verb's own environment: the same `JASON_DATA_DIR`, so the start acts on the same data directory and
 meets the same Desktop. Nothing goes to it on standard input and nothing comes back on standard output; the request file
-is the answer. Before it starts the application, the verb has copied itself aside and drained the runtime, because the
-Windows installer refuses while any process runs from the carried `jason.exe`.
+is the answer. The verb starts the application first, before it drains or stops anything, and the application waits,
+once the update is downloaded, for the verb's go: only then is the runtime drained and stopped and, on Windows, the
+carried `jason.exe` moved out of the folder, because the Windows installer refuses while any process runs from it.
 
 | Argument | What it says |
 |---|---|
 | `--update-apply` | update the application to one version, with no window |
 | `--to <version>` | that version, as the feeds name it: `0.49.1`, or with a pre-release part, `0.49.1-ci.7` |
 | `--request <id>` | the request's id, made by the verb afresh for each request: letters, digits, `-` and `_`, at most 64, never a path |
+| `--await-go` | optional: once the update is downloaded, write `downloaded` and wait for the go (below) before anything is stopped, kept or installed. Only a request that names it waits; given twice, or with `--update-settle`, it is a usage error |
 | `--feed <address>` | optional, and taken only by a start of its own: read the Desktop's update file (`latest.yml`, `latest-mac.yml`) from this address instead of the releases. Only `http` on the loopback address is taken (`localhost`, `127.0.0.0/8`, `[::1]`), with no credentials, query or fragment: it is for a test's own server. What the address binds is below |
 | `--update-settle` | alone: record the update as kept, once the new version's runtime answered (below) |
 
 **What the start does.** It shows no window, and on macOS no Dock icon: the activation policy is set to `accessory`
-before Electron is ready. It reads the file that records whether the Desktop opens on Live or on the Demo and is not ruled
-by it, and writes neither record. It takes the single-instance lock of its data directory. Where a running Jason Desktop
-of that data directory holds the lock, Live or Demo, the request goes to that one in the lock's additional data and the
-start exits 3; otherwise it takes the request itself. Whichever process takes it reads the feed; refuses unless the
-version the feed's file names is exactly `--to`; downloads it; stops the runtime the application carries when that is
-the one running, through `jason runtime stop`, as a click on the menu's install item does; keeps the application aside
-under `<data>/desktop/rollback/<from>/`; and hands the update to the installer with no start of the application after
-it: on Windows the installer runs as `--updated /S`, and on macOS the application quits once Squirrel has the update, and
-ShipIt installs it after the application has ended. It never starts a runtime, and touches no plugin, skill or UI: those
-are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes one for the request. On
-Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's folders first on its `PATH`,
-the PowerShell folder among them, before it reads the feed: the updater checks the installer's publisher by running
-PowerShell through that shell, and lets the check pass where PowerShell cannot be run at all, so the shell and the
-PowerShell are found where the system keeps them rather than where the caller's `PATH` says. The working directory stays
-the caller's, and the command interpreter looks there before `PATH` unless `NoDefaultCurrentDirectoryInExePath` is set, so
-the start sets it. The system's folder is the one `SystemRoot` names, and that value is the caller's too: what is closed
-is the working directory and the order of `PATH`, not a `SystemRoot` the caller pointed at a folder of its own. Where
-`SystemRoot` is not a drive's absolute path nothing is changed.
+before Electron is ready. It reads the file that records whether the Desktop opens on Live or on the Demo and is not
+ruled by it, and writes neither record. It takes the single-instance lock of its data directory. Where a running Jason
+Desktop of that data directory holds the lock, Live or Demo, the request goes to that one in the lock's additional data
+and the start exits 3; otherwise it takes the request itself. Whichever process takes it reads the feed; refuses unless
+the version the feed's file names is exactly `--to`; downloads it; where the request names `--await-go`, writes
+`downloaded` and waits for the go, and past its wait installs and stops nothing; stops the runtime the application
+carries when that is the one running, through `jason runtime stop`, as a click on the menu's install item does; keeps
+the application aside under `<data>/desktop/rollback/<from>/`; and hands the update to the installer with no start of
+the application after it: on Windows the installer runs as `--updated /S`, and on macOS the application quits once
+Squirrel has the update, and ShipIt installs it after the application has ended. It never starts a runtime, and touches
+no plugin, skill or UI: those are the new carried `jason`'s to finish. A Demo window has no updater of its own and makes
+one for the request. On Windows a start of its own sets its `ComSpec` to the system's `cmd.exe` and puts the system's
+folders first on its `PATH`, the PowerShell folder among them, before it reads the feed: the updater checks the
+installer's publisher by running PowerShell through that shell, and lets the check pass where PowerShell cannot be run
+at all, so the shell and the PowerShell are found where the system keeps them rather than where the caller's `PATH`
+says. The working directory stays the caller's, and the command interpreter looks there before `PATH` unless
+`NoDefaultCurrentDirectoryInExePath` is set, so the start sets it. The system's folder is the one `SystemRoot` names,
+and that value is the caller's too: what is closed is the working directory and the order of `PATH`, not a `SystemRoot`
+the caller pointed at a folder of its own. Where `SystemRoot` is not a drive's absolute path nothing is changed.
 
 **What a feed binds, and what it does not.** The address binds where the feed's file is read, and nothing more. The files
 that file names may be absolute addresses on any host, and a redirect is followed to any host, so the package may come
@@ -982,9 +986,12 @@ feed is for a test's own server, and only a start of its own takes one.
 
 **A window that takes a request** goes as far as the download and stops there: the update waits under its menu's install
 item, nothing is stopped or kept, and the request is refused with `window_open`. One switch in the Desktop,
-`windowOpenUpdate`, decides whether an open window may instead close to install, silently and without starting again;
-it is set to stop. A window takes no request that names a feed: it refuses it with `window_feed` before it checks
-anything, so no feed is set and nothing is downloaded, and its install item only ever offers what the releases offer.
+`windowOpenUpdate`, decides whether an open window may instead close to install, silently and without starting again; it
+is set to stop. Where the switch lets a window close to install and the request names `--await-go`, the window waits for
+the go as a start of its own does, its install item at downloaded the while, and past the wait refuses with
+`go_timed_out` and leaves the update under that item. A window takes no request that names a feed: it refuses it with
+`window_feed` before it checks anything, so no feed is set and nothing is downloaded, and its install item only ever
+offers what the releases offer.
 
 **The request file** is `<data>/update/desktop-<id>.json`. The process that takes the request makes it, with its first
 step, only where no file of that name is there, and only that process writes it after; a request whose file is already
@@ -998,7 +1005,7 @@ application as no answer. Every member is always there:
 | Member | What it holds |
 |---|---|
 | `request` | the id |
-| `state` | `checking` or `downloading` while the request is taken; `installing`, `current` or `refused` at its end |
+| `state` | `checking`, `downloading` or `downloaded` while the request is taken; `installing`, `current` or `refused` at its end |
 | `from` | the application's version that took the request |
 | `to` | the version asked for; null only when the arguments could not be read |
 | `reason` | at `refused`, one code of the table below; null otherwise |
@@ -1013,6 +1020,7 @@ application as no answer. Every member is always there:
 |---|---|
 | `checking` | the feed is being read |
 | `downloading` | the feed offered `to`, and it is being downloaded |
+| `downloaded` | the request names `--await-go`, the update is downloaded, and the go is waited for; nothing has been stopped or kept |
 | `installing` | the runtime was stopped where it ran from the application, the copy kept, and the installer handed the update; the Desktop's part is over, and the carried `version.json` naming `to` says the install finished |
 | `current` | the application already is `to`; nothing was done |
 | `refused` | nothing was installed, for `reason` |
@@ -1030,10 +1038,12 @@ application as no answer. Every member is always there:
 | `version_mismatch` | the feed offers another version than `to`, or none newer; `offered` names it |
 | `download_failed` | the download did not arrive |
 | `window_open` | a window took the request and may not close: the update waits under its install item |
+| `go_there` | the request names `--await-go` and its go was there when the request was taken: a go the verb did not make is no go, and nothing was downloaded |
+| `go_timed_out` | the request names `--await-go` and no go came within the wait: nothing was stopped, kept or installed, and the download stays for the menu's install item |
 | `runtime_not_stopped` | the runtime the application carries did not stop, or did not answer while its process runs |
 | `keep_failed` | the copy could not be kept; `runtime_stopped` says whether the runtime was stopped first |
 | `install_failed` | the installer stopped before it finished, at once or, on macOS, when Squirrel said so later |
-| `timed_out` | a start of its own did not end within 30 minutes, the install included |
+| `timed_out` | a start of its own did not end within 30 minutes, the install included, or 45 where it waited for a go |
 | `failed` | an error the Desktop did not expect |
 
 | Exit of `--update-apply` | Meaning |
@@ -1043,71 +1053,104 @@ application as no answer. Every member is always there:
 | 2 | the arguments could not be read (`usage`, where the id could be and no file of that id was there), or the request's file was already there, so nothing was taken or written |
 | 3 | a running Jason Desktop of this data directory took the request; that one writes the file |
 
+**The go** is `<data>/update/desktop-<id>.go`, an empty file beside the request's. The verb makes it by an exclusive
+create, as the last thing it does before the install, after the drain, the stop, the move and the record below; a go
+that is there already is no go, on both sides: the verb gives none and ends with `update_desktop_unanswered`, and a
+request whose go is there when it is taken is refused with `go_there`. The two waits are held apart by a margin: the
+verb gives the go within 10 minutes of reading `downloaded`, the drain at most 8 of them, and past that bound ends
+having given none; the Desktop waits 15 minutes for it (`goWaitMs` in `desktop/src/update-request.ts`), five more than
+the verb's bound, and past that installs and stops nothing and refuses with `go_timed_out`, so a go never arrives after
+the Desktop stopped waiting for one. The verb waits for the application's start up to 50 minutes: the start's own 45 and
+five more. The verb takes the go away once the hand-over has ended.
+
 **What the verb does with it.** The update is one ledger (above), its steps read for this hand-over. On Windows as on
 macOS the caller waits on the process it started, `jason update apply`, and gets one JSON document and the exit code:
 
 | Step | What is begun |
 |---|---|
 | `staged` | the plan: the feed's `manifest.json` read and held to this installation — the version, `--version`, `min_upgrade_from` — and no archive asked for, since the application is the Desktop's to download; the record that stood is kept beside the ledger, for a refusal to put back |
-| `drained` | `system.drain`, as any update's drain |
-| `stopped` | the request: the application started with `--update-apply --to <version> --request <id>`, and `--feed` with the feed's folder where the feed is `http` on the loopback address, which is all the Desktop takes. The Desktop's start stops the runtime the application carries, through the carried `jason`; on Windows that file is out of the folder by then (below), so the verb stops the runtime itself first, as any update's `stopped` does |
+| `staged`, then `asked:` | the request: the application started with `--update-apply --to <version> --request <id> --await-go`, and `--feed` with the feed's folder where the feed is `http` on the loopback address, which is all the Desktop takes. Nothing is drained or stopped until it answers `downloaded`; an end before that leaves the runtime untouched |
+| `drained` | at `downloaded`, `system.drain`, as any update's drain, within the go's bound |
+| `stopped` | on Windows the verb stops the runtime itself, as any update's `stopped` does, and a runtime an earlier version's Demo left running on its own folder beside the data directory or the harness root, which runs the carried `jason` too; then it steps out of the folder (below) and gives the go, under a `stopped: Jason Desktop told to go` line. On macOS the go follows the drain, and the Desktop's start stops the runtime the application carries, through the carried `jason`, as a click on the menu's install item does. A Demo runtime is the Desktop's to start again, at its next Demo start |
 | `kept` | the answer `installing`: the copy of the application the Desktop kept, recorded as `kept_application`. On Windows that copy was made while the carried file was out of the folder, so the verb puts a copy of its own file at `resources\bundle\jason.exe` in it |
 | `swapped` | the application's `version.json` names the version: the new carried `jason` is run as `update apply --finish --feed <feed>`, a child the verb waits for, and its answer passed on, its lines after the verb's own |
 | `plugins` to `complete` | the new carried `jason`, as any update's; then the skills this installation recorded redeployed at the new tag, the role skills among them; `jason install`'s machine setup with no `--roles`, under `install:` lines — the terminal command and the harness skills, which never fail the update and end `run: jason install` where they did not get there; the UI; and the application started with `--update-settle`, under a `settle:` line |
 
 **Out of the application's folder.** The Windows installer refuses while a process runs from the carried path — the
-installer's look finds one by that exact path (`desktop/installer/uninstall.nsh`) — or holds a file in the folder, and on
-macOS the application is replaced under a running process. So the verb steps out of the folder before the application is
-started. On Windows the carried process moves its own file, as its last act before that start, to
+installer's look finds one by that exact path (`desktop/installer/uninstall.nsh`) — or holds a file in the folder, and
+on macOS the application is replaced under a running process. So the verb steps out of the folder before the application
+is told to go. On Windows, before the drain, the verb looks for every process that runs from the carried path and
+refuses, naming each by its id, where one is neither this data directory's runtime nor a Demo runtime, both of which it
+stops. On Windows the carried process moves its own file, as its last act before the go, to
 `%LOCALAPPDATA%\jason-desktop-updater\jason-carried\<request>\jason.exe`, on the application's volume and outside its
-folder, and goes on running from there: Windows lets a running image be renamed, as `jason uninstall` does for its own
-removal (§9). Windows still reports the path the process was started from, so beside the carried file it writes
-`jason-update.pid`, its process id and its start in Windows file time, and the installer's look passes over the one
-process where both match a process that is running; every other process at that path is looked for as before, and a file
-left behind names a process that has ended. The verb takes the file away once the install has ended, and folders an
-earlier request left in the store are removed at the next move, where nothing runs from them. A line `moved:` says where
-the file went. On macOS a copy of the carried `jason` goes under `~/.jason/update/applier/` after `staged` and carries the
-steps from `drained` to `swapped`; the carried process waits for it and passes on its answer and its exit.
+folder; a move that leaves the file where it was and copies it, as across two volumes
+behind one drive letter, is taken back and refused as `update_file_refused`. Beside the moved file it writes
+`jason.version`, the version the file came from alone, as the application's `version.json` names it, with nothing after
+it, so that a later start of the application can tell whether the folder is still that version. It goes on running from
+there: Windows lets a running image be renamed, as `jason uninstall` does for its own removal (§9). Windows still
+reports the path the process was started from, so beside the carried file it writes `jason-update.pid`, its process id
+and its start in Windows file time, and the installer's look passes over the one process where both match a process that
+is running and whose command line carries ` update apply`; every other process at that path is looked for as before, and
+a file left behind names a process that has ended. Only the installer the updater starts with `--updated`, and the
+uninstaller it runs, read the file; a person's install or uninstall reads none, whatever it was started with. The verb
+takes the file away once the install has ended. Folders earlier requests left in the store are swept, quietly and only
+where nothing runs from them, at the next move, by `jason update apply --finish` with no update in flight, and by
+`jason install` where no update is in flight. A line `moved:` says where the file went. On macOS a copy of the carried `jason`
+goes under `~/.jason/update/applier/` after `staged` and carries the steps from `drained` to `swapped`; the carried
+process waits for it and passes on its answer and its exit.
 
-**Every way it ends leaves a working installation.** On Windows, where the installer put no new `jason.exe` at the
-carried path, the verb puts one back before it answers — a copy of its own file, under a `put back:` line — and starts
-again from it the runtime it stopped:
+**Every way it ends leaves a working installation.** Every way out after the request is in one place: where the
+installer put no new `jason.exe` at the carried path, the verb puts one back on Windows before it answers — a copy of
+its own file, under a `put back:` line, never into an application whose `Jason.exe` is gone, as an uninstall leaves it —
+puts back the record that stood where nothing was installed, and starts again the runtime it stopped:
 
 | How it ends | What is at the carried path when the verb answers |
 |---|---|
-| the Desktop refused (`update_refused_by_desktop`), a failed download among the reasons | a copy of the verb's own file |
-| no answer: the start ended with no file naming an end, was killed, could not be started, or did not end within its bound, or a window that took the request named none (`update_desktop_unanswered`) | a copy of the verb's own file |
+| before `downloaded`: the Desktop refused, a failed download or `go_there` among the reasons, or its start ended with no answer (`update_refused_by_desktop`, `update_desktop_unanswered`) | the carried file, never moved; nothing was drained or stopped |
+| the drain, the stop, the move or the record did not end within the go's bound, or was refused (`update_runtime_unreachable`, `update_file_refused`), a move that copied among them; no go was given | the carried file where it was, or a copy of the verb's own file; a drained runtime claims work again |
+| a go was there before the verb made one (`update_desktop_unanswered`); no go was given | a copy of the verb's own file |
+| after the go, the Desktop refused or never answered (`update_refused_by_desktop`, `update_desktop_unanswered`) | a copy of the verb's own file |
 | the installer was handed the update and the application never named the version (`update_desktop_not_installed`) | the installer's file where it placed one, never written over; otherwise a copy of the verb's own file |
-| the move, or the record beside the carried file, was refused (`update_file_refused`), and nothing was asked of the Desktop | the carried file where it was, or a copy of the verb's own file |
-| the runtime would not stop (`update_runtime_unreachable`) | the carried file, never moved; the drained runtime claims work again |
-| a cancel while the Desktop is waited for | a copy of the verb's own file |
+| a cancel — Ctrl+C, a SIGTERM, a console closed — before the installer has the update (`update_cancelled`) | a copy of the verb's own file, or the carried file where it was never moved; the runtime launched and not waited for |
+| a cancel once the installer has the update (`update_cancelled`) | what the installer leaves: the folder is its own, nothing is copied in and no runtime started, and the answer names the finish |
 | the install landed | the new `jason.exe`, which finishes the update |
 
-**The one gap** is a crash of that Windows process itself — a kill, a power cut — between the move and the put-back: the
-application's folder is then without a `jason.exe` until something puts one there. A person sees `jason` not found, or
-not starting, in a terminal, and Jason Desktop opening with no runtime of its own; the ledger stands at `stopped`.
-Choosing Check for Updates in Jason Desktop's menu, or running its installer again, puts a `jason.exe` back; then
-`jason status` names the update in flight and `jason update apply` carries it on. The file the process ran from is whole
-at the store's path above, and copying it to `resources\bundle\jason.exe` by hand repairs it too. The move is the verb's
-last act before the application is started, so the gap is as short as the code allows.
+A cancel is held: the verb lets ten seconds pass for its way out before the process ends, and a closed console four, of
+the five Windows gives it. On macOS the carried process waits on the copy, and a cancel ends the copy and runs the same
+way out from the carried process: the record that stood is put back and the runtime launched from the application's
+`jason`, and not waited for.
+
+**What a kill leaves.** A kill of the verb's own process — a task manager, a power cut — runs none of the above:
+
+| The verb killed | What is left | The way on |
+|---|---|---|
+| before `downloaded` | nothing drained, stopped or moved; the record at `staged`. The Desktop's start downloads, waits for a go that never comes, and installs nothing | `jason update apply` again |
+| between the drain and the go | the runtime drained or stopped, the record at `drained` or `stopped`; on Windows, once the move is made, the application's folder without a `jason.exe`. No go comes, so the Desktop installs nothing | on Windows, Check for Updates in Jason Desktop's menu or its installer run again puts a `jason.exe` back, and the moved file is whole in the store, `jason.version` beside it, to be copied back to `resources\bundle\jason.exe` by hand; then `jason update apply` again. The steps from the drain to the go take seconds, and this is the one gap |
+| after the go | the installer has the update; the record at `stopped` or `kept`, and no runtime started | `jason status` names the update the installer landed and the finish as its repair; `jason update apply`, typed into the new carried `jason`, finishes it and starts the runtime |
 
 The request id is made afresh for each request, and a file of that id there before the request is no answer. The verb
-waits for the application's start to end, up to 35 minutes, then reads the file, whatever the exit. After exit 3 it reads
-the file again until it names an end, since a window takes the request at its own pace: a window that failed before it
-served the request never answers, so the wait is bounded — two minutes for the file to appear, 30 for an end — and the
-refusal says so. At `refused`, and with no answer, it ends with `update_refused_by_desktop` or
-`update_desktop_unanswered`, puts back the record that stood, and leaves the runtime as it found it before the drain: a
-runtime that answers drained claims work again, and one that was running and is gone — the Desktop or the verb stopped it
-— is started again from the carried file. At `current` it goes on to `swapped`. At `installing` it waits up to ten minutes
-for the carried `version.json` to name `to`; where it does not, the refusal is `update_desktop_not_installed`, and on
-macOS it carries the end of ShipIt's own log, `~/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_stderr.log`.
-Whoever asked for a runtime's stop starts one again: a hand-over to the copy or to the new `jason` that ends with no
-answer starts the runtime again where one was running and none answers, from the carried file where its `version.json`
-can be read and otherwise from the verb's own file, and says where the update stands. An update stopped part-way is
-carried on by typing `jason update apply` again, into the carried `jason`, or on macOS into the copy; one whose
-application is already the version asked for, updated from the window say, is finished by the new carried `jason` with no
-request. `--finish` while an update stands before `swapped`, its application not yet the version asked for, is refused
-with `update_in_progress`; with none in flight it is the finishing step below.
+reads the file while the application's start runs, and waits for that start up to 50 minutes, then reads the file,
+whatever the exit. After exit 3 it reads the file again until it names `downloaded` or an end, and after the go an end,
+since a window takes the request at its own pace: a window that failed before it served the request never answers, so
+each wait is bounded — two minutes for the file to appear, 30 for what it waits for — and the refusal says so. One
+`jason update` of a data directory acts at a time: each part — the carried process's plan and hand-over, the copy's, the
+finish, a carried rollback — takes `<data>/update/update.lock` and lets go before it waits on a child, and a second one
+beside it refuses with `update_in_progress`. At `refused`, and with no answer, it ends with `update_refused_by_desktop`
+or `update_desktop_unanswered`, puts back the record that stood, and leaves the runtime as it found it before the drain:
+a runtime that answers drained claims work again, and one that was running and is gone — the Desktop or the verb stopped
+it — is started again from the carried file. At `current` it goes on to `swapped`. At `installing` it waits up to ten
+minutes for the carried `version.json` to name `to`; where it does not, the refusal is `update_desktop_not_installed`,
+and on macOS it carries the end of ShipIt's own log,
+`~/Library/Caches/ai.jasonharness.desktop.ShipIt/ShipIt_stderr.log`. Whoever asked for a runtime's stop starts one
+again: a hand-over to the copy or to the new `jason` that ends with no answer starts the runtime again where one was
+running and none answers, from the carried file where its `version.json` can be read and otherwise from the verb's own
+file, and says where the update stands. An update stopped part-way is carried on by typing `jason update apply` again,
+into the carried `jason`, or on macOS into the copy; one whose application is already the version asked for, updated
+from the window say, is finished by the new carried `jason` with no request. `--finish` while an update stands before
+`swapped`, its application not yet the version asked for, is refused with `update_in_progress`; with none in flight it
+is the finishing step below. A carried `jason update rollback` of an update that stands before `kept` puts back nothing,
+since nothing was put aside: it refuses with `update_nothing_to_roll_back`, or with `update_in_progress` where the
+application names the new version already.
 
 **The finishing step.** `jason update apply --finish`, run as the `jason` Jason Desktop carries with no update in flight
 — the ledger absent or at `complete` — is the one step both doors use to bring what belongs to the installed version up
@@ -1118,7 +1161,7 @@ error.
 | Part | What it brings up to the installed version |
 |---|---|
 | `plugins` | the plugin packages the installed version's release publishes, by the plan an update's `plugins` step makes against that release's `manifest.json`: a package behind is replaced, and every other is left as that step leaves it — not installed, current, later, unreadable, or edited on this machine (it "differs from every package a release published") |
-| `skills` | every skills deployment this installation records, redeployed at the installed version's tag, as an update's skills step redeploys them, the role skills among them |
+| `skills` | every skills deployment this installation records, redeployed at the installed version's tag, as an update's skills step redeploys them, the role skills among them; `already_there` where every record named that ref already, from a source read at a ref rather than a directory |
 | `ui` | the release's UI for the installed version, where the build in place is not already that version for this build's API |
 
 It starts and stops no runtime: where a package changed and a runtime answers, it asks the reload `jason plugin install`
@@ -1164,6 +1207,8 @@ Live window's start, as it is after an update from the menu. A Demo window and a
 it: it stays pending until the next Live window starts. It shows nothing and brings no window forward, and exits 0, or 1
 when the record could not be written. An update whose runtime did not come up is not settled: the next Live window says
 where the copy is. Putting the previous application back is one step by hand, as it is after an update from the menu.
+The verb waits for the settling start at most two minutes, ends it past that and says so in its `settle:` line: the next
+Live window's start records the update then.
 
 ## 8. Starting at logon
 
