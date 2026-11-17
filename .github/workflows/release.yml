@@ -1038,7 +1038,7 @@ jobs:
         run: |
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
-          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before
+          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
 
       - name: The machine after every uninstall is the machine before
         shell: bash

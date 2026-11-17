@@ -1963,6 +1963,18 @@ jobs:
           Write-Host "the previous release is $tag"
           "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
+      # A shape 0.48.2's own updater never makes, the setup run by hand: this build's setup run silently as an update over
+      # an open 0.48.2 window. Then Installed apps takes it off again.
+      - name: Install this build by hand over an open 0.48.2 window
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverOpenWindow -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-open-window-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-open-window-uninstall -Against before
+
       - name: Install this build over the previous release's Jason Desktop, as its updater runs an installer
         shell: pwsh
         env:
@@ -1986,18 +1998,6 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
-
-      # A shape 0.48.2's own updater never makes, the setup run by hand: this build's setup run silently as an update over
-      # an open 0.48.2 window. Then Installed apps takes it off again.
-      - name: Install this build by hand over an open 0.48.2 window
-        shell: pwsh
-        env:
-          JASON_Update__CheckEnabled: 'false'
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverOpenWindow -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-open-window-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-open-window-uninstall -Against before
 
       # The next version, built as a test build the same way at this version and one, for the Desktop's own window-less
       # update below; its updater feed is served from a folder of its own.
@@ -2201,7 +2201,7 @@ jobs:
         run: |
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
-          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before
+          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there and read here,
       # so that one run reads every leg before the job fails.

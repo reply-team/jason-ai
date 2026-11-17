@@ -490,7 +490,7 @@ switch ($Step) {
         $removal = Wait-Program $Matches['file'] @($Matches['arguments'])
         if ($removal -ne 0) { Fail "the uninstall Installed apps runs exited with $removal" }
         Wait-Until { -not (Test-Path -LiteralPath $app) } 60 "the application's folder going"
-        if (@(Get-JasonUninstallEntries).Count -ne 0) { Fail 'the Installed apps entry is left' }
+        Wait-Until { @(Get-JasonUninstallEntries).Count -eq 0 } 30 'the Installed apps entry going after the folder'
         if ((Count-Entry $bundle) -ne 0) { Fail 'the Path entry naming the bundle folder is left: the uninstaller did not run jason uninstall --keep-application' }
         foreach ($root in @('.claude\skills', '.agents\skills')) { if (Test-Path -LiteralPath (Join-Path $env:USERPROFILE "$root\.jason-skills.json")) { Fail "the skills record in $root is left" } }
         if (-not (Test-Path -LiteralPath $data)) { Fail "the data directory $data went, which only --purge-data takes" }

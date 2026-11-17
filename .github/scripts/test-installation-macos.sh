@@ -146,6 +146,19 @@ compare)
     kept='^(data directory|harness root)'
     left="$(comm -13 "$before" "$after" | grep -vE "$kept" || true)"
     went="$(comm -23 "$before" "$after" | grep -vE "$kept" || true)"
+    # After the previous release's command-line install alone, an expected leftover: the profiles 0.48's install.sh
+    # created, which no record of this version's names, emptied of their lines. Said, and not counted.
+    if [ "${3:-}" = previous-profiles ]; then
+        empty="$(printf '' | shasum -a 256 | cut -d' ' -f1)"
+        expected_left="$(printf '%s\n' "$left" | grep -E "^profile \.(zprofile|zshrc)	$empty\$" || true)"
+        if [ -n "$expected_left" ]; then
+            say "expected after the previous release's own install.sh: $(printf '%s' "$expected_left" | tr '\n\t' '; ') (empty profiles it created)"
+            for name in $(printf '%s\n' "$expected_left" | sed -E 's/^profile (\.[a-z]+)	.*/\1/'); do
+                left="$(printf '%s\n' "$left" | grep -vE "^profile \\$name	" || true)"
+                went="$(printf '%s\n' "$went" | grep -vE "^profile \\$name	absent\$" || true)"
+            done
+        fi
+    fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
