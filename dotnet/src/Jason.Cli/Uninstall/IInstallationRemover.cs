@@ -203,9 +203,11 @@ public interface IInstallationRemover
     /// <summary>
     /// Windows: starts the one process an uninstall leaves behind, which waits for process <paramref name="waitFor"/> to
     /// end, then runs a copy of the application's uninstaller silently on <paramref name="application"/>, telling it the
-    /// application's steps are done. Its id, or null where it could not be started.
+    /// application's steps are done; where that run ends 3 it runs it once more for a person to see, and where the last run
+    /// ends with any other code but 0 it writes one line into the log folder <paramref name="logs"/>, where that folder is
+    /// still there (<see cref="UninstallerHandOff"/>). Its id, or null where it could not be started.
     /// </summary>
-    int? HandToUninstaller(string application, int waitFor) => null;
+    int? HandToUninstaller(string application, int waitFor, string logs) => null;
 }
 
 /// <summary>What became of the executable, which is the one step that can honestly half-succeed.</summary>
@@ -226,6 +228,16 @@ public interface IInstallationRemover
 /// process to end, since the uninstaller refuses while a process runs from the folder it removes, then copies the
 /// uninstaller out of that folder and runs the copy silently on it, in place (<c>_?=</c>), waiting for it; then the copy goes.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A silent uninstaller never closes a running Jason Desktop: where it finds one, or cannot look for one, it removes
+/// nothing and ends with 3 (<c>desktop/installer/uninstall.nsh</c>). The person who asked for this uninstall is then
+/// asked on the screen: the copy is run once more without <c>/S</c>, and its own questions say what runs and offer to
+/// close it. Where the last run ends with any other code but 0, nothing is said on any screen, since the verb has already
+/// answered; one line, <see cref="LogTemplate"/> with the code alone, goes into today's runtime log file, which
+/// <c>jason logs</c> shows, and only where the log folder is still there - a purged data directory is never made again.
+/// </para>
+/// </remarks>
 public static class UninstallerHandOff
 {
     /// <summary>The variable that hands the waiter the application's folder.</summary>
@@ -233,6 +245,16 @@ public static class UninstallerHandOff
 
     /// <summary>The variable that hands the waiter the folder it copies the uninstaller into.</summary>
     public const string AsideVariable = "JASON_UNINSTALL_ASIDE";
+
+    /// <summary>The variable that hands the waiter the data directory's log folder.</summary>
+    public const string LogsVariable = "JASON_UNINSTALL_LOGS";
+
+    /// <summary>
+    /// The one line the waiter writes, a message template whose only hole is the uninstaller's exit code, held to the
+    /// reviewed log properties as every template the runtime writes is. It holds no apostrophe, so it sits in the script's
+    /// literal as it is.
+    /// </summary>
+    public const string LogTemplate = "The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {ExitCode}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it";
 
     /// <summary>The script, for Windows PowerShell's <c>-Command</c>. It names no path: each comes in the environment.</summary>
     /// <remarks>
@@ -254,24 +276,35 @@ public static class UninstallerHandOff
     {
         var wait = waitFor.ToString(CultureInfo.InvariantCulture);
         return $"$ErrorActionPreference = 'SilentlyContinue'; Wait-Process -Id {wait} -Timeout 600; "
-            + $"$folder = $env:{ApplicationVariable}; $aside = $env:{AsideVariable}; "
+            + $"$folder = $env:{ApplicationVariable}; $aside = $env:{AsideVariable}; $logs = $env:{LogsVariable}; "
             + "[void][System.IO.Directory]::CreateDirectory($aside); "
             + $"$copy = Join-Path $aside '{DesktopRemoval.UninstallerName}'; "
             + $"Copy-Item -LiteralPath (Join-Path $folder '{DesktopRemoval.UninstallerName}') -Destination $copy; "
-            + $"if (Test-Path -LiteralPath $copy) {{ Start-Process -Wait -FilePath $copy -ArgumentList ('/S {DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder) }}; "
+            + "if (Test-Path -LiteralPath $copy) { "
+            + $"$run = Start-Process -Wait -PassThru -FilePath $copy -ArgumentList ('/S {DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder); "
+            + "$exit = if ($run) { $run.ExitCode } else { -1 }; "
+            + $"if ($exit -eq 3) {{ $run = Start-Process -Wait -PassThru -FilePath $copy -ArgumentList ('{DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder); $exit = if ($run) {{ $run.ExitCode }} else {{ -1 }} }}; "
+            + "if ($exit -ne 0 -and $logs -and (Test-Path -LiteralPath $logs -PathType Container)) { "
+            + "$line = [ordered]@{ '@t' = [DateTime]::UtcNow.ToString('o'); '@mt' = '" + LogTemplate + "'; '@l' = 'Warning'; 'ExitCode' = $exit } | ConvertTo-Json -Compress; "
+            + "[System.IO.File]::AppendAllText((Join-Path $logs ('runtime-' + [DateTime]::Now.ToString('yyyyMMdd') + '.jsonl')), $line + [char]10, (New-Object System.Text.UTF8Encoding $false)) } }; "
             + "Remove-Item -LiteralPath $aside -Recurse -Force";
     }
 
-    /// <summary>What the script is handed in its environment: the application's folder, and a new folder for the copy.</summary>
-    public static IReadOnlyDictionary<string, string> Variables(string application, string temporary)
+    /// <summary>
+    /// What the script is handed in its environment: the application's folder, a new folder for the copy, and the data
+    /// directory's log folder.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Variables(string application, string temporary, string logs)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(application);
         ArgumentException.ThrowIfNullOrWhiteSpace(temporary);
+        ArgumentException.ThrowIfNullOrWhiteSpace(logs);
 
         return new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [ApplicationVariable] = Path.TrimEndingDirectorySeparator(application),
             [AsideVariable] = Path.Combine(temporary, $"jason-uninstall-{Guid.NewGuid():N}"),
+            [LogsVariable] = Path.TrimEndingDirectorySeparator(logs),
         };
     }
 }
@@ -754,7 +787,7 @@ public static class InstallationRemovers
             }
         }
 
-        public int? HandToUninstaller(string application, int waitFor)
+        public int? HandToUninstaller(string application, int waitFor, string logs)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(application);
 
@@ -770,7 +803,7 @@ public static class InstallationRemovers
                 start.ArgumentList.Add(argument);
             }
 
-            foreach (var (variable, value) in UninstallerHandOff.Variables(application, Path.GetTempPath()))
+            foreach (var (variable, value) in UninstallerHandOff.Variables(application, Path.GetTempPath(), logs))
             {
                 start.Environment[variable] = value;
             }

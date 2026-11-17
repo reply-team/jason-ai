@@ -228,6 +228,19 @@ public sealed class LogTemplateInventoryTests
             hole => hole.Contains("Role", StringComparison.OrdinalIgnoreCase) || hole.Contains("Pack", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// The one line jason uninstall's waiter writes into the runtime's log file, from a script and not through a logger, is
+    /// held to the same list: a template whose holes are reviewed names, here the uninstaller's exit code alone.
+    /// </summary>
+    [Fact]
+    public void The_line_the_uninstall_waiter_writes_opens_only_reviewed_holes()
+    {
+        var holes = Holes(Jason.Cli.Uninstall.UninstallerHandOff.LogTemplate);
+
+        Assert.Equal(["ExitCode"], holes);
+        Assert.All(holes, hole => Assert.Contains(hole, ReviewedLogProperties.Names));
+    }
+
     /// <summary>A reload's reason is free text a person or an agent typed, and the journal is where it is kept.</summary>
     [Fact]
     [Critical(Family.B3, "a typed reason never reaches a log")]
