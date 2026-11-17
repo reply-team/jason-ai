@@ -82,6 +82,7 @@ public class JasonPathsTests
         (nameof(JasonPaths.RunDirectory), "run"),
         (nameof(JasonPaths.DescriptorFile), "run/runtime.json"),
         (nameof(JasonPaths.LockFile), "run/runtime.lock"),
+        (nameof(JasonPaths.StartOwedFile), "run/start-owed.json"),
         (nameof(JasonPaths.LogsDirectory), "logs"),
         (nameof(JasonPaths.WorkDirectory), "work"),
         (nameof(JasonPaths.RoleSkillsDirectory), "skills/roles"),
