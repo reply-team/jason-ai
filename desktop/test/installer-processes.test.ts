@@ -354,13 +354,17 @@ test('a runtime running from the carried executable is stopped through the appli
     assert.ok(check.indexOf(stopRuntimeLine) > check.indexOf('Stop-Process'));
 });
 
-test('an update waits for the application to quit, never closes it from a silent run, and asks a person who watches before it closes it', () => {
+test('an update waits for the application to quit; a silent run, updated or not, never closes it; a person who watches is asked before it is closed', () => {
     const check = macro('customCheckAppRunning');
-    // The silent update's way out comes before the question and the stop: a silent update that still finds the
-    // application at the bound, or could not look, ends with error level 1, with no box and nothing closed.
-    assert.match(codeLines(check).join('\n'), /\$\{if\} \$\{isUpdated\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_GONE\}[^`]+`\s+\$\{else\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_FOUND\}[^`]+`\s+\$\{endIf\}\s+Pop \$R0\s+\$\{if\} \$R0 != 1\s+\$\{if\} \$\{isUpdated\}\s+\$\{AndIf\} \$\{Silent\}\s+SetErrorLevel 1\s+Quit\s+\$\{endIf\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+DetailPrint "\$\(appClosing\)"/);
-    // The one stop comes after that way out, so no silent update reaches it.
-    assert.ok(check.indexOf('${AndIf} ${Silent}') < check.indexOf('Stop-Process'));
+    // The silent way out comes before the question and the stop: a silent run that still finds the application - at the
+    // bound of an update's wait, or at a plain install's look - or could not look, ends with error level 3, its own, with
+    // no box and nothing closed.
+    assert.match(codeLines(check).join('\n'), /\$\{if\} \$\{isUpdated\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_GONE\}[^`]+`\s+\$\{else\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_FOUND\}[^`]+`\s+\$\{endIf\}\s+Pop \$R0\s+\$\{if\} \$R0 != 1\s+\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+DetailPrint "\$\(appClosing\)"/);
+    // The one stop comes after that way out, so no silent run reaches it; 3 is said there alone, so a caller that reads
+    // it - the install script, a move - knows the application was running and nothing was changed.
+    assert.ok(check.indexOf('SetErrorLevel 3') < check.indexOf('Stop-Process'));
+    assert.equal([...script.matchAll(/SetErrorLevel 3\b/g)].length, 1);
+    assert.equal([...script.matchAll(/SetErrorLevel (\d+)/g)].map((found) => found[1]).sort().join(','), '1,1,1,1,1,2,3');
     // No fixed pause stands in for the wait any more.
     assert.doesNotMatch(check, /Sleep 300\b/);
     // The bound: a minute, three times the twenty seconds late a slow quit is proven at, looked at twice a second.
@@ -384,13 +388,13 @@ test('the application look fails closed, is made again after the application was
         'Pop $R0',
         // Every exit but the one clean "nothing found" is the application found, a failed look and nsExec's own error included.
         '${if} $R0 != 1',
-        // A silent update closes nothing and shows nothing: it ends, and the old version stays as it was.
-        '${if} ${isUpdated}',
-        '${AndIf} ${Silent}',
-        'SetErrorLevel 1',
+        // A silent run, an update or not, closes nothing and shows nothing: it ends with its own error level, 3, and what
+        // was installed stays as it was.
+        '${if} ${Silent}',
+        'SetErrorLevel 3',
         'Quit',
         '${endIf}',
-        // Everyone else is asked, as a person's install always was; a silent install answers OK itself.
+        // A run a person watches is asked, as a person's install always was.
         '${if} $R0 S== 0',
         'StrCpy $R1 "$(appRunning)"',
         '${else}',

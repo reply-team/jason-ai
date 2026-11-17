@@ -11,7 +11,8 @@
 ; --uninstall start stops the runtime of its own data directory again, in case one was started in between.
 
 ; Which running programs the installer and the uninstaller close before they replace or remove the files: the
-; application's own executable, found by its exact path, and nothing else. electron-builder's own check, which this
+; application's own executable, found by its exact path, and nothing else, and only after a person who watches the run
+; chose OK; a silent run closes no application (below). electron-builder's own check, which this
 ; replaces, closes every program whose path begins with the installation folder - the runtime this application carries
 ; among them, with its work - and where PowerShell is not available every program named Jason.exe, which on Windows is
 ; every jason.exe, a runtime of another installation included. The path is handed to PowerShell in the environment, so
@@ -46,9 +47,10 @@
 ; a failed start of PowerShell included, is read as a process found.
 !define JASON_RUNTIME_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
 
-; The application is looked for the same way, failing closed: only exit 1 says it is not running. It is looked for again
-; after it was closed, and a run where it is still found, or where that look failed, ends with error level 1 before a file
-; is replaced.
+; The application is looked for the same way, failing closed: only exit 1 says it is not running. A silent run that finds
+; it, or whose look failed, ends there with error level 3: the application is running, in its window or in the tray, and
+; nothing was changed. A run a person watches is asked; it is looked for again after it was closed, and where it is still
+; found, or that look failed, the run ends with error level 1 before a file is replaced.
 !define JASON_APP_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
 
 ; An update closes nothing it has not asked about: the application quits itself before an update, and the update waits
@@ -105,11 +107,11 @@
     ${endIf}
     Pop $R0
     ${if} $R0 != 1
-      ; A silent update closes nothing and shows nothing: it ends before a file is replaced, and the old version stays
-      ; installed as it was. An update a person watches, the window's own install, asks them as an install does.
-      ${if} ${isUpdated}
-      ${AndIf} ${Silent}
-        SetErrorLevel 1
+      ; A silent run never closes a person's running application, an update or not: what a terminal or an updater runs
+      ; with no one watching ends before a file is replaced, with error level 3, its own, and shows nothing, and what was
+      ; installed stays as it was. A run a person watches - an install, an uninstall, the window's own update - asks them.
+      ${if} ${Silent}
+        SetErrorLevel 3
         Quit
       ${endIf}
       ${if} $R0 S== 0
