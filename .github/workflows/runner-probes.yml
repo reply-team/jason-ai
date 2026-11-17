@@ -154,6 +154,33 @@ jobs:
           r 'codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/dmg/Jason.app"'
           r 'hdiutil detach "$RUNNER_TEMP/dmg"'
 
+      - name: probe a quarantined copy started directly, before any dialog exists
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          . "$RUNNER_TEMP/h.sh"
+          Q="$RUNNER_TEMP/q"; mkdir -p "$Q"
+          cp "$RUNNER_TEMP/dl/jason-desktop-macos-arm64.zip" "$Q/"
+          QV="0081;$(printf %x $(date +%s));Safari;"
+          r 'xattr -w com.apple.quarantine "$QV" "$Q/jason-desktop-macos-arm64.zip"'
+          r 'ps -axo pid,command | grep -E "CoreServicesUIAgent|Jason" | grep -v grep | cut -c1-160'
+          Q2="$RUNNER_TEMP/q2"; mkdir -p "$Q2"
+          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" "$Q2/"'
+          r 'xattr -p com.apple.quarantine "$Q2/Jason.app" "$Q2/Jason.app/Contents/MacOS/Jason"'
+          printf '\n$ "%s/Jason.app/Contents/MacOS/Jason"   (in the background, killed after 40 s)\n' "$Q2"
+          to 40 "$Q2/Jason.app/Contents/MacOS/Jason" > "$RUNNER_TEMP/direct.log" 2>&1 &
+          dpid=$!
+          sleep 20
+          r "ps -o pid,stat,etime,command -p $dpid | cut -c1-200"
+          r 'ps -axo pid,ppid,command | grep -E "Jason|CoreServicesUIAgent|AppTranslocation" | grep -v grep | cut -c1-200'
+          r 'lsappinfo list | grep -i -A6 "\"Jason\"" | head -20'
+          r 'screencapture -x "$RUNNER_TEMP/shots/direct-exec-quarantined.png"'
+          quit_jason
+          kill "$dpid" 2>/dev/null; wait "$dpid"; echo "direct start exit status: $?"
+          r 'head -30 "$RUNNER_TEMP/direct.log" | cut -c1-200'
+          r 'xattr -p com.apple.quarantine "$Q2/Jason.app"'
+          r 'to 60 log show --last 2m --style compact --predicate "process == \"syspolicyd\"" | grep -iE "jason|q2|assess|notari|prompt" | tail -30'
+
       - name: probe placing in ~/Applications, never launched, then rename and delete
         continue-on-error: true
         timeout-minutes: 4
@@ -213,10 +240,11 @@ jobs:
           Q="$RUNNER_TEMP/q"; mkdir -p "$Q"
           cp "$RUNNER_TEMP/dl/jason-desktop-macos-arm64.zip" "$Q/"
           QV="0081;$(printf %x $(date +%s));Safari;"
-          C="$HOME/Applications/Jason.app"
+          r 'ps -axo pid,command | grep -E "CoreServicesUIAgent|Jason" | grep -v grep | cut -c1-160'
+          C="/Applications/Jason.app"
           r 'xattr -w com.apple.quarantine "$QV" "$Q/jason-desktop-macos-arm64.zip"'
           r 'xattr -p com.apple.quarantine "$Q/jason-desktop-macos-arm64.zip"'
-          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" ~/Applications/'
+          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" /Applications/'
           echo "--- did ditto carry the zip's quarantine onto what it unpacked?"
           r 'xattr -p com.apple.quarantine "$C"'
           r 'xattr -p com.apple.quarantine "$C/Contents/Resources/bundle/jason"'
@@ -231,24 +259,8 @@ jobs:
           launch_probe launched-quarantined "$C"
           r 'xattr -p com.apple.quarantine "$C"'
           r 'to 90 log show --last 4m --style compact --predicate "process == \"syspolicyd\"" | grep -iE "jason|translocat|assess|notari" | tail -40'
-          r 'mv "$C" "$HOME/Applications/Jason-renamed.app" && echo renamed'
-          r 'rm -rf "$HOME/Applications/Jason-renamed.app" && echo deleted'
-          echo "--- a second quarantined copy, its main executable started directly rather than through LaunchServices"
-          Q2="$RUNNER_TEMP/q2"; mkdir -p "$Q2"
-          r 'ditto -x -k "$Q/jason-desktop-macos-arm64.zip" "$Q2/"'
-          r 'xattr -p com.apple.quarantine "$Q2/Jason.app" "$Q2/Jason.app/Contents/MacOS/Jason"'
-          printf '\n$ "%s/Jason.app/Contents/MacOS/Jason"   (in the background, killed after 40 s)\n' "$Q2"
-          to 40 "$Q2/Jason.app/Contents/MacOS/Jason" > "$RUNNER_TEMP/direct.log" 2>&1 &
-          dpid=$!
-          sleep 20
-          r "ps -o pid,stat,etime,command -p $dpid | cut -c1-200"
-          r 'ps -axo pid,ppid,command | grep -E "Jason|CoreServicesUIAgent|AppTranslocation" | grep -v grep | cut -c1-200'
-          r 'lsappinfo list | grep -i -A6 "\"Jason\"" | head -20'
-          r 'screencapture -x "$RUNNER_TEMP/shots/direct-exec-quarantined.png"'
-          quit_jason
-          kill "$dpid" 2>/dev/null; wait "$dpid"; echo "direct start exit status: $?"
-          r 'head -30 "$RUNNER_TEMP/direct.log" | cut -c1-200'
-          r 'xattr -p com.apple.quarantine "$Q2/Jason.app"'
+          r 'mv "$C" /Applications/Jason-renamed.app && echo renamed'
+          r 'rm -rf /Applications/Jason-renamed.app && echo deleted'
 
       - name: probe caches and launchd user jobs
         continue-on-error: true
@@ -326,6 +338,8 @@ jobs:
           r 'JASON_DATA_DIR="$RUNNER_TEMP/jd" to 60 "$A/Contents/Resources/bundle/jason" --version'
 
   probe-windows:
+    # Answered in full by the second run; kept off so the third run holds the macOS question alone.
+    if: ${{ false }}
     runs-on: windows-latest
     timeout-minutes: 20
     defaults:
