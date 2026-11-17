@@ -57,8 +57,10 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 Jason is released under the MIT licence: [LICENSE](../LICENSE). What it sends off your machine, and what stays your
 responsibility when it reaches people, is in [docs/responsible-use.md](responsible-use.md).
 
-A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches
-runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+line your terminal and your agents use. It is installed once, updated once and removed once, and a one-liner installs
+it. On Linux a one-liner installs the executable. Either way it ends by teaching it its role skills, without which
+every role it launches runs untaught. [docs/INSTALL.md](INSTALL.md) is the rest, in order — teaching it its skills again where that step
 said it could not, asking whether it can work, and starting it — for a person or an agent.
 
 ### Ask an agent to do it
@@ -176,11 +178,12 @@ every platform, built from this tree at the release's version.
 
 ## The installation
 
-Each install script works out your platform, verifies the download's SHA-256 before unpacking it, installs the
-executable under your own account — `~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Programs\jason` on
-Windows — with its licence and the third-party notices beside it, as `jason-LICENSE` and
-`jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH unless you pass `--no-modify-path`. Nothing
-needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
+Each install script works out your platform and verifies the download's SHA-256 before it places anything. On macOS
+and Windows it installs Jason Desktop under your own account, its signature checked too, opens nothing, and has the
+`jason` the application carries put `jason` in your terminal and Jason's skills where every agent host it finds reads
+them. On Linux it installs the executable under your own account, in `~/.local/bin`, with its licence and the
+third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and puts that directory on your PATH
+unless you pass `--no-modify-path`. Nothing needs administrator rights. Both one-liners install the **latest release**. If either answers 404, the release
 could not be reached — through the address or on GitHub — and that is not a failure of your machine: report it
 as it stands rather than run the line again, and build nothing instead.
 
@@ -342,6 +345,10 @@ jason uninstall --human --dry-run
 jason uninstall
 jason uninstall --purge-data --yes
 ```
+
+On macOS and Windows this is the one uninstall: it takes Jason Desktop off with everything it placed and an older
+command-line install, and it is also reached from Installed apps on Windows and from Uninstall Jason… in the Jason menu
+on macOS.
 
 **Skills go only by receipt.** Every root a deployment wrote into carries a record listing each path written
 there, and this verb removes those skills and nothing else — a skill you copied into a harness by hand has no

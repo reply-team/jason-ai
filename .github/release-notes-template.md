@@ -103,17 +103,17 @@ Jason stays open and says so. A deb update keeps no copy; to go back, install th
 `jason-desktop-linux-x64.deb` the same way. An AppImage update replaces the file where it is, so you need to be able to
 write to its folder, and keeps the file as it was under `~/.jason/desktop/rollback/<version>/`.
 
-Uninstalling the desktop on Windows stops the runtime the application carries first, and removes nothing when that
-runtime does not stop. It then takes off what it put there - the `jason` command it placed on the PATH, Open Jason at
-login, and the runtime's logon start when that start names the application's own folder - and leaves the data
-directory (`~/.jason`), the harness root (`~/Jason`) and the updater's cache, `%LOCALAPPDATA%\jason-desktop-updater`,
-saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+line your terminal and your agents use. It is removed once, by `jason uninstall` in a terminal, by Installed apps on
+Windows, or by Uninstall Jason… in the Jason menu on macOS. The uninstall stops the runtime first, and removes nothing
+when that runtime does not stop. It then takes off what Jason placed - the `jason` command, the skills of every agent
+host, Open Jason at Login, the runtime's start at logon, an older command-line install and the updater's cache - and
+last the application, and leaves the data directory (`~/.jason`) unless you say otherwise and the harness root
+(`~/Jason`) always, saying so. On Linux, choose Remove What Jason Placed… in the Jason menu first: it stops the runtime the application
 carries and takes off what Jason placed, the `jason` command, Open Jason at Login and the runtime's start at logon,
 then says what removes the application. `sudo apt remove jason-desktop` removes the deb, and deleting the file
 removes the AppImage. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
-cache, `~/.cache/jason-desktop-updater`. On macOS, choose Remove What Jason Placed… in the Jason menu first, then move
-Jason.app to the Trash. What stays is the data directory (`~/.jason`), the harness root (`~/Jason`) and the updater's
-cache, `~/Library/Caches/jason-desktop-updater`.
+cache, `~/.cache/jason-desktop-updater`.
 
 ## Installing
 
@@ -131,19 +131,24 @@ irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 
 Jason is released under the MIT licence: <https://github.com/reply-team/jason-ai/blob/v{{version}}/LICENSE>.
 
-Both find this machine's archive, check it against `checksums.txt` before unpacking, and put `jason` on the
-PATH — in `~/.local/bin`, or `%LOCALAPPDATA%\Programs\jason` — with its licence and the third-party notices
-beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`. Running the line again over an installed Jason of
-the same version changes nothing and says so, unless a licence file is missing beside the executable, which it
-then writes. Two options, for a script that must be told:
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command
+line your terminal and your agents use. It is installed once, updated once and removed once. Each line installs it:
+it checks the application's download against `checksums.txt` and its signature, puts it in its place, opens nothing,
+and has the `jason` it carries put `jason` in the terminal and Jason's skills where every agent host it finds reads
+them. On Linux the line finds this machine's archive, checks it against `checksums.txt` before unpacking, and puts
+`jason` on the PATH in `~/.local/bin`, with its licence and the third-party notices beside it, as `jason-LICENSE` and
+`jason-THIRD-PARTY-NOTICES`. Running the line again over an installed Jason of the same version downloads nothing and
+says so; on Linux, unless a licence file is missing beside the executable, which it then writes. To install this release rather than the latest, name it:
 
 ```sh
-curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}} --no-modify-path
+curl -fsSL https://get.jasonharness.ai/releases/download/v{{version}}/install.sh | sh -s -- --version {{version}}
 ```
 
 ```powershell
-& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}} -NoModifyPath
+& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v{{version}}/install.ps1))) -Version {{version}}
 ```
+
+On Linux, `--no-modify-path` leaves your PATH alone.
 
 ## Upgrading from 0.1.0
 

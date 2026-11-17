@@ -879,7 +879,7 @@ public partial class PageClaimsTests
     /// <summary>
     /// An agent installs by the first route that fits: a package, where the page names one for the platform and its
     /// package manager is already there — installing a package manager to reach it would be installing something else —
-    /// though not Homebrew's formula on a Mac, which is the command line alone; then, on macOS and Windows, the release's
+    /// and the page names none for a new install; then, on macOS and Windows, the release's
     /// install script downloaded into a file and run from it, which installs Jason Desktop and sets the machine up, and
     /// refuses an Intel Mac; and on Linux the steps by hand. It never pipes a download into a shell, and
     /// the one-liner is the person's, handed to them where the script or the steps by hand are refused. The order is
@@ -890,9 +890,9 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*).", StringComparison.Ordinal);
-        // On a Mac the package is not the route for a new install: the formula is the command line alone.
-        var homebrew = agent.IndexOf("On macOS, Homebrew's formula is not that package for a new install: it installs the command line alone, without Jason Desktop, so on a Mac the route is the install script even where Homebrew is there.", StringComparison.Ordinal);
+        var package = agent.IndexOf("Where §2 names a package for this platform and its package manager is already on this machine, use it (*With a package manager*); where it names none, take the next route.", StringComparison.Ordinal);
+        // The page no longer offers Homebrew's formula for a new install on a Mac, so the section names no formula at all.
+        Assert.DoesNotContain("Homebrew", agent, StringComparison.Ordinal);
         var script = agent.IndexOf("On macOS and Windows that is this release's install script: download `install.sh` or `install.ps1` from the release (§2) into a file, and run that file", StringComparison.Ordinal);
         // And an Intel Mac is refused by the script, as the package subsection says no build for one is published.
         var intel = agent.IndexOf("On an Intel Mac it stops before it downloads anything, since no Jason Desktop for one is published: report that as it stands.", StringComparison.Ordinal);
@@ -900,8 +900,7 @@ public partial class PageClaimsTests
         var person = agent.IndexOf("Where your harness refuses the script or the route by hand, say so and give the person the one-liner to type themselves.", StringComparison.Ordinal);
 
         Assert.True(package >= 0, "The section for an agent does not take a package first, where its package manager is already on this machine.");
-        Assert.True(homebrew > package, "The section for an agent does not say that on a Mac Homebrew's formula is not the route for a new install.");
-        Assert.True(script > homebrew, "The section for an agent does not take the install script on macOS and Windows after the package.");
+        Assert.True(script > package, "The section for an agent does not take the install script on macOS and Windows after the package.");
         Assert.True(intel > script, "The section for an agent does not say the script refuses an Intel Mac.");
         Assert.True(byHand > script, "The section for an agent does not take §2 by hand on Linux.");
         Assert.True(person > byHand, "The section for an agent does not hand the person the one-liner after the route by hand.");
@@ -947,32 +946,34 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// The package subsection names the tap, and only a package that is there: the winget package is not published yet,
-    /// so no line installs it.
+    /// The package subsection offers no package for a new install: on macOS and Windows the install is Jason Desktop,
+    /// which the install script installs, and Homebrew's formula is the command line alone, so the pages stop offering it
+    /// for a new install on a Mac; the winget package is not published, so no line installs it either. They say nothing
+    /// of what becomes of the formula.
     /// </summary>
     [Fact]
-    public void The_package_subsection_names_the_tap_and_no_winget_install_yet()
+    public void The_package_subsection_offers_no_package_for_a_new_install()
     {
         var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
 
-        Assert.Contains("On macOS, with Homebrew: `brew install reply-team/tap/jason`.", package, StringComparison.Ordinal);
+        Assert.Contains("This page names no package for a new install: on macOS and Windows the route is the install script above, which installs Jason Desktop, and on Linux the script or the steps by hand below.", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        Assert.DoesNotContain("brew install", Flat(Page("README.md")), StringComparison.Ordinal);
         Assert.DoesNotContain("winget install", package, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// No build for an Intel Mac is published, and Homebrew says so in words that never name the architecture: it
-    /// stops at the formula, before any dependency is read. So the page says it where the macOS route is given, with
-    /// what a person on such a machine can do today.
+    /// On macOS and Windows the install is Jason Desktop, so the steps by hand, which place the command line alone, are
+    /// Linux's: the page gives no archive for macOS or Windows to place by hand.
     /// </summary>
     [Fact]
-    public void The_package_subsection_says_an_Intel_Mac_has_no_build()
+    public void The_steps_by_hand_are_linux_s_alone()
     {
-        var package = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### With a package manager"));
+        var byHand = Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand"));
 
-        Assert.Contains(
-            "Every macOS route on this page — the one-liner, Homebrew and the archive by hand — is for Apple silicon only: no build for an Intel Mac is published, so on an Intel Mac Homebrew answers \"formula requires at least a URL\", `install.sh` names the platforms it has, and the way to Jason today is another machine: Linux x64, Windows x64 or an Apple silicon Mac.",
-            package,
-            StringComparison.Ordinal);
+        Assert.Contains("On Linux, to install without running a downloaded script, take the steps the script takes there, yourself. On macOS and Windows the install is Jason Desktop, which the script installs and sets up; there is no route by hand.", byHand, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason-win-x64.zip", byHand, StringComparison.Ordinal);
+        Assert.DoesNotContain("jason-osx-arm64.tar.gz", byHand, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1031,7 +1032,7 @@ public partial class PageClaimsTests
     {
         var agent = Flat(Agent());
 
-        Assert.Contains("Where it is not, where it fails, or where it or your harness refuses it, say so once and take the next route.", agent, StringComparison.Ordinal);
+        Assert.Contains("where it names none, take the next route. Where the package fails, or where it or your harness refuses it, say so once and take the next route.", agent, StringComparison.Ordinal);
         Assert.Contains("That is the next route, not a way around the refusal.", agent, StringComparison.Ordinal);
         Assert.DoesNotContain("no other way of running the same code", agent, StringComparison.Ordinal);
     }
@@ -1118,39 +1119,52 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// Jason installs two ways, and the pages say each by whom it suits and recommend neither. An agent given only the
-    /// link once offered the command line as the recommended install and the desktop second, and never named the desktop
-    /// again: the install page told it to install the desktop only when asked, and the README offered it as an
-    /// afterthought. An agent that asks before the install offers both, a person with no preference is offered the
-    /// desktop, and after a command-line install the hand-over names the desktop once.
+    /// On macOS and Windows, Jason is one installation: Jason Desktop and the `jason` it carries, installed once, updated
+    /// once and removed once. The pages say so in the same words wherever they speak of installing it, and no page offers
+    /// the command line without the application there, or says an agent never needs it. On Linux the command line stays
+    /// what the install makes, and the desktop's deb and AppImage are separate downloads: an agent asked with only the link
+    /// offers both there, a person with no preference is offered the desktop, and the hand-over names the desktop once.
     /// </summary>
     [Fact]
-    public void The_pages_offer_two_ways_to_install_and_recommend_neither()
+    public void The_pages_say_one_installation_on_macOS_and_Windows_and_offer_the_desktop_on_Linux()
     {
+        const string Words = "On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once.";
         var agent = Flat(Agent());
-        Assert.Contains("each said by whom it suits, and marks neither as the one to take", agent, StringComparison.Ordinal);
-        Assert.Contains("A person with no preference is offered Jason Desktop.", agent, StringComparison.Ordinal);
-        Assert.Contains("Given the three lines, the person has asked for the command line: install it, with no choice offered.", agent, StringComparison.Ordinal);
+        Assert.Contains(Words, agent, StringComparison.Ordinal);
+        Assert.Contains("A person on Linux with no preference is offered Jason Desktop.", agent, StringComparison.Ordinal);
+        Assert.Contains("Given the three lines, the person has asked for the install this page makes: do it, with no choice offered.", agent, StringComparison.Ordinal);
         Assert.Contains("The last line of that first message names Jason Desktop once", agent, StringComparison.Ordinal);
-        Assert.Contains("Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.", agent, StringComparison.Ordinal);
-        Assert.Contains("Install nothing but Jason, or Jason Desktop where the person took it, and build nothing (§3).", agent, StringComparison.Ordinal);
+        Assert.Contains("which the person opens as any other application and you do not open for them", agent, StringComparison.Ordinal);
+        Assert.Contains("On Linux, where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.", agent, StringComparison.Ordinal);
+        Assert.Contains("Install nothing but Jason, and on Linux Jason Desktop where the person took it, and build nothing (§3).", agent, StringComparison.Ordinal);
+        Assert.DoesNotContain("marks neither as the one to take", agent, StringComparison.Ordinal);
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("An agent that installs Jason never needs the desktop", install, StringComparison.Ordinal);
+        Assert.Contains(Words, install, StringComparison.Ordinal);
         Assert.DoesNotContain("Install it only when the person asks", install, StringComparison.Ordinal);
 
         // The desktop's Command Line item places `jason-desktop` where another `jason` already stands, so no page says
-        // it always puts a `jason` in the terminal.
-        Assert.Contains("puts a command in the terminal: `jason`, or `jason-desktop` where another `jason` already stands", install, StringComparison.Ordinal);
+        // it always puts a `jason` in the terminal; the install page says it of Linux, where the deb and the AppImage
+        // are installed beside the command line.
+        Assert.Contains("On Linux the Command Line item of its menu puts a command in the terminal: `jason`, or `jason-desktop` where another `jason` already stands", install, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` the terminal finds", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
-        Assert.Contains("Two ways in, to the same Jason.", readme, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows both make one installation: Jason Desktop and the `jason` it carries.", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("Prefer a window?", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
         Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("The full experience is still a session with your agent", readme, StringComparison.Ordinal);
-        Assert.Contains("on Windows, only where the PATH holds the folder it uses", readme, StringComparison.Ordinal);
+
+        // What two installations said, and what made the application optional on macOS or Windows, is gone from every
+        // page that speaks of installing Jason.
+        foreach (var (page, text) in new[] { ("README.md", readme), ("docs/INSTALL.md", install), ("docs/handbook.md", Flat(Page("docs", "handbook.md"))), ("docs/desktop.md", Flat(Page("docs", "desktop.md"))) })
+        {
+            foreach (var said in new[] { "Two ways in", "two ways Jason is installed", "Jason installs two ways", "never needs the desktop", "the other way to install Jason", "The other way, Jason Desktop", "the other way into this same installation", "rather than a terminal" })
+            {
+                Assert.False(text.Contains(said, StringComparison.Ordinal), $"{page} still says \"{said}\".");
+            }
+        }
 
         // The desktop's own page says the same as the README's section, with no ranking of one way above the other.
         var desktop = Flat(Page("docs", "desktop.md"));
@@ -1321,7 +1335,8 @@ public partial class PageClaimsTests
 
         var pointer = readme[licence..prompt].Split("\n\n").Select(Flat).SingleOrDefault(paragraph => paragraph.Contains("[docs/INSTALL.md](INSTALL.md)", StringComparison.Ordinal));
         Assert.True(pointer is not null, "Between the licence sentence and the prompt, no paragraph links the install page.");
-        Assert.Contains("A one-liner installs the executable and ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line your terminal and your agents use. It is installed once, updated once and removed once, and a one-liner installs it.", pointer, StringComparison.Ordinal);
+        Assert.Contains("On Linux a one-liner installs the executable. Either way it ends by teaching it its role skills, without which every role it launches runs untaught.", pointer, StringComparison.Ordinal);
         Assert.Contains("teaching it its skills again where that step said it could not", pointer, StringComparison.Ordinal);
     }
 
@@ -1559,14 +1574,14 @@ public partial class PageClaimsTests
 
         string[] steps =
         [
-            "1. Download the archive for this machine and `checksums.txt` beside it: for the latest release,",
+            "1. Download the archive and `checksums.txt` beside it: for the latest release,",
             "2. Check the archive's SHA-256 against its line in `checksums.txt`",
             "and stop if they differ.",
             "3. Unpack it into a new temporary directory",
             "named `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`.",
             "4. Run `jason --version` there, by its full path.",
             "5. Put that directory on the PATH, as *Putting it on the PATH yourself* above says",
-            "Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into have done their work: you may delete those three — only those — with `Remove-Item -Recurse <path>` on Windows and `rm -r <path>` elsewhere.",
+            "Once `jason --version` answers there, the archive, `checksums.txt` and the temporary directory you unpacked into have done their work: you may delete those three — only those — with `rm -r <path>`.",
         ];
 
         var at = -1;
@@ -1593,14 +1608,13 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
-    /// An archive can carry the mark of the web, and what it unpacks inherits it, so an executable placed by hand is
-    /// stopped the first time it runs. The script clears the mark from the executable it unpacks; the steps by hand say
-    /// to do the same.
+    /// The steps by hand are Linux's: on Windows the install is Jason Desktop's installer, which the script checks and runs,
+    /// so the page gives no executable for a person to unpack and unblock there.
     /// </summary>
     [Fact]
-    public void The_hand_path_unblocks_the_executable_on_Windows() =>
-        Assert.Contains(
-            "`Unblock-File` the executable, as `install.ps1` does.",
+    public void The_hand_path_places_no_executable_on_Windows() =>
+        Assert.DoesNotContain(
+            "Unblock-File",
             Flat(Subsection(Section(Page("docs", "INSTALL.md"), "## 2. "), "### By hand")),
             StringComparison.Ordinal);
 
@@ -2529,7 +2543,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:5e3f5eac6c30996c2cf37873717d9a7892579cf820fd8a5a01ba0f766e99e1be";
+    private const string AgentSectionDigest = "sha256:55fa584610e818b443b960637b4f187df6f7bd8f3a579519498b31d67e90ef9d";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

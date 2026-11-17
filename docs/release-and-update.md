@@ -158,15 +158,19 @@ application by hand, which leaves the data directory as the newer version left i
 keeps there is the AppImage file itself, and a deb update keeps nothing: going back from a deb is installing the
 previous release's `jason-desktop-linux-x64.deb` with `sudo apt install`.
 
-**Taking the desktop off** is in two steps, what it placed and then the application, and the data directory, the
-harness root and the updater's cache stay either way. On Windows the uninstaller does both: it stops the runtime the
-application carries, removes nothing when that runtime does not stop, and takes off the PATH command's files that are
-its own, Open Jason at Login and the runtime's logon start when that start names the application's own `jason`, and the demo's data directory and harness root. On
-macOS and on Linux no installer starts the application to clean up, so choose Remove What Jason Placed… in the Jason menu
-(or the tray's) first: it takes the same steps, stops a runtime started from any copy of an AppImage's `jason`, removes
-those copies once nothing runs from them, says what came of each step and what to do by hand for one that failed, and
-says what removes the application itself: moving Jason.app to the Trash, `sudo apt remove jason-desktop` for the deb, or
-deleting the AppImage file. [desktop.md](desktop.md) lists the same steps for a Jason that will not start.
+**Taking the desktop off.** On macOS and Windows, Jason is one installation: the Jason Desktop application, which
+carries `jason`, the command line your terminal and your agents use. It is removed once, by the one uninstall, the
+carried `jason uninstall` (§9), from a terminal on both systems, from Installed apps on Windows and from Uninstall
+Jason… in the Jason menu on macOS: what Jason placed, then the application; the data directory stays unless the person
+says otherwise, and the harness root always. On Linux it is in two steps, what it placed and then the application, and
+the data directory, the harness root and the updater's cache stay: no installer starts the application to clean up, so
+choose Remove What Jason Placed… in the Jason menu (or the tray's) first: it stops the runtime the application carries,
+removes nothing when that runtime does not stop, takes off the PATH command's files that are its own, Open Jason at
+Login and the runtime's logon start when that start names the application's own `jason`, and the demo's data directory
+and harness root, stops a runtime started from any copy of an AppImage's `jason`, removes those copies once nothing runs
+from them, says what came of each step and what to do by hand for one that failed, and says what removes the
+application itself: `sudo apt remove jason-desktop` for the deb, or deleting the AppImage file. [desktop.md](desktop.md)
+lists the same steps for a Jason that will not start.
 
 ## 3. The manifest
 
@@ -410,20 +414,28 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 irm https://get.jasonharness.ai/releases/latest/download/install.ps1 | iex
 ```
 
-Each script works out your platform, downloads the archive for it, **verifies the SHA-256 before unpacking**,
-installs the executable with its licence and the third-party notices beside it, as `jason-LICENSE` and
-`jason-THIRD-PARTY-NOTICES`, and adds its directory to your PATH behind a marker line it will recognise next time.
-Pass `--no-modify-path` to leave your PATH alone, and `--version X.Y.Z` to install a particular release.
+Each script works out your platform. `--version X.Y.Z` installs a particular release.
 
-Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
+On macOS and Windows, Jason is one installation: the Jason Desktop application, which carries `jason`, the command line
+your terminal and your agents use. It is installed once, updated once and removed once. There the script downloads the
+application's package, **verifies its SHA-256** and its signature, puts it in its place — on a Mac `/Applications`
+where this account may write there, else `~/Applications`; on Windows the installer, run silently, into
+`%LOCALAPPDATA%\Programs\jason-desktop` — and opens nothing. Then the `jason` the application carries runs
+`jason install --roles` (§9): `jason` in the terminal, the skills of every agent host found, an older command-line
+install retired, and the role skills. [`docs/INSTALL.md`](INSTALL.md) §2 says what each script does, step by step.
+
+On Linux the script downloads the archive, **verifies the SHA-256 before unpacking**, installs the executable with its
+licence and the third-party notices beside it, as `jason-LICENSE` and `jason-THIRD-PARTY-NOTICES`, and adds its
+directory to your PATH behind a marker line it will recognise next time. Pass `--no-modify-path` to leave your PATH
+alone. Its last step, before the licence it installed under, is the role skills: it runs the installed executable's
 `jason skills install --roles-only`, which deploys them from the release's `jason-skills.zip`. Where that fails, the
 executable is still installed and the run still succeeds, one line says the role skills were not deployed and what
 to run, and `jason status` names the same line. A script pointed at a feed in a directory leaves the step out and
 says what to run instead, because the skills verb reads no directory.
 
-The default install directories are `~/.local/bin/jason` on macOS and Linux, and
-`%LOCALAPPDATA%\Programs\jason\jason.exe` on Windows. Both are per-user: nothing here needs administrator
-rights, and nothing is installed for other people on the machine.
+The terminal's `jason` is `~/.local/bin/jason` on macOS and Linux, on a Mac the wrapper that runs the application's
+own, and on Windows the application's `resources\bundle\jason.exe`, its folder on this account's Path. All of it is
+per-user: nothing here needs administrator rights, and nothing is installed for other people on the machine.
 
 They resolve to the latest release, so where none has been published they answer 404 and there is nothing to
 install from — build from source until one has. [`docs/INSTALL.md`](INSTALL.md) is the whole path either way,
