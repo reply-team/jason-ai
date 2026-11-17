@@ -593,10 +593,13 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   run in a world of its own beside the page's (`demoLinkScript`), which marks the element whose whole text is the address,
   keeps marking it as the page draws its note again, makes it focusable with the link role, and on a person's click or
   Enter there, never on load, asks for the address as a navigation of the view. The view's guard refuses that navigation
-  as it refuses every other, and its reader (`demoLinkOpener`), for `https://github.com/reply-team/jason-ai`
-  (`demoRepository`) compared whole, calls `openDemoRepository` in `src/main.ts`, which is handed no address and gives
-  `shell.openExternal` that constant, at most once in two seconds (`demoLinkSpanMs`), so a page asking again and again
-  opens one tab; any other address opens nothing. The view's pop-ups stay denied, the policy is
+  as it refuses every other, and its reader (`demoLinkOpener`), asked of the main frame's navigations alone (a frame's
+  within the page and a redirect ask nothing), for `https://github.com/reply-team/jason-ai` (`demoRepository`) compared
+  whole, calls `openDemoRepository` in `src/main.ts`, which is handed no address and gives `shell.openExternal` that
+  constant. It does so only within a second (`demoLinkGestureMs`) of a person's left click let go or Enter pressed in the
+  page's view, which the main process sees as input reaching the view (`watchDemoGestures`, by `input-event` and
+  `before-input-event`), so a page that asks for the address on load or on its own opens nothing; and at most once in two
+  seconds (`demoLinkSpanMs`), so a person clicking again and again opens one tab. Any other address opens nothing. The view's pop-ups stay denied, the policy is
   unchanged and the page's file is not edited; in a browser tab the address stays text. The open is logged as
   `demo_link_opened`, or `demo_link_open_failed`, without the address. A Demo start appends, before Electron is ready, the
   Chromium switch `host-resolver-rules` with `MAP * ~NOTFOUND` (`demoBeforeReady`), so the run resolves no host name at
@@ -692,7 +695,8 @@ On Windows, a program npm installed is a batch file; the desktop reads which scr
 with Node. `test/process-guard.test.ts` holds this, and also refuses a `require` of `child_process`, an IPC handler
 registered anywhere but `src/ipc.ts` (on `ipcMain` or on a `webContents.ipc`), `shell.openPath`, and `shell.openExternal`
 outside the navigation lock in `src/main.ts`, but for the Demo's opener there, `openDemoRepository`, which hands it the
-repository's address alone, once.
+repository's address alone, once, and is called once, by the Demo window; `src/main.ts` binds no name of its own to that
+address.
 
 What the desktop tells Reply about itself is one label in the User-Agent of reply-cli's requests and nothing else:
 `REPLY_CLIENT=jason-harness/<the bundle's version, less any build metadata after a plus sign>`, set in the environment of

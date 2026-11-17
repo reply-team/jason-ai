@@ -30,6 +30,7 @@ import {
     demoStripAt,
     demoStripSheets,
     demoBeforeReady,
+    demoLinkGestureMs,
     demoLinkMark,
     demoLinkOpener,
     demoLinkScript,
@@ -41,6 +42,8 @@ import {
     demoResolverRule,
     noDragSheet,
     switchChoice,
+    isDemoLinkGesture,
+    watchDemoGestures,
     type DemoRefusal,
 } from '../src/demo-page.ts';
 import { persists } from '../src/window-pairing.ts';
@@ -892,25 +895,40 @@ test('the sheets’ three numbers are the ones the strip’s measures give, and 
 
 // ---- The repository's address in the page's note: the desktop's link, and the one address the view hands out -------
 
-/** The page's view sealed as the window seals it: the desktop's link sheet and script, and the reader that opens the one address. */
+/**
+ * The page's view sealed as the window seals it: the desktop's link sheet and script, the watch over the input that
+ * reaches the view, and the reader that opens the one address.
+ */
 async function sealedPage() {
     const made = stand();
     const refused: DemoRefusal[] = [];
     const opened: string[] = [];
+    const asks: string[] = [];
     const clock = { now: 1_000_000 };
-    const asked = demoLinkOpener(() => opened.push(demoRepository), () => clock.now);
+    const gestures = watchDemoGestures(made.contents, () => clock.now);
+    const opener = demoLinkOpener(() => opened.push(demoRepository), gestures, () => clock.now);
+    const asked = (url: string) => {
+        asks.push(url);
+        return opener(url);
+    };
     await sealView(made.contents, demoPage, { read: () => pageBytes, refused: (kind) => refused.push(kind), sheet: demoLinkSheet, script: demoLinkScript, asked });
-    return { ...made, refused, opened, clock };
+    /** A person's click let go in the view, as Electron reports it to the main process. */
+    const click = () => call(made.on.get('input-event'), event(), { type: 'mouseUp', button: 'left', clickCount: 1, x: 1, y: 1, modifiers: [] });
+    /** Enter pressed in the view, as Electron reports it before the page sees it. */
+    const enter = () => call(made.on.get('before-input-event'), event(), { type: 'keyDown', key: 'Enter', code: 'Enter', isAutoRepeat: false });
+    return { ...made, refused, opened, asks, clock, click, enter };
 }
 
-const navigate = (view: Stand, name: string, url: string) => {
-    const stop = event({ url, isMainFrame: true });
+const navigate = (view: Stand, name: string, url: string, isMainFrame = true) => {
+    const stop = event({ url, isMainFrame });
     call(view.on.get(name), stop);
     return stop.stopped;
 };
 
-test('the repository’s address opens in the browser once, and the view stays where it was', async () => {
+test('a person’s click, then the repository’s address: it opens in the browser once, and the view stays where it was', async () => {
     const view = await sealedPage();
+    view.click();
+    view.clock.now += 50;
     assert.ok(navigate(view, 'will-navigate', demoRepository), 'the navigation is refused');
     assert.deepEqual(view.opened, [demoRepository]);
     // Electron asks about the same navigation of the main frame a second time: the span opens it once.
@@ -921,19 +939,60 @@ test('the repository’s address opens in the browser once, and the view stays w
     assert.deepEqual(view.refused, []);
 });
 
-test('the same address again within the span opens nothing; after the span it opens again', async () => {
+test('the repository’s address with no click or Enter before it opens nothing: a page that asks on load, or on its own, is refused', async () => {
     const view = await sealedPage();
+    for (let step = 0; step < 5; step++) {
+        assert.ok(navigate(view, 'will-navigate', demoRepository));
+        view.clock.now += demoLinkSpanMs + 1;
+    }
+    assert.deepEqual(view.opened, []);
+    assert.ok(view.refused.length > 0 && view.refused.every((kind) => kind === 'navigation'));
+});
+
+test('a click or Enter opens the address within the gesture’s second, and after that second nothing', async () => {
+    const inside = await sealedPage();
+    inside.enter();
+    inside.clock.now += demoLinkGestureMs;
+    assert.ok(navigate(inside, 'will-navigate', demoRepository));
+    assert.deepEqual(inside.opened, [demoRepository], 'Enter, then the address inside the second: it opens once');
+
+    const after = await sealedPage();
+    after.click();
+    after.clock.now += demoLinkGestureMs + 1;
+    assert.ok(navigate(after, 'will-navigate', demoRepository));
+    assert.deepEqual(after.opened, [], 'the address after the second opens nothing');
+    assert.deepEqual(after.refused, ['navigation']);
+    assert.equal(demoLinkGestureMs, 1000);
+});
+
+test('the same address again within the span opens nothing, a gesture before it or not; after the span a new gesture opens it again', async () => {
+    const view = await sealedPage();
+    view.click();
     navigate(view, 'will-navigate', demoRepository);
     view.clock.now += demoLinkSpanMs - 1;
+    view.click();
     assert.ok(navigate(view, 'will-navigate', demoRepository));
-    assert.deepEqual(view.opened, [demoRepository], 'a page asking again and again opens one tab');
+    assert.deepEqual(view.opened, [demoRepository], 'a person clicking again and again opens one tab');
     view.clock.now += 1;
+    view.click();
     assert.ok(navigate(view, 'will-navigate', demoRepository));
     assert.deepEqual(view.opened, [demoRepository, demoRepository]);
     assert.equal(demoLinkSpanMs, 2000);
 });
 
-test('any other address opens nothing and is refused: another address, a path, a query, a fragment, another scheme, another case', async () => {
+test('only the main frame’s navigation is read: a frame’s within the page and a redirect are refused and ask nothing', async () => {
+    const view = await sealedPage();
+    view.click();
+    assert.ok(navigate(view, 'will-frame-navigate', demoRepository, false));
+    assert.ok(navigate(view, 'will-navigate', demoRepository, false));
+    assert.ok(navigate(view, 'will-redirect', demoRepository, true));
+    assert.ok(navigate(view, 'will-redirect', demoRepository, false));
+    assert.deepEqual(view.asks, [], 'the reader is asked nothing');
+    assert.deepEqual(view.opened, []);
+    assert.ok(view.refused.length > 0 && view.refused.every((kind) => kind === 'navigation'));
+});
+
+test('any other address opens nothing and is refused, a gesture before it or not: another address, a path, a query, a fragment, another scheme', async () => {
     const view = await sealedPage();
     const others = [
         'https://github.com/reply-team/jason-ai/releases',
@@ -948,15 +1007,12 @@ test('any other address opens nothing and is refused: another address, a path, a
         'ws://github.com/reply-team/jason-ai',
         'file://github.com/reply-team/jason-ai',
         'github.com/reply-team/jason-ai',
-        'HTTPS://github.com/reply-team/jason-ai',
-        'https://GitHub.com/reply-team/jason-ai',
-        'https://github.com/Reply-Team/Jason-AI',
-        ' https://github.com/reply-team/jason-ai',
         'https://github.com.example.com/reply-team/jason-ai',
         'https://user@github.com/reply-team/jason-ai',
         'https://example.com/',
     ];
     for (const url of others) {
+        view.click();
         for (const name of ['will-navigate', 'will-frame-navigate', 'will-redirect']) assert.ok(navigate(view, name, url), `${name} ${url} is refused`);
     }
     assert.deepEqual(view.opened, []);
@@ -966,13 +1022,35 @@ test('any other address opens nothing and is refused: another address, a path, a
     assert.deepEqual(view.opened, []);
 });
 
-test('the opener hands out the one address alone, whatever it is asked', () => {
+test('the opener compares the text it is handed whole, so any other text, the same letters in another case included, is not the address', () => {
+    // Chromium hands a navigation's address over canonical (a host in lower case, no default port), so in a view these
+    // reach the opener as the address itself; this row is about the comparison alone.
     const opened: string[] = [];
-    const ask = demoLinkOpener(() => opened.push(demoRepository), () => 0);
-    assert.equal(ask('https://example.com/'), false);
-    assert.equal(ask('jason-switch://switch/live'), false);
+    const ask = demoLinkOpener(() => opened.push(demoRepository), () => 0, () => 0);
+    for (const text of ['https://example.com/', 'jason-switch://switch/live', 'HTTPS://github.com/reply-team/jason-ai', 'https://GitHub.com/reply-team/jason-ai', 'https://github.com:443/reply-team/jason-ai', ' https://github.com/reply-team/jason-ai']) {
+        assert.equal(ask(text), false, text);
+    }
     assert.equal(ask(demoRepository), true);
     assert.deepEqual(opened, [demoRepository]);
+});
+
+test('a gesture is the left button let go or Enter pressed, nothing else', () => {
+    assert.ok(isDemoLinkGesture({ type: 'mouseUp', button: 'left' }));
+    assert.ok(isDemoLinkGesture({ type: 'keyDown', key: 'Enter' }));
+    for (const input of [
+        { type: 'mouseUp', button: 'right' },
+        { type: 'mouseUp', button: 'middle' },
+        { type: 'mouseUp' },
+        { type: 'mouseDown', button: 'left' },
+        { type: 'mouseMove' },
+        { type: 'mouseWheel' },
+        { type: 'keyDown', key: 'Enter', isAutoRepeat: true },
+        { type: 'keyUp', key: 'Enter' },
+        { type: 'keyDown', key: ' ' },
+        { type: 'char', key: 'Enter' },
+    ]) {
+        assert.equal(isDemoLinkGesture(input), false, JSON.stringify(input));
+    }
 });
 
 test('every document of the page’s view gets the link’s sheet, of the user’s origin, and the script, in a world of its own', async () => {
@@ -989,12 +1067,12 @@ test('every document of the page’s view gets the link’s sheet, of the user�
     assert.ok(!switchView.calls.some((name) => name.startsWith('executeJavaScript')));
 });
 
-test('the window seals the page’s view with the link, the script and the one opener, and our switch’s without them', () => {
+test('the window seals the page’s view with the link, the script, the gesture watch and the one opener, and our switch’s without them', () => {
     const source = readFileSync(join(root, 'src', 'demo-window.ts'), 'utf8');
     assert.match(source, /sheet: sheets === null \? demoLinkSheet : `\$\{sheets\.page\} \$\{demoLinkSheet\}`,/);
     assert.match(source, /script: demoLinkScript,/);
-    assert.match(source, /asked: demoLinkOpener\(deps\.open\),/);
-    assert.equal(source.match(/demoLinkScript|demoLinkOpener/g)?.length, 4, 'the import and the page’s view alone');
+    assert.match(source, /asked: demoLinkOpener\(deps\.open, watchDemoGestures\(page\.webContents\)\),/);
+    assert.equal(source.match(/demoLinkScript|demoLinkOpener|watchDemoGestures/g)?.length, 6, 'the import and the page’s view alone');
 });
 
 test('the address is spelled once, is the one the page’s note names, and the sheet and the script name no other', () => {

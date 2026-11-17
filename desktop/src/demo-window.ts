@@ -24,6 +24,7 @@ import {
     onceEach,
     sealView,
     switchChoice,
+    watchDemoGestures,
     type DemoRefusal,
 } from './demo-page.ts';
 
@@ -75,7 +76,7 @@ export async function openDemo(window: BrowserWindow, deps: DemoWindowDeps): Pro
         refused: onceEach((kind) => deps.refused('page', kind)),
         sheet: sheets === null ? demoLinkSheet : `${sheets.page} ${demoLinkSheet}`,
         script: demoLinkScript,
-        asked: demoLinkOpener(deps.open),
+        asked: demoLinkOpener(deps.open, watchDemoGestures(page.webContents)),
     });
     await sealView(ours.webContents, demoSwitch, {
         read: fileOf(switchFile),

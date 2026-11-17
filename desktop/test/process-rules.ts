@@ -136,6 +136,13 @@ export const ownPageCaller = "src/main.ts: openTab's open, in the Open in browse
  */
 export const demoOpener = { definition: 'function openDemoRepository(log: Logger): void {', call: 'shell.openExternal(demoRepository)' } as const;
 
+/** The Demo opener's name: in main.ts its definition and one call, the Demo window's `open`; named nowhere else. */
+const demoOpenerName = /\bopenDemoRepository\b/g;
+/** The opener's call, the one place main.ts names it but its definition. */
+const demoOpenerCall = 'open: () => openDemoRepository(log),';
+/** A name in main.ts that could stand for the address the opener opens: only the import from demo-page.ts may name it. */
+const demoRepositoryBound = /\bdemoRepository\s*=(?!=)|\bas\s+demoRepository\b|\bdemoRepository\s*:|:\s*demoRepository\b/g;
+
 /** The body of main.ts's Demo opener, or null. */
 function demoOpenerBody(text: string): { start: number; end: number } | null {
     const start = text.indexOf(demoOpener.definition);
@@ -277,6 +284,17 @@ export function processViolations(path: string, text: string): string[] {
         }
         opened.set(opener, (opened.get(opener) ?? 0) + 1);
         if (opened.get(opener) === 2) found.push(`${path} hands a URL to the system browser more than once in ${opener}`);
+    }
+    const demoNames = [...text.matchAll(demoOpenerName)].filter((match) => !/^\s*(?:\*|\/\/|\/\*)/.test(lineAt(text, match.index)));
+    if (path !== 'src/main.ts' && demoNames.length > 0) found.push(`${path} names the Demo's opener, which only main.ts may`);
+    if (path === 'src/main.ts' && demoNames.length > 0) {
+        const callers = demoNames.filter((match) => !text.startsWith(demoOpener.definition, match.index - 'function '.length));
+        if (callers.length !== 1 || !lineAt(text, callers[0]!.index).trim().startsWith(demoOpenerCall)) {
+            found.push(`${path} calls the Demo's opener other than once, as the Demo window's ${demoOpenerCall}`);
+        }
+    }
+    if (path === 'src/main.ts') {
+        for (const match of text.matchAll(demoRepositoryBound)) found.push(`${path} binds a name of its own to the repository's address: ${match[0].trim()}`);
     }
     const outsideLock = (index: number) => lock === null || index < lock.start || index > lock.end;
     if (path !== 'src/browser-bridge.ts') {

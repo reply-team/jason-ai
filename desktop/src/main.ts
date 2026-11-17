@@ -121,8 +121,9 @@ function isHttps(url: string): boolean {
 
 /**
  * The Demo's one way to the system browser: it takes no address and opens the repository's, the constant the page's note
- * names (`demoRepository`). When it is opened is the page's view's to say (`demoLinkOpener`: a navigation to exactly that
- * address, at most once in two seconds); what is opened is this constant alone.
+ * names (`demoRepository`). When it is opened is the page's view's to say (`demoLinkOpener`: a navigation of its main
+ * frame to exactly that address, within a second of a person's click or Enter there, at most once in two seconds); what
+ * is opened is this constant alone.
  */
 function openDemoRepository(log: Logger): void {
     shell.openExternal(demoRepository).then(

@@ -231,8 +231,9 @@ export interface SealDeps {
     /** A script of the desktop's own, run in every document of the view in a world of its own (`demoLinkWorld`), never the page's. */
     script?: string | undefined;
     /**
-     * A navigation the view asked for, after it has been stopped: the switch reads the person's choice from it, and
-     * answers true when it was one, which is then not told as a refusal.
+     * A navigation of the view's main frame, asked for by the view and stopped: the switch reads the person's choice from
+     * it, and answers true when it was one, which is then not told as a refusal. A frame's navigation within the page and
+     * a redirect are refused and asked nothing.
      */
     asked?(url: string): boolean;
 }
@@ -328,15 +329,15 @@ export async function sealView(contents: WebContents, view: DemoView, deps: Seal
  * and the page's drag regions.
  */
 function sealContents(contents: WebContents, view: DemoView, deps: SealDeps, refuse: (kind: DemoRefusal) => void): void {
-    const guard = (event: Stoppable, url: string, isMainFrame: boolean) => {
+    const guard = (event: Stoppable, url: string, isMainFrame: boolean, asks: boolean) => {
         if (navigationAllowed(view, url, isMainFrame)) return;
         event.preventDefault();
-        if (deps.asked?.(url) === true) return;
+        if (asks && isMainFrame && deps.asked?.(url) === true) return;
         refuse('navigation');
     };
-    contents.on('will-navigate', (event) => guard(event, event.url, event.isMainFrame));
-    contents.on('will-frame-navigate', (event) => guard(event, event.url, event.isMainFrame));
-    contents.on('will-redirect', (event) => guard(event, event.url, event.isMainFrame));
+    contents.on('will-navigate', (event) => guard(event, event.url, event.isMainFrame, true));
+    contents.on('will-frame-navigate', (event) => guard(event, event.url, event.isMainFrame, true));
+    contents.on('will-redirect', (event) => guard(event, event.url, event.isMainFrame, false));
     // A navigation Electron asks no handler about, `about:blank` from the page's script, is undone once it is made: the
     // main frame shows its own address or is loaded with it again.
     contents.on('did-navigate', (_event, url) => {
@@ -476,16 +477,54 @@ export const demoLinkScript = `(() => {
 })();`;
 
 /**
- * The page view's reader of a refused navigation: a navigation to the repository's address, compared whole, calls `open`,
- * which opens that address and is handed none, at most once in `demoLinkSpanMs`, and is answered as the person's choice
- * rather than a refusal; any other address is refused and opens nothing. Electron asks about one navigation of the main
- * frame twice (`will-navigate`, `will-frame-navigate`); the span opens it once.
+ * How long after a person's own click or Enter in the page's view a navigation to the repository's address may open it.
+ * The main process cannot see what the page's script does with a gesture; it sees the input that reached the view, so a
+ * page that asks for the address on load, or again and again, opens nothing.
  */
-export function demoLinkOpener(open: () => void, now: () => number = Date.now): (url: string) => boolean {
+export const demoLinkGestureMs = 1000;
+
+/** What the gesture watch reads of an input event that reached the view: its type, and a key's name or a mouse button. */
+export interface DemoInput {
+    type: string;
+    key?: string;
+    button?: string;
+    isAutoRepeat?: boolean;
+}
+
+/** Pure: whether an input event is a person's act on a link: the left mouse button let go, or Enter pressed (not held). */
+export function isDemoLinkGesture(input: DemoInput): boolean {
+    if (input.type === 'mouseUp') return input.button === 'left';
+    return input.type === 'keyDown' && input.key === 'Enter' && input.isAutoRepeat !== true;
+}
+
+/**
+ * Watches the input that reaches the page's view, a mouse button's by `input-event` and a key's by `before-input-event`,
+ * and answers when the last person's act on a link (`isDemoLinkGesture`) reached it, or null before any.
+ */
+export function watchDemoGestures(contents: Pick<WebContents, 'on'>, now: () => number = Date.now): () => number | null {
+    let last: number | null = null;
+    const seen = (input: DemoInput) => {
+        if (isDemoLinkGesture(input)) last = now();
+    };
+    contents.on('input-event', (_event, input) => seen(input as DemoInput));
+    contents.on('before-input-event', (_event, input) => seen({ type: input.type, key: input.key, isAutoRepeat: input.isAutoRepeat }));
+    return () => last;
+}
+
+/**
+ * The page view's reader of a refused navigation of its main frame: a navigation to the repository's address, compared
+ * as text whole, within `demoLinkGestureMs` of a person's click or Enter in the view (`gestureAt`), calls `open`, which
+ * opens that address and is handed none, at most once in `demoLinkSpanMs`, and is answered as the person's choice rather
+ * than a refusal. The address with no such act before it, and any other address, are refused and open nothing. Electron
+ * asks about one navigation of the main frame twice (`will-navigate`, `will-frame-navigate`); the span opens it once.
+ */
+export function demoLinkOpener(open: () => void, gestureAt: () => number | null, now: () => number = Date.now): (url: string) => boolean {
     let last: number | null = null;
     return (url) => {
         if (url !== demoRepository) return false;
         const at = now();
+        const gesture = gestureAt();
+        if (gesture === null || at - gesture > demoLinkGestureMs) return false;
         if (last !== null && at - last < demoLinkSpanMs) return true;
         last = at;
         open();

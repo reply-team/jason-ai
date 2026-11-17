@@ -169,19 +169,43 @@ test('outside the navigation lock only the Demo’s opener reaches the system br
     const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
     assert.ok(main.includes(`${demoOpener.definition}\n    ${demoOpener.call}.then(`), 'the Demo’s opener takes no address and opens the constant');
     assert.match(main, /open: \(\) => openDemoRepository\(log\),/);
+    assert.deepEqual(processViolations('src/main.ts', main), []);
     const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
     const opener = (body: string) => `${demoOpener.definition}\n${body}\n}\n`;
-    assert.deepEqual(processViolations('src/main.ts', lock + opener(`    ${demoOpener.call}.then(() => 0);`)), []);
+    const called = '            open: () => openDemoRepository(log),\n';
+    assert.deepEqual(processViolations('src/main.ts', lock + opener(`    ${demoOpener.call}.then(() => 0);`) + called), []);
     for (const planted of [
         '    shell.openExternal(url).then(() => 0);',
         "    shell.openExternal('https://github.com/reply-team/jason-ai/releases');",
         `    ${demoOpener.call};\n    ${demoOpener.call};`,
     ]) {
-        assert.notDeepEqual(processViolations('src/main.ts', lock + opener(planted)), [], planted);
+        assert.notDeepEqual(processViolations('src/main.ts', lock + opener(planted) + called), [], planted);
     }
     // The same function anywhere but main.ts, or a call beside it in main.ts, is outside every allowed place.
     assert.notDeepEqual(processViolations('src/desk.ts', opener(`    ${demoOpener.call};`)), []);
-    assert.notDeepEqual(processViolations('src/main.ts', `${lock}${opener(`    ${demoOpener.call};`)}function other() {\n    ${demoOpener.call};\n}\n`), []);
+    assert.notDeepEqual(processViolations('src/main.ts', `${lock}${opener(`    ${demoOpener.call};`)}${called}function other() {\n    ${demoOpener.call};\n}\n`), []);
+});
+
+test('the Demo’s opener has one caller, the Demo window’s open, and main.ts binds no name of its own to the address', () => {
+    const lock = "function lockNavigation(contents) {\n    const leave = (url) => void shell.openExternal(url);\n}\nconst { leave: toBrowser, ownPage } = lockNavigation(contents);\n";
+    const defined = `${lock}import { demoBeforeReady, demoRepository } from './demo-page.ts';\n${demoOpener.definition}\n    ${demoOpener.call}.then(() => 0);\n}\n`;
+    const called = '            open: () => openDemoRepository(log),\n';
+    assert.deepEqual(processViolations('src/main.ts', defined + called), []);
+    for (const planted of [
+        '',
+        `${called}${called}`,
+        `${called}    reload: () => openDemoRepository(log),\n`,
+        `${called}const again = openDemoRepository;\n`,
+        `${called}const demoRepository = 'https://example.com/';\n`,
+        `${called}let demoRepository = other;\n`,
+        `${called}import { other as demoRepository } from './other.ts';\n`,
+        `${called}const { other: demoRepository } = values;\n`,
+    ]) {
+        assert.notDeepEqual(processViolations('src/main.ts', defined + planted), [], planted);
+    }
+    // A comment names the opener and calls nothing; any other module naming it fires the rule.
+    assert.deepEqual(processViolations('src/main.ts', `${defined}${called}// openDemoRepository opens the repository.\n`), []);
+    assert.notDeepEqual(processViolations('src/demo-window.ts', 'void openDemoRepository(log);\n'), []);
 });
 
 test('the opener of the runtime\'s own page is called only by the bridge\'s opening act, and a planted call anywhere else fires the rule', () => {
