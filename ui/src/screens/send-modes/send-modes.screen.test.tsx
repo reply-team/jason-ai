@@ -248,7 +248,7 @@ describe('the doubts on an approval card', () => {
     it('says who doubted and why, with the sentence they wrote as text', () => {
         mount(marta(), card('approval.get/with-doubts'));
 
-        expect(screen.getByRole('heading', { name: 'Doubts about this message' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Why this message was flagged' })).toBeTruthy();
         expect(
             screen.getByText(
                 'A person asked you to look at this: It touches a price, a contract, a legal matter or a complaint.',
@@ -262,10 +262,10 @@ describe('the doubts on an approval card', () => {
         (unknown.preview['doubts'] as { code: string; source: string }[])[0]!.code = 'a_new_code';
         (unknown.preview['doubts'] as { source: string }[])[0]!.source = 'review';
         mount(marta(), unknown);
-        expect(screen.getByText('A person doubted this: a_new_code')).toBeTruthy();
+        expect(screen.getByText('A person flagged this: a_new_code')).toBeTruthy();
         cleanup();
         mount(marta(), card('approval.get/pending-with-preview'));
-        expect(screen.queryByRole('heading', { name: 'Doubts about this message' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Why this message was flagged' })).toBeNull();
     });
 });
 
@@ -421,10 +421,7 @@ describe('why the send mode held a send, or let one go', () => {
             'approval.get/park-sent-from-chat',
             "This message was written in Jason's chat, so it waits for you however messages are set to go.",
         ],
-        [
-            'approval.get/park-doubted',
-            'A doubt was raised about this message, so it waits for you; the doubt is below.',
-        ],
+        ['approval.get/park-doubted', 'This message was flagged, so it waits for you; the reason is below.'],
         [
             'approval.get/park-awaiting-judgement',
             'A reply from this person has not been judged yet, so nothing goes to them automatically until it is.',
@@ -475,7 +472,7 @@ describe('why the send mode held a send, or let one go', () => {
         const api = held();
         mount(api, structuredClone(fixtures['approval.get/park-doubted'].response) as unknown as Approval);
         expect(
-            screen.getByText('The critic role doubted this: It makes a claim the brief or your notes do not support.'),
+            screen.getByText('The critic role flagged this: It makes a claim the brief or your notes do not support.'),
         ).toBeTruthy();
         expect(screen.getByText('Their words: It promises a discount the brief never offers.')).toBeTruthy();
         await waitFor(() => expect(operations(api)).toContain('workitem.get'));

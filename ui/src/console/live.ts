@@ -2,6 +2,7 @@
 // runtime knows of, and nothing here is markup: the panels escape what they draw.
 import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSummary, JournalEntry } from '../api/types';
 import type { DesktopHost } from '../platform/desktop';
+import { en, type MessageKey } from '../locale/en';
 import { t } from '../platform/i18n';
 
 export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
@@ -120,17 +121,30 @@ const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
-/**
- * Where a reply in a thread goes from: the provider answers from the account the conversation is in, which the reply
- * does not name, so neither do these words, and no account is guessed in their place.
- */
-export const CONVERSATION_ACCOUNT = 'the account this conversation is in';
+const factKeys = ['reach', 'reversibility', 'cost'] as const;
 
-const factNames: readonly [string, string][] = [
-    ['reach', 'Reach'],
-    ['reversibility', 'Reversibility'],
-    ['cost', 'Cost'],
-];
+/** A locale line by a key made from the runtime's words, or null where the table has none. */
+const line = (key: string): string | null => (Object.hasOwn(en, key) ? t(key as MessageKey) : null);
+
+/**
+ * One property of what an approval would do, in plain words: a property its operation's contract makes depend on the
+ * moment is one sentence keyed by operation and property; any other is the value's line. A value with no line, or a
+ * condition with no sentence, is said as the runtime gives it, its detail in parentheses, never guessed.
+ */
+function factWords(
+    key: (typeof factKeys)[number],
+    fact: Record<string, unknown>,
+    operation: string | null,
+): string | null {
+    const shown = text(fact['value']);
+    if (!shown) return null;
+    const detail = text(fact['detail']);
+    const conditional =
+        fact['conditional'] === true ? (operation ? line(`approval.fact.${operation}.${key}`) : null) : null;
+    if (conditional !== null) return conditional;
+    const plain = line(`approval.fact.${key}.${shown}`) ?? `${t(`approval.fact.${key}`)}: ${shown}`;
+    return detail ? `${plain} (${detail})` : plain;
+}
 
 function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['example'] {
     if (!example) return null;
@@ -140,9 +154,10 @@ function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['exa
 
 /**
  * What an approval's preview says the act would do: its intent, its recipient, the account and the channel it goes
- * by, its message and its properties. A value the preview does not carry is null, never a word in its place.
+ * by, its message and its properties, in plain words for the operation named. A value the preview does not carry is
+ * null, never a word in its place.
  */
-export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
+export function toApprovalDetail(preview: Record<string, unknown>, operation: string | null = null): ApprovalDetail {
     const highlights = record(preview['highlights']);
     const message = record(highlights?.['/args/message']);
     const sender = record(highlights?.['/args/sender']);
@@ -153,17 +168,17 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
     const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
     const name = text(contact?.['name']);
     const facts: string[] = [];
-    for (const [key, label] of factNames) {
-        const fact = record(preview[key]);
-        const shown = text(fact?.['value']);
-        if (!shown) continue;
-        const detail = text(fact?.['detail']);
-        facts.push(detail ? `${label}: ${shown} (${detail})` : `${label}: ${shown}`);
+    for (const key of factKeys) {
+        const said = factWords(key, record(preview[key]) ?? {}, operation);
+        if (said !== null) facts.push(said);
     }
     return {
         intent: text(preview['intent']),
         to: value ? (name ? `${name}, ${value}` : value) : null,
-        from: text(sender?.['address']) ?? text(sender?.['external_id']) ?? (inThread ? CONVERSATION_ACCOUNT : null),
+        from:
+            text(sender?.['address']) ??
+            text(sender?.['external_id']) ??
+            (inThread ? t('approval.from.conversation') : null),
         channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']) ?? text(highlights?.['/args/body']),

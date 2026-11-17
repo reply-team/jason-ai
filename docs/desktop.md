@@ -105,7 +105,8 @@ shows before anything is typed and what you send waits, while the window is open
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel (a reply in a conversation names no account: it says it goes from the account this conversation is in), and
   narrows to All, Approvals or Questions. An approval's **Approve** is live only once Needs you has read
-  that approval whole, with any doubt about a send shown above it; until then the row says it is being read, or why it
+  that approval whole, with any doubt about a send shown above it, under "Why this message was flagged" (flagged is
+  the screen's word for a doubt a role or a person raised); until then the row says it is being read, or why it
   could not be, and **Details** stays. Under the mailbox an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,
   chosen, with the new text, saying the text is saved and that Jason asks again with it when it next takes this work,
