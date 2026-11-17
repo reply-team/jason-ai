@@ -1331,7 +1331,8 @@ public class CiRunsTests
             ["older-windows"] = Full,
             ["update-end-to-end"] = Linux,
             ["install-sh"] = Linux,
-            ["install-ps1"] = Full,
+            ["union-windows"] = Full,
+            ["union-macos"] = Full,
             ["ui"] = Linux,
             ["desktop"] = Linux,
             [StandIn] = Skipping,
@@ -1512,7 +1513,7 @@ public class CiRunsTests
     [Fact]
     public void The_install_jobs_require_the_archives_their_run_packaged()
     {
-        foreach (var name in new[] { "install-sh", "install-ps1" })
+        foreach (var name in new[] { "install-sh" })
         {
             var steps = Steps(Mapping(Jobs(), name));
             var assembling = Assert.Single(steps, step => Scalar(step, "name") == "Assemble the feed the way a release is assembled");

@@ -4460,10 +4460,13 @@ public partial class ReleaseWorkflowTests
     [Fact]
     public void The_install_job_runs_the_script_the_way_the_one_liner_does()
     {
-        var job = Job(Read(Ci), "install-ps1");
+        var job = Job(Read(Ci), "union-windows");
+        Assert.Contains("Test-InstallationWindows.ps1 -Step Install ", job, StringComparison.Ordinal);
 
-        Assert.True(Runs(job, "Invoke-Expression"), $"the install job never runs the script as text, so it cannot see what the one-liner leaves behind:\n{job}");
-        Assert.Contains("Get-Command Install-Jason", job, StringComparison.Ordinal);
+        // The step's script runs install.ps1 as a file under Windows PowerShell, then its text through Invoke-Expression.
+        var script = Read([".github", "scripts", "Test-InstallationWindows.ps1"]);
+        Assert.Contains("Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw)", script, StringComparison.Ordinal);
+        Assert.Contains("if (Get-Command Install-Jason -ErrorAction SilentlyContinue)", script, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -180,7 +180,6 @@ public sealed partial class InstallNoticesTests
     /// </summary>
     [Theory]
     [InlineData("install-sh", "--feed http://127.0.0.1:8099 ")]
-    [InlineData("install-ps1", "-Feed http://127.0.0.1:8099 ")]
     public void Ci_proves_the_directory_line_and_a_feed_served_on_the_machine(string job, string served)
     {
         var ci = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "workflows", "ci.yml")).ReplaceLineEndings("\n");
@@ -200,7 +199,7 @@ public sealed partial class InstallNoticesTests
             DirectoryLine,
             "http.server 8099 --bind 127.0.0.1 --directory feed",
             served,
-            "skills/roles/.jason-skills.json".Replace("/", job == "install-ps1" ? "\\" : "/", StringComparison.Ordinal),
+            "skills/roles/.jason-skills.json",
             "http://127.0.0.1:8099/manifest.json",
             "\"name\":\"role_skills\",\"required\":true,\"state\":\"ok\"",
         })
