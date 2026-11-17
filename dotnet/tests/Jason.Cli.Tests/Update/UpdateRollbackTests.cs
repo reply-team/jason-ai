@@ -139,10 +139,28 @@ public class UpdateRollbackTests
         Assert.Equal(UpdateCodes.RollbackUnsafe, refused.Code);
         Assert.Contains("state/jason.db", refused.Message, StringComparison.Ordinal);
 
+        // The version put back refuses the migrated database itself, and the refusal says so rather than "may".
+        Assert.Contains($"{installation.From} does not start on a database {installation.To} migrated, and says so with data_newer", refused.Message, StringComparison.Ordinal);
+
         // The binary went back anyway, the runtime is up, and the database is untouched.
         Assert.Equal(installation.From.ToString(), installation.Installed());
         Assert.True(installation.Running, "the refusal was about the database, not about leaving the machine dead");
         Assert.Equal("work done under the new version", File.ReadAllText(installation.Paths.DatabaseFile));
+    }
+
+    /// <summary>
+    /// Which side of the guard the version put back is on decides the sentence: from the first version that refuses a
+    /// database a newer one migrated, its development builds included, it does not start; before it, it may run on it.
+    /// </summary>
+    [Theory]
+    [InlineData("0.48.2", "0.49.0", "0.48.2 may refuse to open a database migrated by 0.49.0; to go all the way back, ")]
+    [InlineData("0.48.2-dev", "0.49.0", "0.48.2-dev may refuse to open a database migrated by 0.49.0; to go all the way back, ")]
+    [InlineData("0.49.0-dev", "0.50.0", "0.49.0-dev does not start on a database 0.50.0 migrated, and says so with data_newer; to go all the way back, ")]
+    [InlineData("0.49.0", "0.50.0", "0.49.0 does not start on a database 0.50.0 migrated, and says so with data_newer; to go all the way back, ")]
+    [InlineData("1.2.0", "1.3.0-rc.1", "1.2.0 does not start on a database 1.3.0-rc.1 migrated, and says so with data_newer; to go all the way back, ")]
+    public void The_version_put_back_is_said_to_refuse_the_database_only_from_the_first_version_that_does(string from, string to, string said)
+    {
+        Assert.Equal(said, UpdateRollback.OlderOnNewer(SemanticVersion.Parse(from), SemanticVersion.Parse(to)));
     }
 
     /// <summary>

@@ -16,6 +16,12 @@ public static class DataNewer
     public const string Code = "data_newer";
 
     /// <summary>
+    /// The first version that refuses, its development builds included: a build of this version or a later one does not start
+    /// on a database a newer Jason migrated, and an earlier one has no such check.
+    /// </summary>
+    public const string FirstRefusing = "0.49.0-dev";
+
+    /// <summary>
     /// The sentence of a data directory at <paramref name="dataDirectory"/> a newer Jason migrated, said for a Jason of version
     /// <paramref name="current"/>, which is said without its build metadata: the part after a plus names a commit, not a
     /// version.

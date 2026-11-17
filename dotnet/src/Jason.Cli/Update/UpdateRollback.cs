@@ -443,6 +443,16 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
     }
 
     /// <summary>
+    /// What the version put back does on the database the newer one migrated, as the refusal says it, up to the steps that go
+    /// all the way back. A version from <see cref="DataNewer.FirstRefusing"/> on does not start on it, and says so with
+    /// <c>data_newer</c>, so its runtime is not running after this rollback; an earlier one has no such check.
+    /// </summary>
+    internal static string OlderOnNewer(SemanticVersion from, SemanticVersion to) =>
+        from >= SemanticVersion.Parse(DataNewer.FirstRefusing)
+            ? $"{from} does not start on a database {to} migrated, and says so with {DataNewer.Code}; to go all the way back, "
+            : $"{from} may refuse to open a database migrated by {to}; to go all the way back, ";
+
+    /// <summary>
     /// The database half, which happens only where this update's own first start migrated and nothing has been
     /// done since.
     /// </summary>
@@ -477,7 +487,7 @@ public sealed class UpdateRollback(CliEnvironment env, UpdatePaths update, TimeP
                 UpdateCodes.RollbackUnsafe,
                 $"{ledger.FromVersion} is back in place, but the database was left as it is: {why}, "
                 + $"and restoring '{Path.GetFileName(backup)}' would erase it. "
-                + $"{ledger.FromVersion} may refuse to open a database migrated by {ledger.ToVersion}; to go all the way back, "
+                + OlderOnNewer(ledger.FromVersion, ledger.ToVersion)
                 + $"stop the runtime, copy '{backup}' over state/jason.db, delete the -wal and -shm files beside it, and start again."));
         }
 
