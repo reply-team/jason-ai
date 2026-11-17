@@ -157,6 +157,22 @@ export function handedData(request: UpdateRequest): { update: UpdateRequest } {
     return { update: request.awaitGo === true ? { id: request.id, to: request.to, feed: request.feed, awaitGo: true } : { id: request.id, to: request.to, feed: request.feed } };
 }
 
+/**
+ * Pure: whether a second start that reaches a window-less request's start asks for a window: no request handed over, no
+ * update start of its own, and not a start the computer made at sign-in. Such a start finds the lock held and gets
+ * nothing while the request lasts, up to `headlessLimitMs` and `goWaitMs` together, so it is remembered and the
+ * application is started once the request ends short of an install (`openAfterRequest`). After an install nothing is
+ * started: the installer has the application's folder, and the new version starts at the person's next open.
+ */
+export function asksForWindow(argv: readonly string[], data: unknown, atLogin: (argv: readonly string[]) => boolean): boolean {
+    return requestOf(data) === null && updateStart(argv) === null && !atLogin(argv);
+}
+
+/** Pure: whether the window-less start opens the application as it exits: a window was asked for, and nothing was installed. */
+export function openAfterRequest(windowAsked: boolean, code: number | null): boolean {
+    return windowAsked && code !== null;
+}
+
 /** The request a second start handed over, read again here and never trusted; null when there is none or it is not one. */
 export function requestOf(data: unknown): UpdateRequest | null {
     if (data === null || typeof data !== 'object' || !('update' in data)) return null;

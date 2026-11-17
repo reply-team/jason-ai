@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import {
     applyExit,
     applyExits,
+    asksForWindow,
     awaitGoFlag,
     busyRecord,
     createRequestFile,
@@ -20,6 +21,7 @@ import {
     isRequestId,
     isVersion,
     loopbackFeed,
+    openAfterRequest,
     readRequestFile,
     refusalMessage,
     requestFile,
@@ -533,7 +535,7 @@ test('the main module decides the update starts after the uninstaller’s, as an
     assert.equal(applyExits.handedOver, 3);
     assert.equal(applyExits.usage, 2);
     // While it holds the lock, a second start's request is refused as busy.
-    assert.ok(update.includes("app.on('second-instance', (_event, _argv, _directory, data) => {\n        const other = requestOf(data);\n        if (other !== null) requests.arrived(other);"));
+    assert.ok(update.includes("app.on('second-instance', (_event, argv, _directory, data) => {\n        const other = requestOf(data);\n        if (other !== null) return requests.arrived(other);"));
     assert.ok(update.includes('const requests = new UpdateRequests((other) => refuseBusy(other, false));'));
 });
 
@@ -757,4 +759,26 @@ test('the wait for the go ends when the request has ended meanwhile, its bound p
     };
     assert.equal(await waitForGo('/nowhere.go', wait, () => over), false);
     assert.equal(await waitForGo('/nowhere.go', { ...wait, exists: () => true }, () => false), true);
+});
+
+test('a person who opens Jason Desktop while a window-less request holds the lock is remembered, and the application opens as the request ends short of an install', () => {
+    const atLogin = (argv: readonly string[]) => argv.includes('--opened-at-login');
+    // A plain start, a link's start: a window asked for. A request handed over, an update start, a start at sign-in: not.
+    assert.equal(asksForWindow(['Jason'], undefined, atLogin), true);
+    assert.equal(asksForWindow(['Jason'], { link: 'jason://open' }, atLogin), true);
+    assert.equal(asksForWindow(['Jason', '--update-apply'], handedData({ id: 'r2', to: '0.49.0', feed: null }), atLogin), false);
+    assert.equal(asksForWindow(['Jason', '--update-settle'], undefined, atLogin), false);
+    assert.equal(asksForWindow(['Jason', '--opened-at-login'], undefined, atLogin), false);
+    // Opened as the start exits with any code; never where nothing exits because the installer has the application.
+    assert.equal(openAfterRequest(true, applyExits.answered), true);
+    assert.equal(openAfterRequest(true, applyExits.failed), true);
+    assert.equal(openAfterRequest(false, applyExits.answered), false);
+    assert.equal(openAfterRequest(true, applyExit({ request: 'r', state: 'installing' } as never)), false);
+    // main: the window-less start remembers it on second-instance and relaunches only on its own exit path.
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const start = main.slice(main.indexOf('function startUpdate('), main.indexOf('\n}\n', main.indexOf('function startUpdate(')));
+    assert.ok(start.includes('if (asksForWindow(argv, data, openedAtLogin)) windowAsked = true;'));
+    assert.ok(start.includes('if (openAfterRequest(windowAsked, code)) {'));
+    assert.ok(start.indexOf('app.relaunch(') < start.indexOf('app.exit(code);'));
+    assert.equal(start.split('app.relaunch(').length - 1, 1);
 });

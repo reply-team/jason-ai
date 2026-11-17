@@ -35,7 +35,7 @@ import { atFirstPairing, Repairer } from './repair.ts';
 import { applicationFolder, failedStartNotice, keptLine, readRollback, rollbackVersions, settleFailedStart, settleStart } from './rollback.ts';
 import { refuseStart, sandboxRefusal } from './sandbox.ts';
 import { debFile, previousRelease, updateKeyWords, Updater } from './updates.ts';
-import { applyExits, handedData, requestOf, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
+import { applyExits, asksForWindow, handedData, openAfterRequest, requestOf, requestSupport, takeRequest, UpdateRequests, updateStart, windowOpenUpdate, type UpdateStart } from './update-request.ts';
 import { refuseBusy, requestUpdater, runUpdateApply, runUpdateSettle, runUpdateUsage } from './update-start.ts';
 import { loopbackOrigin, runtimeOrigin } from './descriptor.ts';
 import { sharingVersionReads } from './host-version.ts';
@@ -1197,9 +1197,21 @@ function startUpdate(updating: UpdateStart): void {
         return;
     }
     const requests = new UpdateRequests((other) => refuseBusy(other, false));
-    app.on('second-instance', (_event, _argv, _directory, data) => {
+    // A person who opens Jason Desktop while this start holds the lock gets nothing meanwhile: the start is remembered,
+    // and the application opened as this one exits, where it installed nothing (`asksForWindow`, `openAfterRequest`).
+    let windowAsked = false;
+    app.on('second-instance', (_event, argv, _directory, data) => {
         const other = requestOf(data);
-        if (other !== null) requests.arrived(other);
+        if (other !== null) return requests.arrived(other);
+        if (asksForWindow(argv, data, openedAtLogin)) windowAsked = true;
     });
-    void ready.then(() => runUpdateApply(request, requests)).then((code) => app.exit(code), () => app.exit(applyExits.failed));
+    const exit = (code: number): void => {
+        if (openAfterRequest(windowAsked, code)) {
+            startLog().info('update_window_opened', { Exit: code });
+            const form = linuxForm();
+            app.relaunch(relaunchOptions(process.argv, app.isPackaged, form === null ? process.execPath : launcherOf(form, process.execPath)));
+        }
+        app.exit(code);
+    };
+    void ready.then(() => runUpdateApply(request, requests)).then(exit, () => exit(applyExits.failed));
 }

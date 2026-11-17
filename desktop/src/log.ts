@@ -84,6 +84,7 @@ export const templates = {
     update_go_missed: 'Jason {Version} was downloaded and no go came for it, so nothing was installed',
     update_installing: 'The application {From} was kept aside; Jason {To} is being installed',
     update_failed: 'The updater step {Step} failed, {Failures} times running',
+    update_window_opened: 'Jason Desktop was opened while a request held its lock; it is opened as the request ends with exit {Exit}',
     update_settled: 'The first start of Jason {Version} after its update loaded the window: {Started}',
     // A terminal's update request (`update-request.ts`): its version, where it was taken and how it ended, never its id or feed.
     update_request_taken: 'A terminal asked for Jason {To}; the request is taken {Where}',
