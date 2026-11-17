@@ -29,13 +29,17 @@ public sealed record InstallOptions(bool Human, bool Roles, string? Retire, Time
 /// What a new terminal finds <c>jason</c> through: the wrapper <c>~/.local/bin/jason</c> on macOS, the folder this
 /// account's Path names on Windows.
 /// </param>
+/// <param name="Placed">
+/// Whether a new terminal finds this jason, as read back: the Path entry on Windows; on macOS the wrapper, with the profile
+/// lines in place or the folder on a terminal's PATH already. The install scripts end non-zero where it is false.
+/// </param>
 /// <param name="OpenShell">
 /// What a shell that was already open types instead, for the rest of its life: it never reads a profile or a Path again.
 /// </param>
 /// <param name="Changed">Whether this run wrote the wrapper or the Path entry.</param>
 /// <param name="Profiles">The profiles this run put <c>install.sh</c>'s two lines into; macOS only.</param>
 /// <param name="TakenBack">The application's Windows command files this run removed from <c>WindowsApps</c>.</param>
-public sealed record InstallCommandOutcome(string Runs, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack);
+public sealed record InstallCommandOutcome(string Runs, bool Placed, string OpenShell, bool Changed, IReadOnlyList<string> Profiles, IReadOnlyList<string> TakenBack);
 
 /// <summary>One skills root, as this run left it.</summary>
 /// <param name="Root">The folder.</param>
@@ -466,7 +470,7 @@ public static class MachineSetup
                 }
             }
 
-            return new InstallCommandOutcome(target, target, changed, added, takenBack);
+            return new InstallCommandOutcome(target, CommandPlaced, target, changed, added, takenBack);
         }
 
         /// <summary>
@@ -531,7 +535,7 @@ public static class MachineSetup
                 Done.Add($"Took back the command files Jason Desktop placed: {string.Join(", ", takenBack)}.");
             }
 
-            return new InstallCommandOutcome(Bundle, carried.Executable, changed, [], takenBack);
+            return new InstallCommandOutcome(Bundle, CommandPlaced, carried.Executable, changed, [], takenBack);
         }
 
         // --- retiring the command-line install ---------------------------------------------------------------

@@ -721,7 +721,11 @@ silent run are not. A process still running, a runtime that did not stop or one 
 ends the install or the uninstall before a file is replaced, and a person is told to stop it with
 `resources\bundle\jason.exe runtime stop` in the application's folder, with `JASON_DATA_DIR` set when it was started
 with another data directory. Where PowerShell is not available nothing is looked for: a person is asked to stop the
-runtime, and an update goes on without a look. A person's uninstall starts the application with `--uninstall`, which
+runtime, and an update goes on without a look. Once the files are in place, at every install and every update, silent
+or not, the installer sets the machine up through the carried `jason install` with no flags, run with no window and
+waited for (`customInstall`): `jason` on this account's Path, the skills of every agent host found, and an older
+command-line install retired, with nothing written under the data directory and no runtime started; what it did not get
+done never fails the install. A person's uninstall starts the application with `--uninstall`, which
 stops the runtime it carries, takes off the PATH command's files that are its own (and on macOS and Linux the PATH lines
 with them, where their folder then holds nothing but what Jason writes there), Open Jason at Login, the runtime's
 start at logon when it starts this application's `jason`, and the `jason-desktop` link registration when it names this
