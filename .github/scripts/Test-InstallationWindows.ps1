@@ -90,6 +90,24 @@ function Wait-Program([string] $file, [string[]] $arguments, [int] $seconds = 30
     return Wait-Started $process "$file $($arguments -join ' ')" $seconds
 }
 
+# Every process the started one started, and every process of the application's folder and of jason, with its command
+# line shortened.
+function Write-ProcessTree([System.Diagnostics.Process] $process) {
+    $all = @(Get-CimInstance -ClassName Win32_Process)
+    $ids = @($process.Id)
+    Write-Host "  the setup, process $($process.Id), ended: $($process.HasExited); the processes it started:"
+    for ($at = 0; $at -lt $ids.Count; $at++) {
+        foreach ($child in @($all | Where-Object { $_.ParentProcessId -eq $ids[$at] })) {
+            $ids += $child.ProcessId
+            Write-Host "    $($child.ProcessId), started by $($child.ParentProcessId): $("$($child.CommandLine)".Substring(0, [Math]::Min(200, "$($child.CommandLine)".Length)))"
+        }
+    }
+    Write-Host '  every process of the application folder and of jason:'
+    foreach ($running in @($all | Where-Object { ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($app, [StringComparison]::OrdinalIgnoreCase)) -or $_.Name -like 'jason*' })) {
+        Write-Host "    $($running.ProcessId), started by $($running.ParentProcessId): $("$($running.CommandLine)".Substring(0, [Math]::Min(200, "$($running.CommandLine)".Length)))"
+    }
+}
+
 function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [int] $seconds = 300) {
     $file = $what; $arguments = @()
     if (-not $process.WaitForExit($seconds * 1000)) {
@@ -413,7 +431,39 @@ switch ($Step) {
         if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
         $opened = Open-Window
         Say "the previous Jason Desktop $(Read-Version $carried) open again; a runtime answering: $(Test-Runtime)"
-        $new = Wait-Program (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') @('--updated', '/S', '--force-run')
+        # Whether the setup is hung or waits for the old application to end: a minute with the window open, the processes
+        # then, the window ended as a quit ends it, and how long after that the setup ends, with the processes then.
+        $installer = Start-Process -FilePath (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') -ArgumentList '--updated', '/S', '--force-run' -PassThru
+        $null = $installer.Handle
+        if ($installer.WaitForExit(60000)) {
+            Say "the setup ended within 60 s with the window open, exit $($installer.ExitCode)"
+        } else {
+            Write-Host 'at 60 s, with the window open:'
+            Write-ProcessTree $installer
+            $main = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' -and $_.CommandLine -notmatch '--type=' })
+            $closed = $false
+            foreach ($window in $main) { $running = Get-Process -Id $window.ProcessId -ErrorAction SilentlyContinue; if ($running -and $running.CloseMainWindow()) { $closed = $true } }
+            $until = (Get-Date).AddSeconds(15)
+            while ((Get-Date) -lt $until -and @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0) { Start-Sleep -Milliseconds 250 }
+            $how = 'its main window closed'
+            if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0) {
+                $how = if ($closed) { 'its main window closed, and then its processes ended, the close not having ended them in 15 s' } else { 'its processes ended, no main window answering a close' }
+                $main | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0 } 30 'the window''s processes ending'
+            }
+            $ended = Get-Date
+            Say "the 0.48.2 window ended at $($ended.ToUniversalTime().ToString('HH:mm:ss.fff'))Z: $how"
+            if ($installer.WaitForExit(300000)) {
+                Say "the setup ended $([int]((Get-Date) - $ended).TotalSeconds) s after the window ended, exit $($installer.ExitCode)"
+            } else {
+                Write-Host '300 s after the window ended:'
+                Write-ProcessTree $installer
+                Fail 'the setup did not end within 300 s after the window ended: it is hung, not waiting for the application'
+            }
+            Write-Host 'after the setup ended:'
+            Write-ProcessTree $installer
+        }
+        $new = $installer.ExitCode
         if ($new -ne 0) { Fail "this build's setup run by hand over the open window exited with $new" }
         if ((Read-Version $carried) -ne $Version) { Fail "after the setup the application is $(Read-Version $carried), not $Version" }
         Say "this build's setup with --updated /S --force-run, run by hand over an open window, put $Version in place"
