@@ -45,8 +45,8 @@ Desktop's chat says when it waits for you and what became of what you approved, 
   agent at the start of a conversation: the client's to every chat, the Feed and set-up chats included, and the
   project's and the campaign's as well in a campaign's chat. A file is given again only when it changes, and all of
   them again after Start fresh. The chat does not write these files: when you state a standing rule, it says the exact
-  line and the file it belongs in. Only folders the runtime records are read; a file reached through a link, over 32
-  KiB, or that does not answer in time is named to the agent, so the chat can tell you. What the chat may read and
+  line and the file it belongs in. Only folders the runtime records are read; a file reached through a link, over
+  32 KiB, or that does not answer in time is named to the agent, so the chat can tell you. What the chat may read and
   write on your computer is unchanged, and the desktop's log and conversation record keep that a file was given, never
   its words.
 
