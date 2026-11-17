@@ -861,13 +861,19 @@ describe('Needs you', () => {
             expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
         });
 
-        it('names no plugin in the pane’s header, and sets a fact’s quoted names as code', async () => {
+        it('names no plugin in the pane’s header, and says what the act is in plain words', async () => {
             await renderConsole(inbox());
             await waitFor(() => expect(pane().querySelector('.needs-facts')).toBeTruthy());
             expect(words(pane().querySelector('.ask-h .meta')!)).toMatch(/^Spring launch · [^·]+$/);
             expect(words(pane().querySelector('.ask-h')!)).not.toMatch(/\breply\b/);
+            // A message's cost depends on its channel, so its line is the one sentence for message.send's cost.
+            expect([...pane().querySelectorAll('.needs-facts .meta')].map((each) => each.textContent)).toEqual([
+                'Contacts the person: something is sent or shown to them',
+                'Cannot be undone',
+                'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+            ]);
             expect(pane().querySelector('.needs-facts')!.textContent).not.toContain('`');
-            expect([...pane().querySelectorAll('.needs-facts code')].map((each) => each.textContent)).toEqual(['none']);
+            expect(pane().querySelectorAll('.needs-facts code')).toHaveLength(0);
         });
     });
 
@@ -1164,7 +1170,7 @@ describe('Needs you', () => {
             await renderConsole(fake);
             await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
             const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
-            const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
+            const doubted = `The critic role flagged this: ${whyWords('unsupported_claim')}`;
             // Before the whole read Approve is held and there is no doubt to draw; the moment it is live, the doubt stands.
             expect(live(approve('apr_1'))).toBe(false);
             expect(within(at('apr_1')).queryByText(doubted)).toBeNull();

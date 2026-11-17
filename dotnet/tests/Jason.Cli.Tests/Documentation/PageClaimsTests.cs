@@ -2672,6 +2672,91 @@ public partial class PageClaimsTests
     [GeneratedRegex(@"releases/download/v(?<version>[0-9]+\.[0-9]+\.[0-9]+)/|(?:--version|-Version) (?<version>[0-9]+\.[0-9]+\.[0-9]+)|These install (?<version>[0-9]+\.[0-9]+\.[0-9]+) with (?<version>[0-9]+\.[0-9]+\.[0-9]+)'s own script")]
     private static partial Regex PinnedVersion();
 
+    /// <summary>
+    /// The browser UI says what an approval would do in plain words: one line per value of an operation's
+    /// <c>reach</c>, <c>reversibility</c> and <c>cost</c>, and, where an operation's contract makes one of them depend on
+    /// the moment, one sentence of its own, keyed in <c>ui/src/locale/en.ts</c> by operation and property. That sentence
+    /// is a person's reading of the contract's detail, so the two are held together: these are the conditional
+    /// properties the sentences were written from, the contract's detail word for word. When this list has to change,
+    /// read the sentence for that operation and property (<c>approval.fact.&lt;operation&gt;.&lt;property&gt;</c>)
+    /// against the new detail first, then move the pin.
+    /// </summary>
+    private static readonly (string Operation, string Property, string Detail)[] FactSentencesReadFrom =
+    [
+        ("campaign.activate", "reach", "`act`, with magnitude equal to the enrolled population; `control` only where the campaign holds no enrolments, and even then it arms the campaign so the next enrolment sends immediately."),
+        ("campaign.enroll", "cost", "none while the campaign is not live; metered once it is."),
+        ("campaign.enroll", "reach", "bookkeeping while the campaign is not live, `act` the moment it is; resolved by the preview, never assumed."),
+        ("campaign.enroll", "reversibility", "compensatable until the first touch goes, irreversible after."),
+        ("contact.delete", "reversibility", "compensatable inside the account's restore window; irreversible after it."),
+        ("conversation.reply", "cost", "metered against the message allowance on channels that meter sending; `none` on channels that do not."),
+        ("message.send", "cost", "metered against the message allowance on channels that meter sending; `none` on channels that do not."),
+    ];
+
+    private static readonly string[] FactProperties = ["reach", "reversibility", "cost"];
+
+    /// <summary>A changed or a new conditional detail is red until its plain sentence is read again.</summary>
+    [Fact]
+    public void Every_conditional_detail_is_the_one_its_plain_sentence_was_written_from()
+    {
+        var found = FactConditionals()
+            .OrderBy(each => each.Operation, StringComparer.Ordinal)
+            .ThenBy(each => each.Property, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(FactSentencesReadFrom, found);
+    }
+
+    /// <summary>Every conditional property has its sentence in the UI's words, and no sentence outlives its property.</summary>
+    [Fact]
+    public void Every_conditional_property_has_its_plain_sentence_and_every_sentence_its_property()
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in FactKey().Matches(Page("ui", "src", "locale", "en.ts")))
+        {
+            var rest = match.Groups["rest"].Value;
+            var last = rest.LastIndexOf('.');
+            if (last > 0 && rest.IndexOf('.', StringComparison.Ordinal) != last && FactProperties.Contains(rest[(last + 1)..]))
+            {
+                keys.Add(rest);
+            }
+        }
+
+        var wanted = FactConditionals().Select(each => $"{each.Operation}.{each.Property}").ToHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(wanted);
+        Assert.Empty(wanted.Except(keys, StringComparer.Ordinal));
+        Assert.Empty(keys.Except(wanted, StringComparer.Ordinal));
+    }
+
+    /// <summary>Every value an operation document gives these properties has its plain line in the UI's words.</summary>
+    [Fact]
+    public void Every_value_of_reach_reversibility_and_cost_has_its_plain_line()
+    {
+        var locale = Page("ui", "src", "locale", "en.ts");
+        var values = OperationDocuments()
+            .SelectMany(document => FactProperties.Select(property => (Property: property, Value: document[property] is JsonObject block ? (string)block["value"]! : (string)document[property]!)))
+            .Distinct()
+            .ToArray();
+
+        Assert.NotEmpty(values);
+        Assert.All(values, each => Assert.Contains($"'approval.fact.{each.Property}.{each.Value}':", locale, StringComparison.Ordinal));
+    }
+
+    private static IEnumerable<(string Operation, string Property, string Detail)> FactConditionals() =>
+        from document in OperationDocuments()
+        from property in FactProperties
+        where document[property] is JsonObject block && block["conditional"]?.GetValue<bool>() == true
+        select ((string)document["id"]!, property, (string)document[property]!["detail"]!);
+
+    private static IEnumerable<JsonObject> OperationDocuments() =>
+        Directory.GetFiles(Path.Combine(Root(), "docs", "contracts", "operations"), "*.json")
+            .Order(StringComparer.Ordinal)
+            .Select(file => JsonNode.Parse(File.ReadAllText(file))!.AsObject());
+
+    /// <summary>A key of the UI's approval facts, after its prefix.</summary>
+    [GeneratedRegex(@"'approval\.fact\.(?<rest>[a-z_.]+)':")]
+    private static partial Regex FactKey();
+
     private static string Page(params string[] path) =>
         File.ReadAllText(Path.Combine([Root(), .. path])).Replace("\r\n", "\n", StringComparison.Ordinal);
 
