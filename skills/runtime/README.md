@@ -32,7 +32,7 @@ description that promises everything matches nothing.
   raised — including when a notification brought the person — presented in their own words and recorded as their
   decision, and the standing approval a person sets in advance for one category of reply in a campaign, or for the
   searches under one of its audiences, the allowance, offered once the audience is judged to work.
-- [`operating-the-installation`](operating-the-installation/SKILL.md) — The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI (without Jason Desktop its tab shows the Demo, not the person's work) and
+- [`operating-the-installation`](operating-the-installation/SKILL.md) — The installation itself: whether the runtime is up, starting and stopping it, having it start at logon, opening the browser UI (without Jason Desktop its tab opens on the Demo, or, while something waits, on one page of text that says so; neither is the person's work) and
   unpairing a browser (`jason ui`), the plugins and routes it has, the accounts whose events it reads and reading a
   span of one again, the journal's kinds and the plugins that subscribe to them, the hosts it can launch, whether notifications reach the person and turning them off, whether a
   newer version exists, and installing it or taking it off again.
