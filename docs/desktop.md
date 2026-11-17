@@ -724,9 +724,9 @@ address. Nothing is sent on a channel where a person is on the do-not-contact li
 Each chat has an access mode, chosen from a menu beside the composer, and the line under the composer says which one the
 chat is in. A mode applies to the turns you start by sending, from the next one on. **Ask first** is the mode of every new
 chat and the chat as the next section describes it. **Plan only** lets the agent read and plan and change nothing: it
-passes only the allowed verbs that read, Claude Code starts in its plan mode with the exit from it removed, and every
-other request is refused. The cards left in Plan only are a read outside the chat's folders and a web page, and every
-refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
+passes only the allowed verbs that read and the nouns' help, Claude Code starts in its plan mode with the exit from it
+removed, and every other request is refused. The cards left in Plan only are a read outside the chat's folders and a web
+page, and every refusal of the next section stays. A Codex turn runs in its read-only sandbox in every mode it can be in.
 
 When a Plan only turn ends with an answer, the answer is shown as a plan card, as text, with **Approve and run** and
 **Keep planning**. Approve and run does what choosing Ask first from the menu does, then sends "Go ahead with the plan in

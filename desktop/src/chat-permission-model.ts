@@ -686,12 +686,13 @@ function jasonRefusal(found: ReturnType<typeof jasonIn>): string | null {
 }
 
 /**
- * True when the command is exactly `jason <noun> --help` for a noun whose help runs (`ChatScope.help`): one command,
- * those three words and no other, as the host's help rule names it.
+ * True when the Bash tool's command is exactly `jason <noun> --help` for a noun whose help runs (`ChatScope.help`): one
+ * command, those three words and no other, apart by spaces and tabs alone, as the host's help rule names it. Any other
+ * tool's command, and any other separator, is judged as it was before.
  */
-function isNounHelp(command: string, scope: ChatScope): boolean {
-    if (isCompound(command)) return false;
-    const words = command.trim().split(/\s+/);
+function isNounHelp(tool: string, command: string, scope: ChatScope): boolean {
+    if (tool !== 'Bash' || isCompound(command)) return false;
+    const words = command.replace(/^[ \t]+|[ \t]+$/g, '').split(/[ \t]+/);
     return words.length === 3 && words[0] === 'jason' && words[2] === '--help' && (scope.help ?? []).includes(words[1] as string);
 }
 
@@ -1084,7 +1085,7 @@ function judgeCommand(tool: string, command: string, scope: ChatScope): Judgemen
     if (guarded !== undefined) return { verdict: 'ask', title: guarded.title, detail: shorten(command), remember: null };
     if (namesLocalJason(command, scope)) return { verdict: 'ask', title: jasonFileTitle, detail: shorten(command), remember: null };
     // A noun's help, exactly as the host's help rule names it, runs here too: it prints and changes nothing.
-    if (isNounHelp(command, scope)) return allow;
+    if (isNounHelp(tool, command, scope)) return allow;
     // The host runs the allow list's verbs itself; a jason command that reaches the model is none of them, so it is the
     // person's to answer, each time.
     if (jason === 'jason') return { verdict: 'ask', title: 'Run a command', detail: shorten(command), remember: null };

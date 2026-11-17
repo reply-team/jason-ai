@@ -691,3 +691,17 @@ test('a noun\'s help runs with no card in Plan only, Ask first, Auto-edit and Fu
     }
     assert.deepEqual(plan.cards, []);
 });
+
+test('the help form of the PowerShell tool or another tool with a command is a card in Ask first, refused in Plan only and held in Full access, as before', async (t) => {
+    for (const tool of ['PowerShell', 'SomeTool']) {
+        const asked = await wired(t, 'ask_first');
+        void asked.broker.ask(asked.id, tool, { command: 'jason campaign --help' });
+        await new Promise((settle) => setImmediate(settle));
+        assert.equal(asked.cards.filter((card) => card.kind === 'permission').length, 1, `${tool} Ask first`);
+        asked.broker.endTurn(asked.id);
+        const plan = await wired(t, 'plan_only');
+        assert.equal((await plan.broker.ask(plan.id, tool, { command: 'jason campaign --help' })).behavior, 'deny', `${tool} Plan only`);
+        const full = await wired(t, 'full_access');
+        assert.match((await hooked(full, tool, { command: 'jason campaign --help' })) ?? 'ran', /^ask: /, `${tool} Full access`);
+    }
+});

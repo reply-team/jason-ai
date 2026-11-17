@@ -1550,3 +1550,34 @@ test('anything but exactly `jason <noun> --help` is judged as before: a further 
         }
     }
 });
+
+test('the help form is allowed for the Bash tool alone: the PowerShell tool and any other tool with a command are judged as before', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        for (const tool of ['PowerShell', 'SomeTool']) {
+            for (const command of ['jason campaign --help', 'jason workitem --help']) {
+                const before = judge(tool, { command }, plain);
+                assert.deepEqual(judge(tool, { command }, scope), before, `${scope.platform} ${tool} Ask first: ${command}`);
+                assert.notDeepEqual(judge(tool, { command }, scope), { verdict: 'allow' }, `${scope.platform} ${tool}: ${command}`);
+                assert.deepEqual(autoEditJudgement(tool, { command }, scope), autoEditJudgement(tool, { command }, plain), `${scope.platform} ${tool} Auto-edit: ${command}`);
+                assert.deepEqual(fullAccessJudgement(tool, { command }, scope), fullAccessJudgement(tool, { command }, plain), `${scope.platform} ${tool} Full access: ${command}`);
+                assert.notDeepEqual(fullAccessJudgement(tool, { command }, scope), { outcome: 'runs' }, `${scope.platform} ${tool} Full access does not run: ${command}`);
+            }
+        }
+    }
+});
+
+test('the help form is allowed apart by spaces and tabs alone: any other separator is judged as before', () => {
+    for (const plain of [windows(), mac()]) {
+        const scope = { ...plain, help: nouns };
+        assert.deepEqual(run(scope, 'jason\tcampaign  --help'), { verdict: 'allow' });
+        assert.deepEqual(run(scope, '  jason campaign --help\t'), { verdict: 'allow' });
+        for (const separator of [' ', ' ', ' ', '\v', '\f', '　', ' ', '﻿']) {
+            for (const command of [`jason${separator}campaign --help`, `jason campaign${separator}--help`, `jason campaign --help${separator}`, `${separator}jason campaign --help`]) {
+                assert.deepEqual(run(scope, command), run(plain, command), `${scope.platform} ${JSON.stringify(command)}`);
+                assert.notDeepEqual(run(scope, command), { verdict: 'allow' }, `${scope.platform} ${JSON.stringify(command)}`);
+                assert.deepEqual(fullAccessJudgement('Bash', { command }, scope), fullAccessJudgement('Bash', { command }, plain), `${scope.platform} Full access ${JSON.stringify(command)}`);
+            }
+        }
+    }
+});
