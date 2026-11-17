@@ -33,7 +33,7 @@ export function NotificationsSection() {
                 <p className="empty">No channel is set up, so Jason sends you no notifications.</p>
             ) : (
                 <ScrollBox label="Notification channels">
-                    <table className="tbl">
+                    <table className="tbl notif-channels">
                         <thead>
                             <tr>
                                 <th>Channel</th>
@@ -52,7 +52,9 @@ export function NotificationsSection() {
                                             {channel.on ? 'on' : 'off'}
                                         </span>
                                     </td>
-                                    <td>{outcomeWords(channel, now)}</td>
+                                    <td className={channel.outcome === 'failed' ? 'failed' : undefined}>
+                                        {outcomeWords(channel, now)}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
