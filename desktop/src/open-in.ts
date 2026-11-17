@@ -10,10 +10,12 @@
  * session the host named are read from the desktop's own record of that chat (`continuableOf`), the working folder from
  * the run. It is offered only for a session of Claude Code or Codex that a plain turn named, and it is never the default.
  *
- * And one entry opens the person's own AI on Jason itself, "Change Jason itself": the bundled `jason session open --setup`,
- * with the host its own rule chooses (the preference `agent.interactive_host`, else Claude Code). Only where that rule
- * cannot choose, by the codes in `hostUnchosen`, is it run once more with a host this desktop found that the command line
- * did not try, Claude Code, else Codex. It is offered in the person's own installation only, and it is never the default.
+ * And one entry opens the person's own AI on Jason itself, "Change Jason itself": the bundled `jason session open --setup`.
+ * Where the person has stated a host of their own, the preference `agent.interactive_host`, the command line's own rule
+ * chooses it; where they have stated none, the desktop names the program the cards mark In use, Claude Code or Codex found
+ * here; else the command line's rule chooses, Claude Code. Only where the host could not be opened, by the codes in
+ * `hostUnchosen`, is it run once more with a host this desktop found that was not tried, Claude Code, else Codex. It is
+ * offered in the person's own installation only, and it is never the default.
  */
 
 import { posix, win32 } from 'node:path';
@@ -261,9 +263,10 @@ export type ChangeJasonFlags = (host: ContinueHost | null) => string[];
 
 /**
  * Where the host of "Change Jason itself" came from, as its log lines say it: the command line's own rule (the preference,
- * else Claude Code), or the host this desktop found and named for the second run.
+ * else Claude Code), the program the cards mark In use where no preference is stated, or the host this desktop found and
+ * named for the second run.
  */
-export type ChangeJasonHost = 'preference' | 'desktop_claude' | 'desktop_codex';
+export type ChangeJasonHost = 'preference' | 'in_use_claude' | 'in_use_codex' | 'desktop_claude' | 'desktop_codex';
 
 /**
  * The command line's error codes a log line of "Change Jason itself" names, a closed table of the codes its act answers;
@@ -274,6 +277,11 @@ export const changeJasonLoggedCodes: readonly string[] = ['host_unknown', 'prefe
 /** What "Change Jason itself" needs from the run. Absent, the entry is not offered. */
 export interface ChangeJasonDeps {
     flags: ChangeJasonFlags;
+    /**
+     * The host word of the profile the agents' roles run on by default, as the cards' In use reads it (`Setup.rolesHost`);
+     * null where it names none or could not be read. Asked at the click only, never when the menu is built.
+     */
+    inUse(): Promise<string | null>;
     log?(event: 'open_in_change_jason', fields: { Host: ChangeJasonHost; Exit: number }): void;
     log?(event: 'open_in_change_jason_refused', fields: { Host: ChangeJasonHost; Exit: number; Code: string }): void;
 }
@@ -339,21 +347,46 @@ export const hostUnchosen: readonly string[] = ['host_unknown', 'preference_unre
 const hostPreference = 'agent.interactive_host';
 const unsetHost = 'claude_code';
 
+/** The host preference as `jason preference list` answers it (`statedPreference`). */
+type StatedPreference = 'unread' | 'none' | { value: unknown };
+
 /**
- * The host word the command line tried, read from `jason preference list` as it read it: the preference's word, else
- * Claude Code's; null when the list cannot be read, so that which host was tried is not known.
+ * The host preference as `jason preference list` answers it: `unread` where the list cannot be read, `none` where the
+ * person has stated no host (the key is listed with no value, or not listed), else the value they stated.
  */
-function triedHost(answer: { exit: number; stdout: string }): string | null {
-    if (answer.exit !== 0) return null;
+function statedPreference(answer: { exit: number; stdout: string }): StatedPreference {
+    if (answer.exit !== 0) return 'unread';
     try {
         const items = (JSON.parse(answer.stdout) as { items?: unknown }).items;
-        if (!Array.isArray(items)) return null;
-        const entry = items.find((item) => typeof item === 'object' && item !== null && (item as { key?: unknown }).key === hostPreference) as { value?: { host?: unknown } | null } | undefined;
-        const word = entry?.value?.host;
-        return typeof word === 'string' ? word : unsetHost;
+        if (!Array.isArray(items)) return 'unread';
+        const entry = items.find((item) => typeof item === 'object' && item !== null && (item as { key?: unknown }).key === hostPreference) as { value?: unknown } | undefined;
+        return entry?.value === undefined || entry.value === null ? 'none' : { value: entry.value };
     } catch {
-        return null;
+        return 'unread';
     }
+}
+
+/**
+ * The host word the command line tried with no host named, as it read the preference: the preference's word, else Claude
+ * Code's; null when the list could not be read, so that which host was tried is not known.
+ */
+function triedHost(preference: StatedPreference): string | null {
+    if (preference === 'unread') return null;
+    const word = preference === 'none' ? undefined : (preference.value as { host?: unknown } | null | undefined)?.host;
+    return typeof word === 'string' ? word : unsetHost;
+}
+
+/**
+ * The host "Change Jason itself" names where no preference is stated: the program the cards mark In use, by its profile's
+ * host word, where that is Claude Code or Codex and the desktop finds it here, as the card's In use needs; null for any
+ * other word, a host not found, or none, so the command line's own rule chooses as it does with no host named. Claude
+ * Code's version floor, which the card also needs, is not read here: below it Claude Code is named all the same, the host
+ * the command line's own rule takes with no preference stated, so the act opens what it opened before.
+ */
+export function inUseHost(word: string | null, hosts: { claude: boolean; codex: boolean }): ContinueHost | null {
+    if (word === 'claude_code') return hosts.claude ? 'claude' : null;
+    if (word === 'codex') return hosts.codex ? 'codex' : null;
+    return null;
 }
 
 /** A host's word on the command line. */
@@ -478,23 +511,30 @@ export class OpenIn {
     }
 
     /**
-     * "Change Jason itself": the bundled `jason session open --setup` with no host, so the preference chooses as typed by
-     * hand. Where the command line says it could not choose (`hostUnchosen`), it is run once more, and only once, with a
-     * host this desktop found that the command line did not try, Claude Code, else Codex (`#secondHost`). A host not
-     * installed where the desktop finds no other is said as the two the entry needs; every other refusal, the second
-     * run's included, in the command line's own sentence. Nothing the page sends is read, and nothing is run where the
-     * entry is not offered. Never kept as the next default.
+     * "Change Jason itself": the bundled `jason session open --setup`. At the click, and only then, the host preference is
+     * read with `jason preference list` and the program the cards mark In use with `inUse`, the two side by side. A stated
+     * preference is the person's own word: the command is run with no host, so it chooses as typed by hand. With none
+     * stated, the program In use is named with `--host` (`inUseHost`); where that names none, or either read fails, the
+     * command is run with no host, as before. Where the command line says the host could not be opened (`hostUnchosen`),
+     * it is run once more, and only once, with a host this desktop found that was not tried, Claude Code, else Codex
+     * (`#secondHost`). A host not installed where the desktop finds no other is said as the two the entry needs; every
+     * other refusal, the second run's included, in the command line's own sentence. Nothing the page sends is read, and
+     * nothing is run where the entry is not offered. Never kept as the next default.
      */
     async changeJason(): Promise<OpenInRefusal | null> {
         const deps = this.#deps;
         const own = deps.changeJason;
         if (own === undefined) return { refused: changeJasonUnoffered };
-        let host: ChangeJasonHost = 'preference';
-        let answer = await deps.cli.run(['session', 'open', ...own.flags(null)]);
+        // Both reads are awaited together, so which of them lands first decides nothing.
+        const [listed, rolesWord] = await Promise.all([deps.cli.run(['preference', 'list']), own.inUse().catch(() => null)]);
+        const preference = statedPreference(listed);
+        const named = preference === 'none' ? inUseHost(rolesWord, deps.hosts()) : null;
+        let host: ChangeJasonHost = named === null ? 'preference' : named === 'claude' ? 'in_use_claude' : 'in_use_codex';
+        let answer = await deps.cli.run(['session', 'open', ...own.flags(named)]);
         let code = answer.exit === 0 ? null : cliCode(answer.stdout);
         let second: ContinueHost | 'none' | 'unknown' | null = null;
         if (answer.exit === 1 && code !== null && hostUnchosen.includes(code)) {
-            second = await this.#secondHost(code);
+            second = this.#secondHost(code, named === null ? triedHost(preference) : hostWord(named));
             if (second === 'claude' || second === 'codex') {
                 host = second === 'claude' ? 'desktop_claude' : 'desktop_codex';
                 answer = await deps.cli.run(['session', 'open', ...own.flags(second)]);
@@ -511,18 +551,16 @@ export class OpenIn {
     }
 
     /**
-     * The host the second run names: the first of Claude Code and Codex this desktop finds that the command line did not
-     * try already. A preference it could not read or does not know tried no host. A host not installed was the
-     * preference's word, else Claude Code's, read once with `jason preference list`; a list that cannot be read leaves
-     * that `unknown`, and there is no second run. `none` where the desktop finds no host it may name.
+     * The host the second run names: the first of Claude Code and Codex this desktop finds that was not tried already. A
+     * preference the command line could not read or does not know tried no host. A host not installed was `tried`: the
+     * host the first run named, else the preference's word, else Claude Code's, as the click's `jason preference list`
+     * read them; a list that could not be read leaves it null, `unknown`, and there is no second run. `none` where the
+     * desktop finds no host it may name.
      */
-    async #secondHost(code: string): Promise<ContinueHost | 'none' | 'unknown'> {
+    #secondHost(code: string, tried: string | null): ContinueHost | 'none' | 'unknown' {
         const deps = this.#deps;
-        let tried: string | null = null;
-        if (code === 'host_not_found') {
-            tried = triedHost(await deps.cli.run(['preference', 'list']));
-            if (tried === null) return 'unknown';
-        }
+        if (code !== 'host_not_found') tried = null;
+        else if (tried === null) return 'unknown';
         const hosts = deps.hosts();
         const found = (['claude', 'codex'] as const).filter((each) => hosts[each] && hostWord(each) !== tried);
         return found[0] ?? 'none';

@@ -615,15 +615,30 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   sidebar to the window's right edge, 38 high, the window's drag region but for the switch. The view and its page are
   transparent, so the page's own dot and sentence show through, and our page (`shell/demo-switch.html`) draws the switch
   alone at the strip's right end, which the page leaves free for one, on the strip's colour. It is laid out again at
-  each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the
-  Demo window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26
-  pixels) and both views start below that band, which they leave to the window's own contents: our band
-  (`shell/demo-band.html`, no script), the sidebar's colour over the left 284 pixels and the page's own ground beyond, never
-  the Demo strip's yellow, so the strip under it is as high as its own line; there the traffic lights stand, and a drag region over those 26 pixels alone. The band's document fills the whole window under
-  the two views, and Electron asks each of them whether a point is in its drag region, the window's own contents first,
-  whichever view is drawn over the point; so the band's body alone drags, as high as `demoGeometry.macBand`, and the
-  document as a whole carries no drag region, which would take every click meant for the page and the switch. The
-  page's strip, 26 to 64 pixels down the window there, lies under our switch's view. On Windows and Linux the views
+  each resize and added after the page's view, so it is drawn over it and takes the clicks there. On macOS the Demo
+  window takes the window's own frame (`frameOf`, above: no title bar, the buttons in a band of `titleBand`, 26 pixels),
+  and both views start at the window's top edge, as they do elsewhere. The traffic lights stand over the left end of the
+  page's sidebar, so the desktop puts a sheet of its own, of the user's origin, into the page's view (`demoMacSheet`):
+  the page's sidebar (`.jc-console .side`, the page's own selector, which `test/demo-page.test.ts` holds the page to)
+  takes those 26 pixels as padding at its top, so its contents start below the buttons and its ground runs on under
+  them; the page itself is not edited. The page has two rules of its own for a Mac window, keyed on a class
+  (`html.desktop-mac`) the view never sets: that padding, which the sheet gives, and a drag region over the sidebar's
+  top 284 by 26 pixels (`#title-drag`), which it leaves out, since no drag region of the page is the window's and our
+  band drags those same pixels; `test/demo-page.test.ts` holds the page to exactly these two. The window is dragged by
+  our band (`shell/demo-band.html`, no script): the window's own contents, under the two views, whose body is a drag
+  region over the window's top 26 pixels, from the window's left edge to a span of `demoGeometry.macCut` (177) pixels at
+  its right end where our switch stands, so over the sidebar and over the Demo strip up to the switch. The span holds
+  the switch by construction: the switch's page fixes the control's greatest extent in its own stylesheet, its box at
+  most 160 pixels wide, its segments hiding what of their words would not fit, 12 from the right edge, with a shadow of
+  5 (`demoSwitchMost`), and the span is those together, the one number the layout uses and the band's sheet
+  (`demoBandSheet`), which the desktop puts into the band once it is loaded and before either view is; until it lands
+  the band's own stylesheet cuts out the whole band. Electron asks each of them whether a point is in its drag region,
+  the window's own contents first, whichever view is drawn over the point; so the band's body alone drags, as high as
+  `demoGeometry.macBand`, the document as a whole carries no drag region, which would take every click meant for the
+  page and the switch, and the band never drags where the switch stands. Inside the span the switch's page decides what
+  drags and what takes a click, as on Windows and Linux: all of it drags but the switch itself. Under the page, the band
+  is the page's own ground, the sidebar's colour over the left 284 pixels and the page's white beyond, never the Demo
+  strip's yellow. On Windows and Linux the views
   start at the top of the content, and the caption buttons stand over the right end of our switch's view, which
   Electron tells the free title bar area in the view's own coordinates; the switch's page pads its right by the buttons' width from those variables, so the switch stands left of
   them and the rest of the view moves the window. The page does not know the buttons are there: it picks its sentence
@@ -636,7 +651,7 @@ listed, one ask at a time, only for a Codex on the PATH and an OpenAI key stored
   page's sentence is drawn in the font the page carries, so its numbers hold on both systems; our switch's are measured
   in Segoe UI, so on Windows its words are drawn in that font by name, and on Linux, which lacks it, in the system's
   own: Ubuntu's and Plasma's fonts were seen to fit in the room kept beside them, and a much wider one may put the
-  sentence's last letters under the switch's edge. On macOS no sheet is put.
+  sentence's last letters under the switch's edge. On macOS neither is put, only the sidebar's sheet above.
 
 ## Links
 
@@ -830,10 +845,16 @@ From `desktop/`:
 ```sh
 npm ci
 npm run check         # the type-check of the sources and the tests
+node node_modules/electron/install.js   # Electron's own binary, for the rows that run under it
 npm test              # the Node tests
 npm run prepare:bundle -- --pre rc.1   # publishes this checkout's jason into bundle/ as <VersionPrefix>-rc.1
 npm run dev           # builds and starts the window
 ```
+
+The electron package fetches its binary only when asked, held to the sha256 its `checksums.json` names, and no test
+downloads it. `test/rollback-electron.test.ts` runs the copy an update keeps aside under that binary as Node, where the
+file system reads `resources/app.asar` as an archive as the application's main process does; without the binary it skips
+and says so, and with `JASON_DESKTOP_ELECTRON_REQUIRED=1`, as CI sets it, it fails instead.
 
 A desktop build always carries a candidate's version string (`0.34.0-rc.1`), never `dev`, so `jason ui install` and
 `jason plugin install` resolve that candidate's own release directory. `test/candidate-version.test.ts` proves it against

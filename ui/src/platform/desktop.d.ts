@@ -549,7 +549,8 @@ export interface DesktopOpenInAnswer {
     continue?: DesktopOpenInContinue;
     /**
      * Present only in the person's own installation, never in the demo: the entry "Change Jason itself", which
-     * `openIn.changeJason` opens. It names no host: the person's preference chooses one when the entry is chosen.
+     * `openIn.changeJason` opens. It names no host: one is chosen when the entry is chosen, the person's preference,
+     * else the program In use, else Claude Code.
      */
     changeJason?: true;
     /**
@@ -671,8 +672,8 @@ export interface JasonDesktop {
         continueChat(chatId: string): Promise<DesktopRefusal | null>;
         /**
          * Opens the person's own AI on Jason itself, "Change Jason itself", in a new terminal: the desktop runs
-         * `jason session open --setup`, whose host the preference chooses, else the host the desktop finds. The page sends
-         * nothing. Null once the terminal was opened; a refusal in the demo, with no host to open, or in the command line's
+         * `jason session open --setup` for the host the person's preference names, else the program In use, else Claude
+         * Code, and else the host the desktop finds. The page sends nothing. Null once the terminal was opened; a refusal in the demo, with no host to open, or in the command line's
          * own sentence. Never the next default.
          */
         changeJason(): Promise<DesktopRefusal | null>;

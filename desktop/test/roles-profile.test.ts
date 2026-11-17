@@ -465,10 +465,13 @@ test('the host the default profile runs on says so, by the profile name, and no 
     const status = async () => new Map((await setupOn(b).status()).hosts.map((host) => [host.id, host.runsRoles]));
 
     assert.deepEqual([...(await status()).values()].filter((each) => each !== null), [], 'no default, no line');
+    // The host word Change Jason itself names is read by the same routine, and says none where the cards say none.
+    assert.equal(await setupOn(b).rolesHost(), null, 'no default, no host');
 
     await setupOn(b).connectRoles(null);
     const named = await status();
     assert.equal(named.get('claude'), 'claude-code');
+    assert.equal(await setupOn(b).rolesHost(), 'claude_code');
     assert.equal(named.get('codex'), null);
     assert.equal(named.get('claude-api-key'), null, 'a key provider runs no role');
 
@@ -478,6 +481,7 @@ test('the host the default profile runs on says so, by the profile name, and no 
         writeInstallationSettings(b, { Roles: { DefaultExecutionProfile: name } });
         const lines = await status();
         assert.deepEqual([...lines].filter(([, line]) => line !== null), where === null ? [] : [[where, name]], name);
+        assert.equal(await setupOn(b).rolesHost(), where === null ? null : 'codex', name);
     }
 
     // The default is the one in force as the runtime answers it, not the file's: a JASON_ variable's, the file naming none.
@@ -497,6 +501,8 @@ test('the host the default profile runs on says so, by the profile name, and no 
         writeInstallationSettings(held, { Roles: { DefaultExecutionProfile: name } });
         const hosts = (await setupOn(held, { programs: programsOn(held.env, null) }).status()).hosts;
         assert.deepEqual(hosts.filter((host) => host.runsRoles !== null).map((host) => host.id), [], name);
+        // The routine answers the profile's host word as it is; which words Change Jason itself names is `inUseHost`'s.
+        assert.equal(await setupOn(held, { programs: programsOn(held.env, null) }).rolesHost(), name === 'gem' ? 'gemini_cli' : 'claude_code', name);
     }
 });
 

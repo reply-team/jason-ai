@@ -94,8 +94,8 @@ its **Recent** or **Search**, and marked in the sidebar; nothing in it is closed
 choose again still has the words you typed and did not send, what arrived meanwhile and a message waiting to be sent.
 The window opens on **Start**, headed
 "Who do you want to reach?", whose box asks "Tell Jason what you sell and who you want to reach." and adds "A website
-link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness runs as well
-without it, from Claude Code, Codex or any other agent. What you type there starts a set-up chat on the AI you connected, about no campaign
+link is enough to start." where the AI host chosen for the chat can open a page; a note under it says that this interface is optional, since the harness works just as well
+without it, through Claude Code, Codex or any other agent, and that Jason is open source, linking github.com/reply-team/jason-ai so a coding agent can build the pages a person needs. What you type there starts a set-up chat on the AI you connected, about no campaign
 yet; no chat is made until you send. Enter sends and Shift+Enter makes a new line. If no AI is connected yet, the AI card
 shows before anything is typed and what you send waits, while the window is open and only then, until one is connected;
 **Take back** returns the words. Start opens every time the window opens, also when campaigns exist, and the sidebar's
@@ -305,11 +305,15 @@ it, to change Jason itself.
 
 **Changing Jason itself.** **Change Jason itself**, below Copy path and
 above Continue this chat where that is offered, opens your own AI in a new terminal on Jason's role skills folder, with its
-plugins folder beside it and a first message that tells it how Jason is changed. The desktop runs
-`jason session open --setup`, which opens the host the preference
-[`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, else Claude Code, and only where that
-host is not installed, or the preference cannot be read or names no host this jason knows, runs it once more with a host
-the desktop finds that was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
+plugins folder beside it and a first message that tells it how Jason is changed. The program it opens is, in this order:
+the one your preference [`agent.interactive_host`](contracts/preferences/agent.interactive_host.md) names, where you have
+stated one; else the program marked **In use** in Settings › Models ([Connect](#connect)), where that is Claude Code or
+Codex and is installed; else Claude Code. When you choose the entry, the desktop reads the preference and the program in
+use and runs `jason session open --setup`, with `--host` naming the program in use only where you have stated no
+preference; where either cannot be read, or no program is in use, it runs the command with no host, which opens the
+preference's host, else Claude Code. Only where the host it ran the command for is not installed, or the preference
+cannot be read or names no host this jason knows, does it run the command once more with a host the desktop finds that
+was not tried, Claude Code, else Codex. It is never the default, and the chat, which is kept from
 changing Jason's roles, plugins and settings, answers a request to change one of them by pointing to it ([Changing Jason](customising.md) says what the session does).
 
 **Continuing the chat in front.** While a chat is in front, the menu's last group can hold **Continue this chat in Claude
@@ -377,8 +381,9 @@ own: the minimize, maximize and close buttons stand at the strip's right end, th
 moves the window. There the strip keeps the page's sentence clear of the switch and the buttons at every width: where the
 window is too narrow for the long sentence the page shows its short one, and at the narrowest widths the switch is drawn
 a little tighter. On macOS the window has no title bar
-of its own: a band of the page's colours above the page holds the window's buttons, and the band and the desktop's
-strip move the window. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
+of its own: the page starts at the window's top edge, the window's buttons stand over the top of the page's sidebar,
+whose contents start below them, and the window's top strip moves the window, up to a little way before the
+Demo | Live switch. No part of the page itself moves it. Choosing **Live** writes the mode and starts the
 desktop again on your own installation, as a first start without the demo would, in the Light theme a new installation
 meets; **Back to Your Own Installation**, in the tray and the Jason menu or with Ctrl+Shift+L (Cmd on a Mac), does
 the same. Your own installation's top bar carries the same switch, with **Demo** to come back.
@@ -966,7 +971,8 @@ only on your word again. The download is kept in the updater's cache under your 
 `%LOCALAPPDATA%\jason-desktop-updater` on Windows, `~/Library/Caches/jason-desktop-updater` on macOS and
 `~/.cache/jason-desktop-updater` on Linux (under `$XDG_CACHE_HOME` when that is set). A build that is not installed says "Updates Come to an Installed Build", and where
 electron-updater cannot replace what runs the item says "Updates Come Through the Package". On Windows the installer is held to the signer
-the package names.
+the package names. On Windows and macOS a Jason Desktop of 0.48.4 or earlier does not install the update it offers:
+install 0.48.5 or later yourself once, and from then on the application's own update works.
 
 Updates come to the Windows installer, the macOS application, the AppImage and the deb; anywhere else the item says
 updates come through the package. Built so, and not yet seen on a real machine: a deb update installs the new deb with
@@ -982,7 +988,10 @@ started from another `jason` is never stopped.
 
 **Going back is by hand.** Before the installer runs, the application as it was is copied under
 `<data>/desktop/rollback/<version>/`, and the Jason menu shows an unclickable line, "The previous version `<v>` is kept at
-`<folder>`; put it back by hand", until the next update replaces the copy. Nothing puts it back by itself, because the
+`<folder>`; put it back by hand", until the next update replaces the copy. The copy is the folder as it is, the
+application's `resources/app.asar` a file in it like any other. When the copy cannot be made, the update is not
+installed, no part of a copy is left and no earlier copy is named any more, and Jason says so: "You can install the new
+version yourself: download it for your system from `<release page>` and install it as you installed this one." Nothing puts the kept copy back by itself, because the
 runtime has no guard against a data directory a newer version migrated: if the new version does not start, the
 starting page says what went wrong and where the kept version is, and going back is quitting Jason and putting that
 folder back in the place of the installed application. That puts back the previous application and the Jason it carried;
