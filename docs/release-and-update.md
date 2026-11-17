@@ -1554,7 +1554,9 @@ other `jason` is refused with `install_not_carried`, and a system other than mac
 update's lock, `<data>/update/update.lock`, while it runs, naming itself beside it as `install` (§7), and while another
 `jason` holds it — an update, its finish or a rollback — it refuses with `update_in_progress` and sets nothing up, since an
 update's own finish sets the machine up itself; while another `jason install` holds it, it refuses with
-`install_in_progress`, retryable, a sentence of its own naming that process. The lock is the open file, so one a killed
+`install_in_progress`, retryable, a sentence of its own naming that process. A setup the lock's holder runs as its waited
+child, handed the holder's nonce in `JASON_UPDATE_LOCK` as the update's own parts are (§7), goes on under that hold
+instead, and one handed another nonce is refused. The lock is the open file, so one a killed
 holder left refuses nobody. Where there is no update folder, or no data directory at all, it takes no lock and makes
 none: no update can be in flight there, and a person's first start still writes nothing under it. `install.sh` and
 `install.ps1` print a refusal's sentence and end non-zero; the installer goes on whatever `jason install` answers. The two

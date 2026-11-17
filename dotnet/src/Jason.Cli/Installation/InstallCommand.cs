@@ -116,8 +116,9 @@ public static class InstallCommand
         its finish or a rollback holds it, the setup refuses with update_in_progress, having set nothing up:
         an update's own finish sets the machine up itself. While another jason install holds it, it refuses
         with install_in_progress, and so does an update begun then. The lock is the open file, which a killed
-        holder lets go. Where there is no update folder, or no data directory at all, it takes no lock and
-        makes none.
+        holder lets go. A setup the holder runs as its waited child, handed the holder's nonce in
+        JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
+        is no update folder, or no data directory at all, it takes no lock and makes none.
 
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
@@ -179,14 +180,17 @@ public static class InstallCommand
 
         // One at a time with an update: the update's finish runs this same setup, and the installer's own `jason install`
         // can run while it does. The lock is taken only where an update could hold it, so none is made under a data directory
-        // a first start must still find without one.
+        // a first start must still find without one. A setup the lock's holder runs as its waited child is handed the
+        // holder's nonce, as the update's own parts are, and goes on under that hold rather than refuse; read here whether a
+        // lock is taken or not, so that nothing this setup starts carries it on.
+        var handed = UpdateLock.Handed(env.Variables);
         var update = new UpdatePaths(env.Paths);
         UpdateLock? held = null;
         if (Directory.Exists(update.Root))
         {
             try
             {
-                held = UpdateLock.Take(update, "the machine setup", holder: UpdateLock.Holder.Install);
+                held = UpdateLock.Take(update, "the machine setup", handed, UpdateLock.Holder.Install);
             }
             catch (UpdateException refused)
             {
