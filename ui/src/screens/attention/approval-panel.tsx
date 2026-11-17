@@ -11,6 +11,7 @@ import { PanelHeader } from '../../layout/panel-header';
 import { toApprovalDetail } from '../../console/live';
 import { MessageCard } from './message-card';
 import { MessageEditor } from './message-editor';
+import { SearchLines } from './search-lines';
 import { SenderLine } from './sender-line';
 import { senderReads } from '../../console/senders';
 import { Doubts } from '../send-modes/doubts';
@@ -193,6 +194,7 @@ export function ApprovalPanel({
                         <h3>What will happen</h3>
                         <div className="preview">
                             <p>{intent}</p>
+                            <SearchLines search={detail.search} />
                         </div>
                     </div>
                 )}

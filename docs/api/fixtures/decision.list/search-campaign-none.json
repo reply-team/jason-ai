@@ -1,0 +1,14 @@
+{
+  "operation": "decision.list",
+  "case": "search-campaign-none",
+  "request": {
+    "status": "pending",
+    "campaign_id": "cmp_1",
+    "limit": 50
+  },
+  "status": 200,
+  "response": {
+    "items": [],
+    "next_cursor": null
+  }
+}

@@ -52,6 +52,7 @@ const operations: Readonly<Record<string, string>> = {
     'campaign.activate': 'Start sequence',
     'campaign.enroll': 'Add to sequence',
     'enrollment.stop': 'Stop sequence',
+    'audience.search': 'Find people',
 };
 
 /** The operations that reach their person by a message; a row of any other names its person with no word before. */
@@ -97,6 +98,16 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
     };
 }
 
+/** What a search is for, as its preview highlights it, in the words of its own definition and arguments. */
+export interface SearchWords {
+    /** Each filter of the definition and the values it takes, `name: values` as written, in the definition's order. */
+    filters: string[];
+    /** Each filter that leaves values out, `name: values`, in the same order. */
+    leftOut: string[];
+    /** The search's other highlighted arguments, `name: value` as written, each that carries a value. */
+    arguments: string[];
+}
+
 export interface ApprovalDetail {
     intent: string | null;
     to: string | null;
@@ -110,6 +121,8 @@ export interface ApprovalDetail {
     compose: string | null;
     /** The runtime's rendering of a template over this person, which the provider may render otherwise. */
     example: { subject: string | null; body: string | null; unfilled: string[] } | null;
+    /** What a search is for, where the preview highlights a definition; null for any other approval. */
+    search: SearchWords | null;
     facts: string[];
 }
 
@@ -122,6 +135,68 @@ const factNames: readonly [string, string][] = [
     ['reversibility', 'Reversibility'],
     ['cost', 'Cost'],
 ];
+
+const isTerm = (value: unknown): value is { value: unknown; type: 'include' | 'exclude' } => {
+    const term = record(value);
+    return term !== null && 'value' in term && (term['type'] === 'include' || term['type'] === 'exclude');
+};
+
+/**
+ * A value as written: a text as it stands, a list's items joined, an object's members named, anything else as JSON.
+ * An item a list marks `exclude` is not written here but handed to `excluded`, and a member left with nothing to say is
+ * not named.
+ */
+function written(value: unknown, excluded: string[]): string {
+    if (Array.isArray(value))
+        return value
+            .flatMap((each) => {
+                if (!isTerm(each)) return [written(each, excluded)];
+                if (each.type === 'include') return [written(each.value, excluded)];
+                excluded.push(written(each.value, excluded));
+                return [];
+            })
+            .join(', ');
+    const object = record(value);
+    if (object !== null)
+        return Object.entries(object)
+            .flatMap(([name, member]) => {
+                const taken = written(member, excluded);
+                return taken === '' ? [] : [`${name}: ${taken}`];
+            })
+            .join('; ');
+    return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/**
+ * What a search is for, where the preview highlights a definition: each filter by its own name, what it leaves out
+ * apart, and the search's other arguments by their own names. Nothing is renamed or put into other words.
+ */
+function searchOf(highlights: Record<string, unknown> | null): SearchWords | null {
+    if (highlights === null || !Object.hasOwn(highlights, '/definition')) return null;
+    const filters: string[] = [];
+    const leftOut: string[] = [];
+    for (const [name, value] of Object.entries(record(highlights['/definition']) ?? {})) {
+        const excluded: string[] = [];
+        const taken = written(value, excluded);
+        if (taken !== '') filters.push(`${name}: ${taken}`);
+        if (excluded.length > 0) leftOut.push(`${name}: ${excluded.join(', ')}`);
+    }
+    const searchArguments = Object.entries(highlights)
+        .filter(([pointer, value]) => pointer !== '/definition' && value !== null && value !== undefined)
+        .map(([pointer, value]) => `${pointer.slice(pointer.lastIndexOf('/') + 1)}: ${written(value, [])}`);
+    return filters.length + leftOut.length + searchArguments.length === 0
+        ? null
+        : { filters, leftOut, arguments: searchArguments };
+}
+
+/** A search's lines as every place draws them: each filter, then what it leaves out, then its arguments. */
+export function searchLines(search: SearchWords): string[] {
+    return [
+        ...search.filters,
+        ...(search.leftOut.length > 0 ? [`Leaving out: ${search.leftOut.join(' · ')}`] : []),
+        ...(search.arguments.length > 0 ? [search.arguments.join(' · ')] : []),
+    ];
+}
 
 function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['example'] {
     if (!example) return null;
@@ -158,6 +233,7 @@ export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDeta
         body: text(message?.['body']) ?? text(highlights?.['/args/body']),
         compose: text(message?.['compose']) ?? text(highlights?.['/args/message/compose']),
         example: exampleOf(record(preview['example'])),
+        search: searchOf(highlights),
         facts,
     };
 }

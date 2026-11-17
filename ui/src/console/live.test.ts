@@ -108,6 +108,44 @@ describe('what the console draws from the runtime', () => {
         });
     });
 
+    it('shows a search’s definition and arguments as written: each filter a line, what it excludes apart, nothing renamed', () => {
+        const term = (value: string, type: 'include' | 'exclude') => ({ value, type });
+        const search = toApprovalDetail({
+            highlights: {
+                '/args/count': 1,
+                '/definition': {
+                    accountKeywords: {
+                        values: [term('freight', 'include'), term('ports', 'include'), term('agency', 'exclude')],
+                        type: 'or',
+                    },
+                    departmentHeadcountGrowth: { department: 'Sales', min: 5 },
+                    isHiringOnLinkedIn: true,
+                    seniorities: ['Director', 'VP'],
+                    companySizes: [],
+                    minRevenue: 'oneMillion',
+                    contactKeywords: { values: [term('intern', 'exclude')], type: 'and' },
+                },
+                '/args/audience': null,
+                '/args/people_per_company': 3,
+                '/args/find_phones': false,
+            },
+        }).search;
+        expect(search).toEqual({
+            filters: [
+                'accountKeywords: values: freight, ports; type: or',
+                'departmentHeadcountGrowth: department: Sales; min: 5',
+                'isHiringOnLinkedIn: true',
+                'seniorities: Director, VP',
+                'minRevenue: oneMillion',
+                'contactKeywords: type: and',
+            ],
+            leftOut: ['accountKeywords: agency', 'contactKeywords: intern'],
+            arguments: ['count: 1', 'people_per_company: 3', 'find_phones: false'],
+        });
+        expect(toApprovalDetail({ highlights: { '/args/count': 5 } }).search).toBeNull();
+        expect(toApprovalDetail({ highlights: { '/definition': {} } }).search).toBeNull();
+    });
+
     it('reads what an approval would do from its preview, and nothing it does not carry', () => {
         expect(
             toApprovalDetail({
@@ -125,6 +163,7 @@ describe('what the console draws from the runtime', () => {
             body: null,
             compose: null,
             example: null,
+            search: null,
             facts: ['Reach: act (bookkeeping until the campaign is live)', 'Reversibility: irreversible'],
         });
         expect(

@@ -17,6 +17,7 @@ import { shown } from '../test/area';
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
+import { linesOf, searchIntent, firstSearchLines, topUpArguments } from '../test/search-words';
 import * as consoleCampaigns from './campaigns';
 import { Console } from './console';
 import { attention } from './needs';
@@ -297,6 +298,27 @@ describe('what waits in an agent’s chat', () => {
         fireEvent.click(within(question).getByRole('button', { name: 'Something else…' }));
         expect(within(question).getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
         expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
+    });
+
+    it('names a paid search in words and shows its definition and its arguments as written under its intent', async () => {
+        springApprovals = 'approval.list/search-campaign-pending';
+        elsewhere = 'nothing';
+        const { fake } = renderConsole();
+        // The chat's own reads, made only once it is opened: the search's story, and nothing else.
+        fake.answer('decision.list', 'decision.list/empty', 'decision.list/search-campaign-none').answer(
+            'approval.get',
+            'approval.get/search-first',
+            'approval.get/search-top-up',
+        );
+        const pane = await openChat('Spring');
+        const search = await drawn(pane, 'apr_1');
+        expect(words(search.querySelector('.ask-h')!)).toMatch(/^Waiting for you Find people /);
+        expect(words(search.querySelector('.waiting-intent')!)).toBe(searchIntent);
+        expect(linesOf(search, '.search-lines')).toEqual(firstSearchLines);
+        expect(within(search).queryByRole('button', { name: 'Edit' })).toBeNull();
+        const topUp = await drawn(pane, 'apr_2');
+        expect(linesOf(topUp, '.search-lines').at(-1)).toBe(topUpArguments);
+        expect(sent(fake, 'workitem.get')).toEqual([]);
     });
 
     it('draws Approve green and Reject red, Details quiet at the end, the words clamped, and a question’s options as pills', async () => {

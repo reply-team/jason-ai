@@ -1759,6 +1759,11 @@ body,
 .jc-console .needs-facts {
     margin-top: 8px;
 }
+/* A search's definition and arguments, under its intent, as the runtime returned them. */
+.jc-console .needs-search {
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+}
 .jc-console .needs-pane .ask-a > .inp {
     flex: 1 1 200px;
     width: auto;
@@ -2570,8 +2575,12 @@ body,
     color: var(--mute);
 }
 .jc-console .waiting-card .waiting-body,
-.jc-console .waiting-card .waiting-intent {
+.jc-console .waiting-card .waiting-intent,
+.jc-console .waiting-card .search-lines {
     margin-top: 4px;
+}
+.jc-console .waiting-card .search-lines {
+    overflow-wrap: anywhere;
 }
 /* Who doubted a send and why, above the message's words: on a chat's card and in Needs you's pane. */
 .jc-console .waiting-card .send-doubts,

@@ -1,0 +1,156 @@
+{
+  "operation": "journal.list",
+  "case": "search-first",
+  "request": {
+    "work_item_id": "wi_1"
+  },
+  "status": 200,
+  "response": {
+    "items": [
+      {
+        "id": "jrn_1",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "kind": "approval_requested",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "approval",
+        "old": null,
+        "new": {
+          "id": "apr_1",
+          "operation": "audience.search",
+          "subject_hash": "sha256:recorded-1"
+        },
+        "reason": "approval_required",
+        "contact_id": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "audience.search",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_2",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "kind": "workitem_awaiting_approval",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "status",
+        "old": "created",
+        "new": "awaiting_approval",
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "audience.search",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_3",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "system",
+          "id": "dispatcher"
+        },
+        "kind": "workitem_context_updated",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "audience",
+        "old": null,
+        "new": {
+          "id": "aud_1",
+          "number": 1,
+          "definition": {
+            "jobTitles": [
+              {
+                "value": "Head of Operations",
+                "type": "include"
+              },
+              {
+                "value": "Operations Director",
+                "type": "include"
+              },
+              {
+                "value": "Operations Intern",
+                "type": "exclude"
+              }
+            ],
+            "contactLocations": [
+              {
+                "value": "Portugal",
+                "type": "include"
+              }
+            ],
+            "industries": [
+              {
+                "value": "Logistics",
+                "type": "include"
+              },
+              {
+                "value": "Staffing and Recruiting",
+                "type": "exclude"
+              }
+            ],
+            "companySizes": [
+              "fifty",
+              "twoHundred"
+            ]
+          }
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "audience.search",
+        "actor_role": null
+      },
+      {
+        "id": "jrn_4",
+        "ts": "2026-10-16T09:00:00.000Z",
+        "actor": {
+          "type": "role",
+          "id": "planner"
+        },
+        "kind": "workitem_created",
+        "campaign_id": "cmp_1",
+        "work_item_id": "wi_1",
+        "attempt_id": null,
+        "key": "kind",
+        "old": null,
+        "new": {
+          "kind": "provider_op",
+          "role": null,
+          "operation": "audience.search",
+          "contact_id": null,
+          "priority": 0,
+          "not_before": null,
+          "due_at": null
+        },
+        "reason": null,
+        "contact_id": null,
+        "campaign_name": "Spring launch",
+        "contact_name": null,
+        "work_item_kind": "provider_op",
+        "work_item_role": null,
+        "work_item_operation": "audience.search",
+        "actor_role": null
+      }
+    ],
+    "next_cursor": null
+  }
+}
