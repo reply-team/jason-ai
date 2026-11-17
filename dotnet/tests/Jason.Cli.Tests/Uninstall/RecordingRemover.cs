@@ -259,6 +259,8 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
         return Running.GetValueOrDefault(executable) ?? [];
     }
 
+    public void UnloadLaunchAgent(string file) => Record("launchagent.unload", file);
+
     /// <summary>The waiter's id this pretends to have started, or null for one that could not be.</summary>
     public int? Waiter { get; init; } = 4242;
 

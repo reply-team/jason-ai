@@ -132,6 +132,60 @@ public static partial class DesktopRemoval
             : null;
     }
 
+    /// <summary>
+    /// Whether a bundle on macOS is Jason Desktop's by its bundle identifier, read from <c>Contents/Info.plist</c>: the folder's
+    /// shape alone is no proof before a recursive delete. electron-builder writes that file as XML (app-builder-lib's
+    /// <c>savePlistFile</c> builds it with the <c>plist</c> package), from <c>appId</c>; a file that is not there, is a link, is
+    /// larger than a property list is, or does not name <see cref="Identifier"/> is not proof.
+    /// </summary>
+    public static bool IsJasonsBundle(string application)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(application);
+        try
+        {
+            var info = new FileInfo(Path.Combine(application, "Contents", "Info.plist"));
+            if (!info.Exists || info.LinkTarget is not null || info.Length > 1024 * 1024)
+            {
+                return false;
+            }
+
+            var match = BundleIdentifier().Match(File.ReadAllText(info.FullName));
+            return match.Success && string.Equals(match.Groups[1].Value.Trim(), Identifier, StringComparison.Ordinal);
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    [GeneratedRegex(@"<key>CFBundleIdentifier</key>\s*<string>([^<]*)</string>", RegexOptions.CultureInvariant)]
+    private static partial Regex BundleIdentifier();
+
+    /// <summary>
+    /// Windows, the terminal door: the processes running the carried jason besides this one, the runtime this uninstall stops
+    /// and an earlier demo's runtime it stops. The application's uninstaller ends with nothing removed while any process runs
+    /// from that file (<c>installer/uninstall.nsh</c>), after this verb has ended and can no longer say so, so the verb refuses
+    /// first while one does. A process started after this look still blocks it; the report says what to do then.
+    /// </summary>
+    public static IReadOnlyList<int> OthersRunningTheCarriedJason(CliEnvironment env, CarriedExecutable carried, DesktopPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(carried);
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        var stopped = new HashSet<int> { Environment.ProcessId };
+        foreach (var paths in plan.Demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths))
+        {
+            if (DescriptorProcess.Live(paths, processes) is { } runtime)
+            {
+                stopped.Add(runtime.Pid);
+            }
+        }
+
+        return [.. env.Removes!.RunningFrom(carried.Executable).Where(pid => !stopped.Contains(pid)).Order()];
+    }
+
     /// <summary>The application's own executable inside its folder.</summary>
     public static string ApplicationExecutable(string application, SetupSystem platform) =>
         platform is SetupSystem.Windows ? Path.Combine(application, "Jason.exe") : Path.Combine(application, "Contents", "MacOS", "Jason");
@@ -150,6 +204,11 @@ public static partial class DesktopRemoval
         if (application is null)
         {
             left.Add($"{carried.Executable} is not inside a folder shaped as Jason Desktop's, so no application was looked for or is removed here.");
+        }
+        else if (places.Platform is SetupSystem.MacOs && !IsJasonsBundle(application))
+        {
+            left.Add($"{application} does not name Jason Desktop's bundle identifier, {Identifier}, in its Contents/Info.plist, so it is not known to be Jason's: no application was looked for or is removed here.");
+            application = null;
         }
 
         var fate = application is null ? ApplicationFates.NotFound
@@ -451,6 +510,14 @@ public static partial class DesktopRemoval
             {
                 if (places.Platform is SetupSystem.MacOs)
                 {
+                    // Unloaded first, where the window was looked for and is not open: a loaded job would stay loaded until
+                    // the person logs out. Where the application is kept, the window may be the job's own, and an unload
+                    // would end it, so the file alone goes.
+                    if (plan.ApplicationFate == ApplicationFates.Deleted)
+                    {
+                        env.Removes!.UnloadLaunchAgent(item);
+                    }
+
                     env.Removes!.RemoveFile(item);
                 }
                 else if (OperatingSystem.IsWindows())
@@ -558,12 +625,9 @@ public static partial class DesktopRemoval
 
         if (plan.CommandLineInstall is { } old)
         {
-            var (aside, removed) = new CommandLineRemoval(places, kept, problems).Remove(old, replacedByWrapper: false);
+            // What became of an executable held by a running process is said by the routine itself, once.
+            var (_, removed) = new CommandLineRemoval(places, kept, problems).Remove(old, replacedByWrapper: false);
             done.Add($"Took off the command-line install at {old}{(removed.Count > 0 ? ": removed " + string.Join(", ", removed) : string.Empty)}.");
-            if (aside is not null)
-            {
-                kept.Add($"{old} was held by a running process, so it was renamed to {aside}; it can be deleted once nothing runs from it.");
-            }
         }
 
         if (places.Platform is SetupSystem.Windows)
@@ -700,7 +764,8 @@ public static partial class DesktopRemoval
 
                 if (env.Removes!.HandToUninstaller(application, Environment.ProcessId) is { } waiter)
                 {
-                    done.Add(string.Create(CultureInfo.InvariantCulture, $"Handed the application at {application} to its own uninstaller, which removes it once this command has ended: process {waiter} waits for that."));
+                    done.Add(string.Create(CultureInfo.InvariantCulture, $"Handed the application at {application} to its own uninstaller, which removes it once this command has ended: process {waiter} waits for that. ")
+                        + "If Jason is still listed in Installed apps in Settings afterwards, a jason started from its folder in the meantime kept the uninstaller from removing it: uninstall Jason there.");
                 }
                 else
                 {
@@ -709,14 +774,23 @@ public static partial class DesktopRemoval
 
                 return;
             case ApplicationFates.Deleted:
+                if (!IsJasonsBundle(application))
+                {
+                    problems.Add($"{application} no longer names Jason Desktop's bundle identifier, {Identifier}, in its Contents/Info.plist, so it was not deleted: it is not known to be Jason's.");
+                    return;
+                }
+
                 try
                 {
                     env.Removes!.RemoveTree(application);
                     done.Add($"Removed the application, {application}.");
                 }
-                catch (Exception refused) when (refused is RemovalRefused or IOException or UnauthorizedAccessException)
+                catch (Exception refused) when (refused is not OperationCanceledException)
                 {
-                    problems.Add($"The application at {application} could not be removed: {refused.Message} Moving it to the Trash removes it.");
+                    // macOS may refuse a terminal the right to delete an application (Privacy & Security, App Management), and
+                    // a delete refused part-way leaves part of the bundle. Never passed over: the verb ends 1 on it.
+                    var left = Directory.Exists(application) ? $"{application} is still there, and may be only part of the application now" : $"{application} is gone";
+                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move Jason from Applications to the Bin (the Trash) in the Finder to remove it.");
                 }
 
                 return;
