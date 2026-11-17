@@ -52,7 +52,7 @@ public partial class ReleaseWorkflowTests
 
         var configuration = Read(["desktop", "electron-builder.config.mjs"]);
         Assert.Contains("export const testBuildVariable = 'JASON_DESKTOP_TEST_BUILD';", configuration, StringComparison.Ordinal);
-        Assert.Equal(1, Regex.Matches(configuration, @"environment\[testBuildVariable\] === '1'").Count);
+        Assert.Single(Regex.Matches(configuration, @"environment\[testBuildVariable\] === '1'"));
         Assert.DoesNotContain("process.env[testBuildVariable]", configuration, StringComparison.Ordinal);
     }
 
