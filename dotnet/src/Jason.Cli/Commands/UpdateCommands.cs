@@ -217,7 +217,7 @@ public static class UpdateCommands
         IReadOnlyList<string> command,
         bool human,
         Func<string, Exception?, UpdateException> unfinished,
-        Func<CancellationToken, Task>? recover,
+        Func<bool, Task<string>>? recover,
         CancellationToken cancellationToken)
     {
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
@@ -226,11 +226,18 @@ public static class UpdateCommands
         {
             finished = await processes.RunAsync(env.Paths, command, env.Error, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException cancelled) when (recover is not null && cancellationToken.IsCancellationRequested)
+        {
+            // The child was ended with the cancel: what it began is put back as far as it can be, and the runtime launched
+            // without a wait, so the answer comes before the process is ended too.
+            var said = await recover(false).ConfigureAwait(false);
+            throw new UpdateException(UpdateCodes.Cancelled, $"The update was cancelled while {command[0]} carried it. {said}", cancelled, retryable: true);
+        }
         catch (Exception error) when (error is Win32Exception or IOException or InvalidOperationException)
         {
             if (recover is not null)
             {
-                await recover(cancellationToken).ConfigureAwait(false);
+                await recover(true).ConfigureAwait(false);
             }
 
             throw unfinished($"it could not be run to finish the update: {error.Message}", error);
@@ -242,7 +249,7 @@ public static class UpdateCommands
             // Whoever asked for a runtime's stop starts one again: a hand-over that ended with no answer may have left none.
             if (recover is not null)
             {
-                await recover(cancellationToken).ConfigureAwait(false);
+                await recover(true).ConfigureAwait(false);
             }
 
             throw unfinished(
@@ -360,6 +367,87 @@ public static class UpdateCommands
             return ExitCodes.Success;
         }
 
+        // A console's close ends this process soon after it is told, and nothing else tells a .NET program of it: it cancels
+        // the update as Ctrl+C does, and holds the close until the way out has run (Closing).
+        using var closing = new Closing(cancellationToken);
+        cancellationToken = closing.Token;
+        try
+        {
+            return await CarriedApplyClosableAsync(env, carried, continuing, feed, version, drainSeconds, human, finish, paths, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            closing.Settled();
+        }
+    }
+
+    /// <summary>
+    /// What a console's close does to a carried update: on Windows the close of its window, on macOS and Linux the hang-up of
+    /// its terminal. .NET reports it as SIGHUP, which no part of the command line handles, and Windows ends the process
+    /// shortly after the handler returns; so the handler cancels the update and waits, a few seconds at most, for its way out
+    /// to have run.
+    /// </summary>
+    internal sealed class Closing : IDisposable
+    {
+        private readonly CancellationTokenSource _cancel;
+        private readonly ManualResetEventSlim _settled = new(false);
+        private readonly System.Runtime.InteropServices.PosixSignalRegistration? _registration;
+
+        public Closing(CancellationToken outer)
+        {
+            _cancel = CancellationTokenSource.CreateLinkedTokenSource(outer);
+            try
+            {
+                _registration = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGHUP, Closed);
+            }
+            catch (Exception unsupported) when (unsupported is PlatformNotSupportedException or IOException)
+            {
+                _registration = null;
+            }
+        }
+
+        /// <summary>The update's token: the caller's, and the console's close.</summary>
+        public CancellationToken Token => _cancel.Token;
+
+        /// <summary>How long the close is held for the way out: under the five seconds Windows gives a close handler.</summary>
+        public static TimeSpan Hold { get; } = TimeSpan.FromSeconds(4);
+
+        /// <summary>The handler: the update cancelled, and the close held until it settled or the hold ran out.</summary>
+        internal void Closed(System.Runtime.InteropServices.PosixSignalContext? context)
+        {
+            if (context is not null)
+            {
+                context.Cancel = true;
+            }
+
+            _cancel.Cancel();
+            _settled.Wait(Hold);
+        }
+
+        /// <summary>The way out has run: a close that came may end the process now.</summary>
+        public void Settled() => _settled.Set();
+
+        public void Dispose()
+        {
+            _registration?.Dispose();
+            _settled.Set();
+            _cancel.Dispose();
+            _settled.Dispose();
+        }
+    }
+
+    private static async Task<int> CarriedApplyClosableAsync(
+        CliEnvironment env,
+        CarriedExecutable carried,
+        bool continuing,
+        string? feed,
+        string? version,
+        int? drainSeconds,
+        bool human,
+        bool finish,
+        UpdatePaths paths,
+        CancellationToken cancellationToken)
+    {
         var handing = new CarriedUpdate(env, paths, TimeProvider.System, carried, env.Setup?.Platform)
         {
             // On Windows the carried process itself carries the update, its own image moved out of the application's folder.
@@ -379,12 +467,28 @@ public static class UpdateCommands
             unread = error;
         }
 
-        // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop.
+        // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop,
+        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more.
         if (finish && !continuing && unread is null && inFlight is null)
         {
-            var finishing = new UpdateApplier(env, paths, TimeProvider.System, carried.Executable);
-            PrintFinish(env, human, await finishing.FinishInstalledAsync(SemanticVersion.Current, Request(feed, null, null), cancellationToken).ConfigureAwait(false));
-            return ExitCodes.Success;
+            UpdateLock held;
+            try
+            {
+                held = UpdateLock.Take(paths, "the finishing step");
+            }
+            catch (UpdateException refused)
+            {
+                env.Out.WriteLine(CliErrors.Serialize(refused.Code, refused.Message, refused.Retryable));
+                return ExitCodes.ApiError;
+            }
+
+            using (held)
+            {
+                CarriedUpdate.Sweep(CarriedUpdate.Store(env.Setup));
+                var finishing = new UpdateApplier(env, paths, TimeProvider.System, carried.Executable);
+                PrintFinish(env, human, await finishing.FinishInstalledAsync(SemanticVersion.Current, Request(feed, null, null), cancellationToken).ConfigureAwait(false));
+                return ExitCodes.Success;
+            }
         }
 
         if (!handing.HasDesktop && inFlight is not { Step: >= UpdateStep.Swapped } && !(continuing && inFlight is not null))
@@ -427,11 +531,19 @@ public static class UpdateCommands
             {
                 if (continuing)
                 {
-                    var swapped = inFlight.Step >= UpdateStep.Swapped ? inFlight : handing.Swapped(inFlight);
+                    UpdateLedger swapped;
+                    using (UpdateLock.Take(paths, "the update"))
+                    {
+                        swapped = inFlight.Step >= UpdateStep.Swapped ? inFlight : handing.Swapped(inFlight);
+                    }
+
                     return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
                 }
 
-                return await FinishAsync(env, handing, inFlight, request, human, cancellationToken).ConfigureAwait(false);
+                using (UpdateLock.Take(paths, "the finishing step"))
+                {
+                    return await FinishAsync(env, handing, inFlight, request, human, wasLive, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             if (finish)
@@ -444,29 +556,49 @@ public static class UpdateCommands
 
             if (continuing)
             {
-                var installed = await handing.InstallAsync(inFlight!, request, cancellationToken).ConfigureAwait(false);
+                UpdateLedger installed;
+                using (UpdateLock.Take(paths, "the update"))
+                {
+                    installed = await handing.InstallAsync(inFlight!, request, cancellationToken).ConfigureAwait(false);
+                }
+
                 return await HandToFinishAsync(env, handing, installed, request, human, wasLive, cancellationToken).ConfigureAwait(false);
             }
 
-            var planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
-
-            // Windows: this process carries the update itself, its image moved out of the folder right before the Desktop
-            // starts, and hands the new jason the rest as a child it waits for.
+            // Windows: this process carries the update itself, the Desktop asked first and its image moved out of the folder
+            // at the download, and hands the new jason the rest as a child it waits for, the lock let go for it.
             if (handing.MovesItself)
             {
-                var swapped = await handing.InstallAsync(planned, request, cancellationToken).ConfigureAwait(false);
+                UpdateLedger swapped;
+                using (UpdateLock.Take(paths, "the update"))
+                {
+                    var planning = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+                    swapped = await handing.InstallAsync(planning, request, cancellationToken).ConfigureAwait(false);
+                }
+
                 return await HandToFinishAsync(env, handing, swapped, request, human, wasLive, cancellationToken).ConfigureAwait(false);
             }
 
-            // macOS: this jason puts its copy aside and ends its part there: the copy drains, asks the Desktop and waits.
-            handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
+            // macOS: this jason plans and puts its copy aside under the lock, and ends its part there: the copy takes the lock,
+            // asks the Desktop, drains and waits.
+            UpdateLedger planned;
+            using (UpdateLock.Take(paths, "the update"))
+            {
+                planned = inFlight ?? await handing.PlanAsync(request, cancellationToken).ConfigureAwait(false);
+                handing.CopyAside(env.InstallPath ?? Environment.ProcessPath);
+            }
+
             return await HandOverAsync(
                 env,
                 handing.Steps,
                 [handing.Copy, "update", "apply", "--feed", request.Feed.AbsoluteUri, "--drain-seconds", ((int)request.Drain.TotalSeconds).ToString(CultureInfo.InvariantCulture)],
                 human,
                 (why, cause) => CopyNotFinished(env, handing, planned, why, cause),
-                ct => handing.RecoverAsync(wasLive, ct),
+                async waits =>
+                {
+                    await handing.RecoverAsync(wasLive, waits).ConfigureAwait(false);
+                    return handing.RuntimeSaid();
+                },
                 cancellationToken).ConfigureAwait(false);
         }
         catch (UpdateException error)
@@ -502,14 +634,18 @@ public static class UpdateCommands
             [handing.Carried.Executable, "update", "apply", "--finish", "--feed", request.Feed.AbsoluteUri],
             human,
             (why, cause) => NotFinished(env, swapped, why, cause),
-            ct => handing.RecoverAsync(wasLive, ct),
+            async waits =>
+            {
+                await handing.RecoverAsync(wasLive, waits).ConfigureAwait(false);
+                return $"The application is {swapped.ToVersion}, and {handing.RuntimeSaid()} `jason update apply` finishes the update.";
+            },
             cancellationToken);
 
     /// <summary>
     /// The new carried jason's part: <c>plugins</c>, <c>started</c>, <c>healthy</c>, <c>complete</c>, the skills this
     /// installation recorded, the machine setup and the UI, then the application's own record of the update settled.
     /// </summary>
-    private static async Task<int> FinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger inFlight, UpdateRequest request, bool human, CancellationToken cancellationToken)
+    private static async Task<int> FinishAsync(CliEnvironment env, CarriedUpdate handing, UpdateLedger inFlight, UpdateRequest request, bool human, bool wasLive, CancellationToken cancellationToken)
     {
         if (inFlight.Step < UpdateStep.Swapped)
         {
@@ -536,6 +672,17 @@ public static class UpdateCommands
         {
             handing.Steps.AddRange(applier.Steps);
             throw;
+        }
+        catch (OperationCanceledException cancelled) when (cancellationToken.IsCancellationRequested)
+        {
+            // The update stopped the runtime; the new jason is in place, so it is started from it, not waited for.
+            handing.Steps.AddRange(applier.Steps);
+            await handing.RecoverAsync(wasLive, waits: false).ConfigureAwait(false);
+            throw new UpdateException(
+                UpdateCodes.Cancelled,
+                $"The update to {inFlight.ToVersion} was cancelled while it was finished. The application is {inFlight.ToVersion}, and {handing.RuntimeSaid()} `jason update apply` finishes the update.",
+                cancelled,
+                retryable: true);
         }
     }
 

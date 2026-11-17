@@ -33,6 +33,12 @@ public sealed class UpdatePaths(JasonPaths paths)
     /// </summary>
     public string Replaced => Path.Combine(Root, "replaced");
 
+    /// <summary>
+    /// The lock a carried update, its finishing step and its rollback hold while they act, so that a second one beside them
+    /// refuses rather than reads the same ledger (<see cref="UpdateLock"/>).
+    /// </summary>
+    public string Lock => Path.Combine(Root, "update.lock");
+
     /// <summary>Everything downloaded for updates, whichever version.</summary>
     public string Staging => Path.Combine(Root, "staged");
 

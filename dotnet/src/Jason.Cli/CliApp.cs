@@ -164,6 +164,12 @@ public static class CliApp
             Output = env.Out,
             Error = env.Error,
             EnableDefaultExceptionHandler = false,
+
+            // Ctrl+C and SIGTERM cancel the verb's token, and the process is ended this long after unless the verb has
+            // answered: a carried update puts back what it began, a jason file of some 120 MB among it, launches the runtime
+            // and says so, which the default two seconds do not always leave room for. A verb that ends on the cancel ends
+            // at once all the same.
+            ProcessTerminationTimeout = TimeSpan.FromSeconds(10),
         };
 
         try

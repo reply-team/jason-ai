@@ -355,6 +355,17 @@ public static partial class DesktopRemoval
         return found;
     }
 
+    /// <summary>
+    /// The data directories an earlier version's demo made, each only where it carries the demo's mark: where a runtime it
+    /// left running holds the carried jason too. A carried update stops one before it steps out of the application's folder.
+    /// </summary>
+    public static IReadOnlyList<string> DemoFolders(CliEnvironment env, SetupPlaces places)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(places);
+        return Demo(env, places, []);
+    }
+
     private static IReadOnlyList<string> Demo(CliEnvironment env, SetupPlaces places, List<string> left)
     {
         var data = Path.TrimEndingDirectorySeparator(Path.GetFullPath(env.Paths.Root));

@@ -92,6 +92,13 @@ public static class UpdateCodes
     /// </summary>
     public const string DesktopNotInstalled = "update_desktop_not_installed";
 
+    /// <summary>
+    /// A carried update was cancelled - Ctrl+C, a SIGTERM, its console closed - and put back what it had begun, as far as the
+    /// answer says: before the installer had it, the record that stood and the runtime as it was found, the runtime launched
+    /// without a wait; while the installer has it, nothing, and the command that finishes it once it lands.
+    /// </summary>
+    public const string Cancelled = "update_cancelled";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -113,6 +120,7 @@ public static class UpdateCodes
         RefusedByDesktop,
         DesktopUnanswered,
         DesktopNotInstalled,
+        Cancelled,
     ];
 }
 

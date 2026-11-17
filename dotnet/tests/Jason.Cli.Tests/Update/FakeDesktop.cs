@@ -66,34 +66,52 @@ public sealed class FakeDesktop : IDisposable
 
     /// <summary>
     /// The registry key the Windows machine setup writes its Path to: a key of this test's own under
-    /// <c>HKCU\Software\jason-tests</c>, made at the first read and taken away with this Desktop.
+    /// <c>HKCU\Software\jason-tests</c>, named here and made only by a setup that writes it, so a row that never runs the
+    /// machine setup writes nothing under HKCU; taken away with this Desktop.
     /// </summary>
-    public string PathKey => _pathKey ??= MakePathKey();
+    public string PathKey { get; } = $@"Software\jason-tests\{Guid.NewGuid():N}";
 
-    private string? _pathKey;
-
-    private static string MakePathKey()
-    {
-        var key = $@"Software\jason-tests\{Guid.NewGuid():N}";
-        if (OperatingSystem.IsWindows())
-        {
-            Microsoft.Win32.Registry.CurrentUser.CreateSubKey(key).Dispose();
-        }
-
-        return key;
-    }
-
-    /// <summary>What each start with <c>--update-apply</c> found: whether the carried file was there, and the record beside it.</summary>
+    /// <summary>
+    /// What each start with <c>--update-apply</c> found when it was told to go — the moment the installer looks: whether the
+    /// carried file was there, and the record beside it.
+    /// </summary>
     public List<(bool CarriedThere, string? Pid)> Seen { get; } = [];
 
-    /// <summary>Set to have a start with <c>--update-apply</c> never end, as a start that hangs does, until it is cancelled.</summary>
+    /// <summary>Set to have a start with <c>--update-apply</c> never end once it is told to go, until it is cancelled.</summary>
     public bool Hangs { get; set; }
+
+    /// <summary>
+    /// What a start does before the update is downloaded, as a refusal of the feed's or a start that ends with no file does:
+    /// given the request's id and the version, it returns the exit and the start goes no further. Null downloads.
+    /// </summary>
+    public Func<string, string, int>? Before { get; set; }
+
+    /// <summary>Set to have a start never end before it has downloaded anything, until it is cancelled.</summary>
+    public bool HangsBeforeDownload { get; set; }
+
+    /// <summary>Set to have the request taken by a running window: the start exits 3 at once, and the window does the rest.</summary>
+    public bool TakenByAWindow { get; set; }
+
+    /// <summary>Set to have a go of this request appear beside the request's file as soon as it names downloaded.</summary>
+    public bool PlantsAGo { get; set; }
+
+    /// <summary>How long the start waits for the go once it has written downloaded, as the Desktop's own wait does.</summary>
+    public TimeSpan GoWait { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>The requests that waited for a go that never came, and ended at go_timed_out.</summary>
+    public List<string> NoGo { get; } = [];
+
+    /// <summary>The arguments the starts with <c>--update-apply</c> were made with, in order.</summary>
+    public List<IReadOnlyList<string>> Requests => Starts.Where(start => start.Contains("--update-apply")).ToList();
+
+    /// <summary>Set to have a start with <c>--update-settle</c> never end, until it is ended.</summary>
+    public bool SettleHangs { get; set; }
 
     public void Dispose()
     {
-        if (_pathKey is { } key && OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows())
         {
-            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(key, throwOnMissingSubKey: false);
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(PathKey, throwOnMissingSubKey: false);
         }
     }
 
@@ -135,7 +153,76 @@ public sealed class FakeDesktop : IDisposable
         Starts.Add(command);
         if (command.Contains("--update-settle"))
         {
+            if (SettleHangs)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
             return new FinishedCommand(SettleExit, string.Empty);
+        }
+
+        var arguments = command.ToList();
+        var id = arguments[arguments.IndexOf("--request") + 1];
+        var to = arguments[arguments.IndexOf("--to") + 1];
+        if (TakenByAWindow)
+        {
+            // The window takes it at its own pace; the start that handed it on ends at once.
+            Window = Task.Run(() => TakeAsync(id, to, command.Contains("--await-go"), CancellationToken.None), CancellationToken.None);
+            return new FinishedCommand(3, string.Empty);
+        }
+
+        return new FinishedCommand(await TakeAsync(id, to, command.Contains("--await-go"), cancellationToken), string.Empty);
+    }
+
+    /// <summary>The window's taking of a request it was handed, while it runs.</summary>
+    public Task<int>? Window { get; private set; }
+
+    /// <summary>
+    /// What the process that takes a request does: before the download what <see cref="Before"/> says; a request that waits
+    /// for the go writes downloaded and waits for <c>desktop-&lt;id&gt;.go</c>, ending at go_timed_out where none comes; then, told
+    /// to go, what <see cref="Answer"/> says.
+    /// </summary>
+    private async Task<int> TakeAsync(string id, string to, bool awaitsGo, CancellationToken cancellationToken)
+    {
+        if (HangsBeforeDownload)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+
+        if (Before is { } before)
+        {
+            return before(id, to);
+        }
+
+        if (awaitsGo)
+        {
+            var go = Path.Combine(_installation.Paths.Root, "update", $"desktop-{id}.go");
+            if (File.Exists(go))
+            {
+                Write(id, to, "refused", reason: "go_there", message: "A go for this request was there before the request was taken.");
+                return 0;
+            }
+
+            Write(id, to, "downloaded", offered: to);
+            if (PlantsAGo)
+            {
+                File.WriteAllText(go, string.Empty);
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            var waited = TimeSpan.Zero;
+            while (!File.Exists(go))
+            {
+                if (waited >= GoWait)
+                {
+                    NoGo.Add(id);
+                    Write(id, to, "refused", reason: "go_timed_out", message: "No go came.");
+                    return 0;
+                }
+
+                await Task.Delay(10, cancellationToken);
+                waited += TimeSpan.FromMilliseconds(10);
+            }
         }
 
         var pid = Path.Combine(Path.GetDirectoryName(_installation.InstallPath)!, CarriedUpdate.PidFileName);
@@ -145,11 +232,7 @@ public sealed class FakeDesktop : IDisposable
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
 
-        var arguments = command.ToList();
-        var id = arguments[arguments.IndexOf("--request") + 1];
-        var to = arguments[arguments.IndexOf("--to") + 1];
-        var exit = (Answer ?? Install)(id, to);
-        return new FinishedCommand(exit, string.Empty);
+        return (Answer ?? Install)(id, to);
     }
 
     /// <summary>
