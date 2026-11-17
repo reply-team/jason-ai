@@ -93,9 +93,12 @@ export function askedAfter(edits: readonly Edited[], approvalId: string): string
     return withdrawnOf(edits, approvalId)?.asked ?? null;
 }
 
-/** The edit a list's row stands for: its withdrawn approval, or the approval asked again with its words. */
+/**
+ * The edit a list's row stands for: the one that withdrew the row's approval, else the one asked again with it. A row
+ * whose approval was asked again after one edit and then edited itself stands for the later edit.
+ */
 export function editOf(edits: readonly Edited[], rowId: string): Edited | undefined {
-    return edits.find((edit) => edit.withdrawn === rowId || edit.asked === rowId);
+    return edits.find((edit) => edit.withdrawn === rowId) ?? edits.find((edit) => edit.asked === rowId);
 }
 
 /** The message's words as the approval was read, with the words an edit saved in their place. */

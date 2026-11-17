@@ -62,6 +62,16 @@ describe('an edited message’s row, matched by its work item alone', () => {
         expect(editOf([now], 'apr_other')).toBeUndefined();
     });
 
+    it('stands for the second edit of a message once the approval asked again was edited too', () => {
+        // The first edit withdrew apr_1 and was asked again as apr_2; the second edit withdrew apr_2.
+        const first = { ...edit, asked: asked.id };
+        const second: Edited = { ...edit, withdrawn: asked.id };
+        expect(editOf([first, second], asked.id)).toBe(second);
+        expect(editOf([first, second], withdrawn.id)).toBe(first);
+        // So the row of apr_2 stays while the runtime has not asked again, rather than going as the first edit's.
+        expect(rowNow(editOf([first, second], asked.id)!, [])).toBe('read');
+    });
+
     it('keeps the approval it withdrew withdrawn after it was asked again, and after its work ended', () => {
         expect(withdrawnOf([edit], withdrawn.id)).toBe(edit);
         const now = { ...edit, asked: asked.id };
