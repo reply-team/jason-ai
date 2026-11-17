@@ -86,7 +86,7 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
-  §7 takes the installation off again.
+  §7 takes the installation off again. Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.
 - Install by the first route that fits. Where §2 names a package for this platform and its package manager is
   already on this machine, use it (*With a package manager*). Where it is not, where it fails, or where it or your
   harness refuses it, say so once and take §2 *By hand*: download the archive and `checksums.txt` from the release,
@@ -104,8 +104,8 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
-- Install nothing else and build nothing (§3). A 404 from a download is §2's:
-  stop and report exactly that. Leave no long-running process behind except the runtime that
+- Install nothing but Jason, or Jason Desktop where the person took it, and build nothing (§3). A 404 from a
+  download is §2's: stop and report exactly that. Leave no long-running process behind except the runtime that
   `jason runtime start` starts.
 - A refusal — by your harness, or by a package manager — is reported once, as it stands, and never worked around.
   Working around it is a retry, the same command rewrapped, or the refused code run by another means, such as a
@@ -313,17 +313,19 @@ latest release's downloads: `jason-desktop-windows-x64-setup.exe` for Windows on
 `jason-desktop-linux-x64.deb` (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later)
 or `jason-desktop-linux-x64.AppImage`; `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
 `/desktop/linux-deb` and `/desktop/linux-appimage` send you to the latest release's file. Each carries the release's own
-`jason` and works on this same installation, and the Command Line item of its menu puts a `jason` the terminal finds
-whenever the person wants one ([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Windows and macOS
-packages are signed; the Linux packages are not, and are built so, not yet seen on a real machine.
+`jason` and works on this same installation. The Command Line item of its menu puts a command in the terminal: `jason`,
+or `jason-desktop` where another `jason` already stands, so beside a command-line install the terminal's `jason` stays
+that install's and the desktop's is `jason-desktop`; on Windows it is placed only where the PATH holds the folder it
+uses ([desktop.md](desktop.md#the-command-line-and-the-login-items)). The Windows and macOS packages are signed; the
+Linux packages are not, and are built so, not yet seen on a real machine.
 
 An agent that installs Jason never needs the desktop: the steps of this page are its way. When the person takes the
 desktop (§1, *If an agent installs it*), give them the short address for their system, or download the file, check its
 SHA-256 against the release's `checksums.txt` as *By hand* does, and hand it to them to open. That ends the install:
 at a start the desktop starts a runtime when none is up, and deploys the role skills and its chat's own skills from the
 package it carries ([desktop.md](desktop.md#what-it-does-at-a-start)). The skills for the person's own agent, which
-§4 deploys on a command-line install, come only when they ask: `jason skills install --host <their host>`, in a
-terminal the Command Line item has put `jason` in.
+§4 deploys on a command-line install, come only when they ask: `jason skills install --host <their host>`, run
+with the command the Command Line item put in the terminal.
 
 ---
 

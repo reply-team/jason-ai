@@ -472,9 +472,12 @@ for every other is 1.0.0; whether that one is behind is `jason status`'s to say,
 Installing Jason is `docs/INSTALL.md` (<https://raw.githubusercontent.com/reply-team/jason-ai/main/docs/INSTALL.md>),
 followed in order, its §4 included: that section teaches the installation its role skills, which the install script
 has already done as its last step unless it said it could not, and without them every role it launches runs
-untaught. A person installs it with the two lines below. If they ask you to install it, follow
-that page yourself, by its section for an agent: a package where the page names one for this platform and its
-package manager is already there, otherwise the steps it gives by hand. Never pipe a download into a shell, and
+untaught. Jason installs two ways: the command line, which a person installs with the two lines below, and Jason
+Desktop, one download from `https://get.jasonharness.ai/desktop/windows`, `/desktop/mac`, `/desktop/mac-intel`,
+`/desktop/linux-deb` or `/desktop/linux-appimage`. If they ask you to install it, follow that page yourself, by its
+section for an agent: a package where the page names one for this platform and its package manager is already there,
+otherwise the steps it gives by hand. That section also says when to offer them the two ways, and what to do when they
+take Jason Desktop. Never pipe a download into a shell, and
 ask them before every act it marks "Ask first". The two lines are the person's: where neither route is open to
 you, hand them the lines to type.
 
