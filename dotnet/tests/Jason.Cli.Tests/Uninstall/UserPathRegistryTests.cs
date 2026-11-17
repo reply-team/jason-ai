@@ -235,6 +235,39 @@ public class UserPathRegistryTests
         }
     }
 
+    /// <summary>
+    /// <c>jason install</c> puts the application's folder on the Path with <see cref="UserPathValue.Append"/>, the C# twin
+    /// of the statements <c>install.ps1</c> runs and the repair prints: run side by side on the same values, twice each,
+    /// they leave the same value of the same kind.
+    /// </summary>
+    [Theory]
+    [InlineData(null, RegistryValueKind.ExpandString)]
+    [InlineData("", RegistryValueKind.ExpandString)]
+    [InlineData(@"%USERPROFILE%\AppData\Local\Microsoft\WindowsApps;;C:\tools\", RegistryValueKind.ExpandString)]
+    [InlineData(@"C:\tools;{dir}\", RegistryValueKind.ExpandString)]
+    [InlineData(@"C:\tools;{DIR}", RegistryValueKind.String)]
+    [InlineData(@"%USERPROFILE%\bin;C:\tools", RegistryValueKind.String)]
+    public void The_setups_writer_and_the_installers_statements_leave_the_same_path(string? before, RegistryValueKind kind)
+    {
+        using var byPowerShell = ScratchKey.Create();
+        using var byCSharp = ScratchKey.Create();
+        var directory = byPowerShell.NewDirectory();
+        if (before is not null)
+        {
+            var value = before.Replace("{dir}", directory, StringComparison.Ordinal).Replace("{DIR}", directory.ToUpperInvariant(), StringComparison.Ordinal);
+            byPowerShell.SetPath(value, kind);
+            byCSharp.SetPath(value, kind);
+        }
+
+        for (var run = 0; run < 2; run++)
+        {
+            Run(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), PathEntry.RegistryCommand(directory, byPowerShell.SubKey));
+            new UserPathValue(byCSharp.SubKey).Append(directory);
+
+            Assert.Equal(byPowerShell.ReadPath(), byCSharp.ReadPath());
+        }
+    }
+
     /// <summary>The variable that test spells its directory with, set for the shell it runs and nowhere else.</summary>
     private const string SpelledRoot = "JASON_TESTS_SPELLED_ROOT";
 

@@ -228,7 +228,7 @@ public class UninstallPathEntryTests
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs in sh, on the platforms it installs on.");
 
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
 
         var (said, saw, error) = InSh(home, shell, PathEntry.InteractiveProfileFunction, "interactive_profile");
@@ -248,7 +248,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_block_in_the_interactive_profile_is_ours_to_remove()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         var bin = Installed(home, "jason");
         File.WriteAllText(Path.Combine(home, ".profile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
@@ -360,7 +360,7 @@ public class UninstallPathEntryTests
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs in sh, on the platforms it installs on.");
 
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         foreach (var name in existing)
         {
@@ -385,7 +385,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_bash_profile_that_links_to_nothing_is_not_the_one_bash_reads()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         File.WriteAllText(Path.Combine(home, ".profile"), "# mine\n");
         try
@@ -402,6 +402,143 @@ public class UninstallPathEntryTests
         if (!OperatingSystem.IsWindows())
         {
             Assert.Equal(Path.Combine(home, ".profile"), LoginProfileInSh(home, "/bin/bash").Said);
+        }
+    }
+
+    /// <summary>
+    /// <c>jason install</c> writes the block on macOS by <see cref="PathEntry.AddToProfile"/>, and <c>install.sh</c> by its
+    /// <c>add_to_profile</c>: one rule with two writers. The script carries the function the C# spells, word for word, with the
+    /// marker and the line it appends.
+    /// </summary>
+    [Fact]
+    public void The_installer_carries_the_add_to_profile_rule_word_for_word()
+    {
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains(PathEntry.AddToProfileFunction.Replace("\r\n", "\n", StringComparison.Ordinal), script, StringComparison.Ordinal);
+        Assert.Contains($"MARKER=\"{PathEntry.Marker}\"", script, StringComparison.Ordinal);
+        Assert.Contains("LINE=\"export PATH=\\\"$INSTALL_DIR:\\$PATH\\\"\"", script, StringComparison.Ordinal);
+        Assert.Contains("INSTALL_DIR=\"$HOME/.local/bin\"", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>install.sh</c> writes no profile where the PATH it runs with names the folder already, and <c>jason install</c>
+    /// keeps the same gate by <see cref="PathEntry.OnPath"/>: the script carries the test the C# spells, word for word, its
+    /// indentation aside.
+    /// </summary>
+    [Fact]
+    public void The_installer_carries_the_on_path_test_word_for_word()
+    {
+        static string Unindented(string text) => System.Text.RegularExpressions.Regex.Replace(text.Replace("\r\n", "\n", StringComparison.Ordinal), @"(?m)^[ \t]+", string.Empty);
+
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), "install", "install.sh"));
+
+        Assert.Contains(Unindented(PathEntry.OnPathTest) + "\n", Unindented(script), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// And the two judge a PATH alike: the script's test run in <c>sh</c> with that PATH, the C# beside it — a folder named
+    /// first, last, alone or between empty entries is there; one with a trailing slash, one that only begins an entry, and
+    /// an empty PATH are not. A PATH nobody could read (null) is not there either.
+    /// </summary>
+    [Theory]
+    [InlineData("/usr/bin:{dir}", true)]
+    [InlineData("{dir}:/usr/bin", true)]
+    [InlineData("{dir}", true)]
+    [InlineData("::{dir}::", true)]
+    [InlineData("/usr/bin:{dir}/", false)]
+    [InlineData("/usr/bin:{dir}x:/bin", false)]
+    [InlineData("/usr/bin:/bin", false)]
+    [InlineData("", false)]
+    public void The_installers_on_path_test_and_the_csharp_one_agree(string path, bool on)
+    {
+        var directory = "/home/a b/.local/bin";
+        var value = path.Replace("{dir}", directory, StringComparison.Ordinal);
+
+        Assert.Equal(on, PathEntry.OnPath(value, directory));
+        Assert.False(PathEntry.OnPath(null, directory));
+
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add($"set -eu\nPATH=\"$1\"\nINSTALL_DIR=\"$2\"\non=1\n{PathEntry.OnPathTest}\n    *) on=0 ;;\nesac\nprintf '%s' \"$on\"");
+        start.ArgumentList.Add("sh");
+        start.ArgumentList.Add(value);
+        start.ArgumentList.Add(directory);
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var said = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, error);
+        Assert.Equal(on ? "1" : "0", said);
+    }
+
+    /// <summary>
+    /// A colon in a folder's name splits PATH's entries, so no profile line can name the folder: refused wherever it stands
+    /// past the path's root, and a drive's own colon, which is part of the root, is not one.
+    /// </summary>
+    [Theory]
+    [InlineData("/Users/a:b/.local/bin", true)]
+    [InlineData("/Users/a/.local:x/bin", true)]
+    [InlineData("/Users/a b/.local/bin", false)]
+    [InlineData("/Users/a/.local/bin", false)]
+    public void A_colon_in_the_folder_splits_the_path(string directory, bool splits)
+    {
+        Assert.Equal(splits, PathEntry.SplitsPath(directory));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.False(PathEntry.SplitsPath(@"C:\Users\a\.local\bin"));
+        }
+    }
+
+    /// <summary>
+    /// And the two writers leave the same bytes: the script's function run in <c>sh</c> on one copy of each case, the C# on
+    /// another — no file, an empty one, one with the line, one with the line commented out, one ending without a newline,
+    /// one with a CRLF line — twice each, so a second run is held too.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("alias ll='ls -l'\n")]
+    [InlineData("alias ll='ls -l'")]
+    [InlineData("export PATH=\"{dir}:$PATH\"\n")]
+    [InlineData("# export PATH=\"{dir}:$PATH\"\n")]
+    [InlineData("export PATH=\"{dir}:$PATH\"\r\n")]
+    public void The_installers_add_to_profile_and_the_csharp_writer_leave_the_same_bytes(string? before)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "install.sh runs in sh, on the platforms it installs on.");
+        using var tree = new TempTree();
+        var directory = Path.Combine(tree.Root, "home dir", ".local", "bin");
+        var bySh = Path.Combine(tree.Root, "by-sh");
+        var byCSharp = Path.Combine(tree.Root, "by-csharp");
+        if (before is not null)
+        {
+            File.WriteAllText(bySh, before.Replace("{dir}", directory, StringComparison.Ordinal));
+            File.WriteAllText(byCSharp, before.Replace("{dir}", directory, StringComparison.Ordinal));
+        }
+
+        for (var run = 0; run < 2; run++)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("/bin/sh") { RedirectStandardError = true, UseShellExecute = false };
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add($"set -eu\nMARKER=\"{PathEntry.Marker}\"\nLINE=\"export PATH=\\\"$1:\\$PATH\\\"\"\nADDED=\"\"\n{PathEntry.AddToProfileFunction}\nadd_to_profile \"$2\"");
+            start.ArgumentList.Add("sh");
+            start.ArgumentList.Add(directory);
+            start.ArgumentList.Add(bySh);
+            using (var process = System.Diagnostics.Process.Start(start)!)
+            {
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                Assert.True(process.ExitCode == 0, error);
+            }
+
+            PathEntry.AddToProfile(byCSharp, directory);
+
+            Assert.Equal(File.ReadAllBytes(bySh), File.ReadAllBytes(byCSharp));
         }
     }
 
@@ -447,7 +584,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_block_in_a_profile_bash_does_not_read_is_ours_to_remove_and_no_answer_to_the_check()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         var bin = Installed(home, "jason");
         File.WriteAllText(Path.Combine(home, ".bash_profile"), "# mine\n");
@@ -473,7 +610,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_block_for_a_directory_other_tools_share_is_left_and_says_why()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         var bin = Installed(home, "jason", "claude", "uv");
         File.WriteAllText(Path.Combine(home, ".zprofile"), $"# mine\n\n{PathEntry.Marker}\n{PathEntry.ExportLine(bin)}\n");
@@ -521,7 +658,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_hand_written_line_in_the_login_profile_answers_the_check_and_is_not_ours()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         File.WriteAllText(Path.Combine(home, ".zprofile"), $"{PathEntry.ExportLine(Directory)}\n");
 
@@ -536,7 +673,7 @@ public class UninstallPathEntryTests
     [Fact]
     public void A_commented_line_answers_nothing()
     {
-        using var tree = new Jason.Cli.Tests.Documentation.TempTree();
+        using var tree = new TempTree();
         var home = tree.NewDirectory("home");
         File.WriteAllText(Path.Combine(home, ".profile"), $"# {PathEntry.ExportLine(Directory)}\n");
 

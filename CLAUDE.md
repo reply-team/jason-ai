@@ -195,11 +195,14 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   people, stderr is diagnostics only. Exit codes: 0 success, 1 understood and refused (an API
   business error, a local act the CLI refused to perform, or a request the runtime took and did not answer within its
   operation's own `timeout_ms` and a margin, `request_timed_out`, which is not retryable), 2 usage error, 3 runtime
-  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations with **eleven declared exceptions**:
+  unreachable or unauthorized — which `runtime status` and `journal watch` also say of a runtime that never answers. The verb map is one-to-one with API operations with **twelve declared exceptions**:
   `jason status` answers "can this installation start work?", half of which is not the runtime's to
   know, so no operation can stand behind it; `jason uninstall` takes this installation off the
   machine — a logon registration, an executable, a PATH entry, the files a deployment recorded — which
-  the runtime neither performs nor is asked about; the `skills` and `update` nouns and the
+  the runtime neither performs nor is asked about; `jason install`, its other half, run by the jason the desktop
+  application carries, sets this machine up for it — the terminal command, the skills of every agent host found, an older
+  command-line install retired — and of the runtime asks only to drain and stop one running from the executable it
+  retires, and starts none; the `skills` and `update` nouns and the
   `jason ui install` and `jason plugin install` verbs change this installation's files — deploying skills,
   replacing the executable and redeploying the recorded skills, placing the release's UI as the default
   build, placing a plugin package the release publishes — rather than ask the runtime anything (each is the
@@ -254,9 +257,9 @@ Building, testing, migrations, the UI's checks, and running a build of this chec
   plugin id, role name and skill pack name Jason did not ship an alias per distinct name (`<plugin-N>`,
   `<role-N>`, `<skill-pack-N>`), and a skill source other than the public repository, with its ref unless
   that is a release tag, `<skill-source>`.
-  `CliApp` states all eleven where the rule is written, each verb's `--help`
+  `CliApp` states all twelve where the rule is written, each verb's `--help`
   publishes its own contract — which checks are required, what is removed, what is never touched and
-  what a bundle never carries — and guards hold the list to these eleven. `export` refuses while the runtime runs unless `--stop`
+  what a bundle never carries — and guards hold the list to these twelve. `export` refuses while the runtime runs unless `--stop`
   is given, never writes over a file, carries the settings file with every secret in it and says so, and refuses a
   link inside a carried place, following one at its top and judging it where it leads, or a name another system cannot
   hold before anything is written. `import` refuses, before anything is written, an

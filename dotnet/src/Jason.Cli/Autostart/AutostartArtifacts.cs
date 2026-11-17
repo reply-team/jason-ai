@@ -99,13 +99,19 @@ public static class AutostartArtifacts
     /// does a user unit, since the user manager's environment reads no shell profile. Null or empty, neither carries
     /// one. A logon task ignores it: it starts with the account's own environment.
     /// </param>
+    /// <param name="namesDataDirectory">
+    /// Whether the line names the data directory with <c>--data-dir</c>. False only where a registration made before the
+    /// line named one is made again (<c>jason install</c> moving it to another executable): it kept the runtime on the
+    /// default data directory, and keeps doing so.
+    /// </param>
     public static AutostartRegistration Compose(
         AutostartPlatform platform,
         IReadOnlyList<string> run,
         string dataDirectory,
         string home,
         string account,
-        string? searchPath = null)
+        string? searchPath = null,
+        bool namesDataDirectory = true)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
@@ -115,7 +121,7 @@ public static class AutostartArtifacts
             throw new ArgumentException("There is no program to register.", nameof(run));
         }
 
-        var line = Line(run, dataDirectory);
+        var line = namesDataDirectory ? Line(run, dataDirectory) : [.. run, "runtime", "run", "--detached"];
         return platform switch
         {
             AutostartPlatform.Windows => Windows(line, dataDirectory, account),

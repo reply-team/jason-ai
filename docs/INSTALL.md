@@ -457,8 +457,8 @@ jason status
 jason status --human
 ```
 
-One question — "can this installation start work?" — answered check by check. It is one of eleven names in
-this CLI with no API operation behind it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and
+One question — "can this installation start work?" — answered check by check. It is one of twelve names in
+this CLI with no API operation behind it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and
 `update` nouns, `ui install` and `plugin install`, which change this installation's files as those two do, and
 `session open`, which starts your own agent host, or a plain shell, in a terminal — and it cannot be
 otherwise: half of what it reports is not the runtime's to know.

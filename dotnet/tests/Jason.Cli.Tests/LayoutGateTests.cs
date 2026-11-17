@@ -71,7 +71,7 @@ public sealed class LayoutGateTests : IDisposable
             [
                 ("runtime start", null), ("runtime restart", null), ("plugin install", null), ("plugin reload", null),
                 ("skills install", null), ("skills update", null), ("ui install", null), ("update apply", null),
-                ("update rollback", null), ("export", null), ("import", null), ("uninstall", "--purge-data"),
+                ("update rollback", null), ("export", null), ("import", null), ("uninstall", "--purge-data"), ("install", "--roles"),
                 ("session open", "--setup"),
             ],
             LayoutGatedVerbs.Table);

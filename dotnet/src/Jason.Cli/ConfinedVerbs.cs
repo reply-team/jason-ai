@@ -62,6 +62,7 @@ public static class ConfinedVerbs
         (Kind.Installation, "skills"),
         (Kind.Installation, "update"),
         (Kind.Installation, "uninstall"),
+        (Kind.Installation, "install"),
         (Kind.Installation, "ui"),
         (Kind.Installation, "session"),
         (Kind.Installation, "journal watch"),
