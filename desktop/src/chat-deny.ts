@@ -142,6 +142,27 @@ export function allowRules(verbs: readonly string[]): string[] {
 }
 
 /**
+ * The nouns whose help the chat reads: the first word of each verb of two words or more on the allow list or the plan
+ * list, each once, in the order the lists first name it. A verb of one word (`status`, `logs`) is no noun.
+ */
+export function helpNouns(allowed: readonly string[], reads: readonly string[]): string[] {
+    const nouns: string[] = [];
+    for (const verb of [...allowed, ...reads]) {
+        const words = verb.split(' ');
+        if (words.length > 1 && !nouns.includes(words[0] as string)) nouns.push(words[0] as string);
+    }
+    return nouns;
+}
+
+/**
+ * The host's allow rules for the nouns' help: exactly `jason <noun> --help`, with no `:*`, so the rule matches that
+ * command as written and no longer one. The same rules in every mode: help prints and changes nothing.
+ */
+export function helpRules(nouns: readonly string[]): string[] {
+    return nouns.map((noun) => `Bash(jason ${noun} --help)`);
+}
+
+/**
  * The host's deny rules for the list: each command and everything after it, and every jason command that starts with
  * an option, since `jason --actor human:x approval approve` would otherwise pass the `jason` allow rule untouched.
  */
