@@ -99,7 +99,8 @@ public static class InstallCommand
         moves from.
 
         The document: version, executable (this jason); command {runs (what a new terminal finds: the wrapper on
-        macOS, the folder on the Path on Windows), open_shell, changed, profiles, taken_back}; skills [{root,
+        macOS, the folder on the Path on Windows), placed (whether a new terminal finds this jason, as read back;
+        the install scripts end non-zero where it is false), open_shell, changed, profiles, taken_back}; skills [{root,
         hosts, written, unchanged, left_alone}]; roles (with --roles, else null); retired {executable, aside,
         removed, reregistered} or null; runtime (not_running, running, stopped, would_not_stop); done, left,
         problems (sentences); completed.

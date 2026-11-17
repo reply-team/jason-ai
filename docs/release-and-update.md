@@ -1338,7 +1338,9 @@ application's own, which it adds places to — or the empty value where the shel
 install, with `--retire` naming the executable it moves from. On Windows `--terminal-path` is read by nothing.
 
 The document carries `version` and `executable` (the carried file); `command` — `runs` (what a new terminal finds `jason`
-through: the wrapper on macOS, the folder on the Path on Windows), `open_shell`, `changed`, `profiles`, `taken_back`;
+through: the wrapper on macOS, the folder on the Path on Windows), `placed` (whether a
+new terminal finds this `jason`, as read back: a `command` that is null or not `placed` is what makes the install
+scripts end non-zero), `open_shell`, `changed`, `profiles`, `taken_back`;
 `skills`, one entry per root — `root`, `hosts`, `written`, `unchanged`, `left_alone`; `roles` (with `--roles`, else null);
 `retired` — `executable`, `aside`, `removed`, `reregistered` — or null; `runtime` — `not_running`, `running` (another
 executable's, left as it is), `stopped`, `would_not_stop`; and `done`, `left` and `problems`, a sentence each, with
