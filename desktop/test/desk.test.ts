@@ -256,7 +256,7 @@ test('the update item and the way back from the Demo have keys of their own, whi
     // A press of the update item goes through `pressItem`, which asks first when the key brought the install and installs
     // only on yes, asked in the desk's own box. The tray's menu has no key, and on Linux it reports a click with no mouse
     // button, which Electron counts as a key's (`triggeredByAccelerator`): a press there is always a click.
-    assert.match(method('updateItems'), /void pressItem\(updates, item\.act, !inTray && event\.triggeredByAccelerator === true, \(question\) => this\.box\(question\)\);/);
+    assert.match(method('updateItems'), /click: \(_menuItem, _window, event\) => this\.pressUpdate\(item\.act, !inTray && event\.triggeredByAccelerator === true\),/);
     assert.ok(desk.includes('...this.updateItems(false),'), 'the window’s menu: its key asks');
     assert.match(method('renderTray'), /\.\.\.this\.updateItems\(true\),/);
     // The page and the versions-differ sentence take the update key's words from the desktop, and only where the item can
@@ -265,6 +265,42 @@ test('the update item and the way back from the Demo have keys of their own, whi
     assert.ok(main.includes('const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);'), 'the key where the item can act');
     assert.ok(main.includes("handle(seam, 'updates.key', origin, updateKey, refused);"), 'updates.key answers it');
     assert.match(main, /\n {8}updateKey,\n/, 'the setup names it');
+});
+
+// The update item stands in the menu and at the foot of the page's Settings, and both are the one item: the page is
+// answered the menu's own item, label and enabled alike, and its press is a click in the menu, through the one method
+// the menu's click and key go through. No other way reaches `pressItem`.
+test('the page’s update item is the menu’s own, and its press goes the one way the menu’s does', () => {
+    const desk = readFileSync(join(root, 'src', 'desk.ts'), 'utf8');
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    const body = (name: string) => {
+        const at = desk.indexOf(`\n    ${name}(`);
+        return desk.slice(at, desk.indexOf('\n    }\n', at));
+    };
+    // One call of pressItem in the desktop's sources, in the one method, behind the guard of Remove What Jason Placed.
+    const sources = readdirSync(join(root, 'src')).filter((name) => name.endsWith('.ts') && name !== 'updates.ts');
+    const calls = sources.flatMap((name) => [...readFileSync(join(root, 'src', name), 'utf8').matchAll(/\bpressItem\(/g)].map(() => name));
+    assert.deepEqual(calls, ['desk.ts']);
+    const press = body('pressUpdate');
+    assert.ok(press.startsWith("\n    pressUpdate(act: MenuItem['act'], byKey: boolean): void {"));
+    const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question));';
+    assert.ok(press.includes(pressed));
+    assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
+    // none in a demo run.
+    const item = body('updateItem');
+    assert.ok(item.includes('if (this.demo !== null) return null;'));
+    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);"));
+    assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
+    assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
+    // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
+    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.press', origin, () => desk.pressUpdate(desk.updateItem()?.act ?? null, false), refused);"));
+    assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
+    // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
+    assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
+    assert.ok(main.includes("menuChanged: () => toPage('updates.changed') });"));
+    assert.equal(main.split('menuChanged:').length - 1, 1, 'Live alone');
 });
 
 test('a packaged build offers no developer tools', () => {

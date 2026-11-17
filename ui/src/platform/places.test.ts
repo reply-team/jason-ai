@@ -149,7 +149,7 @@ describe('the object of a tab with a bridge', () => {
         expect(outside.length).toBeGreaterThan(25);
         for (const member of outside) {
             // A subscription or a read that has no answer to give is not a refusal; the rest say the one sentence.
-            if (['onCommand', 'mode.onPreparing', 'links.onOpen'].includes(member)) {
+            if (['onCommand', 'mode.onPreparing', 'links.onOpen', 'updates.onChanged'].includes(member)) {
                 expect(typeof at(desktop, member)(() => undefined), member).toBe('function');
                 continue;
             }
@@ -224,6 +224,7 @@ describe('the object of a tab with no desktop', () => {
             'chat.onEvent',
             'setup.onChanged',
             'fullAccess.onChanged',
+            'updates.onChanged',
         ];
         const acts = everyMember.filter((member) => !reads.includes(member) && !subscriptions.includes(member));
         expect(acts.length).toBeGreaterThan(30);
