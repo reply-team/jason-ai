@@ -2544,7 +2544,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:06b4a79a18f51174da52ffed29305ad7de31f2ef5725677276c4545b719f34f8";
+    private const string AgentSectionDigest = "sha256:452e734bba11a6bd1136131379f86a00c55c70169a2034bc53cb3ce07a180380";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

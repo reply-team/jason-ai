@@ -79,8 +79,9 @@ An act this page marks **Ask first.** needs the word of the person you install f
 yes. With nobody to ask, leave it undone and say so. A question tool that comes back with no answer is nobody to
 ask.
 
-On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too) reads them:
-nobody is asked, and where your own host is one of those the step below changes nothing there.
+On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex
+read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs
+read too): nobody is asked, and where your own host is one of those the step below changes nothing there.
 If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
 agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
 [the host matrix](execution-profiles.md#12-the-hosts), such as `claude_code`) as a step of the install, without asking again.

@@ -167,7 +167,7 @@ public partial class PageClaimsTests
             AgentHosts.All.Where(row => row.HomeSkills == codex.HomeSkills && row.Kind != AgentHostKind.Codex).Select(row => row.Kind));
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too) reads them", install, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too):", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
         Assert.Contains("Where your agent is another host than Claude Code or Codex, or on Linux, give it Jason's skills with `jason skills install --host <your host>`", readme, StringComparison.Ordinal);
