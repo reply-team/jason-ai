@@ -45,7 +45,8 @@ public sealed record DesktopAnswer(string State, string? Reason, string? Message
         string text;
         try
         {
-            text = File.ReadAllText(file);
+            using var reader = new StreamReader(Open(file));
+            text = reader.ReadToEnd();
         }
         catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
         {
@@ -78,6 +79,16 @@ public sealed record DesktopAnswer(string State, string? Reason, string? Message
             return null;
         }
     }
+
+    /// <summary>
+    /// A request's file opened for reading while the Desktop goes on writing it, sharing write and delete, so the poll refuses
+    /// no writer's open in the moment it holds the file: on Windows "If this flag is not specified, but the file or device has
+    /// been opened for write access ..., the function fails" (CreateFileW, FILE_SHARE_WRITE), and likewise for delete access,
+    /// which "allows both delete and rename operations" (FILE_SHARE_DELETE). <see cref="File.ReadAllText(string)"/> shares
+    /// read alone, and a write that met the poll failed.
+    /// </summary>
+    internal static FileStream Open(string file) =>
+        new(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
     private static string? Text(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
