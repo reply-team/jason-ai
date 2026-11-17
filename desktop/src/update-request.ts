@@ -18,14 +18,15 @@
  * installed: the request's file names `downloaded`, the verb drains and stops the runtime and steps out of the
  * application's folder, and only then makes `<data>/update/desktop-<id>.go`, by an exclusive create. A request that names
  * no `--await-go` never waits, as before. A go that does not come within `goWaitMs` refuses the request as `go_timed_out`,
- * with nothing stopped, kept or installed and the download left under the menu's install item; a go file already there
- * when the request is taken is no go, and refuses it as `go_there`.
+ * with nothing stopped, kept or installed, and a window keeps the download under its menu's install item; a go file
+ * already there when the request is taken, or one made before the request's file said `downloaded`, is no go the verb
+ * made, and refuses it as `go_there`.
  *
  * `--update-settle` is the other start: once the new version's runtime answered, it records the update the window-less
  * install left pending as kept (`rollback.ts`), as a window's first start would, under the single-instance lock.
  */
 
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Timers } from './attention.ts';
 import type { Logger } from './log.ts';
@@ -295,9 +296,11 @@ export function refusalMessage(
         case 'window_feed':
             return 'Jason Desktop is open, and an open window updates from the releases alone, never from a feed a terminal names, so nothing was checked or downloaded. Quit Jason Desktop and run jason update apply again.';
         case 'go_there':
-            return 'A go for this request was there before the request was taken, so it is no go: nothing was checked, downloaded or changed. Run jason update apply again.';
+            return 'A go for this request was made before Jason Desktop had downloaded the update and asked for one, so it is no go the verb made: nothing was stopped, kept or installed. Run jason update apply again.';
         case 'go_timed_out':
-            return `Jason ${to} was downloaded, and jason update apply did not say go within ${goWaitMs / 60_000} minutes, so nothing was stopped, kept or installed. The download waits under the install item of Jason Desktop's menu; run jason update apply again.`;
+            return `Jason ${to} was downloaded, and jason update apply did not say go within ${goWaitMs / 60_000} minutes, so nothing was stopped, kept or installed. ${
+                at.menu ? "The download waits under the install item of Jason Desktop's menu; run jason update apply again." : "Run jason update apply again, or choose Check for Updates in Jason Desktop's menu once it is open."
+            }`;
         case 'updater_inactive':
             return 'Jason Desktop’s updater cannot replace the application where it is installed, so nothing was changed.';
         case 'busy':
@@ -432,15 +435,28 @@ export interface TakeDeps {
     now?(): Date;
 }
 
-/** How the go is waited for: whether its file is there, how long and how often it is looked for, and a pause. */
+/**
+ * How the go is waited for: whether its file is there, how long and how often it is looked for, and a pause; and when a
+ * file was last written (`made`), where it is read, so that a go older than the request's own `downloaded` is told apart.
+ */
 export interface GoWait {
     exists(file: string): boolean;
     ms: number;
     pollMs: number;
     sleep(ms: number): Promise<void>;
+    made?(file: string): number | null;
 }
 
-const goWait: GoWait = { exists: existsSync, ms: goWaitMs, pollMs: goPollMs, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+/** When a file was last written, in milliseconds, or null where it cannot be read. */
+function madeAt(file: string): number | null {
+    try {
+        return statSync(file).mtimeMs;
+    } catch {
+        return null;
+    }
+}
+
+const goWait: GoWait = { exists: existsSync, ms: goWaitMs, pollMs: goPollMs, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), made: madeAt };
 
 /**
  * Waits for the go file of a request: true once it is there, false when the wait ran out or `over` says the request
@@ -551,12 +567,27 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         if (handle !== null) deps.limit?.timers.clearTimeout(handle);
         handle = null;
     };
+    // When the request's file said `downloaded`, as the file system dates it: the verb makes its go only after it read that,
+    // so a go dated before it is one the verb did not make.
+    let downloadedAt: number | null = null;
+    let early = false;
     const progress = (step: TakenStep): void => {
         if (ended) return;
         if (step.step === 'checking') put({ state: 'checking' });
         else if (step.step === 'downloading') put({ state: 'downloading', offered: step.offered });
-        else if (step.step === 'downloaded') put({ state: 'downloaded', offered: request.to });
-        else put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
+        else if (step.step === 'downloaded') {
+            put({ state: 'downloaded', offered: request.to });
+            downloadedAt = waiting.made?.(file) ?? null;
+        } else put({ state: 'installing', offered: request.to, runtime_stopped: step.runtimeStopped, kept: step.kept });
+    };
+    const awaitGo = async (): Promise<boolean> => {
+        if (!(await waitForGo(go, waiting, () => ended))) return false;
+        const made = waiting.made?.(go) ?? null;
+        if (downloadedAt !== null && made !== null && made < downloadedAt) {
+            early = true;
+            return false;
+        }
+        return true;
     };
     const taken: TakenRequest = { to: request.to, feed: request.feed };
     let outcome: TakenOutcome;
@@ -564,7 +595,7 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
         outcome = await deps.updater().take(taken, {
             install: !window || deps.windowOpen === 'close',
             // Only a request that names --await-go waits for the verb's go; every other request installs as before.
-            ...(request.awaitGo === true ? { go: () => waitForGo(go, waiting, () => ended) } : {}),
+            ...(request.awaitGo === true ? { go: awaitGo } : {}),
             late: () => {
                 if (ended && last.state !== 'installing') return;
                 ended = true;
@@ -586,7 +617,9 @@ export async function takeRequest(request: UpdateRequest, deps: TakeDeps): Promi
     clear();
     ended = true;
     if (outcome.state === 'current') return end(put({ state: 'current' }));
-    return end(refuse(outcome.reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
+    // A go older than `downloaded` stopped the request where no go would have: nothing was stopped, kept or installed.
+    const reason = early && outcome.reason === 'go_timed_out' ? 'go_there' : outcome.reason;
+    return end(refuse(reason, { offered: outcome.offered, runtime_stopped: outcome.runtimeStopped, kept: outcome.kept }, outcome.runtime));
 }
 
 /**

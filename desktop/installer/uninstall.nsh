@@ -40,6 +40,12 @@
 ; process found at that path is looked for as before.
 !define JASON_OWN_RUNTIME `& { $$skip = -1; try { $$named = @((Get-Content -LiteralPath $$env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $$found = Get-Process -Id ([int]$$named[0]) -ErrorAction Stop; $$asked = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + $$found.Id); if ($$found.StartTime.ToFileTimeUtc() -eq [long]$$named[1] -and $$asked.CommandLine.Contains(' update apply')) { $$skip = $$found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and [string]::Equals($$_.ExecutablePath, $$env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $$_.ProcessId -ne $$skip } }`
 
+; The look itself fails closed: a query the system failed to answer, which a machine under load meets, is an error that
+; stops the look rather than a list that came back empty. It is asked again, five times in all half a second apart, and
+; where it never answered the look exits 2. Only exit 1 says nothing runs from the carried executable: every other exit,
+; a failed start of PowerShell included, is read as a process found.
+!define JASON_RUNTIME_FOUND `$$ErrorActionPreference = 'Stop'; for ($$look = 1; ; $$look++) { try { if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 } } catch { if ($$look -ge 5) { exit 2 }; Start-Sleep -Milliseconds 500 } }`
+
 !define JASON_RUNTIME_ASK "A Jason runtime is running from this application's folder. Choose OK to stop it and go on."
 !define JASON_RUNTIME_STILL "A Jason process from this application's folder is still running, so nothing was changed. If it is a runtime that did not stop, stop it with $INSTDIR\resources\bundle\jason.exe runtime stop, with JASON_DATA_DIR set if it was started with another data directory; other Jason work from this folder ends by itself. Then run this again."
 
@@ -58,9 +64,9 @@
     StrCpy $JasonRuntimeAsked ""
     ${ifNot} ${isUpdated}
     ${AndIfNot} ${Silent}
-      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"`
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"`
       Pop $R0
-      ${if} $R0 == 0
+      ${if} $R0 != 1
         MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3
         SetErrorLevel 1
         Quit
@@ -84,9 +90,9 @@
       ; So that the files it held are let go of before they are replaced or removed.
       Sleep 1000
     ${endIf}
-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"`
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"`
     Pop $R0
-    ${if} $R0 == 0
+    ${if} $R0 != 1
       ${ifNot} ${isUpdated}
       ${AndIfNot} ${Silent}
       ${AndIf} $JasonRuntimeAsked == ""
@@ -97,9 +103,9 @@
       ExecWait '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" --stop-runtime'
       ; So that the process has gone from the list before it is looked for again.
       Sleep 1000
-      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"`
+      nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"`
       Pop $R0
-      ${if} $R0 == 0
+      ${if} $R0 != 1
         ${ifNot} ${isUpdated}
         ${AndIfNot} ${Silent}
           MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"

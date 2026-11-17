@@ -820,6 +820,11 @@ public sealed class UpdateCarriedWindowsTests
         var filter = System.Text.RegularExpressions.Regex.Match(script, "^!define JASON_OWN_RUNTIME `([^`]+)`$", System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value.Replace("$$", "$", StringComparison.Ordinal);
         Assert.NotEmpty(filter);
 
+        // The look the installer runs, as it ships: the filter inside the command that fails closed.
+        var shipped = System.Text.RegularExpressions.Regex.Match(script, "^!define JASON_RUNTIME_FOUND `([^`]+)`$", System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value;
+        Assert.Contains("${JASON_OWN_RUNTIME}", shipped, StringComparison.Ordinal);
+        var command = shipped.Replace("$$", "$", StringComparison.Ordinal).Replace("${JASON_OWN_RUNTIME}", filter, StringComparison.Ordinal);
+
         using var applying = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(image)
         {
             ArgumentList = { "/d", "/k", "rem", "update", "apply" },
@@ -852,8 +857,8 @@ public sealed class UpdateCarriedWindowsTests
             applying.WaitForExit();
         }
 
-        // The installer's own command around the filter, with one difference: a query the system failed to answer, which a
-        // machine under load meets, exits 2 and is asked again rather than read as nothing found.
+        // The installer's own command: a query the system failed to answer, which a machine under load meets, is asked again
+        // inside it and then exits 2, which the installer reads as found; here it is asked again once more rather than failed.
         bool Found(string updating)
         {
             for (var attempt = 0; ; attempt++)
@@ -873,7 +878,7 @@ public sealed class UpdateCarriedWindowsTests
         {
             var look = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
             {
-                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", $"$ErrorActionPreference = 'Stop'; try {{ if (@({filter}).Count -gt 0) {{ exit 0 }} else {{ exit 1 }} }} catch {{ exit 2 }}" },
+                ArgumentList = { "-NoProfile", "-NonInteractive", "-Command", command },
                 WorkingDirectory = dir.Paths.Root,
                 CreateNoWindow = true,
                 UseShellExecute = false,

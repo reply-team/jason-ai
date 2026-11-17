@@ -64,6 +64,13 @@ function filterText(name: 'JASON_OWN_APP' | 'JASON_OWN_RUNTIME'): string {
     return found[1]!;
 }
 
+/** A command the script defines between backticks, as the script writes it. */
+function define_(name: string): string {
+    const found = new RegExp(`^!define ${name} \`([^\`]+)\`$`, 'm').exec(script);
+    assert.ok(found !== null, `installer/uninstall.nsh defines no ${name}.`);
+    return found[1]!;
+}
+
 /** A sentence the script defines once and shows where it is named. */
 function define(name: string): string {
     const found = new RegExp(`^!define ${name} "([^"]*)"$`, 'm').exec(script);
@@ -76,8 +83,20 @@ function codeLines(text: string): string[] {
     return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '' && !line.startsWith(';'));
 }
 
-/** The look whether a program runs from the carried executable, by its filter. */
-const runtimeLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_RUNTIME}).Count -gt 0) { exit 0 } else { exit 1 }"';
+/** The look whether a program runs from the carried executable, by its filter, failing closed. */
+const runtimeLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_RUNTIME_FOUND}"';
+
+/**
+ * The PowerShell the installer runs for a runtime look, as PowerShell reads it once nsis has expanded the filter into it
+ * and turned each `$$` into `$`: the command that ships, with `filter` standing in for the runtime filter where a row says.
+ */
+function runtimeFound(filterText: string = filter('JASON_OWN_RUNTIME')): string {
+    const found = /^!define JASON_RUNTIME_FOUND `([^`]+)`$/m.exec(script);
+    assert.ok(found !== null, 'installer/uninstall.nsh defines no JASON_RUNTIME_FOUND look.');
+    const [before, after, ...more] = found[1]!.split('${JASON_OWN_RUNTIME}');
+    assert.equal(more.length, 0, 'the look names the filter more than once');
+    return `${before!.replaceAll('$$', '$')}${filterText}${after!.replaceAll('$$', '$')}`;
+}
 /** The look whether the application runs. */
 const appLook = '"$PowerShellPath" -NoProfile -NonInteractive -Command "if (@(${JASON_OWN_APP}).Count -gt 0) { exit 0 } else { exit 1 }"';
 /** The one stop of the whole include: the application's, by its filter. */
@@ -127,7 +146,9 @@ test('the custom check closes the application by its exact path and never a prog
     // that one reads the application's.
     const commands = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!);
     assert.equal(commands.length, 5);
-    for (const command of commands) assert.ok(command.includes('${JASON_OWN_APP}') || command.includes('${JASON_OWN_RUNTIME}'), `A command reads processes another way: ${command}`);
+    // The runtime's filter is read through the look that fails closed, which holds it once (JASON_RUNTIME_FOUND).
+    for (const command of commands) assert.ok(command.includes('${JASON_OWN_APP}') || command.includes('${JASON_RUNTIME_FOUND}'), `A command reads processes another way: ${command}`);
+    assert.equal(define_('JASON_RUNTIME_FOUND').split('${JASON_OWN_RUNTIME}').length, 2);
     const stopping = commands.filter((command) => /Stop-Process/.test(command));
     assert.deepEqual(stopping, [appStop]);
     assert.equal(filter('JASON_OWN_APP'), 'Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_APP, [StringComparison]::OrdinalIgnoreCase) }');
@@ -172,6 +193,10 @@ test('the whole include runs only the commands these rows name, stops only the a
     ]);
     assert.deepEqual(naming('JASON_OWN_RUNTIME'), [
         `!define JASON_OWN_RUNTIME \`${filterText('JASON_OWN_RUNTIME')}\``,
+        `!define JASON_RUNTIME_FOUND \`${define_('JASON_RUNTIME_FOUND')}\``,
+    ]);
+    assert.deepEqual(naming('JASON_RUNTIME_FOUND'), [
+        `!define JASON_RUNTIME_FOUND \`${define_('JASON_RUNTIME_FOUND')}\``,
         `nsExec::Exec \`${runtimeLook}\``,
         `nsExec::Exec \`${runtimeLook}\``,
         `nsExec::Exec \`${runtimeLook}\``,
@@ -199,7 +224,7 @@ test('the carried jason executable is looked for by its exact path, in a filter 
         'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
     ]);
     assert.equal(filter('JASON_OWN_RUNTIME'), "& { $skip = -1; try { $named = @((Get-Content -LiteralPath $env:JASON_DESKTOP_UPDATING -TotalCount 1 -ErrorAction Stop) -split ' '); $found = Get-Process -Id ([int]$named[0]) -ErrorAction Stop; $asked = Get-CimInstance -ClassName Win32_Process -Filter ('ProcessId=' + $found.Id); if ($found.StartTime.ToFileTimeUtc() -eq [long]$named[1] -and $asked.CommandLine.Contains(' update apply')) { $skip = $found.Id } } catch { }; Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and [string]::Equals($_.ExecutablePath, $env:JASON_DESKTOP_RUNTIME, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $skip } }");
-    const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_OWN_RUNTIME}'));
+    const looks = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!).filter((command) => command.includes('${JASON_RUNTIME_FOUND}'));
     assert.deepEqual(looks, Array(3).fill(runtimeLook));
 });
 
@@ -213,7 +238,8 @@ test('a person is asked about a runtime before the application is closed, so a C
         '${AndIfNot} ${Silent}',
         `nsExec::Exec \`${runtimeLook}\``,
         'Pop $R0',
-        '${if} $R0 == 0',
+        // Every exit but the one clean "nothing found" is a process found.
+        '${if} $R0 != 1',
         'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3',
         'SetErrorLevel 1',
         'Quit',
@@ -234,7 +260,7 @@ test('a runtime running from the carried executable is stopped through the appli
     const runtime = after.slice(after.indexOf(runtimeLook) + runtimeLook.length + 1);
     assert.deepEqual(codeLines(runtime), [
         'Pop $R0',
-        '${if} $R0 == 0',
+        '${if} $R0 != 1',
         // A person not asked before the application was closed is asked now; nobody else is asked.
         '${ifNot} ${isUpdated}',
         '${AndIfNot} ${Silent}',
@@ -249,7 +275,7 @@ test('a runtime running from the carried executable is stopped through the appli
         // The look decides, never the start's exit code.
         `nsExec::Exec \`${runtimeLook}\``,
         'Pop $R0',
-        '${if} $R0 == 0',
+        '${if} $R0 != 1',
         '${ifNot} ${isUpdated}',
         '${AndIfNot} ${Silent}',
         'MessageBox MB_OK|MB_ICONSTOP "${JASON_RUNTIME_STILL}"',
@@ -328,7 +354,7 @@ test('the runtime filter passes over only the live jason update apply the record
         const record = join(folder, 'jason-update.pid');
         const found = (updating: string) => {
             try {
-                execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `if (@(${filter('JASON_OWN_RUNTIME')}).Count -gt 0) { exit 0 } else { exit 1 }`], {
+                execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', runtimeFound()], {
                     env: { ...process.env, JASON_DESKTOP_RUNTIME: image, JASON_DESKTOP_UPDATING: updating },
                     stdio: 'ignore',
                     windowsHide: true,
@@ -381,6 +407,26 @@ test('the runtime filter passes over only the live jason update apply the record
     }
 });
 
+test('the runtime look fails closed: a query the system does not answer is asked again, then exits 2, which is read as found', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, () => {
+    // The command that ships, with a query Windows refuses in place of the filter: the class does not exist.
+    const failing = runtimeFound('Get-CimInstance -ClassName Jason_No_Such_Class');
+    const began = Date.now();
+    let exit = -1;
+    try {
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', failing], { stdio: 'ignore', windowsHide: true });
+        exit = 0;
+    } catch (error) {
+        exit = (error as { status: number }).status;
+    }
+    assert.equal(exit, 2, 'a look whose query failed did not exit 2');
+    assert.ok(Date.now() - began >= 4 * 500, 'the failed query was not asked again');
+    // And the installer reads that exit, as every exit but 1, as a process found: each runtime look is followed by that test.
+    const check = macro('customCheckAppRunning');
+    const after = [...check.matchAll(/nsExec::Exec `([^`]*)`\s+Pop \$R0\s+\$\{if\} \$R0 (\S+) (\S+)/g)].filter((found) => found[1] === runtimeLook);
+    assert.equal(after.length, 3);
+    for (const found of after) assert.deepEqual([found[2], found[3]], ['!=', '1']);
+});
+
 test('only the update’s own installer and the uninstaller it runs read the record; a person’s install or uninstall reads none, whatever it was started with', () => {
     const check = macro('customCheckAppRunning');
     // electron-builder runs this check in a person's install and uninstall too (`CHECK_APP_RUNNING`), and passes --updated
@@ -404,5 +450,5 @@ test('the record the runtime filter reads is named once, inside the installation
     assert.ok(check.indexOf('JASON_DESKTOP_UPDATING') < check.indexOf('IS_POWERSHELL_AVAILABLE'), 'the record is named after a look may read it');
     assert.deepEqual([...script.matchAll(/\$\$?env:JASON_DESKTOP_UPDATING/g)].length, 1);
     // NSIS holds a string to 1024 characters; the longest command it runs is the runtime look with its filter.
-    assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "if (@(${filterText('JASON_OWN_RUNTIME')}).Count -gt 0) { exit 0 } else { exit 1 }"`.length < 1024);
+    assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "${define_('JASON_RUNTIME_FOUND').replace('${JASON_OWN_RUNTIME}', filterText('JASON_OWN_RUNTIME'))}"`.length < 1024);
 });
