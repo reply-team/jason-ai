@@ -14,6 +14,13 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Jason.Cli.Tests" />
   </ItemGroup>
+  <!-- A test build, and only one built with -p:JasonTestBuild=true: the move into Jason Desktop then reads the signer and
+       the requirement it holds the application to from the environment, so a proof on a runner can sign a test build of
+       the application with that runner's own certificate. No release passes it; a guard holds it out of the release
+       workflow and the package action. -->
+  <PropertyGroup Condition="'$(JasonTestBuild)' == 'true'">
+    <DefineConstants>$(DefineConstants);JASON_TEST_BUILD</DefineConstants>
+  </PropertyGroup>
   <!-- The plugins this repository ships, by their directories under plugins/, read from the tree at build time: a
        diagnostic bundle carries their ids by name and writes any other id as an alias. Read rather than typed, so the
        sources name no plugin and the list cannot drift from the directory. -->

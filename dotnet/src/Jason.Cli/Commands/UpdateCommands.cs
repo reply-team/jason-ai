@@ -171,7 +171,18 @@ public static class UpdateCommands
                     cancellationToken).ConfigureAwait(false);
             }
 
-            Print(env, human, applier.Steps, ledger);
+            // The update is complete; the move of this command-line install into Jason Desktop comes after it, never fails it,
+            // and is said beside it.
+            var move = await MoveAsync(env, ledger, request.Feed, cancellationToken).ConfigureAwait(false);
+            Print(env, human, [.. applier.Steps, .. move?.Lines ?? []], ledger, move?.Response);
+            return ExitCodes.Success;
+        }
+        catch (UpdateException error) when (error.Code == UpdateCodes.UpToDate && MoveToCarryOn(env) is { } complete)
+        {
+            // Nothing newer to apply, and a move of this install left to carry on: `jason update apply` carries it on at the
+            // version it is.
+            var move = await MoveAsync(env, complete, request.Feed, cancellationToken).ConfigureAwait(false);
+            Print(env, human, move?.Lines ?? [], complete with { FromVersion = complete.ToVersion }, move?.Response);
             return ExitCodes.Success;
         }
         catch (UpdateException error)
@@ -191,6 +202,66 @@ public static class UpdateCommands
             // file should not answer differently, least of all with a bare line and no code.
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
+        }
+    }
+
+    /// <summary>
+    /// The move of the command-line install a completed update installed this version at, into Jason Desktop: where this
+    /// version is the one the update installed and the install is a command-line one. Null where there is no such install;
+    /// on a system the move does not apply to, the answer says so and nothing is changed.
+    /// </summary>
+    private static async Task<(IReadOnlyList<string> Lines, UpdateMoveResponse Response)?> MoveAsync(CliEnvironment env, UpdateLedger ledger, Uri feed, CancellationToken cancellationToken)
+    {
+        if (ledger.Step != UpdateStep.Complete
+            || ledger.ToVersion != SemanticVersion.Current
+            || string.IsNullOrWhiteSpace(ledger.InstallPath)
+            || CarriedExecutable.Of(ledger.InstallPath) is not null)
+        {
+            return null;
+        }
+
+        var move = new CommandLineMove(env, new UpdatePaths(env.Paths), env.Clock ?? TimeProvider.System);
+        var response = await move.RunAsync(ledger, feed, cancellationToken).ConfigureAwait(false);
+        return (move.Lines, response);
+    }
+
+    /// <summary>
+    /// The completed update whose move an apply that finds nothing newer carries on: this version's, of a command-line
+    /// install, on a system the move applies to, with a move that is not done. Null otherwise.
+    /// </summary>
+    private static UpdateLedger? MoveToCarryOn(CliEnvironment env)
+    {
+        if (env.Setup is null)
+        {
+            return null;
+        }
+
+        var paths = new UpdatePaths(env.Paths);
+        UpdateLedger? complete;
+        try
+        {
+            complete = UpdateLedger.ReadFile(paths.Ledger);
+        }
+        catch (Exception unread) when (unread is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (complete is not { Step: UpdateStep.Complete }
+            || complete.ToVersion != SemanticVersion.Current
+            || string.IsNullOrWhiteSpace(complete.InstallPath)
+            || CarriedExecutable.Of(complete.InstallPath) is not null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return MoveRecord.Read(paths.Move) is { State: MoveStates.Done } ? null : complete;
+        }
+        catch (MoveRecordUnreadable)
+        {
+            return complete;
         }
     }
 
@@ -513,6 +584,10 @@ public static class UpdateCommands
             using (held)
             {
                 CarriedUpdate.Sweep(CarriedUpdate.Store(env.Setup));
+                if (env.Setup is { } machine)
+                {
+                    RetiredSweep.Sweep(machine);
+                }
                 var finishing = new UpdateApplier(env, paths, TimeProvider.System, carried.Executable);
                 PrintFinish(env, human, await finishing.FinishInstalledAsync(SemanticVersion.Current, Request(feed, null, null), cancellationToken).ConfigureAwait(false));
                 return ExitCodes.Success;
@@ -995,13 +1070,14 @@ public static class UpdateCommands
         return true;
     }
 
-    private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger)
+    private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger, UpdateMoveResponse? move = null)
     {
         var answer = new UpdateApplyResponse(
             ledger.FromVersion.ToString(),
             ledger.ToVersion.ToString(),
             SnakeCase(ledger.Step),
-            [.. steps]);
+            [.. steps],
+            move);
 
         env.Out.WriteLine(human
             ? string.Join(Environment.NewLine, steps.Select(step => "- " + step))

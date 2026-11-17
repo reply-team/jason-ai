@@ -181,6 +181,9 @@ public static class MachineSetup
         // and never while an update is in flight.
         CarriedUpdate.SweepWhereNothingIsInFlight(CarriedUpdate.Store(places), new UpdatePaths(env.Paths));
 
+        // And the command-line executables an earlier run renamed aside while a process held them, once that process ended.
+        RetiredSweep.Sweep(places, old);
+
         return new InstallReport(carried.Version, carried.Executable, command, skills, roles, retired, runtime, run.Done, run.Left, run.Problems);
     }
 
