@@ -770,6 +770,42 @@ public sealed class CommandLineMoveTests
     }
 
     /// <summary>
+    /// The move's installer exits are the include's own numbers, read from <c>desktop/installer/uninstall.nsh</c>: every silent
+    /// run that finds Jason Desktop, or whose look failed, sets <see cref="SetupExits.ApplicationRunning"/>; the old
+    /// version's refused uninstaller sets <see cref="SetupExits.StoppedBeforeInstalling"/>; a process still found sets
+    /// <see cref="SetupExits.ProcessRunsFromPlace"/>; and the include sets no other level, so a new one cannot pass unread.
+    /// </summary>
+    [Fact]
+    public void The_moves_installer_exits_are_the_includes_own_numbers()
+    {
+        var lines = File.ReadAllLines(Path.Combine(TreeRoot(), "desktop", "installer", "uninstall.nsh"));
+        var levels = lines
+            .Select((line, at) => (Text: line.Trim(), At: at))
+            .Where(line => line.Text.StartsWith("SetErrorLevel ", StringComparison.Ordinal))
+            .Select(line => (Level: int.Parse(line.Text["SetErrorLevel ".Length..], CultureInfo.InvariantCulture), line.At))
+            .ToList();
+
+        Assert.Equal(
+            new[] { SetupExits.ProcessRunsFromPlace, SetupExits.StoppedBeforeInstalling, SetupExits.ApplicationRunning }.Order(),
+            levels.Select(level => level.Level).Distinct().Order());
+
+        // Exit 3: set only in a silent run, the line before it opening that branch, and followed by its Quit.
+        var silent = levels.Where(level => level.Level == SetupExits.ApplicationRunning).ToList();
+        Assert.NotEmpty(silent);
+        Assert.All(silent, level =>
+        {
+            Assert.Equal("${if} ${Silent}", lines[level.At - 1].Trim());
+            Assert.Equal("Quit", lines[level.At + 1].Trim());
+        });
+
+        // Exit 2: the old version's uninstaller refused, in the macro both uninstall-check hooks insert.
+        var hook = Array.FindIndex(lines, line => line.Trim() == "!macro jasonOldUninstallerResult");
+        var end = Array.FindIndex(lines, hook, line => line.Trim() == "!macroend");
+        Assert.Contains(levels, level => level.Level == SetupExits.StoppedBeforeInstalling && level.At > hook && level.At < end);
+        Assert.Contains("!insertmacro jasonOldUninstallerResult", string.Join("\n", lines[end..]), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A test build's signer comes from the environment only in a build made with JasonTestBuild, which no release makes:
     /// this one is not, and the release workflow and the package action never name the property. One symbol says it: only
     /// Jason.Contracts defines <c>JASON_TEST_BUILD</c>, and the move's relaxed checks read <c>JasonVersion.TestBuild</c> and
