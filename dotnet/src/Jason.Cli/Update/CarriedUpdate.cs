@@ -415,9 +415,10 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         // An earlier run handed the installer this update: the record at `kept`, or the request it recorded given the go or
         // answered `installing`. While that request is younger than the install's own wait the installer may still be
         // landing it, so the Desktop is not asked again and nothing is touched; and whatever this run meets, it never puts
-        // back a record it did not begin, which would erase the record of an install as it lands.
+        // back a record it did not begin, which would erase the record of an install as it lands. A request written in the
+        // future, by a clock stepped back since, is aged: the refusal never holds anybody longer than the install's wait.
         var (earlier, since) = EarlierHanding(ledger);
-        if (earlier && since is { } handedAt && clock.GetUtcNow() - handedAt < InstallWait)
+        if (earlier && since is { } handedAt && clock.GetUtcNow() - handedAt is var age && age >= TimeSpan.Zero && age < InstallWait)
         {
             throw new UpdateException(
                 UpdateCodes.InProgress,
@@ -559,6 +560,7 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         // may end this one past its hold, reads by it whether the Desktop has the update.
         OnDisk("recording the request made of Jason Desktop", update.DesktopRequest, () => File.WriteAllText(update.DesktopRequest, id));
         _request = id;
+        SweepEarlierRequests(id);
 
         List<string> command = [Application!, "--update-apply", "--to", ledger.ToVersion.ToString(), "--request", id, "--await-go"];
         if (DesktopFeed(request.Feed) is { } feed)
@@ -1372,6 +1374,31 @@ public sealed class CarriedUpdate(CliEnvironment env, UpdatePaths update, TimePr
         }
 
         Sweep(store);
+    }
+
+    /// <summary>
+    /// The files of every earlier request, <c>desktop-&lt;id&gt;.json</c> and <c>desktop-&lt;id&gt;.go</c>, taken away once
+    /// <paramref name="id"/> is the request recorded: from then on nothing reads them, since every reader finds its request by
+    /// that record. Quietly, as the rest of the sweeps: a file that will not go is left for the next request.
+    /// </summary>
+    private void SweepEarlierRequests(string id)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(update.Root, "desktop-*"))
+            {
+                if ((file.EndsWith(".json", StringComparison.Ordinal) || file.EndsWith(".go", StringComparison.Ordinal))
+                    && !string.Equals(file, RequestFile(id), StringComparison.Ordinal)
+                    && !string.Equals(file, GoFile(id), StringComparison.Ordinal))
+                {
+                    TryDelete(file);
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // An update folder that cannot be listed: the files stay for the next request.
+        }
     }
 
     private static void TryDelete(string? file)
