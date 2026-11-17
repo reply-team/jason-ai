@@ -1173,6 +1173,42 @@ each known by its `.jason/marker.json`, or holding a folder there that cannot be
 It exits 0 when everything it set out to remove is gone, and 1 when it did not get there — it refused,
 something is still there, or it stopped part-way — and every step that did happen is listed either way.
 
+### The other half: setting the machine up, `jason install`
+
+```sh
+jason install
+jason install --roles
+jason install --retire <executable>
+```
+
+Run by the `jason` the desktop application carries (a `version.json` beside it), it sets this machine up for the
+application: the terminal command, the skills of every agent host found, and an older command-line install retired. Any
+other `jason` is refused with `install_not_carried`, and a system other than macOS and Windows with
+`install_unsupported`, before anything is read or written. It is idempotent — a second run changes nothing and says so —
+it starts no process that outlives it, and it prints one JSON document (`--human`: lines). Its steps, in order:
+
+| Step | What it does |
+|---|---|
+| a command-line install's runtime | where an older command-line install is found — the executable `--retire` names, else the one the last `jason update apply` recorded, else the installer's default place (`~/.local/bin/jason`, `%LOCALAPPDATA%\Programs\jason\jason.exe`), each only where it is Jason's: named by the flag or the record, a `jason-LICENSE` or `jason-THIRD-PARTY-NOTICES` beside it, or on Windows that folder — a runtime running from that executable is drained and stopped. **No runtime is ever started**: the report says `stopped`, and `jason runtime start` starts one from the carried file; a caller that goes on to use Jason runs it. Where nothing is to be retired, no runtime is asked anything. A runtime that will not stop leaves that install as it is |
+| the terminal command | macOS: `~/.local/bin/jason`, the application's own two-line `sh` wrapper running the carried file (naming `JASON_DATA_DIR` where that is set), written over an earlier wrapper, the retired executable or a link to an application's `jason`, and over no other file; then `install.sh`'s marker and line, `export PATH="<home>/.local/bin:$PATH"`, appended to the login profile and to `~/.zshrc` or `~/.bashrc`, each only where the line is not already a line of that file — the rule `install.sh` appends by, held to it word for word. Windows: one entry in this account's Path naming the carried file's folder, `resources\bundle`, only where it is not there, the value's kind kept and running programs told, as `install.ps1` writes its own; and the `jason`/`jason-desktop` command files the application placed in `%LOCALAPPDATA%\Microsoft\WindowsApps` taken back, each only where it is one of the application's shapes. A shell already open finds neither, and runs the path the report gives as `open_shell` |
+| the rest of the retired install | its logon registration, where it names that executable and this data directory, registered again naming the carried file; its notice files, and on Windows `jason.previous.exe`, removed. Windows: the executable removed, or, while a running process holds it, renamed into a `jason-retired-<id>` folder on its own volume and left there, with nothing started to wait for that process; its Path entry taken off where its folder then holds nothing but what `install.ps1` writes; the folder once empty. macOS: the wrapper has taken its place at the default path; one elsewhere is removed, with its profile block by §9's rule |
+| the harness skills | both packs, from the skills beside the carried file, read where they stand, into the folder of every agent host found by its home folder: Claude Code (`~/.claude` → `~/.claude/skills`) and Codex (`~/.codex` → `~/.agents/skills`, which other hosts read too), recorded as `jason skills install` records them. A skill folder there under a name Jason ships that no record of Jason's names is the person's own: left as it is, and named under `left_alone` |
+| the role skills | with `--roles` only, into the data directory, as `jason skills install --roles-only` deploys them |
+
+Without `--roles` it writes nothing under the data directory, so the application's first start still opens on the Demo;
+only an install being retired, which has data already, may have its runtime stopped and its logon registration made
+again. Its callers: the Windows installer at every install and update, silent or not, with no flags; the agent's install
+script on macOS once the application is in place, with `--roles`; the application's start where this last ran for an
+older version, with no flags; and the move of a command-line install, with `--retire` naming the executable it moves from.
+
+The document carries `version` and `executable` (the carried file); `command` — `runs` (what a new terminal finds `jason`
+through: the wrapper on macOS, the folder on the Path on Windows), `open_shell`, `changed`, `profiles`, `taken_back`;
+`skills`, one entry per root — `root`, `hosts`, `written`, `unchanged`, `left_alone`; `roles` (with `--roles`, else null);
+`retired` — `executable`, `aside`, `removed`, `reregistered` — or null; `runtime` — `not_running`, `running` (another
+executable's, left as it is), `stopped`, `would_not_stop`; and `done`, `left` and `problems`, a sentence each, with
+`completed`. It exits 0 when everything it set out to do is done, 1 when it refused or a step did not get there, each named
+under `problems`, and 2 for a usage error.
+
 ## 10. Where things live
 
 The **data directory** is `~/.jason`, or whatever `JASON_DATA_DIR` names: the database, the configuration, the

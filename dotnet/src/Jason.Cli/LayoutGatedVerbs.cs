@@ -38,6 +38,7 @@ public static class LayoutGatedVerbs
         ("export", null),
         ("import", null),
         ("uninstall", "--purge-data"),
+        ("install", "--roles"),
         ("session open", "--setup"),
     ];
 

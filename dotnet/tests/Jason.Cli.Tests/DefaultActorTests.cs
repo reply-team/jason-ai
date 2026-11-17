@@ -443,6 +443,7 @@ public class DefaultActorTests
         ["logs"] = "reads the log files and never asks the runtime",
         ["doctor"] = "asks the runtime only reads",
         ["uninstall"] = "takes this installation off the machine",
+        ["install"] = "sets this machine up for the application: a terminal command, a Path, skills in an agent host's folder",
     };
 
     /// <summary>The one operation the runtime maps by hand, with no body to bind: it reads, and takes no actor.</summary>

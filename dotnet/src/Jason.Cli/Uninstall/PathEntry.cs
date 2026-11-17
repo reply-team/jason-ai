@@ -296,6 +296,100 @@ public static class PathEntry
     public const string AppendFormat = @"\n%s\n%s\n";
 
     /// <summary>
+    /// How <c>install.sh</c> puts the line into one profile, as the function it defines and calls: nothing where the file
+    /// already holds the whole line, otherwise the marker and the line appended behind a blank line.
+    /// <see cref="AddToProfile"/> is the same rule in C#, which <c>jason install</c> writes by on macOS; the script carries
+    /// this text verbatim, and a test runs it in <c>sh</c> beside the C# on the same files.
+    /// </summary>
+    public const string AddToProfileFunction =
+        """
+        add_to_profile() {
+            if [ -f "$1" ] && grep -qxF "$LINE" "$1"; then
+                return 0
+            fi
+            printf '\n%s\n%s\n' "$MARKER" "$LINE" >> "$1"
+            ADDED="${ADDED:+$ADDED and }$1"
+        }
+        """;
+
+    /// <summary>
+    /// <see cref="AddToProfileFunction"/> in C#: puts the marker and the line for that directory into one profile, as
+    /// <c>install.sh</c> puts them, and says whether it wrote anything.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Byte for byte the script's act.</b> A file that is a regular file, through any link, and holds the line as a whole
+    /// line of its own, exactly — <c>grep -qxF</c> — takes nothing. Any other is appended to, as <c>&gt;&gt;</c> appends:
+    /// through a link, and creating a file that is not there. What is appended is <c>printf '\n%s\n%s\n'</c> of the marker
+    /// and the line, in UTF-8, the encoding the script's own bytes are in.
+    /// </para>
+    /// <para>
+    /// The line looked for is the directory's UTF-8 bytes read one byte a character, as <see cref="CarriesLine"/> reads a
+    /// profile, so a directory with non-ASCII in its name is found again on the second run and not appended twice.
+    /// </para>
+    /// </remarks>
+    /// <param name="profile">The profile file.</param>
+    /// <param name="directory">The directory to put on the PATH.</param>
+    public static bool AddToProfile(string profile, string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+
+        if (IsRegularFile(profile))
+        {
+            var line = ExportLine(AsBytes(directory));
+            if (System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(profile)).Split('\n').Any(candidate => string.Equals(candidate, line, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+
+        var block = System.Text.Encoding.UTF8.GetBytes($"\n{Marker}\n{ExportLine(directory)}\n");
+        using (var stream = new FileStream(profile, FileMode.Append, FileAccess.Write, FileShare.Read))
+        {
+            stream.Write(block);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The profiles <c>install.sh</c> puts the line into for this account, in its order: the <see cref="LoginProfile"/>, then
+    /// the <see cref="InteractiveProfile"/> where the shell has one.
+    /// </summary>
+    public static IReadOnlyList<string> ProfileTargets(string home, string? shell) =>
+        InteractiveProfile(home, shell) is { } interactive ? [LoginProfile(home, shell), interactive] : [LoginProfile(home, shell)];
+
+    /// <summary>
+    /// This account's <c>Path</c> value with the directory appended, by the rule <see cref="RegistryStatements"/> spells for
+    /// <c>install.ps1</c> — or <b>the same string</b> where the value already names it.
+    /// </summary>
+    /// <remarks>
+    /// Compared as Windows reads the value: ignoring case and a trailing separator, and expanded only where the value is
+    /// <c>REG_EXPAND_SZ</c>. The empty entries are dropped before the directory is appended, the installer's rule, because
+    /// an empty PATH entry is the current directory; every other entry keeps its spelling and its place. A test runs the
+    /// PowerShell statements and this against the same values.
+    /// </remarks>
+    /// <param name="registryValue">The value as the registry stores it, or the empty string where there is none.</param>
+    /// <param name="directory">The directory to put on the Path.</param>
+    /// <param name="expand">How an entry is read: <see cref="ReadAs"/> of the value's kind.</param>
+    public static string WithDirectory(string registryValue, string directory, Func<string, string> expand)
+    {
+        ArgumentNullException.ThrowIfNull(registryValue);
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        ArgumentNullException.ThrowIfNull(expand);
+
+        var entry = directory.TrimEnd('\\');
+        var entries = registryValue.Split(';');
+        if (entries.Any(stored => string.Equals(expand(stored).TrimEnd('\\'), entry, StringComparison.OrdinalIgnoreCase)))
+        {
+            return registryValue;
+        }
+
+        return string.Join(';', entries.Where(stored => stored.Length > 0).Append(entry));
+    }
+
+    /// <summary>
     /// The command that puts the directory on this account's PATH on Unix, spelled as <c>install.sh</c>
     /// spells it.
     /// </summary>

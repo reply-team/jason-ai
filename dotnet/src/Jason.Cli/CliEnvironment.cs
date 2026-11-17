@@ -111,7 +111,13 @@ namespace Jason.Cli;
 /// the registry of whoever ran the suite. Null is "no desktop", which opens the browser UI; <see cref="Default()"/> names
 /// this account's on Windows, and nothing elsewhere.
 /// </param>
-public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null, TimeProvider? Clock = null, Link.IDesktopRegistration? Desktop = null)
+/// <param name="Setup">
+/// The places <c>jason install</c> sets this machine up in — the home, the Path, the folders a terminal finds programs in —
+/// and the ninth seam whose default is the refusal, for the reason <paramref name="Removes"/> gives: a verb that found them
+/// for itself would write into the profiles and the Path of whoever runs the suite. Null sets nothing up;
+/// <see cref="Default()"/> names this machine's on macOS and Windows, and nothing elsewhere.
+/// </param>
+public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths Paths, HttpMessageHandler? HttpHandler = null, TextReader? In = null, IRuntimeProcessControl? Processes = null, string? InstallPath = null, IAutostartRegistrar? Autostart = null, IHarnessLocator? Harnesses = null, IProgramRunner? Programs = null, string? SearchPath = null, IInstallationRemover? Removes = null, IdentityFacts? Identity = null, IReadOnlyDictionary<string, string>? Variables = null, string? BuildVersion = null, IManagerRecords? Managers = null, IUrlOpener? Opener = null, string? WorkingDirectory = null, string? AccountName = null, IClipboard? Clipboard = null, Session.ITerminalStarter? Terminals = null, TimeProvider? Clock = null, Link.IDesktopRegistration? Desktop = null, SetupPlaces? Setup = null)
 {
     public static CliEnvironment Default() => Default(Console.Out, Console.Error, Console.OutputEncoding);
 
@@ -138,7 +144,8 @@ public sealed record CliEnvironment(TextWriter Out, TextWriter Error, JasonPaths
             AccountName: AccountNameOf(() => Environment.UserName),
             Clipboard: OperatingSystem.IsWindows() ? new WindowsClipboard() : null,
             Terminals: new Session.PlatformTerminalStarter(),
-            Desktop: OperatingSystem.IsWindows() ? new Link.WindowsDesktopRegistration() : null);
+            Desktop: OperatingSystem.IsWindows() ? new Link.WindowsDesktopRegistration() : null,
+            Setup: SetupPlaces.ForThisMachine());
 
     /// <summary>
     /// The attempt this CLI was launched inside, as the launcher named it in <c>JASON_ATTEMPT_ID</c> — read from

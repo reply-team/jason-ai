@@ -34,6 +34,7 @@ public class ConfinedVerbsTests
         ["skills"] = ["skills", "update", "--dry-run"],
         ["update"] = ["update", "check"],
         ["uninstall"] = ["uninstall"],
+        ["install"] = ["install"],
         ["ui"] = ["ui", "tokens"],
         ["session"] = ["session", "open", "--dry-run"],
         ["journal watch"] = ["journal", "watch"],

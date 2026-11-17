@@ -44,6 +44,15 @@ public static class CliErrors
     /// </summary>
     public const string UninstallCarriedByDesktop = "uninstall_carried_by_desktop";
 
+    /// <summary>
+    /// <c>jason install</c> run by a jason the desktop application does not carry: it sets the machine up for the
+    /// application's own, and nothing was read or written.
+    /// </summary>
+    public const string InstallNotCarried = "install_not_carried";
+
+    /// <summary><c>jason install</c> on a system it does not set up — anything but macOS and Windows: nothing was read or written.</summary>
+    public const string InstallUnsupported = "install_unsupported";
+
     /// <summary>The log directory exists and <c>jason logs</c> could not read it: nothing was shown rather than less.</summary>
     public const string LogsUnreadable = "logs_unreadable";
 

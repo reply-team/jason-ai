@@ -223,8 +223,8 @@ would later refuse to launch, rather than writing one.
 [`skills/README.md`](../skills/README.md) is the contract both verbs keep. `jason ui install` places this release's
 browser UI, the page `jason ui open` opens; a runtime works without it.
 
-One question, answered check by check. It is one of eleven names in this CLI with no API operation behind
-it — `status`, `uninstall`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
+One question, answered check by check. It is one of twelve names in this CLI with no API operation behind
+it — `status`, `uninstall`, `install`, `logs`, `doctor`, `export` and `import`, the `skills` and `update` nouns, `ui install` and
 `plugin install`, which change this installation's files as those two do, and `session open`, which starts your own
 agent host, or a plain shell, in a terminal — and it cannot be otherwise: half of what it reports is not the runtime's to know — an executable on PATH,
 another vendor's CLI and whether it answers, files in a folder in your home directory. No API operation can
