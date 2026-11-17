@@ -793,6 +793,14 @@ export interface JasonDesktop {
         /** Installs a program by a `DesktopHost.install` or `DesktopReply.cli.install` id, with npm. */
         installProgram(programId: string): Promise<void>;
         /**
+         * Puts the agents' roles on a program found here by default, `claude` or `codex`: an enabled execution profile on
+         * it is named the default with `jason profile set-default`, the desktop's own first, else the one there is, and
+         * where there is none one is made under the desktop's own name. Refused, in the runtime's words where it refused,
+         * for several profiles on it and none the desktop's own, and for a default a JASON_ variable sets. What the card
+         * shows afterwards is read again from `status()`.
+         */
+        useProgram(programId: string): Promise<void>;
+        /**
          * Configures one of `status().plugins` in one edit of the settings file. It writes `Plugins:Config:<id>` (the
          * token where the plugin reads one from there; the forwarder's `url` from `target`), `Plugins:Grants:<id>:Http`,
          * and for the three notification plugins `Notifications:Plugins:<id>:Binding` with `target` under the plugin's

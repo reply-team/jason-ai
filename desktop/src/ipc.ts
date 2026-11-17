@@ -11,6 +11,7 @@ export const invokeChannels = {
     'setup.connectReplyWithKey': 'jason:setup.connectReplyWithKey',
     'setup.setProviderKey': 'jason:setup.setProviderKey',
     'setup.installProgram': 'jason:setup.installProgram',
+    'setup.useProgram': 'jason:setup.useProgram',
     'setup.configurePlugin': 'jason:setup.configurePlugin',
     'setup.disconnectPlugin': 'jason:setup.disconnectPlugin',
     'setup.replyConnect': 'jason:setup.replyConnect',

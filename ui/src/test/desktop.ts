@@ -641,6 +641,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
             connectReplyWithKey: call('setup.connectReplyWithKey'),
             setProviderKey: call('setup.setProviderKey'),
             installProgram: call('setup.installProgram'),
+            useProgram: call('setup.useProgram'),
             configurePlugin: call('setup.configurePlugin'),
             disconnectPlugin: call('setup.disconnectPlugin'),
             replyConnect: acting('setup.replyConnect', (channel, options) => linked(channel, 'connect', options)),

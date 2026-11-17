@@ -11,9 +11,9 @@ import { dataLayout } from '../src/paths.ts';
 import { programsOn } from '../src/programs.ts';
 import { ProviderKeys } from '../src/providers.ts';
 import { rolesMoments } from '../src/roles-moments.ts';
-import { lastChosenHost, profileProgram, roleHostOf } from '../src/roles-profile.ts';
+import { lastChosenHost, profileProgram, profileToUse, roleHostOf, type ListedProfile } from '../src/roles-profile.ts';
 import { readSettings, writeSettings, type DesktopSettings } from '../src/settings.ts';
-import { namingReason, Setup, type SetupDeps } from '../src/setup.ts';
+import { namingReason, runtimeWords, Setup, usingReason, type SetupDeps } from '../src/setup.ts';
 import { bench, fakeBox, memoryLog, type Bench } from './harness.ts';
 
 /** A Setup on the bench whose desktop settings live in the bench's own file, read again by every Setup made on it. */
@@ -498,4 +498,183 @@ test('the host the default profile runs on says so, by the profile name, and no 
         const hosts = (await setupOn(held, { programs: programsOn(held.env, null) }).status()).hosts;
         assert.deepEqual(hosts.filter((host) => host.runsRoles !== null).map((host) => host.id), [], name);
     }
+});
+
+// ---- Use: a person puts the agents' roles on a program -----------------------------------------------------------------
+
+const listed = (name: string, host: string | null, disabled = false): ListedProfile => ({ id: null, name, disabled, host });
+
+test("Use names an enabled profile on the host, the desktop's own first, else the one there is, and never guesses between several", () => {
+    assert.deepEqual(profileToUse([listed('night', 'codex'), listed('codex', 'codex')], 'codex'), { kind: 'name', name: 'codex' });
+    assert.deepEqual(profileToUse([listed('claude-code', 'claude_code'), listed('night', 'codex')], 'codex'), { kind: 'name', name: 'night' });
+    assert.deepEqual(profileToUse([listed('a', 'codex'), listed('b', 'codex'), listed('c', 'claude_code')], 'codex'), { kind: 'several', names: ['a', 'b'] });
+    // A disabled one is not one to name: with none enabled, the desktop's own is made, unless its name is held.
+    assert.deepEqual(profileToUse([listed('claude-code', 'claude_code'), listed('night', 'codex', true)], 'codex'), { kind: 'create' });
+    assert.deepEqual(profileToUse([], 'claude'), { kind: 'create' });
+    assert.deepEqual(profileToUse([listed('codex', 'codex', true)], 'codex'), { kind: 'disabled', name: 'codex' });
+    assert.deepEqual(profileToUse([listed('codex', 'gemini_cli')], 'codex'), { kind: 'taken', name: 'codex' });
+    assert.deepEqual(profileToUse([listed('claude-code', 'codex')], 'claude'), { kind: 'taken', name: 'claude-code' });
+});
+
+test("the runtime's words are its error's message and its details', and the program's words where it printed no error", () => {
+    const error = { code: 'setting_not_in_force', message: 'Not in force.', retryable: false, details: [{ field: 'settings_file', code: 'put_back', message: 'The file was put back.' }] };
+    assert.equal(runtimeWords({ exit: 1, stderr: '', stdout: JSON.stringify({ error }) }, 'otherwise'), 'Not in force. The file was put back.');
+    assert.equal(runtimeWords({ exit: 3, stdout: '', stderr: 'No runtime answered.\n' }, 'otherwise'), 'No runtime answered.');
+    assert.equal(runtimeWords({ exit: 1, stdout: '', stderr: '' }, 'otherwise'), 'otherwise');
+});
+
+/** A bench with both programs and the desktop's Claude Code profile named the default, as a fresh installation leaves it. */
+async function linked(t: Parameters<typeof bench>[0], programs = ['claude', 'codex']): Promise<Bench> {
+    const b = bench(t, { programs });
+    writeInstallationSettings(b, { Roles: { MaxStdoutBytes: 1000 } });
+    assert.equal(await setupOn(b).connectRoles('claude'), 'made');
+    return b;
+}
+
+/** The hosts the cards read in use, with the profile each names. */
+const inUseOn = async (b: Bench, extra: Partial<SetupDeps> = {}) =>
+    (await setupOn(b, extra).status()).hosts.filter((host) => host.runsRoles !== null).map((host) => [host.id, host.runsRoles]);
+
+test('Use on Codex with no profile there makes one by the routine the fresh installation uses, names it the default, and the card reads it in use', async (t) => {
+    const b = await linked(t);
+    const setup = setupOn(b);
+    let changed = 0;
+    setup.onChanged(() => changed++);
+    const before = b.record().length;
+
+    await setup.useProgram('codex');
+
+    const verbs = b
+        .record()
+        .slice(before)
+        .filter((entry) => entry.name === 'jason' && entry.args[0] === 'profile')
+        .map((entry) => entry.args.slice(0, 2).join(' '));
+    assert.deepEqual(verbs, ['profile list', 'profile create', 'profile set-default']);
+    const made = profiles(b).find((each) => each.name === 'codex');
+    assert.deepEqual(made?.revision, { host: 'codex', program: programOf(b, 'codex') });
+    assert.deepEqual(made?.mark_when_made, { name: 'codex' }, 'the mark goes before the create, as at a fresh installation');
+    assert.deepEqual(asked(b, 'profile set-default').at(-1)?.args, ['profile', 'set-default', 'codex', '--reason', usingReason]);
+    const roles = installationSettings(b).Roles as Record<string, unknown>;
+    assert.equal(roles.DefaultExecutionProfile, 'codex');
+    assert.equal(roles.MaxStdoutBytes, 1000, 'the runtime keeps every other key');
+    assert.equal(readSettings(b.paths.settings).rolesProfilePending, undefined, 'the mark is taken away once the default is named');
+    assert.ok(changed > 0, 'the cards are read again');
+    assert.deepEqual(await inUseOn(b), [['codex', 'codex']]);
+
+    // And back: the desktop's own Claude Code profile is there, so it is named and nothing is made.
+    const creates = asked(b, 'profile create').length;
+    await setup.useProgram('claude');
+    assert.equal(asked(b, 'profile create').length, creates);
+    assert.deepEqual(await inUseOn(b), [['claude', 'claude-code']]);
+});
+
+test('Use names the one enabled profile a person made on the host, and refuses several, naming them and the verb', async (t) => {
+    const b = await linked(t);
+    holdProfiles(b, [
+        ...profiles(b),
+        { name: 'night-run', disabled: false, revision: { host: 'codex', program: 'codex' } },
+        { name: 'old', disabled: true, revision: { host: 'codex', program: 'codex' } },
+    ]);
+    await setupOn(b).useProgram('codex');
+    assert.equal(asked(b, 'profile create').length, 1, 'only the fresh installation made one');
+    assert.deepEqual(await inUseOn(b), [['codex', 'night-run']]);
+
+    const several = await linked(t);
+    holdProfiles(several, [
+        ...profiles(several),
+        { name: 'a', disabled: false, revision: { host: 'codex', program: 'codex' } },
+        { name: 'b', disabled: false, revision: { host: 'codex', program: 'codex' } },
+    ]);
+    await assert.rejects(setupOn(several).useProgram('codex'), {
+        message: 'Several execution profiles run on Codex: a, b. Name the one to use with `jason profile set-default <name>`.',
+    });
+    assert.equal(asked(several, 'profile set-default').length, 1, 'nothing is named after the fresh installation');
+    assert.deepEqual(await inUseOn(several), [['claude', 'claude-code']]);
+});
+
+test("Use reads every page of the profiles, so the desktop's own on a later page is the one named", async (t) => {
+    const b = await linked(t);
+    const many = Array.from({ length: 1000 }, (_, at) => ({ name: `p${at}`, disabled: true, revision: { host: 'codex', program: 'codex' } }));
+    holdProfiles(b, [
+        ...profiles(b),
+        ...many,
+        { name: 'other', disabled: false, revision: { host: 'codex', program: 'codex' } },
+        { name: 'codex', disabled: false, revision: { host: 'codex', program: 'codex' } },
+    ]);
+    await setupOn(b).useProgram('codex');
+    assert.deepEqual(asked(b, 'profile list').at(-1)?.args, ['profile', 'list', '--include-disabled', '--limit', '1000', '--cursor', '1000']);
+    assert.deepEqual(await inUseOn(b), [['codex', 'codex']]);
+});
+
+test('a cursor the runtime gives again is not followed again: the pages stop there and Use goes on with what they held', async (t) => {
+    const b = await linked(t);
+    b.env.STUB_PROFILE_LIST_CURSOR = 'same';
+    const before = asked(b, 'profile list').length;
+    await setupOn(b).useProgram('codex');
+    delete b.env.STUB_PROFILE_LIST_CURSOR;
+    // The first page, then the cursor once; its answer names the same cursor, which is not asked for a second time.
+    assert.deepEqual(
+        asked(b, 'profile list')
+            .slice(before)
+            .map((entry) => entry.args.slice(5)),
+        [[], ['--cursor', 'same']],
+    );
+    assert.deepEqual(await inUseOn(b), [['codex', 'codex']]);
+});
+
+test("a default a JASON_ variable sets, or one the runtime refuses to put in force, keeps the card as it was and is said in the runtime's words", async (t) => {
+    const b = await linked(t);
+    b.env.STUB_DEFAULT_IN_FORCE = 'claude-code';
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'A JASON_ variable sets the default, so the file would not be in force.' });
+    assert.deepEqual(await inUseOn(b), [['claude', 'claude-code']], 'the pill does not move');
+    delete b.env.STUB_DEFAULT_IN_FORCE;
+
+    b.env.STUB_PROFILE_SET_DEFAULT_REFUSED = 'setting_not_in_force';
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'The default was not written.' });
+    assert.deepEqual(await inUseOn(b), [['claude', 'claude-code']]);
+    delete b.env.STUB_PROFILE_SET_DEFAULT_REFUSED;
+
+    b.env.STUB_PROFILE_SET_DEFAULT_ANSWERS = 'claude-code';
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'The runtime answered claude-code in force, not codex.' });
+    delete b.env.STUB_PROFILE_SET_DEFAULT_ANSWERS;
+
+    b.env.STUB_PROFILE_SET_DEFAULT_UNREACHABLE = 'yes';
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'No runtime answered.' });
+});
+
+test("a refused create is said in the runtime's words, and a profile of the desktop's name that is disabled or on another program is never made over", async (t) => {
+    const b = await linked(t);
+    b.env.STUB_PROFILE_CREATE_FAILS = 'yes';
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'The profile was refused.' });
+    delete b.env.STUB_PROFILE_CREATE_FAILS;
+    assert.deepEqual(await inUseOn(b), [['claude', 'claude-code']]);
+
+    const off = await linked(t);
+    holdProfiles(off, [...profiles(off), { name: 'codex', disabled: true, revision: { host: 'codex', program: 'codex' } }]);
+    await assert.rejects(setupOn(off).useProgram('codex'), {
+        message: 'The execution profile codex runs on Codex and is disabled; `jason profile enable codex` puts it back in service.',
+    });
+
+    const taken = await linked(t);
+    holdProfiles(taken, [...profiles(taken), { name: 'codex', disabled: false, revision: { host: 'gemini_cli', program: 'gemini' } }]);
+    await assert.rejects(setupOn(taken).useProgram('codex'), {
+        message:
+            'The execution profile codex is there and runs another program, so none was made for Codex. Make one under another name with `jason profile create <name> --host codex --program codex`, then name it with `jason profile set-default <name>`.',
+    });
+    for (const each of [off, taken]) assert.equal(asked(each, 'profile create').length, 1);
+});
+
+test('Use refuses a program that is not Claude Code or Codex, one not found, and a Claude Code below its floor, before it asks the runtime anything', async (t) => {
+    const b = bench(t, { programs: ['claude', 'gemini'] });
+    for (const id of ['gemini', 'claude-api-key', 42]) {
+        await assert.rejects(setupOn(b).useProgram(id), { message: 'The agents’ roles are put on Claude Code or Codex from here, and on no other program.' });
+    }
+    await assert.rejects(setupOn(b).useProgram('codex'), { message: 'Codex is not found on this computer, so the agents’ roles were left where they are.' });
+
+    // The floor's own sentence, for a Claude Code that says a version below it, in the shape the program stub reads.
+    const held = bench(t, { programs: ['claude', 'codex'] });
+    held.env.STUB_CLAUDE_VERSION_FILE = join(held.root, 'claude-said.json');
+    writeFileSync(held.env.STUB_CLAUDE_VERSION_FILE, JSON.stringify({ stdout: '2.1.200 (Claude Code)\n' }));
+    await assert.rejects(setupOn(held, { programs: programsOn(held.env, null) }).useProgram('claude'), { message: /^Claude Code 2\.1\.200 is older than / });
+    for (const each of [b, held]) assert.deepEqual(profileVerbs(each), []);
 });

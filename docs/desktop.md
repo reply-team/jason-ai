@@ -74,7 +74,7 @@ is named; `jason status` then says what is missing. A profile or a default a per
 or any later one, nor a default in force when the desktop looks again just before it asks for the naming, and nothing of
 this happens or is read in the demo. The naming itself has no condition, so a default a person names in the moment
 between that look and the naming is replaced, and the runtime journals the change as it journals every one. Connect says
-which host the roles run on.
+which host the roles run on, and its **Use** moves them to the other one when you ask ([Connect](#connect)).
 
 The desktop starts every program with a file and arguments, never through a shell, and only from the modules that are
 named for it; a test holds that, and holds the page to a window that reaches the desktop through one object,
@@ -394,7 +394,7 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
 - **Agent hosts.** The cards detect the agent hosts (Claude Code, Codex, Gemini CLI, Antigravity CLI, Cursor CLI and GitHub Copilot CLI), `reply` and `node`. A missing program is explained with its install
   command and a link, and the command runs on a click when `npm` is present, never without one; Node itself is never
   installed. The desktop never signs in to a host: sign in once by running the host in a terminal, and the chat uses that
-  sign-in.
+  sign-in; a host that does not drive the chat, Gemini CLI say, runs campaign work alone, and that work uses it.
   Under Claude Code and Codex, Connect names the MCP servers set up in your own settings for each: Claude Code's user
   servers and the servers of Codex's config.toml. They work when you open Jason in that program from Open in, where it
   runs with your own settings. The chat runs without them in this version. Servers of the folder Open in opens, of a
@@ -402,7 +402,19 @@ nothing else reads them, and they can be deleted by hand once nothing runs from 
   Under the host the agents' roles run on by default, Connect says so in one line, with the profile's name: "Your agents'
   roles run on Claude Code, by the execution profile claude-code." It is said where the default profile the runtime
   answers in force is an enabled profile on Claude Code or Codex and the chat can use that host here, found and at its
-  version floor, whoever made the profile, and nowhere else.
+  version floor, whoever made the profile, and nowhere else; that card is marked **In use**.
+  **Use**, on the card of Claude Code or Codex when it is found, at its version floor and not in use (never on a model
+  key, which runs no role), puts the agents' roles on that program by default. It names an enabled execution profile on
+  that host the default with `jason profile set-default`, which you could type yourself: the desktop's own
+  (`claude-code` or `codex`) first, else the only one there is. Where there is none, one is made the way the desktop
+  makes the first one, with `jason profile create`; where several are there and none is the desktop's own, Use names them
+  and leaves the choice to `jason profile set-default <name>`, and it never makes a profile over one of the same name that
+  is disabled or runs another program. The card then reads the default the runtime answers in force again and draws that,
+  so a default a `JASON_` variable sets, or a Roles section of the settings file the runtime refuses, keeps the card as it
+  was and the refusal is said in the runtime's own words. Use changes only the default: a work item, a campaign or a role
+  that names a profile keeps it, work already running finishes on the program it started on, the chat is not touched (each
+  chat's program is chosen in its own model menu, and a new chat starts as before), and neither is the host Open in
+  starts a session of your own on (`agent.interactive_host`). In a browser tab it is drawn off with the other acts.
 - **AI provider keys.** Anthropic and OpenAI keys, and the Anthropic-compatible providers DeepSeek, Kimi, GLM and
   MiniMax, which run through Claude Code with a token and a base address (GLM's default models are `glm-5.3` and
   `glm-5.3-flash`, MiniMax's `MiniMax-M3.1-Flash`). A key is kept by the operating system's store, reaches the host's

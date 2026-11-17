@@ -1478,7 +1478,8 @@ body,
     align-items: center;
     gap: 4px 8px;
 }
-.jc-console .row-hd > .in-use {
+.jc-console .row-hd > .in-use,
+.jc-console .row-hd > .use-program {
     margin-left: auto;
 }
 .jc-console .host-does {

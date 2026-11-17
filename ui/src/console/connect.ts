@@ -860,19 +860,62 @@ export const hostRow = (host: DesktopHost): boolean => host.found || host.belowF
  */
 export const inUse = (host: DesktopHost): boolean => runsRolesLine(host) !== null;
 
+/**
+ * Whether a program's card offers Use: a program found here that could carry "In use" — it drives the chat and is at its
+ * version floor, as the runs-roles line needs — and does not carry it now. Never a key provider, which runs no role.
+ */
+export const usable = (host: DesktopHost): boolean =>
+    host.kind === 'program' && host.found && host.drivesChat && host.belowFloor === null && !inUse(host);
+
+/** The program a person last put the agents' roles on with Use, while the page is open; null before any. */
+const used = signal<string | null>(null);
+
+/**
+ * The line a program's card says after a person's Use, while the card reads that program in use again: what the act did
+ * not change. What it changed, that the roles run on this program, is the runs-roles line the card already draws, since
+ * In use and that line are one fact, so it is never said twice.
+ */
+export function usedLine(host: DesktopHost): string | null {
+    return used.value === host.id && inUse(host) ? t('connect.used') : null;
+}
+
+define('connect.use', ([id]) => {
+    if (!can('setup.useProgram') || typeof id !== 'string') return;
+    const host = setup.value?.hosts.find((each) => each.id === id);
+    if (host === undefined || !usable(host)) return;
+    used.value = null;
+    void doing(t('connect.using', { host: host.label }), async () => {
+        await here().desktop.setup.useProgram(id);
+        used.value = id;
+    });
+});
+
 /** A program found here: a card, its name, its version as its state and "In use" on one line, its notes under it. */
 function program(host: DesktopHost, busy: Html | null): Html {
     const sentence = signInSentence(host);
     const own = ownServersLine(host);
     const roles = runsRolesLine(host);
+    const after = usedLine(host);
     const state = host.found ? (host.version ?? 'Found') : 'Not found';
     const tone = host.belowFloor !== null ? 'amber' : host.found ? 'green' : 'gray';
-    const how = host.belowFloor !== null || sentence !== null || own !== null || roles !== null;
+    const how = host.belowFloor !== null || sentence !== null || own !== null || roles !== null || after !== null;
     return html`<div class="setrow host-row host-card">
         <div class="grow">
             <div class="row-hd">
                 <b>${host.label}</b> <span class="pillc ${tone} host-state">${state}</span>
                 ${inUse(host) ? html`<span class="pillc green in-use">In use</span>` : null}
+                ${
+                    usable(host)
+                        ? html`<button
+                              class="btn sm use-program"
+                              type="button"
+                              ${unlessCan(busy, 'setup.useProgram')}
+                              ${act('connect.use', host.id)}
+                          >
+                              Use
+                          </button>`
+                        : null
+                }
                 ${
                     !host.found && host.install
                         ? html`<button
@@ -900,6 +943,7 @@ function program(host: DesktopHost, busy: Html | null): Html {
                           ${sentence ? html`<div class="meta sign-in">${withCode(sentence)}</div>` : null}
                           ${own !== null ? html`<div class="meta own-servers">${own}</div>` : null}
                           ${roles !== null ? html`<div class="meta runs-roles">${roles}</div>` : null}
+                          ${after !== null ? html`<div class="meta used-program" role="status">${after}</div>` : null}
                       </div>`
                     : null
             }

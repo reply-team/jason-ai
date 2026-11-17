@@ -44,6 +44,7 @@ export const templates = {
     program_installed: 'npm install of {Program} exited {Exit}',
     own_servers_unread: 'The MCP servers of {Program} were not listed: its file is {Kind}',
     roles_profile: 'The agents’ roles were looked at for a profile of their own: {Outcome}',
+    program_used: 'The agents’ roles were asked to run on {Program} by default: {Outcome}',
     roles_profile_unmarked: 'The mark of a profile for the agents’ roles could not be written to the desktop’s settings, so none was made',
     reply_account_act: 'reply account {Act} on {Channel} exited {Exit} with code {Code}; a usage error {Usage}',
     // The desk: the tray, its notifications.

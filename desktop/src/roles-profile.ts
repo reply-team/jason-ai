@@ -60,10 +60,10 @@ function profileOf(value: unknown): ListedProfile | null {
 }
 
 /**
- * One page of `jason profile list`, whether more follow, and the default in force the page says, by name, or null where
- * none is named; null where it is not one, a page that does not say the default included.
+ * One page of `jason profile list`, whether more follow and the cursor of the next, and the default in force the page
+ * says, by name, or null where none is named; null where it is not one, a page that does not say the default included.
  */
-export function readProfilePage(stdout: string): { profiles: ListedProfile[]; more: boolean; defaultInForce: string | null } | null {
+export function readProfilePage(stdout: string): { profiles: ListedProfile[]; more: boolean; cursor: string | null; defaultInForce: string | null } | null {
     try {
         const raw = JSON.parse(stdout) as { items?: unknown; next_cursor?: unknown; default_execution_profile?: unknown };
         if (!Array.isArray(raw.items)) return null;
@@ -71,7 +71,8 @@ export function readProfilePage(stdout: string): { profiles: ListedProfile[]; mo
         if (profiles.some((each) => each === null)) return null;
         const named = raw.default_execution_profile;
         if (named !== null && typeof named !== 'string') return null;
-        return { profiles: profiles as ListedProfile[], more: typeof raw.next_cursor === 'string', defaultInForce: named };
+        const cursor = typeof raw.next_cursor === 'string' ? raw.next_cursor : null;
+        return { profiles: profiles as ListedProfile[], more: cursor !== null, cursor, defaultInForce: named };
     } catch {
         return null;
     }
@@ -114,6 +115,32 @@ export function rolesNext(profiles: readonly ListedProfile[], more: boolean, pen
     const ours = pending?.id !== undefined && only?.id === pending.id && only.name === pending.name;
     if (ours && !more && profiles.length === 1 && !only.disabled) return { kind: 'name', name: only.name };
     return { kind: 'leave', why: 'profiles_exist' };
+}
+
+/** What a person's Use on a program's card leads to, by the profiles the runtime holds. */
+export type ProfileToUse =
+    | { kind: 'name'; name: string }
+    | { kind: 'create' }
+    | { kind: 'several'; names: string[] }
+    | { kind: 'disabled'; name: string }
+    | { kind: 'taken'; name: string };
+
+/**
+ * Pure: the profile Use names the default for a host, from every profile the runtime holds, a disabled one included. An
+ * enabled profile on the host: the desktop's own name among them, else the one there is; several and none of them the
+ * desktop's own is never guessed between. None at all: one is made under the desktop's own name, unless a profile of
+ * that name is there already — disabled on the host, or on another — which is never made over.
+ */
+export function profileToUse(profiles: readonly ListedProfile[], host: RoleHost): ProfileToUse {
+    const { name: own, host: word } = roleProfiles[host];
+    const on = profiles.filter((each) => !each.disabled && each.host === word);
+    if (on.some((each) => each.name === own)) return { kind: 'name', name: own };
+    const [only] = on;
+    if (only !== undefined && on.length === 1) return { kind: 'name', name: only.name };
+    if (on.length > 1) return { kind: 'several', names: on.map((each) => each.name) };
+    const held = profiles.find((each) => each.name === own);
+    if (held === undefined) return { kind: 'create' };
+    return held.host === word ? { kind: 'disabled', name: own } : { kind: 'taken', name: own };
 }
 
 /** The host word of a profile, by the desktop's id of the program that runs it. */
