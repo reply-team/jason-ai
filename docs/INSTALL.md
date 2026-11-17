@@ -80,7 +80,7 @@ yes. With nobody to ask, leave it undone and say so. A question tool that comes 
 ask.
 
 On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex
-read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs
+read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI
 read too): nobody is asked, and where your own host is one of those the step below changes nothing there.
 If the person gave you those three lines, they are also the person's yes to putting Jason's skills where your own
 agent reads them: run `jason skills install --host <your host>` (§4; `<your host>` is one of the host words of
@@ -188,7 +188,7 @@ your terminal and your agents use. It is installed once, updated once and remove
   the line again.
 - Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
   put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
-  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
+  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
   runtime answered before the install and none answers after it, or the report says it stopped one, the script starts
   one again from the application's `jason`.
 - It ends non-zero, saying which act failed, when `jason` was not put in the terminal. Run again over the version

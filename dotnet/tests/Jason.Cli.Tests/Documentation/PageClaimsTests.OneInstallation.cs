@@ -145,7 +145,7 @@ public partial class PageClaimsTests
 
     /// <summary>
     /// <c>jason install</c> puts Jason's skills in for Claude Code and Codex only, each where its home folder is found, and
-    /// Codex's folder is the one Copilot, Cursor and Gemini CLIs read too. The pages say exactly that, never "every agent
+    /// Codex's folder is the one Copilot, Cursor and Gemini CLI read too. The pages say exactly that, never "every agent
     /// host", and tell every reader that another host takes them with <c>jason skills install --host</c>. The hosts named
     /// are the routine's own, read from its help; the hosts said to read Codex's folder are the table's.
     /// </summary>
@@ -156,7 +156,18 @@ public partial class PageClaimsTests
         var output = new StringWriter();
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
         var help = Flat(output.ToString());
-        Assert.Contains("into the folder of each of two hosts found by its home folder, and of no other: Claude Code (~/.claude -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which Copilot, Cursor and Gemini CLIs read too)", help, StringComparison.Ordinal);
+        Assert.Contains("into the folder of each of two hosts found by its home folder, and of no other: Claude Code (~/.claude -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which Copilot, Cursor and Gemini CLI read too)", help, StringComparison.Ordinal);
+        Assert.Contains("Set this machine up for the jason Jason Desktop carries: the terminal command, the skills of Claude Code and Codex where each is found, and an older command-line install retired.", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("every agent host", help, StringComparison.Ordinal);
+
+        var root = new StringWriter();
+        await CliApp.RunAsync(["--help"], new CliEnvironment(root, new StringWriter(), dir.Paths), TestContext.Current.CancellationToken);
+        Assert.Contains("the skills of Claude Code and Codex where each is found", Flat(root.ToString()), StringComparison.Ordinal);
+        Assert.DoesNotContain("every agent host", Flat(root.ToString()), StringComparison.Ordinal);
+
+        var installer = Flat(Page("desktop", "installer", "uninstall.nsh"));
+        Assert.Contains("DetailPrint \"Setting this machine up for Jason: the jason command in the terminal and the skills of Claude Code and Codex where each is found.\"", installer, StringComparison.Ordinal);
+        Assert.DoesNotContain("every agent host", installer, StringComparison.Ordinal);
 
         var codex = AgentHosts.All.Single(row => row.Kind == AgentHostKind.Codex);
         var claude = AgentHosts.All.Single(row => row.Kind == AgentHostKind.ClaudeCode);
@@ -167,7 +178,7 @@ public partial class PageClaimsTests
             AgentHosts.All.Where(row => row.HomeSkills == codex.HomeSkills && row.Kind != AgentHostKind.Codex).Select(row => row.Kind));
 
         var install = Flat(Page("docs", "INSTALL.md"));
-        Assert.Contains("On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLIs read too):", install, StringComparison.Ordinal);
+        Assert.Contains("On macOS and Windows the install script, and on Windows the installer, put Jason's skills where Claude Code and Codex read them, each where it is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too):", install, StringComparison.Ordinal);
 
         var readme = Flat(Page("README.md"));
         Assert.Contains("Where your agent is another host than Claude Code or Codex, or on Linux, give it Jason's skills with `jason skills install --host <your host>`", readme, StringComparison.Ordinal);
@@ -175,7 +186,7 @@ public partial class PageClaimsTests
         Assert.Contains("another agent host gets them with `jason skills install --host <host>`.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
         Assert.Contains("Any other agent host, and on Linux every one, gets Jason's skills with `jason skills install --host <host>`", Flat(Page("skills", "runtime", "operating-the-installation", "SKILL.md")), StringComparison.Ordinal);
 
-        foreach (var page in new[] { "README.md", "CLAUDE.md", "docs/INSTALL.md", "docs/handbook.md", "docs/desktop.md", "docs/release-and-update.md", ".github/release-notes-template.md", "desktop/README.md", "skills/runtime/operating-the-installation/SKILL.md", "install/install.sh", "install/install.ps1" })
+        foreach (var page in new[] { "README.md", "CLAUDE.md", "docs/INSTALL.md", "docs/handbook.md", "docs/desktop.md", "docs/release-and-update.md", ".github/release-notes-template.md", "desktop/README.md", "skills/runtime/operating-the-installation/SKILL.md", "install/install.sh", "install/install.ps1", "desktop/installer/uninstall.nsh", "dotnet/src/Jason.Cli/CliApp.cs", "dotnet/src/Jason.Cli/Installation/InstallCommand.cs" })
         {
             var text = Flat(Page(page.Split('/')));
             foreach (var said in new[] { "every agent host it finds", "every agent host found", "skills of every agent host", "where every agent host" })

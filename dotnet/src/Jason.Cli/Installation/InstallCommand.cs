@@ -87,7 +87,7 @@ public static class InstallCommand
           4. The harness skills, both packs, from the skills beside this jason (read where they stand, nothing
              downloaded), into the folder of each of two hosts found by its home folder, and of no other:
              Claude Code (~/.claude -> ~/.claude/skills) and Codex (~/.codex -> ~/.agents/skills, which
-             Copilot, Cursor and Gemini CLIs read too); another host's are `jason skills install --host`'s.
+             Copilot, Cursor and Gemini CLI read too); another host's are `jason skills install --host`'s.
              Each is recorded in .jason-skills.json. A skill folder there under a name Jason ships
              that no record of Jason's names is yours: left as it is, and named; one whose files equal this
              jason's, byte for byte, is one an earlier deployment wrote before its record, and is adopted.
@@ -119,9 +119,9 @@ public static class InstallCommand
     {
         ArgumentNullException.ThrowIfNull(env);
 
-        var command = new Command("install", "Set this machine up for the jason Jason Desktop carries: the terminal command, the skills of every agent host found, and an older command-line install retired.")
+        var command = new Command("install", "Set this machine up for the jason Jason Desktop carries: the terminal command, the skills of Claude Code and Codex where each is found, and an older command-line install retired.")
         {
-            Description = "Set this machine up for the jason Jason Desktop carries: the terminal command, the skills of every agent host found, and an older command-line install retired."
+            Description = "Set this machine up for the jason Jason Desktop carries: the terminal command, the skills of Claude Code and Codex where each is found, and an older command-line install retired."
                 + Environment.NewLine + Environment.NewLine + Contract,
         };
 
