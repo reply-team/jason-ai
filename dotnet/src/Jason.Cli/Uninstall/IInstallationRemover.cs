@@ -234,8 +234,17 @@ public interface IInstallationRemover
 /// nothing and ends with 3 (<c>desktop/installer/uninstall.nsh</c>). The person who asked for this uninstall is then
 /// asked on the screen: the copy is run once more without <c>/S</c>, and its own questions say what runs and offer to
 /// close it. Where the last run ends with any other code but 0, nothing is said on any screen, since the verb has already
-/// answered; one line, <see cref="LogTemplate"/> with the code alone, goes into today's runtime log file, which
-/// <c>jason logs</c> shows, and only where the log folder is still there - a purged data directory is never made again.
+/// answered; one line, <see cref="LogTemplate"/> with the code alone, goes into the desktop's log file of the day, which
+/// <c>jason logs --source desktop</c> shows, and only where the log folder is still there - a purged data directory is
+/// never made again.
+/// </para>
+/// <para>
+/// Not the runtime's file: the runtime's logger holds its file of the day open and shares no write, and the likeliest
+/// refusal, 3, comes while a Jason Desktop runs, which runs a runtime. The desktop's writer opens and closes its file for
+/// each line (<c>desktop/src/log.ts</c>, <c>fileLines</c>: <c>appendFileSync(file, line, ...)</c>), so a line of the
+/// waiter's lands beside its own; it goes into the day's newest file, the last the desktop rolled to, and is tried five
+/// times a second apart, in case a reader holds the file at that moment. The line has the desktop's own shape and its
+/// template is the desktop's <c>uninstaller_exited</c>, held to that table (<c>desktop/test/log.test.ts</c>).
 /// </para>
 /// </remarks>
 public static class UninstallerHandOff
@@ -250,11 +259,13 @@ public static class UninstallerHandOff
     public const string LogsVariable = "JASON_UNINSTALL_LOGS";
 
     /// <summary>
-    /// The one line the waiter writes, a message template whose only hole is the uninstaller's exit code, held to the
-    /// reviewed log properties as every template the runtime writes is. It holds no apostrophe, so it sits in the script's
-    /// literal as it is.
+    /// The one line the waiter writes, the desktop's template <c>uninstaller_exited</c>, whose only hole is the
+    /// uninstaller's exit code. It holds no apostrophe, so it sits in the script's literal as it is.
     /// </summary>
-    public const string LogTemplate = "The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {ExitCode}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it";
+    public const string LogTemplate = "The uninstaller of Jason Desktop, run once jason uninstall had ended, exited {Exit}: the application may still be installed, and uninstalling Jason in Installed apps in Settings removes it";
+
+    /// <summary>The name the desktop's table gives <see cref="LogTemplate"/>, written beside it as the desktop's lines are.</summary>
+    public const string LogEventName = "uninstaller_exited";
 
     /// <summary>The script, for Windows PowerShell's <c>-Command</c>. It names no path: each comes in the environment.</summary>
     /// <remarks>
@@ -285,8 +296,11 @@ public static class UninstallerHandOff
             + "$exit = if ($run) { $run.ExitCode } else { -1 }; "
             + $"if ($exit -eq 3) {{ $run = Start-Process -Wait -PassThru -FilePath $copy -ArgumentList ('{DesktopRemoval.UninstalledByJasonFlag} _?=' + $folder); $exit = if ($run) {{ $run.ExitCode }} else {{ -1 }} }}; "
             + "if ($exit -ne 0 -and $logs -and (Test-Path -LiteralPath $logs -PathType Container)) { "
-            + "$line = [ordered]@{ '@t' = [DateTime]::UtcNow.ToString('o'); '@mt' = '" + LogTemplate + "'; '@l' = 'Warning'; 'ExitCode' = $exit } | ConvertTo-Json -Compress; "
-            + "[System.IO.File]::AppendAllText((Join-Path $logs ('runtime-' + [DateTime]::Now.ToString('yyyyMMdd') + '.jsonl')), $line + [char]10, (New-Object System.Text.UTF8Encoding $false)) } }; "
+            + "$line = [ordered]@{ '@t' = [DateTime]::UtcNow.ToString('o'); '@mt' = '" + LogTemplate + "'; '@l' = 'Warning'; 'Exit' = $exit; 'SourceContext' = 'Jason.Cli'; 'EventName' = '" + LogEventName + "' } | ConvertTo-Json -Compress; "
+            + "$day = 'desktop-' + [DateTime]::Now.ToString('yyyyMMdd'); $file = Join-Path $logs ($day + '.jsonl'); "
+            + "$rolled = @(Get-ChildItem -LiteralPath $logs -File | Where-Object { $_.Name -match ('^' + $day + '_([0-9]{3,9})\\.jsonl$') } | Sort-Object { [long]($_.BaseName.Split('_')[1]) }); "
+            + "if ($rolled.Count -gt 0) { $file = $rolled[-1].FullName }; "
+            + "for ($try = 1; $try -le 5; $try++) { try { [System.IO.File]::AppendAllText($file, $line + [char]10, (New-Object System.Text.UTF8Encoding $false)); break } catch { Start-Sleep -Seconds 1 } } } }; "
             + "Remove-Item -LiteralPath $aside -Recurse -Force";
     }
 

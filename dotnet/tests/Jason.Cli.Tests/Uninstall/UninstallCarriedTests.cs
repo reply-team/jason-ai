@@ -991,8 +991,9 @@ public sealed class UninstallCarriedTests : IDisposable
     /// <summary>
     /// The waiter as it ships, run by Windows PowerShell over a stand-in uninstaller that records how it was run and ends
     /// with the code a row gives a silent run and a run a person sees: 3 from the silent run runs it once more without /S;
-    /// any other code but 0 at the end leaves the one line in today's runtime log file, which <c>jason logs</c> lists; 0
-    /// leaves none; and a log folder that is gone is never made again.
+    /// any other code but 0 at the end leaves the one line, in the desktop's own shape, in the desktop's log file of the day,
+    /// which <c>jason logs --source desktop</c> reads and says; 0 leaves none; and a log folder that is gone is never made
+    /// again.
     /// </summary>
     [Theory]
     [InlineData(3, 0, 2, null)]
@@ -1000,14 +1001,13 @@ public sealed class UninstallCarriedTests : IDisposable
     [InlineData(2, 0, 1, 2)]
     [InlineData(0, 0, 1, null)]
     [SupportedOSPlatform("windows")]
-    public void The_waiter_asks_a_person_where_the_silent_uninstaller_ended_3_and_logs_any_other_refusal(int silent, int watched, int runs, int? logged)
+    public async Task The_waiter_asks_a_person_where_the_silent_uninstaller_ended_3_and_logs_any_other_refusal(int silent, int watched, int runs, int? logged)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The waiter is Windows PowerShell's.");
         var application = Path.Combine(_tree.Paths.Root, Quoted, "jason-desktop");
         Directory.CreateDirectory(application);
         File.WriteAllBytes(Path.Combine(application, DesktopRemoval.UninstallerName), UninstallerStandIn.Value);
-        var logs = Path.Combine(_tree.Paths.Root, "data", "logs");
-        Directory.CreateDirectory(logs);
+        var logs = Directory.CreateDirectory(_tree.Paths.LogsDirectory).FullName;
         var calls = Path.Combine(_tree.Paths.Root, "calls.log");
         var variables = new Dictionary<string, string>(UninstallerHandOff.Variables(application, _tree.Paths.Root, logs))
         {
@@ -1028,18 +1028,21 @@ public sealed class UninstallCarriedTests : IDisposable
             Assert.Equal($"--uninstalled-by-jason _?={application}", made[1]);
         }
 
-        var files = Jason.Cli.Logs.LogFiles.In(logs);
+        var files = Jason.Cli.Logs.LogFiles.In(logs, Jason.Cli.Logs.LogSource.Desktop);
+        // Never the runtime's file, which the runtime's logger holds open while a runtime runs.
+        Assert.Empty(Jason.Cli.Logs.LogFiles.In(logs));
         if (logged is { } code)
         {
             var file = Assert.Single(files);
-            var line = Assert.Single(File.ReadAllLines(file.Path));
-            using var json = JsonDocument.Parse(line);
-            Assert.Equal(UninstallerHandOff.LogTemplate, json.RootElement.GetProperty("@mt").GetString());
-            Assert.Equal("Warning", json.RootElement.GetProperty("@l").GetString());
-            Assert.Equal(code, json.RootElement.GetProperty("ExitCode").GetInt32());
-            Assert.True(DateTimeOffset.TryParse(json.RootElement.GetProperty("@t").GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _));
-            Assert.Equal(["@t", "@mt", "@l", "ExitCode"], json.RootElement.EnumerateObject().Select(property => property.Name));
+            Assert.Equal($"desktop-{DateTime.Now:yyyyMMdd}.jsonl", file.Name);
+            AssertTheLine(Assert.Single(File.ReadAllLines(file.Path)), code);
             Assert.NotEqual(0xEF, File.ReadAllBytes(file.Path)[0]);
+
+            // jason logs reads it as the desktop's and says it in words, the code in its hole.
+            var output = new StringWriter();
+            var env = new CliEnvironment(output, new StringWriter(), _tree.Paths, RuntimeVerbs.NeverCalled());
+            Assert.Equal(ExitCodes.Success, await CliApp.RunAsync(["logs", "--source", "desktop", "--human"], env, Ct));
+            Assert.Contains(UninstallerHandOff.LogTemplate.Replace("{Exit}", code.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), output.ToString(), StringComparison.Ordinal);
         }
         else
         {
@@ -1047,6 +1050,64 @@ public sealed class UninstallCarriedTests : IDisposable
         }
 
         Assert.False(Directory.Exists(variables[UninstallerHandOff.AsideVariable]), "the copy of the uninstaller is still there");
+    }
+
+    /// <summary>
+    /// The day's newest desktop file, the one its writer rolled to, held by another writer for a moment: the waiter tries
+    /// again a second later and its line lands there, beside what was there.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task The_waiters_line_lands_in_the_day_s_newest_desktop_file_once_another_writer_lets_it_go()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The waiter is Windows PowerShell's.");
+        var application = Path.Combine(_tree.Paths.Root, "jason-desktop");
+        Directory.CreateDirectory(application);
+        File.WriteAllBytes(Path.Combine(application, DesktopRemoval.UninstallerName), UninstallerStandIn.Value);
+        var logs = Directory.CreateDirectory(_tree.Paths.LogsDirectory).FullName;
+        var day = DateTime.Now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+        var first = Path.Combine(logs, $"desktop-{day}.jsonl");
+        var rolled = Path.Combine(logs, $"desktop-{day}_001.jsonl");
+        var earlier = "{\"@t\":\"2026-11-17T10:00:00.0000000Z\",\"@mt\":\"A line the desktop wrote\"}";
+        File.WriteAllText(first, earlier + "\n");
+        File.WriteAllText(rolled, earlier + "\n");
+        var variables = new Dictionary<string, string>(UninstallerHandOff.Variables(application, _tree.Paths.Root, logs))
+        {
+            ["JASON_STANDIN_CALLS"] = Path.Combine(_tree.Paths.Root, "calls.log"),
+            ["JASON_STANDIN_SILENT_EXIT"] = "2",
+            ["JASON_STANDIN_WATCHED_EXIT"] = "0",
+        };
+
+        // Held with no write shared, as the runtime's logger holds its own file, for long enough that the first try fails.
+        var held = new FileStream(rolled, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), Ct);
+            await held.DisposeAsync();
+        }, Ct);
+        var (ended, said) = PowerShell(UninstallerHandOff.Script(int.MaxValue - 1), variables);
+        await release;
+
+        Assert.True(ended == 0, said);
+        Assert.Equal([earlier], File.ReadAllLines(first));
+        var lines = File.ReadAllLines(rolled);
+        Assert.Equal(2, lines.Length);
+        Assert.Equal(earlier, lines[0]);
+        AssertTheLine(lines[1], 2);
+    }
+
+    /// <summary>The waiter's line, in the shape the desktop writes its own: the template, the level, the code alone, and its name.</summary>
+    private static void AssertTheLine(string line, int code)
+    {
+        using var json = JsonDocument.Parse(line);
+        var root = json.RootElement;
+        Assert.Equal(["@t", "@mt", "@l", "Exit", "SourceContext", "EventName"], root.EnumerateObject().Select(property => property.Name));
+        Assert.True(DateTimeOffset.TryParse(root.GetProperty("@t").GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _));
+        Assert.Equal(UninstallerHandOff.LogTemplate, root.GetProperty("@mt").GetString());
+        Assert.Equal("Warning", root.GetProperty("@l").GetString());
+        Assert.Equal(code, root.GetProperty("Exit").GetInt32());
+        Assert.Equal("Jason.Cli", root.GetProperty("SourceContext").GetString());
+        Assert.Equal(UninstallerHandOff.LogEventName, root.GetProperty("EventName").GetString());
     }
 
     [Fact]
