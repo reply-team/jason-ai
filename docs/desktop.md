@@ -1,16 +1,17 @@
 # Jason Desktop
 
-Jason Desktop is a window onto the installation the `jason` command line already uses. It is one more client of that
+Jason Desktop is a window onto the installation the `jason` command line uses. It is one more client of that
 installation, as the [browser UI](ui.md) is: it finds the data directory as the CLI does (`JASON_DATA_DIR`, otherwise
 `~/.jason`), starts the runtime only through `jason runtime start`, and changes the installation only through CLI verbs
 and the settings file a person would edit. It runs on one installation, yours; in [the demo](#the-demo) it shows a page of sample data instead and runs
 no installation. Nothing in the runtime exists for the desktop.
 
-The full experience is still a session with your agent, by text or by voice, with the skills loaded; the desktop is for
-the moments you want to see a screen, and what a screen shows is never all there is. It adds three things the browser
-cannot do: a chat that starts an agent on your computer and asks you before the agent acts, a tray that counts what
-waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything else
-it shows is the browser's UI, served by the runtime ([ui.md](ui.md)).
+It adds three things the browser cannot do: a chat that is a session with your own agent, started for you on this
+computer (Claude Code, which by default asks you before it acts, or Codex, which reads and advises), a tray that counts
+what waits for you, and the one-step setup of Reply, your notification channels and your AI provider's key. Everything
+else it shows is the browser's UI, served by the runtime ([ui.md](ui.md)). The terminal stays open to you at any time:
+the Command Line item of its menu puts a command there, `jason`, or `jason-desktop` where another `jason` already
+stands ([The command line, and the login items](#the-command-line-and-the-login-items)).
 
 This page is for the person using it. [desktop/README.md](../desktop/README.md) is the builder's view of the same
 program: its modules, its guards and how a package is made.

@@ -1103,6 +1103,53 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Jason installs two ways, and the pages say each by whom it suits and recommend neither. An agent given only the
+    /// link once offered the command line as the recommended install and the desktop second, and never named the desktop
+    /// again: the install page told it to install the desktop only when asked, and the README offered it as an
+    /// afterthought. An agent that asks before the install offers both, a person with no preference is offered the
+    /// desktop, and after a command-line install the hand-over names the desktop once.
+    /// </summary>
+    [Fact]
+    public void The_pages_offer_two_ways_to_install_and_recommend_neither()
+    {
+        var agent = Flat(Agent());
+        Assert.Contains("each said by whom it suits, and marks neither as the one to take", agent, StringComparison.Ordinal);
+        Assert.Contains("A person with no preference is offered Jason Desktop.", agent, StringComparison.Ordinal);
+        Assert.Contains("Given the three lines, the person has asked for the command line: install it, with no choice offered.", agent, StringComparison.Ordinal);
+        Assert.Contains("The last line of that first message names Jason Desktop once", agent, StringComparison.Ordinal);
+        Assert.Contains("Where the person took Jason Desktop, do only §2 *Jason Desktop*, and stop there.", agent, StringComparison.Ordinal);
+        Assert.Contains("Install nothing but Jason, or Jason Desktop where the person took it, and build nothing (§3).", agent, StringComparison.Ordinal);
+
+        var install = Flat(Page("docs", "INSTALL.md"));
+        Assert.Contains("An agent that installs Jason never needs the desktop", install, StringComparison.Ordinal);
+        Assert.DoesNotContain("Install it only when the person asks", install, StringComparison.Ordinal);
+
+        // The desktop's Command Line item places `jason-desktop` where another `jason` already stands, so no page says
+        // it always puts a `jason` in the terminal.
+        Assert.Contains("puts a command in the terminal: `jason`, or `jason-desktop` where another `jason` already stands", install, StringComparison.Ordinal);
+        Assert.DoesNotContain("puts a `jason` the terminal finds", install, StringComparison.Ordinal);
+
+        var readme = Flat(Page("README.md"));
+        Assert.Contains("Two ways in, to the same Jason.", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prefer a window?", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("puts a `jason` in your terminal", readme, StringComparison.Ordinal);
+        Assert.Contains("approvals in Jason Desktop", readme, StringComparison.Ordinal);
+        Assert.DoesNotContain("The full experience is still a session with your agent", readme, StringComparison.Ordinal);
+        Assert.Contains("on Windows, only where the PATH holds the folder it uses", readme, StringComparison.Ordinal);
+
+        // The desktop's own page says the same as the README's section, with no ranking of one way above the other.
+        var desktop = Flat(Page("docs", "desktop.md"));
+        Assert.DoesNotContain("The full experience is still a session with your agent", desktop, StringComparison.Ordinal);
+        Assert.Contains("a chat that is a session with your own agent, started for you on this computer", desktop, StringComparison.Ordinal);
+        Assert.Contains("The terminal stays open to you at any time", desktop, StringComparison.Ordinal);
+
+        foreach (var text in new[] { install, readme })
+        {
+            Assert.DoesNotContain("recommended", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// Starting the runtime at logon is not asked at install: the guide marks it as not done, so an agent says it at the
     /// end with the command and an unmarked paragraph cannot be read as an act to run.
     /// </summary>
@@ -2466,7 +2513,7 @@ public partial class PageClaimsTests
     private const string PromptDigest = "sha256:3917c3d51e278193ce6aad7e1ce0e889313821e51215cf85cf7e0df1ceeae8a1";
 
     /// <summary>The digest of the install page's section for an agent, as <see cref="Agent"/> reads it.</summary>
-    private const string AgentSectionDigest = "sha256:b8f84523824d10519f38f1f0e8cbae938f4d6b5b70e016e338227cdd79f08246";
+    private const string AgentSectionDigest = "sha256:88e09da81b3b21870e542d046d82c4a57636c2565f694b54a1bbc7ffd5c009f6";
 
     /// <summary>The digest of the golden path's section for an agent, as <see cref="GoldenAgent"/> reads it.</summary>
     private const string GoldenAgentSectionDigest = "sha256:ceb6ff1ad6c0344f89171f57246378cd70dc0ad395bb415aad7a8b0ec43421e4";

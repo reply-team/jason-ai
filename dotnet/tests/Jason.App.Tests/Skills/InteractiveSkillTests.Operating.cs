@@ -444,6 +444,12 @@ public partial class InteractiveSkillTests
         Assert.Contains("Never pipe a download into a shell", skill, StringComparison.Ordinal);
         Assert.Contains("The two lines are the person's: where neither route is open to you, hand them the lines to type.", skill, StringComparison.Ordinal);
 
+        // Jason installs two ways, and the skill names both: a session asked to install offers them as the install page's
+        // section for an agent says, never the command line alone.
+        Assert.Contains("Jason installs two ways: the command line, which a person installs with the two lines below, and Jason", skill, StringComparison.Ordinal);
+        Assert.Contains("That section also says when to offer them the two ways, and what to do when they", skill, StringComparison.Ordinal);
+        Assert.DoesNotContain("A person installs it with the two lines below.", skill, StringComparison.Ordinal);
+
         // After an update the role skills can be another release's. The skill says what `jason status` says about it and
         // that the repair is the line it prints — no more, because the repair's own words are the check's to give. Only
         // what a default install took fails: a deployment pinned with --ref passes, so the sentence names the default.
