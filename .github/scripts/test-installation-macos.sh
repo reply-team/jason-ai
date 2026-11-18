@@ -270,9 +270,11 @@ hold_account_terminal() {
                 done < "$OUT/terminal-before-profiles.txt"
                 if [ -n "$record" ]; then
                     [ -f "$record" ] || fail "no set-up record at $record, so its report's done cannot be read"
+                    # done is the report's own member, beside left and problems (jason install's document), not its command's.
                     done_list="$(python3 -c 'import json,sys
-command = (json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}).get("command") or {}
-print("\n".join(str(item) for item in (command.get("done") or [])))' "$record")" || fail "the done of the set-up record at $record could not be read"
+report = json.load(open(sys.argv[1], encoding="utf-8")).get("report") or {}
+print("\n".join(str(item) for item in (report.get("done") or [])))' "$record")" || fail "the done of the set-up record at $record could not be read"
+                    say "the set-up record at $record: its report's done says: $(if [ -n "$done_list" ]; then printf '%s' "$done_list" | tr '\n' ' '; else printf 'nothing'; fi)"
                     printf '%s\n' "$done_list" | grep -qxF "$HOME/.local/bin is on the PATH a terminal has already, so no profile was written." || fail "a new login shell's PATH named ~/.local/bin before the open, and the set-up's report does not say no profile was written: $(printf '%s' "$done_list" | tr '\n' ' ')"
                     said_done="and the report's done says no profile was written"
                 else

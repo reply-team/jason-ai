@@ -4,8 +4,12 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Cli.Installation;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 using Microsoft.Win32;
@@ -813,6 +817,54 @@ public partial class InstallScriptTests
         hold = hold[..hold.IndexOf("\n}\n", StringComparison.Ordinal)];
         Assert.Contains("if [ -s \"$OUT/terminal-before-names-local-bin.txt\" ]; then", hold, StringComparison.Ordinal);
         Assert.Contains("grep -qx '# added by jason install' \"$profile\"", hold, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The hold reads the set-up report's done by the members the product's own document has: a report MachineSetup's type
+    /// makes, serialized as jason install prints it and kept as the application's first start keeps it, walked by the
+    /// members the hold's reader names, in its order, gives the sentence back. And the hold says what it read, so a reader
+    /// of the run can quote the record's done.
+    /// </summary>
+    [Fact]
+    public void The_macOS_hold_reads_the_set_up_report_s_done_where_the_product_s_own_document_has_it()
+    {
+        var root = RepositoryRoot();
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var hold = macos[macos.IndexOf("\nhold_account_terminal() {\n", StringComparison.Ordinal)..];
+        hold = hold[..hold.IndexOf("\n}\n", StringComparison.Ordinal)];
+        var reader = Regex.Match(hold, @"done_list=""\$\(python3 -c '(?<code>[^']*)' ""\$record""\)""");
+        Assert.True(reader.Success, "the hold reads no done from the set-up record by one python3 reader");
+        var members = Regex.Matches(reader.Groups["code"].Value, @"\.get\(""(?<member>[a-z_]+)""\)").Select(match => match.Groups["member"].Value).ToArray();
+
+        // The record as the application's first start writes it: the report is the document jason install printed.
+        var desktop = File.ReadAllText(Path.Combine(root, "desktop", "src", "machine-setup.ts"));
+        Assert.Contains("JSON.stringify({ ran_for: version, ran_from: place, report: printed }, null, 2)", desktop, StringComparison.Ordinal);
+        const string sentence = "/Users/someone/.local/bin is on the PATH a terminal has already, so no profile was written.";
+        var report = new InstallReport(
+            "0.49.0",
+            "/Applications/Jason.app/Contents/Resources/bundle/jason",
+            new InstallCommandOutcome("/Users/someone/.local/bin/jason", true, "/bin/zsh", false, [], [], "/Users/someone/.local/bin/jason", true),
+            [],
+            null,
+            null,
+            "not_running",
+            [sentence],
+            [],
+            []);
+        JsonNode? said = new JsonObject
+        {
+            ["ran_for"] = "0.49.0",
+            ["ran_from"] = "/Applications/Jason.app",
+            ["report"] = JsonNode.Parse(JsonSerializer.Serialize(report, JasonJson.Options)),
+        };
+        foreach (var member in members)
+        {
+            said = said is JsonObject holding ? holding[member] : null;
+        }
+
+        Assert.True(said is JsonArray, $"the hold reads {string.Join('.', members)} of the set-up record, which the product's own document does not hold as a list");
+        Assert.Equal([sentence], said!.AsArray().Select(item => item!.GetValue<string>()));
+        Assert.Contains("say \"the set-up record at $record: its report's done says: ", hold, StringComparison.Ordinal);
     }
 
     /// <summary>
