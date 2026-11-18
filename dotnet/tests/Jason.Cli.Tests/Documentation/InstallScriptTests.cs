@@ -476,8 +476,11 @@ public partial class InstallScriptTests
         var job = ci.IndexOf("name: install.ps1 on windows", StringComparison.Ordinal);
 
         Assert.True(job >= 0, "ci.yml no longer runs install.ps1 on Windows.");
-        Assert.True(ci.IndexOf("'DoNotExpandEnvironmentNames'", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer reads the account's Path as the registry holds it.");
-        Assert.True(ci.IndexOf("the install turned the user Path from ExpandString", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer asserts the kind of the account's Path.");
+        // The job's install is one step of the Windows proof script, which reads the Path and asserts its kind.
+        Assert.True(ci.IndexOf("Test-InstallationWindows.ps1 -Step Install ", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer runs the proof's install step.");
+        var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1"));
+        Assert.Contains("'DoNotExpandEnvironmentNames'", script, StringComparison.Ordinal);
+        Assert.Contains("the install turned the user Path from $($before.Kind) into $($after.Kind)", script, StringComparison.Ordinal);
     }
 
     /// <summary>

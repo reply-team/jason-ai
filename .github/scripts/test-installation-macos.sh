@@ -261,6 +261,19 @@ install)
     feed="$1"; version="$2"; script="$3"; pinned="${4:-}"
     said="$OUT/install.txt"
     set --
+    if [ "$pinned" != pinned ]; then
+        # --no-modify-path, which a release before 0.49 took, is refused on macOS with its own sentence and installs
+        # nothing: every install puts jason in the terminal. Recorded, not failed, so the install below is still read.
+        refusal="--no-modify-path is not taken on macOS: every install puts jason in the terminal. Nothing was installed: run this again without it."
+        status=0
+        within 300 'install.sh --no-modify-path' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" --no-modify-path > "$OUT/install-no-modify-path.txt" 2>&1 || status=$?
+        cat "$OUT/install-no-modify-path.txt"
+        if [ "$status" -eq 0 ]; then fail_held "install.sh --no-modify-path ended 0"
+        elif ! grep -qF -- "$refusal" "$OUT/install-no-modify-path.txt"; then fail_held "install.sh --no-modify-path was refused without its own sentence"
+        elif [ -n "$(app)" ] || [ -e "$HOME/.local/bin/jason" ]; then fail_held "the refused install.sh --no-modify-path left $(app) $( [ -e "$HOME/.local/bin/jason" ] && echo "$HOME/.local/bin/jason")"
+        else say "install.sh --no-modify-path was refused on macOS with its own sentence, '$refusal', and installed nothing"
+        fi
+    fi
     if [ "$pinned" = pinned ]; then
         # The pinned line reads its pin: one naming another version than the feed's is refused, naming both, and places
         # nothing, before the pin naming this one installs.
