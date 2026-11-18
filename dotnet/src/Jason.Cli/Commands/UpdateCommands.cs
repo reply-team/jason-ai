@@ -78,7 +78,7 @@ public static class UpdateCommands
         };
         var finish = new Option<bool>("--finish")
         {
-            Description = "The finishing step of a jason Jason Desktop carries. With an update past 'swapped' in flight, it finishes that update, as the update's own hand-over runs it. With none in flight, it brings what belongs to the installed version up to it - the plugin packages its release publishes, by the update's own plan (an edited package is left as it is), every skills deployment this installation records, and the UI - starts and stops no runtime, asks a running one to reload where a package changed, and answers one document: version, data_dir, data_dir_found, complete, and parts (plugins, skills, ui), each with state done, already_there or not_done, a reason where not_done, and its lines. Run again it changes nothing. With no data directory it makes none and says so. Refused with update_in_progress while an update stands before 'swapped'; a usage error for a jason the application does not carry.",
+            Description = "The finishing step of a jason Jason Desktop carries. With an update past 'swapped' in flight, it finishes that update, as the update's own hand-over runs it. With none in flight, it brings what belongs to the installed version up to it - the plugin packages its release publishes, by the update's own plan (an edited package is left as it is), every skills deployment this installation records, and the UI - starts and stops no runtime, asks a running one to reload where a package changed, and answers one document: version, data_dir, data_dir_found, installation_found, complete, and parts (plugins, skills, ui), each with state done, already_there or not_done, a reason where not_done, and its lines. Run again it changes nothing. With no data directory, or one holding nothing but Jason Desktop's own, it reads no release, makes nothing and says so, installation_found false. A data directory it cannot list is refused with data_dir_unreadable, which is retryable, before anything is made or read. Refused with update_in_progress while an update stands before 'swapped'; a usage error for a jason the application does not carry.",
         };
         var human = VerbOptions.Human();
         command.Options.Add(feed);
@@ -393,6 +393,25 @@ public static class UpdateCommands
             return ExitCodes.Success;
         }
 
+        // Nor where the data directory holds nothing of an installation but Jason Desktop's own, as on its first start: it
+        // reads no release and makes nothing, so a fresh machine stays new. One that cannot be listed is refused before the
+        // lock rather than taken for an installation: failing closed, it makes nothing and reads no release either.
+        if (finish && !continuing)
+        {
+            switch (InstallationAt(env.Paths.Root))
+            {
+                case DataDirHolds.DesktopsOwnOnly:
+                    PrintFinish(env, human, UpdateApplier.NothingInstalled(SemanticVersion.Current, env.Paths.Root));
+                    return ExitCodes.Success;
+                case DataDirHolds.Unreadable:
+                    env.Out.WriteLine(CliErrors.Serialize(
+                        UpdateCodes.DataDirUnreadable,
+                        $"The data directory at {env.Paths.Root} could not be listed, so whether an installation is there cannot be told: nothing was made and no release was read. Run jason update apply --finish again once it can be read.",
+                        retryable: true));
+                    return ExitCodes.ApiError;
+            }
+        }
+
         // A console's close ends this process soon after it is told, and nothing else tells a .NET program of it: it cancels
         // the update as Ctrl+C does, and holds the close until the way out has run (Closing).
         using var closing = new Closing(cancellationToken);
@@ -521,7 +540,9 @@ public static class UpdateCommands
         }
 
         // With nothing in flight, --finish brings what belongs to the installed version up to it, with or without a Desktop,
-        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more.
+        // under the update's lock, and sweeps the images earlier updates moved out where nothing runs from them any more. A
+        // fresh machine was turned away above, so here an installation is there, and the lock is always taken, its folder made
+        // for it where it is not there yet: the finish writes into the installation, and nothing else may beside it.
         if (finish && !continuing && unread is null && inFlight is null)
         {
             UpdateLock held;
@@ -727,6 +748,82 @@ public static class UpdateCommands
                 $"The update to {inFlight.ToVersion} was cancelled while it was finished. The application is {inFlight.ToVersion}, and {handing.RuntimeSaid()} `jason update apply` finishes the update.",
                 cancelled,
                 retryable: true);
+        }
+    }
+
+    /// <summary>What a data directory that exists holds, as the finishing step decides whether an installation is there.</summary>
+    internal enum DataDirHolds
+    {
+        /// <summary>Something of an installation's is there.</summary>
+        Here,
+
+        /// <summary>Nothing but Jason Desktop's own, an update's lock files and the system's litter.</summary>
+        DesktopsOwnOnly,
+
+        /// <summary>The directory, or a folder in it the answer depends on, could not be listed.</summary>
+        Unreadable,
+    }
+
+    /// <summary>
+    /// The update's lock, <c>update/update.lock</c>, and the note its holder writes beside it, <c>update/update.lock.holder</c>
+    /// (<see cref="UpdatePaths.Lock"/>, <see cref="UpdatePaths.LockHolder"/>): an <c>update/</c> holding these alone is no
+    /// installation, a holder killed before it let go (a <c>jason install</c> Jason Desktop's quit ends, on Windows) included.
+    /// </summary>
+    private static readonly string[] LockFiles = ["update.lock", "update.lock.holder"];
+
+    /// <summary>The files a system leaves in any folder it shows, passed over at the data directory's top and in its logs.</summary>
+    private static readonly string[] SystemLitter = [".DS_Store", "desktop.ini", "Thumbs.db"];
+
+    /// <summary>
+    /// Whether the data directory holds an installation: the one definition of "an installation is here". It does not where it
+    /// holds nothing but Jason Desktop's own — its folder, <c>desktop/</c>, and its log, <c>logs/desktop-*.jsonl</c>, which it
+    /// writes from its first start — an <c>update/</c> folder holding nothing but the update's lock file and the note of its
+    /// holder (<see cref="LockFiles"/>), which the tool makes for itself, and leaves behind where a holder is killed, and which
+    /// never make a machine installed, and the system's litter (<see cref="SystemLitter"/>) at the top
+    /// and in <c>logs/</c>. Anything else is an installation's, a record under <c>update/</c> among it. A directory, or one of
+    /// those folders, that cannot be listed is <see cref="DataDirHolds.Unreadable"/>: never taken for either answer.
+    /// </summary>
+    internal static DataDirHolds InstallationAt(string root)
+    {
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+            {
+                var name = Path.GetFileName(entry);
+                if (name == "desktop" && Directory.Exists(entry))
+                {
+                    continue;
+                }
+
+                if (File.Exists(entry) && SystemLitter.Contains(name, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                if (name == "logs"
+                    && Directory.Exists(entry)
+                    && Directory.EnumerateFileSystemEntries(entry).All(log => File.Exists(log)
+                        && (SystemLitter.Contains(Path.GetFileName(log), StringComparer.Ordinal)
+                            || (Path.GetFileName(log).StartsWith("desktop-", StringComparison.Ordinal) && log.EndsWith(".jsonl", StringComparison.Ordinal)))))
+                {
+                    continue;
+                }
+
+                if (name == "update"
+                    && Directory.Exists(entry)
+                    && Directory.EnumerateFileSystemEntries(entry).All(held => File.Exists(held) && LockFiles.Contains(Path.GetFileName(held), StringComparer.Ordinal)))
+                {
+                    continue;
+                }
+
+                return DataDirHolds.Here;
+            }
+
+            return DataDirHolds.DesktopsOwnOnly;
+        }
+        catch (Exception unread) when (unread is IOException or UnauthorizedAccessException)
+        {
+            return DataDirHolds.Unreadable;
         }
     }
 

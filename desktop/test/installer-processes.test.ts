@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { configuration } from '../electron-builder.config.mjs';
 import { stopRuntimeFlag } from '../src/uninstall.ts';
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,9 +67,9 @@ function filterText(name: 'JASON_OWN_APP' | 'JASON_OWN_RUNTIME'): string {
 
 /** A command the script defines between backticks, as the script writes it. */
 function define_(name: string): string {
-    const found = new RegExp(`^!define ${name} \`([^\`]+)\`$`, 'm').exec(script);
+    const found = new RegExp(`^!define ${name} (?:\`([^\`]+)\`|(\\d+))$`, 'm').exec(script);
     assert.ok(found !== null, `installer/uninstall.nsh defines no ${name}.`);
-    return found[1]!;
+    return (found[1] ?? found[2])!;
 }
 
 /** A sentence the script defines once and shows where it is named. */
@@ -105,6 +106,16 @@ function appFound(filterText: string = filter('JASON_OWN_APP')): string {
     const [before, after, ...more] = define_('JASON_APP_FOUND').split('${JASON_OWN_APP}');
     assert.equal(more.length, 0, 'the look names the filter more than once');
     return `${before!.replaceAll('$$', '$')}${filterText}${after!.replaceAll('$$', '$')}`;
+}
+/** The bounded wait an update makes for the application to quit, by its filter, failing closed as the looks do. */
+const appWait = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_APP_GONE}"';
+
+/** The PowerShell the installer runs for that wait, as PowerShell reads it, with `filter` and the bound where a row says. */
+function appGone(filterText: string = filter('JASON_OWN_APP'), seconds: string = define_('JASON_APP_WAIT_SECONDS')): string {
+    const [before, after, ...more] = define_('JASON_APP_GONE').split('${JASON_OWN_APP}');
+    assert.equal(more.length, 0, 'the wait names the filter more than once');
+    const bound = (text: string) => text.replaceAll('${JASON_APP_WAIT_SECONDS}', seconds).replaceAll('$$', '$');
+    return `${bound(before!)}${filterText}${bound(after!)}`;
 }
 /** The one stop of the whole include: the application's, by its filter. */
 const appStop = '"$PowerShellPath" -NoProfile -NonInteractive -Command "${JASON_OWN_APP} | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force }"';
@@ -152,12 +163,13 @@ test('the custom check closes the application by its exact path and never a prog
     // Every PowerShell command it runs reads the processes through one of the two filters; only one stops any, and
     // that one reads the application's.
     const commands = [...check.matchAll(/nsExec::Exec `([^`]*)`/g)].map((found) => found[1]!);
-    assert.equal(commands.length, 6);
+    assert.equal(commands.length, 7);
     // Each filter is read through a look that fails closed, which holds it once (JASON_RUNTIME_FOUND, JASON_APP_FOUND);
     // the one stop reads the application's filter itself.
-    for (const command of commands) assert.ok(command.includes('${JASON_APP_FOUND}') || command.includes('${JASON_RUNTIME_FOUND}') || command === appStop, `A command reads processes another way: ${command}`);
+    for (const command of commands) assert.ok(command.includes('${JASON_APP_FOUND}') || command.includes('${JASON_RUNTIME_FOUND}') || command === appWait || command === appStop, `A command reads processes another way: ${command}`);
     assert.equal(define_('JASON_RUNTIME_FOUND').split('${JASON_OWN_RUNTIME}').length, 2);
     assert.equal(define_('JASON_APP_FOUND').split('${JASON_OWN_APP}').length, 2);
+    assert.equal(define_('JASON_APP_GONE').split('${JASON_OWN_APP}').length, 2);
     // The two looks are one wrap around two filters.
     assert.equal(define_('JASON_APP_FOUND').replace('${JASON_OWN_APP}', '${JASON_OWN_RUNTIME}'), define_('JASON_RUNTIME_FOUND'));
     const stopping = commands.filter((command) => /Stop-Process/.test(command));
@@ -172,6 +184,7 @@ test('the whole include runs only the commands these rows name, stops only the a
     const running = /\b(?:Exec|ExecWait|ExecShell|ExecShellWait|ExecDos|ExecCmd|nsExec|ShellExecWait|UAC::Exec|UAC::ShellExec)\b|::Exec/i;
     assert.deepEqual(code.filter((line) => running.test(line)), [
         `nsExec::Exec \`${runtimeLook}\``,
+        `nsExec::Exec \`${appWait}\``,
         `nsExec::Exec \`${appLook}\``,
         `nsExec::Exec \`${appStop}\``,
         `nsExec::Exec \`${appLook}\``,
@@ -216,7 +229,12 @@ test('the whole include runs only the commands these rows name, stops only the a
     assert.deepEqual(naming('JASON_OWN_APP'), [
         `!define JASON_OWN_APP \`${filterText('JASON_OWN_APP')}\``,
         `!define JASON_APP_FOUND \`${define_('JASON_APP_FOUND')}\``,
+        `!define JASON_APP_GONE \`${define_('JASON_APP_GONE')}\``,
         `nsExec::Exec \`${appStop}\``,
+    ]);
+    assert.deepEqual(naming('JASON_APP_GONE'), [
+        `!define JASON_APP_GONE \`${define_('JASON_APP_GONE')}\``,
+        `nsExec::Exec \`${appWait}\``,
     ]);
     assert.deepEqual(naming('JASON_APP_FOUND'), [
         `!define JASON_APP_FOUND \`${define_('JASON_APP_FOUND')}\``,
@@ -240,7 +258,7 @@ test('the carried jason executable is looked for by its exact path, in a filter 
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_RUNTIME", t "$INSTDIR\\resources\\bundle\\jason.exe")'`,
         `System::Call 'Kernel32::SetEnvironmentVariable(t "JASON_DESKTOP_UPDATING", t "$INSTDIR\\resources\\bundle\\jason-update.pid")'`,
         `nsExec::Exec '"$INSTDIR\\resources\\bundle\\jason.exe" install'`,
-        'DetailPrint "jason install did not set everything up (it answered $R0). Run $INSTDIR\\resources\\bundle\\jason.exe install in a terminal to see what it says."',
+        'MessageBox MB_OK|MB_ICONEXCLAMATION "jason install did not set everything up (it answered $R0). Run $INSTDIR\\resources\\bundle\\jason.exe install in a terminal to see what it says." /SD IDOK',
     ]);
     assert.deepEqual(script.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes('JASON_RUNTIME_STILL') && !line.startsWith('!define')), [
         'StrCpy $R1 "${JASON_RUNTIME_STILL}"',
@@ -252,7 +270,7 @@ test('the carried jason executable is looked for by its exact path, in a filter 
 
 test('a person is asked about a runtime before the application is closed, so a Cancel leaves Jason as it was', () => {
     const check = macro('customCheckAppRunning');
-    const first = check.slice(check.indexOf('Var /GLOBAL JasonRuntimeAsked'), check.indexOf(`nsExec::Exec \`${appLook}`));
+    const first = check.slice(check.indexOf('Var /GLOBAL JasonRuntimeAsked'), check.indexOf(`nsExec::Exec \`${appWait}`));
     assert.deepEqual(codeLines(first), [
         'Var /GLOBAL JasonRuntimeAsked',
         'StrCpy $JasonRuntimeAsked ""',
@@ -274,8 +292,6 @@ test('a person is asked about a runtime before the application is closed, so a C
         '${endIf}',
         '${endIf}',
         '${if} ${isUpdated}',
-        'Sleep 300',
-        '${endIf}',
     ]);
     assert.ok(check.indexOf(runtimeLook) < check.indexOf('Stop-Process'));
     assert.equal(define('JASON_RUNTIME_ASK'), "A Jason runtime is running from this application's folder. Choose OK to stop it and go on.");
@@ -292,7 +308,13 @@ test('a runtime running from the carried executable is stopped through the appli
         '${ifNot} ${isUpdated}',
         '${AndIfNot} ${Silent}',
         '${AndIf} $JasonRuntimeAsked == ""',
-        'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "${JASON_RUNTIME_ASK}" IDOK +3',
+        // Chosen by the exit, as the other three are: a look that failed is not said to have found a runtime.
+        '${if} $R0 S== 0',
+        'StrCpy $R1 "${JASON_RUNTIME_ASK}"',
+        '${else}',
+        'StrCpy $R1 "${JASON_LOOK_ASK}"',
+        '${endIf}',
+        'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3',
         'SetErrorLevel 1',
         'Quit',
         '${endIf}',
@@ -317,6 +339,13 @@ test('a runtime running from the carried executable is stopped through the appli
         '${endIf}',
         '${endIf}',
         '${else}',
+        // No PowerShell, or a policy that refuses it: no look can be made, which is a look that failed. A silent run, an
+        // update included, ends with 3 before electron-builder's extraction, whose own retry box answers itself and writes
+        // over a running Jason.exe; a person who watches is asked, and an update they watch goes on, as before.
+        '${if} ${Silent}',
+        'SetErrorLevel 3',
+        'Quit',
+        '${endIf}',
         '${ifNot} ${isUpdated}',
         'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Close Jason if it is open, and stop its runtime with jason runtime stop if it runs, then choose OK." /SD IDOK IDOK +2',
         'Quit',
@@ -332,20 +361,49 @@ test('a runtime running from the carried executable is stopped through the appli
     assert.ok(check.indexOf(stopRuntimeLine) > check.indexOf('Stop-Process'));
 });
 
-test('the uninstall an update runs closes the application without asking; a person is asked first', () => {
+test('an update waits for the application to quit; a silent run, updated or not, never closes it; a person who watches is asked before it is closed', () => {
     const check = macro('customCheckAppRunning');
-    assert.match(check, /\$\{ifNot\} \$\{isUpdated\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+\$\{endIf\}/);
+    // The silent way out comes before the question and the stop: a silent run that still finds the application - at the
+    // bound of an update's wait, or at a plain install's look - or could not look, ends with error level 3, its own, with
+    // no box and nothing closed.
+    assert.match(codeLines(check).join('\n'), /\$\{if\} \$\{isUpdated\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_GONE\}[^`]+`\s+\$\{else\}\s+nsExec::Exec `[^`]+\$\{JASON_APP_FOUND\}[^`]+`\s+\$\{endIf\}\s+Pop \$R0\s+\$\{if\} \$R0 != 1\s+\$\{if\} \$\{Silent\}\s+SetErrorLevel 3\s+Quit\s+\$\{endIf\}\s+\$\{if\} \$R0 S== 0\s+StrCpy \$R1 "\$\(appRunning\)"\s+\$\{else\}\s+StrCpy \$R1 "\$\{JASON_APP_UNSURE\}"\s+\$\{endIf\}\s+MessageBox MB_OKCANCEL\|MB_ICONEXCLAMATION "\$R1" \/SD IDOK IDOK \+2\s+Quit\s+DetailPrint "\$\(appClosing\)"/);
+    // The one stop comes after that way out, so no silent run reaches it; 3 is said there and where no look can be made
+    // alone, so a caller that reads it - the install script, a move, jason uninstall's waiter - knows the application was
+    // running, or could not be looked for, and nothing was changed.
+    assert.ok(check.indexOf('SetErrorLevel 3') < check.indexOf('Stop-Process'));
+    assert.equal([...script.matchAll(/SetErrorLevel 3\b/g)].length, 2);
+    assert.equal([...codeLines(check).join('\n').matchAll(/\$\{if\} \$\{Silent\}\nSetErrorLevel 3\nQuit\n\$\{endIf\}/g)].length, 2);
+    assert.equal([...script.matchAll(/SetErrorLevel (\d+)/g)].map((found) => found[1]).sort().join(','), '1,1,1,1,1,2,3,3');
+    // No fixed pause stands in for the wait any more.
+    assert.doesNotMatch(check, /Sleep 300\b/);
+    // The bound: a minute, three times the twenty seconds late a slow quit is proven at, looked at twice a second.
+    assert.equal(define_('JASON_APP_WAIT_SECONDS'), '60');
+    assert.equal(define_('JASON_APP_GONE'), "$$ErrorActionPreference = 'Stop'; $$clock = [Diagnostics.Stopwatch]::StartNew(); while ($$true) { try { if (@(${JASON_OWN_APP}).Count -eq 0) { exit 1 }; $$failed = $$false } catch { $$failed = $$true }; if ($$clock.Elapsed.TotalSeconds -ge ${JASON_APP_WAIT_SECONDS}) { if ($$failed) { exit 2 }; exit 0 }; Start-Sleep -Milliseconds 500 }");
+    // NSIS holds a string to 1024 characters.
+    assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "${appGone(filterText('JASON_OWN_APP'))}"`.length < 1024);
 });
 
 test('the application look fails closed, is made again after the application was closed, and a run where it is still found or that look failed ends with error level 1', () => {
     const check = macro('customCheckAppRunning');
-    const app = check.slice(check.indexOf(`nsExec::Exec \`${appLook}\``), check.indexOf(`nsExec::Exec \`${runtimeLook}\``, check.indexOf('Stop-Process')));
+    const waited = check.indexOf(`nsExec::Exec \`${appWait}\``);
+    const app = check.slice(check.lastIndexOf('${if} ${isUpdated}', waited), check.indexOf(`nsExec::Exec \`${runtimeLook}\``, check.indexOf('Stop-Process')));
     assert.deepEqual(codeLines(app), [
+        // An update waits, bounded, for the application it told to quit; a person's install or uninstall looks once.
+        '${if} ${isUpdated}',
+        `nsExec::Exec \`${appWait}\``,
+        '${else}',
         `nsExec::Exec \`${appLook}\``,
+        '${endIf}',
         'Pop $R0',
         // Every exit but the one clean "nothing found" is the application found, a failed look and nsExec's own error included.
         '${if} $R0 != 1',
-        '${ifNot} ${isUpdated}',
+        // A silent run, an update or not, closes nothing and shows nothing: it ends with its own error level, 3, and what
+        // was installed stays as it was.
+        '${if} ${Silent}',
+        'SetErrorLevel 3',
+        'Quit',
+        '${endIf}',
+        // A run a person watches is asked, as a person's install always was.
         '${if} $R0 S== 0',
         'StrCpy $R1 "$(appRunning)"',
         '${else}',
@@ -353,7 +411,6 @@ test('the application look fails closed, is made again after the application was
         '${endIf}',
         'MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" /SD IDOK IDOK +2',
         'Quit',
-        '${endIf}',
         'DetailPrint "$(appClosing)"',
         `nsExec::Exec \`${appStop}\``,
         'Pop $R0',
@@ -362,8 +419,8 @@ test('the application look fails closed, is made again after the application was
         `nsExec::Exec \`${appLook}\``,
         'Pop $R0',
         '${if} $R0 != 1',
-        '${ifNot} ${isUpdated}',
-        '${AndIfNot} ${Silent}',
+        // A person who chose OK is told, an update they watch included.
+        '${ifNot} ${Silent}',
         '${if} $R0 S== 0',
         'StrCpy $R1 "${JASON_APP_STILL}"',
         '${else}',
@@ -547,7 +604,7 @@ test('the application look fails closed the same way: a query the system does no
     }
     assert.equal(clean, 1);
     const check = macro('customCheckAppRunning');
-    const after = [...check.matchAll(/nsExec::Exec `([^`]*)`\s+Pop \$R0\s+\$\{if\} \$R0 (\S+) (\S+)/g)].filter((found) => found[1] === appLook);
+    const after = [...check.matchAll(/nsExec::Exec `([^`]*)`\s+(?:\$\{endIf\}\s+)?Pop \$R0\s+\$\{if\} \$R0 (\S+) (\S+)/g)].filter((found) => found[1] === appLook || found[1] === appWait);
     assert.equal(after.length, 2);
     for (const found of after) assert.deepEqual([found[2], found[3]], ['!=', '1']);
 });
@@ -576,4 +633,158 @@ test('the record the runtime filter reads is named once, inside the installation
     assert.deepEqual([...script.matchAll(/\$\$?env:JASON_DESKTOP_UPDATING/g)].length, 1);
     // NSIS holds a string to 1024 characters; the longest command it runs is the runtime look with its filter.
     assert.ok(`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -Command "${define_('JASON_RUNTIME_FOUND').replace('${JASON_OWN_RUNTIME}', filterText('JASON_OWN_RUNTIME'))}"`.length < 1024);
+});
+
+test('the update’s wait runs as it ships: it ends as soon as the application has quit, and at the bound says found, or a look that failed, never that it is gone', { skip: process.platform !== 'win32' && 'the process query is Windows’ own' }, async () => {
+    // A process of the test's own at a path no other process runs from, standing in for the application: node itself,
+    // linked under a folder of the test's own as Jason.exe, ending after the time it is given or waiting until it is ended.
+    const folder = mkdtempSync(join(tmpdir(), 'jason-app-wait-'));
+    const image = join(folder, 'Jason.exe');
+    try {
+        linkSync(process.execPath, image);
+    } catch {
+        copyFileSync(process.execPath, image);
+    }
+    const children: ChildProcess[] = [];
+    const start = async (lives: number): Promise<ChildProcess> => {
+        const child = spawn(image, ['-e', lives < 0 ? 'setInterval(() => {}, 1000)' : `setTimeout(() => {}, ${lives})`], { stdio: 'ignore', windowsHide: true });
+        children.push(child);
+        await new Promise<void>((resolve, reject) => {
+            child.once('spawn', () => resolve());
+            child.once('error', reject);
+        });
+        return child;
+    };
+    // The wait as it ships, with a bound of four seconds in place of the minute and, where a row says, another filter.
+    const wait = (filterText?: string): Promise<{ exit: number; seconds: number }> =>
+        new Promise((resolve, reject) => {
+            const began = Date.now();
+            const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', appGone(filterText, '4')], {
+                env: { ...process.env, JASON_DESKTOP_APP: image },
+                stdio: 'ignore',
+                windowsHide: true,
+            });
+            child.once('error', reject);
+            child.once('exit', (code) => resolve({ exit: code ?? -1, seconds: (Date.now() - began) / 1000 }));
+        });
+    try {
+        // Nothing at the path: gone at the first look.
+        const none = await wait();
+        assert.equal(none.exit, 1, 'a wait with nothing running did not say gone');
+
+        // The application quits two seconds into the wait: gone before the bound.
+        await start(2000);
+        const quits = await wait();
+        assert.equal(quits.exit, 1, 'a wait over an application that quit did not say gone');
+
+        // The application never quits: found at the bound, and not before it.
+        const stays = await start(-1);
+        const found = await wait();
+        assert.equal(found.exit, 0, 'a wait over an application that never quits did not say found');
+        assert.ok(found.seconds >= 4, `the wait said found before its bound, after ${found.seconds} s`);
+        assert.equal(stays.exitCode, null, 'the wait ended the application');
+
+        // A query the system never answers: 2 at the bound, which the installer reads as found.
+        const failed = await wait('Get-CimInstance -ClassName Jason_No_Such_Class');
+        assert.equal(failed.exit, 2, 'a wait whose query failed did not exit 2');
+        assert.ok(failed.seconds >= 4, `a wait whose query failed ended before its bound, after ${failed.seconds} s`);
+    } finally {
+        for (const child of children) {
+            child.kill();
+            await new Promise<void>((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve() : child.once('exit', () => resolve())));
+        }
+        rmSync(folder, { recursive: true, force: true });
+    }
+});
+
+/** The one body both of electron-builder's hooks for the old uninstaller's result insert. */
+const resultLines = [
+    // The template's own first test, kept: an old uninstaller that could not be started at all is said, and the install
+    // goes on over its files, as it always did.
+    '${if} ${Errors}',
+    'DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`',
+    // An old uninstaller that refused: a person who watches is told, as the template tells them; a silent setup shows no
+    // box, which would wait for a click no one gives while it holds the installer's mutex against every later setup.
+    '${elseIf} $R0 != 0',
+    'MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0" /SD IDOK',
+    'DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`',
+    'SetErrorLevel 2',
+    'Quit',
+    '${endIf}',
+];
+
+test('the old version’s uninstaller refusing ends a silent setup with error level 2 and no box: both of the pinned template’s hooks for its result are taken', () => {
+    // electron-builder 26.18.0 hands the old uninstaller's result to a hook where one is defined, for the shell context and
+    // for the current user, and returns: the rest of the function, the box with no silent answer among it, is then not run.
+    const util = template(join('include', 'installUtil.nsh'));
+    const handle = util.slice(util.indexOf('Function handleUninstallResult'), util.indexOf('FunctionEnd', util.indexOf('Function handleUninstallResult')));
+    assert.match(handle, /\$\{if\} "\$rootKey_uninstallResult" == "SHELL_CONTEXT"\s+!ifmacrodef customUnInstallCheck\s+!insertmacro customUnInstallCheck\s+Return\s+!endif\s+\$\{elseif\} "\$rootKey_uninstallResult" == "HKEY_CURRENT_USER"\s+!ifmacrodef customUnInstallCheckCurrentUser\s+!insertmacro customUnInstallCheckCurrentUser\s+Return\s+!endif\s+\$\{endif\}\s+IfErrors 0 \+3/);
+    // The template's own box, which these hooks take the place of, has no silent answer; when it gains one this row says so.
+    assert.match(handle, /MessageBox MB_OK\|MB_ICONEXCLAMATION "\$\(uninstallFailed\): \$R0"\n/);
+    // The install section hands every result it gets to that function, and the old uninstaller's code is in $R0.
+    const section = template('installSection.nsh');
+    assert.deepEqual([...section.matchAll(/!insertmacro (uninstallOldVersion|handleUninstallResult) (\S+)/g)].map((found) => `${found[1]} ${found[2]}`), [
+        'uninstallOldVersion SHELL_CONTEXT',
+        'handleUninstallResult SHELL_CONTEXT',
+        'uninstallOldVersion HKEY_CURRENT_USER',
+        'handleUninstallResult HKEY_CURRENT_USER',
+    ]);
+    assert.match(util, /ExecWait '"\$uninstallerFileNameTemp" \/S \/KEEP_APP_DATA \$0 _\?=\$installationDir' \$R0/);
+    // Its retries end, in a silent run, with no box of their own and the last code still in $R0.
+    assert.match(util, /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDCANCEL IDRETRY OneMoreAttempt\s+Return/);
+
+    for (const name of ['customUnInstallCheck', 'customUnInstallCheckCurrentUser']) {
+        assert.deepEqual(codeLines(macro(name)), [`!macro ${name}`, '!insertmacro jasonOldUninstallerResult'], `${name} does not take the result`);
+    }
+    assert.deepEqual(codeLines(macro('jasonOldUninstallerResult')), ['!macro jasonOldUninstallerResult', ...resultLines]);
+    // The same sentence, error level and details lines as the template's, so a person who watches sees what they saw.
+    for (const line of ['DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`', 'DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`', 'SetErrorLevel 2']) {
+        assert.ok(handle.includes(line), `the template no longer says ${line}`);
+    }
+});
+
+test('the template’s other boxes with no silent answer cannot be reached by a silent run of this installer', () => {
+    // installUtil.nsh's "Unsupported" box is readReg's answer to a root it does not know; every caller passes the root
+    // uninstallOldVersion was given, which is only ever SHELL_CONTEXT or HKEY_CURRENT_USER (the row above).
+    const util = template(join('include', 'installUtil.nsh'));
+    assert.match(util, /\$\{else\}\s+MessageBox MB_OK "Unsupported \$\{ROOT_KEY\}"/);
+    const callers = nsisFiles(templates).flatMap((file) => [...template(file).matchAll(/!insertmacro readReg \S+ (\S+)/g)].map((found) => found[1]));
+    assert.deepEqual([...new Set(callers)], ['"$rootKey"']);
+    assert.match(util, /Function uninstallOldVersion[\s\S]*?Exch \$rootKey/);
+    // extractAppPackage.nsh's decompression box is compiled only under ZIP_COMPRESSION, which electron-builder defines only
+    // for a zip payload (nsis.useZip); this installer's payload is 7z, whose retry box has its silent answer.
+    const extract = template(join('include', 'extractAppPackage.nsh'));
+    assert.match(extract, /!ifdef ZIP_COMPRESSION\s+nsisunz::Unzip [^\n]+\s+Pop \$R0\s+StrCmp \$R0 "success" \+3\s+MessageBox MB_OK\|MB_ICONEXCLAMATION "\$\(decompressionFailed\)\$\\n\$R0"\s+Quit\s+!else/);
+    assert.match(extract, /MessageBox MB_RETRYCANCEL\|MB_ICONEXCLAMATION "\$\(appCannotBeClosed\)" \/SD IDRETRY IDCANCEL AbortExtract7za/);
+    const nsis = configuration({ version: '0.49.0' }).nsis as { useZip?: boolean };
+    assert.equal(nsis.useZip, undefined, 'the installer is built with a zip payload, which reaches a box with no silent answer');
+    // common.nsh's two boxes, in check64BitAndSetRegView, which .onInit and un.onInit run, are the last the template has with
+    // no silent answer; neither is reached by a silent run of this installer. win7Required stands only on Windows 2000, ME,
+    // XP and Vista, and x64WinRequired only on a Windows that is not 64-bit, where this build carries no 32-bit payload.
+    // Who runs it silently: install.ps1, which refuses every architecture but AMD64 before it downloads anything, and the
+    // Desktop's own update and a move, both made by an x64 Electron build already running here, which Electron supports on
+    // Windows 10 and later alone ("Windows (Windows 10 and up): Electron provides x64 (amd64) and arm64 binaries for
+    // Windows", github.com/electron/electron, README.md); and jason uninstall's waiter, run by a carried jason of the same
+    // x64 build.
+    const common = template('common.nsh');
+    const check64 = macroIn(common, 'check64BitAndSetRegView', 'common.nsh').body;
+    assert.match(check64, /\$\{If\} \$\{IsWin2000\}\s+\$\{OrIf\} \$\{IsWinME\}\s+\$\{OrIf\} \$\{IsWinXP\}\s+\$\{OrIf\} \$\{IsWinVista\}\s+MessageBox MB_OK "\$\(win7Required\)"\s+Quit/);
+    assert.match(check64, /\$\{If\} \$\{RunningX64\}\s+SetRegView 64\s+\$\{Else\}\s+!ifndef APP_32\s+MessageBox MB_OK\|MB_ICONEXCLAMATION "\$\(x64WinRequired\)"\s+Quit/);
+    assert.equal([...check64.matchAll(/MessageBox/g)].length, 2);
+    const ps1 = readFileSync(join(desktop, '..', 'install', 'install.ps1'), 'utf8');
+    assert.match(ps1, /if \(\$architecture -ne 'AMD64'\) \{\s+throw "No release is built for Windows on \$architecture; Jason Desktop for Windows is built for x64\."/);
+    assert.ok(ps1.indexOf("$architecture -ne 'AMD64'") < ps1.indexOf('Fetch '), 'install.ps1 downloads before it refuses another architecture');
+});
+
+test('no box of the include waits for a click in a silent run', () => {
+    // Every box this include shows during an install or an update carries a silent answer, but the two questions about a
+    // runtime, which stand where the run is known to be neither an update nor silent; the uninstaller's own part, which
+    // reads /S itself, has rows of its own (uninstall.test.ts).
+    const lines = codeLines(script.slice(0, script.indexOf('!macro customUnInstall\n')));
+    const unanswered = lines.flatMap((line, index) => (line.startsWith('MessageBox') && !line.includes(' /SD ') ? [index] : []));
+    assert.deepEqual(unanswered.map((index) => lines[index]), Array(2).fill('MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$R1" IDOK +3'));
+    for (const index of unanswered) {
+        const opened = lines.lastIndexOf('${ifNot} ${isUpdated}', index);
+        assert.ok(opened >= 0 && lines.slice(opened, index).includes('${AndIfNot} ${Silent}'), `a box a silent run reaches has no answer, at line ${index}`);
+    }
 });

@@ -68,11 +68,22 @@ export interface DesktopPaths {
      * of the UI token the window's page holds now, never the token (`window-pairing.ts`).
      */
     windowPairing: string;
+    /**
+     * `<data>/desktop/machine-setup.json`: the version `jason install` last completed for at a start or from the menu, and
+     * its report, on macOS and Windows (`machine-setup.ts`); one of the desktop's own records (`isNewInstallation`).
+     */
+    machineSetup: string;
     /** `<data>/logs/`, shared with the runtime; the desktop writes only `desktop-*.jsonl` there. */
     logs: string;
     // The installation's settings file is not here: it is one of the parts a layout places, answered by `dataLayout`.
     /** `<data>/run/runtime.json`, which the running runtime writes and the desktop only reads. */
     runFile: string;
+    /**
+     * `<data>/run/start-owed.json`: the note that a start is owed, which `jason install` and an installer's
+     * `jason runtime stop --start-owed` write and a runtime's own start removes (`docs/release-and-update.md` §9). The
+     * desktop only reads it, and starts a runtime where it stands and none answers; it never writes one.
+     */
+    startOwed: string;
 }
 
 /** `JASON_DATA_DIR` when it is set, otherwise `~/.jason`: the rule the CLI and the runtime follow. */
@@ -106,8 +117,10 @@ export function desktopPaths(data: string): DesktopPaths {
         electron: join(desktop, 'electron'),
         electronLogs: join(desktop, 'electron', 'logs'),
         windowPairing: join(desktop, 'window-pairing.json'),
+        machineSetup: join(desktop, 'machine-setup.json'),
         logs: join(data, 'logs'),
         runFile: join(data, 'run', 'runtime.json'),
+        startOwed: join(data, 'run', 'start-owed.json'),
     };
 }
 

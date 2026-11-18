@@ -454,9 +454,10 @@ internal sealed class LaunchAgentRegistrar(BoundedRun? run = null, string? home 
         ArgumentNullException.ThrowIfNull(registration);
 
         // The job goes out of launchd before its file goes, bounded, and by its label as well, which holds for a job whose
-        // file is gone already: a job left loaded with no plist is never this one's doing (LaunchdJobs).
+        // file is gone already: a job left loaded with no plist is never this one's doing (LaunchdJobs). What an uninstall
+        // clears for the label goes last, file or none: an earlier removal may have taken the file and left the label disabled.
         var registered = Read().Registered;
-        LaunchdJobs.TakeOut(registered ? registration.Remove : [], registration.Name, run);
+        LaunchdJobs.TakeOut(registered ? registration.Remove : [], registration.Name, run, registration.Forget);
         AutostartRegistrars.Discard(registration.ArtifactPath);
         return new AutostartRemoval(registered, Legacy: false);
     }

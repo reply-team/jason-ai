@@ -1,6 +1,7 @@
 /**
- * The starts the nsis installer and uninstaller make (`uninstall.ts`): no window, no runtime started, no single-instance
- * lock, since the installer has already closed the running application.
+ * The starts the nsis installer and uninstaller make (`uninstall.ts`): no window and no runtime started. `--stop-runtime`
+ * takes no single-instance lock, since the installer has already closed the running application; `--uninstall` holds it
+ * while it runs (`main.ts`), and where another start holds it says so and goes no further (`runUninstallBusy`).
  *
  * - `--uninstall` runs the one uninstall, `jason uninstall --keep-application` of the jason this application carries,
  *   which stops the runtime and takes off what Jason and Jason Desktop placed; it shows what was taken off and what is
@@ -47,8 +48,10 @@ function carried() {
 /** Returns the start's exit code (`stopRuntimeCode`). */
 export async function runStopRuntime(): Promise<number> {
     const { paths, executable, own } = carried();
-    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's.
-    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
+    // A demo runtime left running holds the carried jason.exe too: it is stopped with the person's. The person's is always
+    // stopped with --start-owed, since this start is only ever made on an installer's behalf: the next start of the
+    // application, Demo or Live, starts a runtime from the note (`docs/release-and-update.md` §9).
+    return stopRuntimeCode(() => stopWithDemo(() => stopOwnRuntime(own, { startOwed: true }), () => stopDemoRuntime({ platform: process.platform, executable, person: paths.data, env: withPath(process.env, pathOf(process.env)) })));
 }
 
 /**
@@ -63,4 +66,21 @@ export async function runUninstall(quiet: boolean): Promise<number> {
         await dialog.showMessageBox({ type: outcome.kind === 'done' && outcome.problems.length === 0 ? 'info' : 'warning', title: windowTitle, message: shown.message, detail: shown.detail, buttons: ['OK'] });
     }
     return carriedUninstallExit(outcome);
+}
+
+/** The exit an uninstall start gives where another start holds the lock: go no further, as for a runtime that did not stop. */
+export const uninstallBusyExit = 1;
+
+/** What a person is told where the uninstall start could not take the lock; a silent uninstall is told nothing. */
+export const uninstallBusyWords = {
+    message: 'Jason Desktop is open, or an update of it is under way, so nothing was taken off.',
+    detail: 'Close Jason Desktop, or let the update end, then uninstall Jason again.',
+};
+
+/** Returns `uninstallBusyExit`, having said why unless the uninstall is silent, and run nothing. */
+export async function runUninstallBusy(quiet: boolean): Promise<number> {
+    const { log } = carried();
+    log.warn('uninstall_busy', {});
+    if (!quiet) await dialog.showMessageBox({ type: 'warning', title: windowTitle, message: uninstallBusyWords.message, detail: uninstallBusyWords.detail, buttons: ['OK'] });
+    return uninstallBusyExit;
 }

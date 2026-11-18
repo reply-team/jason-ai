@@ -1,3 +1,4 @@
+using System.CommandLine.Parsing;
 using System.Text.RegularExpressions;
 using Jason.Cli;
 
@@ -18,12 +19,18 @@ namespace Jason.Cli.Tests.Documentation;
 /// </remarks>
 public partial class CliSentenceCommandsTests
 {
-    /// <summary>The source folders and files whose sentences are read, under <c>dotnet/src/Jason.Cli</c>.</summary>
+    /// <summary>
+    /// The source folders and files whose sentences are read, under <c>dotnet/src/Jason.Cli</c>; a name ending in <c>*</c>
+    /// is every file of the folder whose name starts with it.
+    /// </summary>
     private static readonly string[] Sources =
     [
         "Update",
         "Installation",
+        "Status",
+        "Uninstall",
         Path.Combine("Commands", "UpdateCommands.cs"),
+        Path.Combine("Commands", "Runtime*"),
     ];
 
     public static TheoryData<string, string> Named()
@@ -49,13 +56,34 @@ public partial class CliSentenceCommandsTests
     [InlineData("jason system resume")]
     public void The_router_refuses_a_command_it_does_not_take(string command) => Assert.NotNull(Refusal(command));
 
+    /// <summary>
+    /// A sentence that names a verb rather than a line to type - "the `jason plugin grant` command that grants it" - is
+    /// taken where the router's only complaint is an argument or a required option it was not given.
+    /// </summary>
+    [Theory]
+    [InlineData("jason plugin grant")]
+    [InlineData("jason route set --global")]
+    public void A_verb_named_without_its_arguments_is_taken(string command) => Assert.Null(Refusal(command));
+
     /// <summary>What the router says of a command, parsed and never run; null where it takes it.</summary>
+    /// <remarks>
+    /// An error that stands on the command itself, or on an argument or option given no token, is a value the sentence did
+    /// not give, a verb named rather than a line to type; a word or an option the router does not know is a token left
+    /// unmatched or an unknown option, and is refused.
+    /// </remarks>
     private static string? Refusal(string command)
     {
         using var dir = new TempPaths();
         var parsed = CliApp.BuildRootCommand(DocumentedPageCommandsTests.Machine(dir, new StringWriter())).Parse([.. ShellWords.Split(command)]);
         var unknown = CliApp.UnknownOptions(parsed);
-        return parsed.Errors.Count == 0 && unknown.Count == 0
+        var refused = parsed.Errors.Where(error => error.SymbolResult switch
+        {
+            CommandResult => parsed.UnmatchedTokens.Count > 0,
+            ArgumentResult argument => argument.Tokens.Count > 0,
+            OptionResult option => option.Tokens.Count > 0,
+            _ => true,
+        }).ToList();
+        return refused.Count == 0 && unknown.Count == 0 && parsed.UnmatchedTokens.Count == 0
             ? null
             : string.Join(" ", parsed.Errors.Select(error => error.Message).Concat(unknown));
     }
@@ -72,6 +100,34 @@ public partial class CliSentenceCommandsTests
         }
 
         Assert.Contains(Commands(), named => named.Where.StartsWith("docs", StringComparison.Ordinal));
+        foreach (var folder in new[] { "Status", "Uninstall", "Commands" })
+        {
+            var under = Path.Combine("dotnet", "src", "Jason.Cli", folder) + Path.DirectorySeparatorChar;
+            Assert.Contains(Commands(), named => named.Where.StartsWith(under, StringComparison.Ordinal));
+        }
+
+        Assert.Contains(Commands(), named => named.Where.EndsWith("RuntimeStartCommand.cs", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Each way a sentence names a command is read: backticked, single-quoted, a step line's unquoted <c>run: jason …</c>, and
+    /// a string literal that is a command whole, as the constants are; a command with a placeholder in it is left.
+    /// </summary>
+    [Fact]
+    public void Each_way_a_sentence_names_a_command_is_read()
+    {
+        const string Source = """
+            Say("x", "`jason update apply` finishes it");
+            Say("y", "Stop the runtime with 'jason runtime stop' and run this again.");
+            Say("z", $"not updated — {why}; run: jason skills update");
+            public const string Start = "jason runtime start";
+            Say("p", $"{id} not replaced; run: jason plugin install {id} --replace");
+            Say("q", "'jason plugin <id>' and `jason update …`");
+            """;
+
+        Assert.Equal(
+            ["jason update apply", "jason runtime stop", "jason skills update", "jason runtime start"],
+            Named(Source).Order(Comparer<string>.Create((a, b) => Source.IndexOf(a, StringComparison.Ordinal).CompareTo(Source.IndexOf(b, StringComparison.Ordinal)))));
     }
 
     private static IEnumerable<(string Where, string Command)> Commands()
@@ -80,11 +136,13 @@ public partial class CliSentenceCommandsTests
         var cli = Path.Combine(root, "dotnet", "src", "Jason.Cli");
         var files = Sources
             .Select(source => Path.Combine(cli, source))
-            .SelectMany(path => Directory.Exists(path) ? Directory.EnumerateFiles(path, "*.cs", SearchOption.AllDirectories) : [path])
+            .SelectMany(path => path.EndsWith('*')
+                ? Directory.EnumerateFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".cs")
+                : Directory.Exists(path) ? Directory.EnumerateFiles(path, "*.cs", SearchOption.AllDirectories) : [path])
             .Order(StringComparer.Ordinal);
         foreach (var file in files)
         {
-            foreach (var command in Backticked(File.ReadAllText(file)))
+            foreach (var command in Named(Sentences(File.ReadAllText(file))))
             {
                 yield return (Path.GetRelativePath(root, file), command);
             }
@@ -114,14 +172,42 @@ public partial class CliSentenceCommandsTests
         Assert.Equal(2, tables);
     }
 
-    private static IEnumerable<string> Backticked(string text) =>
-        Command().Matches(text)
+    private static IEnumerable<string> Backticked(string text) => Kept(Command().Matches(text));
+
+    /// <summary>A source file without its comment lines, which no person or agent is ever shown.</summary>
+    private static string Sentences(string source) =>
+        string.Join('\n', source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+
+    /// <summary>
+    /// Every command a source file names: backticked; single-quoted, as the uninstall's and the runtime verbs' sentences
+    /// quote one; after <c>run: </c> at the end of a step line, unquoted; and a string literal that is a command whole, a
+    /// constant a sentence is built from.
+    /// </summary>
+    private static IEnumerable<string> Named(string text) =>
+        Kept(Command().Matches(text)
+            .Concat(Quoted().Matches(text))
+            .Concat(StepLine().Matches(text))
+            .Concat(Literal().Matches(text)));
+
+    private static IEnumerable<string> Kept(IEnumerable<Match> matches) =>
+        matches
             .Select(match => match.Groups[1].Value.Trim())
             .Where(command => command.IndexOfAny(['{', '<', '…']) < 0)
             .Distinct(StringComparer.Ordinal);
 
     [GeneratedRegex("`(jason [a-z][^`\\n]*)`")]
     private static partial Regex Command();
+
+    [GeneratedRegex("'(jason [a-z][^'\\n]*)'")]
+    private static partial Regex Quoted();
+
+    /// <summary>A step line's way on, unquoted to the end of its string: <c>…; run: jason skills update"</c>.</summary>
+    [GeneratedRegex("run: (jason [a-z][^\"\\n]*)\"")]
+    private static partial Regex StepLine();
+
+    /// <summary>A string literal that is a command and nothing else: <c>public const string Start = "jason runtime start";</c>.</summary>
+    [GeneratedRegex("(?<![$@\\w])\"(jason [a-z][^\"\\\\\\n]*)\"")]
+    private static partial Regex Literal();
 
     private static string RepositoryRoot()
     {

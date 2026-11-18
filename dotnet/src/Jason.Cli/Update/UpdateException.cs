@@ -106,6 +106,13 @@ public static class UpdateCodes
     /// </summary>
     public const string Elevated = "update_elevated";
 
+    /// <summary>
+    /// The finishing step could not list the data directory, or a folder in it that decides whether an installation is there:
+    /// it is refused before the update's lock, so nothing is made and no release read, rather than taken for an installation.
+    /// Worth trying again once the directory can be read.
+    /// </summary>
+    public const string DataDirUnreadable = "data_dir_unreadable";
+
     /// <summary>Every code above, for the page's guard to read rather than for anything to iterate at runtime.</summary>
     public static IReadOnlyList<string> All { get; } =
     [
@@ -129,6 +136,7 @@ public static class UpdateCodes
         DesktopNotInstalled,
         Cancelled,
         Elevated,
+        DataDirUnreadable,
     ];
 }
 
