@@ -208,7 +208,10 @@ On macOS and Windows the `jason` Jason Desktop carries replaces no file itself: 
 application's own updater, with no window, and the new version's `jason` finishes it — the plugin packages, the
 runtime's start, the skills, the terminal command and the UI ([release-and-update.md](release-and-update.md) §7). Where
 another update or a `jason install` is under way, it is refused with `update_in_progress` or `install_in_progress`, which
-mean later: let that one end, then run it again.
+mean later: let that one end, then run it again. On macOS and Windows a command-line install of an earlier version
+moves into Jason Desktop through that same `apply`: once it is updated, the application is installed and the command line
+moved into it. The update never fails because of the move, `jason status` says where the move stands, and Linux has no
+move ([release-and-update.md](release-and-update.md) §7, "Moving a command-line install into Jason Desktop").
 
 ### Can this installation start work?
 

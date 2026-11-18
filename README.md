@@ -657,7 +657,7 @@ For the technical reader, in one screen.
 jason status --human            # read-only: can this installation work? each check names its fix
 jason approval list --human     # read-only: everything that waits for your yes
 jason approval approve <id> ... # your yes for one item, under your name
-jason update apply              # self-update, with skills and UI; `jason update rollback` undoes it
+jason update apply              # self-update, with skills and UI
 jason profile create local-codex --host codex --program codex  # run background roles on Codex
 ```
 
