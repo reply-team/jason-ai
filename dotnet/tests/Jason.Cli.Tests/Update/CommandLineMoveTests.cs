@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jason.Cli.Installation;
 using Jason.Cli.Process;
 using Jason.Cli.Status;
@@ -430,18 +431,24 @@ public sealed class CommandLineMoveTests
     }
 
     /// <summary>
-    /// A test build's named signer comes before the running jason's own, and only a test build reads it: a released build given
-    /// the variable holds the installer to its own signer still.
+    /// Only a test build reads the two variables, and whether it is one is read from the build itself, never passed in: this
+    /// build is a released one, so both variables change nothing, and a move given them holds the installer to its own signer
+    /// still. (A test build's named signer coming first is held by construction, by the guard below, and by the proof that
+    /// runs a test build on a runner.)
     /// </summary>
     [Fact]
-    public async Task A_test_builds_named_signer_comes_first_and_a_released_build_reads_none()
+    public async Task A_released_build_ignores_both_test_build_variables()
     {
-        var named = new Dictionary<string, string> { ["JASON_TEST_BUILD_SIGNER"] = "A Runner's Own Certificate" };
-        Assert.Equal("A Runner's Own Certificate", MoveSignatures.TestSigner(testBuild: true, named));
-        Assert.Null(MoveSignatures.TestSigner(testBuild: false, named));
-        Assert.Null(MoveSignatures.TestSigner(testBuild: true, new Dictionary<string, string>()));
+        Assert.False(Jason.Contracts.JasonVersion.TestBuild);
+        var named = new Dictionary<string, string>
+        {
+            ["JASON_TEST_BUILD_SIGNER"] = "A Runner's Own Certificate",
+            ["JASON_TEST_BUILD_REQUIREMENT"] = "anchor apple",
+        };
+        Assert.Null(MoveSignatures.TestSigner(named));
+        Assert.Equal(MoveSignatures.Requirement, MoveSignatures.RequirementInForce(named));
 
-        // This build is a released one: the variable changes nothing, and an installer by that signer is refused.
+        // The variable changes nothing in a move, and an installer by that signer is refused.
         using var rig = new MoveRig(windows: true, variables: named);
         rig.Installation.WithRuntime();
         rig.System.SignedBy = "A Runner's Own Certificate";
@@ -889,10 +896,9 @@ public sealed class CommandLineMoveTests
     [Fact]
     public void No_released_build_is_a_test_build()
     {
-        Assert.False(MoveSignatures.TestBuild);
-        Assert.Equal(Jason.Contracts.JasonVersion.TestBuild, MoveSignatures.TestBuild);
-        Assert.Null(MoveSignatures.TestSigner(MoveSignatures.TestBuild, new Dictionary<string, string> { ["JASON_TEST_BUILD_SIGNER"] = "Anyone" }));
-        Assert.Equal(MoveSignatures.Requirement, MoveSignatures.RequirementInForce);
+        Assert.False(Jason.Contracts.JasonVersion.TestBuild);
+        Assert.Null(MoveSignatures.TestSigner(null));
+        Assert.Equal(MoveSignatures.Requirement, MoveSignatures.RequirementInForce(null));
 
         var root = TreeRoot();
         foreach (var file in new[] { Path.Combine(".github", "workflows", "release.yml"), Path.Combine("dotnet", "Directory.Build.props"), Path.Combine("dotnet", "Directory.Packages.props") }
@@ -914,15 +920,34 @@ public sealed class CommandLineMoveTests
             .Select(file => Path.GetFileName(file));
         Assert.Equal(["JasonVersion.cs"], testing);
 
+        // The door is closed by construction: each variable is read by one exact expression that asks the build itself whether
+        // it is a test build, with no flag a caller could pass, and its name stands once in all the sources.
         var source = File.ReadAllText(Path.Combine(root, "dotnet", "src", "Jason.Cli", "Update", "MoveSystem.cs"));
-        Assert.Contains("public static bool TestBuild => Jason.Contracts.JasonVersion.TestBuild;", source, StringComparison.Ordinal);
+        string[] doors =
+        [
+            "public static string? TestSigner(IReadOnlyDictionary<string, string>? variables) =>\n"
+                + "        Jason.Contracts.JasonVersion.TestBuild && Variable(variables, \"JASON_TEST_BUILD_SIGNER\") is { Length: > 0 } named ? named : null;",
+            "public static string RequirementInForce(IReadOnlyDictionary<string, string>? variables) =>\n"
+                + "        Jason.Contracts.JasonVersion.TestBuild && Variable(variables, \"JASON_TEST_BUILD_REQUIREMENT\") is { Length: > 0 } named ? named : Requirement;",
+        ];
+        var unified = source.ReplaceLineEndings("\n");
+        foreach (var door in doors)
+        {
+            Assert.Contains(door, unified, StringComparison.Ordinal);
+        }
+
+        // Variable is private and called by the two doors alone.
+        Assert.Contains("private static string? Variable(IReadOnlyDictionary<string, string>? variables, string name) =>", unified, StringComparison.Ordinal);
+        Assert.Equal(3, Regex.Count(unified, @"\bVariable\("));
+
+        var sources = Directory.EnumerateFiles(Path.Combine(root, "dotnet", "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(File.ReadAllText)
+            .ToList();
         foreach (var variable in new[] { "JASON_TEST_BUILD_SIGNER", "JASON_TEST_BUILD_REQUIREMENT" })
         {
-            var at = source.IndexOf($"\"{variable}\"", StringComparison.Ordinal);
-            Assert.True(at >= 0, $"{variable} is not read");
-            Assert.Equal(at, source.LastIndexOf($"\"{variable}\"", StringComparison.Ordinal));
-            var line = source[(source.LastIndexOf('\n', at) + 1)..source.IndexOf('\n', at)];
-            Assert.Contains("estBuild && ", line, StringComparison.Ordinal);
+            Assert.Equal(1, sources.Sum(text => Regex.Count(text, $"\"{variable}\"")));
         }
     }
 

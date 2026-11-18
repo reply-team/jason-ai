@@ -218,7 +218,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         // that verifies the installer; a test build's named signer comes first. Unverified, nothing is fetched or looked at.
         if (places.Platform is SetupSystem.Windows)
         {
-            _publisher = MoveSignatures.TestSigner(MoveSignatures.TestBuild, env.Variables);
+            _publisher = MoveSignatures.TestSigner(env.Variables);
             if (_publisher is null)
             {
                 var (own, why) = System.WindowsSigner(System.RunningExecutable);
@@ -247,7 +247,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
         {
             // Held to the publisher before anything of it runs, as a new one is.
             if (places.Platform is SetupSystem.MacOs
-                && await System.MacSignatureRefusalAsync(found.Application, MoveSignatures.RequirementInForce, cancellationToken).ConfigureAwait(false) is { } unsigned)
+                && await System.MacSignatureRefusalAsync(found.Application, MoveSignatures.RequirementInForce(env.Variables), cancellationToken).ConfigureAwait(false) is { } unsigned)
             {
                 env.Error.WriteLine(unsigned);
                 return End(MoveStates.Failed, $"The Jason.app at {found.Application} does not verify as signed by the team that signs Jason, so its jason was not run and nothing was changed ({OneLine(unsigned)}). `jason update apply` carries the move on.");
@@ -488,7 +488,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 return End(MoveStates.Failed, $"{MacAsset} holds no Jason.app; nothing was installed or changed. `jason update apply` carries the move on.");
             }
 
-            if (await System.MacSignatureRefusalAsync(staged, MoveSignatures.RequirementInForce, cancellationToken).ConfigureAwait(false) is { } unsigned)
+            if (await System.MacSignatureRefusalAsync(staged, MoveSignatures.RequirementInForce(env.Variables), cancellationToken).ConfigureAwait(false) is { } unsigned)
             {
                 env.Error.WriteLine(unsigned);
                 return End(MoveStates.Failed, $"The Jason.app in {MacAsset} does not verify as signed by the team that signs Jason ({OneLine(unsigned)}), so nothing of it ran and nothing was installed or changed. `jason update apply` carries the move on.");

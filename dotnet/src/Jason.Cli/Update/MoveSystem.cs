@@ -103,16 +103,21 @@ public static class MoveSignatures
     /// </summary>
     public const string Requirement = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"BD8M7U5YBV\"";
 
-    /// <summary>Whether this build is a test build, whose checks may be pointed at another signer: the build's one symbol for it.</summary>
-    public static bool TestBuild => Jason.Contracts.JasonVersion.TestBuild;
-
     /// <summary>
     /// The signer a test build is pointed at, which comes before the running jason's own: the one <c>JASON_TEST_BUILD_SIGNER</c>
-    /// names in <paramref name="variables"/> (the process's own where null), and only where <paramref name="testBuild"/> holds;
-    /// null otherwise. The move passes <see cref="TestBuild"/>.
+    /// names in <paramref name="variables"/> (the process's own where null), and only in a test build, which this reads from
+    /// <see cref="Jason.Contracts.JasonVersion.TestBuild"/> itself: no caller can say it is one. Null in every other build.
     /// </summary>
-    public static string? TestSigner(bool testBuild, IReadOnlyDictionary<string, string>? variables) =>
-        testBuild && Variable(variables, "JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : null;
+    public static string? TestSigner(IReadOnlyDictionary<string, string>? variables) =>
+        Jason.Contracts.JasonVersion.TestBuild && Variable(variables, "JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : null;
+
+    /// <summary>
+    /// The requirement the move holds an application to on macOS: in a test build, read from
+    /// <see cref="Jason.Contracts.JasonVersion.TestBuild"/> itself, the one <c>JASON_TEST_BUILD_REQUIREMENT</c> names in
+    /// <paramref name="variables"/> (the process's own where null); <see cref="Requirement"/> in every other build.
+    /// </summary>
+    public static string RequirementInForce(IReadOnlyDictionary<string, string>? variables) =>
+        Jason.Contracts.JasonVersion.TestBuild && Variable(variables, "JASON_TEST_BUILD_REQUIREMENT") is { Length: > 0 } named ? named : Requirement;
 
     private static string? Variable(IReadOnlyDictionary<string, string>? variables, string name) =>
         variables is null ? Environment.GetEnvironmentVariable(name) : variables.GetValueOrDefault(name);
@@ -127,10 +132,6 @@ public static class MoveSignatures
         var (signer, refusal) = system.WindowsSigner(file);
         return refusal ?? (string.Equals(signer, publisher, StringComparison.Ordinal) ? null : $"it is signed by '{signer}', not by {publisher}");
     }
-
-    /// <summary>The requirement the move holds an application to: in a test build, the one <c>JASON_TEST_BUILD_REQUIREMENT</c> names.</summary>
-    public static string RequirementInForce =>
-        TestBuild && Environment.GetEnvironmentVariable("JASON_TEST_BUILD_REQUIREMENT") is { Length: > 0 } named ? named : Requirement;
 }
 
 /// <summary>This machine's: the programs the move runs, each started by <see cref="ChildProcess"/>.</summary>
