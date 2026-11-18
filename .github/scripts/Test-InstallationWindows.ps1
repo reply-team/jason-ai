@@ -48,9 +48,10 @@ uploads, and they are what a person reads.
   InstallOverCommandLine   the previous release's command-line Jason, a runtime running and its logon start registered, then
                     this build's unpinned line run over it: the old runtime stopped before the install is retired, a runtime
                     again from the carried jason, the Path, a new shell, and the campaigns the same by id
-  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, both on the Path, then this
-                    build's setup run as an update runs it: one installation, the command-line one retired into the
-                    application, the Path naming the bundle folder once, a new shell finding the carried jason
+  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, both on the Path, a runtime
+                    started by the command-line jason and left running, then this build's setup run as an update runs it:
+                    one installation, the command-line one retired into the application and no runtime running from it,
+                    the Path naming the bundle folder once, a new shell finding the carried jason, the campaigns kept
 
 -Signer names the signer the script under test holds the setup to: the release's on the signed packages; on CI's test
 build, which a release never signs, the runner's own test certificate, which the job's copy of install.ps1 names.
@@ -1725,10 +1726,14 @@ switch ($Step) {
         # The previous release's Jason Desktop, installed by its own setup /S, and its command-line Jason, installed by its own
         # install.ps1, side by side, both on the Path; then this build's setup run as an update runs it (--updated --force-run,
         # as InstallOverPrevious runs it), whose own last step, jason install with no flags, retires the command-line one.
+        # The runtime is started by the command-line jason and left running: the previous release's updater stops only a
+        # runtime it judges its own, one started from the jason it carries, so a real update hands the setup a machine where
+        # the command-line install's runtime still runs from its folder, and nothing here stops it first.
         # Asserted: one installation remains, at this version; the command-line install retired into the application, its
-        # files gone, no move record written (a move writes one, and this is no move) and jason status's move check reading
-        # absent; the Path naming the bundle folder once and the command-line folder no more, and no command file in
-        # WindowsApps; a new shell finding the carried jason. The uninstall Installed apps runs is the next step.
+        # files gone and no runtime running from it; no move record written (a move writes one, and this is no move) and
+        # jason status's move check reading absent; the Path naming the bundle folder once and the command-line folder no
+        # more, and no command file in WindowsApps; a new shell finding the carried jason; the campaigns the same, by id. The
+        # uninstall Installed apps runs is the next step.
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         # It writes the account's own data directory, Path and Installed apps: a GitHub-hosted runner's alone, never a
         # person's machine.
@@ -1756,8 +1761,20 @@ switch ($Step) {
         $first = @(Find-InNewShell 'jason')
         Say "side by side: Jason Desktop $desktopVersion at $app ($(if ((Count-Entry $bundle) -ge 1) { "its bundle folder on the Path" } else { "its command files in WindowsApps: $($commandFiles -join ', ')" })) and the command-line Jason $cliVersion at $jason on the Path; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
 
-        # This build's setup as an update runs it: the carried runtime stopped where one runs, --updated --force-run.
-        $null = Invoke-Program $carried @('runtime', 'stop') $quiet
+        # The runtime, started by the command-line jason as a person using it starts it, and one campaign made.
+        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release''s command-line jason could not start a runtime' }
+        $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made beside both previous installs') $quiet
+        if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
+        $idsBefore = @(Read-All $jason @('campaign', 'list', '--include-archived') | ForEach-Object { $_.GetProperty('id').GetString() } | Sort-Object)
+        if ($idsBefore.Count -lt 1) { Fail 'the campaign made under the previous release is not listed' }
+        $runtimesBefore = @(Get-RuntimeProcesses)
+        if (@($runtimesBefore | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" }).Count -lt 1) { Fail "no runtime runs from $commandLine before the setup; the runtimes running: $(if ($runtimesBefore) { ($runtimesBefore | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })" }
+        # A fact, not an assertion: what runtime status answers before the setup, and the runtimes running, by their files.
+        $before = Invoke-Program $jason @('runtime', 'status') $quiet
+        Say "before the setup, runtime status ended $($before.Exit) and said: $("$($before.Said)".Trim()); runtimes running from: $(($runtimesBefore | ForEach-Object { $_.ExecutablePath }) -join ', '); $($idsBefore.Count) campaign(s)"
+
+        # This build's setup as an update runs it, --updated --force-run, with the command-line install's runtime still
+        # running: the previous release's updater stops none it does not judge its own, and nothing here stops it either.
         $installer = Start-Process -FilePath (Join-Path $Feed 'jason-desktop-windows-x64-setup.exe') -ArgumentList '--updated', '--force-run' -PassThru
         $null = $installer.Handle
         $new = Wait-Started $installer "this build's setup --updated --force-run, as an update starts it"
@@ -1786,6 +1803,9 @@ switch ($Step) {
         $moveSaid = "$($moveCheck[0].state): $($moveCheck[0].fact)"
         if ($moveCheck[0].state -cne 'absent') { Fail "no move record was written, and jason status's move check does not read absent: $moveSaid" }
         Say "one installation: one Installed apps entry, $app at $Version, the command-line install's files gone from $commandLine; no move record was written, as the setup's own jason install writes none; jason status's move check reads $moveSaid"
+        $runtimesAfter = @(Get-RuntimeProcesses)
+        if (@($runtimesAfter | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" }).Count -ne 0) { Fail "a runtime still runs from the retired install at $commandLine after the update; the runtimes running: $(($runtimesAfter | ForEach-Object { $_.ExecutablePath }) -join ', ')" }
+        Say "no runtime runs from $commandLine after the update; the runtimes running from: $(if ($runtimesAfter) { ($runtimesAfter | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })"
 
         # A fact, not an assertion: jason status as a whole after the update, read by eye in the run.
         $ready = if ($status.PSObject.Properties['ready']) { "$($status.ready)" } else { 'not read' }
@@ -1801,6 +1821,11 @@ switch ($Step) {
         if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
         if ($found[0] -ine $carried -or (($found[1] -split '\+')[0]) -ne $Version) { Fail "a new shell finds '$($found -join ' ')', not $carried saying $Version" }
         Say "the user Path names $bundle once and $commandLine no more, no command file in WindowsApps, and a new shell finds $carried, saying $Version"
+
+        # The data kept: the same campaigns, by id.
+        $idsAfter = @(Read-All $carried @('campaign', 'list', '--include-archived') | ForEach-Object { $_.GetProperty('id').GetString() } | Sort-Object)
+        if (($idsAfter -join ',') -cne ($idsBefore -join ',')) { Fail "the campaigns are not the same after the update over both previous installs: before $($idsBefore -join ', '); after $($idsAfter -join ', ')" }
+        Say "the data kept: the same $($idsAfter.Count) campaign(s), by id"
 
         # --force-run started the application again; a person closes it before an uninstall.
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 60 'the application starting again after the update (--force-run)'
