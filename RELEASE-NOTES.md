@@ -46,12 +46,15 @@ Jason is installed, updated and removed as it was.
   so `install.sh` run as root, with `sudo`, and `install.ps1` run in an elevated PowerShell — an administrator's, or
   another account's than the one signed in — stop before anything is downloaded, and say to run the line again as
   yourself; `jason install` run so refuses with `install_elevated`. On Linux a run as root installs as any run does.
+- **The install line says which `jason` a terminal finds.** On macOS and Windows, where another `jason` answers first by
+  name in a terminal opened afterwards, the line ends with an error that names that file, after `jason install`'s report
+  that says what removes it, and leaves the file as it is; the report says so as `command.finds_this`.
 - **One update.** `jason update apply` updates Jason Desktop and the `jason` it carries together, through the
   application's own updater, one update at a time. Check for Updates… in Jason Desktop's menu updates the same way. An
   installer that finds Jason Desktop running waits for it to quit or refuses, and never closes it.
-- **A terminal's update is refused while Jason Desktop shows the Demo.** `jason update apply` is refused as `demo_open`
-  before anything is checked, so nothing is stopped, kept or downloaded. Leaving the Demo, or quitting Jason Desktop, and
-  running it again takes it.
+- **A terminal's update is refused while Jason Desktop shows the Demo.** `jason update apply` is refused with
+  `update_refused_by_desktop`, the Desktop's reason `demo_open`, before anything is checked, so nothing is stopped, kept
+  or downloaded. Leaving the Demo, or quitting Jason Desktop, and running it again takes it.
 - **A command-line install moves into Jason Desktop.** On macOS and Windows, `jason update apply` in a command-line
   install of an earlier version updates it and then moves it into Jason Desktop, so that the terminal's `jason` is the
   one the application carries. The update never fails because of the move: where the move cannot go on, the install is
