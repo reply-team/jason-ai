@@ -376,6 +376,12 @@ function Get-OwnProcesses([string] $folder) {
     @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
 }
 
+# An Installed apps entry's quiet uninstall line; empty where the entry has none.
+function Get-QuietUninstall($entry) {
+    if ($entry -and $entry.PSObject.Properties.Name -contains 'QuietUninstallString') { return [string]$entry.QuietUninstallString }
+    return ''
+}
+
 function Get-JasonUninstallEntries {
     @(Get-ChildItem -LiteralPath $uninstallKeys -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath } | Where-Object { ($_.PSObject.Properties.Name -contains 'DisplayName') -and $_.DisplayName -like 'Jason*' })
 }
@@ -449,7 +455,7 @@ $lastLegFile = Join-Path $Out 'last-leg.txt'
 # A leg that began and never ended failed: recorded by its name, its own lines being its step's.
 function Close-Leg {
     if (-not (Test-Path -LiteralPath $legOpen)) { return }
-    $open = (Get-Content -LiteralPath $legOpen -Raw).Trim()
+    $open = "$(Get-Content -LiteralPath $legOpen -Raw)".Trim()
     Remove-Item -LiteralPath $legOpen -Force
     if (-not $open) { return }
     $words = Join-Path $Out 'leg-failure.txt'
@@ -547,7 +553,7 @@ switch ($Step) {
         # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
         # the end fails the job on any divergence recorded.
         if ($gone.Count -gt 0 -or $left.Count -gt 0) {
-            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $(($gone | ForEach-Object { "- $_" }) + ($left | ForEach-Object { "+ $_" }) -join '; ')"
+            Write-Host "::error title=Uninstall::the machine after '$Name' is not the machine before '${Against}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
             Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$Name against ${Against}: see $diff"
         }
     }
@@ -586,7 +592,7 @@ switch ($Step) {
             $found = @(Get-LeftOver)
             if ($found.Count -gt 0) {
                 $resets = Join-Path $Out 'resets.txt'
-                $last = if (Test-Path -LiteralPath $lastLegFile) { (Get-Content -LiteralPath $lastLegFile -Raw).Trim() } else { '' }
+                $last = if (Test-Path -LiteralPath $lastLegFile) { "$(Get-Content -LiteralPath $lastLegFile -Raw)".Trim() } else { '' }
                 if (-not $last) { Skip-Leg "not run: the machine is not the machine before, and no leg before this one changed it: $($found -join '; ')"; return }
                 $ended = (Test-Path -LiteralPath $legsEnded) -and (@(Get-Content -LiteralPath $legsEnded) -ccontains $last)
                 if ($ended) {
@@ -611,7 +617,7 @@ switch ($Step) {
                         }
                     }
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
-                        $quietLine = if ($entry.PSObject.Properties.Name -contains 'QuietUninstallString') { [string]$entry.QuietUninstallString } else { '' }
+                        $quietLine = Get-QuietUninstall $entry
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
                             $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
                             $said = "  Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
@@ -695,7 +701,9 @@ switch ($Step) {
         $first = Invoke-InstallScript $Script $pin
         if ($first.Exit -ne 0) { Fail "install.ps1 $($pin -join ' ') exited with $($first.Exit)" }
         Say "install.ps1 ran $(if ($Pinned) { "by the pinned line: -Version $Version" } else { 'unpinned, with no -Version, as an agent runs it' })"
-        $lastLine = @($first.Said -split "`n" | Where-Object { $_.Trim() })[-1]
+        $printed = @($first.Said -split "`n" | Where-Object { $_.Trim() })
+        if ($printed.Count -eq 0) { Fail "install.ps1 $($pin -join ' ') printed nothing" }
+        $lastLine = $printed[-1]
         if (-not $lastLine.TrimEnd().EndsWith($carried, [StringComparison]::OrdinalIgnoreCase)) { Fail "install.ps1's last line does not end with the full path of jason, $carried, for a shell already open: $lastLine" }
         Say "install.ps1 installed Jason Desktop and ended on the full path of jason for a shell already open"
 
@@ -721,7 +729,8 @@ switch ($Step) {
             # The release's proof job gives the Path no shape; CI's job always does, and a guard holds it to that step.
             Say "the user Path was given no ExpandString shape before this install (kind $($before.Kind)): its kind and entries are held as they were"
         }
-        $found = Find-InNewShell 'jason'
+        $found = @(Find-InNewShell 'jason')
+        if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
         if ($found[0] -ine $carried) { Fail "a new shell finds jason at '$($found[0])', not $carried" }
         if ((($found[1] -split '\+')[0]) -ne $Version) { Fail "jason in a new shell says '$($found[1])', not $Version" }
         Say "a new shell finds jason at $carried, and it says $Version; the user Path is still $($after.Kind) and every entry it held is kept"
@@ -811,7 +820,7 @@ switch ($Step) {
                     $handle = Get-Process -Id $id -ErrorAction SilentlyContinue
                     if ($handle) { $null = $handle.Handle }
                     $silent = "$($run.CommandLine)" -match '(^|\s)/S(\s|$)'
-                    $runs[$id] = @{ Process = $handle; Silent = $silent; Line = "$($run.CommandLine)"; Windows = [System.Collections.Generic.List[string]]::new() }
+                    $runs[$id] = @{ Id = $id; Process = $handle; Silent = $silent; Line = "$($run.CommandLine)"; Windows = [System.Collections.Generic.List[string]]::new() }
                     Write-Host "  at $([int]((Get-Date) - $started).TotalSeconds) s an uninstaller run, process $id, $(if ($silent) { 'with /S' } else { 'WITHOUT /S' }): $($run.CommandLine)"
                 }
                 foreach ($window in (Get-VisibleWindows @($id))) { if (-not $runs[$id].Windows.Contains($window)) { $runs[$id].Windows.Add($window); Write-Host "    its visible window: $window" } }
@@ -827,14 +836,14 @@ switch ($Step) {
         }
         if ($asked) {
             Write-JasonProcesses
-            Write-ProcessWindows $asked.Process.Id
-            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Process.Id) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
+            Write-ProcessWindows $asked.Id
+            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Id) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
             Fail-Held "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; '); its text: $($text -join ' / ')"
-            Stop-Process -Id $asked.Process.Id -Force -ErrorAction SilentlyContinue
-            Wait-Until { -not (Get-Process -Id $asked.Process.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
+            Stop-Process -Id $asked.Id -Force -ErrorAction SilentlyContinue
+            Wait-Until { -not (Get-Process -Id $asked.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
             Say 'that run was ended unanswered; the application stays installed, and Installed apps takes it off in the next leg'
             $entry = @(Get-JasonUninstallEntries)
-            if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
+            if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                 $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
                 Say "the quiet uninstall Installed apps runs ended $quiet"
                 if ($quiet -ne 0) { Fail-Held "the quiet uninstall Installed apps runs ended $quiet with nothing of Jason running" }
@@ -867,7 +876,7 @@ switch ($Step) {
 
         # Open, as a person leaves it. A fresh 0.48.2 opens on the Demo, which starts no runtime; a person who works in it
         # has one running from the carried jason, which the updater then stops, so one is started from it here.
-        $opened = Open-Window
+        $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
             $started = Invoke-Program $carried @('runtime', 'start')
             if ($started.Exit -ne 0) { Fail "the previous release's carried jason could not start a runtime ($($started.Exit)): $($started.Said)" }
@@ -893,7 +902,8 @@ switch ($Step) {
 
         # Its own machine set-up ran: the Path names the bundle folder and a new shell finds this version.
         if ((Count-Entry $bundle) -ne 1) { Fail "after the update the user Path holds $bundle $(Count-Entry $bundle) time(s)" }
-        $found = Find-InNewShell 'jason'
+        $found = @(Find-InNewShell 'jason')
+        if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
         if ($found[0] -ine $carried -or (($found[1] -split '\+')[0]) -ne $Version) { Fail "after the update a new shell finds '$($found -join ' ')'" }
         Wait-Until { @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -gt 0 } 60 'the application starting again after the update (--force-run)'
         Say "the installer's machine set-up put jason in the terminal, and --force-run started $Version again"
@@ -910,7 +920,7 @@ switch ($Step) {
         if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
         $installed = Wait-Program (Join-Path $Previous 'jason-desktop-windows-x64-setup.exe') @('/S')
         if ($installed -ne 0) { Fail "the previous release's setup exited with $installed" }
-        $opened = Open-Window
+        $opened = @(Open-Window)
         Say "the previous Jason Desktop $(Read-Version $carried) open again; a runtime answering: $(Test-Runtime)"
         # Whether the setup is hung or waits for the old application to end: a minute with the window open, the processes
         # then, the window ended as a quit ends it, and how long after that the setup ends, with the processes then.
@@ -978,7 +988,7 @@ switch ($Step) {
             if (Test-Path -LiteralPath $carried) {
                 End-Application
                 $entry = @(Get-JasonUninstallEntries)
-                if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
+                if ($entry.Count -gt 0 -and (Get-QuietUninstall $entry[0]) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
                     $null = Wait-Program $Matches['file'] @($Matches['arguments'])
                     Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going before the leg"
                 }
@@ -1082,7 +1092,7 @@ switch ($Step) {
             New-Item -ItemType File -Path $release -Force | Out-Null
             $null = $holder.WaitForExit(15000)
             Assert-Untouched 'leg 5' $false
-            $opened = Open-Window -RuntimeSeconds 0
+            $opened = @(Open-Window -RuntimeSeconds 0)
             if ($opened.Count -eq 0) { $failures.Add('after leg 5 the previous release does not open') } else { Say "after leg 5 the previous release $(Read-Version $carried) opens" }
             End-Application
         } catch {
@@ -1228,7 +1238,7 @@ switch ($Step) {
     'UninstallFromInstalledApps' {
         $entry = @(Get-JasonUninstallEntries)
         if ($entry.Count -ne 1) { Fail "Installed apps lists $($entry.Count) Jason entries, not one" }
-        $quiet = [string]$entry[0].QuietUninstallString
+        $quiet = Get-QuietUninstall $entry[0]
         if ($quiet -notmatch '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') { Fail "QuietUninstallString is not a quoted program and its arguments: $quiet" }
         $removal = Wait-Program $Matches['file'] @($Matches['arguments'])
         if ($removal -ne 0) { Fail "the uninstall Installed apps runs exited with $removal" }
@@ -1286,7 +1296,8 @@ switch ($Step) {
         # install's folder no more, and a new shell finds the carried jason.
         if ((Count-Entry $bundle) -ne 1) { Fail "the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $((Get-UserPath).Raw)" }
         if ((Count-Entry $commandLine) -ne 0) { Fail "the user Path still names the retired $commandLine" }
-        $found = Find-InNewShell 'jason'
+        $found = @(Find-InNewShell 'jason')
+        if ($found.Count -lt 2) { Fail "a new shell looking for jason said: $(if ($found) { $found -join ' / ' } else { 'nothing' })" }
         if ($found[0] -ine $carried) { Fail "a new shell finds jason at '$($found[0])', not $carried" }
         if ((($found[1] -split '\+')[0]) -ne $Version) { Fail "jason in a new shell says '$($found[1])', not $Version" }
         Say "a new shell finds jason at $carried and it says $Version; the user Path names $bundle once and $commandLine no more"
@@ -1303,8 +1314,8 @@ switch ($Step) {
 
         # The logon registration names the carried file.
         $registration = Read-Document (Invoke-Program $carried @('runtime', 'autostart', 'status') $quiet).Said
-        if (-not $registration -or -not $registration.registered) { Fail 'no logon registration after the move' }
-        if ([string]$registration.executable -ine $carried) { Fail "the logon registration names $($registration.executable), not $carried" }
+        if (-not $registration -or -not $registration.PSObject.Properties['registered'] -or -not $registration.registered) { Fail "no logon registration after the move: $(if ($registration) { $registration | ConvertTo-Json -Compress -Depth 6 } else { 'no body' })" }
+        if (-not $registration.PSObject.Properties['executable'] -or [string]$registration.executable -ine $carried) { Fail "the logon registration names $(if ($registration.PSObject.Properties['executable']) { $registration.executable } else { 'no executable' }), not $carried" }
         Say "the logon registration names $carried"
 
         # The move's record, complete.

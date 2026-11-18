@@ -146,7 +146,7 @@ folder() {
     local label="$1" path="$2"
     if [ ! -e "$path" ]; then printf '%s\tabsent\n' "$label"; return; fi
     printf '%s\tpresent\n' "$label"
-    (cd "$path" && find . \( -type f -o -type l \) -print 2>/dev/null | sort | while IFS= read -r file; do
+    (cd "$path" && { find . \( -type f -o -type l \) -print 2>/dev/null || true; } | sort | while IFS= read -r file; do
         printf '%s/%s\t%s\n' "$label" "${file#./}" "$(stat -f %z "$file" 2>/dev/null || echo '?')"
     done)
 }
@@ -178,7 +178,7 @@ write_listing() {
         # uninstall, so these places are written as a person's are.
         for parent in Preferences "Saved Application State" HTTPStorages Caches "Application Support" Logs WebKit Cookies; do
             [ -d "$HOME/Library/$parent" ] || continue
-            find "$HOME/Library/$parent" -maxdepth 1 -iname '*jason*' 2>/dev/null | while IFS= read -r kept; do printf 'system-kept\t%s\n' "${kept#$HOME/}"; done
+            { find "$HOME/Library/$parent" -maxdepth 1 -iname '*jason*' 2>/dev/null || true; } | while IFS= read -r kept; do printf 'system-kept\t%s\n' "${kept#$HOME/}"; done
         done
         # The native libraries the single-file executable extracts, under ~/.net/jason/<id> (the host's default base on
         # macOS, one id per build): one line per folder.
@@ -395,7 +395,7 @@ begin)
                 [ -n "$jason" ] && [ -x "$jason" ] || continue
                 status=0
                 ( within 300 "$jason uninstall --purge-data --yes" "$jason" uninstall --purge-data --yes > "$OUT/reset-uninstall.txt" 2>&1 ) || status=$?
-                line="  $jason uninstall --purge-data --yes ended $status: $(grep . "$OUT/reset-uninstall.txt" | tail -n 3 | tr '\n' ' ')"
+                line="  $jason uninstall --purge-data --yes ended $status: $({ grep . "$OUT/reset-uninstall.txt" || true; } | tail -n 3 | tr '\n' ' ')"
                 echo "$line"
                 printf '%s\n' "$line" >> "$resets"
             done
@@ -476,7 +476,7 @@ install)
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
     grep -qx '# added by jason install' "$HOME/.zprofile" || fail "~/.zprofile carries no line for ~/.local/bin"
-    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
     [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
     [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
     say "a new zsh login shell finds jason at $WRAPPER, and it says $version"
@@ -605,7 +605,7 @@ from-previous)
     # The previous release's command-line Jason, by its own script from its own assets, with a terminal's PATH, a runtime
     # running and its start at login registered.
     within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" || fail "the previous release's install.sh failed"
-    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
     within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > "$OUT/autostart.json" || fail "the previous release could not register its logon start: $(cat "$OUT/autostart.json")"
     [ -z "$(app)" ] || fail "an application is in place before the move: $(app)"
@@ -649,7 +649,7 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
     if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is still an executable, not the application's wrapper"; fi
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
-    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
     [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
     [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
     say "~/.local/bin/jason is the application's wrapper running $carried, and a new zsh login shell finds it saying $version"
@@ -736,7 +736,7 @@ for key in sys.argv[2].split("."):
 print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
 
     within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/way-back-previous-install.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/way-back-previous-install.txt")"
-    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
     within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
     within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before going back' > "$OUT/way-back-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/way-back-campaign.json")"
@@ -762,6 +762,7 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     read_all "$carried" journal list > "$OUT/way-back-journal-before.json" || fail "the journal could not be read under the moved 0.49"
     counted="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-campaigns-before.json")"
     [ "$counted" -ge 1 ] || fail 'the campaign made under the previous release is not listed under the moved 0.49'
+    [ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-journal-before.json")" -ge 1 ] || fail 'the journal is empty under the moved 0.49'
     say "under the moved 0.49: $counted campaign(s), archived included; the journal holds $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print("%d entries, the newest %s" % (len(j), j[0]["id"] if j else "none"))' "$OUT/way-back-journal-before.json")"
 
     # Step 1: the leg's own application quit, then jason uninstall with no --purge-data.
@@ -815,12 +816,12 @@ if faults:
 else:
     print('under %s: %d campaign(s), as before; every one of the %d journal entries is there by id with its kind and its moment, and none has appeared at or before %s; %d newer entr(ies) are listed above it' % (old, len(c1), len(j0), newest, at))
 PY
-)"
+)" || fail "the campaigns and the journal could not be held: see this step's log"
     case "$held" in FAIL\ *) fail "${held#FAIL }" ;; esac
     say "$held"
 
     # (ii) Its version and its status.
-    said="$(within 60 "jason --version under $old" "$WRAPPER" --version 2>/dev/null | cut -d+ -f1)"
+    said="$(within 60 "jason --version under $old" "$WRAPPER" --version 2>/dev/null | cut -d+ -f1)" || fail "jason --version under $old failed"
     [ "$said" = "$old" ] || fail "jason --version says '$said', not $old"
     within 120 "jason status under $old" "$WRAPPER" status > "$OUT/way-back-status.json" 2>/dev/null || true
     [ "$(read_field "$OUT/way-back-status.json" ready)" = true ] || fail "jason status under $old is not ready: $(cat "$OUT/way-back-status.json")"
@@ -842,7 +843,7 @@ previous-removal)
     previous="$1"
     say "launchd's records before the previous release's own removal leg: $(launchd_records | tr '\t\n' ' ;' || true)"
     within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/install-previous-again.txt" || fail "the previous release's install.sh failed"
-    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
     within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > "$OUT/autostart-again.json" || fail "the previous release could not register its logon start"
     say "launchd's records after $old's registration: $(launchd_records | tr '\t\n' ' ;' || true)"
