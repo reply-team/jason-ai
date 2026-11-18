@@ -737,6 +737,17 @@ way-back)
     # It runs on the account's own home and default data directory, which a moved installation and the previous release
     # share: a GitHub-hosted runner's alone, never a person's Mac.
     if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "way-back runs on the account's own home and data directory, and on a GitHub-hosted runner alone."; fi
+    # The person's own quick-start, as the page's going back says: named by jason status before step 1, moved out of the
+    # skills folder before step 3, then either put back after step 3 (put-back) or kept out while the previous release is
+    # installed (keep-out). The one switch is JASON_PROOF_OWN_SKILL_GOING_BACK in ci.yml. Its SKILL.md is read, by its
+    # bytes, at four moments: before step 1, after step 3, after the put-back where the words have one, and after the
+    # previous release's own uninstall.
+    way="${JASON_PROOF_OWN_SKILL_GOING_BACK:-}"
+    case "$way" in put-back|keep-out) ;; *) fail "JASON_PROOF_OWN_SKILL_GOING_BACK is '$way', where it says put-back or keep-out" ;; esac
+    outside="$RUNNER_TEMP/own-quick-start-out"
+    own_out="$outside/quick-start"
+    # A quick-start folder's SKILL.md by its bytes: its length and its SHA-256, or absent.
+    own_bytes() { if [ -f "$1/SKILL.md" ]; then printf '%s bytes, sha256 %s' "$(wc -c < "$1/SKILL.md" | tr -d ' ')" "$(shasum -a 256 < "$1/SKILL.md" | cut -d' ' -f1)"; else printf absent; fi; }
     # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, as a JSON array.
     read_all() {
         python3 - "$@" <<'PY'
@@ -796,6 +807,14 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ "$counted" -ge 1 ] || fail 'the campaign made under the previous release is not listed under the moved 0.49'
     [ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-journal-before.json")" -ge 1 ] || fail 'the journal is empty under the moved 0.49'
     say "under the moved 0.49: $counted campaign(s), archived included; the journal holds $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print("%d entries, the newest %s" % (len(j), j[0]["id"] if j else "none"))' "$OUT/way-back-journal-before.json")"
+    # Before step 1, as the page says: jason status names the person's own quick-start as a folder Jason did not deploy.
+    within 120 'jason status under the moved 0.49' "$carried" status > "$OUT/way-back-status-before.json" 2>&1 || true
+    grep -qF 'quick-start' "$OUT/way-back-status-before.json" && grep -qE 'Jason did not deploy, under (a name Jason ships, left as it is|names Jason ships, left as they are)' "$OUT/way-back-status-before.json" \
+        || fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $(cat "$OUT/way-back-status-before.json")"
+    say "before step 1, jason status under the moved 0.49 names the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is"
+    own1="$(own_bytes "$OWN_SKILL")"
+    [ "$own1" != absent ] || fail "the person's own quick-start is not at $OWN_SKILL before going back"
+    say "moment 1, before step 1: the person's own quick-start/SKILL.md at $OWN_SKILL is $own1"
 
     # Step 1: the leg's own application quit, then jason uninstall with no --purge-data.
     pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
@@ -812,12 +831,34 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ -x "$WRAPPER" ] || fail "the pinned line of $old placed no jason at $WRAPPER"
     say "$old installed by its pinned line from the real release page: $line"
 
+    # Before step 3: the person's own quick-start moved out of the skills folder, as it stood after steps 1 and 2.
+    own="$(own_bytes "$OWN_SKILL")"
+    [ "$own" = "$own1" ] || fail "steps 1 and 2 changed the person's own quick-start: it is $own, where it was $own1"
+    [ ! -e "$outside" ] || fail "$outside is there before the person's own quick-start is moved to it"
+    mkdir -p "$outside"
+    mv "$OWN_SKILL" "$own_out" || fail "the person's own quick-start could not be moved to $own_out"
+    say "before step 3: the person's own quick-start moved out of the skills folder, to $own_out"
+
     # Step 3: its skills, its UI, its runtime and its login start.
     for words in 'skills install' 'ui install' 'runtime start' 'runtime autostart enable'; do
         # shellcheck disable=SC2086
         within 600 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-step3.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-step3.txt")"
     done
     say "under $old: jason skills install, ui install, runtime start and runtime autostart enable each ended 0"
+    own2="$(own_bytes "$own_out")"
+    say "moment 2, after step 3: the person's own SKILL.md, out at $own_out, is $own2; at $OWN_SKILL stands $(own_bytes "$OWN_SKILL")"
+    [ "$own2" = "$own1" ] || fail "the person's own quick-start, out of the skills folder, changed during step 3: $own2, where it was $own1"
+    if [ "$way" = put-back ]; then
+        # The put-back: the person's own quick-start in its place again, over the one the previous release's skills wrote.
+        rm -rf "$OWN_SKILL"
+        mv "$own_out" "$OWN_SKILL" || fail "the person's own quick-start could not be put back at $OWN_SKILL"
+        rmdir "$outside"
+        own3="$(own_bytes "$OWN_SKILL")"
+        say "moment 3, after the put-back: the person's own SKILL.md at $OWN_SKILL is $own3"
+        [ "$own3" = "$own1" ] || fail "the person's own quick-start put back is $own3, where it was $own1"
+    else
+        say "moment 3: none; the page's words keep the person's own quick-start out while $old is installed"
+    fi
 
     # (i) The campaigns, as many; the journal, held by id.
     read_all "$WRAPPER" campaign list --include-archived > "$OUT/way-back-campaigns-after.json" || fail "the campaigns could not be read under $old"
@@ -865,6 +906,23 @@ PY
         within 300 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-end.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-end.txt")"
     done
     say "$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+    if [ "$way" = put-back ]; then
+        own4="$(own_bytes "$OWN_SKILL")"
+        say "moment 4, after $old's own uninstall: the person's own SKILL.md at $OWN_SKILL is $own4"
+        [ "$own4" = "$own1" ] || fail "$old's own uninstall took or changed the person's own quick-start: it is $own4, where it was $own1"
+    else
+        own4="$(own_bytes "$own_out")"
+        place4="$(own_bytes "$OWN_SKILL")"
+        say "moment 4, after $old's own uninstall: the person's own SKILL.md, out at $own_out, is $own4; at $OWN_SKILL stands $place4"
+        [ "$own4" = "$own1" ] || fail "the person's own quick-start, out of the skills folder, changed while $old was installed: $own4, where it was $own1"
+        [ ! -e "$OWN_SKILL" ] || fail "after $old's own uninstall a quick-start stands at $OWN_SKILL ($place4), where the person's own goes back"
+        mkdir -p "$(dirname "$OWN_SKILL")"
+        mv "$own_out" "$OWN_SKILL" || fail "the person's own quick-start could not be put back at $OWN_SKILL"
+        rmdir "$outside"
+        back="$(own_bytes "$OWN_SKILL")"
+        [ "$back" = "$own1" ] || fail "the person's own quick-start put back is $back, where it was $own1"
+        say "the person's own quick-start put back at $OWN_SKILL, $back"
+    fi
     ;;
 
 previous-removal)

@@ -1443,6 +1443,10 @@ switch ($Step) {
         if ($journalBefore.Count -lt 1) { Fail 'the journal is empty under the moved 0.49' }
         $newest = $journalBefore[0].Id
         Say "under the moved 0.49: $($campaignsBefore.Count) campaign(s), archived included; the journal holds $($journalBefore.Count) entries, the newest $newest"
+        # Before step 1, as the page says: jason status names the person's own quick-start as a folder Jason did not deploy.
+        $named = Invoke-Program $carried @('status') $quiet
+        if (-not ($named.Said.Contains('quick-start') -and ($named.Said.Contains('Jason did not deploy, under a name Jason ships, left as it is') -or $named.Said.Contains('Jason did not deploy, under names Jason ships, left as they are')))) { Fail "before step 1, jason status under the moved 0.49 does not name the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is: $($named.Said)" }
+        Say "before step 1, jason status under the moved 0.49 names the person's own quick-start as a folder Jason did not deploy, under a name Jason ships, left as it is"
         $own1 = Read-OwnSkill $ownSkill
         if ($own1 -ceq 'absent') { Fail "the person's own quick-start is not at $ownSkill before going back" }
         Say "moment 1, before step 1: the person's own quick-start\SKILL.md at $ownSkill is $own1"
@@ -1533,6 +1537,7 @@ switch ($Step) {
             Say "moment 4, after $previousVersion's own uninstall: the person's own SKILL.md, out at $ownOut, is $own4; at $ownSkill stands $place4"
             if ($own4 -cne $own1) { Fail "the person's own quick-start, out of the skills folder, changed while $previousVersion was installed: $own4, where it was $own1" }
             if (Test-Path -LiteralPath $ownSkill) { Fail "after $previousVersion's own uninstall a quick-start stands at $ownSkill ($place4), where the person's own goes back" }
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ownSkill) | Out-Null
             Move-Item -LiteralPath $ownOut -Destination $ownSkill
             Remove-Item -LiteralPath $outside -Force
             $back = Read-OwnSkill $ownSkill
