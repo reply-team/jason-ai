@@ -565,12 +565,15 @@ public static class UninstallRunner
             return;
         }
 
-        if (StartInFlight.LastLook(env, executable, []) is { Count: > 0 } started)
+        if (StartInFlight.LastLook(env, executable, []) is { Any: true } late)
         {
-            problems.Add(
-                $"The executable at '{executable}' was kept, and its notice files, its install directory and what it unpacked "
-                + $"with it: another jason of this installation ({StartInFlight.Processes(started)}) runs it, started since the "
-                + $"runtime was stopped. Wait until it ends, then run '{executable} uninstall' again.");
+            problems.Add(StartInFlight.LateProblem(
+                env,
+                late,
+                [],
+                $"The executable at '{executable}' was kept, and its notice files, its install directory and what it unpacked with it",
+                executable,
+                $"run '{executable} uninstall' again"));
             return;
         }
 
@@ -1116,19 +1119,29 @@ public static class UninstallRunner
         }
 
         var left = await StartInFlight.SettleAsync(env, image, plan.Desktop?.Demo ?? [], cancellationToken).ConfigureAwait(false);
-        return left.Count == 0
-            ? null
-            : new RemovalRefused(
-                CliErrors.JasonRunning,
-                StartInFlight.JasonRunning(
-                    env,
-                    $"Another jason still runs from this installation ({StartInFlight.Processes(left)}) with its runtime stopped, so nothing "
-                    + "further was removed and this installation is as it was"
-                    + (registrationAfterTheStop
-                        ? ", its logon registration included."
-                        : " — except the logon registration, which had already been taken away and which "
-                          + "'jason runtime autostart enable' puts back."),
-                    afterTheStop: true));
+        if (left.Count == 0)
+        {
+            return null;
+        }
+
+        // A runtime that answers on this data directory now is one started again since the stop, which ends only when stopped.
+        var again = DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is { } runtime && left.Contains(runtime.Pid)
+            ? $" Process {runtime.Pid.ToString(CultureInfo.InvariantCulture)} is a runtime of {env.Paths.Root} started again since the stop, which "
+              + $"`\"{image}\" runtime stop` stops."
+            : string.Empty;
+        return new RemovalRefused(
+            CliErrors.JasonRunning,
+            StartInFlight.JasonRunning(
+                env,
+                image,
+                $"Another jason still runs from this installation ({StartInFlight.Processes(left)}) with its runtime stopped, so nothing "
+                + "further was removed and this installation is as it was"
+                + (registrationAfterTheStop
+                    ? ", its logon registration included."
+                    : " — except the logon registration, which had already been taken away and which "
+                      + "'jason runtime autostart enable' puts back.")
+                + again,
+                afterTheStop: true));
     }
 
     /// <summary>

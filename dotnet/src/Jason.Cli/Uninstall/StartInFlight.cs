@@ -54,6 +54,16 @@ public enum StartWait
 /// <c>jason_running</c>.
 /// </para>
 /// </remarks>
+/// <summary>
+/// What the last look before a deletion found: each runtime that answers, with its data directory, and the other processes
+/// of the image.
+/// </summary>
+internal sealed record LateProcesses(IReadOnlyList<(int Pid, string Root)> Runtimes, IReadOnlyList<int> Others)
+{
+    /// <summary>Whether it found anything.</summary>
+    public bool Any => Runtimes.Count > 0 || Others.Count > 0;
+}
+
 internal static class StartInFlight
 {
     /// <summary>How long a start in flight is waited for: <c>jason runtime start</c>'s own wait for the runtime, and as long again.</summary>
@@ -98,12 +108,21 @@ internal static class StartInFlight
     public static IReadOnlyList<int> Others(CliEnvironment env, string image, IEnumerable<string> demo)
     {
         ArgumentNullException.ThrowIfNull(env);
-        ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(demo);
+        return Besides(env, image, demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths));
+    }
+
+    /// <summary>
+    /// The processes running <paramref name="image"/>, in any session, besides this one, a runtime that answers on one of
+    /// <paramref name="answering"/>, and, on Windows, every process any of those started, at any depth.
+    /// </summary>
+    private static IReadOnlyList<int> Besides(CliEnvironment env, string image, IEnumerable<JasonPaths> answering)
+    {
+        ArgumentNullException.ThrowIfNull(image);
 
         var processes = env.Processes ?? RuntimeProcessControl.Instance;
         var stopped = new HashSet<int> { Environment.ProcessId };
-        foreach (var paths in demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths))
+        foreach (var paths in answering)
         {
             if (DescriptorProcess.Live(paths, processes) is { } runtime)
             {
@@ -113,6 +132,18 @@ internal static class StartInFlight
 
         var removes = env.Removes!;
         return [.. removes.RunningFromInAnySession(image).Where(pid => !stopped.Contains(pid) && !Descends(removes, pid, stopped)).Distinct().Order()];
+    }
+
+    /// <summary>
+    /// After the stop: the processes running <paramref name="image"/> besides this one and a runtime of an earlier demo that
+    /// still answers, which the demo's own step stops later. A runtime that answers on this data directory now is not the one
+    /// this uninstall stopped but one started since, and is counted as any process of the image is.
+    /// </summary>
+    public static IReadOnlyList<int> AfterTheStop(CliEnvironment env, string image, IEnumerable<string> demo)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(demo);
+        return Besides(env, image, demo.Select(folder => new JasonPaths(folder)));
     }
 
     /// <summary>
@@ -173,11 +204,72 @@ internal static class StartInFlight
     }
 
     /// <summary>
-    /// The last look, just before the executable or the application is deleted: the processes of <paramref name="image"/>
-    /// started in the removal's own seconds, since the runtime stopped. None on Windows, which never looks again.
+    /// The last look, just before the executable or the application is deleted: every process of <paramref name="image"/> but
+    /// this one, each started in the removal's own seconds, since every runtime of this installation was stopped, an earlier
+    /// demo's included, whose own step stopped it before; a runtime that answers on this data directory or on an earlier
+    /// demo's is told apart, since it does not end by itself and is stopped instead. None on Windows, which never looks again.
     /// </summary>
-    public static IReadOnlyList<int> LastLook(CliEnvironment env, string image, IEnumerable<string> demo) =>
-        Windows(env) ? [] : Others(env, image, demo);
+    public static LateProcesses LastLook(CliEnvironment env, string image, IEnumerable<string> demo)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(demo);
+        if (Windows(env))
+        {
+            return new LateProcesses([], []);
+        }
+
+        var running = Besides(env, image, []);
+        var processes = env.Processes ?? RuntimeProcessControl.Instance;
+        var runtimes = new List<(int Pid, string Root)>();
+        foreach (var paths in demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths))
+        {
+            if (DescriptorProcess.Live(paths, processes) is { } runtime && running.Contains(runtime.Pid) && runtimes.All(known => known.Pid != runtime.Pid))
+            {
+                runtimes.Add((runtime.Pid, paths.Root));
+            }
+        }
+
+        return new LateProcesses(runtimes, [.. running.Where(pid => runtimes.All(known => known.Pid != pid))]);
+    }
+
+    /// <summary>
+    /// What the last look found, as the problem says it: <paramref name="kept"/> names what was kept and where it is, and
+    /// <paramref name="window"/> the window found open again, if any; then each runtime found, with the command that stops it
+    /// by the <c>jason</c> that still stands (<paramref name="image"/>), and the other processes, which end by themselves.
+    /// <paramref name="after"/> is what to do once they are gone.
+    /// </summary>
+    public static string LateProblem(CliEnvironment env, LateProcesses late, IReadOnlyList<int> window, string kept, string image, string after)
+    {
+        ArgumentNullException.ThrowIfNull(env);
+        ArgumentNullException.ThrowIfNull(late);
+        ArgumentNullException.ThrowIfNull(window);
+
+        var found = new List<string>();
+        var todo = new List<string>();
+        if (window.Count > 0)
+        {
+            found.Add($"Jason Desktop is open again ({Processes(window)})");
+            todo.Add("quit Jason Desktop from the Jason menu");
+        }
+
+        foreach (var (pid, root) in late.Runtimes)
+        {
+            found.Add($"a runtime of {root} answers again ({Processes([pid])})");
+            todo.Add(
+                $"stop that runtime with `\"{image}\" runtime stop`"
+                + (string.Equals(root, env.Paths.Root, StringComparison.Ordinal) ? string.Empty : $" with JASON_DATA_DIR set to {root}"));
+        }
+
+        if (late.Others.Count > 0)
+        {
+            found.Add($"another jason of this installation runs from it ({Processes(late.Others)})");
+            todo.Add("wait until that jason ends");
+        }
+
+        var steps = string.Join("; ", todo);
+        return $"{kept}: {string.Join(" and ", found)}, started since the runtime was stopped. "
+            + $"{char.ToUpperInvariant(steps[0])}{steps[1..]}; then {after}.";
+    }
 
     /// <summary>
     /// Once the runtime has stopped: looks for the other processes of <paramref name="image"/> until none runs, for up to
@@ -192,7 +284,7 @@ internal static class StartInFlight
         var until = clock.GetUtcNow() + Settle;
         while (true)
         {
-            var left = Others(env, image, demo);
+            var left = AfterTheStop(env, image, demo);
             if (left.Count == 0 || clock.GetUtcNow() >= until)
             {
                 return left;
@@ -209,7 +301,7 @@ internal static class StartInFlight
     /// (<paramref name="afterTheStop"/>) the first case is a provider's call the stopped runtime left running; before it, a
     /// start in flight. On Windows, where a process's parent is told, it says first what the process is not.
     /// </summary>
-    public static string JasonRunning(CliEnvironment env, string lead, bool afterTheStop)
+    public static string JasonRunning(CliEnvironment env, string image, string lead, bool afterTheStop)
     {
         var windows = Windows(env);
         return lead
@@ -217,8 +309,9 @@ internal static class StartInFlight
             + (afterTheStop
                 ? $" It may be {ProviderCall("the stopped runtime")}, or {StillFinishing}"
                 : $" It may be {StillFinishing}, or {ProviderCall("a runtime stopped a moment ago")}")
-            + ": wait until it ends, then uninstall again. It may also be a runtime of another data directory, a `jason journal "
-            + "watch`, or a call an agent host you opened yourself makes; "
+            + ": wait until it ends, then uninstall again. It may also be a runtime of another data directory, which "
+            + $"`\"{image}\" runtime stop` with JASON_DATA_DIR set to that directory stops, a `jason journal watch`, or a call "
+            + "an agent host you opened yourself makes; "
             + (windows
                 ? "in another session of this account, it may be a task that runs whether you are signed in or not."
                 : $"{SharedComputer}.")

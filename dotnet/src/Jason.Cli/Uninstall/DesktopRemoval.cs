@@ -896,27 +896,21 @@ public static partial class DesktopRemoval
     private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application)
     {
         var window = env.Removes!.RunningFrom(ApplicationExecutable(application, SetupSystem.MacOs));
-        var jason = StartInFlight.Image(env) is { } image ? StartInFlight.LastLook(env, image, plan.Demo) : [];
-        if (window.Count == 0 && jason.Count == 0)
+        if (StartInFlight.Image(env) is not { } image)
         {
             return null;
         }
 
-        var found = string.Join(
-            " and ",
-            new[]
-            {
-                window.Count > 0 ? $"Jason Desktop is open again ({StartInFlight.Processes(window)})" : null,
-                jason.Count > 0 ? $"another jason of this installation runs from it ({StartInFlight.Processes(jason)})" : null,
-            }.OfType<string>());
-        var first = (window.Count > 0, jason.Count > 0) switch
-        {
-            (true, true) => "Quit Jason Desktop from the Jason menu and wait until that jason ends",
-            (true, false) => "Quit Jason Desktop from the Jason menu",
-            _ => "Wait until that jason ends",
-        };
-        return $"The application at {application} was not deleted: {found}, started since the runtime was stopped. {first}, "
-            + $"then move {application} to the Bin (the Trash) in the Finder.";
+        var late = StartInFlight.LastLook(env, image, plan.Demo);
+        return window.Count == 0 && !late.Any
+            ? null
+            : StartInFlight.LateProblem(
+                env,
+                late,
+                window,
+                $"The application at {application} was not deleted",
+                image,
+                $"move {application} to the Bin (the Trash) in the Finder");
     }
 
     /// <summary>The application itself, the last act: kept, handed to its uninstaller, or deleted.</summary>

@@ -169,6 +169,7 @@ public sealed partial class UninstallCarriedTests
         var call = refusal.IndexOf("It may be a call to a provider that the stopped runtime left running, which ends by itself within that operation's own time limit", StringComparison.Ordinal);
         Assert.True(call >= 0 && call < refusal.IndexOf("a runtime still starting", StringComparison.Ordinal), refusal);
         Assert.Contains("wait until it ends, then uninstall again", refusal, StringComparison.Ordinal);
+        Assert.Contains($"a runtime of another data directory, which `\"{executable}\" runtime stop` with JASON_DATA_DIR set to that directory stops", refusal, StringComparison.Ordinal);
         Assert.DoesNotContain("end it", refusal, StringComparison.Ordinal);
         Assert.True(clock.Passed >= TimeSpan.FromSeconds(10), $"it gave what remained {clock.Passed} to end");
         Assert.True(clock.Passed < TimeSpan.FromSeconds(60), $"it waited {clock.Passed}, as for a start");
@@ -185,6 +186,128 @@ public sealed partial class UninstallCarriedTests
             Assert.Equal(0, registrar.Removals);
             Assert.True(Directory.Exists(ApplicationOf(executable)));
         }
+    }
+
+    /// <summary>
+    /// A runtime of this data directory started again once the settle found nothing, which answers by the last look: it is
+    /// not the runtime this uninstall stopped, so it is counted, and keeps what it runs from as a problem that says how to
+    /// stop it, by the jason that still stands, and what to do then; the verb does not report completed.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_runtime_of_this_data_directory_started_again_after_the_settle_keeps_what_it_runs_from_and_says_how_to_stop_it(bool linux)
+    {
+        var executable = linux ? CommandLineExecutable() : MacApplication();
+        var (env, output, remover) = Environment(linux ? null : MacPlaces(), executable);
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STARTING"));
+        var clock = new Leaping();
+        var stopped = false;
+        var afterTheStop = 0;
+        remover.Looks = (image, _) =>
+        {
+            if (!Same(image, executable))
+            {
+                return [];
+            }
+
+            if (!stopped)
+            {
+                return processes.RunningPids.Contains(RuntimeVerbs.Pid) ? [RuntimeVerbs.Pid] : [];
+            }
+
+            // The settle's look finds nothing; just after it, a person's `jason runtime start` brings a runtime up again.
+            if (++afterTheStop == 1)
+            {
+                _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_AGAIN"));
+                processes.RunningPids.Add(RuntimeVerbs.Pid);
+                return [];
+            }
+
+            return [RuntimeVerbs.Pid];
+        };
+        env = env with
+        {
+            Autostart = new Autostart.RecordingRegistrar(linux ? Jason.Cli.Autostart.AutostartPlatform.Linux : Jason.Cli.Autostart.AutostartPlatform.MacOs),
+            Processes = processes,
+            Clock = clock,
+            HttpHandler = Stopping(processes, () => stopped = true),
+        };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("refusal_code").ValueKind);
+        Assert.False(report.GetProperty("completed").GetBoolean());
+        var problem = Assert.Single(report.GetProperty("problems").EnumerateArray()).GetString()!;
+        Assert.True(afterTheStop >= 2, $"{afterTheStop} looks after the stop");
+        Assert.Contains($": a runtime of {_dir.Paths.Root} answers again (process {RuntimeVerbs.Pid}), started since the runtime was stopped.", problem, StringComparison.Ordinal);
+        Assert.Contains($"Stop that runtime with `\"{executable}\" runtime stop`; then ", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("JASON_DATA_DIR", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("wait until", problem, StringComparison.OrdinalIgnoreCase);
+        if (linux)
+        {
+            Assert.StartsWith($"The executable at '{executable}' was kept", problem, StringComparison.Ordinal);
+            Assert.EndsWith($"then run '{executable} uninstall' again.", problem, StringComparison.Ordinal);
+            Assert.True(File.Exists(executable));
+        }
+        else
+        {
+            var application = ApplicationOf(executable);
+            Assert.StartsWith($"The application at {application} was not deleted", problem, StringComparison.Ordinal);
+            Assert.EndsWith($"then move {application} to the Bin (the Trash) in the Finder.", problem, StringComparison.Ordinal);
+            Assert.True(Directory.Exists(application));
+        }
+    }
+
+    /// <summary>
+    /// A runtime of this data directory started again while the stopped runtime's processes are given their moment: it is
+    /// counted after the stop, refused with jason_running before anything further goes, and named as such with the command
+    /// that stops it.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_of_this_data_directory_started_again_during_the_settle_is_refused_and_named()
+    {
+        var executable = MacApplication();
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        var registrar = (Autostart.RecordingRegistrar)env.Autostart!;
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STARTING"));
+        var clock = new Leaping();
+        var stopped = false;
+        remover.Looks = (image, _) =>
+        {
+            if (!Same(image, executable))
+            {
+                return [];
+            }
+
+            if (stopped && !processes.RunningPids.Contains(RuntimeVerbs.Pid))
+            {
+                _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_AGAIN"));
+                processes.RunningPids.Add(RuntimeVerbs.Pid);
+            }
+
+            return processes.RunningPids.Contains(RuntimeVerbs.Pid) ? [RuntimeVerbs.Pid] : [];
+        };
+        env = env with { Processes = processes, Clock = clock, HttpHandler = Stopping(processes, () => stopped = true) };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.Equal(CliErrors.JasonRunning, report.GetProperty("refusal_code").GetString());
+        var refusal = report.GetProperty("refusal").GetString()!;
+        Assert.Contains($"(process {RuntimeVerbs.Pid}) with its runtime stopped", refusal, StringComparison.Ordinal);
+        Assert.Contains($"Process {RuntimeVerbs.Pid} is a runtime of {_dir.Paths.Root} started again since the stop, which `\"{executable}\" runtime stop` stops.", refusal, StringComparison.Ordinal);
+        Assert.True(clock.Passed >= TimeSpan.FromSeconds(10), $"it gave what remained {clock.Passed} to end");
+        Assert.Empty(remover.Calls);
+        Assert.Equal(0, registrar.Removals);
+        Assert.True(Directory.Exists(ApplicationOf(executable)));
     }
 
     /// <summary>

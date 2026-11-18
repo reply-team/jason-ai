@@ -822,7 +822,7 @@ public sealed partial class UninstallCarriedTests : IDisposable
         Assert.Equal("jason_running", refusal.Code);
         Assert.Contains("(process 9001)", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("wait until it ends, then uninstall again", refusal.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("runtime stop", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("runtime stop", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(Path.Combine(apps, "jason.cmd")), "the command was removed");
         Assert.True(Directory.Exists(application));

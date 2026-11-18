@@ -48,13 +48,14 @@ public static class UninstallCommand
              for and before anything is removed, a runtime that is still starting is waited for, up to {StartInFlight.Seconds(StartInFlight.Bound)},
              and then stopped; a dry run never waits. Where another jason of this installation still runs
              (jason_running), nothing is removed at that bound, and nothing further is removed where one still
-             runs {StartInFlight.Seconds(StartInFlight.Settle)} after the stop; one more look comes just before the executable, or on macOS
-             the application, is deleted, and one found then keeps it. Such a jason may be a runtime still
-             starting or migrating its database, a set-up or an update finishing, or a call to a provider a
-             stopped runtime left running: wait until it ends, then run this again. On a computer more than
-             one account uses, it may be Jason running under another account from this same application,
-             which that account quits. Windows never waits or looks again: where the application carries this
-             jason, it refuses one running from its folder at once, as below
+             runs {StartInFlight.Seconds(StartInFlight.Settle)} after the stop, a runtime started again since the stop included; one
+             more look comes just before the executable, or on macOS the application, is deleted, and one
+             found then keeps it. Such a jason may be a runtime still starting or migrating its database, a
+             set-up or an update finishing, or a call to a provider a stopped runtime left running: wait until
+             it ends, then run this again. On a computer more than one account uses, it may be Jason running
+             under another account from this same application, which that account quits. Windows never
+             waits or looks again: where the application carries this jason, it refuses one running from its
+             folder at once, as below
           3. on Windows, the notification registration: the AppUserModelID key the toast was shown under, the
              two entries Windows made for it, and the jason: link registration where its command names this
              executable
@@ -660,6 +661,7 @@ public static class UninstallCommand
             ? null
             : StartInFlight.JasonRunning(
                 env,
+                carried.Executable,
                 $"Another jason runs from the application's folder ({StartInFlight.Processes(others)}), and the application's uninstaller "
                 + "removes nothing while one does, so nothing was removed.",
                 afterTheStop: false);
@@ -686,6 +688,7 @@ public static class UninstallCommand
         return outcome is StartWait.Refused
             ? (outcome, StartInFlight.JasonRunning(
                 env,
+                image,
                 $"Another jason runs from this installation ({StartInFlight.Processes(left)}), and no runtime of {env.Paths.Root} "
                 + $"answered within {StartInFlight.Seconds(StartInFlight.Bound)}, so nothing was removed.",
                 afterTheStop: false))
