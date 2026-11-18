@@ -632,6 +632,42 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// A leg whose own compare differs never reads as succeeded: wherever either proof script records a divergence, the
+    /// open leg is recorded as failed by its name and as dirty in the same act, and the leg's end, which still runs so that
+    /// what the leg does after its compare is done, fails its step. A divergence once ended a leg's step green while the job
+    /// failed only at its held step, and no leg was named for it.
+    /// </summary>
+    [Fact]
+    public void A_leg_whose_own_compare_differs_is_recorded_failed_and_its_end_fails_its_step()
+    {
+        var root = RepositoryRoot();
+        var windows = File.ReadAllText(Path.Combine(root, ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var wrong = new List<string>();
+        void Hold(string[] lines, string script, string records, string marks)
+        {
+            var at = Enumerable.Range(0, lines.Length).Where(index => !lines[index].TrimStart().StartsWith('#') && lines[index].Contains(records, StringComparison.Ordinal)).ToList();
+            if (at.Count == 0) wrong.Add($"{script} records no divergence");
+            wrong.AddRange(at.Where(index => index + 1 >= lines.Length || !lines[index + 1].TrimStart().StartsWith(marks, StringComparison.Ordinal)).Select(index => $"{script}:{index + 1} records a divergence and does not mark the open leg with {marks.Trim()}"));
+        }
+
+        Hold(windows, "Test-InstallationWindows.ps1", "-LiteralPath (Join-Path $Out 'divergent.txt') -Value", "Set-LegDirty ");
+        Hold(macos, "test-installation-macos.sh", ">> \"$OUT/divergent.txt\"", "dirty_leg ");
+
+        var windowsText = string.Join('\n', windows);
+        var windowsEnd = windowsText.IndexOf("\n    'End' {\n", StringComparison.Ordinal);
+        var windowsFails = windowsText.IndexOf("if ((Test-Path -LiteralPath $dirty) -and (@(Get-Content -LiteralPath $dirty) -ccontains $Leg)) {", windowsEnd, StringComparison.Ordinal);
+        if (windowsEnd < 0 || windowsFails < 0 || windowsText.IndexOf("exit 1", windowsFails, StringComparison.Ordinal) > windowsText.IndexOf("\n    'Held' {\n", windowsEnd, StringComparison.Ordinal)) wrong.Add("Test-InstallationWindows.ps1's End does not fail the step of a dirty leg");
+        var macosText = string.Join('\n', macos);
+        var macosEnd = macosText.IndexOf("\nend)\n", StringComparison.Ordinal);
+        var macosFails = macosText.IndexOf("if grep -qxF -- \"$1\" \"$OUT/legs-dirty.txt\" 2>/dev/null; then", macosEnd, StringComparison.Ordinal);
+        if (macosEnd < 0 || macosFails < 0 || macosText.IndexOf("exit 1", macosFails, StringComparison.Ordinal) > macosText.IndexOf("\nheld)\n", macosEnd, StringComparison.Ordinal)) wrong.Add("test-installation-macos.sh's end does not fail the step of a dirty leg");
+        if (!macosText.Contains("    printf '%s\\n' \"the leg '$open' failed: $1\" >> \"$OUT/failed-legs.txt\"\n    printf '%s\\n' \"$open\" >> \"$OUT/legs-dirty.txt\"\n", StringComparison.Ordinal)) wrong.Add("test-installation-macos.sh's dirty_leg does not record the open leg as failed and dirty");
+        if (!windowsText.Contains("    Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value \"the leg '$open' failed: $why\"\n    Add-Content -LiteralPath $dirty -Value $open\n", StringComparison.Ordinal)) wrong.Add("Test-InstallationWindows.ps1's Set-LegDirty does not record the open leg as failed and dirty");
+        Assert.True(wrong.Count == 0, string.Join("; ", wrong));
+    }
+
+    /// <summary>
     /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
     /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
     /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.

@@ -399,6 +399,18 @@ close_leg() {
     printf '%s\n' "the leg '$open' failed; $why" >> "$OUT/failed-legs.txt"
 }
 
+# The open leg's own compare differed: the leg is recorded as failed by its name at once, and as dirty, so that its end
+# fails its step and a later begin treats the machine it left as a failed leg's. Outside a leg (the held step's whole
+# compare) nothing is recorded here: the held step fails the job on the divergence itself.
+dirty_leg() {
+    [ -s "$OUT/leg-open.txt" ] || return 0
+    local open
+    open="$(cat "$OUT/leg-open.txt")"
+    grep -qxF -- "$open" "$OUT/legs-dirty.txt" 2>/dev/null && return 0
+    printf '%s\n' "the leg '$open' failed: $1" >> "$OUT/failed-legs.txt"
+    printf '%s\n' "$open" >> "$OUT/legs-dirty.txt"
+}
+
 # This leg not run, said by why: recorded for the held step, and $OUT/skip left for the job's step to end on.
 skip_leg() {
     echo "::error title=Installation::$LEG - $1"
@@ -584,6 +596,7 @@ compare)
         why="$1 against $2: no id of this build is recorded ($OUT/this-build-extracted.txt is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
         echo "::error title=Uninstall::$why"
         printf '%s\n' "$why" >> "$OUT/divergent.txt"
+        dirty_leg "$why"
     fi
     expected_x=""; soft_x=""; rest=""
     while IFS= read -r line; do
@@ -629,11 +642,13 @@ compare)
     cat "$diffed"
     keeping="$(comm -13 "$before" "$after" | grep -cE "$kept" || true)"
     say "$1 against $2: $(printf '%s' "$left" | grep -c . || true) line(s) left, $(printf '%s' "$went" | grep -c . || true) gone, beside $keeping line(s) of the data directory and the harness root, which are kept"
-    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the held step at the
-    # end fails the job on any divergence recorded.
+    # A divergence is recorded and the leg goes on to its end, so that what it does after the compare still runs and one
+    # run reads every leg; the leg is recorded as failed by its name at once, and its end fails its step (dirty_leg). The
+    # held step at the end fails the job on any divergence recorded.
     if [ -n "$left" ] || [ -n "$went" ]; then
         echo "::error title=Uninstall::the machine after '$1' is not the machine before '$2': $(cat "$diffed" | tr '\n' ' ')"
         echo "$1 against $2: see $diffed" >> "$OUT/divergent.txt"
+        dirty_leg "its compare differs, $1 against $2: see $diffed"
     fi
     ;;
 
@@ -767,6 +782,12 @@ begin)
 end)
     printf '%s\n' "$1" >> "$OUT/legs-ended.txt"
     rm -f "$OUT/leg-open.txt"
+    # A leg whose own compare differed ran to its end and is recorded as failed already: its step fails here, so that no
+    # leg reads as succeeded with a divergence in it.
+    if grep -qxF -- "$1" "$OUT/legs-dirty.txt" 2>/dev/null; then
+        echo "::error title=Installation::$1 - ended, but its compare differs: it is recorded as failed"
+        exit 1
+    fi
     say "$1 - ended"
     ;;
 

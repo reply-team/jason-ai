@@ -584,6 +584,19 @@ function Close-Leg {
     Save-JasonLogs $open
 }
 
+# The open leg's own compare differed: the leg is recorded as failed by its name at once, and as dirty, so that its End
+# fails its step and a later Begin treats the machine it left as a failed leg's. Outside a leg (Held's whole compare)
+# nothing is recorded here: Held fails the job on the divergence itself.
+function Set-LegDirty([string] $why) {
+    if (-not (Test-Path -LiteralPath $legOpen)) { return }
+    $open = "$(Get-Content -LiteralPath $legOpen -Raw)".Trim()
+    if (-not $open) { return }
+    $dirty = Join-Path $Out 'legs-dirty.txt'
+    if ((Test-Path -LiteralPath $dirty) -and (@(Get-Content -LiteralPath $dirty) -ccontains $open)) { return }
+    Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value "the leg '$open' failed: $why"
+    Add-Content -LiteralPath $dirty -Value $open
+}
+
 # This leg not run, said by why: recorded for Held, and -Out\skip left for the job's step to end on.
 function Skip-Leg([string] $why) {
     Write-Host "::error title=Installation::$Leg - $why"
@@ -724,6 +737,7 @@ function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
         $why = "${listed} against ${base}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
         Write-Host "::error title=Uninstall::$why"
         Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
+        Set-LegDirty $why
     }
     $left = [System.Collections.Generic.List[string]]::new()
     $expectedLines = [System.Collections.Generic.List[string]]::new()
@@ -776,11 +790,13 @@ function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
     Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
     $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
     Say "$listed against ${base}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
-    # A divergence is recorded and the job goes on to its next leg, so that one run reads every leg; the Held step at
-    # the end fails the job on any divergence recorded.
+    # A divergence is recorded and the leg goes on to its End, so that what it does after the compare still runs and one
+    # run reads every leg; the leg is recorded as failed by its name at once, and its End fails its step (Set-LegDirty).
+    # The Held step at the end fails the job on any divergence recorded.
     if ($gone.Count -gt 0 -or $left.Count -gt 0) {
         Write-Host "::error title=Uninstall::the machine after '$listed' is not the machine before '${base}': $((@($gone | ForEach-Object { "- $_" }) + @($left | ForEach-Object { "+ $_" })) -join '; ')"
         Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value "$listed against ${base}: see $diff"
+        Set-LegDirty "its compare differs, $listed against ${base}: see $diff"
     }
 }
 
@@ -1006,6 +1022,13 @@ switch ($Step) {
         if (-not $Leg) { Fail '-Leg names the leg.' }
         Add-Content -LiteralPath $legsEnded -Value $Leg
         Remove-Item -LiteralPath $legOpen -Force -ErrorAction SilentlyContinue
+        # A leg whose own compare differed ran to its End and is recorded as failed already: its step fails here, so that
+        # no leg reads as succeeded with a divergence in it.
+        $dirty = Join-Path $Out 'legs-dirty.txt'
+        if ((Test-Path -LiteralPath $dirty) -and (@(Get-Content -LiteralPath $dirty) -ccontains $Leg)) {
+            Write-Host "::error title=Installation::$Leg - ended, but its compare differs: it is recorded as failed"
+            exit 1
+        }
         Say "$Leg - ended"
     }
 
