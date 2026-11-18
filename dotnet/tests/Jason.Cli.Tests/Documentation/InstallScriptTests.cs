@@ -491,6 +491,24 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
+    /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
+    /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one
+    /// writes to a file the script reads after.
+    /// </summary>
+    [Fact]
+    public void The_macOS_proof_script_opens_no_here_document_inside_a_command_substitution()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh"));
+        var opened = lines
+            .Select((line, at) => (line, at))
+            .Where(item => Regex.IsMatch(item.line, @"\$\((?:[^()]|\([^()]*\))*<<-?\s*['""]?\w"))
+            .Select(item => $"line {item.at + 1}: {item.line.Trim()}")
+            .ToList();
+        Assert.True(opened.Count == 0, "test-installation-macos.sh opens a here-document inside a command substitution: " + string.Join("; ", opened));
+    }
+
+    /// <summary>
     /// The proof scripts change the machine they run on: they install, uninstall, write the account's Path and its
     /// profiles. Each holds every step but the five that only read (the listing, the compare, the held list, a leg's begin
     /// and end, which stub trials run) behind one guard at its entry, before any step runs: a GitHub-hosted runner, or

@@ -2139,13 +2139,29 @@ jobs:
           if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
           if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
           New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
-          foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          $verified = @('jason-win-x64.zip', 'jason-desktop-windows-x64-setup.exe')
+          $unverifiable = @('install.ps1', 'manifest.json')
+          foreach ($name in @('checksums.txt') + $verified + $unverifiable) {
             Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing -TimeoutSec 600
           }
+          $listed = @{}
           foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
             $hash, $name = $line -split '  ', 2
-            $file = Join-Path $env:PREVIOUS $name
-            if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
+            if ($name) { $listed[$name] = $hash }
+          }
+          foreach ($name in $verified) {
+            if (-not $listed.ContainsKey($name)) { throw "$name has no line in $tag's checksums.txt" }
+            if ((Get-FileHash -LiteralPath (Join-Path $env:PREVIOUS $name) -Algorithm SHA256).Hash -ne $listed[$name]) { throw "$name does not match $tag's checksums.txt" }
+            Write-Host "$name matches $tag's checksums.txt"
+          }
+          foreach ($name in $unverifiable) {
+            if ($listed.ContainsKey($name)) { throw "$name is now listed in $tag's checksums.txt: it belongs with the verified files" }
+            $said = "$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            Write-Host $said
+            "- $said" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
           Write-Host "the previous release is $tag"
           "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -2385,7 +2401,8 @@ jobs:
             '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
             '- The updater''s publisher check, and window_open: this build''s updater checks no publisher, and with a window open only the refusal of a request naming a feed is seen.',
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
-            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
+            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.',
+            '- The start --force-run makes after the update over both previous installs: that leg runs the setup without --force-run and starts the application itself; the install over the previous release''s Jason Desktop is the leg that runs the setup with --force-run.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Keep the listings
@@ -2601,13 +2618,27 @@ jobs:
           printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
           [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
           mkdir -p "$PREVIOUS"
-          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json jason-desktop-macos-arm64.zip; do
+          # Every file fetched is in one of two lists, by name. The verified ones are held to checksums.txt: a file with no
+          # line there, or a digest that differs, fails. checksums.txt names the release's archives and packages alone, so
+          # the others are used as downloaded, each said unverified; one checksums.txt comes to list fails until it is moved.
+          verified="jason-osx-arm64.tar.gz jason-desktop-macos-arm64.zip"
+          unverifiable="install.sh manifest.json"
+          for name in checksums.txt $verified $unverifiable; do
             curl -fsSL --max-time 600 -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
           done
-          (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
-          # The previous release's Desktop archive, held to checksums.txt as the three files beside it are: unlisted, it fails.
-          grep -qE '  jason-desktop-macos-arm64\.zip$' "$PREVIOUS/checksums.txt" || { echo "::error::jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt"; exit 1; }
-          (cd "$PREVIOUS" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
+          listed() { awk -v n="$1" 'index($0, "  ") > 0 && substr($0, index($0, "  ") + 2) == n' "$PREVIOUS/checksums.txt"; }
+          for name in $verified; do
+            line="$(listed "$name")"
+            [ -n "$line" ] || { echo "::error::$name has no line in $tag's checksums.txt"; exit 1; }
+            (cd "$PREVIOUS" && printf '%s\n' "$line" | shasum -a 256 -c - > /dev/null) || { echo "::error::$name does not match $tag's checksums.txt"; exit 1; }
+            echo "$name matches $tag's checksums.txt"
+          done
+          for name in $unverifiable; do
+            [ -z "$(listed "$name")" ] || { echo "::error::$name is now listed in $tag's checksums.txt: it belongs with the verified files"; exit 1; }
+            said="$name is not listed in $tag's checksums.txt, which names the release's archives and packages alone, so it is used as downloaded, unverified."
+            echo "$said"
+            echo "- $said" >> "$GITHUB_STEP_SUMMARY"
+          done
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
