@@ -1125,36 +1125,67 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains($"{old} was not retired", StringComparison.Ordinal));
     }
 
-    /// <summary>B1, Windows: a Path that cannot be written leaves the command-line install, its Path entry and the application's command files as they were.</summary>
+    /// <summary>
+    /// B1, Windows: a Path that cannot be written leaves the command-line install, its Path entry and the application's
+    /// command files as they were. The account's Path is held in memory and refuses every write, as one a policy locks
+    /// refuses them, so the row writes no registry key.
+    /// </summary>
     [Fact]
     [SupportedOSPlatform("windows")]
     public async Task On_windows_nothing_is_retired_or_taken_back_where_the_path_could_not_be_written()
     {
-        using var key = ScratchKey.Create();
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
         var folder = Path.Combine(LocalAppData, "Programs", "jason");
         Directory.CreateDirectory(folder);
         var old = Path.Combine(folder, "jason.exe");
         File.WriteAllText(old, "old");
-        key.SetPath(folder, RegistryValueKind.ExpandString);
+        var account = new AccountPathInMemory(new StoredPath(folder, RegistryValueKind.ExpandString)) { RefusesWrites = true };
         var executable = Carried("jason.exe");
         var apps = Path.Combine(LocalAppData, "Microsoft", "WindowsApps");
         Directory.CreateDirectory(apps);
         var shim = Path.Combine(apps, "jason.cmd");
         File.WriteAllText(shim, $"@echo off\r\n\"{executable}\" %*\r\n");
-        key.DenySetValue();
-        var (env, output) = Environment(WindowsPlaces(key.SubKey), executable);
+        var (env, output) = Environment(WindowsPlaces(NoKey) with { AccountPath = account }, executable);
 
         var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.True(File.Exists(old), "jason.exe went though the bundle folder never reached the Path");
         Assert.True(File.Exists(shim), "the application's command file went though nothing else answers jason");
-        Assert.Equal((folder, RegistryValueKind.ExpandString), key.ReadPath());
+        Assert.Equal(new StoredPath(folder, RegistryValueKind.ExpandString), account.Stored);
         var report = Report(output);
         Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
         Assert.Equal(0, report.GetProperty("command").GetProperty("taken_back").GetArrayLength());
         Assert.False(report.GetProperty("command").GetProperty("placed").GetBoolean(), "a Path that was never written reads as placed, and the install scripts would end saying jason is in the terminal");
     }
+
+    /// <summary>
+    /// A scratch key whose writes a row denied is gone once the row ends: the deny rule once left one key behind for every
+    /// run, silently. It writes a key under the account it runs as, so it runs on a hosted runner only.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void A_scratch_key_whose_writes_were_denied_is_gone_once_the_row_ends()
+    {
+        Assert.SkipUnless(
+            OperatingSystem.IsWindows() && OnHostedRunner,
+            "It writes a key under the account it runs as: it runs on a hosted runner only, never on a person's machine.");
+        string subKey;
+        using (var key = ScratchKey.Create())
+        {
+            subKey = key.SubKey;
+            key.SetPath(Path.Combine(_tree.Paths.Root, "locked"), RegistryValueKind.ExpandString);
+            key.DenySetValue();
+        }
+
+        using var left = Registry.CurrentUser.OpenSubKey(subKey);
+        Assert.Null(left);
+    }
+
+    /// <summary>A GitHub-hosted runner, whose account is thrown away with the machine; never a person's own.</summary>
+    private static bool OnHostedRunner =>
+        string.Equals(System.Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal)
+        && string.Equals(System.Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT"), "github-hosted", StringComparison.Ordinal);
 
     /// <summary>B2: on macOS the registration is moved on disk and takes effect at the next logon: no load, which would start a runtime now (RunAtLoad), and no unload.</summary>
     [Fact]
@@ -1888,9 +1919,40 @@ public sealed class InstallCommandTests : IDisposable
                 : null;
         }
 
+        /// <summary>
+        /// Takes the key off, and fails the row where it is still there. A deny rule a row set (<see cref="DenySetValue"/>)
+        /// refused the writable open <see cref="RegistryKey.DeleteSubKeyTree(string, bool)"/> makes first, and with
+        /// <c>throwOnMissingSubKey</c> false that refusal returned silently and left the key behind: the account's explicit
+        /// deny rules on it come off first, and the key is read back gone, so a leak is never silent again.
+        /// </summary>
         public void Dispose()
         {
+            using (var key = Registry.CurrentUser.OpenSubKey(
+                SubKey,
+                RegistryKeyPermissionCheck.ReadWriteSubTree,
+                System.Security.AccessControl.RegistryRights.ReadPermissions | System.Security.AccessControl.RegistryRights.ChangePermissions))
+            {
+                if (key is not null)
+                {
+                    var security = key.GetAccessControl(System.Security.AccessControl.AccessControlSections.Access);
+                    var denied = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(System.Security.Principal.SecurityIdentifier))
+                        .OfType<System.Security.AccessControl.RegistryAccessRule>()
+                        .Where(rule => rule.AccessControlType == System.Security.AccessControl.AccessControlType.Deny)
+                        .ToList();
+                    if (denied.Count > 0)
+                    {
+                        denied.ForEach(security.RemoveAccessRuleSpecific);
+                        key.SetAccessControl(security);
+                    }
+                }
+            }
+
             Registry.CurrentUser.DeleteSubKeyTree(SubKey, throwOnMissingSubKey: false);
+            using (var left = Registry.CurrentUser.OpenSubKey(SubKey))
+            {
+                Assert.True(left is null, $@"HKCU\{SubKey} is still there after the row: a scratch key is never left behind under this account.");
+            }
+
             try
             {
                 Registry.CurrentUser.DeleteSubKey(Parent, throwOnMissingSubKey: false);

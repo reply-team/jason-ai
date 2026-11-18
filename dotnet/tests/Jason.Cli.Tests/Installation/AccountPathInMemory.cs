@@ -18,12 +18,20 @@ internal sealed class AccountPathInMemory(StoredPath? stored = null) : IAccountP
     /// <summary>The value as it stands now, or null where there is none.</summary>
     public StoredPath? Stored { get; private set; } = stored;
 
+    /// <summary>Whether this account may not set the value, as on a Path a policy locks: every write is refused.</summary>
+    public bool RefusesWrites { get; init; }
+
     public StoredPath? Read() => Stored;
 
-    public void Write(string raw, RegistryValueKind kind) => Stored = raw.Length == 0 ? null : new StoredPath(raw, kind);
+    public void Write(string raw, RegistryValueKind kind)
+    {
+        RefuseWhereLocked();
+        Stored = raw.Length == 0 ? null : new StoredPath(raw, kind);
+    }
 
     public bool Append(string directory)
     {
+        RefuseWhereLocked();
         var raw = Stored?.Raw ?? string.Empty;
         var kind = Stored?.Kind ?? RegistryValueKind.ExpandString;
         var with = PathEntry.WithDirectory(raw, directory, PathEntry.ReadAs(kind != RegistryValueKind.String));
@@ -34,5 +42,13 @@ internal sealed class AccountPathInMemory(StoredPath? stored = null) : IAccountP
 
         Write(with, kind);
         return true;
+    }
+
+    private void RefuseWhereLocked()
+    {
+        if (RefusesWrites)
+        {
+            throw new UnauthorizedAccessException("Access to the registry key is denied.");
+        }
     }
 }
