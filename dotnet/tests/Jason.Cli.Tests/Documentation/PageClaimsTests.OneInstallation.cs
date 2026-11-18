@@ -358,4 +358,16 @@ public partial class PageClaimsTests
         Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
         Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`: it installs the application and moves the command line into it, and the update never fails because of the move; `jason status` says where the move stands. Linux has no move.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// The application goes to <c>/Applications</c> where this account may write there, and an application there is one for
+    /// every account of the Mac: §9 says, in the row that deletes it, that taking it off takes it from all of them.
+    /// </summary>
+    [Fact]
+    public void Taking_the_application_off_says_one_in_Applications_is_every_account_s()
+    {
+        var off = Flat(Section(Page("docs", "release-and-update.md"), "## 9. "));
+        Assert.Contains("macOS: the `Jason.app` the `jason` is inside, deleted by this verb", off, StringComparison.Ordinal);
+        Assert.Contains("An application in `/Applications` is one for every account of the Mac, and taking it off takes it from all of them.", off, StringComparison.Ordinal);
+    }
 }

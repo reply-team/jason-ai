@@ -803,7 +803,7 @@ public sealed class UninstallCarriedTests : IDisposable
         Directory.CreateDirectory(apps);
         File.WriteAllText(Path.Combine(apps, "jason.cmd"), $"@echo off\r\n\"{executable}\" %*\r\n");
         _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_LIVE"));
-        var places = new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, keys.Environment, null) { RunKey = keys.Run, StartupApprovedKey = keys.StartupApproved, ClassesKey = keys.Classes };
+        var places = new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, keys.Environment, null) { Temporary = _tree.Paths.Root, RunKey = keys.Run, StartupApprovedKey = keys.StartupApproved, ClassesKey = keys.Classes };
         var (env, output, remover) = Environment(places, executable);
         var processes = new FakeProcessControl();
         processes.RunningPids.Add(RuntimeVerbs.Pid);
@@ -972,8 +972,15 @@ public sealed class UninstallCarriedTests : IDisposable
 
         await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
 
-        var kept = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("kept").EnumerateArray().Select(line => line.GetString()!).ToList();
-        Assert.Single(kept, line => line.Contains("renamed to", StringComparison.Ordinal));
+        // Said once, by the removal's sweep of the folder it was renamed into, which the same process still holds: a problem.
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        string Lines(string name) => string.Join("\n", report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!));
+        var aside = Assert.Single(Directory.GetDirectories(_tree.Paths.Root, "jason-retired-*"));
+        Assert.Equal(1, Count(Lines("done") + "\n" + Lines("kept") + "\n" + Lines("problems"), aside));
+        Assert.Contains(aside, Lines("problems"), StringComparison.Ordinal);
+        Assert.DoesNotContain("renamed to", Lines("kept"), StringComparison.Ordinal);
+
+        static int Count(string text, string part) => (text.Length - text.Replace(part, string.Empty, StringComparison.Ordinal).Length) / part.Length;
     }
 
     [Fact]
@@ -985,7 +992,7 @@ public sealed class UninstallCarriedTests : IDisposable
         var bundle = Path.GetDirectoryName(executable)!;
         File.WriteAllText(Path.Combine(bundle, "someone-elses.exe"), "x");
         keys.Set(keys.Environment, "Path", bundle, RegistryValueKind.ExpandString);
-        var places = new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, keys.Environment, null) { RunKey = keys.Run, StartupApprovedKey = keys.StartupApproved, ClassesKey = keys.Classes };
+        var places = new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, keys.Environment, null) { Temporary = _tree.Paths.Root, RunKey = keys.Run, StartupApprovedKey = keys.StartupApproved, ClassesKey = keys.Classes };
         var (env, output, _) = Environment(places, executable);
 
         var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
@@ -1305,6 +1312,309 @@ public sealed class UninstallCarriedTests : IDisposable
         return (process.ExitCode, output.GetAwaiter().GetResult() + error.GetAwaiter().GetResult());
     }
 
+    // --- what the command-line removal took, taken by the carried jason too --------------------------------------
+
+    /// <summary>
+    /// The jason the application carries is a single file like any other, and its first run unpacks the build's native
+    /// libraries the same way. The removal plans that directory in the same field the command-line removal does and takes
+    /// it by the same routine, before the application goes; the other builds' beside it are counted and left elsewhere
+    /// than Windows, and with DOTNET_BUNDLE_EXTRACT_BASE_DIR set they are not looked for.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task On_macOS_the_carried_jason_takes_what_its_build_unpacked_before_the_application_goes(bool baseMoved)
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var own = Unpacked("Xq7tzCSumrk");
+        var other = Unpacked("L5GxzH7oZwh");
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        remover.ExtractedLibraries = own;
+        if (baseMoved)
+        {
+            env = env with { Variables = new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.GetDirectoryName(Path.GetDirectoryName(own))! } };
+        }
+
+        var plan = await HumanPlan(env);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        AssertUnpackedNamed(plan, JsonDocument.Parse(output.ToString()).RootElement, own, other, othersTaken: OperatingSystem.IsWindows() && !baseMoved, baseMoved);
+        var taken = remover.Calls.IndexOf($"extracted.remove {own}");
+        Assert.True(taken >= 0 && taken < remover.Calls.IndexOf($"tree.remove {application}"), string.Join(" | ", remover.Calls));
+        Assert.Equal($"tree.remove {application}", remover.Calls[^1]);
+    }
+
+    /// <summary>
+    /// And on Windows: the carried jason maps nothing of what its build unpacked, which only a runtime loads, so it takes
+    /// its own build's directory and every other build's beside it during its run, by the same routine, before the folder
+    /// is handed to the uninstaller.
+    /// </summary>
+    [Theory]
+    [SupportedOSPlatform("windows")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task On_Windows_the_carried_jason_takes_what_its_build_and_the_others_unpacked_before_the_hand_off(bool baseMoved)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The application's uninstaller is Windows'.");
+        var executable = WindowsApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", ".."));
+        var own = Unpacked("Xq7tzCSumrk");
+        var other = Unpacked("L5GxzH7oZwh");
+        var (env, output, remover) = Environment(AbsentKeysPlaces(), executable);
+        remover.ExtractedLibraries = own;
+        if (baseMoved)
+        {
+            env = env with { Variables = new Dictionary<string, string> { ["DOTNET_BUNDLE_EXTRACT_BASE_DIR"] = Path.GetDirectoryName(Path.GetDirectoryName(own))! } };
+        }
+
+        var plan = await HumanPlan(env);
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.True(exit == ExitCodes.Success, output.ToString());
+        AssertUnpackedNamed(plan, JsonDocument.Parse(output.ToString()).RootElement, own, other, othersTaken: !baseMoved, baseMoved);
+        Assert.True(remover.Calls.IndexOf($"extracted.remove {own}") >= 0, string.Join(" | ", remover.Calls));
+        Assert.Equal($"application.uninstaller {application}", remover.Calls[^1]);
+    }
+
+    /// <summary>The plan a person reads before anything goes, from a dry run that removes nothing.</summary>
+    private static async Task<string> HumanPlan(CliEnvironment env)
+    {
+        var plan = new StringWriter();
+        var exit = await UninstallCommand.RunAsync(env with { Out = plan }, new UninstallOptions(Human: true, DryRun: true, PurgeData: false, Yes: false, Force: false), Ct);
+        Assert.True(exit == ExitCodes.Success, plan.ToString());
+        return plan.ToString();
+    }
+
+    /// <summary>
+    /// What the build unpacked is named where the command-line removal names it: in the plan a person reads, in the plan an
+    /// agent reads, and in the report; the others' directories too, as taken or as left with the reason; and what is taken
+    /// is gone and what is left is there.
+    /// </summary>
+    private static void AssertUnpackedNamed(string humanPlan, JsonElement report, string own, string other, bool othersTaken, bool baseMoved)
+    {
+        var why = baseMoved ? "DOTNET_BUNDLE_EXTRACT_BASE_DIR is set" : "is left, 1 directory";
+        var parent = Path.GetDirectoryName(own)!;
+        static IEnumerable<string> Lines(JsonElement report, string name) => report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!);
+
+        // The plan a person reads, before anything at all is removed.
+        Assert.Contains($"the native libraries it unpacked, at {own}", humanPlan, StringComparison.Ordinal);
+        Assert.Equal(othersTaken, humanPlan.Contains($"the native libraries another build of this program unpacked, at {other}", StringComparison.Ordinal));
+        Assert.Equal(!othersTaken, humanPlan.Contains("NOT touched: ", StringComparison.Ordinal) && humanPlan.Contains(why, StringComparison.Ordinal));
+
+        // The plan an agent reads.
+        var plan = report.GetProperty("plan");
+        Assert.Equal(own, plan.GetProperty("extracted_libraries").GetString());
+        Assert.Equal(othersTaken ? [other] : [], plan.GetProperty("other_extracted_libraries").EnumerateArray().Select(entry => entry.GetString()!).ToArray());
+        var left = plan.GetProperty("other_extracted_libraries_left");
+        Assert.Equal(!othersTaken, left.ValueKind is JsonValueKind.String && left.GetString()!.Contains(parent, StringComparison.Ordinal) && left.GetString()!.Contains(why, StringComparison.Ordinal));
+
+        // The report, and the disk.
+        Assert.False(Directory.Exists(own), "what this build unpacked is still there");
+        Assert.Contains(Lines(report, "done"), line => line.Contains(own, StringComparison.Ordinal));
+        if (othersTaken)
+        {
+            Assert.False(Directory.Exists(other), "another build's unpacked libraries were left");
+            Assert.Contains(Lines(report, "done"), line => line.Contains(other, StringComparison.Ordinal) && line.Contains("another build", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.True(Directory.Exists(other), "another build's unpacked libraries were removed");
+            Assert.Contains(Lines(report, "kept"), line => line.Contains(parent, StringComparison.Ordinal) && line.Contains(why, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// The folders <c>jason install</c> or a move renamed a running executable into are swept by no later run once the
+    /// installation is off the machine, so the removal sweeps them by the same rule: each goes once the process running it
+    /// has ended, is said, and one still held is named with what to do. A folder of that name holding anything else is not
+    /// the routine's, and is neither taken nor named.
+    /// </summary>
+    [Theory]
+    [SupportedOSPlatform("windows")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task On_Windows_the_removal_sweeps_the_retired_folders_and_names_one_still_held(bool carried)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows renames a running executable aside.");
+        var temporary = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "temp")).FullName;
+        var swept = Retired(temporary, "jason.exe");
+        var held = Retired(temporary, "jason.exe");
+        var notTheRoutines = Retired(temporary, "jason.exe", "notes.txt");
+        string executable;
+        if (carried)
+        {
+            executable = WindowsApplication();
+        }
+        else
+        {
+            executable = Path.Combine(_tree.Paths.Root, "cli", "jason.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+            File.WriteAllText(executable, "jason 0.48.5");
+        }
+
+        var places = AbsentKeysPlaces() with
+        {
+            Temporary = temporary,
+            Delete = path =>
+            {
+                if (path.StartsWith(held, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException($"'{path}' is in use.");
+                }
+
+                File.Delete(path);
+            },
+        };
+        var (env, output, _) = Environment(places, executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.True(exit == ExitCodes.ApiError, output.ToString());
+        Assert.False(Directory.Exists(swept), "a retired folder whose process has ended is still there");
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains(swept, StringComparison.Ordinal));
+        Assert.True(Directory.Exists(held));
+        Assert.Contains(report.GetProperty("problems").EnumerateArray(), line => line.GetString()!.Contains(held, StringComparison.Ordinal)
+            && line.GetString()!.Contains("once that process has ended", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(notTheRoutines));
+        Assert.DoesNotContain(notTheRoutines, output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An older command-line install the removal takes off, in a folder of the person's own that the last update recorded,
+    /// whose executable a running process holds: it is renamed aside, and that folder is said once, by the sweep, with what
+    /// to do, a problem since nothing sweeps it afterwards. And the sweep looks beside that install's folder too, where a
+    /// rename aside on another volume puts its folder, so a retired folder an earlier run left there goes.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_Windows_an_older_install_set_aside_in_this_run_is_said_once_and_the_sweep_looks_beside_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows renames a running executable aside.");
+        var temporary = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "temp")).FullName;
+        var tools = Path.Combine(_tree.Paths.Root, "tools");
+        var old = Path.Combine(tools, "jason", "jason.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.WriteAllText(old, "jason 0.48.5");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(old)!, "jason-LICENSE"), "MIT");
+        var update = new Jason.Cli.Update.UpdatePaths(_dir.Paths);
+        Directory.CreateDirectory(update.Root);
+        new Jason.Contracts.Update.UpdateLedger(
+            Jason.Contracts.Update.SemanticVersion.Parse("0.48.4"),
+            Jason.Contracts.Update.SemanticVersion.Parse("0.48.5"),
+            Jason.Contracts.Update.UpdateStep.Complete,
+            DateTimeOffset.UtcNow.AddDays(-1),
+            old,
+            update.StagedExecutable(Jason.Contracts.Update.SemanticVersion.Parse("0.48.5")),
+            update.PreviousExecutable).Write(update.Ledger);
+        var besideIt = Path.Combine(tools, $".jason-retired-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(besideIt);
+        File.WriteAllText(Path.Combine(besideIt, "jason.exe"), "jason 0.48.4");
+        var executable = WindowsApplication();
+        var places = AbsentKeysPlaces() with
+        {
+            Temporary = temporary,
+
+            // The older install's executable, and the copy of it this run sets aside, are held by its running process.
+            Delete = path =>
+            {
+                if (string.Equals(path, old, StringComparison.OrdinalIgnoreCase) || path.StartsWith(Path.Combine(temporary, "jason-retired-"), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException($"'{path}' is in use.");
+                }
+
+                File.Delete(path);
+            },
+        };
+        var (env, output, _) = Environment(places, executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.True(exit == ExitCodes.ApiError, output.ToString());
+        Assert.False(File.Exists(old), "the older install's executable is still in its folder");
+        var aside = Assert.Single(Directory.GetDirectories(temporary, "jason-retired-*"));
+        string[] lines = [.. new[] { "done", "kept", "problems" }.SelectMany(name => report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!))];
+        var said = Assert.Single(lines, line => line.Contains(aside, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(said, report.GetProperty("problems").EnumerateArray().Select(line => line.GetString()!));
+        Assert.Contains("once that process has ended", said, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(besideIt), "a retired folder beside the older install's folder was not swept");
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains(besideIt, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Open Jason at Login is taken off after the runtime has stopped, so a runtime that will not stop leaves the
+    /// installation as the refusal says it is, the application's own start at login included. Nothing starts the window
+    /// between the stop and the take-off: an open window refuses the verb before anything, and a login of an account
+    /// already signed in starts nothing again.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_that_will_not_stop_leaves_Open_Jason_at_Login_where_it_was()
+    {
+        var executable = MacApplication();
+        var application = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(executable)!, "..", "..", ".."));
+        var agent = DesktopRemoval.LaunchAgentFile(MacPlaces());
+        Directory.CreateDirectory(Path.GetDirectoryName(agent)!);
+        File.WriteAllText(agent, $"<plist><dict><key>ProgramArguments</key>\n<array>\n<string>{Path.Combine(application, "Contents", "MacOS", "Jason")}</string>\n<string>--opened-at-login</string></array></dict></plist>");
+        _dir.WriteDescriptor(RuntimeVerbs.Descriptor("rt_STUBBORN"));
+        var processes = new FakeProcessControl();
+        processes.RunningPids.Add(RuntimeVerbs.Pid);
+        var (env, output, remover) = Environment(MacPlaces(), executable);
+        env = env with
+        {
+            Processes = processes,
+            HttpHandler = new FakeHandler(_ => RuntimeVerbs.Response(System.Net.HttpStatusCode.OK, RuntimeVerbs.ShutdownJson("rt_STUBBORN"))),
+        };
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        Assert.Contains(CliErrors.RuntimeStillRunning, output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("is as it was, its logon registration included", output.ToString(), StringComparison.Ordinal);
+        Assert.True(File.Exists(agent), "Open Jason at Login was taken off by an uninstall that refused");
+        Assert.Empty(remover.Calls);
+    }
+
+    /// <summary>
+    /// The pid file a carried update writes beside the carried jason, and leaves where that update was killed, is one of
+    /// the application's own names there: it does not make the Path entry another program's.
+    /// </summary>
+    [Fact]
+    public void The_pid_file_a_carried_update_writes_is_one_of_the_bundles_own()
+    {
+        var bundle = Path.GetDirectoryName(WindowsApplication())!;
+        File.WriteAllText(Path.Combine(bundle, Jason.Cli.Update.CarriedUpdate.PidFileName), "4321 134000000000000000");
+
+        Assert.True(PathEntry.CarriedBundle(bundle, windows: true), "a pid file a killed update left made the bundle another program's");
+
+        File.WriteAllText(Path.Combine(bundle, "someone-elses.exe"), "x");
+        Assert.False(PathEntry.CarriedBundle(bundle, windows: true));
+    }
+
+    /// <summary>A build's unpacked libraries of the test's own, under a base of the test's own.</summary>
+    private string Unpacked(string id)
+    {
+        var directory = Path.Combine(_tree.Paths.Root, "net", "jason", id);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "e_sqlite3.dll"), "native");
+        return directory;
+    }
+
+    /// <summary>A <c>jason-retired-&lt;id&gt;</c> folder of the test's own, holding the files named.</summary>
+    private static string Retired(string temporary, params string[] files)
+    {
+        var folder = Path.Combine(temporary, $"jason-retired-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        foreach (var file in files)
+        {
+            File.WriteAllText(Path.Combine(folder, file), "x");
+        }
+
+        return folder;
+    }
+
     // --- held to the application's own source ------------------------------------------------------------------
 
     [Fact]
@@ -1412,6 +1722,10 @@ public sealed class UninstallCarriedTests : IDisposable
 
     private (CliEnvironment Env, StringWriter Output, RecordingRemover Remover) Environment(SetupPlaces? places, string executable)
     {
+        // The removal sweeps the temporary directory the places name for retired folders: never the machine's own.
+        Assert.True(
+            places is null || !string.Equals(Path.GetFullPath(places.Temporary), Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase),
+            "these places name the machine's own temporary directory");
         var output = new StringWriter();
         var remover = new RecordingRemover { ReallyRemoves = true };
         var env = new CliEnvironment(
