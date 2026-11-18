@@ -505,8 +505,8 @@ export function layoutRefusal(layout: DataLayout, current: string): { code: stri
 /**
  * The data directory a wrapper of the command line names, as the desktop compares one: none where `JASON_DATA_DIR` is
  * unset or names the default `~/.jason`, which the command line's wrapper does not pin; else the variable as set. The
- * default is compared as the command line compares it: the full path, a trailing separator dropped, letter for letter on
- * macOS and Linux and whatever the case on Windows.
+ * default is compared as the command line compares it (`FolderPaths` in the contracts): the full path, a trailing separator
+ * dropped, whatever the case on Windows and macOS and letter for letter on Linux.
  */
 export function namedDataDirectory(env: Readonly<Record<string, string | undefined>>, home: string, platform: NodeJS.Platform): string | null {
     const named = env.JASON_DATA_DIR;
@@ -514,6 +514,6 @@ export function namedDataDirectory(env: Readonly<Record<string, string | undefin
     const paths = platform === 'win32' ? win32 : posix;
     const full = paths.resolve(named);
     const theDefault = paths.join(home, '.jason');
-    const same = platform === 'win32' ? full.toLowerCase() === theDefault.toLowerCase() : full === theDefault;
+    const same = platform === 'win32' || platform === 'darwin' ? full.toUpperCase() === theDefault.toUpperCase() : full === theDefault;
     return same ? null : named;
 }

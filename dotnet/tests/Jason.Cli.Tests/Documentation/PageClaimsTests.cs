@@ -2689,7 +2689,7 @@ public partial class PageClaimsTests
     [InlineData("docs/INSTALL.md", "Opened from its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, it sets nothing up: nothing is placed, retired or stopped, and its Command Line item says to move Jason first.")]
     [InlineData("docs/desktop.md", "opened from the disk image itself, it sets nothing up and says to move it first.")]
     [InlineData("docs/desktop.md", "`jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything")]
-    [InlineData("docs/desktop.md", "Nothing else follows from such a place: no finishing step, no runtime started and nothing recorded, so each start from there asks again")]
+    [InlineData("docs/desktop.md", "From such a place the set-up is not run: nothing is placed, retired or stopped by it, no finishing step runs, a start that is owed is not paid and nothing is recorded, so each start from there asks again")]
     [InlineData("docs/desktop.md", "the place it ran from (the `jason` the application carries)")]
     [InlineData("docs/release-and-update.md", "is refused with `install_vanishing_place` before anything is stopped, written or retired, and before the update's lock is read or taken")]
     [InlineData("desktop/README.md", "`ran_from`, the carried `jason` it ran from")]
@@ -2697,6 +2697,8 @@ public partial class PageClaimsTests
     {
         Assert.Contains(said, Flat(Page(page.Split('/'))), StringComparison.Ordinal);
         Assert.DoesNotContain("Installed by hand from one of them, it sets the machine up as the script does (§2): the application's first start", Flat(Page("docs", "INSTALL.md")), StringComparison.Ordinal);
+        // The window's own Live start still brings a runtime up from such a place: the page claims only what the set-up does.
+        Assert.DoesNotContain("no runtime started", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
         Assert.Equal("install_vanishing_place", CliErrors.InstallVanishingPlace);
 
         using var paths = new TempPaths();

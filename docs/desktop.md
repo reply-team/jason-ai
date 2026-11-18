@@ -417,9 +417,9 @@ Line item says in Live and only the desktop's log says in the Demo. Where anothe
 nothing recorded, the item says it is left for the next start, and it is no failure. On macOS, an application opened from
 its disk image, or where it was downloaded, which macOS runs from a temporary place of its own, runs from a place that goes
 away: `jason install` refuses there (`install_vanishing_place`) before it stops, writes or retires anything, and the item
-says to move Jason to Applications, or to the Applications folder in your home, and open it there. Nothing else follows
-from such a place: no finishing step, no runtime started and nothing recorded, so each start from there asks again, and
-the first start from Applications sets the machine up, the same version included, since the set-up is recorded by the
+says to move Jason to Applications, or to the Applications folder in your home, and open it there. From such a place the
+set-up is not run: nothing is placed, retired or stopped by it, no finishing step runs, a start that is owed is not paid
+and nothing is recorded, so each start from there asks again, and the first start from Applications sets the machine up, the same version included, since the set-up is recorded by the
 place as well as the version. The set-up writes nothing under your
 data directory but the desktop's record of it, so the demo still opens first. It never keeps the window from you: the
 window says what is being done, and in Live the start waits for it at most thirty seconds before it brings the runtime up,

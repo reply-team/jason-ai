@@ -121,8 +121,8 @@ not act on, known or not, is said by one sentence that carries it, and nothing o
 - `<data>/desktop/machine-setup.json`: on macOS and Windows, `ran_for`, the version `jason install` last completed for,
   `ran_from`, the carried `jason` it ran from, and `report`, the document it printed then; a start runs the set-up again
   where either differs, and a record that names no place, an earlier desktop's, counts as another place. A refusal as
-  `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, starts no
-  runtime and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
+  `install_vanishing_place`, an application opened from its disk image or translocated, runs no finishing step, pays no
+  start that is owed and writes no record; one of the records `isNewInstallation` counts as the desktop's own.
 - `<data>/desktop/chat/`: the chat's working folder; its skills, Jason's and the Reply ones, are in `.claude/skills/` for
   Claude Code and in `.agents/skills/` for Codex. Its `CLAUDE.md` and `AGENTS.md` are the application's own instruction
   text, which the desktop writes again when it starts and before each turn, so an edit made to either does not last.

@@ -1054,12 +1054,22 @@ test('THE VANISHING PLACE: install_vanishing_place is said in the item, runs no 
     assert.deepEqual(next.calls, ['install --terminal-path /usr/bin:/bin']);
 });
 
+test('the default data directory is compared as the command line compares folders: whatever the case on macOS and Windows, letter for letter on Linux', () => {
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.JASON' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/USERS/A/.Jason/' }, '/Users/a', 'darwin'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'c:\\users\\a\\.Jason' }, 'C:\\Users\\a', 'win32'), null);
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/home/a/.JASON' }, '/home/a', 'linux'), '/home/a/.JASON');
+    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/home/a/.jason/' }, '/home/a', 'linux'), null);
+    // The command line's rule, which the desktop's must be: FolderPaths, case ignored on Windows and macOS alone.
+    const folders = readFileSync(new URL('../../dotnet/src/Jason.Contracts/Harness/FolderPaths.cs', import.meta.url), 'utf8');
+    assert.ok(folders.includes('OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal'));
+});
+
 test('the data directory a wrapper names is none where JASON_DATA_DIR is unset or names the default, as the command line writes its wrapper', () => {
     assert.equal(namedDataDirectory({}, '/Users/a', 'darwin'), null);
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: '' }, '/Users/a', 'darwin'), null);
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.jason' }, '/Users/a', 'darwin'), null);
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.jason/' }, '/Users/a', 'darwin'), null);
-    assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/.JASON' }, '/Users/a', 'darwin'), '/Users/a/.JASON', 'macOS compares as the command line does, letter for letter');
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: '/Users/a/work' }, '/Users/a', 'darwin'), '/Users/a/work');
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'C:\\Users\\A\\.JASON\\' }, 'C:\\Users\\a', 'win32'), null);
     assert.equal(namedDataDirectory({ JASON_DATA_DIR: 'D:\\jason' }, 'C:\\Users\\a', 'win32'), 'D:\\jason');
