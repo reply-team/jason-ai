@@ -681,10 +681,13 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
     if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is still an executable, not the application's wrapper"; fi
     grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    # The wrapper names no data directory: a runtime starts every child with JASON_DATA_DIR set, the move's routine
+    # among them, and the default one is not written, so the wrapper is the one the install script writes.
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory after a move with none named: $(cat "$WRAPPER")"
     found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
     [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
     [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
-    say "~/.local/bin/jason is the application's wrapper running $carried, and a new zsh login shell finds it saying $version"
+    say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
 
     # The command-line install retired: its executable replaced by the wrapper, its notice files gone.
     for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
@@ -729,11 +732,11 @@ way-back)
     # and login start set up again. Asserted alone: the campaigns are as many, every journal entry is still there by id
     # with its kind and moment, no entry has appeared among the old ones, and the previous release's jason says its
     # version and its status is ready. No update and no rollback runs under it. Its own uninstall, purging the data, ends
-    # the leg.
-    # Two checks are to join this leg, each once it has run in a rehearsal: after the move, the wrapper's text names no
-    # data directory (on a real Mac that moved with none named); and after going back, the previous release's own jason
-    # update apply moves it into Jason Desktop again.
-    previous="$1"; feed="$2"; version="$3"
+    # the leg. After the move, the wrapper's text names no data directory.
+    # With 'again', a leg of its own: after going back, the previous release's own jason update apply moves the install
+    # into Jason Desktop again, as the page says it does; the moved install's own uninstall, purging the data, ends it.
+    previous="$1"; feed="$2"; version="$3"; again="${4:-}"
+    case "$again" in ''|again) ;; *) fail "way-back takes 'again' or nothing as its fourth word, not '$again'" ;; esac
     # It runs on the account's own home and default data directory, which a moved installation and the previous release
     # share: a GitHub-hosted runner's alone, never a person's Mac.
     if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then fail "way-back runs on the account's own home and data directory, and on a GitHub-hosted runner alone."; fi
@@ -797,7 +800,10 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     placed="$(app)"
     [ -n "$placed" ] || fail "no Jason.app after the move"
     carried="$placed/Contents/Resources/bundle/jason"
-    say "moved into Jason Desktop $version by the previous release's own update"
+    # The wrapper names no data directory: a runtime starts every child with JASON_DATA_DIR set, the move's routine
+    # among them, and the default one is not written, so the wrapper is the one the install script writes.
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory after a move with none named: $(cat "$WRAPPER")"
+    say "moved into Jason Desktop $version by the previous release's own update; the wrapper names no data directory"
 
     # Step 0: under the moved 0.49, its runtime running.
     within 60 'the moved runtime answering' "$carried" runtime status > /dev/null || fail 'no runtime answers under the moved 0.49 before going back'
@@ -900,22 +906,55 @@ PY
     [ "$(read_field "$OUT/way-back-status.json" ready)" = true ] || fail "jason status under $old is not ready: $(cat "$OUT/way-back-status.json")"
     say "under $old: jason --version says $said, and jason status says ready: true"
 
-    # The leg's own end: the runtime stopped, the login start taken off, and the previous release's own uninstall.
-    for words in 'runtime stop' 'runtime autostart disable' 'uninstall --purge-data --yes'; do
-        # shellcheck disable=SC2086
-        within 300 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-end.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-end.txt")"
-    done
-    say "$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+    if [ "$again" = again ]; then
+        # Moving again: the previous release's own update apply, pinned to this version, from the feed served here.
+        python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/way-back-again-feed-server.log" 2>&1 &
+        server=$!
+        wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
+        status=0
+        within 900 "$old's jason update apply --version $version after going back" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/way-back-again.json" 2> "$OUT/way-back-again.err" || status=$?
+        kill "$server" 2>/dev/null || true
+        [ "$status" -eq 0 ] || fail "after going back, $old's jason update apply --version $version exited with $status: $(cat "$OUT/way-back-again.err")"
+        [ "$(read_field "$OUT/way-back-again.json" move.state)" = done ] || fail "after going back, the update did not end with its move done: $(cat "$OUT/way-back-again.json")"
+        placed="$(app)"
+        [ -n "$placed" ] || fail "no Jason.app after moving again"
+        carried="$placed/Contents/Resources/bundle/jason"
+        [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed") after moving again, not $version"
+        grep -q "$carried" "$WRAPPER" || fail "after moving again, the wrapper at $WRAPPER does not run $carried"
+        # The wrapper names no data directory: a runtime starts every child with JASON_DATA_DIR set, the move's routine
+        # among them, and the default one is not written, so the wrapper is the one the install script writes.
+        ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory after a move with none named: $(cat "$WRAPPER")"
+        within 60 'the runtime answering after moving again' "$carried" runtime status > /dev/null || fail 'no runtime answers after moving again'
+        read_all "$carried" campaign list --include-archived > "$OUT/way-back-campaigns-again.json" || fail "the campaigns could not be read after moving again"
+        again_count="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-campaigns-again.json")"
+        [ "$again_count" = "$counted" ] || fail "after moving again $again_count campaign(s) are listed, not the $counted listed before going back"
+        say "after going back, $old's own jason update apply --version $version moved the install into Jason Desktop again: $placed at $version, the wrapper naming no data directory, $again_count campaign(s) as before"
+        # The leg's own end: the moved install's own uninstall, the application quit first.
+        pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
+        sleep 3
+        within 300 'jason uninstall --purge-data --yes after moving again' "$carried" uninstall --purge-data --yes > "$OUT/way-back-end.txt" 2>&1 || fail "jason uninstall --purge-data --yes after moving again failed: $(tail -n 3 "$OUT/way-back-end.txt")"
+        wait_until 120 "Jason.app going after jason uninstall" gone "$placed"
+        remover="the moved install's own uninstall"
+        say "$version's own uninstall --purge-data --yes, after moving again, ended 0"
+    else
+        # The leg's own end: the runtime stopped, the login start taken off, and the previous release's own uninstall.
+        for words in 'runtime stop' 'runtime autostart disable' 'uninstall --purge-data --yes'; do
+            # shellcheck disable=SC2086
+            within 300 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-end.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-end.txt")"
+        done
+        remover="$old's own uninstall"
+        say "$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+    fi
     if [ "$way" = put-back ]; then
         own4="$(own_bytes "$OWN_SKILL")"
-        say "moment 4, after $old's own uninstall: the person's own SKILL.md at $OWN_SKILL is $own4"
-        [ "$own4" = "$own1" ] || fail "$old's own uninstall took or changed the person's own quick-start: it is $own4, where it was $own1"
+        say "moment 4, after $remover: the person's own SKILL.md at $OWN_SKILL is $own4"
+        [ "$own4" = "$own1" ] || fail "$remover took or changed the person's own quick-start: it is $own4, where it was $own1"
     else
         own4="$(own_bytes "$own_out")"
         place4="$(own_bytes "$OWN_SKILL")"
-        say "moment 4, after $old's own uninstall: the person's own SKILL.md, out at $own_out, is $own4; at $OWN_SKILL stands $place4"
+        say "moment 4, after $remover: the person's own SKILL.md, out at $own_out, is $own4; at $OWN_SKILL stands $place4"
         [ "$own4" = "$own1" ] || fail "the person's own quick-start, out of the skills folder, changed while $old was installed: $own4, where it was $own1"
-        [ ! -e "$OWN_SKILL" ] || fail "after $old's own uninstall a quick-start stands at $OWN_SKILL ($place4), where the person's own goes back"
+        [ ! -e "$OWN_SKILL" ] || fail "after $remover a quick-start stands at $OWN_SKILL ($place4), where the person's own goes back"
         mkdir -p "$(dirname "$OWN_SKILL")"
         mv "$own_out" "$OWN_SKILL" || fail "the person's own quick-start could not be put back at $OWN_SKILL"
         rmdir "$outside"

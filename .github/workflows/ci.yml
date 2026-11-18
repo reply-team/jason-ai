@@ -2341,7 +2341,7 @@ jobs:
     if: needs.version.outputs.full == 'true'
     runs-on: macos-latest
     # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 90
+    timeout-minutes: 105
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
@@ -2573,7 +2573,8 @@ jobs:
           bash .github/scripts/test-installation-macos.sh listing after-previous-own-removal
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # LAST before the held step, so that whatever going back does to the machine takes no later leg.
+      # Among the last before the held step, so that whatever going back does to the machine takes no leg but the one that
+      # goes back and moves again, which follows it.
       # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
       # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
       # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
@@ -2592,6 +2593,25 @@ jobs:
           bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION"
           bash .github/scripts/test-installation-macos.sh listing after-way-back-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-way-back-uninstall before previous-own
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # Going back, then moving again: after going back to the previous release as the page says, its own jason update
+      # apply moves the install into Jason Desktop again, the wrapper naming no data directory, the campaigns as many; the
+      # moved install's own uninstall ends it, and the listing is held to the machine before, the previous release's empty
+      # profiles and enabled launchd record aside.
+      - name: Go back to the previous release, then move again with its own update
+        if: ${{ !cancelled() }}
+        timeout-minutes: 35
+        shell: bash
+        env:
+          LEG: "Go back to the previous release, then move again with its own update"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
+          bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION" again
+          bash .github/scripts/test-installation-macos.sh listing after-way-back-again-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-way-back-again-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that
