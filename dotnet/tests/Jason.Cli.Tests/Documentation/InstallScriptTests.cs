@@ -4,8 +4,12 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Jason.Cli.Installation;
 using Jason.Cli.Uninstall;
+using Jason.Contracts.Json;
 using Jason.Contracts.Update;
 using Jason.Runtime.Tests;
 using Microsoft.Win32;
@@ -656,6 +660,78 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The line over a running command-line install on Windows: the setup's own <c>jason install</c> retires that install and
+    /// stops its runtime, and its report is kept nowhere, so the leg holds of the line's own <c>jason install --roles</c> what
+    /// is true of it - no runtime running, nothing retired - and the sentence install.ps1 says when it starts a runtime again,
+    /// read from install.ps1 itself; the old runtime, by its process and its start, and the old executable both gone, with no
+    /// order claimed; and it says that the order is held by the set-up's own rows, not by this leg.
+    /// </summary>
+    [Fact]
+    public void The_Windows_line_over_a_running_command_line_holds_of_its_own_report_what_is_true_of_it()
+    {
+        var root = RepositoryRoot();
+        var windows = File.ReadAllText(Path.Combine(root, ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var script = File.ReadAllText(Path.Combine(root, "install", "install.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = windows[windows.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    'OverBothPrevious' {\n", StringComparison.Ordinal)];
+
+        Assert.DoesNotContain("-cne 'stopped'", leg, StringComparison.Ordinal);
+        Assert.Contains("if ([string]$report.runtime -cne 'not_running') { Fail ", leg, StringComparison.Ordinal);
+        Assert.Contains("if ($retired -and $retired.Value) { Fail ", leg, StringComparison.Ordinal);
+
+        // The started-again sentence, as install.ps1 says it, with the application's jason in place of its variable.
+        var said = Regex.Match(script, @"Write-Host ""(?<sentence>A runtime answered before the install and none answers now, so one is started again from )\$from\.""");
+        Assert.True(said.Success, "install.ps1 no longer says, in one sentence, that it starts a runtime again from $from.");
+        Assert.Contains($"$startedAgain = \"{said.Groups["sentence"].Value}$carried.\"", leg, StringComparison.Ordinal);
+        Assert.Contains("if (-not $over.Said.Contains($startedAgain)) { Fail ", leg, StringComparison.Ordinal);
+
+        // Both gone, no order claimed, and the order said to be the set-up's own rows'.
+        Assert.Contains("@($oldRuntimes | Where-Object { Test-SameProcess $_ })", leg, StringComparison.Ordinal);
+        Assert.Contains("if (Test-Path -LiteralPath $jason) { Fail ", leg, StringComparison.Ordinal);
+        Assert.Contains("is held by MachineSetup's own rows, not by this leg", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Going back to the previous release on Windows leaves that release's own skills record, which its uninstall keeps where
+    /// the person's own quick-start stands. One name is the previous release's own and no other; the way-back leg records
+    /// its exact listing line only after reading the file as that release's own, outside the leg that moves again; a compare
+    /// excuses a line only where a leg of the previous release recorded it exactly; and a clean begin takes it after that leg,
+    /// before it reads the machine, so the next leg runs.
+    /// </summary>
+    [Fact]
+    public void The_Windows_compare_excuses_and_a_clean_begin_takes_only_the_previous_release_s_own_record_going_back_leaves()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\n$previousOwn = [ordered]@{ 'agents skills\\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\\skills\\.jason-skills.json') }\n", windows, StringComparison.Ordinal);
+        Assert.Contains("($previousLegs -ccontains $leg) -and (@(Get-Content -LiteralPath $previousOwnRows) -ccontains \"$leg`t$line\")", Function("Test-PreviousOwn"), StringComparison.Ordinal);
+        Assert.Contains("if (-not (Test-PreviousOwn $by $line)) { continue }", Function("Take-PreviousOwn"), StringComparison.Ordinal);
+        Assert.Contains("if (Test-PreviousOwn $by $line) { $own.Add(", Function("Compare-Listings"), StringComparison.Ordinal);
+
+        // The one writer of a row: the way-back leg's own end, outside -Again, after the record is read as the previous release's.
+        Assert.Single(Regex.Matches(windows, @"Add-Content -LiteralPath \$previousOwnRows"));
+        var wayBack = windows[windows.IndexOf("\n    'WayBack' {\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)];
+        var otherwise = wayBack.IndexOf("        } else {\n            # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.\n", StringComparison.Ordinal);
+        var refs = wayBack.IndexOf("is not $previousVersion's own skills record", StringComparison.Ordinal);
+        var row = wayBack.IndexOf("Add-Content -LiteralPath $previousOwnRows", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("Say \"going back leaves $leftRecord", StringComparison.Ordinal);
+        var ownSkill = wayBack.IndexOf("        if ($way -ceq 'put-back') {\n            $own4", StringComparison.Ordinal);
+        Assert.True(otherwise >= 0 && refs > otherwise && row > refs && said > row && ownSkill > said, "the way-back leg does not record the previous release's own record only after reading it as that release's, in its own end and outside -Again, and say so");
+
+        var begin = windows[windows.IndexOf("\n    'Begin' {\n", StringComparison.Ordinal)..];
+        var cache = begin.IndexOf("\n            if (-not (Take-UpdaterCache $Leg $prior)) { return }\n", StringComparison.Ordinal);
+        var take = begin.IndexOf("\n            if (-not (Take-PreviousOwn $Leg $prior)) { return }\n", StringComparison.Ordinal);
+        var read = begin.IndexOf("\n            $found = @(Get-LeftOver)\n", StringComparison.Ordinal);
+        Assert.True(cache >= 0 && take > cache && read > take, "a clean Windows begin does not take the previous release's own record by the leg before it, before it reads the machine");
+    }
+
+    /// <summary>
     /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
     /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
     /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one
@@ -813,6 +889,123 @@ public partial class InstallScriptTests
         hold = hold[..hold.IndexOf("\n}\n", StringComparison.Ordinal)];
         Assert.Contains("if [ -s \"$OUT/terminal-before-names-local-bin.txt\" ]; then", hold, StringComparison.Ordinal);
         Assert.Contains("grep -qx '# added by jason install' \"$profile\"", hold, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The hold reads the set-up report's done by the members the product's own document has: a report MachineSetup's type
+    /// makes, serialized as jason install prints it and kept as the application's first start keeps it, walked by the
+    /// members the hold's reader names, in its order, gives the sentence back. And the hold says what it read, so a reader
+    /// of the run can quote the record's done.
+    /// </summary>
+    [Fact]
+    public void The_macOS_hold_reads_the_set_up_report_s_done_where_the_product_s_own_document_has_it()
+    {
+        var root = RepositoryRoot();
+        var macos = File.ReadAllText(Path.Combine(root, ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var hold = macos[macos.IndexOf("\nhold_account_terminal() {\n", StringComparison.Ordinal)..];
+        hold = hold[..hold.IndexOf("\n}\n", StringComparison.Ordinal)];
+        var reader = Regex.Match(hold, @"done_list=""\$\(python3 -c '(?<code>[^']*)' ""\$record""\)""");
+        Assert.True(reader.Success, "the hold reads no done from the set-up record by one python3 reader");
+        var members = Regex.Matches(reader.Groups["code"].Value, @"\.get\(""(?<member>[a-z_]+)""\)").Select(match => match.Groups["member"].Value).ToArray();
+
+        // The record as the application's first start writes it: the report is the document jason install printed.
+        var desktop = File.ReadAllText(Path.Combine(root, "desktop", "src", "machine-setup.ts"));
+        Assert.Contains("JSON.stringify({ ran_for: version, ran_from: place, report: printed }, null, 2)", desktop, StringComparison.Ordinal);
+        const string sentence = "/Users/someone/.local/bin is on the PATH a terminal has already, so no profile was written.";
+        var report = new InstallReport(
+            "0.49.0",
+            "/Applications/Jason.app/Contents/Resources/bundle/jason",
+            new InstallCommandOutcome("/Users/someone/.local/bin/jason", true, "/bin/zsh", false, [], [], "/Users/someone/.local/bin/jason", true),
+            [],
+            null,
+            null,
+            "not_running",
+            [sentence],
+            [],
+            []);
+        JsonNode? said = new JsonObject
+        {
+            ["ran_for"] = "0.49.0",
+            ["ran_from"] = "/Applications/Jason.app",
+            ["report"] = JsonNode.Parse(JsonSerializer.Serialize(report, JasonJson.Options)),
+        };
+        foreach (var member in members)
+        {
+            said = said is JsonObject holding ? holding[member] : null;
+        }
+
+        Assert.True(said is JsonArray, $"the hold reads {string.Join('.', members)} of the set-up record, which the product's own document does not hold as a list");
+        Assert.Equal([sentence], said!.AsArray().Select(item => item!.GetValue<string>()));
+        Assert.Contains("say \"the set-up record at $record: its report's done says: ", hold, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The disk image leg's end takes this build's extraction folder by the id the build was read to extract to, and .NET
+    /// spells that id in the URL-safe base64 alphabet: a letter, a digit, '_' or '-'. The pattern the end refuses an id by,
+    /// read from the script, takes an id holding both '_' and '-' (one a run's build had) and refuses one that is empty or
+    /// would name anything but one folder. Read as a glob everywhere; run by bash itself where there is one.
+    /// </summary>
+    [Fact]
+    public void The_disk_image_leg_s_end_takes_an_extraction_id_holding_both_underscore_and_hyphen()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var end = macos[macos.IndexOf("\nran-from-image-end)\n", StringComparison.Ordinal)..];
+        end = end[..end.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
+        var refusal = Regex.Match(end, @"\n *case ""\$id"" in (?<pattern>[^)\n]+)\) line=""  \$folder: not an id of the shape a build's is, left"" ;; \*\)\n");
+        Assert.True(refusal.Success, "the disk image leg's end refuses no id by one case pattern");
+        var pattern = refusal.Groups["pattern"].Value;
+        var taken = new[] { "4_Z-4a36gQYZ", "5NxLCBGAJEwA", "a_b", "a-b" };
+        var refused = new[] { "", "../x", "a/b", "a b", "a.b", "*" };
+        var glob = new Regex(GlobAsRegex(pattern));
+        foreach (var id in taken)
+        {
+            Assert.False(glob.IsMatch(id), $"the disk image leg's end refuses the id '{id}' by '{pattern}', and a build's id may be spelled so");
+        }
+
+        foreach (var id in refused)
+        {
+            Assert.True(glob.IsMatch(id), $"the disk image leg's end takes the id '{id}' by '{pattern}', which names no build's folder");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            foreach (var id in taken.Concat(refused))
+            {
+                var (exit, stdout, stderr) = Run("/bin/bash", new Dictionary<string, string>(), "-c", $"case \"$1\" in {pattern}) echo refused ;; *) echo taken ;; esac", "row", id);
+                Assert.True(exit == 0, stderr);
+                Assert.Equal(taken.Contains(id) ? "taken" : "refused", stdout.Trim());
+            }
+        }
+
+        // A case pattern of the shell's, as a regular expression: alternatives by '|', '*' any run, '?' one character,
+        // a bracket as a class ('!' negating it), and '' the empty word.
+        static string GlobAsRegex(string cases)
+        {
+            var alternatives = new List<string>();
+            foreach (var alternative in cases.Split('|'))
+            {
+                var regex = new StringBuilder();
+                for (var at = 0; at < alternative.Length; at++)
+                {
+                    var c = alternative[at];
+                    if (c == '*') { regex.Append(".*"); }
+                    else if (c == '?') { regex.Append('.'); }
+                    else if (c == '\'' && alternative.IndexOf('\'', at + 1) is var close and > 0) { regex.Append(Regex.Escape(alternative[(at + 1)..close])); at = close; }
+                    else if (c == '[')
+                    {
+                        var close2 = alternative.IndexOf(']', at + 2);
+                        var inside = alternative[(at + 1)..close2];
+                        regex.Append('[').Append(inside.StartsWith('!') ? "^" + inside[1..] : inside).Append(']');
+                        at = close2;
+                    }
+                    else { regex.Append(Regex.Escape(c.ToString())); }
+                }
+
+                alternatives.Add(regex.ToString());
+            }
+
+            return "^(?:" + string.Join('|', alternatives) + ")$";
+        }
     }
 
     /// <summary>
