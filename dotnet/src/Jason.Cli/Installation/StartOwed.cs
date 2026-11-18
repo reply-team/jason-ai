@@ -1,14 +1,16 @@
 using System.Globalization;
 using System.Text.Json;
+using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
 
 namespace Jason.Cli.Installation;
 
 /// <summary>
 /// The note that a start is owed, at <see cref="JasonPaths.StartOwedFile"/> (<c>run/start-owed.json</c> in the data
-/// directory). <c>jason install</c> writes it just before it drains and stops this data directory's runtime, and takes it
-/// back where the runtime then does not stop, and so does <c>jason runtime stop --start-owed</c>, a stop on an installer's
-/// behalf; a runtime's own start removes it, and so do any other stop through <c>jason runtime stop</c> and an uninstall
+/// directory). <c>jason install</c> writes it just before it drains and stops this data directory's runtime, and so does
+/// <c>jason runtime stop --start-owed</c>, a stop on an installer's behalf; where the stop does not see the runtime end,
+/// both take it back only where <see cref="After"/> says the runtime goes on (<see cref="StopLeft.GoesOn"/>). A runtime's
+/// own start removes it, and so do any other stop through <c>jason runtime stop</c> and an uninstall
 /// that keeps the data. So it stands from the stop until a runtime runs on this
 /// data directory again, a routine killed or timed out during the stop's wait and a caller that quit before it started one
 /// included.
@@ -102,4 +104,51 @@ internal static class StartOwed
             return false;
         }
     }
+
+    /// <summary>
+    /// What became of a runtime that a stop did not see end, read the one way every stop that writes the note reads it:
+    /// one that runs no longer ended; one that took the shutdown is going down; one sent the shutdown whose answer never came
+    /// may be either; and one that refused it, or was sent none, goes on.
+    /// </summary>
+    /// <param name="stopSent">Whether the shutdown was asked: false where the stop ended before it, in a drain or a wait.</param>
+    /// <param name="stopTaken">The runtime's answer to the shutdown: true where it took it, false where it refused it, null where none came.</param>
+    public static StopLeft After(JasonPaths paths, IRuntimeProcessControl processes, bool stopSent, bool? stopTaken)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(processes);
+
+        if (DescriptorProcess.Live(paths, processes) is null)
+        {
+            return StopLeft.Ended;
+        }
+
+        return stopTaken switch
+        {
+            true => StopLeft.GoingDown,
+            null when stopSent => StopLeft.Unknown,
+            _ => StopLeft.GoesOn,
+        };
+    }
+}
+
+/// <summary>
+/// What became of a runtime that a stop did not see end (<see cref="StartOwed.After"/>). The note that a start is owed stands
+/// in every case but <see cref="GoesOn"/>.
+/// </summary>
+internal enum StopLeft
+{
+    /// <summary>It runs no longer: it went down, and a start is owed.</summary>
+    Ended,
+
+    /// <summary>It took the shutdown and has not ended: it is going down, and a start is owed once it has.</summary>
+    GoingDown,
+
+    /// <summary>
+    /// The shutdown was sent and its answer never came: whether it is going down is not known. The note stands, inert beside
+    /// a runtime that answers, and its own start or a deliberate stop takes it back.
+    /// </summary>
+    Unknown,
+
+    /// <summary>It refused the shutdown, or was sent none: it goes on running, and no start is owed beside it.</summary>
+    GoesOn,
 }

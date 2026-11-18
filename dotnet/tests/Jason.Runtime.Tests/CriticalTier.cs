@@ -96,7 +96,7 @@ internal static partial class CriticalTier
         [Family.N1] =  [  0,   0,   0,   0,   7],
         [Family.N2] =  [  0,   0,   0,   0,  24],
         [Family.N3] =  [  0,   0,   0,   0,  46],
-        [Family.D1] =  [  1,   7,   0,   0,   2],
+        [Family.D1] =  [  1,  11,   0,   0,   2],
         [Family.D2] =  [  4,   0,   0,   0,   0],
         [Family.D3] =  [  2,   0,   0,   0,   3],
         [Family.X1] =  [  0,  10,   3,   1,  14],
@@ -116,7 +116,7 @@ internal static partial class CriticalTier
     public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
         (29, 415, 676, 32),      // Jason.App.Tests
-        (196, 3125, 5938, 446),  // Jason.Cli.Tests
+        (199, 3125, 5938, 450),  // Jason.Cli.Tests
         (105, 864, 4589, 136),   // Jason.Contracts.Tests
         (48, 302, 479, 54),      // Jason.PluginHost.Tests
         (734, 6295, 12968, 936), // Jason.Runtime.Tests

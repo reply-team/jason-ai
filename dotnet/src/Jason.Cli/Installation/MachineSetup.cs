@@ -409,19 +409,20 @@ public static class MachineSetup
                 null => "the stop's answer never came",
             };
             env.Error.Write(said.ToString());
-            if (DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null)
+            var left = StartOwed.After(env.Paths, env.Processes ?? RuntimeProcessControl.Instance, stopSent, stopTaken);
+            if (left is StopLeft.Ended)
             {
                 Problems.Add($"Stopping the runtime that ran from {old} did not finish ({why}), though it runs no longer, so nothing of that install was retired in this run. `jason runtime start` starts one; run this again to retire it.");
                 return (RuntimeStates.Stopped, true);
             }
 
-            if (stopTaken is true)
+            if (left is StopLeft.GoingDown)
             {
                 Problems.Add($"The runtime that runs from {old} took the stop and had not ended when stopping it stopped part-way ({why}), so nothing of that install was retired. {env.Paths.StartOwedFile} says a start is owed once it has ended; run this again to retire it.");
                 return (RuntimeStates.WouldNotStop, true);
             }
 
-            var unknown = stopSent && stopTaken is null;
+            var unknown = left is StopLeft.Unknown;
             if (!unknown)
             {
                 StartOwed.Remove(env.Paths);
