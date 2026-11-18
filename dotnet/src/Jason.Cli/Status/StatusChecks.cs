@@ -281,7 +281,7 @@ internal static partial class StatusChecks
             var unfinished = Contracts.Update.UnfinishedUpdate.Read(env.Paths);
             checks.Add(Runtime(descriptor, info, unfinished, StartOwed.Read(env.Paths)));
             checks.Add(RuntimeVersion(info, SkillsSource.BuildVersion(env)));
-            checks.Add(Dispatcher(info, unfinished));
+            checks.Add(Dispatcher(info, unfinished, SkillsSource.BuildVersion(env)));
             checks.Add(Migrations(info));
             checks.Add(Plugins(info));
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
@@ -556,12 +556,13 @@ internal static partial class StatusChecks
     /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
     /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
     /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
-    /// restarts nothing. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
+    /// restarts nothing; for a runtime of an older build than this CLI, whose executable another build has replaced, it is
+    /// the restart alone, since a resume would start its plugin hosts from that file. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
     /// of it is never offered: the check says the runtime is draining for the update and names the update's own repair. A
     /// dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never failed; a runtime that
     /// did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
     /// </summary>
-    private static StatusCheck Dispatcher(SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished)
+    private static StatusCheck Dispatcher(SystemInfoResponse? info, Contracts.Update.UnfinishedUpdate? unfinished, string build)
     {
         const string Name = "dispatcher";
         if (info is null)
@@ -586,6 +587,12 @@ internal static partial class StatusChecks
                 CheckState.Failed,
                 $"The runtime is draining, and an update may be under way: {unfinished.Said()}; {running}.",
                 null),
+            DispatcherState.Draining when OlderBuild(info, build) => new StatusCheck(
+                Name,
+                true,
+                CheckState.Failed,
+                $"The runtime is draining, and it is {info.RuntimeVersion}, not this CLI's {build}: it starts its plugin hosts from a file another build has replaced, so a restart of the runtime brings it back claiming work, never a resume; {running}.",
+                Repair.Restart),
             DispatcherState.Draining => new StatusCheck(
                 Name,
                 true,
@@ -596,6 +603,14 @@ internal static partial class StatusChecks
             _ => new StatusCheck(Name, true, CheckState.Ok, "The runtime claims work.", null),
         };
     }
+
+    /// <summary>
+    /// Whether the runtime is another build than this CLI and not a newer one: the case <c>runtime_version</c> repairs with a
+    /// restart, a runtime whose executable another build has replaced.
+    /// </summary>
+    private static bool OlderBuild(SystemInfoResponse info, string build) =>
+        !string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)
+        && !(SemanticVersion.TryParse(info.RuntimeVersion, out var running) && SemanticVersion.TryParse(build, out var self) && running > self);
 
     private static StatusCheck Migrations(SystemInfoResponse? info)
     {
