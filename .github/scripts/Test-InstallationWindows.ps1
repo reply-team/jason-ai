@@ -474,25 +474,31 @@ switch ($Step) {
         # leg's failure is recorded already; nothing here is a proof of anything.
         if ($Clean) {
             if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
-            $left = Get-LeftOver
+            $left = @(Get-LeftOver)
             if ($left.Count -gt 0) {
                 Say "the machine is not the machine before ($($left.Count) line(s): $(($left | Select-Object -First 6) -join '; ')); an earlier leg failed, and the product's own uninstalls take it off before this leg"
-                Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-                foreach ($jason in @($carried, (Join-Path $commandLine 'jason.exe'))) {
-                    if (Test-Path -LiteralPath $jason) {
-                        $removed = Invoke-Program $jason @('uninstall', '--purge-data', '--yes') @{} 300
-                        Write-Host "$jason uninstall --purge-data --yes ended $($removed.Exit)"
+                try {
+                    Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                    foreach ($jason in @($carried, (Join-Path $commandLine 'jason.exe'))) {
+                        if (Test-Path -LiteralPath $jason) {
+                            $removed = Invoke-Program $jason @('uninstall', '--purge-data', '--yes') @{} 300
+                            Write-Host "$jason uninstall --purge-data --yes ended $($removed.Exit)"
+                        }
                     }
-                }
-                foreach ($entry in @(Get-JasonUninstallEntries)) {
-                    if (([string]$entry.QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
-                        $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
-                        Write-Host "Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                    foreach ($entry in @(Get-JasonUninstallEntries)) {
+                        $quietLine = if ($entry.PSObject.Properties.Name -contains 'QuietUninstallString') { [string]$entry.QuietUninstallString } else { '' }
+                        if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
+                            $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
+                            Write-Host "Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                        }
                     }
+                } catch {
+                    Skip-Leg "not run: taking off the machine an earlier failed leg left failed: $($_.Exception.Message)"
+                    return
                 }
                 $deadline = [DateTime]::UtcNow.AddSeconds(120)
-                while ([DateTime]::UtcNow -lt $deadline -and (Get-LeftOver).Count -gt 0) { Start-Sleep -Seconds 2 }
-                $left = Get-LeftOver
+                while ([DateTime]::UtcNow -lt $deadline -and @(Get-LeftOver).Count -gt 0) { Start-Sleep -Seconds 2 }
+                $left = @(Get-LeftOver)
                 if ($left.Count -gt 0) { Skip-Leg "not run: the machine an earlier failed leg left could not be brought back by the product's own uninstalls: $($left -join '; ')"; return }
                 Say "the product's own uninstalls brought the machine back to the machine before"
             }
