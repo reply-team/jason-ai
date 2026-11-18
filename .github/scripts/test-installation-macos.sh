@@ -821,10 +821,11 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     placed="$(app)"
     [ -n "$placed" ] || fail "no Jason.app after the move"
     carried="$placed/Contents/Resources/bundle/jason"
+    grep -q "$carried" "$WRAPPER" || fail "after the move the wrapper at $WRAPPER does not run $carried"
     # The wrapper names no data directory: a runtime starts every child with JASON_DATA_DIR set, the move's routine
     # among them, and the default one is not written, so the wrapper is the one the install script writes.
     ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory after a move with none named: $(cat "$WRAPPER")"
-    say "moved into Jason Desktop $version by the previous release's own update; the wrapper names no data directory"
+    say "moved into Jason Desktop $version by the previous release's own update; the wrapper runs $carried and names no data directory"
 
     # Step 0: under the moved 0.49, its runtime running.
     within 60 'the moved runtime answering' "$carried" runtime status > /dev/null || fail 'no runtime answers under the moved 0.49 before going back'

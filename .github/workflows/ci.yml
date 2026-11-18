@@ -2536,13 +2536,9 @@ jobs:
             curl -fsSL --max-time 600 -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
           done
           (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
-          # The previous release's Desktop archive, held to checksums.txt where that lists it, and named where it does not.
-          if grep -qE '  jason-desktop-macos-arm64\.zip$' "$PREVIOUS/checksums.txt"; then
-            (cd "$PREVIOUS" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
-          else
-            echo "jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt, so it is not verified by it"
-            echo "- jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt, so it is not verified by it" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          # The previous release's Desktop archive, held to checksums.txt as the three files beside it are: unlisted, it fails.
+          grep -qE '  jason-desktop-macos-arm64\.zip$' "$PREVIOUS/checksums.txt" || { echo "::error::jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt"; exit 1; }
+          (cd "$PREVIOUS" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
@@ -2560,7 +2556,12 @@ jobs:
           bash .github/scripts/test-installation-macos.sh over-previous-desktop "$PREVIOUS" "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
           bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-over-previous-uninstall
-          bash .github/scripts/test-installation-macos.sh compare after-over-previous-uninstall before
+          # The previous release's Desktop's first start ran its own jason install, which wrote the ~/.local/bin lines into a
+          # profile it keeps no record of creating; docs/release-and-update.md §9 ("in place of the PATH entry and the
+          # executable") says such a file stays: "a file the person had, one they have written into since, and one with no
+          # record (an install before 0.49) stay". previous-profiles excuses that file only when empty, and that release's
+          # enabled launchd record by name, each said.
+          bash .github/scripts/test-installation-macos.sh compare after-over-previous-uninstall before previous-profiles
           bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # The path every command-line user takes: the previous release's own install, its own jason update apply pinned to
