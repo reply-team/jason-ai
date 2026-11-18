@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection.PortableExecutable;
 using System.Runtime.Versioning;
 using System.Formats.Tar;
 using System.IO.Compression;
@@ -20,7 +21,8 @@ namespace Jason.Cli.Tests.Documentation;
 /// <remarks>
 /// <para>
 /// Nothing real is installed or run. On Windows the feed's setup is a stand-in built by the .NET Framework's C# compiler,
-/// which every Windows carries: run with <c>/S /D=&lt;folder&gt;</c>, it puts a stand-in carried jason and its
+/// which every Windows carries, as a windowed program as the real setup is, so the script's start of it opens no console
+/// window on the machine the rows run on: run with <c>/S /D=&lt;folder&gt;</c>, it puts a stand-in carried jason and its
 /// <c>version.json</c> in that folder's <c>resources\bundle</c>, under a <c>LOCALAPPDATA</c> of the test's own. The stand-in
 /// jason writes each call it is given into a log, answers <c>runtime status</c> by whether a flag file of the test's exists,
 /// makes the file at <c>runtime start</c>, and prints the report a row gives it for <c>install</c>. A stand-in carries no
@@ -61,7 +63,18 @@ public sealed class InstallDesktopScriptTests : IDisposable
     private const string Requirement =
         "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"BD8M7U5YBV\"";
 
-    private static readonly Lazy<byte[]> StandIn = new(Compile);
+    /// <summary>
+    /// The stand-in as the carried jason, a console program as jason is: the script runs it inside its own console and
+    /// reads what it prints.
+    /// </summary>
+    private static readonly Lazy<byte[]> StandIn = new(() => Compile("exe"));
+
+    /// <summary>
+    /// The same stand-in as the setup and as the application's Jason.exe, windowed programs as the real ones are: the script
+    /// starts the setup with Start-Process, which gives a console program a console window of its own, shown on the desktop
+    /// of whoever runs the rows. Neither part prints anything.
+    /// </summary>
+    private static readonly Lazy<byte[]> WindowedStandIn = new(() => Compile("winexe"));
 
     private readonly TempTree _tree = new();
 
@@ -266,7 +279,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.True(windows.Run(windows.Feed()).Exit == 0);
         File.Delete(windows.Log);
         var window = Path.Combine(windows.App, "Jason.exe");
-        File.WriteAllBytes(window, StandIn.Value);
+        File.WriteAllBytes(window, WindowedStandIn.Value);
         using var open = System.Diagnostics.Process.Start(new ProcessStartInfo(window) { UseShellExecute = false, CreateNoWindow = true })!;
         try
         {
@@ -295,7 +308,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.True(windows.Run(windows.Feed()).Exit == 0);
         File.Delete(windows.Log);
         var window = Path.Combine(windows.App, "Jason.exe");
-        File.WriteAllBytes(window, StandIn.Value);
+        File.WriteAllBytes(window, WindowedStandIn.Value);
         var asked = Path.Combine(_tree.NewDirectory("asked"), "asked");
         var go = Path.Combine(_tree.NewDirectory("go"), "go");
         windows.Variables["JASON_TEST_ASKED"] = asked;
@@ -913,7 +926,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
         {
             var feed = _tree.NewDirectory("feed");
             var setup = Path.Combine(feed, Setup);
-            File.WriteAllBytes(setup, StandIn.Value);
+            File.WriteAllBytes(setup, WindowedStandIn.Value);
             File.WriteAllText(Path.Combine(feed, ReleaseAssets.Manifest), "{\n  \"schema\": 1,\n  \"version\": \"" + version + "\"\n}\n");
             File.WriteAllText(Path.Combine(feed, ReleaseAssets.Checksums), Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(setup))) + "  " + Setup + "\n");
             Variables["JASON_STANDIN_VERSION"] = version;
@@ -1097,13 +1110,28 @@ public sealed class InstallDesktopScriptTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The parts the script starts as windowed programs, the setup and the application's Jason.exe, are windowed programs,
+    /// read from the header of the program built for them, so that starting one opens no console window; the carried jason
+    /// the script runs in its own console is a console program, as jason is.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Windows_the_setup_and_the_window_the_script_starts_are_windowed_programs_and_the_carried_jason_a_console_one()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The stand-ins are built by the .NET Framework's C# compiler, which Windows carries.");
+
+        Assert.Equal(Subsystem.WindowsGui, StandInPrograms.SubsystemOf(WindowedStandIn.Value));
+        Assert.Equal(Subsystem.WindowsCui, StandInPrograms.SubsystemOf(StandIn.Value));
+    }
+
     // --- helpers -----------------------------------------------------------------------------------------------
 
     /// <summary>
     /// The stand-in, one program for both parts by its own file name: as the setup it puts itself in a folder's
     /// <c>resources\bundle</c> as the carried jason, with a <c>version.json</c>; as jason it logs, answers and reports.
     /// </summary>
-    private static byte[] Compile()
+    private static byte[] Compile(string target)
     {
         var csc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
         Assert.SkipUnless(File.Exists(csc), "This Windows has no .NET Framework C# compiler to build the stand-in with.");
@@ -1114,7 +1142,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             var source = Path.Combine(directory, "standin.cs");
             var output = Path.Combine(directory, "standin.exe");
             File.WriteAllText(source, StandInSource);
-            var (exit, stdout, stderr) = RunToEnd(csc, new Dictionary<string, string>(), ["/nologo", "/target:exe", "/out:" + output, source]);
+            var (exit, stdout, stderr) = RunToEnd(csc, new Dictionary<string, string>(), ["/nologo", "/target:" + target, "/out:" + output, source]);
             Assert.True(exit == 0, stdout + stderr);
             return File.ReadAllBytes(output);
         }
