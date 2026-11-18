@@ -52,7 +52,8 @@ OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
 
-fail() { echo "::error title=Installation::$1"; exit 1; }
+# A failed assertion ends its step; its words are kept beside the leg's name for the held step's list as well.
+fail() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT/leg-failure.txt" 2>/dev/null || true; exit 1; }
 
 # A failed assertion that does not keep the legs after it from being read: said now as an error, recorded, and failed by
 # the held step at the end with its own words.
@@ -180,8 +181,45 @@ write_listing() {
         folder 'harness root' "$ROOT"
         ps -axo command= | grep -iE '(Jason\.app/|/\.local/bin/jason|/bundle/jason)' | grep -v grep | sed 's/^/process\t/' || true
     } | sort -u > "$1"
+    [ "${2:-}" = quiet ] && return 0
     echo "$(wc -l < "$1" | tr -d ' ') lines written to $1"
     sed 's/^/  /' "$1"
+}
+
+# --- the legs' two ends ----------------------------------------------------------------------------------------------
+
+# A leg that began and never ended failed: recorded by its name with the words its failure said.
+close_leg() {
+    [ -s "$OUT/leg-open.txt" ] || { rm -f "$OUT/leg-open.txt"; return 0; }
+    local open why
+    open="$(cat "$OUT/leg-open.txt")"
+    rm -f "$OUT/leg-open.txt"
+    if [ -s "$OUT/leg-failure.txt" ]; then why="it said: $(tr '\n' ' ' < "$OUT/leg-failure.txt")"; else why="its own lines are in its step"; fi
+    echo "::error title=Installation::the leg '$open' failed; $why"
+    printf '%s\n' "the leg '$open' failed; $why" >> "$OUT/failed-legs.txt"
+}
+
+# This leg not run, said by why: recorded for the held step, and $OUT/skip left for the job's step to end on.
+skip_leg() {
+    echo "::error title=Installation::$LEG - $1"
+    say "$LEG - $1"
+    printf '%s\n' "$LEG - $1" >> "$OUT/not-run.txt"
+    rm -f "$OUT/leg-open.txt"
+    : > "$OUT/skip"
+}
+
+# Every line of the machine now that is not a line of the machine before, and every line gone, as compare reads them:
+# the data directory and the harness root aside, and what an earlier leg is known to leave and asserts itself - launchd's
+# records, which no command without administrator rights removes, and the empty profiles the previous release's install.sh
+# creates.
+left_over() {
+    write_listing "$OUT/now.txt" quiet
+    local empty
+    empty="$(printf '' | shasum -a 256 | cut -d' ' -f1)"
+    { comm -13 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/+ /'; comm -23 "$OUT/before.txt" "$OUT/now.txt" | sed 's/^/- /'; } \
+        | grep -vE '^[+-] (data directory|harness root|launchd record )' \
+        | grep -vE "^\+ profile \.(zprofile|zshrc)	$empty\$" \
+        | grep -vE '^- profile \.(zprofile|zshrc)	absent$' || true
 }
 
 step="${1:-}"; shift || true
@@ -217,7 +255,7 @@ compare)
     went="$(comm -23 "$before" "$after" | grep -vE "$kept" || true)"
     # After the previous release's command-line install alone, an expected leftover: the profiles 0.48's install.sh
     # created, which no record of this version's names, emptied of their lines. Said, and not counted.
-    if [ "${3:-}" = previous-profiles ]; then
+    if [ "${3:-}" = previous-profiles ] || [ "${3:-}" = previous-own ]; then
         empty="$(printf '' | shasum -a 256 | cut -d' ' -f1)"
         expected_left="$(printf '%s\n' "$left" | grep -E "^profile \.(zprofile|zshrc)	$empty\$" || true)"
         if [ -n "$expected_left" ]; then
@@ -238,6 +276,16 @@ compare)
         else
             say "no enabled record of the previous release's registration is left in launchd"
         fi
+        # After the previous release's own autostart disable and uninstall (the way back's end), the disabled record they
+        # write (unload -w) is that release's own act, not this version's: named, said, and not counted. Any other label
+        # still counts.
+        if [ "${3:-}" = previous-own ]; then
+            expected_left="$(printf '%s\n' "$left" | grep -E '^launchd record (gui|user)	ai\.jason\.runtime disabled$' || true)"
+            if [ -n "$expected_left" ]; then
+                say "expected after the previous release's own autostart disable and uninstall (unload -w): $(printf '%s' "$expected_left" | tr '\n\t' '; ') (that release's disabled record)"
+                left="$(printf '%s\n' "$left" | grep -vE '^launchd record (gui|user)	ai\.jason\.runtime disabled$' || true)"
+            fi
+        fi
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
     cat "$diffed"
@@ -251,8 +299,87 @@ compare)
     fi
     ;;
 
+begin)
+    # A leg's start: the leg before recorded as failed where it began and never ended; this leg said not run where a
+    # step it needs ('name=outcome') did not succeed; and, with clean, the machine held to the listing taken before
+    # anything was installed. Where it is not:
+    #  - the leg that last changed the machine ENDED: that leg left it, which is that leg's own failure, said and recorded
+    #    by its name; the reset below then acts, that leg now being a failed one, and hides nothing;
+    #  - that leg FAILED or never ended: its failure is recorded already, and the reset acts;
+    #  - no leg changed the machine yet: nothing to blame and nothing to reset, so this leg is not run.
+    # The reset uses the product's own uninstalls alone - the carried jason's, then the wrapper's or the previous
+    # release's at ~/.local/bin - and only on a GitHub-hosted runner, never on a person's Mac. Each act is logged with what
+    # it found and what it removed, here and in $OUT/resets.txt; none of it is a proof of anything. What they cannot
+    # remove makes this leg not run, naming the lines left.
+    LEG="$1"; shift
+    clean=""; if [ "${1:-}" = clean ]; then clean=1; shift; fi
+    rm -f "$OUT/skip"
+    echo "=== $LEG"
+    close_leg
+    rm -f "$OUT/leg-failure.txt"
+    printf '%s\n' "$LEG" > "$OUT/leg-open.txt"
+    for need in "$@"; do
+        needed="${need%=*}"; outcome="${need##*=}"
+        [ "$outcome" = success ] && continue
+        if [ "$outcome" = failure ]; then skip_leg "not run: the leg it needs failed, $needed"; else skip_leg "not run: the leg it needs did not run ($outcome), $needed"; fi
+        exit 0
+    done
+    if [ -n "$clean" ]; then
+        [ -f "$OUT/before.txt" ] || { skip_leg 'not run: the leg it needs failed, The machine before anything is installed'; exit 0; }
+        found="$(left_over)"
+        if [ -n "$found" ]; then
+            resets="$OUT/resets.txt"
+            last="$(cat "$OUT/last-leg.txt" 2>/dev/null || true)"
+            [ -n "$last" ] || { skip_leg "not run: the machine is not the machine before, and no leg before this one changed it: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"; exit 0; }
+            ended=""; if [ -f "$OUT/legs-ended.txt" ] && grep -qxF -- "$last" "$OUT/legs-ended.txt"; then ended=1; fi
+            if [ -n "$ended" ]; then
+                why="the leg '$last' ended, but the machine after it is not the machine before: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"
+                echo "::error title=Installation::$why"
+                printf '%s\n' "$why" >> "$OUT/failed-legs.txt"
+                after_last="ended leaving it, recorded as its failure"
+            else
+                after_last="failed"
+            fi
+            printf "before '%s', after '%s' %s, found: %s\n" "$LEG" "$last" "$after_last" "$(printf '%s\n' "$found" | tr '\t\n' ' ;')" >> "$resets"
+            say "before this leg the machine is not the machine before ($(printf '%s\n' "$found" | grep -c .) line(s)), after '$last' $after_last; found: $(printf '%s\n' "$found" | tr '\t\n' ' ;')"
+            if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]; then skip_leg 'not run: the reset after a failed leg runs on a GitHub-hosted runner alone, and this is not one'; exit 0; fi
+            for pid in $(pgrep -f '/Jason\.app/Contents/MacOS/' || true); do
+                kill "$pid" 2>/dev/null || true
+                printf "  quit the application's process %s\n" "$pid" >> "$resets"
+            done
+            sleep 3
+            placed="$(app)"
+            for jason in "${placed:+$placed/Contents/Resources/bundle/jason}" "$WRAPPER"; do
+                [ -n "$jason" ] && [ -x "$jason" ] || continue
+                status=0
+                ( within 300 "$jason uninstall --purge-data --yes" "$jason" uninstall --purge-data --yes > "$OUT/reset-uninstall.txt" 2>&1 ) || status=$?
+                line="  $jason uninstall --purge-data --yes ended $status: $(grep . "$OUT/reset-uninstall.txt" | tail -n 3 | tr '\n' ' ')"
+                echo "$line"
+                printf '%s\n' "$line" >> "$resets"
+            done
+            until=$(( $(date +%s) + 120 ))
+            while [ "$(date +%s)" -lt "$until" ] && [ -n "$(left_over)" ]; do sleep 2; done
+            left="$(left_over)"
+            removed="$(comm -23 <(printf '%s\n' "$found" | sort) <(printf '%s\n' "$left" | sort) | grep . || true)"
+            printf '  removed: %s; left: %s\n' "$(printf '%s' "${removed:-nothing}" | tr '\t\n' ' ;')" "$(printf '%s' "${left:-nothing}" | tr '\t\n' ' ;')" >> "$resets"
+            say "the reset removed: $(printf '%s' "${removed:-nothing}" | tr '\t\n' ' ;'); left: $(printf '%s' "${left:-nothing}" | tr '\t\n' ' ;')"
+            if [ -n "$left" ]; then skip_leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $(printf '%s\n' "$left" | tr '\t\n' ' ;')"; exit 0; fi
+        fi
+    fi
+    # This leg now changes the machine, and is the one a later leg's start holds to what it leaves.
+    printf '%s\n' "$LEG" > "$OUT/last-leg.txt"
+    ;;
+
+end)
+    printf '%s\n' "$1" >> "$OUT/legs-ended.txt"
+    rm -f "$OUT/leg-open.txt"
+    say "$1 - ended"
+    ;;
+
 held)
-    [ ! -s "$OUT/failed-legs.txt" ] || fail "$(tr '\n' ' ' < "$OUT/failed-legs.txt")$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
+    close_leg
+    [ ! -s "$OUT/not-run.txt" ] || cat "$OUT/not-run.txt" >> "$OUT/failed-legs.txt"
+    [ ! -s "$OUT/failed-legs.txt" ] || fail "$(paste -sd '|' "$OUT/failed-legs.txt" | sed 's/|/ | /g')$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
     [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"
     say "the machine after every uninstall was the machine before it, the data directory and the harness root aside"
     ;;
@@ -517,6 +644,145 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
         [ "$test_build" = true ] || fail "CI's test build's runtime report does not carry test_build: true"
         say "a test build, and it says so: jason --version on standard error, and test_build: true in the runtime's report"
     fi
+    ;;
+
+way-back)
+    # Going back from 0.49 to the previous release (docs/release-and-update.md, "Going back from 0.49"), on a Mac moved
+    # by the previous release's own update: one campaign made under the previous release first; then, under the moved
+    # 0.49 with its runtime running, the campaigns counted and the journal read whole; jason uninstall with no
+    # --purge-data; the previous release installed by its pinned line from the real release page; its skills, UI, runtime
+    # and login start set up again. Asserted alone: the campaigns are as many, every journal entry is still there by id
+    # with its kind and moment, no entry has appeared among the old ones, and the previous release's jason says its
+    # version and its status is ready. No update and no rollback runs under it. Its own uninstall, purging the data, ends
+    # the leg.
+    previous="$1"; feed="$2"; version="$3"
+    # Every item of a listing a jason verb pages by next_cursor, a thousand at a time, as a JSON array.
+    read_all() {
+        python3 - "$@" <<'PY'
+import json, subprocess, sys
+jason, words = sys.argv[1], sys.argv[2:]
+items, cursor = [], None
+for page in range(1000):
+    asked = [jason] + words + ['--limit', '1000'] + (['--cursor', cursor] if cursor else [])
+    ran = subprocess.run(asked, capture_output=True, text=True, timeout=120)
+    if ran.returncode != 0:
+        sys.exit('jason %s exited with %d: %s' % (' '.join(words), ran.returncode, ran.stderr.strip()))
+    lines = [line for line in ran.stdout.splitlines() if line.lstrip().startswith('{')]
+    if not lines:
+        sys.exit('jason %s printed no page' % ' '.join(words))
+    doc = json.loads(lines[-1])
+    items += doc['items']
+    cursor = doc.get('next_cursor')
+    if not cursor:
+        break
+else:
+    sys.exit('jason %s still had pages after 1000' % ' '.join(words))
+json.dump(items, sys.stdout)
+PY
+    }
+    read_field() { python3 -c 'import json,sys
+doc = json.load(open(sys.argv[1]))
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
+
+    within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/way-back-previous-install.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/way-back-previous-install.txt")"
+    old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)"
+    within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
+    within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
+    within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before going back' > "$OUT/way-back-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/way-back-campaign.json")"
+    say "the previous release's command-line Jason $old installed by its own script, a runtime running, its login start registered and one campaign made"
+
+    python3 -m http.server 8099 --bind 127.0.0.1 --directory "$feed" > "$OUT/way-back-feed-server.log" 2>&1 &
+    server=$!
+    trap 'kill "$server" 2>/dev/null || true' EXIT
+    wait_until 10 'the feed on 127.0.0.1:8099 answering' curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8099/manifest.json
+    status=0
+    within 900 "the previous release's jason update apply --version $version" "$WRAPPER" update apply --version "$version" --feed http://127.0.0.1:8099/manifest.json --drain-seconds 0 > "$OUT/way-back-update.json" 2> "$OUT/way-back-update.err" || status=$?
+    kill "$server" 2>/dev/null || true
+    [ "$status" -eq 0 ] || fail "the previous release's jason update apply --version $version exited with $status: $(cat "$OUT/way-back-update.err")"
+    [ "$(read_field "$OUT/way-back-update.json" move.state)" = done ] || fail "the update did not end with its move done: $(cat "$OUT/way-back-update.json")"
+    placed="$(app)"
+    [ -n "$placed" ] || fail "no Jason.app after the move"
+    carried="$placed/Contents/Resources/bundle/jason"
+    say "moved into Jason Desktop $version by the previous release's own update"
+
+    # Step 0: under the moved 0.49, its runtime running.
+    within 60 'the moved runtime answering' "$carried" runtime status > /dev/null || fail 'no runtime answers under the moved 0.49 before going back'
+    read_all "$carried" campaign list --include-archived > "$OUT/way-back-campaigns-before.json" || fail "the campaigns could not be read under the moved 0.49"
+    read_all "$carried" journal list > "$OUT/way-back-journal-before.json" || fail "the journal could not be read under the moved 0.49"
+    counted="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$OUT/way-back-campaigns-before.json")"
+    [ "$counted" -ge 1 ] || fail 'the campaign made under the previous release is not listed under the moved 0.49'
+    say "under the moved 0.49: $counted campaign(s), archived included; the journal holds $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print("%d entries, the newest %s" % (len(j), j[0]["id"] if j else "none"))' "$OUT/way-back-journal-before.json")"
+
+    # Step 1: the leg's own application quit, then jason uninstall with no --purge-data.
+    pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
+    sleep 3
+    within 300 'jason uninstall with no --purge-data' "$carried" uninstall > "$OUT/way-back-uninstall.json" 2>&1 || fail "jason uninstall with no --purge-data failed: $(cat "$OUT/way-back-uninstall.json")"
+    wait_until 120 "Jason.app going after jason uninstall" gone "$placed"
+    [ -d "$DATA" ] || fail "jason uninstall with no --purge-data took the data directory $DATA"
+    [ -d "$ROOT" ] || fail "jason uninstall with no --purge-data took the harness root $ROOT"
+    say "jason uninstall with no --purge-data took the application off and kept the data directory and the harness root"
+
+    # Step 2: the previous release by its pinned line, from the real release page, as the page says.
+    line="curl -fsSL https://get.jasonharness.ai/releases/download/v$old/install.sh | sh -s -- --version $old"
+    within 600 "the pinned line of $old" env PATH="$(plain_path)" SHELL=/bin/zsh sh -c "$line" > "$OUT/way-back-pinned.txt" 2>&1 || fail "the pinned line of $old failed: $(tail -n 5 "$OUT/way-back-pinned.txt")"
+    [ -x "$WRAPPER" ] || fail "the pinned line of $old placed no jason at $WRAPPER"
+    say "$old installed by its pinned line from the real release page: $line"
+
+    # Step 3: its skills, its UI, its runtime and its login start.
+    for words in 'skills install' 'ui install' 'runtime start' 'runtime autostart enable'; do
+        # shellcheck disable=SC2086
+        within 600 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-step3.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-step3.txt")"
+    done
+    say "under $old: jason skills install, ui install, runtime start and runtime autostart enable each ended 0"
+
+    # (i) The campaigns, as many; the journal, held by id.
+    read_all "$WRAPPER" campaign list --include-archived > "$OUT/way-back-campaigns-after.json" || fail "the campaigns could not be read under $old"
+    read_all "$WRAPPER" journal list > "$OUT/way-back-journal-after.json" || fail "the journal could not be read under $old"
+    held="$(python3 - "$OUT/way-back-campaigns-before.json" "$OUT/way-back-campaigns-after.json" "$OUT/way-back-journal-before.json" "$OUT/way-back-journal-after.json" "$old" <<'PY'
+import json, sys
+c0, c1, j0, j1 = (json.load(open(path)) for path in sys.argv[1:5])
+old = sys.argv[5]
+faults = []
+if len(c1) != len(c0):
+    faults.append('under %s %d campaign(s) are listed, not the %d the moved 0.49 listed' % (old, len(c1), len(c0)))
+after = {entry['id']: entry for entry in j1}
+known = {entry['id'] for entry in j0}
+lost = [entry['id'] for entry in j0 if entry['id'] not in after]
+changed = ['%s (%s %s now %s %s)' % (e['id'], e['kind'], e['ts'], after[e['id']]['kind'], after[e['id']]['ts'])
+           for e in j0 if e['id'] in after and (after[e['id']]['kind'] != e['kind'] or after[e['id']]['ts'] != e['ts'])]
+if lost:
+    faults.append('going back lost %d journal entr(ies): %s' % (len(lost), ', '.join(lost[:10])))
+if changed:
+    faults.append('going back changed the kind or the moment of %d journal entr(ies): %s' % (len(changed), '; '.join(changed[:10])))
+newest = j0[0]['id'] if j0 else None
+at = next((i for i, entry in enumerate(j1) if entry['id'] == newest), -1)
+among = ['%s (%s)' % (e['id'], e['kind']) for e in (j1[at:] if at >= 0 else []) if e['id'] not in known]
+if among:
+    faults.append('going back put %d entr(ies) among the old ones, at or before %s in the journal\'s order: %s' % (len(among), newest, ', '.join(among[:10])))
+if faults:
+    print('FAIL ' + ' | '.join(faults))
+else:
+    print('under %s: %d campaign(s), as before; every one of the %d journal entries is there by id with its kind and its moment, and none has appeared at or before %s; %d newer entr(ies) are listed above it' % (old, len(c1), len(j0), newest, at))
+PY
+)"
+    case "$held" in FAIL\ *) fail "${held#FAIL }" ;; esac
+    say "$held"
+
+    # (ii) Its version and its status.
+    said="$(within 60 "jason --version under $old" "$WRAPPER" --version 2>/dev/null | cut -d+ -f1)"
+    [ "$said" = "$old" ] || fail "jason --version says '$said', not $old"
+    within 120 "jason status under $old" "$WRAPPER" status > "$OUT/way-back-status.json" 2>/dev/null || true
+    [ "$(read_field "$OUT/way-back-status.json" ready)" = true ] || fail "jason status under $old is not ready: $(cat "$OUT/way-back-status.json")"
+    say "under $old: jason --version says $said, and jason status says ready: true"
+
+    # The leg's own end: the runtime stopped, the login start taken off, and the previous release's own uninstall.
+    for words in 'runtime stop' 'runtime autostart disable' 'uninstall --purge-data --yes'; do
+        # shellcheck disable=SC2086
+        within 300 "jason $words under $old" "$WRAPPER" $words > "$OUT/way-back-end.txt" 2>&1 || fail "jason $words under $old failed: $(tail -n 3 "$OUT/way-back-end.txt")"
+    done
+    say "$old's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
     ;;
 
 previous-removal)

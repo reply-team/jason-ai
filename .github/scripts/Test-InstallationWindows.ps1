@@ -35,19 +35,26 @@ uploads, and they are what a person reads.
   Begin, End        a leg's two ends, so that no leg's failure keeps the legs after it from running. Begin records the
                     leg before it as failed when that one began and never ended; says "not run" for this leg when a step
                     it needs (-Needs 'name=outcome') did not succeed, and leaves -Out\skip for the job's step to read;
-                    and, with -Clean, holds the machine to the listing taken before anything was installed, a machine an
-                    earlier failed leg left being taken off by the product's own uninstalls and said so. Held lists
-                    every failed leg, every leg not run and every divergence, and fails the job at its end
+                    and, with -Clean, holds the machine to the listing taken before anything was installed: a machine
+                    the leg that last changed it left is that leg's failure, recorded by its name, and on a
+                    GitHub-hosted runner alone the product's own uninstalls take it off, each act logged in
+                    -Out\resets.txt. -Reading marks a leg that changes nothing. Held lists every failed leg, every leg
+                    not run and every divergence, and fails the job at its end
+  PathShape         the account's Path made ExpandString with an entry spelled through a variable, on a GitHub-hosted
+                    runner alone; every install after it holds both by name
+  WayBack           going back from 0.49 to the previous release on a moved machine: campaigns as many, the journal held
+                    by id, the previous release's version and its ready status
 
 -Signer names the signer the script under test holds the setup to: the release's on the signed packages; on CI's test
 build, which a release never signs, the runner's own test certificate, which the job's copy of install.ps1 names.
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack')] [string] $Step,
     [string] $Leg,
     [string[]] $Needs = @(),
     [switch] $Clean,
+    [switch] $Reading,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -73,6 +80,8 @@ $harnessRoot = Join-Path $env:USERPROFILE 'Jason'
 $uninstallKeys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
 # A skill folder of a name Jason ships, written before the install as a person's own: never touched, never recorded.
 $ownSkill = Join-Path $env:USERPROFILE '.agents\skills\quick-start'
+# The entry the PathShape step adds to the account's Path, spelled through a variable, which every install must keep so.
+$keptEntry = '%USERPROFILE%\jason-ci-kept'
 
 # A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
 function Fail([string] $why) {
@@ -284,6 +293,31 @@ function Read-Document([string] $said) {
     try { return ($lines[-1] | ConvertFrom-Json) } catch { return $null }
 }
 
+# Every item of a listing a jason verb pages by next_cursor, a thousand at a time, read whole: each item as the JSON the
+# verb printed (System.Text.Json, so that a moment is the text written and never a date the reader converted).
+function Read-All([string] $jason, [string[]] $words) {
+    $items = [System.Collections.Generic.List[object]]::new()
+    $cursor = $null
+    for ($page = 1; $page -le 1000; $page++) {
+        $asked = @($words) + @('--limit', '1000') + $(if ($cursor) { @('--cursor', $cursor) } else { @() })
+        $ran = Invoke-Program $jason $asked @{ JASON_Update__CheckEnabled = 'false' } 120
+        if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') exited with $($ran.Exit): $($ran.Said)" }
+        $lines = @(@($ran.Said -split "`n") | Where-Object { $_.TrimStart().StartsWith('{') })
+        if ($lines.Count -eq 0) { Fail "jason $($words -join ' ') printed no page" }
+        $root = ([System.Text.Json.JsonDocument]::Parse($lines[-1])).RootElement
+        foreach ($item in $root.GetProperty('items').EnumerateArray()) { $items.Add($item.Clone()) }
+        $next = $root.GetProperty('next_cursor')
+        $cursor = if ($next.ValueKind -eq [System.Text.Json.JsonValueKind]::String) { $next.GetString() } else { $null }
+        if (-not $cursor) { return $items.ToArray() }
+    }
+    Fail "jason $($words -join ' ') still had pages after 1000"
+}
+
+# A journal entry by what going back holds it to: its id, its kind and its moment as written.
+function Read-Entry($item) {
+    [pscustomobject]@{ Id = $item.GetProperty('id').GetString(); Kind = $item.GetProperty('kind').GetString(); Ts = $item.GetProperty('ts').GetRawText() }
+}
+
 # What a terminal opened from now on finds: a new pwsh given the environment Windows would give it, not this job's.
 function Find-InNewShell([string] $command) {
     $file = Join-Path $Out "found-$([Guid]::NewGuid().ToString('N')).txt"
@@ -389,6 +423,8 @@ function Write-Listing([string] $file, [switch] $Quiet) {
 # The leg begun and not yet ended, and every leg that ended.
 $legOpen = Join-Path $Out 'leg-open.txt'
 $legsEnded = Join-Path $Out 'legs-ended.txt'
+# The leg that last changed the machine, which a later leg's start holds to what it left.
+$lastLegFile = Join-Path $Out 'last-leg.txt'
 
 # A leg that began and never ended failed: recorded by its name, its own lines being its step's.
 function Close-Leg {
@@ -423,6 +459,23 @@ function Get-LeftOver {
 }
 
 switch ($Step) {
+    'PathShape' {
+        # The account's Path as an ordinary account has it: REG_EXPAND_SZ, with an entry spelled through a variable.
+        # Through [Environment]'s pair an installer expands every such entry and writes the whole value back as REG_SZ,
+        # which a fresh account's install once did. A runner's own value is whatever its image left, so the job gives it
+        # the shape to be kept rather than hoping for one; everything already in it stays. A GitHub-hosted runner's
+        # account alone: no person's Path is ever written here.
+        if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail "PathShape writes the account's Path, and runs on a GitHub-hosted runner alone." }
+        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+        try {
+            $entries = @(([string]$key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $_ -and $_ -cne $keptEntry })
+            $key.SetValue('Path', (@($entries) + $keptEntry) -join ';', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        } finally { $key.Dispose() }
+        $shaped = Get-UserPath
+        if ($shaped.Kind -cne 'ExpandString' -or $shaped.Entries -cnotcontains $keptEntry) { Fail "the account's Path is $($shaped.Kind) without '$keptEntry' after it was given the shape" }
+        Say "the account's Path is ExpandString, ending in the entry '$keptEntry', spelled through a variable and unexpanded"
+    }
+
     'Listing' {
         if (-not $Name) { Fail '-Name names the listing.' }
         Write-Listing (Join-Path $Out "$Name.txt")
@@ -468,41 +521,71 @@ switch ($Step) {
             return
         }
 
-        # The machine this leg starts from is the machine before anything was installed. A machine an earlier failed leg
-        # left is taken off by the product's own doors - jason uninstall from each jason found, then Installed apps' quiet
-        # uninstall - and said so; what they cannot bring back makes this leg not run, naming what is left. That earlier
-        # leg's failure is recorded already; nothing here is a proof of anything.
+        # The machine this leg starts from is the machine before anything was installed. Where it is not:
+        #  - the leg that last changed the machine ENDED: that leg left it, which is that leg's own failure, said and
+        #    recorded by its name; the reset below then acts, that leg now being a failed one, and hides nothing;
+        #  - that leg FAILED or never ended: its failure is recorded already, and the reset acts;
+        #  - no leg changed the machine yet: nothing to blame and nothing to reset, so this leg is not run.
+        # The reset uses the product's own doors alone - jason uninstall --purge-data from each jason found, then Installed
+        # apps' quiet uninstall - and only on a GitHub-hosted runner, never on a person's machine. Each act is logged with
+        # what it found and what it removed, here and in -Out\resets.txt; none of it is a proof of anything. What those
+        # doors cannot remove makes this leg not run, naming the lines left.
         if ($Clean) {
             if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
-            $left = @(Get-LeftOver)
-            if ($left.Count -gt 0) {
-                Say "the machine is not the machine before ($($left.Count) line(s): $(($left | Select-Object -First 6) -join '; ')); an earlier leg failed, and the product's own uninstalls take it off before this leg"
+            $found = @(Get-LeftOver)
+            if ($found.Count -gt 0) {
+                $resets = Join-Path $Out 'resets.txt'
+                $last = if (Test-Path -LiteralPath $lastLegFile) { (Get-Content -LiteralPath $lastLegFile -Raw).Trim() } else { '' }
+                if (-not $last) { Skip-Leg "not run: the machine is not the machine before, and no leg before this one changed it: $($found -join '; ')"; return }
+                $ended = (Test-Path -LiteralPath $legsEnded) -and (@(Get-Content -LiteralPath $legsEnded) -ccontains $last)
+                if ($ended) {
+                    $why = "the leg '$last' ended, but the machine after it is not the machine before: $($found -join '; ')"
+                    Write-Host "::error title=Installation::$why"
+                    Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value $why
+                }
+                Add-Content -LiteralPath $resets -Value "before '$Leg', after '$last' $(if ($ended) { 'ended leaving it' } else { 'failed' }), found: $($found -join '; ')"
+                Say "before this leg the machine is not the machine before ($($found.Count) line(s)), after '$last' $(if ($ended) { 'ended leaving it, recorded as its failure' } else { 'failed' }); found: $($found -join '; ')"
+                if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg 'not run: the reset after a failed leg runs on a GitHub-hosted runner alone, and this is not one'; return }
                 try {
-                    Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                    foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) {
+                        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+                        Add-Content -LiteralPath $resets -Value "  quit the application's process $($process.ProcessId)"
+                    }
                     foreach ($jason in @($carried, (Join-Path $commandLine 'jason.exe'))) {
                         if (Test-Path -LiteralPath $jason) {
                             $removed = Invoke-Program $jason @('uninstall', '--purge-data', '--yes') @{} 300
-                            Write-Host "$jason uninstall --purge-data --yes ended $($removed.Exit)"
+                            $said = "  $jason uninstall --purge-data --yes ended $($removed.Exit): $(($removed.Said -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 3) -join ' / ')"
+                            Write-Host $said
+                            Add-Content -LiteralPath $resets -Value $said
                         }
                     }
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
                         $quietLine = if ($entry.PSObject.Properties.Name -contains 'QuietUninstallString') { [string]$entry.QuietUninstallString } else { '' }
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
                             $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
-                            Write-Host "Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                            $said = "  Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                            Write-Host $said
+                            Add-Content -LiteralPath $resets -Value $said
                         }
                     }
                 } catch {
-                    Skip-Leg "not run: taking off the machine an earlier failed leg left failed: $($_.Exception.Message)"
+                    Add-Content -LiteralPath $resets -Value "  the reset failed: $($_.Exception.Message)"
+                    Skip-Leg "not run: taking off the machine '$last' left failed: $($_.Exception.Message)"
                     return
                 }
                 $deadline = [DateTime]::UtcNow.AddSeconds(120)
                 while ([DateTime]::UtcNow -lt $deadline -and @(Get-LeftOver).Count -gt 0) { Start-Sleep -Seconds 2 }
                 $left = @(Get-LeftOver)
-                if ($left.Count -gt 0) { Skip-Leg "not run: the machine an earlier failed leg left could not be brought back by the product's own uninstalls: $($left -join '; ')"; return }
-                Say "the product's own uninstalls brought the machine back to the machine before"
+                $removedLines = @($found | Where-Object { $left -cnotcontains $_ })
+                Add-Content -LiteralPath $resets -Value "  removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
+                Say "the reset removed: $(if ($removedLines) { $removedLines -join '; ' } else { 'nothing' }); left: $(if ($left) { $left -join '; ' } else { 'nothing' })"
+                if ($left.Count -gt 0) { Skip-Leg "not run: the product's own uninstalls could not bring back the machine '$last' left: $($left -join '; ')"; return }
             }
         }
+
+        # This leg now changes the machine, and is the one a later leg's start holds to what it leaves; a reading changes
+        # nothing.
+        if (-not $Reading) { Set-Content -LiteralPath $lastLegFile -Value $Leg }
     }
 
     'End' {
@@ -575,6 +658,16 @@ switch ($Step) {
         if ((Count-Entry $bundle) -ne 1) { Fail "the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $($after.Raw)" }
         if ($after.Kind -ne $before.Kind -and $before.Kind -ne 'absent') { Fail "the install turned the user Path from $($before.Kind) into $($after.Kind)" }
         foreach ($entry in $before.Entries) { if ($after.Entries -cnotcontains $entry) { Fail "the install rewrote the user Path entry '$entry'" } }
+        # The shape the PathShape step gave the account's Path, held by name: ExpandString into ExpandString, and the
+        # entry spelled through a variable still unexpanded.
+        if ($before.Kind -ceq 'ExpandString' -and $before.Entries -ccontains $keptEntry) {
+            if ($after.Kind -cne 'ExpandString') { Fail "the install turned the user Path from ExpandString into $($after.Kind)" }
+            if ($after.Entries -cnotcontains $keptEntry) { Fail "the install expanded or dropped the user Path entry '$keptEntry'" }
+            Say "the user Path is ExpandString before and after the install, and its entry '$keptEntry' is still unexpanded"
+        } else {
+            # The release's proof job gives the Path no shape; CI's job always does, and a guard holds it to that step.
+            Say "the user Path was given no ExpandString shape before this install (kind $($before.Kind)): its kind and entries are held as they were"
+        }
         $found = Find-InNewShell 'jason'
         if ($found[0] -ine $carried) { Fail "a new shell finds jason at '$($found[0])', not $carried" }
         if ((($found[1] -split '\+')[0]) -ne $Version) { Fail "jason in a new shell says '$($found[1])', not $Version" }
@@ -1192,6 +1285,107 @@ switch ($Step) {
             if (-not $testBuild) { Fail "CI's test build's runtime report does not carry test_build: true" }
             Say 'a test build, and it says so: jason --version on standard error, and test_build: true in the runtime''s report'
         }
+        exit 0
+    }
+
+    'WayBack' {
+        # Going back from 0.49 to the previous release (docs/release-and-update.md, "Going back from 0.49"), on a machine
+        # moved by the previous release's own update: one campaign made under the previous release first; then, under the
+        # moved 0.49 with its runtime running, the campaigns counted and the journal read whole; jason uninstall with no
+        # --purge-data; the previous release installed by its pinned line from the real release page; its skills, UI,
+        # runtime and logon start set up again. Asserted alone: the campaigns are as many, every journal entry is still
+        # there by id with its kind and moment, no entry has appeared among the old ones, and the previous release's
+        # jason says its version and its status is ready. No update and no rollback runs under it. Its own uninstall,
+        # purging the data, ends the leg.
+        if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
+        $quiet = @{ JASON_Update__CheckEnabled = 'false' }
+        $jason = Join-Path $commandLine 'jason.exe'
+
+        $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
+        if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
+        $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
+        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
+        $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made before going back') $quiet
+        if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
+        Say "the previous release's command-line Jason $previousVersion installed by its own script, a runtime running, its logon start registered and one campaign made"
+
+        $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $Feed -PassThru -NoNewWindow
+        try {
+            Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing -TimeoutSec 5 | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
+            $update = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
+        } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+        }
+        if ($update.Exit -ne 0) { Fail "the previous release's jason update apply --version $Version exited with $($update.Exit)" }
+        $document = Read-Document $update.Said
+        $move = if ($document) { $document.PSObject.Properties['move'] } else { $null }
+        if (-not $move -or -not $move.Value -or $move.Value.state -cne 'done') { Fail "the update did not end with its move done: $($update.Said)" }
+        Say "moved into Jason Desktop $Version by the previous release's own update"
+
+        # Step 0: under the moved 0.49, its runtime running.
+        if ((Invoke-Program $carried @('runtime', 'status') $quiet).Exit -ne 0) { Fail 'no runtime answers under the moved 0.49 before going back' }
+        $campaignsBefore = @(Read-All $carried @('campaign', 'list', '--include-archived'))
+        $journalBefore = @(Read-All $carried @('journal', 'list') | ForEach-Object { Read-Entry $_ })
+        if ($campaignsBefore.Count -lt 1) { Fail 'the campaign made under the previous release is not listed under the moved 0.49' }
+        if ($journalBefore.Count -lt 1) { Fail 'the journal is empty under the moved 0.49' }
+        $newest = $journalBefore[0].Id
+        Say "under the moved 0.49: $($campaignsBefore.Count) campaign(s), archived included; the journal holds $($journalBefore.Count) entries, the newest $newest"
+
+        # Step 1: the leg's own window quit, then jason uninstall with no --purge-data.
+        foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
+        $removed = Invoke-Program $carried @('uninstall') $quiet 300
+        if ($removed.Exit -ne 0) { Fail "jason uninstall with no --purge-data exited with $($removed.Exit): $($removed.Said)" }
+        Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
+        if (-not (Test-Path -LiteralPath $data)) { Fail "jason uninstall with no --purge-data took the data directory $data" }
+        if (-not (Test-Path -LiteralPath $harnessRoot)) { Fail "jason uninstall with no --purge-data took the harness root $harnessRoot" }
+        Say "jason uninstall with no --purge-data took the application off and kept the data directory and the harness root"
+
+        # Step 2: the previous release by its pinned line, from the real release page, as the page says.
+        $line = "& ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v$previousVersion/install.ps1))) -Version $previousVersion"
+        $back = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $line) @{} 600
+        if ($back.Exit -ne 0) { Fail "the pinned line of $previousVersion exited with $($back.Exit): $($back.Said)" }
+        if (-not (Test-Path -LiteralPath $jason)) { Fail "the pinned line of $previousVersion placed no jason at $jason" }
+        Say "$previousVersion installed by its pinned line from the real release page: $line"
+
+        # Step 3: its skills, its UI, its runtime and its logon start.
+        foreach ($words in @(@('skills', 'install'), @('ui', 'install'), @('runtime', 'start'), @('runtime', 'autostart', 'enable'))) {
+            $ran = Invoke-Program $jason $words $quiet 600
+            if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
+        }
+        Say "under ${previousVersion}: jason skills install, ui install, runtime start and runtime autostart enable each ended 0"
+
+        # (i) The campaigns, as many; the journal, held by id.
+        $campaignsAfter = @(Read-All $jason @('campaign', 'list', '--include-archived'))
+        if ($campaignsAfter.Count -ne $campaignsBefore.Count) { Fail "under $previousVersion $($campaignsAfter.Count) campaign(s) are listed, not the $($campaignsBefore.Count) the moved 0.49 listed" }
+        $journalAfter = @(Read-All $jason @('journal', 'list') | ForEach-Object { Read-Entry $_ })
+        $after = @{}
+        foreach ($entry in $journalAfter) { $after[$entry.Id] = $entry }
+        $known = @{}
+        foreach ($entry in $journalBefore) { $known[$entry.Id] = $true }
+        $lost = @($journalBefore | Where-Object { -not $after.ContainsKey($_.Id) } | ForEach-Object { $_.Id })
+        $changed = @($journalBefore | Where-Object { $after.ContainsKey($_.Id) -and ($after[$_.Id].Kind -cne $_.Kind -or $after[$_.Id].Ts -cne $_.Ts) } | ForEach-Object { "$($_.Id) ($($_.Kind) $($_.Ts) now $($after[$_.Id].Kind) $($after[$_.Id].Ts))" })
+        if ($lost.Count -gt 0) { Fail "going back lost $($lost.Count) journal entr(ies): $(($lost | Select-Object -First 10) -join ', ')" }
+        if ($changed.Count -gt 0) { Fail "going back changed the kind or the moment of $($changed.Count) journal entr(ies): $(($changed | Select-Object -First 10) -join '; ')" }
+        $at = -1
+        for ($i = 0; $i -lt $journalAfter.Count; $i++) { if ($journalAfter[$i].Id -ceq $newest) { $at = $i; break } }
+        $among = @(if ($at -ge 0) { for ($i = $at; $i -lt $journalAfter.Count; $i++) { if (-not $known.ContainsKey($journalAfter[$i].Id)) { "$($journalAfter[$i].Id) ($($journalAfter[$i].Kind))" } } })
+        if ($among.Count -gt 0) { Fail "going back put $($among.Count) entr(ies) among the old ones, at or before $newest in the journal's order: $(($among | Select-Object -First 10) -join ', ')" }
+        Say "under ${previousVersion}: $($campaignsAfter.Count) campaign(s), as before; every one of the $($journalBefore.Count) journal entries is there by id with its kind and its moment, and none has appeared at or before $newest; $($at) newer entr(ies) are listed above it"
+
+        # (ii) Its version and its status.
+        $said = (("$(& $jason --version)".Trim()) -split '\+')[0]
+        if ($said -cne $previousVersion) { Fail "jason --version says '$said', not $previousVersion" }
+        $status = Read-Document (Invoke-Program $jason @('status') $quiet).Said
+        if (-not $status -or -not $status.PSObject.Properties['ready'] -or $status.ready -ne $true) { Fail "jason status under $previousVersion is not ready: $(if ($status) { $status | ConvertTo-Json -Compress -Depth 6 } else { 'no body' })" }
+        Say "under ${previousVersion}: jason --version says $said, and jason status says ready: true"
+
+        # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.
+        foreach ($words in @(@('runtime', 'stop'), @('runtime', 'autostart', 'disable'), @('uninstall', '--purge-data', '--yes'))) {
+            $ran = Invoke-Program $jason $words $quiet 300
+            if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
+        }
+        Say "$previousVersion's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
         exit 0
     }
 

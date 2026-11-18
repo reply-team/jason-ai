@@ -476,11 +476,18 @@ public partial class InstallScriptTests
         var job = ci.IndexOf("name: install.ps1 on windows", StringComparison.Ordinal);
 
         Assert.True(job >= 0, "ci.yml no longer runs install.ps1 on Windows.");
-        // The job's install is one step of the Windows proof script, which reads the Path and asserts its kind.
-        Assert.True(ci.IndexOf("Test-InstallationWindows.ps1 -Step Install ", job, StringComparison.Ordinal) > job, "the install.ps1 job no longer runs the proof's install step.");
+        // A step of its own, named, gives the account's Path the shape an ordinary account has before the install leg:
+        // ExpandString, with an entry spelled through a variable. The install leg holds both by name.
+        var shape = ci.IndexOf("- name: Give the account's Path the shape an ordinary account has, ExpandString with an entry spelled through a variable", job, StringComparison.Ordinal);
+        var install = ci.IndexOf("Test-InstallationWindows.ps1 -Step Install ", job, StringComparison.Ordinal);
+        Assert.True(shape > job, "the install.ps1 job no longer gives the account's Path its ExpandString shape in a step of its own.");
+        Assert.True(ci.IndexOf("-Step PathShape", shape, StringComparison.Ordinal) is var runs && runs > shape && runs < install, "the Path's shape is not given by the proof's PathShape step before the install leg.");
         var script = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1"));
         Assert.Contains("'DoNotExpandEnvironmentNames'", script, StringComparison.Ordinal);
-        Assert.Contains("the install turned the user Path from $($before.Kind) into $($after.Kind)", script, StringComparison.Ordinal);
+        Assert.Contains("$keptEntry = '%USERPROFILE%\\jason-ci-kept'", script, StringComparison.Ordinal);
+        Assert.Contains("[Microsoft.Win32.RegistryValueKind]::ExpandString", script, StringComparison.Ordinal);
+        Assert.Contains("the install turned the user Path from ExpandString into $($after.Kind)", script, StringComparison.Ordinal);
+        Assert.Contains("the install expanded or dropped the user Path entry '$keptEntry'", script, StringComparison.Ordinal);
     }
 
     /// <summary>
