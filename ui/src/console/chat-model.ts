@@ -11,11 +11,31 @@ import type {
     DesktopConversation,
     DesktopConversationRecord,
     DesktopEffort,
+    DesktopFullAccessWhy,
     DesktopHost,
     DesktopKeptEntry,
     DesktopLineEntry,
     DesktopModel,
 } from '../platform/desktop';
+import { en, type MessageKey } from '../locale/en';
+import { t } from '../platform/i18n';
+
+/**
+ * Why a card of a Full access turn asks, in the page's words for the case the desktop names: the tool's name, where the
+ * case carries one, is the one part of the request the sentence holds, drawn as text. The value comes over the seam,
+ * from a live card or a kept one, and a desktop may be newer than this page: a code the page has no sentence for, or a
+ * value not in the shape it declares, is null, and the card is drawn without the line, as it was before there was one.
+ */
+export function fullAccessWhyWords(why: unknown): string | null {
+    if (why === null || typeof why !== 'object' || Array.isArray(why)) return null;
+    const { reason, tool, ...rest } = why as Record<string, unknown>;
+    if (typeof reason !== 'string' || Object.keys(rest).length > 0) return null;
+    const key = `fullAccess.why.${reason}`;
+    if (!Object.hasOwn(en, key)) return null;
+    const message = key as MessageKey;
+    if (!en[message].includes('{tool}')) return tool === undefined ? t(message) : null;
+    return typeof tool === 'string' && tool !== '' ? t(message, { tool }) : null;
+}
 
 export type Answer = 'allow' | 'always' | 'deny' | 'gone';
 
@@ -41,6 +61,8 @@ export type Entry =
           /** What "always, in this chat" would cover, as the button prints it; null when it is not offered. */
           remember: string | null;
           answer: Answer | null;
+          /** On a card of a Full access turn: why Full access asks, which the card says under its title. */
+          why?: DesktopFullAccessWhy;
       }
     | { kind: 'error'; text: string }
     /** The campaigns a set-up turn made, for the person to pick the one this chat is about. */
@@ -174,6 +196,7 @@ function entryOf(entry: DesktopKeptEntry): Entry {
                 detail: entry.detail,
                 remember: null,
                 answer: entry.answer ?? 'gone',
+                ...(entry.why === undefined ? {} : { why: entry.why }),
             };
         case 'pick':
             return { kind: 'pick', campaignIds: [...entry.campaignIds] };
@@ -527,6 +550,7 @@ export function received(chat: Chat, event: DesktopChatEvent): Chat {
                         detail: event.detail,
                         remember: event.remember,
                         answer: null,
+                        ...(event.why === undefined ? {} : { why: event.why }),
                     },
                 ],
             };

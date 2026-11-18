@@ -208,6 +208,64 @@ export interface DesktopRefusal {
 }
 
 /**
+ * Why a card of a Full access turn asks: a shell command by the reason it was held for (`command.*`), any other request
+ * by Ask first's card for it (`request.*`), and `host_asked` where Full access would have run it and the host asked all
+ * the same. The two codes that name a tool carry its name, and nothing else of the request comes with any of them.
+ */
+export type DesktopFullAccessWhy =
+    | {
+          reason:
+              | 'command.expansion'
+              | 'command.escape'
+              | 'command.glob'
+              | 'command.brace'
+              | 'command.group'
+              | 'command.history'
+              | 'command.comment'
+              | 'command.tilde'
+              | 'command.non_ascii'
+              | 'command.control_character'
+              | 'command.character'
+              | 'command.operator'
+              | 'command.background'
+              | 'command.assignment'
+              | 'command.here_document'
+              | 'command.process_substitution'
+              | 'command.quote'
+              | 'command.array'
+              | 'command.stop_parsing'
+              | 'command.call_operator'
+              | 'command.syntax'
+              | 'command.unknown_shell'
+              | 'command.command_prompt'
+              | 'command.inline_code'
+              | 'command.runner'
+              | 'command.builtin'
+              | 'command.servers'
+              | 'command.directory_change'
+              | 'command.reply'
+              | 'command.guarded_name'
+              | 'command.search'
+              | 'command.local_jason'
+              | 'command.holds_data'
+              | 'command.link'
+              | 'request.own_tool'
+              | 'request.settings'
+              | 'request.repository'
+              | 'request.marker'
+              | 'request.loads'
+              | 'request.instructions'
+              | 'request.server_list'
+              | 'request.local_jason'
+              | 'request.search'
+              | 'request.windows_name'
+              | 'request.tilde_path'
+              | 'request.other'
+              | 'host_asked';
+      }
+    | { reason: 'request.no_file_named' | 'request.unknown_tool'; tool: string };
+
+/**
  * One thing the page drew, as the desktop kept it: text only, never markup, drawn by the same code as the live event it
  * stands for. A card keeps the answer it was given: `gone` when it no longer waited, null when it was never answered.
  */
@@ -220,7 +278,14 @@ export type DesktopKeptEntry =
      */
     | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; text: string; detail?: string }
-    | { kind: 'permission'; title: string; detail: string; answer: 'allow' | 'always' | 'deny' | 'gone' | null }
+    /** `why`, on a card of a Full access turn: why Full access asked. */
+    | {
+          kind: 'permission';
+          title: string;
+          detail: string;
+          answer: 'allow' | 'always' | 'deny' | 'gone' | null;
+          why?: DesktopFullAccessWhy;
+      }
     | { kind: 'error'; text: string }
     | { kind: 'pick'; campaignIds: string[] }
     /** A line of the Feed, which only the Feed keeps. */
@@ -251,9 +316,17 @@ export type DesktopChatEvent =
     /**
      * The agent asks to do something the permission model does not settle on its own: `request` is the id to answer
      * by `chat.answer`, `title` the act in a few words, `detail` the command or path in full, and `remember` what
-     * "always, in this chat" would cover, in words to print on its button, or null when it may not be offered.
+     * "always, in this chat" would cover, in words to print on its button, or null when it may not be offered. `why`,
+     * on a card of a Full access turn only, says why Full access asks.
      */
-    | { kind: 'permission'; request: string; title: string; detail: string; remember: string | null }
+    | {
+          kind: 'permission';
+          request: string;
+          title: string;
+          detail: string;
+          remember: string | null;
+          why?: DesktopFullAccessWhy;
+      }
     /**
      * A request no longer waits: it was answered, it timed out, or the desktop no longer holds it. An answer sent for
      * it after this changes nothing.
