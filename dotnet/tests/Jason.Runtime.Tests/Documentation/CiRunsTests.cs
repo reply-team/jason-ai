@@ -1208,7 +1208,7 @@ public class CiRunsTests
         var (_, byRule, byCondition) = Report(decided.Outputs);
         Assert.Equal(["an update on win-x64"], byRule);
         Assert.Equal(
-            ["The suite under a release's version", "install.ps1 on windows", "jason.exe on a Windows older than 24H2"],
+            ["The suite under a release's version", "install.ps1 on windows", "install.sh on macos", "jason.exe on a Windows older than 24H2"],
             byCondition.Order(StringComparer.Ordinal));
         Assert.Contains("is a hotfix's", Assert.Single(Legs(decided.Outputs["skipped"]))["why"], StringComparison.Ordinal);
     }

@@ -1910,10 +1910,15 @@ jobs:
       # A package is built at a release's or a candidate's version and never at the -dev one the tree carries, so this
       # job's carries the release this tree is on the way to with a ci word and the run's number, as the desktop job's
       # does. Its upload is named for this job, outside jason-*, so no download of a release's files takes it.
-      - name: Package jason for win-x64 as a release does
+      # A test build (JasonTestBuild, read by MSBuild from the environment): it says so on --version's standard error and
+      # in the runtime's report, and its move into the application takes the signer this job names (the stand-in's), as no
+      # released build can. Packaged as a release packages it otherwise.
+      - name: Package jason for win-x64 as a release does, as a test build
         timeout-minutes: 20
         id: package
         uses: ./.github/actions/package
+        env:
+          JasonTestBuild: 'true'
         with:
           rid: win-x64
           version: ${{ env.VERSION }}
@@ -2002,6 +2007,7 @@ jobs:
           $script = Join-Path $env:RUNNER_TEMP 'install-stand-in-signer.ps1'
           Set-Content -LiteralPath $script -Value $copy -Encoding ascii
           "script=$script" >> $env:GITHUB_OUTPUT
+          "signer=$standIn" >> $env:GITHUB_OUTPUT
           exit 0
 
       # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
@@ -2045,6 +2051,19 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-waiter-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-waiter-uninstall -Against before
 
+      # The pinned line, on a machine the legs before brought back to its listing: a pin naming another version refused,
+      # then -Version naming this one, asserted as the unpinned install is, and taken off from a new terminal.
+      - name: Install by the pinned line, and uninstall from a new terminal
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Pinned -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-pinned-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-pinned-uninstall -Against before
+
       # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
       # to until that is published, read from where the public releases' latest redirects, and its files from its public
       # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
@@ -2086,13 +2105,19 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
 
-      - name: Update the previous release's command-line Jason with its own update apply
-        timeout-minutes: 20
+      # The path every command-line user takes: the previous release's own install, its own jason update apply pinned to
+      # this version, and the move into Jason Desktop asserted in full; then the moved installation taken off from a new
+      # terminal. JASON_TEST_BUILD_SIGNER is the stand-in's name, which this test build's move holds the setup to.
+      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
+        timeout-minutes: 30
         shell: pwsh
         env:
           JASON_Update__CheckEnabled: 'false'
+          JASON_PROOF_BUILD: test
+          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
         run: |
           ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
 
@@ -2236,10 +2261,15 @@ jobs:
           bash .github/scripts/test-installation-macos.sh requirement "$RUNNER_TEMP/published/jason-desktop-macos-arm64.zip"
           echo "- install.sh's requirement admits the application $tag published, and refuses it named for another team" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Package jason for osx-arm64 as a pull request does
+      # A test build (JasonTestBuild, read by MSBuild from the environment): it says so on --version's standard error and
+      # in the runtime's report, and its move into the application takes the requirement this job names (the ad hoc
+      # signature's), as no released build can.
+      - name: Package jason for osx-arm64 as a pull request does, as a test build
         timeout-minutes: 20
         id: package
         uses: ./.github/actions/package
+        env:
+          JasonTestBuild: 'true'
         with:
           rid: osx-arm64
           version: ${{ env.VERSION }}
@@ -2324,6 +2354,19 @@ jobs:
           bash .github/scripts/test-installation-macos.sh listing after-menu-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
 
+      # The pinned line, on a machine the legs before brought back to its listing: a pin naming another version refused,
+      # then --version naming this one, asserted as the unpinned install is; whether autostart enable starts a runtime at
+      # once, said; and the installation taken off from a new terminal.
+      - name: Install by the pinned line, see whether autostart enable starts a runtime, and uninstall from a new terminal
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}" pinned
+          bash .github/scripts/test-installation-macos.sh enable-starts-now
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-pinned-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-pinned-uninstall before
+
       - name: Fetch the previous release
         timeout-minutes: 20
         shell: bash
@@ -2340,11 +2383,18 @@ jobs:
           echo "the previous release is $tag"
           echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Update the previous release's command-line Jason with its own update apply
-        timeout-minutes: 20
+      # The path every command-line user takes: the previous release's own install, its own jason update apply pinned to
+      # this version, and the move into Jason Desktop asserted in full; then the moved installation taken off from a new
+      # terminal. JASON_TEST_BUILD_REQUIREMENT is this build's own ad hoc signature, which its move holds the application to.
+      - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
+        timeout-minutes: 30
         shell: bash
+        env:
+          JASON_PROOF_BUILD: test
         run: |
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
           bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
           bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
           bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
 

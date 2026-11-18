@@ -13,7 +13,9 @@ uploads, and they are what a person reads.
   Install           install.ps1 (-Script) from the feed, as an agent runs it: Windows PowerShell 5.1, the file, then its
                     text through Invoke-Expression as the one-liner runs it; the place, jason in a fresh shell, the Path
                     entry and its kind, the skills records, the person's own skill left alone, the role skills; and the
-                    machine set-up an application's start runs, which writes nothing under a data directory
+                    machine set-up an application's start runs, which writes nothing under a data directory. Unpinned,
+                    as an agent runs it; with -Pinned, by the pinned line, -Version, after a pin naming another version
+                    was refused and placed nothing
   UninstallFromTerminal   jason uninstall typed in a fresh shell, the data directory purged: the waiter hands the folder to
                     the uninstaller with --uninstalled-by-jason, the folder goes whole, and no start of the application
                     writes a data directory again
@@ -23,7 +25,11 @@ uploads, and they are what a person reads.
   UninstallFromInstalledApps   the uninstall Installed apps runs, QuietUninstallString: the folder, its entry, the Path
                     entry and the skills go, the data directory stays
   FromPrevious      the previous release's command-line Jason, installed by its own script, with a runtime and a logon
-                    registration, updated by its own `jason update apply` from the feed served on this machine
+                    registration, updated by its own `jason update apply --version` from the feed served on this
+                    machine, and moved into Jason Desktop: the application in place, jason in a new shell its carried
+                    file, the runtime running from it, the logon registration naming it, the move's record done, the
+                    command-line install retired; and whether the build says it is a test build, as JASON_PROOF_BUILD
+                    says it must (test on CI's build, release on the release's packages). The uninstall is the next step's
   Compare           -Name against -Against: every line equal but those of the data directory, which an uninstall keeps
   ModulePath        a reading, never a failure: the module path Windows PowerShell rebuilds from an empty one
 
@@ -40,7 +46,8 @@ param(
     [string] $Next,
     [string] $Out = (Join-Path $env:RUNNER_TEMP 'installation'),
     [string] $Name,
-    [string] $Against
+    [string] $Against,
+    [switch] $Pinned
 )
 
 $ErrorActionPreference = 'Stop'
@@ -252,8 +259,16 @@ function Invoke-Program([string] $file, [string[]] $arguments, [hashtable] $envi
 }
 
 # install.ps1 as the one-liner runs it: Windows PowerShell 5.1, the file run.
-function Invoke-InstallScript([string] $path) {
-    Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $path) @{ JASON_INSTALL_FEED = $Feed }
+function Invoke-InstallScript([string] $path, [string[]] $words = @()) {
+    Invoke-Program 'powershell.exe' (@('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $path) + $words) @{ JASON_INSTALL_FEED = $Feed }
+}
+
+# The one JSON document a jason verb prints on standard output, among the lines Invoke-Program merged with its stderr: the
+# last line that reads as a JSON object; null where none does.
+function Read-Document([string] $said) {
+    $lines = @(@($said -split "`n") | Where-Object { $_.TrimStart().StartsWith('{') })
+    if ($lines.Count -eq 0) { return $null }
+    try { return ($lines[-1] | ConvertFrom-Json) } catch { return $null }
 }
 
 # What a terminal opened from now on finds: a new pwsh given the environment Windows would give it, not this job's.
@@ -395,9 +410,23 @@ switch ($Step) {
         if (-not $Feed -or -not $Version -or -not $Script) { Fail '-Feed, -Version and -Script are needed.' }
         $before = Get-UserPath
 
-        # The agent's install: the script run as a file in Windows PowerShell, as the one-liner's shell runs it.
-        $first = Invoke-InstallScript $Script
-        if ($first.Exit -ne 0) { Fail "install.ps1 exited with $($first.Exit)" }
+        # The pinned line reads its pin: one naming another version than the feed's is refused, naming both, and places
+        # nothing, before the pin naming this one installs.
+        $pin = @()
+        if ($Pinned) {
+            $wrong = Invoke-InstallScript $Script @('-Version', '9.9.9')
+            if ($wrong.Exit -eq 0) { Fail "install.ps1 -Version 9.9.9 ended 0 against a feed of $Version" }
+            if (-not $wrong.Flat.Contains(('-Version asked for 9.9.9 and' -replace '\s+', '')) -or -not $wrong.Flat.Contains("names$Version;nothingwasinstalled")) { Fail "install.ps1 -Version 9.9.9 was refused for another reason than the pin: $($wrong.Said)" }
+            if (Test-Path -LiteralPath $app) { Fail "the refused pinned install left $app" }
+            Say "install.ps1 -Version 9.9.9 against a feed of $Version was refused, naming both versions, and placed nothing: the pin is read"
+            $pin = @('-Version', $Version)
+        }
+
+        # The agent's install: the script run as a file in Windows PowerShell, as the one-liner's shell runs it; by the
+        # pinned line, -Version, where this leg is the pinned one.
+        $first = Invoke-InstallScript $Script $pin
+        if ($first.Exit -ne 0) { Fail "install.ps1 $($pin -join ' ') exited with $($first.Exit)" }
+        Say "install.ps1 ran $(if ($Pinned) { "by the pinned line: -Version $Version" } else { 'unpinned, with no -Version, as an agent runs it' })"
         $lastLine = @($first.Said -split "`n" | Where-Object { $_.Trim() })[-1]
         if (-not $lastLine.TrimEnd().EndsWith($carried, [StringComparison]::OrdinalIgnoreCase)) { Fail "install.ps1's last line does not end with the full path of jason, $carried, for a shell already open: $lastLine" }
         Say "install.ps1 installed Jason Desktop and ended on the full path of jason for a shell already open"
@@ -436,8 +465,10 @@ switch ($Step) {
 
         # Run again as the one-liner runs it: its text in the shell that typed it, which keeps nothing of it, and over the
         # version already installed, which downloads nothing.
-        $again = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw); if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { 'Install-Jason is still defined'; exit 9 }") @{ JASON_INSTALL_FEED = $Feed }
-        if ($again.Exit -ne 0) { Fail "install.ps1's text run through Invoke-Expression exited with $($again.Exit)" }
+        # The pinned one-liner runs the text as a script block given -Version, as the page's pinned line does.
+        $text = if ($Pinned) { "& ([scriptblock]::Create((Get-Content -LiteralPath '$Script' -Raw))) -Version $Version" } else { "Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw)" }
+        $again = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "$text; if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { 'Install-Jason is still defined'; exit 9 }") @{ JASON_INSTALL_FEED = $Feed }
+        if ($again.Exit -ne 0) { Fail "install.ps1's text run as the one-liner runs it exited with $($again.Exit)" }
         if (-not $again.Flat.Contains(("Jason Desktop $Version is already installed" -replace '\s+', ''))) { Fail 'the second run did not say the version is already installed' }
         if ((Count-Entry $bundle) -ne 1) { Fail 'a second run added a second Path entry' }
         Say 'run again as the one-liner runs it, it downloads nothing, adds nothing to the Path and leaves no function behind'
@@ -905,8 +936,12 @@ switch ($Step) {
     }
 
     'FromPrevious' {
-        if (-not $Previous -or -not $Feed) { Fail '-Previous and -Feed are needed.' }
-        # The previous release's command-line Jason, installed by its own script from its own assets, as a person has it.
+        if (-not $Previous -or -not $Feed -or -not $Version) { Fail '-Previous, -Feed and -Version are needed.' }
+        $build = $env:JASON_PROOF_BUILD
+        if ($build -cnotin @('test', 'release')) { Fail "JASON_PROOF_BUILD says '$build': it must say test (CI's build) or release (the release's packages)" }
+
+        # The previous release's command-line Jason, installed by its own script from its own assets, as a person has it,
+        # with a runtime running and its start at logon registered.
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
         $jason = Join-Path $commandLine 'jason.exe'
@@ -914,34 +949,90 @@ switch ($Step) {
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
-        Say "the previous release's command-line Jason $previousVersion installed by its own script, with a runtime and a logon registration"
+        if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
+        Say "the previous release's command-line Jason $previousVersion installed by its own script at $jason, with a runtime running and a logon registration"
 
-        # Its own update, from the feed served on this machine.
+        # Its own update, pinned to this version, from the feed served on this machine. The update is the 0.48 parent's;
+        # the move is this version's, which the parent hands the rest to.
         $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $Feed -PassThru -NoNewWindow
         try {
-            Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
-            $update = Invoke-Program $jason @('update', 'apply', '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet
+            Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing -TimeoutSec 5 | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
+            $update = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
             Set-Content -LiteralPath (Join-Path $Out 'update-from-previous.json') -Value $update.Said
-            if ($update.Exit -ne 0) { Fail "the previous release's jason update apply exited with $($update.Exit)" }
+            if ($update.Exit -ne 0) { Fail "the previous release's jason update apply --version $Version exited with $($update.Exit)" }
         } finally {
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
         }
-        Say "the previous release's own jason update apply took the feed served on this machine"
+        $document = Read-Document $update.Said
+        if (-not $document) { Fail 'the update printed no document' }
+        if ($document.step -cne 'complete' -or $document.to -cne $Version) { Fail "the update ended at '$($document.step)' to '$($document.to)', not complete to $Version" }
+        $move = $document.PSObject.Properties['move']
+        if (-not $move -or -not $move.Value) { Fail 'the update document carries no move: the jason it handed to did not move the install' }
+        if ($move.Value.state -cne 'done') { Fail "the move is $($move.Value.state) at $($move.Value.step): $($move.Value.reason)" }
+        if ([string]$move.Value.application -ine $app) { Fail "the move put the application at $($move.Value.application), not $app" }
+        Say "the previous release's own jason update apply --version $Version took the feed served on this machine and ended complete, its move done at $($move.Value.step)"
 
-        # THE MOVE (the unit that moves a command-line install into the application) is asserted here once it lands: the
-        # application at $app, jason in a new shell its carried file, the command-line install retired, the runtime
-        # running from the carried file, the logon task naming it, and the move's record complete. Until then the update
-        # is the command-line update, read back as such.
-        $now = ((& $jason --version) -split '\+')[0]
-        if ($now -ne $Version) { Fail "after the update the command-line jason says $now, not $Version" }
-        $status = Invoke-Program $jason @('runtime', 'status') $quiet
-        if ($status.Exit -ne 0) { Fail 'no runtime answers after the update' }
-        Say "the command-line install now says $Version and its runtime answers (the move into the application is asserted once it lands)"
+        # THE MOVE. The application in place, at this version.
+        if (-not (Test-Path -LiteralPath (Join-Path $app 'Jason.exe') -PathType Leaf)) { Fail "no Jason.exe at $app" }
+        if ((Read-Version $carried) -ne $Version) { Fail "$carried is $(Read-Version $carried), not $Version" }
+        Say "Jason Desktop $Version is at $app"
 
-        # Taken off by its own uninstall, which is the product's; what remains is compared after this step.
-        $removal = Invoke-Program $jason @('uninstall') $quiet
-        if ($removal.Exit -ne 0) { Fail "jason uninstall of the updated command-line install exited with $($removal.Exit)" }
-        Wait-Until { -not (Test-Path -LiteralPath $jason) } 60 'the command-line executable going'
+        # The terminal command as the routine places it: the user Path names the bundle folder once and the command-line
+        # install's folder no more, and a new shell finds the carried jason.
+        if ((Count-Entry $bundle) -ne 1) { Fail "the user Path holds $bundle $(Count-Entry $bundle) time(s), not once: $((Get-UserPath).Raw)" }
+        if ((Count-Entry $commandLine) -ne 0) { Fail "the user Path still names the retired $commandLine" }
+        $found = Find-InNewShell 'jason'
+        if ($found[0] -ine $carried) { Fail "a new shell finds jason at '$($found[0])', not $carried" }
+        if ((($found[1] -split '\+')[0]) -ne $Version) { Fail "jason in a new shell says '$($found[1])', not $Version" }
+        Say "a new shell finds jason at $carried and it says $Version; the user Path names $bundle once and $commandLine no more"
+
+        # The runtime answering, from the carried file, and none from the retired one.
+        $status = Invoke-Program $carried @('runtime', 'status') $quiet
+        if ($status.Exit -ne 0) { Fail 'no runtime answers after the move' }
+        $runtimes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'jason.exe'" | Where-Object { "$($_.CommandLine)" -match '\bruntime\s+run\b' })
+        $fromCarried = @($runtimes | Where-Object { [string]$_.ExecutablePath -ieq $carried })
+        $fromOld = @($runtimes | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" })
+        if ($fromCarried.Count -lt 1) { Fail "no runtime runs from $carried; the runtimes running: $(($runtimes | ForEach-Object { $_.ExecutablePath }) -join ', ')" }
+        if ($fromOld.Count -ne 0) { Fail "a runtime still runs from the retired install: $(($fromOld | ForEach-Object { $_.ExecutablePath }) -join ', ')" }
+        Say "the runtime answers, running from $carried, and none from $commandLine"
+
+        # The logon registration names the carried file.
+        $registration = Read-Document (Invoke-Program $carried @('runtime', 'autostart', 'status') $quiet).Said
+        if (-not $registration -or -not $registration.registered) { Fail 'no logon registration after the move' }
+        if ([string]$registration.executable -ine $carried) { Fail "the logon registration names $($registration.executable), not $carried" }
+        Say "the logon registration names $carried"
+
+        # The move's record, complete.
+        $recordFile = Join-Path $data 'update\move.json'
+        if (-not (Test-Path -LiteralPath $recordFile)) { Fail "no move record at $recordFile" }
+        $record = Get-Content -LiteralPath $recordFile -Raw | ConvertFrom-Json
+        if ($record.state -cne 'done') { Fail "the move record at $recordFile says $($record.state) at $($record.step)" }
+        Say "the move record at $recordFile says done"
+
+        # The command-line install retired: its executable and notice files gone from its folder.
+        foreach ($file in 'jason.exe', 'jason-LICENSE', 'jason-THIRD-PARTY-NOTICES') {
+            if (Test-Path -LiteralPath (Join-Path $commandLine $file)) { Fail "the retired install still holds $file at $commandLine" }
+        }
+        $left = @(if (Test-Path -LiteralPath $commandLine) { Get-ChildItem -LiteralPath $commandLine -Force | ForEach-Object { $_.Name } })
+        $aside = @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Filter 'jason-retired-*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+        Say "the command-line install is retired: no jason.exe or notice file at $commandLine; that folder $(if (Test-Path -LiteralPath $commandLine) { "is kept, holding: $(if ($left) { $left -join ', ' } else { 'nothing' })" } else { 'is gone' }); executables renamed aside: $(if ($aside) { $aside -join ', ' } else { 'none' })"
+
+        # Whether this build says it is a test build: a release never does, CI's build always.
+        $stderr = Join-Path $Out 'version-stderr.txt'
+        $null = & $carried --version 2> $stderr
+        $said = ((Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue) + '').Trim()
+        $info = Read-Document $status.Said
+        $testBuild = $info -and $info.PSObject.Properties['test_build'] -and $info.test_build -eq $true
+        if ($build -ceq 'release') {
+            if ($said) { Fail "a released jason --version wrote on standard error: $said" }
+            if (-not $info) { Fail 'jason runtime status printed no document to read test_build from' }
+            if ($info.PSObject.Properties['test_build']) { Fail "a released runtime's report carries test_build: $($info.test_build)" }
+            Say 'released: jason --version writes nothing on standard error, and the runtime''s report carries no test_build'
+        } else {
+            if ($said -cne 'This jason is a test build, not a release.') { Fail "CI's test build does not say so on standard error: '$said'" }
+            if (-not $testBuild) { Fail "CI's test build's runtime report does not carry test_build: true" }
+            Say 'a test build, and it says so: jason --version on standard error, and test_build: true in the runtime''s report'
+        }
         exit 0
     }
 
