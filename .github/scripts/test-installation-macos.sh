@@ -1162,29 +1162,41 @@ print("" if doc is None else doc)' "$@"; }
 vanishing-place)
     # An application opened from its disk image sets nothing up: this build's application put in a read-only disk image,
     # as a download is, and the image mounted; jason install from the application on it, as its first start runs it,
-    # refused with install_vanishing_place; the application opened from the image as a person opens a download, and quit;
-    # the image ejected. Asserted: the refusal by its code, nothing placed, and no jason in a new terminal after the eject.
-    # The listing and the compare after it are the leg's next steps.
+    # refused with install_vanishing_place; the application opened from the image as a person opens a download, its own
+    # start running the setup and refused, and quit; the image ejected. Asserted: the refusal by its code and its words,
+    # nothing placed, the start's setup run and refused and no setup record written, the image gone, and no jason in a new
+    # terminal after the eject. The listing and the compare after it are the leg's next steps. On any failure between the
+    # attach and the detach, the application from the image is ended and the image detached, so that no later leg finds
+    # it holding the data directory.
     built="$1"
     [ -d "$built" ] || fail "no application at $built"
     [ -z "$(app)" ] || fail "an application is in place before the leg: $(app)"
     [ ! -e "$WRAPPER" ] || fail "a terminal command is in place before the leg: $WRAPPER"
+    data="${JASON_DATA_DIR:-$HOME/.jason}"
+    record="$data/desktop/machine-setup.json"
     image="$RUNNER_TEMP/jason-vanishing-place.dmg"
     mount="$RUNNER_TEMP/jason-vanishing-place"
-    [ ! -e "$image" ] && [ ! -e "$mount" ] || fail "$image or $mount is there before the leg makes it"
-    within 300 'hdiutil create' hdiutil create -srcfolder "$built" -volname 'Jason Test' -format UDZO "$image" > "$OUT/vanishing-create.txt" 2>&1 || fail "hdiutil create failed: $(tail -n 3 "$OUT/vanishing-create.txt")"
+    stage="$RUNNER_TEMP/jason-vanishing-stage"
+    [ ! -e "$image" ] && [ ! -e "$mount" ] && [ ! -e "$stage" ] || fail "$image, $mount or $stage is there before the leg makes it"
+    # The volume's root holds Jason.app, as a download's image does: the application staged in a folder of its own.
+    mkdir -p "$stage"
+    ditto "$built" "$stage/Jason.app" || fail "this build's application could not be staged at $stage"
+    within 300 'hdiutil create' hdiutil create -srcfolder "$stage" -volname 'Jason Test' -format UDZO "$image" > "$OUT/vanishing-create.txt" 2>&1 || fail "hdiutil create failed: $(tail -n 3 "$OUT/vanishing-create.txt")"
+    rm -rf "$stage"
     within 120 'hdiutil attach' hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$image" > "$OUT/vanishing-attach.txt" 2>&1 || fail "hdiutil attach failed: $(tail -n 3 "$OUT/vanishing-attach.txt")"
+    # From here to the detach, a failure leaves nothing behind: the application from the image ended, the image detached.
+    trap 'pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true; hdiutil detach -force "$mount" > /dev/null 2>&1 || true; rm -f "$image"' EXIT
     mounted="$mount/Jason.app"
-    [ -d "$mounted" ] || fail "no Jason.app on the mounted image at $mount"
-    say "this build's application put in a read-only disk image (UDZO) and mounted at $mount"
+    [ -d "$mounted" ] || fail "no Jason.app at the root of the mounted image at $mount"
+    say "this build's application put in a read-only disk image (UDZO), at its root, and mounted at $mount"
 
     # jason install from the application on the image, as its first start runs it.
     status=0
     within 120 'jason install from the disk image' env SHELL=/bin/zsh "$mounted/Contents/Resources/bundle/jason" install > "$OUT/vanishing-install.json" 2> "$OUT/vanishing-install.err" || status=$?
     cat "$OUT/vanishing-install.json" "$OUT/vanishing-install.err"
     [ "$status" -ne 0 ] || fail "jason install from the disk image ended 0"
-    code="$(python3 -c 'import json,sys
-code = ""
+    python3 -c 'import json,sys
+code, message = "", ""
 for path in sys.argv[1:]:
     for line in open(path, encoding="utf-8").read().splitlines():
         line = line.strip()
@@ -1195,31 +1207,64 @@ for path in sys.argv[1:]:
                 continue
             error = doc.get("error") if isinstance(doc, dict) else None
             if isinstance(error, dict) and error.get("code"):
-                code = error["code"]
-print(code)' "$OUT/vanishing-install.json" "$OUT/vanishing-install.err")" || fail "the refusal could not be read"
+                code, message = error["code"], str(error.get("message") or "")
+print(code)
+print(message)' "$OUT/vanishing-install.json" "$OUT/vanishing-install.err" > "$OUT/vanishing-refusal.txt" || fail "the refusal could not be read"
+    code="$(sed -n 1p "$OUT/vanishing-refusal.txt")"
     [ "$code" = install_vanishing_place ] || fail "jason install from the disk image exited $status with the code '$code', not install_vanishing_place"
+    # The branch of the refusal a mounted image takes, by its words, rather than a translocated copy's.
+    grep -qF 'a read-only volume' "$OUT/vanishing-refusal.txt" || fail "the refusal does not say the place is a read-only volume: $(sed -n 2p "$OUT/vanishing-refusal.txt")"
     [ -z "$(app)" ] || fail "the refused jason install placed an application at $(app)"
     [ ! -e "$WRAPPER" ] || fail "the refused jason install placed a terminal command at $WRAPPER"
-    say "jason install from the application on the disk image exited $status, refused with install_vanishing_place, and placed nothing"
+    say "jason install from the application on the disk image exited $status, refused with install_vanishing_place as on a read-only volume, and placed nothing"
 
-    # Opened from the image, as a person opens a download, then quit.
+    # Opened from the image, as a person opens a download: its start runs the setup, which is refused; then quit. The
+    # setup's run is read in the desktop's log, by its line counted before the open and after; the setup record, which a
+    # refused setup does not write, is held to be as it was.
+    ran_lines() {
+        python3 -c 'import glob,json,os,sys
+count = 0
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "logs", "desktop-*.jsonl"))):
+    for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("EventName") == "machine_setup_ran" and event.get("Why") == "start" and event.get("Exit") not in (0, None) and event.get("Completed") is False:
+            count += 1
+print(count)' "$data"
+    }
+    ran_before="$(ran_lines)" || fail "the desktop's log could not be read before the open"
+    if [ -e "$record" ]; then record_before="$(shasum -a 256 < "$record") $(stat -f %m "$record")"; else record_before=absent; fi
     "$mounted/Contents/MacOS/Jason" > "$OUT/vanishing-window.log" 2>&1 &
     window=$!
-    sleep 15
+    until=$(( $(date +%s) + 120 ))
+    ran_after="$ran_before"
+    while [ "$ran_after" -le "$ran_before" ] && [ "$(date +%s)" -lt "$until" ]; do
+        kill -0 "$window" 2>/dev/null || fail "Jason Desktop opened from the disk image did not stay running: $(tail -n 20 "$OUT/vanishing-window.log")"
+        sleep 2
+        ran_after="$(ran_lines)" || fail "the desktop's log could not be read after the open"
+    done
+    [ "$ran_after" -gt "$ran_before" ] || fail "Jason Desktop opened from the disk image wrote no refused setup run (machine_setup_ran at start, exit not 0, not completed) to its log within 120 s"
     kill -0 "$window" 2>/dev/null || fail "Jason Desktop opened from the disk image did not stay running: $(tail -n 20 "$OUT/vanishing-window.log")"
     end_process "$window" 'Jason Desktop opened from the disk image'
     pkill -f "$mount/Jason.app/Contents/MacOS/" 2>/dev/null || true
     sleep 3
+    if [ -e "$record" ]; then record_after="$(shasum -a 256 < "$record") $(stat -f %m "$record")"; else record_after=absent; fi
+    [ "$record_after" = "$record_before" ] || fail "opening the application from its disk image wrote the setup record at $record: $(cat "$record" 2>/dev/null || true)"
     [ -z "$(app)" ] || fail "opening the application from its disk image placed an application at $(app)"
     [ ! -e "$WRAPPER" ] || fail "opening the application from its disk image placed a terminal command at $WRAPPER: $(cat "$WRAPPER")"
-    say "Jason Desktop opened from the disk image and quit, and set nothing up: no application placed, no terminal command"
+    say "Jason Desktop opened from the disk image, its start ran the setup and was refused ($((ran_after - ran_before)) line(s) in its log), and it quit having set nothing up: no application placed, no terminal command, the setup record $(if [ "$record_before" = absent ]; then echo 'not written'; else echo 'as it was'; fi)"
 
-    # Ejected, as a person ejects a download's image.
+    # Ejected, as a person ejects a download's image, and gone.
     within 120 'hdiutil detach' hdiutil detach "$mount" > "$OUT/vanishing-detach.txt" 2>&1 || fail "the disk image could not be ejected: $(tail -n 3 "$OUT/vanishing-detach.txt")"
+    [ ! -e "$mounted" ] || fail "after the eject the application is still at $mounted"
+    if [ -d "$mount" ]; then [ -z "$(ls -A "$mount")" ] || fail "after the eject $mount still holds: $(ls -A "$mount" | tr '\n' ' ')"; fi
     rm -f "$image"
+    trap - EXIT
     found="$(within 60 'a new login shell looking for jason' fresh 'command -v jason || echo none')" || true
     [ "$found" = none ] || fail "after the disk image was ejected a new login shell finds jason at '$found'"
-    say "the disk image ejected, and a new zsh login shell finds no jason"
+    say "the disk image ejected and its mount gone, and a new zsh login shell finds no jason"
     ;;
 
 previous-removal)
