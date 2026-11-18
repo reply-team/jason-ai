@@ -264,7 +264,9 @@ install)
     # The skills of both hosts found, each recorded; the person's own skill of a name Jason ships left alone and named.
     for root in .claude/skills .agents/skills; do [ -f "$HOME/$root/.jason-skills.json" ] || fail "no skills record in ~/$root"; done
     [ -f "$DATA/skills/roles/.jason-skills.json" ] || fail "no role skills record under $DATA"
-    if [ -f "$OWN_SKILL/SKILL.md" ]; then
+    if grep -q "person's own" "$OUT/failed-legs.txt" 2>/dev/null; then
+        say "the skills of Claude Code and Codex are recorded in both folders and the role skills under ~/.jason; the person's own quick-start was lost in a leg before, as recorded, so this install's handling of it is not seen"
+    elif [ -f "$OWN_SKILL/SKILL.md" ]; then
         [ "$(cat "$OWN_SKILL/SKILL.md")" = "a person's own skill" ] || fail "the person's own skill at $OWN_SKILL was changed"
         if grep -q '"quick-start/' "$HOME/.agents/skills/.jason-skills.json"; then fail "the record in ~/.agents/skills claims the person's own quick-start"; fi
         grep -q 'quick-start' "$said" || fail "the install did not name the person's own quick-start it left alone"
@@ -294,10 +296,11 @@ refuse-while-open)
     while [ "$waited" -lt 120 ] && [ "$(stat -f %m "$record" 2>/dev/null || echo none)" = "$before" ]; do sleep 0.5; waited=$((waited + 1)); done
     if [ "$(stat -f %m "$record" 2>/dev/null || echo none)" = "$before" ]; then moment='not written again within 60 s of the start'; else moment="written again $((waited / 2)) s after the start"; fi
     sleep 2
-    claims="$(grep -n 'quick-start' "$record" 2>/dev/null | tr '\n' ';' || true)"
+    claims="$(grep -o '"quick-start/[^"]*"' "$record" 2>/dev/null | sort -u | tr '\n' ' ' || true)"
     own="$(cat "$OWN_SKILL/SKILL.md" 2>/dev/null || echo '(absent)')"
     say "after the application's first start the record in ~/.agents/skills was $moment; it names quick-start in: ${claims:-no line}; the person's own SKILL.md reads: $own"
     if [ -n "$claims" ] || [ "$own" != "a person's own skill" ]; then fail_held "the application's first start took the person's own quick-start: the record names it in ${claims:-no line}, and the file reads '$own'"; fi
+    say "launchd's records after the application's first start, before any uninstall: $(launchd_records | tr '\t\n' ' ;' || true)"
     status=0
     within 120 'jason uninstall while the application runs' "$carried" uninstall > "$OUT/refused.json" 2>&1 || status=$?
     cat "$OUT/refused.json"
@@ -325,6 +328,7 @@ uninstall-terminal)
     if grep -qx '# added by jason install' "$HOME/.zprofile" 2>/dev/null; then fail "~/.zprofile still carries the line"; fi
     [ ! -e "$DATA" ] || fail "~/.jason is left after --purge-data"
     [ -f "$OWN_SKILL/SKILL.md" ] || fail_held "the person's own skill went with the uninstall"
+    say "launchd's records after this build's jason uninstall from a new login shell: $(launchd_records | tr '\t\n' ' ;' || true)"
     say "jason uninstall from a new login shell: the runtime stopped, Jason.app, the wrapper, the profile lines, the skills and the data directory gone"
     ;;
 

@@ -465,8 +465,8 @@ switch ($Step) {
         # The application's first start sets the machine up (jason install): the skills record and the person's own skill
         # read right after it.
         $record = Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json'
-        $claims = @(Select-String -LiteralPath $record -SimpleMatch 'quick-start' -ErrorAction SilentlyContinue | ForEach-Object { "line $($_.LineNumber): $($_.Line.Trim())" })
-        $ownText = if (Test-Path -LiteralPath (Join-Path $ownSkill 'SKILL.md')) { (Get-Content -LiteralPath (Join-Path $ownSkill 'SKILL.md') -Raw).Trim() } else { '(absent)' }
+        $claims = @(Select-String -LiteralPath $record -Pattern '"quick-start/[^"]*"' -AllMatches -ErrorAction SilentlyContinue | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value } | Sort-Object -Unique)
+        $ownText = if (Test-Path -LiteralPath (Join-Path $ownSkill 'SKILL.md')) { ((Get-Content -LiteralPath (Join-Path $ownSkill 'SKILL.md') -Raw).Trim() -split "`n")[0].Trim() } else { '(absent)' }
         Say "after the window's first start, the record at .agents\skills names quick-start in: $(if ($claims) { $claims -join '; ' } else { 'no line' }); the person's own SKILL.md reads: $ownText"
         if ($claims -or $ownText -ne "a person's own skill") { Fail-Held "the window's first start took the person's own quick-start: the record names it in $(if ($claims) { $claims -join '; ' } else { 'no line' }), and the file reads '$ownText'" }
         Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -518,7 +518,20 @@ switch ($Step) {
         }
         if ($asked) {
             Write-JasonProcesses
-            Fail "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; ')"
+            Write-ProcessWindows $asked.Process.Id
+            $text = @(Use-WindowsType; [JasonProof.Windows]::Describe([uint32] $asked.Process.Id) | Where-Object { $_ -match "class 'Static', text '[^']+'" } | ForEach-Object { ($_ -replace "^.*text '", '') -replace "', visible.*$", '' })
+            Fail-Held "the waiter ran the uninstaller WITHOUT /S with the window closed, and it showed: $($asked.Windows -join '; '); its text: $($text -join ' / ')"
+            Stop-Process -Id $asked.Process.Id -Force -ErrorAction SilentlyContinue
+            Wait-Until { -not (Get-Process -Id $asked.Process.Id -ErrorAction SilentlyContinue) } 30 'the asking uninstaller ending'
+            Say 'that run was ended unanswered; the application stays installed, and Installed apps takes it off in the next leg'
+            $entry = @(Get-JasonUninstallEntries)
+            if ($entry.Count -gt 0 -and ([string]$entry[0].QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$') {
+                $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
+                Say "the quiet uninstall Installed apps runs ended $quiet"
+                if ($quiet -ne 0) { Fail-Held "the quiet uninstall Installed apps runs ended $quiet with nothing of Jason running" }
+                Wait-Until { -not (Test-Path -LiteralPath $app) -or $quiet -ne 0 } 120 "the application's folder going after the quiet uninstall"
+            }
+            return
         }
         if (Test-Path -LiteralPath $app) {
             Write-JasonProcesses
