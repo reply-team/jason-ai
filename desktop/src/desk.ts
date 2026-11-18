@@ -15,7 +15,7 @@ import { bringForward, type LoginItem, type RuntimeAutostart } from './login-ite
 import { commandMenuOf, commandQuestion, type CommandStatus, type PathCommand } from './path-command.ts';
 import { quietWatcher, RemovalAct, removeLabel, type RemovalDeps } from './remove-placed.ts';
 import type { DemoMenu } from './mode.ts';
-import { menuItemOf, pressItem, type Updater } from './updates.ts';
+import { menuItemOf, pressItem, type MenuItem, type Updater } from './updates.ts';
 import { windowTitle } from './window-title.ts';
 
 export interface DeskDeps {
@@ -51,6 +51,11 @@ export interface DeskDeps {
     demo: DemoMenu | null;
     /** Back to Your Own Installation: switches to Live and starts the desktop again. */
     back(): void;
+    /**
+     * Told each time the menu is drawn again, so the page's copy of the update item (`updates.onChanged`) follows the
+     * menu's; absent where no page asks for it.
+     */
+    menuChanged?(): void;
 }
 
 /** The Command Line submenu's one line where this start carries no jason that outlasts it. */
@@ -184,9 +189,8 @@ export class Desk {
      * Electron counts as a key's (`triggeredByAccelerator`).
      */
     private updateItems(inTray: boolean): MenuItemConstructorOptions[] {
-        if (this.demo !== null) return [];
-        const { updates } = this.deps;
-        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
+        const item = this.updateItem();
+        if (item === null) return [];
         let kept: string | null = null;
         try {
             kept = this.deps.kept();
@@ -197,16 +201,34 @@ export class Desk {
             {
                 label: item.label,
                 accelerator: itemKeys.update,
-                enabled: item.enabled && !this.removing(),
-                click: (_menuItem, _window, event) => {
-                    // The item is disabled while Remove What Jason Placed runs; its key does nothing then either.
-                    if (this.removing()) return;
-                    if (updates === null) return;
-                    void pressItem(updates, item.act, !inTray && event.triggeredByAccelerator === true, (question) => this.box(question));
-                },
+                enabled: item.enabled,
+                click: (_menuItem, _window, event) => this.pressUpdate(item.act, !inTray && event.triggeredByAccelerator === true),
             },
             ...(kept === null ? [] : [{ label: kept, enabled: false }]),
         ];
+    }
+
+    /**
+     * The update item as the menu shows it now, disabled while Remove What Jason Placed runs; null in a demo run, whose
+     * menu has none. The menu draws it, and the page's Settings shows it through the seam (`updates.item`).
+     */
+    updateItem(): MenuItem | null {
+        if (this.demo !== null) return null;
+        const { updates } = this.deps;
+        const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);
+        return { ...item, enabled: item.enabled && !this.removing() };
+    }
+
+    /**
+     * A press of the update item, on the act of the step it showed: the menu's click and key, and the page's press in
+     * Settings (`updates.press`, a click on the label the page drew, `actShown`), the one way either reaches `pressItem`. While Remove What Jason Placed runs the
+     * item is disabled, and a press does nothing either.
+     */
+    pressUpdate(act: MenuItem['act'], byKey: boolean): void {
+        if (this.removing()) return;
+        const { updates } = this.deps;
+        if (updates === null) return;
+        void pressItem(updates, act, byKey, (question) => this.box(question));
     }
 
     /**
@@ -340,6 +362,7 @@ export class Desk {
         );
         // The tray carries the same items, since a Windows or Linux window shows no menu bar.
         this.renderTray();
+        this.deps.menuChanged?.();
     }
 
     private renderTray(): void {

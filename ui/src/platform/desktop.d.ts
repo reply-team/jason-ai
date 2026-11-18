@@ -134,6 +134,14 @@ export interface DesktopChatOptions {
  */
 export type DesktopChatMode = 'ask_first' | 'plan_only' | 'auto_edit' | 'full_access';
 
+/** `updates.item()`: the desktop's version, and its update item as the menu shows it. */
+export interface DesktopUpdateItem {
+    /** The desktop's own version, as its About says it. */
+    version: string;
+    /** The menu's update item: its label and whether it can be pressed now; null where the menu shows none. */
+    item: { label: string; enabled: boolean } | null;
+}
+
 /**
  * The standing choice of Full access, which only the person's answer to the desktop's own box gives: while it stands,
  * the menu enters Full access without the box, and with `newChats` a new chat on a host that can take Full access starts
@@ -619,6 +627,20 @@ export interface JasonDesktop {
          * the key does nothing. The page names the key only when this says one; a desktop before it names none.
          */
         key(): Promise<string | null>;
+        /**
+         * The desktop's version and its update item as its menu shows it now: the same label, enabled when the menu's
+         * is. `item` is null where the menu shows no update item.
+         */
+        item(): Promise<DesktopUpdateItem>;
+        /**
+         * Presses the update item as a click in the menu does: the same act, the same boxes and refusals of the
+         * desktop's own. `label` is the label the page drew; the desktop presses only while its item is enabled and says
+         * that very label, and otherwise does nothing, so a click lands only on the step the person saw. The page learns
+         * what came of it through `onChanged`.
+         */
+        press(label: string): Promise<void>;
+        /** Calls `handler` whenever what `item()` answers may have changed; the function it returns stops that. */
+        onChanged(handler: () => void): () => void;
     };
     dailyTrends: {
         /** Whether the desktop keeps the Dashboard's daily trends as shown (true) or hidden (false), or null when the person never chose; the page reads null as shown. */

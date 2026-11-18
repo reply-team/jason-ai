@@ -398,6 +398,21 @@
     clip-path: inset(50%);
     white-space: nowrap;
 }
+/* The foot of the list in the desktop's window: its name and version, and its update item as the menu shows it. */
+.jc-console .harness .settings > .settings-list > .settings-update {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 12px 10px 0;
+    border-top: 1px solid var(--line);
+}
+.jc-console .harness .settings > .settings-list > .settings-update > .settings-version {
+    margin: 0;
+    color: var(--mute);
+    font-size: 12px;
+}
 /* A section other than the one shown holds an error: its name carries a dot, and the error is its description. */
 .jc-console .harness .settings > .settings-list > button[data-flagged] {
     background-image: radial-gradient(circle at calc(100% - 12px) 50%, var(--red) 4px, transparent 5px);
@@ -441,6 +456,9 @@
         flex-direction: row;
         flex-wrap: wrap;
         margin-bottom: 14px;
+    }
+    .jc-console .harness .settings > .settings-list > .settings-update {
+        flex-basis: 100%;
     }
     .jc-console .harness .settings[data-chosen] > [data-section] {
         margin-left: 0;

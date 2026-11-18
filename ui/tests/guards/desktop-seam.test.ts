@@ -22,8 +22,12 @@ const top = {
     fullAccess: true,
 } as const satisfies Record<keyof JasonDesktop, true>;
 const theme = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['theme'], true>;
-// The update item's key, where the item can act: read by the System screen's notice of an update.
-const updates = { key: true } as const satisfies Record<keyof JasonDesktop['updates'], true>;
+// The update item's key, where the item can act: read by the System screen's notice of an update. The desktop's version
+// and its update item as the menu shows it, a press of it as a click, and word that it changed: the foot of Settings.
+const updates = { key: true, item: true, press: true, onChanged: true } as const satisfies Record<
+    keyof JasonDesktop['updates'],
+    true
+>;
 // Whether the Dashboard shows its daily trends: read as the page loads, told whenever the switch is flipped.
 const dailyTrends = { get: true, set: true } as const satisfies Record<keyof JasonDesktop['dailyTrends'], true>;
 // Live or Demo, the installation the desktop runs on: read once as the page loads, and set, which starts it again; and
@@ -137,6 +141,9 @@ describe('the desktop seam', () => {
             'theme.get',
             'theme.set',
             'updates.key',
+            'updates.item',
+            'updates.press',
+            'updates.onChanged',
             'dailyTrends.get',
             'dailyTrends.set',
             'mode.get',

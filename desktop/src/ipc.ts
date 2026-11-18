@@ -24,6 +24,8 @@ export const invokeChannels = {
     'theme.get': 'jason:theme.get',
     'theme.set': 'jason:theme.set',
     'updates.key': 'jason:updates.key',
+    'updates.item': 'jason:updates.item',
+    'updates.press': 'jason:updates.press',
     'dailyTrends.get': 'jason:dailyTrends.get',
     'dailyTrends.set': 'jason:dailyTrends.set',
     'mode.get': 'jason:mode.get',
@@ -60,6 +62,7 @@ export const eventChannels = {
     'links.open': 'jason:links.open',
     'fullAccess.changed': 'jason:fullAccess.changed',
     'mode.preparing': 'jason:mode.preparing',
+    'updates.changed': 'jason:updates.changed',
 } as const;
 
 export type InvokeMember = keyof typeof invokeChannels;

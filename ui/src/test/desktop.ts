@@ -16,6 +16,7 @@ import type {
     DesktopReplyOpened,
     DesktopReplyRefusal,
     DesktopSetup,
+    DesktopUpdateItem,
     JasonDesktop,
 } from '../platform/desktop';
 import { JournalStream, type StreamSocket } from '../platform/journal-stream';
@@ -198,6 +199,10 @@ export interface StubDesktop extends JasonDesktop {
     themeKept: 'system' | 'light' | 'dark' | null;
     /** Whether the desktop keeps the daily trends shown, as `dailyTrends.get` answers it; null when never told. */
     dailyTrendsKept: boolean | null;
+    /** What `updates.item` answers: the desktop's version and its update item; a test changes it with `updateMoved`. */
+    updateKept: DesktopUpdateItem;
+    /** Moves the update item on, as the desktop does as an update goes, and says so through `updates.onChanged`. */
+    updateMoved(next: DesktopUpdateItem): void;
     /**
      * The mode this run is on, as `mode.get` answers it; Live unless a test says Demo. `mode.set` keeps the mode it is
      * given and answers null, as the desktop does before it starts again, or a refusal the test set by name.
@@ -268,6 +273,7 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const standingHandlers = new Set<(standing: DesktopFullAccessStanding | null) => void>();
     const commandHandlers = new Set<(command: DesktopCommand) => void>();
     const linkHandlers = new Set<(link: DesktopLink) => void>();
+    const updateHandlers = new Set<() => void>();
     const calls: { name: string; args: unknown[] }[] = [];
     const refuse = new Map<string, string>();
     const actAnswers = new Map<string, ReplyAnswer | ReplyAnswer[]>();
@@ -372,7 +378,15 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
     const stub: StubDesktop = {
         platform: 'win32',
         theme: { get: () => Promise.resolve(stub.themeKept), set: call('theme.set') },
-        updates: { key: () => Promise.resolve(null) },
+        updates: {
+            key: () => Promise.resolve(null),
+            item: () => Promise.resolve(structuredClone(stub.updateKept)),
+            press: call('updates.press'),
+            onChanged(handler) {
+                updateHandlers.add(handler);
+                return () => updateHandlers.delete(handler);
+            },
+        },
         dailyTrends: {
             get: () => Promise.resolve(stub.dailyTrendsKept),
             set: (on: boolean) => {
@@ -417,6 +431,11 @@ export function stubDesktop(status: DesktopSetup = setupFound, options: { newCha
         status,
         themeKept: null,
         dailyTrendsKept: null,
+        updateKept: { version: '0.48.5', item: { label: 'Check for Updates…', enabled: true } },
+        updateMoved: (next) => {
+            stub.updateKept = next;
+            updateHandlers.forEach((handler) => handler());
+        },
         modeKept: 'live',
         modeUnopened: null,
         modePreparing: false,

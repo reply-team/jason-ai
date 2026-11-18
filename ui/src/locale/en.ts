@@ -23,6 +23,7 @@ export const en = {
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
     'settings.group': 'Jason',
+    'settings.version': 'Jason Desktop {version}',
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
     'settings.notifications': 'Notifications',
