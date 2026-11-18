@@ -490,8 +490,8 @@ the command line alone, without Jason Desktop, and from 0.49.0 Jason on a Mac is
 0.48.5, the last release it carries: a release no longer asks the tap to bump it, and `brew upgrade jason` finds
 nothing newer.
 
-On a Mac, the one line at the top of this section is the way to 0.49 and later. An installation Homebrew made reaches
-it in three lines:
+The one line at the top of this section is the way to 0.49 and later on both systems: on a Mac it installs Jason
+Desktop, and on Linux the command line. An installation Homebrew made, on a Mac or on Linux, reaches it in three lines:
 
 ```sh
 jason uninstall
@@ -501,7 +501,7 @@ curl -fsSL https://get.jasonharness.ai/releases/latest/download/install.sh | sh
 
 `jason uninstall` stops the runtime and takes off the logon registration and the skills it deployed, keeps the data
 directory, and leaves the rest to Homebrew (§9); `brew uninstall jason` takes the rest; the one line installs Jason
-Desktop, which opens the same data directory as it is.
+Desktop on a Mac and the command line on Linux, either of which opens the same data directory as it is.
 
 ### Carried by the desktop
 
