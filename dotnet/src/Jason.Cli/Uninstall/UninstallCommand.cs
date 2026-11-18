@@ -58,8 +58,9 @@ public static class UninstallCommand
              unpacks again on its next start. Elsewhere a running copy holds nothing, so those are counted
              and left, for you to remove once nothing runs from them; and with DOTNET_BUNDLE_EXTRACT_BASE_DIR
              set they are not looked for. Then, on Windows, each jason-retired-<id> folder an install, an
-             update or a move renamed a running jason.exe into, once that process has ended; one it still
-             runs is named, for you to remove once it has ended
+             update or a move renamed a running jason.exe into - in the temporary folder, and beside the
+             folder of the default command-line install and of the one this removal takes - once that
+             process has ended; one it still runs is named, for you to remove once it has ended
 
         A file another program holds open is tried again for up to {InstallationRemovers.HeldFiles.WaitInWords} before it is reported;
         elsewhere than Windows an open file does not stop the removal.
@@ -118,7 +119,8 @@ public static class UninstallCommand
             of Jason, found where jason install looks for one, goes with its notice files, its PATH entry or
             profile block and its folder. Then the folders an earlier version's demo made, each only where it
             carries the demo's mark, and the updater's cache (on macOS also ~/Library/Caches/
-            ai.jasonharness.desktop.ShipIt).
+            ai.jasonharness.desktop.ShipIt). Then, on Windows, the jason-retired-<id> folders, as step 6 says,
+            beside the older command-line install's folder too.
           - macOS, just before the application and only where it goes: its own state under ~/Library, each
             where found as itself and named in the plan: Preferences/ai.jasonharness.desktop.plist (through
             defaults delete, then the file), Saved Application State/ai.jasonharness.desktop.savedState,

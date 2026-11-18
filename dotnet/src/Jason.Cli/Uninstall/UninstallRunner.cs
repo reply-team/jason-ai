@@ -629,18 +629,6 @@ public static class UninstallRunner
     }
 
     /// <summary>
-    /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
-    /// planned, and the directory holding them if that is now empty.
-    /// </summary>
-    /// <remarks>
-    /// The parent is where every build of this program unpacks, one directory each: earlier versions of this
-    /// installation left theirs there, and so would another installation. Keeping them left the libraries of every
-    /// version this account ever ran behind an uninstall. On Windows removing one another installation still uses costs
-    /// it a moment on its next start, when its build unpacks again, and a copy running now keeps its own by holding it,
-    /// so they go and the plan names each. Elsewhere a running copy holds nothing, so they stay, counted, and the report
-    /// says so in the plan's words. The parent goes only if nothing is left in it — the report says why when it stays.
-    /// </remarks>
-    /// <summary>
     /// The <c>jason-retired-&lt;id&gt;</c> folders, by the sweep an install, an update's finish and a move run: each goes once
     /// the process running its executable has ended, and is said; one still held is a problem, named with what to do, since
     /// nothing of Jason sweeps it after this. Windows only, where the sweep is; and only where the system's places are known.
@@ -652,7 +640,10 @@ public static class UninstallRunner
             return;
         }
 
-        var outcome = RetiredSweep.Sweep(places, plan.Executable);
+        // Where the routine renames into: the temporary directory, beside the default install's folder, and beside the folder of
+        // the executable this removal takes, or of the older command-line install the application's removal found, where a
+        // rename aside on another volume puts its folder.
+        var outcome = RetiredSweep.Sweep(places, plan.Executable ?? plan.Desktop?.CommandLineInstall);
         foreach (var folder in outcome.Swept)
         {
             done.Add($"Removed '{folder}', where an earlier install or move set aside a jason.exe a process was still running.");
@@ -666,6 +657,18 @@ public static class UninstallRunner
         }
     }
 
+    /// <summary>
+    /// What a single-file build unpacked on its first run, what every other build unpacked beside it where those are
+    /// planned, and the directory holding them if that is now empty.
+    /// </summary>
+    /// <remarks>
+    /// The parent is where every build of this program unpacks, one directory each: earlier versions of this
+    /// installation left theirs there, and so would another installation. Keeping them left the libraries of every
+    /// version this account ever ran behind an uninstall. On Windows removing one another installation still uses costs
+    /// it a moment on its next start, when its build unpacks again, and a copy running now keeps its own by holding it,
+    /// so they go and the plan names each. Elsewhere a running copy holds nothing, so they stay, counted, and the report
+    /// says so in the plan's words. The parent goes only if nothing is left in it — the report says why when it stays.
+    /// </remarks>
     private static void RemoveExtractedLibraries(
         CliEnvironment env,
         UninstallPlan plan,

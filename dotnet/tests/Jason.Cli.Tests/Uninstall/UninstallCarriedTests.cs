@@ -972,8 +972,15 @@ public sealed class UninstallCarriedTests : IDisposable
 
         await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false, KeepApplication: true), Ct);
 
-        var kept = JsonDocument.Parse(output.ToString()).RootElement.GetProperty("kept").EnumerateArray().Select(line => line.GetString()!).ToList();
-        Assert.Single(kept, line => line.Contains("renamed to", StringComparison.Ordinal));
+        // Said once, by the removal's sweep of the folder it was renamed into, which the same process still holds: a problem.
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        string Lines(string name) => string.Join("\n", report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!));
+        var aside = Assert.Single(Directory.GetDirectories(_tree.Paths.Root, "jason-retired-*"));
+        Assert.Equal(1, Count(Lines("done") + "\n" + Lines("kept") + "\n" + Lines("problems"), aside));
+        Assert.Contains(aside, Lines("problems"), StringComparison.Ordinal);
+        Assert.DoesNotContain("renamed to", Lines("kept"), StringComparison.Ordinal);
+
+        static int Count(string text, string part) => (text.Length - text.Replace(part, string.Empty, StringComparison.Ordinal).Length) / part.Length;
     }
 
     [Fact]
@@ -1473,6 +1480,68 @@ public sealed class UninstallCarriedTests : IDisposable
             && line.GetString()!.Contains("once that process has ended", StringComparison.Ordinal));
         Assert.True(Directory.Exists(notTheRoutines));
         Assert.DoesNotContain(notTheRoutines, output.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An older command-line install the removal takes off, in a folder of the person's own that the last update recorded,
+    /// whose executable a running process holds: it is renamed aside, and that folder is said once, by the sweep, with what
+    /// to do, a problem since nothing sweeps it afterwards. And the sweep looks beside that install's folder too, where a
+    /// rename aside on another volume puts its folder, so a retired folder an earlier run left there goes.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_Windows_an_older_install_set_aside_in_this_run_is_said_once_and_the_sweep_looks_beside_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows renames a running executable aside.");
+        var temporary = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "temp")).FullName;
+        var tools = Path.Combine(_tree.Paths.Root, "tools");
+        var old = Path.Combine(tools, "jason", "jason.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.WriteAllText(old, "jason 0.48.5");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(old)!, "jason-LICENSE"), "MIT");
+        var update = new Jason.Cli.Update.UpdatePaths(_dir.Paths);
+        Directory.CreateDirectory(update.Root);
+        new Jason.Contracts.Update.UpdateLedger(
+            Jason.Contracts.Update.SemanticVersion.Parse("0.48.4"),
+            Jason.Contracts.Update.SemanticVersion.Parse("0.48.5"),
+            Jason.Contracts.Update.UpdateStep.Complete,
+            DateTimeOffset.UtcNow.AddDays(-1),
+            old,
+            update.StagedExecutable(Jason.Contracts.Update.SemanticVersion.Parse("0.48.5")),
+            update.PreviousExecutable).Write(update.Ledger);
+        var besideIt = Path.Combine(tools, $".jason-retired-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(besideIt);
+        File.WriteAllText(Path.Combine(besideIt, "jason.exe"), "jason 0.48.4");
+        var executable = WindowsApplication();
+        var places = AbsentKeysPlaces() with
+        {
+            Temporary = temporary,
+
+            // The older install's executable, and the copy of it this run sets aside, are held by its running process.
+            Delete = path =>
+            {
+                if (string.Equals(path, old, StringComparison.OrdinalIgnoreCase) || path.StartsWith(Path.Combine(temporary, "jason-retired-"), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException($"'{path}' is in use.");
+                }
+
+                File.Delete(path);
+            },
+        };
+        var (env, output, _) = Environment(places, executable);
+
+        var exit = await UninstallCommand.RunAsync(env, new UninstallOptions(false, false, false, false, false), Ct);
+
+        var report = JsonDocument.Parse(output.ToString()).RootElement;
+        Assert.True(exit == ExitCodes.ApiError, output.ToString());
+        Assert.False(File.Exists(old), "the older install's executable is still in its folder");
+        var aside = Assert.Single(Directory.GetDirectories(temporary, "jason-retired-*"));
+        string[] lines = [.. new[] { "done", "kept", "problems" }.SelectMany(name => report.GetProperty(name).EnumerateArray().Select(line => line.GetString()!))];
+        var said = Assert.Single(lines, line => line.Contains(aside, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(said, report.GetProperty("problems").EnumerateArray().Select(line => line.GetString()!));
+        Assert.Contains("once that process has ended", said, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(besideIt), "a retired folder beside the older install's folder was not swept");
+        Assert.Contains(report.GetProperty("done").EnumerateArray(), line => line.GetString()!.Contains(besideIt, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
