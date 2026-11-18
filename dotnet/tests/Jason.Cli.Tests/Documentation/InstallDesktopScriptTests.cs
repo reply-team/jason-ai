@@ -456,6 +456,25 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.DoesNotContain("call it by its full path", run.Stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// "A terminal opened from now on finds jason by name" is said only where the report says that terminal finds this
+    /// jason: where it finds another file first, the script ends non-zero naming it, and the report above says what removes
+    /// it.
+    /// </summary>
+    [Fact]
+    public void Windows_a_report_naming_another_jason_first_ends_non_zero_and_says_so()
+    {
+        var windows = Windows.Start(_tree);
+        windows.Variables["JASON_STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: false, finds: @"C:\\Tools\\jason.exe");
+        windows.Variables["JASON_STANDIN_INSTALL_EXIT"] = "1";
+
+        var run = windows.Run(windows.Feed());
+
+        Assert.Equal(1, run.Exit);
+        AssertSaid(@"a terminal opened from now on finds C:\Tools\jason.exe first by that name; its problems above say what to do.", run.Stderr);
+        Assert.DoesNotContain("finds jason by name", run.Stdout, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Windows_a_report_that_left_other_things_undone_still_ends_with_jason_in_the_terminal()
     {
@@ -897,6 +916,23 @@ public sealed class InstallDesktopScriptTests : IDisposable
         Assert.DoesNotContain("call it by its full path", run.Stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// "A terminal opened from now on finds jason by name" is said only where the report says that terminal finds the
+    /// wrapper or this jason: where it finds another file first, the script ends non-zero naming it.
+    /// </summary>
+    [Fact]
+    public void Macos_a_report_naming_another_jason_first_ends_non_zero_and_says_so()
+    {
+        var mac = Mac.Start(_tree);
+        mac.Variables["STANDIN_REPORT"] = Report(placed: true, runtime: "not_running", completed: false, finds: "/usr/local/bin/jason");
+
+        var run = mac.Run(mac.Feed());
+
+        Assert.NotEqual(0, run.Exit);
+        Assert.Contains("a terminal opened from now on finds /usr/local/bin/jason first by that name; its problems above say what to do.", run.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("finds jason by name", run.Stdout, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -935,9 +971,9 @@ public sealed class InstallDesktopScriptTests : IDisposable
     // --- the two machines --------------------------------------------------------------------------------------
 
     /// <summary>A report as <c>jason install</c> prints it, with what a row needs to vary.</summary>
-    private static string Report(bool placed, string runtime, bool completed) =>
+    private static string Report(bool placed, string runtime, bool completed, string finds = "{self}") =>
         "{\"version\":\"" + Version + "\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":" + (placed ? "true" : "false")
-        + ",\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[]},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\""
+        + ",\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[],\"finds\":\"" + finds + "\"},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\""
         + runtime + "\",\"done\":[],\"left\":[],\"problems\":[" + (completed ? string.Empty : "\"Something was not done.\"") + "],\"completed\":"
         + (completed ? "true" : "false") + "}";
 
@@ -1258,7 +1294,7 @@ public sealed class InstallDesktopScriptTests : IDisposable
             if (a.Length >= 2 && a[0] == "runtime" && a[1] == "start") { if (running != null) File.WriteAllText(running, ""); Console.WriteLine("{\"instance\":\"standin\"}"); return 0; }
             if (a.Length >= 1 && a[0] == "install") {
               var said = E("JASON_STANDIN_INSTALL_STDERR"); if (said != null) Console.Error.WriteLine(said);
-              var report = E("JASON_STANDIN_REPORT") ?? "{\"version\":\"0.49.0\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":true,\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[]},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\"not_running\",\"done\":[],\"left\":[],\"problems\":[],\"completed\":true}";
+              var report = E("JASON_STANDIN_REPORT") ?? "{\"version\":\"0.49.0\",\"executable\":\"{self}\",\"command\":{\"runs\":\"{dir}\",\"placed\":true,\"open_shell\":\"{self}\",\"changed\":true,\"profiles\":[],\"taken_back\":[],\"finds\":\"{self}\"},\"skills\":[],\"roles\":null,\"retired\":null,\"runtime\":\"not_running\",\"done\":[],\"left\":[],\"problems\":[],\"completed\":true}";
               Console.WriteLine(report.Replace("{self}", self.Replace("\\", "\\\\")).Replace("{dir}", Path.GetDirectoryName(self).Replace("\\", "\\\\")));
               var code = E("JASON_STANDIN_INSTALL_EXIT");
               return code == null ? 0 : int.Parse(code);

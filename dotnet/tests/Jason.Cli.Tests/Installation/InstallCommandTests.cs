@@ -397,6 +397,138 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Equal(written, File.Exists(Path.Combine(Home, ".zprofile")));
     }
 
+    /// <summary>
+    /// What a new terminal finds, read once the Path entry is placed: the machine's Path comes before the account's, so a
+    /// jason on it answers before the entry appended last. The entry is placed all the same; the report names the file it
+    /// finds, a problem says what removes it - a command-line install's own update, or else removing it or taking its folder
+    /// off the Path - and the file is left as it is.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_a_jason_first_on_the_machine_Path_is_named_with_what_removes_it_and_left(bool commandLineInstall)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        using var key = ScratchKey.Create();
+        var tools = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "tools")).FullName;
+        var decoy = Path.Combine(tools, "jason.exe");
+        File.WriteAllText(decoy, "another jason");
+        if (commandLineInstall)
+        {
+            File.WriteAllText(Jason.Contracts.Update.ReleaseAssets.NoticeBeside(decoy, Jason.Contracts.Update.ReleaseAssets.Notices[0]), "MIT");
+        }
+
+        var executable = Carried("jason.exe");
+        var places = WindowsPlaces(key.SubKey) with { MachinePath = () => new StoredPath(tools, RegistryValueKind.ExpandString), PathExtensions = ".COM;.EXE;.BAT;.CMD" };
+        var (env, output) = Environment(places, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        var command = report.GetProperty("command");
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        Assert.Equal(decoy, command.GetProperty("finds").GetString());
+        var first = $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable})";
+        Assert.Contains(
+            commandLineInstall
+                ? $"{first}: it is a command-line install of Jason, and its own `jason update apply` moves it into Jason Desktop. It was left as it is."
+                : $"{first}. It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
+            report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+        Assert.Equal("another jason", File.ReadAllText(decoy));
+        Assert.True(PathEntry.Carries(key.ReadPath()!.Value.Raw, Path.GetDirectoryName(executable)!));
+    }
+
+    /// <summary>With nothing before it, the entry appended last is what a new terminal finds: this jason, and no problem.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_this_jason_is_what_a_new_terminal_finds_where_nothing_comes_before_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        using var key = ScratchKey.Create();
+        key.SetPath(Path.Combine(_tree.Paths.Root, "empty"), RegistryValueKind.ExpandString);
+        var executable = Carried("jason.exe");
+        var (env, output) = Environment(WindowsPlaces(key.SubKey) with { PathExtensions = ".COM;.EXE;.BAT;.CMD" }, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        Assert.Equal(executable, Report(output).GetProperty("command").GetProperty("finds").GetString());
+    }
+
+    /// <summary>
+    /// A command-line install held in this run - its runtime would not stop - still answers as jason: on Windows, as on
+    /// macOS, the terminal command is left as it is, the Path unwritten, placed false, and the problem says why.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_a_held_command_line_install_leaves_the_Path_as_it_is()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        using var key = ScratchKey.Create();
+        var before = Path.Combine(_tree.Paths.Root, "before");
+        key.SetPath(before, RegistryValueKind.ExpandString);
+        var (old, _, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, """{"error":{"code":"internal","message":"no","retryable":false}}"""), WindowsPlaces(key.SubKey));
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.Equal(MachineSetup.RuntimeStates.WouldNotStop, report.GetProperty("runtime").GetString());
+        var command = report.GetProperty("command");
+        Assert.False(command.GetProperty("placed").GetBoolean());
+        Assert.False(command.GetProperty("changed").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, command.GetProperty("finds").ValueKind);
+        Assert.Equal((before, RegistryValueKind.ExpandString), key.ReadPath());
+        Assert.Contains(
+            $"The command-line install at {old} is not retired in this run, so this account's Path was left as it is: a new terminal still finds that jason.",
+            report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+        Assert.True(File.Exists(old));
+    }
+
+    /// <summary>
+    /// macOS: where <c>~/.local/bin</c> is on the terminal's PATH already, no profile line is written to put it in front,
+    /// and a jason earlier on that PATH is what a new terminal finds: named, with what removes it, and left. Where the lines
+    /// are written they put it in front, and the wrapper is what it finds.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task On_macos_a_jason_earlier_on_the_terminal_s_PATH_is_named_unless_the_lines_put_the_wrapper_in_front(bool onPathAlready)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A macOS PATH and an execute bit are not a Windows host's.");
+        var bin = Path.Combine(Home, ".local", "bin");
+        var tools = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "usr-local-bin")).FullName;
+        var decoy = Path.Combine(tools, "jason");
+        File.WriteAllText(decoy, "another jason");
+        File.SetUnixFileMode(decoy, (UnixFileMode)0b111_101_101);
+        var executable = Carried();
+        var (env, output) = Environment(MacPlaces(), executable);
+        var terminal = onPathAlready ? $"{tools}:{bin}:/usr/bin" : $"{tools}:/usr/bin";
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: terminal), Ct);
+
+        var report = Report(output);
+        var command = report.GetProperty("command");
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        if (onPathAlready)
+        {
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Equal(decoy, command.GetProperty("finds").GetString());
+            Assert.Contains(
+                $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable}). It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
+                report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+            Assert.Equal("another jason", File.ReadAllText(decoy));
+        }
+        else
+        {
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Equal(Path.Combine(bin, "jason"), command.GetProperty("finds").GetString());
+        }
+    }
+
     /// <summary>The gate is macOS's: on Windows a terminal PATH that names the folder already still leaves the Path entry written.</summary>
     [Fact]
     [SupportedOSPlatform("windows")]
@@ -1192,9 +1324,10 @@ public sealed class InstallCommandTests : IDisposable
     /// A command-line install at <c>~/.local/bin/jason</c> whose runtime runs from it, drains with nothing running, resumes,
     /// and answers the shutdown with <paramref name="shutdown"/>.
     /// </summary>
-    private (string Old, List<string> Asked, FakeProcessControl Processes, CliEnvironment Env, StringWriter Output) OldRuntimeStopping(Func<HttpRequestMessage, HttpResponseMessage> shutdown)
+    private (string Old, List<string> Asked, FakeProcessControl Processes, CliEnvironment Env, StringWriter Output) OldRuntimeStopping(Func<HttpRequestMessage, HttpResponseMessage> shutdown, SetupPlaces? places = null)
     {
-        var old = PlantMacCommandLineInstall();
+        var windows = places?.Platform is SetupSystem.Windows;
+        var old = windows ? PlantWindowsCommandLineInstall(places!) : PlantMacCommandLineInstall();
         Directory.CreateDirectory(_data.Paths.Root);
         _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
         var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
@@ -1211,7 +1344,7 @@ public sealed class InstallCommandTests : IDisposable
                 _ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD")),
             };
         });
-        var (env, output) = Environment(MacPlaces(), Carried());
+        var (env, output) = Environment(places ?? MacPlaces(), Carried(windows ? "jason.exe" : "jason"));
         return (old, asked, processes, env with { HttpHandler = handler, Processes = processes }, output);
     }
 
@@ -1559,7 +1692,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "taken_back, finds (the", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }
@@ -1628,6 +1761,15 @@ public sealed class InstallCommandTests : IDisposable
         var old = Path.Combine(folder, name);
         File.WriteAllBytes(old, new byte[200_000]);
         File.WriteAllText(Path.Combine(folder, "jason-LICENSE"), "MIT");
+        return old;
+    }
+
+    /// <summary>A command-line install of an earlier release in its Windows installer's place, which is Jason's by that place.</summary>
+    private static string PlantWindowsCommandLineInstall(SetupPlaces places)
+    {
+        var old = places.DefaultCommandLineExecutable;
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.WriteAllBytes(old, new byte[200_000]);
         return old;
     }
 
