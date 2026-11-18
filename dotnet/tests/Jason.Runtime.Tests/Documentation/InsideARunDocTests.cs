@@ -36,6 +36,23 @@ public sealed partial class InsideARunDocTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The sentence that says which operations refuse the header names, beside the person's word it links to, exactly the
+    /// ones that change Jason itself, derived from the gate: an operation added to the gate and not to the page, or named
+    /// on the page and not refused, fails here.
+    /// </summary>
+    [Fact]
+    public void The_runtime_api_page_names_every_operation_that_changes_jason_and_refuses_the_header()
+    {
+        var section = Flat(Section(Page("runtime-api.md"), "## How a program authorises"));
+        var sentence = Regex.Match(section, @"Every operation reads past it but .*? before the body is read, and record nothing;").Value;
+        Assert.False(sentence.Length == 0, "The page no longer says which operations refuse the header.");
+
+        var named = Regex.Matches(sentence, @"`(?<operation>[a-z]+\.[a-z_]+)`").Select(match => match.Groups["operation"].Value);
+        Assert.Equal(InsideARun.ChangesJason.Order(StringComparer.Ordinal), named.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+        Assert.Equal(InsideARun.Refusing.Order(StringComparer.Ordinal), InsideARun.PersonsWord.Concat(named).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+    }
+
     /// <summary>The bullet that lists a person's decisions lists exactly the ones that refuse, the rule, and what it is worth.</summary>
     [Fact]
     public void The_runtime_api_page_says_a_persons_decision_is_refused_from_inside_a_run_as_a_higher_bar()

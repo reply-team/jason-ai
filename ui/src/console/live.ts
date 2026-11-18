@@ -2,6 +2,7 @@
 // runtime knows of, and nothing here is markup: the panels escape what they draw.
 import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSummary, JournalEntry } from '../api/types';
 import type { DesktopHost } from '../platform/desktop';
+import { en, type MessageKey } from '../locale/en';
 import { t } from '../platform/i18n';
 
 export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
@@ -52,6 +53,7 @@ const operations: Readonly<Record<string, string>> = {
     'campaign.activate': 'Start sequence',
     'campaign.enroll': 'Add to sequence',
     'enrollment.stop': 'Stop sequence',
+    'audience.search': 'Find people',
 };
 
 /** The operations that reach their person by a message; a row of any other names its person with no word before. */
@@ -97,10 +99,26 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
     };
 }
 
+/** What a search is for, as its preview highlights it: its definition in its own words, its arguments in plain ones. */
+export interface SearchWords {
+    /** Each filter of the definition and the values it takes, `name: values` as written, in the definition's order. */
+    filters: string[];
+    /** Each filter that leaves values out, `name: values`, in the same order. */
+    leftOut: string[];
+    /**
+     * The search's other highlighted arguments, each that carries a value, in the locale table's plain words; one the
+     * table has no line for is `name: value` as written.
+     */
+    arguments: string[];
+}
+
 export interface ApprovalDetail {
     intent: string | null;
     to: string | null;
-    /** The account the message goes from, as the preview highlights it: its address, else its identifier. */
+    /**
+     * The account the message goes from, as the preview highlights it: its address, else its identifier. A reply in a
+     * thread names none, because the provider answers from the account the conversation is in, so it is those words.
+     */
     from: string | null;
     /** The channel it goes on, in words. */
     channel: string | null;
@@ -110,6 +128,8 @@ export interface ApprovalDetail {
     compose: string | null;
     /** The runtime's rendering of a template over this person, which the provider may render otherwise. */
     example: { subject: string | null; body: string | null; unfilled: string[] } | null;
+    /** What a search is for, where the preview highlights a definition; null for any other approval. */
+    search: SearchWords | null;
     facts: string[];
 }
 
@@ -117,11 +137,106 @@ const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const text = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
 
-const factNames: readonly [string, string][] = [
-    ['reach', 'Reach'],
-    ['reversibility', 'Reversibility'],
-    ['cost', 'Cost'],
-];
+const factKeys = ['reach', 'reversibility', 'cost'] as const;
+
+/** A locale line by a key made from the runtime's words, or null where the table has none. */
+const line = (key: string, parameters: Readonly<Record<string, string>> = {}): string | null =>
+    Object.hasOwn(en, key) ? t(key as MessageKey, parameters) : null;
+
+/**
+ * One property of what an approval would do, in plain words: a property its operation's contract makes depend on the
+ * moment is one sentence keyed by operation and property; any other is the value's line. A value with no line, or a
+ * condition with no sentence, is said as the runtime gives it, its detail in parentheses, never guessed.
+ */
+function factWords(
+    key: (typeof factKeys)[number],
+    fact: Record<string, unknown>,
+    operation: string | null,
+): string | null {
+    const shown = text(fact['value']);
+    if (!shown) return null;
+    const detail = text(fact['detail']);
+    const conditional =
+        fact['conditional'] === true ? (operation ? line(`approval.fact.${operation}.${key}`) : null) : null;
+    if (conditional !== null) return conditional;
+    const plain = line(`approval.fact.${key}.${shown}`) ?? `${t(`approval.fact.${key}`)}: ${shown}`;
+    return detail ? `${plain} (${detail})` : plain;
+}
+
+// A list item `{ value, type: 'include' | 'exclude' }` is one provider's convention, not a contract: read where present,
+// never required. An item of any other shape is written as it is, with no "Leaving out" line.
+const isTerm = (value: unknown): value is { value: unknown; type: 'include' | 'exclude' } => {
+    const term = record(value);
+    return term !== null && 'value' in term && (term['type'] === 'include' || term['type'] === 'exclude');
+};
+
+/**
+ * A value as written: a text as it stands, a list's items joined, an object's members named, anything else as JSON.
+ * An item a list marks `exclude` is not written here but handed to `terms.excluded`, one it marks `include` is counted
+ * in `terms.included`, and a member left with nothing to say is not named.
+ */
+function written(value: unknown, terms: { included: number; excluded: string[] }): string {
+    if (Array.isArray(value))
+        return value
+            .flatMap((each) => {
+                if (!isTerm(each)) return [written(each, terms)];
+                if (each.type === 'include') {
+                    terms.included += 1;
+                    return [written(each.value, terms)];
+                }
+                terms.excluded.push(written(each.value, terms));
+                return [];
+            })
+            .join(', ');
+    const object = record(value);
+    if (object !== null)
+        return Object.entries(object)
+            .flatMap(([name, member]) => {
+                const taken = written(member, terms);
+                return taken === '' ? [] : [`${name}: ${taken}`];
+            })
+            .join('; ');
+    return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+/**
+ * What a search is for, where the preview highlights a definition: each filter by its own name, what it leaves out
+ * apart, and the search's other arguments in plain words. Nothing of the definition is renamed or put into other words.
+ */
+function searchOf(highlights: Record<string, unknown> | null): SearchWords | null {
+    if (highlights === null || !Object.hasOwn(highlights, '/definition')) return null;
+    const filters: string[] = [];
+    const leftOut: string[] = [];
+    for (const [name, value] of Object.entries(record(highlights['/definition']) ?? {})) {
+        const terms = { included: 0, excluded: [] as string[] };
+        const taken = written(value, terms);
+        if (taken !== '' && (terms.included > 0 || terms.excluded.length === 0)) filters.push(`${name}: ${taken}`);
+        if (terms.excluded.length > 0) leftOut.push(`${name}: ${terms.excluded.join(', ')}`);
+    }
+    const searchArguments = Object.entries(highlights)
+        .filter(([pointer, value]) => pointer !== '/definition' && value !== null && value !== undefined)
+        .map(([pointer, value]) => {
+            const name = pointer.slice(pointer.lastIndexOf('/') + 1);
+            const shown = written(value, { included: 0, excluded: [] });
+            return (
+                line(`approval.arg.${name}.${shown}`) ??
+                line(`approval.arg.${name}`, { value: shown }) ??
+                `${name}: ${shown}`
+            );
+        });
+    return filters.length + leftOut.length + searchArguments.length === 0
+        ? null
+        : { filters, leftOut, arguments: searchArguments };
+}
+
+/** A search's lines as every place draws them: each filter, then what it leaves out, then its arguments. */
+export function searchLines(search: SearchWords): string[] {
+    return [
+        ...search.filters,
+        ...(search.leftOut.length > 0 ? [`Leaving out: ${search.leftOut.join(' · ')}`] : []),
+        ...(search.arguments.length > 0 ? [search.arguments.join(' · ')] : []),
+    ];
+}
 
 function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['example'] {
     if (!example) return null;
@@ -131,33 +246,37 @@ function exampleOf(example: Record<string, unknown> | null): ApprovalDetail['exa
 
 /**
  * What an approval's preview says the act would do: its intent, its recipient, the account and the channel it goes
- * by, its message and its properties. A value the preview does not carry is null, never a word in its place.
+ * by, its message and its properties, in plain words for the operation named. A value the preview does not carry is
+ * null, never a word in its place.
  */
-export function toApprovalDetail(preview: Record<string, unknown>): ApprovalDetail {
+export function toApprovalDetail(preview: Record<string, unknown>, operation: string | null = null): ApprovalDetail {
     const highlights = record(preview['highlights']);
     const message = record(highlights?.['/args/message']);
     const sender = record(highlights?.['/args/sender']);
+    // A reply names the thread it answers and no account: it goes from the one the conversation is in.
+    const inThread = record(highlights?.['/args/thread']) !== null && highlights?.['/args/sender'] === undefined;
     const channel = text(highlights?.['/args/channel']);
     const contact = record(preview['contact']);
     const value = text(contact?.['value']) ?? text(highlights?.['/contacts/0/channels/0/value']);
     const name = text(contact?.['name']);
     const facts: string[] = [];
-    for (const [key, label] of factNames) {
-        const fact = record(preview[key]);
-        const shown = text(fact?.['value']);
-        if (!shown) continue;
-        const detail = text(fact?.['detail']);
-        facts.push(detail ? `${label}: ${shown} (${detail})` : `${label}: ${shown}`);
+    for (const key of factKeys) {
+        const said = factWords(key, record(preview[key]) ?? {}, operation);
+        if (said !== null) facts.push(said);
     }
     return {
         intent: text(preview['intent']),
         to: value ? (name ? `${name}, ${value}` : value) : null,
-        from: text(sender?.['address']) ?? text(sender?.['external_id']),
+        from:
+            text(sender?.['address']) ??
+            text(sender?.['external_id']) ??
+            (inThread ? t('approval.from.conversation') : null),
         channel: channel ? channelWords(channel) : null,
         subject: text(message?.['subject']),
         body: text(message?.['body']) ?? text(highlights?.['/args/body']),
         compose: text(message?.['compose']) ?? text(highlights?.['/args/message/compose']),
         example: exampleOf(record(preview['example'])),
+        search: searchOf(highlights),
         facts,
     };
 }

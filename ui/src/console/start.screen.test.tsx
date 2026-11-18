@@ -164,9 +164,15 @@ describe('the start screen', () => {
         await waitFor(() => screen.getByRole('heading', { name: 'Who do you want to reach?', level: 1 }));
         const note = screen.getByRole('note');
         expect(note.querySelector('strong')!.textContent).toBe('This interface is optional.');
-        expect(note.textContent).toContain(
-            'This interface is optional. It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
-        );
+        const paragraphs = Array.from(note.querySelectorAll('.start-note-para')).map((each) => each.textContent);
+        expect(paragraphs).toEqual([
+            'This interface is optional. It showcases the main things Jason Harness can do, but the harness works just as well without it, through Claude Code, Codex, or any other agent.',
+            'Jason is open source: get the code at github.com/reply-team/jason-ai and let your coding agent build the pages you need.',
+        ]);
+        const link = note.querySelector('a')!;
+        expect(link.getAttribute('href')).toBe('https://github.com/reply-team/jason-ai');
+        expect(link.getAttribute('target')).toBe('_blank');
+        expect(link.getAttribute('rel')).toBe('noopener noreferrer');
         expect(startForm().contains(note)).toBe(false);
     });
 

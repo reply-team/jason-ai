@@ -10,10 +10,21 @@
  * outside the folder the application is installed in.
  */
 
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { cp } from 'node:fs/promises';
+import * as nodeFiles from 'node:fs';
 import { basename, dirname, isAbsolute, join, posix, relative, win32 } from 'node:path';
 import type { Logger } from './log.ts';
+
+/**
+ * The file system this module reads and writes with: Electron's `original-fs` where it runs under Electron, else Node's
+ * own, which outside Electron is the same thing. In Electron's main process `node:fs` reads an `.asar` as an archive, so a
+ * copy of the application's folder through it takes `resources/app.asar` for a folder and fails; `original-fs` reads it
+ * as the file it is. Only this module's calls use it: everything else of the main process still reads its own archive.
+ */
+const files: typeof nodeFiles = (process.getBuiltinModule('original-fs') as typeof nodeFiles | undefined) ?? nodeFiles;
+const { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } = files;
+
+/** How a file or a folder is copied: `cp` of the file system above, unless a test says otherwise. */
+export type Copy = (source: string, target: string, options: nodeFiles.CopyOptions) => Promise<void>;
 
 export interface PendingUpdate {
     fromVersion: string;
@@ -126,25 +137,33 @@ function within(folder: string, path: string): boolean {
 }
 
 /** Copies `source` into `target`, leaving out `data` wherever it lies inside `source`. */
-async function copyOutside(source: string, target: string, data: string): Promise<void> {
+async function copyOutside(source: string, target: string, data: string, copy: Copy): Promise<void> {
     if (!within(source, data)) {
-        await cp(source, target, { recursive: true, verbatimSymlinks: true });
+        await copy(source, target, { recursive: true, verbatimSymlinks: true });
         return;
     }
     mkdirSync(target, { recursive: true });
     for (const name of readdirSync(source)) {
         const path = join(source, name);
         if (within(data, path)) continue;
-        await copyOutside(path, join(target, name), data);
+        await copyOutside(path, join(target, name), data, copy);
     }
 }
 
 /**
  * Copies the installed application under `<rollback>/<fromVersion>/` and records the update as pending; whatever copy an
  * earlier update left, kept or pending, is removed first, so one previous version is kept at most. Returns the copy. An
- * application that is one file, the AppImage, is copied as that file; a null one, the deb, is recorded with no copy.
+ * application that is one file, the AppImage, is copied as that file; a null one, the deb, is recorded with no copy. A
+ * copy that fails leaves nothing of itself and records no copy: what it copied is removed, the record no longer names the
+ * earlier copy, which was removed before it, and its error is thrown.
  */
-export async function keepPrevious(rollback: string, application: string | null, fromVersion: string, toVersion: string): Promise<string | null> {
+export async function keepPrevious(
+    rollback: string,
+    application: string | null,
+    fromVersion: string,
+    toVersion: string,
+    copy: Copy = files.promises.cp,
+): Promise<string | null> {
     const state = readRollback(rollback);
     let kept: string[] = [];
     try {
@@ -158,16 +177,32 @@ export async function keepPrevious(rollback: string, application: string | null,
         return null;
     }
     const directory = join(rollback, fromVersion, application.split(/[\\/]/).filter(Boolean).at(-1) ?? 'Jason');
-    if (statSync(application).isFile()) {
-        mkdirSync(dirname(directory), { recursive: true });
-        await cp(application, directory);
-        writeRollback(rollback, { rejected: state.rejected, pending: { fromVersion, toVersion, directory } });
-        return directory;
+    try {
+        if (statSync(application).isFile()) {
+            mkdirSync(dirname(directory), { recursive: true });
+            await copy(application, directory, {});
+        } else {
+            mkdirSync(directory, { recursive: true });
+            // `<rollback>` is `<data>/desktop/rollback`: a data directory placed inside the application's folder stays out
+            // of the copy, so the copy never holds the run token, a provider key or anything else of the installation's state.
+            await copyOutside(application, directory, dirname(dirname(rollback)), copy);
+        }
+    } catch (error) {
+        try {
+            rmSync(join(rollback, fromVersion), { recursive: true, force: true });
+        } catch {
+            // The copy's own error is the one thrown; a folder that cannot be removed either is the next update's to remove.
+        }
+        // The earlier copy went before this one was made, so the record names none: kept, or pending from an earlier update.
+        if (state.kept !== undefined || (state.pending !== undefined && state.pending.directory !== null)) {
+            try {
+                writeRollback(rollback, { rejected: state.rejected });
+            } catch {
+                // A record that cannot be written is read as it was; the menu names a copy only while its folder is there.
+            }
+        }
+        throw error;
     }
-    mkdirSync(directory, { recursive: true });
-    // `<rollback>` is `<data>/desktop/rollback`: a data directory placed inside the application's folder stays out of the
-    // copy, so the copy never holds the run token, a provider key or anything else of the installation's state.
-    await copyOutside(application, directory, dirname(dirname(rollback)));
     writeRollback(rollback, { rejected: state.rejected, pending: { fromVersion, toVersion, directory } });
     return directory;
 }

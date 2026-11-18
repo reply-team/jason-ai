@@ -133,9 +133,12 @@ function buttonWords(text: string): string[] {
     const found: string[] = [];
     for (let at = text.indexOf('<button'); at !== -1; at = text.indexOf('<button', at)) {
         const open = tagEnd(text, at);
-        // A name the button gives itself, written as it is: the composer's Send and Stop have only that.
-        const named = /aria-label=(?:"([^"$]*)"|\{'([^']*)'\})/.exec(text.slice(at, open));
-        if (named) found.push(named[1] ?? named[2]!);
+        // A name the button gives itself, written as it is or as a key's words: the composer's round button has only that.
+        const named = /aria-label=(?:"([^"$]*)"|\{'([^']*)'\}|\{t\('([\w.]+)'\)\})/.exec(text.slice(at, open));
+        if (named)
+            found.push(
+                named[3] === undefined ? (named[1] ?? named[2]!) : (english.get(named[3]) ?? `no word for ${named[3]}`),
+            );
         // A button closed in its own tag draws no words of its own.
         if (text[open - 2] === '/') {
             at = open;

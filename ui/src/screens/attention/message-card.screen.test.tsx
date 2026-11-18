@@ -69,6 +69,17 @@ describe('the message card', () => {
         expect(screen.getByText('Thanks, Tuesday works.')).toBeTruthy();
     });
 
+    it('shows a reply in a thread as going from the account the conversation is in, naming none', () => {
+        card(fixtures['approval.get/card-reply'].response.preview as unknown as Record<string, unknown>, true);
+        expect(terms()).toEqual(['From', 'To', 'Channel', 'Text']);
+        const values = Array.from(document.querySelectorAll('.message-card dd'), (dd) => dd.textContent);
+        expect(values.slice(0, 3)).toEqual([
+            'the account this conversation is in',
+            'Kai Lindt, kai@example.test',
+            'Email',
+        ]);
+    });
+
     it('shows nothing for an approval that is no message', () => {
         card(fixtures['approval.get/pending-with-preview'].response.preview as unknown as Record<string, unknown>);
         expect(document.querySelector('.message-card')).toBeNull();

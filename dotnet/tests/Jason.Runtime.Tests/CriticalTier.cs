@@ -51,7 +51,7 @@ internal static partial class CriticalTier
         [Family.B4] =  [  0,   0,   0,   0,   7],
         [Family.B5] =  [  0,   0,   0,   0,   2],
         [Family.B6] =  [  0,   1,   2,   0,   3],
-        [Family.B7] =  [  4,   4,   4,   4,  14],
+        [Family.B7] =  [  4,   4,   4,   4,  16],
         [Family.B8] =  [  0,   0,   0,   0,   1],
         [Family.B9] =  [  3,   0,   0,   0,   5],
         [Family.W1] =  [  0,   0,   0,   0,   7],
@@ -81,7 +81,7 @@ internal static partial class CriticalTier
         [Family.R5] =  [  0,   0,   0,   9,   7],
         [Family.I1] =  [  0,  16,   5,   0,   4],
         [Family.I2] =  [  0,  54,  10,   0,   2],
-        [Family.I3] =  [  1,  31,   0,   0,   0],
+        [Family.I3] =  [  1,  48,   0,   0,   0],
         [Family.I4] =  [  0,  12,   0,   0,   0],
         [Family.E1] =  [  0,   0,   0,   0,   1],
         [Family.E2] =  [  1,   0,   0,   0,   0],
@@ -98,7 +98,7 @@ internal static partial class CriticalTier
         [Family.N3] =  [  0,   0,   0,   0,  46],
         [Family.D1] =  [  1,   7,   0,   0,   2],
         [Family.D2] =  [  4,   0,   0,   0,   0],
-        [Family.D3] =  [  2,   0,   0,   0,   2],
+        [Family.D3] =  [  2,   0,   0,   0,   3],
         [Family.X1] =  [  0,  10,   3,   1,  14],
         [Family.X2] =  [  0,  20,   4,   3,  24],
         [Family.X3] =  [  0,   1,   0,   0,   6],
@@ -116,10 +116,10 @@ internal static partial class CriticalTier
     public static readonly (int TierMethods, int Methods, int Cases, int TierRows)[] Sizes =
     [
         (29, 415, 676, 32),      // Jason.App.Tests
-        (191, 3095, 5878, 429),  // Jason.Cli.Tests
+        (196, 3125, 5938, 446),  // Jason.Cli.Tests
         (105, 864, 4589, 136),   // Jason.Contracts.Tests
         (48, 302, 479, 54),      // Jason.PluginHost.Tests
-        (731, 6245, 12705, 930), // Jason.Runtime.Tests
+        (734, 6295, 12968, 936), // Jason.Runtime.Tests
     ];
 
     /// <summary>The ceiling of the tier's share of the suite, in per cent, of its methods and of its executed rows.</summary>

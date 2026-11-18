@@ -117,6 +117,10 @@ This page is served as plain text at `https://get.jasonharness.ai/install`, the 
   own agent's configuration unless the person says so (§4), except the skills that the install prompt's yes covers. A package manager's own PATH change is part of the
   install you were asked for, and so is the one-liner's when the person types it; a PATH edit of your own, by hand
   (§2) or by the repair (§5), is marked **Ask first.**
+- Where the install's report names a skill left alone (`left_alone`, with its sentence under `left`), tell the person in
+  that sentence's sense: the folder is left as it is, Jason's skill of that name is not installed for that host and an
+  agent asked to use it reads their folder, and to have Jason's they move or remove that folder, then run the command
+  the sentence names. The folder is theirs to move; never move or remove it yourself.
 - With a no to the PATH entry, it is the person's own step: finish everything else, then hand them the exact line
   `jason status` prints for `path`, and say that `jason status` again proves it. Never end on "not ready" alone:
   name the step that remains.
@@ -189,7 +193,7 @@ your terminal and your agents use. It is installed once, updated once and remove
   with exit code 3, which the script says in the same words.
 - Then each runs the `jason` the application carries as `jason install --roles` and shows its one JSON report: `jason`
   put in the terminal — on a Mac the wrapper `~/.local/bin/jason` and the PATH lines below, on Windows the
-  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. Where a
+  application's `resources\bundle` folder on your account's Path — Jason's skills for Claude Code and Codex, where each is found (`~/.claude/skills`, and `~/.agents/skills`, which Copilot, Cursor and Gemini CLI read too), an older command-line install of Jason retired, and the role skills in Jason's data directory. A skill folder of yours under a name Jason ships, one no record of Jason's names, is left as it is, nothing of it written or recorded, and the report names it under `left_alone` and in a sentence under `left`. Where a
   runtime answered before the install and none answers after it, or the report says it stopped one, the script starts
   one again from the application's `jason`.
 - It ends non-zero, saying which act failed, when `jason` was not put in the terminal. Run again over the version
@@ -349,9 +353,12 @@ have done their work: you may delete those three — only those — with `rm -r 
 installation itself: one installation, Jason Desktop and the `jason` it carries, which the install script above
 installs. Its installer is also one download from the latest release, `jason-desktop-windows-x64-setup.exe` for Windows
 on x64 and `jason-desktop-macos-arm64.dmg` or `jason-desktop-macos-x64.dmg` for macOS, at
-`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. The Windows installer, at
-every install and update, puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each is
-found, as the script does (§2). The Windows and macOS packages are signed.
+`https://get.jasonharness.ai/desktop/windows`, `/desktop/mac` and `/desktop/mac-intel`. Installed by hand from one of
+them, it sets the machine up as the script does (§2): the application's first start of each version runs the
+`jason install` it carries, which puts `jason` in the terminal and Jason's skills for Claude Code and Codex, where each
+is found, and its Command Line item says what that placed
+([desktop.md](desktop.md#the-command-line-and-the-login-items)); the Windows installer runs it too, at every install
+and update. The Windows and macOS packages are signed.
 
 On Linux, Jason Desktop is a separate download beside the command line: `jason-desktop-linux-x64.deb`
 (`sudo apt install ./jason-desktop-linux-x64.deb`, the one to take on Ubuntu 24.04 and later) or
@@ -476,7 +483,9 @@ package manager's upgrade goes straight to the newest release.
 
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
-and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. A package
+and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
+Windows the `jason` Jason Desktop carries hands the update to the application's own updater, and the new version's
+`jason` takes these steps when it finishes it ([release-and-update.md](release-and-update.md) §7). A package
 manager's upgrade does not run `jason update apply`, so `jason skills update` and `jason ui install` follow it. Either way, `jason status` is the check: role skills a
 default install took at another release's tag fail
 `role_skills`, and the repair it prints moves them to the runtime's own tag. That repair is
@@ -662,6 +671,12 @@ runtime then runs in your own session when you sign in, shows no window on Windo
 when you sign out. On Windows that is a logon task named for this account; on macOS a LaunchAgent,
 `ai.jason.runtime`; on Linux a `systemd --user` unit, `jason.service`. `jason runtime autostart status` says what
 is registered.
+
+An install, an update or Jason Desktop's set-up that stops the runtime leaves a note that a start is owed,
+`<data>/run/start-owed.json`, and Jason Desktop's next start starts one from the `jason` it carries where it finds the
+note and no runtime answering ([desktop.md](desktop.md), "The start that is owed"). The note goes in two ways: when a
+runtime starts on that data directory again, and when you stop the runtime yourself with `jason runtime stop`, so a
+stop of your own is never taken for one an install owes.
 
 That is the installation. An agent that installed Jason tells you where it keeps your files and what it ran, then starts
 the [`quick-start`](../skills/runtime/quick-start/SKILL.md) skill, which asks you one question and takes you to your

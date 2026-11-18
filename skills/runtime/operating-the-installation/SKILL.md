@@ -49,7 +49,9 @@ a minute. After that pairing, a bookmark of the page keeps working. `--approval 
 address of one item. This release's build draws its console in Jason Desktop and in a tab the desktop opens; the tab
 this opens shows the demo, or, while something waits, one page that says Live Mode is only available in Jason Desktop,
 where to download it, and what waits and where to decide it, so say that to the person, who can decide from their agent or the `jason approval` and
-`jason decision` commands.
+`jason decision` commands. Where Jason was installed on macOS or Windows by its install script or Jason Desktop's own
+package, Jason Desktop is already there, since it is the installation itself: name opening it, not the page's download
+link, which is for Linux, where the desktop is a separate download.
 
 That tab, then, is not where a person watches their work, whether Jason Desktop is installed or not: only the desktop
 draws this release's console, in its window and in a tab it opens itself. When they ask what happened, what is
@@ -202,7 +204,9 @@ they were and, where a line names a contact, whose email it was. You may also re
 `jason campaign activity`, and the people it counts with `jason campaign list-contacts --activity bounced`. The toast,
 the operating system's own notification, is on by default and needs nothing set up; `jason runtime status --human` says
 on its `Notify:` line what each channel did last. `Notifications:Enabled` set to `false` in
-`~/.jason/config/settings.json` turns all of it off, and `Notifications:Toast` set to `false` turns off the toast alone.
+`~/.jason/config/settings.json` turns all of it off, and `jason notification disable <channel> --actor human:<Name>`
+turns off one channel alone, `toast` or a notification plugin's id, as `jason notification enable` turns it on again,
+naming the person who asked: say a refusal as Jason says it, which names what is missing.
 `docs/notifications.md` says when a burst is said, and what a pointer never carries.
 
 Naming a notification plugin in `settings.json` sends a pointer to a third party's server. Do it only when the person
@@ -418,6 +422,19 @@ needs no runtime either. From 0.20.0, Jason's own installation on 0.18.x or earl
 `install_first` and its apply as `upgrade_command`, and a plain `jason update apply` refuses with
 `update_not_directly_applicable`, naming 0.19.0. A package manager's upgrade goes straight to the newest release.
 
+Where `jason` is the one Jason Desktop carries, as it is on macOS and Windows once the install script ran,
+`jason update apply` replaces no file itself: it hands the update to the application's own updater, with no window,
+waits for it, and the new version's `jason` finishes it: the plugin packages, the runtime's start, the skills, the terminal command and the UI. It still ends with one JSON
+document and its exit code. Jason Desktop's first start of each version runs `jason install` and
+`jason update apply --finish` itself, so a version installed from the desktop's own menu catches up the same way. A
+refusal with `update_in_progress` or `install_in_progress` means later, not a failure: another update, or
+`jason install`, holds this installation's update lock; let it end, then run the command again, and
+`jason update status` says where an update stands. `update_desktop_not_installed` means Jason Desktop's installer had not
+installed the version ten minutes later; where nothing was installed, its message names the likely cause, a Jason
+Desktop that is running, one of another data directory included: say that to the person, who quits it, and run the
+command again only on their word. On Linux the `jason` the deb or the AppImage carries is refused with
+`update_carried_by_desktop`: the desktop's own update item updates it.
+
 After an update, `jason status` says whether the role skills still belong to this build: role skills a default
 install took at another release's tag fail its `role_skills` check, which names both tags, and its repair is the
 line it prints. From 0.12.0 on, `jason update apply` redeploys the skills this installation recorded as its last
@@ -430,6 +447,12 @@ A skill file the person edited, or a file they put in a skill, is theirs: the sk
 and the install it repeats, keep it, write everything else around it, name each file they kept and succeed. The
 skill holding it is then a blend of two hands, the person's and the release's, which the person reconciles. Only
 `--force` overwrites it, and it is the person's to type, never yours to add.
+A whole skill folder under a name Jason ships, one no record of Jason's names, is taken for the person's: every
+deployment leaves it as it is, writes and records nothing of it, and names it in its answer, and `jason status` names
+it — no flag reaches it. Pass that sentence on in its sense: Jason's skill of that name is not installed there, and an
+agent asked to use it reads their folder. The release's skill takes its place only when the person moves or removes
+their folder, then runs the command the sentence names — `jason skills update` for an agent host's folder,
+`jason skills install --roles-only` for the roles home. Never move it yourself.
 
 **Installed by a package manager.** Where Homebrew or winget installed Jason, `jason update check` names the
 manager's own upgrade, and `jason update apply` refuses the installation. The manager's upgrade is typed as three
@@ -511,7 +534,10 @@ and its last line is the full path of `jason`, which a shell already open, yours
 installs the executable under the person's own account, in `~/.local/bin`, and puts that directory on the `PATH`
 unless `--no-modify-path` is passed; then the executable it installed deploys the role skills from the release's
 package of them; where that fails, Jason is still installed, one line says so, and `jason status` names the line to
-run. Nothing needs administrator rights. Any other agent host, and on Linux every one, gets Jason's skills with
+run. Nothing needs administrator rights. A person who installs Jason Desktop on macOS or Windows by hand, from its
+disk image or its installer, gets the same: the application's first start of each version runs the `jason install` it
+carries, which puts `jason` in the terminal and gives Claude Code and Codex Jason's skills, and its Command Line item
+says what that placed. Any other agent host, and on Linux every one, gets Jason's skills with
 `jason skills install --host <host>`, an act the install page marks "Ask first" unless it is the host of the agent the install prompt's
 three lines were given to.
 

@@ -19,53 +19,58 @@ While a release's notes are not yet written, the file names its version with `-u
 replaces the title and the body together.
 -->
 
-# Jason 0.48.3
+# Jason 0.48.5
 
-## What is new since 0.48.2
+## What is new since 0.48.4
 
-This patch release tidies what an agent tells you in your first campaign, and a few of Jason Desktop's screens: an
-edited message stays where you left it, a dialog is never painted under the page, and an optional reason no longer
-asks to be filled first.
+- **Settings shows Jason Desktop's version and its update.** The foot of Settings' list, in Jason Desktop's window,
+  shows the desktop's version and the same update item the tray's menu (on a Mac, the menu bar) shows: Check for
+  Updates…, Download, or Restart to Install. Pressing it does exactly what the menu's item does.
+- **Turn one notification channel on or off.** Settings › Notifications has a switch for each channel, and
+  `jason notification enable <channel>` and `jason notification disable <channel>` do the same from the command line,
+  for the system's own notifications (`toast`, on Windows, macOS and Linux) or a notification plugin. Whoever
+  switches a channel is named, and the change is recorded. This release publishes the journal forwarder 1.7.0, whose
+  manifest declares the kind a channel's switch writes (`notification_channel_updated`): a grant of every kind
+  forwards it from the first load, and a grant that names kinds does not until you add it, with
+  `jason plugin grant journal-forwarder --subscription notification_channel_updated`.
+- **A Full access card says why it asks.** In the desktop chat, a card titled "Full access asks about this one" now
+  says in one line why this request still asks, for example a command whose wildcard the shell expands only as it runs.
+- **Approvals in plain words.** An approval's detail says what the act does in words a person reads at a glance:
+  whether it contacts anyone, whether it can be undone, and what it costs. A message that was doubted is shown under
+  "Why this message was flagged". A reply in a conversation says it goes from the account the conversation is in.
+- **The chat queues what you send while it works.** While a turn runs, the round button sends your words when the
+  turn ends, and what you send waits below the conversation, where **Take back** returns it to the box. Messages sent
+  meanwhile go together as the next turn. Escape in the message box stops the turn.
+- **The chat reads the command line's own help.** The desktop chat may run `jason <noun> --help` for the nouns it
+  works with, instead of guessing at a verb or an option.
+- **Change Jason itself opens the program you use.** Open in › Change Jason itself opens the agent host your
+  preference names, else the one marked **In use** in Settings › Models, else Claude Code, as before.
+- **A wiring check for a direct send.** The golden path has a section that checks a single email sent outside any
+  provider campaign: one real send, to your own address, run only when you ask for it.
+- **The Live start page** says the interface is optional and links the open-source repository.
 
-- **Where to see what waits.** After a send, an agent no longer points you to the browser tab `jason ui open` opens:
-  without Jason Desktop that tab shows the Demo, or a page of text while something waits, not your work. It names
-  what does show it: **Needs you** in Jason Desktop, or `jason approval list`, `jason decision list` and
-  `jason workitem list --campaign <id>` in a terminal.
-- **"Did they answer?" is answered now.** Asked whether somebody replied, an agent no longer says "nothing yet" and
-  waits for Jason's next read. It reads the person's threads from the provider at once (`jason contact threads`, then
-  `jason contact thread`), says what they show and that such a read records nothing, and says from the journal and
-  the responder's items whether Jason has noticed the reply yet. Where it has not, Jason notices it at its own next
-  read, by default within ten minutes for a provider that reports events and fifteen for one Jason reads on its own
-  cadence, and only then wakes its responder.
-- **The plan says that messages can later go on their own.** The quick-start's plan says once, as a fact and not a
-  question, that every message waits for your yes and that you can later let messages go on their own, for people who
-  have not answered yet and for people who have: in Jason Desktop under Settings, "How messages go", and anywhere else
-  by telling your agent.
-- **Jason Desktop's chat loads a skill before a command it has not used.** Before the chat types a `jason` command it
-  has not used in the conversation, it loads the skill for that work and takes the command from it. It no longer
-  guesses one, which could fail, or wait unseen as a card for your permission.
-- **An edited message stays in the list.** When you edit a message waiting for your yes and save it, its row stays
-  where it was, selected, with the new text, wherever a message waits for you: Needs you, the console's Needs you, a
-  campaign's Sequence and the chat's waiting card. It says that the text is saved and that Jason asks again with it
-  when it next takes this work; nothing on it can be approved or rejected until then. When Jason asks, the row becomes
-  the new approval in place, and says so if the text it carries is not the one you saved. A reload forgets the kept
-  row until Jason asks again.
-- **A dialog stands above the page.** A dialog such as Start, Pause or Add people is drawn on a layer above the page's
-  menus and cards, so the chat's answer choices no longer cover a dialog's title. The search palette still opens above
-  it.
-- **An optional reason is small and waits its turn.** The "Reason (optional, kept in the journal)" field is one line
-  high and grows as you type, up to about six lines. A dialog no longer opens with the focus on it: the focus goes to
-  the dialog's first other field, else to Cancel, and never to the button that acts, so Enter as it opens does
-  nothing. Where a browser cannot grow a field by itself, it stays one line and scrolls.
-- **The Mac Demo window's top strip.** On macOS, the strip above the Demo page, right of the sidebar, is drawn in the
-  page's own ground, so the yellow Demo band is as tall as its own line.
+## Fixed since 0.48.4
 
-## Upgrading from 0.48.2
+- **Jason Desktop's update installs.** The update the desktop offers no longer stops with "a copy of this version
+  could not be kept aside to go back to". If keeping that copy ever fails, the message now says where to download the
+  new version to install it yourself. See **Known issues** for a desktop of 0.48.4 or earlier.
+- **The Demo | Live switch at start.** The Demo's page enters the window once its styles are in, so the switch no
+  longer answers as the window's drag area while the Demo starts.
+- **`jason status` and Windows' notification settings.** On Windows, `jason status` reads Windows' notification
+  switches as they stand when it runs: a switch that is off now is said so, whatever the last notification did, and
+  one switched back on is no longer reported as off. A failed notification is still reported first.
+
+## Upgrading from 0.48.4
 
 Nothing stops, no setting is renamed and no migration runs.
 
-- **The executable and the skills:** `jason update apply`, or run the install line again; the update redeploys the
-  skills it recorded. After it, `jason ui install` brings the console's changes.
-- **The desktop is a separate install:** update it from this release's installers or the update an installed desktop
-  offers. It brings the chat's new rule and the screens above.
-- **From 0.48.1 or earlier,** the notes of each release in between apply as well.
+- **The desktop:** on Windows and macOS, install this release from its installer once (see **Known issues**). On
+  Linux, and from 0.48.5 on everywhere, the desktop's own update works.
+- **The executable:** `jason update`, as for every release.
+- **From 0.48.3 or earlier,** the notes of each release in between apply as well.
+
+## Known issues
+
+- **A Jason Desktop of 0.48.4 or earlier on Windows and macOS cannot take this release by its own update,** since
+  the code that fails is the installed one. Install 0.48.5 from its installer once; from 0.48.5 on, the
+  application's own update works.

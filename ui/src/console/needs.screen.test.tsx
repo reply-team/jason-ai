@@ -12,6 +12,7 @@ import { journalLine, stubDesktop, stubStream, type StubDesktop, type StubStream
 import { FakeApi, watch } from '../test/fake-api';
 import { agentHeads } from '../test/agent-head';
 import { fixtures, type FixtureName } from '../test/fixtures';
+import { linesOf, searchIntent, firstSearchLines, topUpArguments } from '../test/search-words';
 import { ASKING_MARK, QUEUED_SENTENCE } from '../screens/attention/reasking-model';
 import { noteEdit } from '../screens/attention/reasking';
 import { here } from './state';
@@ -425,6 +426,47 @@ describe('Needs you', () => {
         expect(words(row('apr_2'))).not.toContain('to Grace');
     });
 
+    describe('a paid search of the provider’s people', () => {
+        const searches = () =>
+            new FakeApi()
+                .answer('approval.list', 'approval.list/search-pending')
+                .answer('decision.list', 'decision.list/empty')
+                .answer('approval.get', 'approval.get/search-first', 'approval.get/search-top-up');
+
+        it('is named in words, and shows its definition as written and its arguments in plain words under its intent', async () => {
+            const fake = searches();
+            await renderConsole(fake);
+            await waitFor(() => expect(pane().querySelector('.needs-search')).toBeTruthy());
+            expect(words(row('apr_1').querySelector('.needs-row-t')!)).toBe('Find people');
+            expect(words(pane().querySelector('.needs-title')!)).toBe('Find people');
+            expect(words(pane().querySelector('.needs-intent')!)).toBe(searchIntent);
+            expect(linesOf(pane(), '.needs-search')).toEqual(firstSearchLines);
+            // Nothing else of the card moves: the reason, and the three properties as they always read.
+            expect(words(pane().querySelector('.ask-w')!)).toBe(
+                'Approval is required for every operation of this kind for this agent.',
+            );
+            expect([...pane().querySelectorAll('.needs-facts > *')].map((each) => words(each))).toEqual([
+                'Contacts nobody: it acts in your provider account only',
+                'Cannot be undone',
+                "Spends your provider's allowance or credits",
+            ]);
+            expect(words(pane())).not.toContain(fixtures['approval.get/search-first'].response.preview.summary);
+            expect(sent(fake, 'workitem.get')).toEqual([]);
+        });
+
+        it('approves a top-up, which shows the audience it adds to among its arguments', async () => {
+            const fake = searches().answer('approval.approve', 'approval.approve/search-top-up');
+            await renderConsole(fake);
+            await waitFor(() => expect(Object.keys(reads.approvals.value)).toHaveLength(2));
+            await choose('apr_2');
+            await waitFor(() => expect(linesOf(pane(), '.needs-search').at(-1)).toBe(topUpArguments));
+            fake.answer('approval.list', 'approval.list/search-after-top-up');
+            fireEvent.click(within(pane()).getByRole('button', { name: 'Approve' }));
+            await waitFor(() => expect(sent(fake, 'approval.approve')).toEqual([{ approval_id: 'apr_2' }]));
+            await waitFor(() => expect(needs().querySelector('[data-row="apr_2"]')).toBeNull());
+        });
+    });
+
     it("shows a message's sender and its channel in words beside the recipient, subject and the whole body", async () => {
         await renderConsole(messages());
         await waitFor(() => within(pane()).getByText('Notes from the meetup'));
@@ -451,6 +493,28 @@ describe('Needs you', () => {
         expect(pane().querySelector('.needs-from')).toBeNull();
         expect(pane().querySelector('.needs-channel')).toBeNull();
         expect(words(pane())).not.toMatch(/From|Channel|unknown/);
+    });
+
+    it('says a reply in a thread goes from the account the conversation is in, names none, and reads no sending name', async () => {
+        const fake = new FakeApi()
+            .answer('approval.list', 'approval.list/needs-inbox')
+            .answer('decision.list', 'decision.list/empty')
+            .answer('approval.get', 'approval.get/needs-message', 'approval.get/needs-reply');
+        await renderConsole(fake);
+        await waitFor(() => expect(row('apr_2')).toBeTruthy());
+        // The message beside it still names the mailbox it goes from, with the sending name under it.
+        await choose('apr_1');
+        await waitFor(() => expect(words(pane().querySelector('.needs-from')!)).toBe('From owner@example.test'));
+        await choose('apr_2');
+        await waitFor(() => within(pane()).getByText('Thanks Kai, Thursday at ten works for me.'));
+        expect(words(pane().querySelector('.needs-from')!)).toBe('From the account this conversation is in');
+        expect(pane().querySelector('.needs-from')!.nextElementSibling?.classList.contains('sender-line')).not.toBe(
+            true,
+        );
+        expect(pane().querySelector('.sender-line')).toBeNull();
+        const asked = fake.calls.filter((each) => each.operation === 'sender.list').length;
+        await settle();
+        expect(fake.calls.filter((each) => each.operation === 'sender.list').length).toBe(asked);
     });
 
     it('draws a hostile sender, channel and recipient as text', async () => {
@@ -861,13 +925,19 @@ describe('Needs you', () => {
             expect(document.activeElement).toBe(within(pane()).getByRole('button', { name: 'Reject' }));
         });
 
-        it('names no plugin in the pane’s header, and sets a fact’s quoted names as code', async () => {
+        it('names no plugin in the pane’s header, and says what the act is in plain words', async () => {
             await renderConsole(inbox());
             await waitFor(() => expect(pane().querySelector('.needs-facts')).toBeTruthy());
             expect(words(pane().querySelector('.ask-h .meta')!)).toMatch(/^Spring launch · [^·]+$/);
             expect(words(pane().querySelector('.ask-h')!)).not.toMatch(/\breply\b/);
+            // A message's cost depends on its channel, so its line is the one sentence for message.send's cost.
+            expect([...pane().querySelectorAll('.needs-facts .meta')].map((each) => each.textContent)).toEqual([
+                'Contacts the person: something is sent or shown to them',
+                'Cannot be undone',
+                'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+            ]);
             expect(pane().querySelector('.needs-facts')!.textContent).not.toContain('`');
-            expect([...pane().querySelectorAll('.needs-facts code')].map((each) => each.textContent)).toEqual(['none']);
+            expect(pane().querySelectorAll('.needs-facts code')).toHaveLength(0);
         });
     });
 
@@ -1164,7 +1234,7 @@ describe('Needs you', () => {
             await renderConsole(fake);
             await waitFor(() => expect(live(approve('apr_2'))).toBe(true));
             const { doubts } = fixtures['approval.get/park-doubted'].response.preview as { doubts: { note: string }[] };
-            const doubted = `The critic role doubted this: ${whyWords('unsupported_claim')}`;
+            const doubted = `The critic role flagged this: ${whyWords('unsupported_claim')}`;
             // Before the whole read Approve is held and there is no doubt to draw; the moment it is live, the doubt stands.
             expect(live(approve('apr_1'))).toBe(false);
             expect(within(at('apr_1')).queryByText(doubted)).toBeNull();

@@ -42,6 +42,24 @@ describe('an approval’s card in a chat', () => {
         expect(card.intent).toBe('Put Grace Hopper into the campaign at the provider.');
         expect(card.title).toBe('Enroll Oli Example');
     });
+
+    it('names a paid search in words, and keeps its intent with its definition and arguments as written under it', () => {
+        const listed = fixtures['approval.list/search-campaign-pending'].response.items[0] as ApprovalSummary;
+        const search = fixtures['approval.get/search-first'].response as unknown as Approval;
+        expect(toApprovalCard(listed, undefined, now)).toMatchObject({
+            what: 'Find people',
+            title: 'Find people',
+            to: null,
+        });
+        const card = toApprovalCard(listed, search, now);
+        expect(card).toMatchObject({ what: 'Find people', intent: search.preview['intent'], message: false });
+        expect(card.search?.filters).toEqual([
+            'jobTitles: Head of Operations, Operations Director',
+            'contactLocations: Portugal',
+            'industries: Logistics',
+            'companySizes: fifty, twoHundred',
+        ]);
+    });
 });
 
 describe('a question’s card in a chat', () => {

@@ -264,6 +264,19 @@ describe('the sender line on an agent’s chat’s card', () => {
         expect(asks(fake, 'sender.list')).toBe(0);
     });
 
+    it('says a reply in a thread goes from the account the conversation is in, draws no line, and asks for no accounts', async () => {
+        listed = 'approval.list/card-reply-pending';
+        const fake = new FakeApi().answer('approval.get', 'approval.get/card-reply');
+        renderChat(fake);
+        fake.answer('approval.get', 'approval.get/card-reply');
+        const card = await openCard();
+        expect(words(card.querySelector('.ask-h')!)).toContain('Email · from the account this conversation is in');
+        await flush(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+        expect(card.querySelector('.sender-line')).toBeNull();
+        expect(card.querySelector('.sender-hold')).toBeNull();
+        expect(asks(fake, 'sender.list')).toBe(0);
+    });
+
     it('draws nothing when the pairing ends while the accounts are read, and leaves Approve as it was', async () => {
         const fake = new FakeApi();
         const call = fake.call.bind(fake);

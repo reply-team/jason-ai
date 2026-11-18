@@ -311,12 +311,13 @@ public class SkillsIdempotencyTests
     }
 
     /// <summary>
-    /// A deployment whose record never landed. The record is written last, so a crash half-way through always
-    /// reads as incomplete next time rather than as a deployment that is current — and the operator is told,
-    /// because a root that silently completed itself hides that something went wrong once.
+    /// A deployment whose record never landed: the record is written last, so a crash half-way through leaves skills on
+    /// disk that no record names. Each one byte for byte this release's is adopted, recorded and said; one that is not —
+    /// an older tree, or one a file of it went missing from — is a folder nothing can tell from the person's, and is left
+    /// alone and named, never completed in silence.
     /// </summary>
     [Fact]
-    public async Task A_deployment_whose_record_never_landed_is_completed_and_said_to_have_been()
+    public async Task A_deployment_whose_record_never_landed_is_adopted_where_it_is_this_releases_and_left_alone_where_not()
     {
         using var dir = new TempPaths();
         var source = Source(dir);
@@ -327,9 +328,16 @@ public class SkillsIdempotencyTests
         var again = await InstallAsync(dir, source);
 
         Assert.Equal(ExitCodes.Success, again.Exit);
-        Assert.NotNull(SkillsRecord.Read(Harness(dir)));
-        Assert.True(File.Exists(Path.Combine(Harness(dir), "campaign-planning", "SKILL.md")));
-        Assert.Contains("no record of what is there", again.Output, StringComparison.Ordinal);
+        var record = SkillsRecord.Read(Harness(dir));
+        Assert.NotNull(record);
+        var recorded = record.Packs.SelectMany(pack => pack.Files).Select(file => file.Path).ToList();
+        Assert.Contains("operating/SKILL.md", recorded);
+        Assert.DoesNotContain(recorded, path => path.StartsWith("campaign-planning/", StringComparison.Ordinal));
+        Assert.False(File.Exists(Path.Combine(Harness(dir), "campaign-planning", "SKILL.md")), "a remnant was completed");
+        Assert.Contains(Path.Combine(Harness(dir), "operating") + " is byte for byte the skill Jason ships", again.Output, StringComparison.Ordinal);
+        Assert.Contains(Path.Combine(Harness(dir), "campaign-planning") + " is a skill under a name Jason ships that no record of Jason's names there", again.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("completed rather than trusted", again.Output, StringComparison.Ordinal);
+        Assert.Equal(["campaign-planning"], record.Packs.SelectMany(pack => pack.LeftAlone));
     }
 
     /// <summary>

@@ -27,6 +27,7 @@ import { startDetached } from './open-in-start.ts';
 import { changeJasonFlags, continueFlags, terminalFlags } from './open-in-terminal.ts';
 import { linkIn, LinkPost, linkRegistration, linksTaken, parseLink } from './deep-link.ts';
 import { Desk } from './desk.ts';
+import { actShown, updateAnswerOf } from './update-item.ts';
 import { bringForward, LoginItem, openedAtLogin, RuntimeAutostart, showsOnSecondStart, windowConduct } from './login-item.ts';
 import { keptAsideOf, launcherOf, linuxPackage, mountOf, withoutMount, type LinuxPackage } from './linux-package.ts';
 import { commandFolder, isProgramFile, PathCommand, type PathCommandDeps } from './path-command.ts';
@@ -499,6 +500,7 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         uninstall,
         demo: demoMenu(runOn.mode),
         back: () => backToLive(modeDeps),
+        menuChanged: () => toPage('updates.changed'),
     });
     desk.open();
     showWindow = () => desk.show();
@@ -544,6 +546,10 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
     handle(seam, 'theme.get', origin, () => settings.theme, refused);
     handle(seam, 'theme.set', origin, (choice) => void (settings = applyTheme(choice, settings, themeDeps)), refused);
     handle(seam, 'updates.key', origin, updateKey, refused);
+    // The update item at the foot of the page's Settings: the menu's own item, and a press of it as a click in the menu,
+    // on the label the page drew and only while the item still says it.
+    handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);
+    handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);
     handle(seam, 'dailyTrends.get', origin, () => keptDailyTrends(settings), refused);
     handle(
         seam,
@@ -697,6 +703,9 @@ async function run(links: LinkPost, newInstallation: boolean): Promise<void> {
         icon: (path) => icons.icon(path),
         changeJason: {
             flags: changeJasonFlags,
+            // The program the Models page marks In use, read by its own routine at the click: the host named where the
+            // person has stated no preference of their own.
+            inUse: () => setup.rolesHost(),
             log: (event: 'open_in_change_jason' | 'open_in_change_jason_refused', fields: { Host: string; Exit: number; Code?: string }) =>
                 event === 'open_in_change_jason' ? log.info(event, { Host: fields.Host, Exit: fields.Exit }) : log.info(event, { Host: fields.Host, Exit: fields.Exit, Code: fields.Code ?? 'none' }),
         },
@@ -877,7 +886,7 @@ async function runDemo(_links: LinkPost): Promise<void> {
         minWidth: 900,
         minHeight: 600,
         title: windowTitle,
-        // The window's own frame: on macOS no title bar, its buttons in our band above the page (`demo-window.ts`); on
+        // The window's own frame: on macOS no title bar, its buttons over the page's sidebar (`demo-window.ts`); on
         // Windows and Linux none either, the caption buttons over the strip's right end, drawn light as the page is.
         ...frameOf(process.platform, nativeTheme.shouldUseDarkColors),
         show: !atLogin || conduct.atLogin === 'minimized',

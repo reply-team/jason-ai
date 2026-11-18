@@ -62,6 +62,7 @@ public static class UpdateCommands
         var command = new Command(
             "apply",
             "Install the newest release: download it, stop this machine's runtime, put the new executable and its licence files in place, start it again, redeploy the skills this machine recorded at the new release's tag, and place the release's UI. If the skills or the UI cannot be placed the update still stands; the step's line says why, and 'jason status' names the repair. "
+            + "On macOS and Windows a command-line install updated to 0.49 or later is then moved into Jason Desktop: an application of that version or later already there is reused, none there is downloaded, checked against checksums.txt and the publisher's signature and installed, one older is left as it is; the application's own `jason install` retires the command-line install, and a runtime it stopped is started again from the application's jason. The move never fails the update: its lines follow the update's, each beginning 'move:', and the document's move member says where it stands (done, pending, failed, or not_applicable on Linux) and why; <data>/update/move.json keeps it, 'jason status' names a move that has not ended, and this command run again at the same version carries it on. "
             + "Run as the jason Jason Desktop carries, the application is updated by the Desktop's own updater with no window, and this command still ends with one JSON document and its exit code: it starts the application with --update-apply --await-go, and once the update is downloaded drains the runtime, stops it, steps out of the application's folder (on Windows it moves its own file out and keeps running, on macOS a copy of it under the data directory goes on) and gives the Desktop its go last, then waits for its answer and for its version.json to name the new version; the new jason then replaces the plugin packages, starts the runtime and checks it, redeploys the recorded skills, runs `jason install`, places the UI and has the application record the update as kept. "
             + "A refusal of the Desktop's ends with update_refused_by_desktop and its reason, a jason at the application's path and the runtime as it was found; a cancel (Ctrl+C, a closed console) before the installer has the update ends with update_cancelled, the record put back and the runtime launched without a wait. One update of a data directory acts at a time, its lock kept from one part to the next: another beside it, or `jason install` beside it, is refused with update_in_progress, and while `jason install` holds it the update is refused with install_in_progress. Run elevated (an administrator's elevated terminal under User Account Control, another account than the session's, root) it is refused with update_elevated before anything is begun: run it from an ordinary terminal. On Linux, or where the application is not where its jason says, that jason is refused with update_carried_by_desktop: Check for Updates in Jason Desktop updates it.");
         var feed = new Option<string?>("--feed")
@@ -171,7 +172,18 @@ public static class UpdateCommands
                     cancellationToken).ConfigureAwait(false);
             }
 
-            Print(env, human, applier.Steps, ledger);
+            // The update is complete; the move of this command-line install into Jason Desktop comes after it, never fails it,
+            // and is said beside it.
+            var move = await MoveAsync(env, ledger, request.Feed, cancellationToken).ConfigureAwait(false);
+            Print(env, human, [.. applier.Steps, .. move?.Lines ?? []], ledger, move?.Response);
+            return ExitCodes.Success;
+        }
+        catch (UpdateException error) when (error.Code == UpdateCodes.UpToDate && MoveToCarryOn(env) is { } complete)
+        {
+            // Nothing newer to apply, and a move of this install left to carry on: `jason update apply` carries it on at the
+            // version it is.
+            var move = await MoveAsync(env, complete, request.Feed, cancellationToken).ConfigureAwait(false);
+            Print(env, human, move?.Lines ?? [], complete with { FromVersion = complete.ToVersion }, move?.Response);
             return ExitCodes.Success;
         }
         catch (UpdateException error)
@@ -191,6 +203,76 @@ public static class UpdateCommands
             // file should not answer differently, least of all with a bare line and no code.
             env.Out.WriteLine(CliErrors.Serialize(error.Code, error.Message, retryable: false));
             return ExitCodes.ApiError;
+        }
+    }
+
+    /// <summary>
+    /// The move of the command-line install a completed update installed this version at, into Jason Desktop: where this
+    /// version is the one the update installed and the install is a command-line one. Null where there is no such install;
+    /// on a system the move does not apply to, the answer says so and nothing is changed.
+    /// </summary>
+    private static async Task<(IReadOnlyList<string> Lines, UpdateMoveResponse Response)?> MoveAsync(CliEnvironment env, UpdateLedger ledger, Uri feed, CancellationToken cancellationToken)
+    {
+        if (ledger.Step != UpdateStep.Complete
+            || ledger.ToVersion != SemanticVersion.Current
+            || string.IsNullOrWhiteSpace(ledger.InstallPath)
+            || CarriedExecutable.Of(ledger.InstallPath) is not null)
+        {
+            return null;
+        }
+
+        var move = new CommandLineMove(env, new UpdatePaths(env.Paths), env.Clock ?? TimeProvider.System);
+        try
+        {
+            var response = await move.RunAsync(ledger, feed, cancellationToken).ConfigureAwait(false);
+            return (move.Lines, response);
+        }
+        catch (Exception unexpected) when (unexpected is not OutOfMemoryException)
+        {
+            // Nothing of the move can turn a complete update into a refusal: what escaped it is said as the move's failure.
+            env.Error.WriteLine(unexpected.Message);
+            var reason = $"The move into Jason Desktop stopped: {unexpected.Message} `jason update apply` carries it on.";
+            return ([.. move.Lines, $"move: {MoveStates.Failed} — {reason}"], new UpdateMoveResponse(MoveStates.Failed, null, null, reason));
+        }
+    }
+
+    /// <summary>
+    /// The completed update whose move an apply that finds nothing newer carries on: this version's, of a command-line
+    /// install, on a system the move applies to, with a move that is not done. Null otherwise.
+    /// </summary>
+    private static UpdateLedger? MoveToCarryOn(CliEnvironment env)
+    {
+        if (env.Setup is null)
+        {
+            return null;
+        }
+
+        var paths = new UpdatePaths(env.Paths);
+        UpdateLedger? complete;
+        try
+        {
+            complete = UpdateLedger.ReadFile(paths.Ledger);
+        }
+        catch (Exception unread) when (unread is UpdateLedgerException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (complete is not { Step: UpdateStep.Complete }
+            || complete.ToVersion != SemanticVersion.Current
+            || string.IsNullOrWhiteSpace(complete.InstallPath)
+            || CarriedExecutable.Of(complete.InstallPath) is not null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return MoveRecord.Read(paths.Move) is { State: MoveStates.Done } ? null : complete;
+        }
+        catch (MoveRecordUnreadable)
+        {
+            return complete;
         }
     }
 
@@ -559,6 +641,10 @@ public static class UpdateCommands
             using (held)
             {
                 CarriedUpdate.Sweep(CarriedUpdate.Store(env.Setup));
+                if (env.Setup is { } machine)
+                {
+                    RetiredSweep.Sweep(machine);
+                }
                 var finishing = new UpdateApplier(env, paths, TimeProvider.System, carried.Executable);
                 PrintFinish(env, human, await finishing.FinishInstalledAsync(SemanticVersion.Current, Request(feed, null, null), cancellationToken).ConfigureAwait(false));
                 return ExitCodes.Success;
@@ -771,15 +857,12 @@ public static class UpdateCommands
     /// </summary>
     private static readonly string[] LockFiles = ["update.lock", "update.lock.holder"];
 
-    /// <summary>The files a system leaves in any folder it shows, passed over at the data directory's top and in its logs.</summary>
-    private static readonly string[] SystemLitter = [".DS_Store", "desktop.ini", "Thumbs.db"];
-
     /// <summary>
     /// Whether the data directory holds an installation: the one definition of "an installation is here". It does not where it
     /// holds nothing but Jason Desktop's own — its folder, <c>desktop/</c>, and its log, <c>logs/desktop-*.jsonl</c>, which it
     /// writes from its first start — an <c>update/</c> folder holding nothing but the update's lock file and the note of its
     /// holder (<see cref="LockFiles"/>), which the tool makes for itself, and leaves behind where a holder is killed, and which
-    /// never make a machine installed, and the system's litter (<see cref="SystemLitter"/>) at the top
+    /// never make a machine installed, and the system's litter (<see cref="Files.SystemLitter"/>) at the top
     /// and in <c>logs/</c>. Anything else is an installation's, a record under <c>update/</c> among it. A directory, or one of
     /// those folders, that cannot be listed is <see cref="DataDirHolds.Unreadable"/>: never taken for either answer.
     /// </summary>
@@ -795,7 +878,7 @@ public static class UpdateCommands
                     continue;
                 }
 
-                if (File.Exists(entry) && SystemLitter.Contains(name, StringComparer.Ordinal))
+                if (File.Exists(entry) && Files.SystemLitter.Names.Contains(name, StringComparer.Ordinal))
                 {
                     continue;
                 }
@@ -803,7 +886,7 @@ public static class UpdateCommands
                 if (name == "logs"
                     && Directory.Exists(entry)
                     && Directory.EnumerateFileSystemEntries(entry).All(log => File.Exists(log)
-                        && (SystemLitter.Contains(Path.GetFileName(log), StringComparer.Ordinal)
+                        && (Files.SystemLitter.Names.Contains(Path.GetFileName(log), StringComparer.Ordinal)
                             || (Path.GetFileName(log).StartsWith("desktop-", StringComparison.Ordinal) && log.EndsWith(".jsonl", StringComparison.Ordinal)))))
                 {
                     continue;
@@ -930,7 +1013,7 @@ public static class UpdateCommands
     {
         var command = new Command(
             "rollback",
-            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's.");
+            "Put the version this machine updated from back: the executable it replaced with its licence files, and - if that update migrated the database - the backup it wrote. Run as the jason Jason Desktop carries, it puts back the plugin packages and the database, starts no runtime and names the one step by hand that puts the application back, and refuses an update that stands before 'kept', which put nothing aside; on Linux it is refused with update_carried_by_desktop. Refused too when the update recorded is another jason's, and, with update_carried_by_desktop, when that update moved a command-line install into Jason Desktop: it does not go back from 0.49, and its sentence says where that is described.");
         var human = VerbOptions.Human();
         command.Options.Add(human);
 
@@ -1041,12 +1124,43 @@ public static class UpdateCommands
             return false;
         }
 
+        // The update that moved a command-line install into the application: the file it names is retired, and no command puts
+        // the install back, so none is named.
+        if (MovedFrom(env, ledger.InstallPath))
+        {
+            env.Out.WriteLine(CliErrors.Serialize(
+                UpdateCodes.CarriedByDesktop,
+                "This Jason was moved from a command-line install into Jason Desktop, and a rollback here does not take it back from 0.49; nothing was changed. "
+                + $"Going back from 0.49 is described at {PublicRepository.GoingBackFrom049}",
+                retryable: false));
+            return true;
+        }
+
         env.Out.WriteLine(CliErrors.Serialize(
             UpdateCodes.CarriedByDesktop,
             $"The update recorded at {path} is of the jason at {ledger.InstallPath}, not of the one the Jason desktop application carries, "
             + $"at {carried.Executable}, so this jason does not roll it back: that jason does, with `{ledger.InstallPath} update rollback`.",
             retryable: false));
         return true;
+    }
+
+    /// <summary>
+    /// Whether the command-line install at <paramref name="installPath"/> was moved into Jason Desktop: its move is done, or the
+    /// install is retired by the rule <c>jason status</c> reads (<see cref="MoveRecord.Retired"/>), which a move stopped after the
+    /// routine leaves with its record not done.
+    /// </summary>
+    private static bool MovedFrom(CliEnvironment env, string installPath)
+    {
+        try
+        {
+            return MoveRecord.Read(new UpdatePaths(env.Paths).Move) is { } record
+                && string.Equals(Path.GetFullPath(record.From), Path.GetFullPath(installPath), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                && (record.State == MoveStates.Done || MoveRecord.Retired(record.From));
+        }
+        catch (MoveRecordUnreadable)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -1117,13 +1231,14 @@ public static class UpdateCommands
         return true;
     }
 
-    private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger)
+    private static void Print(CliEnvironment env, bool human, IReadOnlyList<string> steps, UpdateLedger ledger, UpdateMoveResponse? move = null)
     {
         var answer = new UpdateApplyResponse(
             ledger.FromVersion.ToString(),
             ledger.ToVersion.ToString(),
             SnakeCase(ledger.Step),
-            [.. steps]);
+            [.. steps],
+            move);
 
         env.Out.WriteLine(human
             ? string.Join(Environment.NewLine, steps.Select(step => "- " + step))

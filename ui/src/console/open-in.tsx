@@ -513,7 +513,7 @@ export function OpenIn({ desktop }: { desktop: JasonDesktop }) {
 
 /**
  * The group above the last: "Change Jason itself", with the line that says what it opens. It is never the default, and it
- * names no host, which is the person's preference's to choose.
+ * names no host, which is chosen when it is chosen: the person's preference, else the program In use, else Claude Code.
  */
 function ChangeJasonEntry({ onChoose }: { onChoose: () => void }) {
     return (

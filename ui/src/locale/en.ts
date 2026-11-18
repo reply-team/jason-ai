@@ -23,6 +23,7 @@ export const en = {
     'attention.filter.noneAnswered': 'No question has been answered yet.',
     'settings.title': 'Settings',
     'settings.group': 'Jason',
+    'settings.version': 'Jason Desktop {version}',
     'settings.appearance': 'Appearance',
     'settings.models': 'Models',
     'settings.notifications': 'Notifications',
@@ -62,7 +63,10 @@ export const en = {
     'start.send': 'Send',
     'start.note.lead': 'This interface is optional.',
     'start.note.body':
-        'It shows the main things the Jason harness can do. The harness runs fine without it, from Claude Code, Codex, or any other agent. And the interface is yours: change it, extend it, or build your own.',
+        'It showcases the main things Jason Harness can do, but the harness works just as well without it, through Claude Code, Codex, or any other agent.',
+    'start.note.source.before': 'Jason is open source: get the code at ',
+    'start.note.source.link': 'github.com/reply-team/jason-ai',
+    'start.note.source.after': ' and let your coding agent build the pages you need.',
     'start.note.demo.lead': 'This interface is optional.',
     'start.note.demo.body':
         'It shows the main things the Jason harness can do, and the harness runs fine without it, from Claude Code, Codex or any other agent. What you see in Demo is an example of what you can build; Live has the essentials. Jason is open source: get the code at github.com/reply-team/jason-ai and have your coding agent build the pages you need.',
@@ -86,6 +90,13 @@ export const en = {
     'chat.tab.empty': 'No chats yet.',
     'chat.tab.pick': 'Choose a chat, or start a new one.',
     'chat.tab.running': 'running',
+    'chat.queue.placeholder': 'Sent when this turn ends · Esc stops it',
+    'chat.queue.send': 'Send when this turn ends',
+    'chat.queue.sendTitle': 'Send when this turn ends (Esc stops the turn)',
+    'chat.queue.label': 'Queued message',
+    'chat.queue.line': 'Queued · Jason takes it when this turn ends',
+    'chat.queue.takeBack': 'Take back',
+    'chat.queue.emptyFirst': 'Empty the box to take it back',
     'chat.get': 'Get Jason Desktop from the releases page',
     'chat.agent':
         'Everything here also works from a session with your AI in a terminal, with the skills Jason deployed.',
@@ -330,9 +341,9 @@ export const en = {
     'modes.reminder':
         'Your name and tone are not set. Messages are written better with them: Settings, "Your name and tone".',
     'modes.reminder.hide': 'Hide for 7 days',
-    'modes.doubts.heading': 'Doubts about this message',
+    'modes.doubts.heading': 'Why this message was flagged',
     'modes.doubts.asked': '{who} asked you to look at this: {why}',
-    'modes.doubts.reviewed': '{who} doubted this: {why}',
+    'modes.doubts.reviewed': '{who} flagged this: {why}',
     'modes.doubts.who.person': 'A person',
     'modes.doubts.who.role': 'The {role} role',
     'modes.doubts.who.ai': 'The AI',
@@ -355,7 +366,7 @@ export const en = {
     'modes.agent.refused': 'That did not go through: {why}',
     'modes.park.sent_from_chat':
         "This message was written in Jason's chat, so it waits for you however messages are set to go.",
-    'modes.park.doubted': 'A doubt was raised about this message, so it waits for you; the doubt is below.',
+    'modes.park.doubted': 'This message was flagged, so it waits for you; the reason is below.',
     'modes.park.awaiting_judgement':
         'A reply from this person has not been judged yet, so nothing goes to them automatically until it is.',
     'modes.park.awaiting_nature':
@@ -386,7 +397,136 @@ export const en = {
     'agent.kind.sequence': 'Sequence',
     'agent.kind.adaptive': 'Adaptive',
     'agent.kind.paths': 'Paths',
+    // What an approval would do, one plain line per property of its operation's contract. A value with no line here is
+    // shown as the property's name and the value, never guessed.
+    // Where a reply in a thread goes from: the provider answers from the account the conversation is in, which the reply
+    // does not name, so neither do these words, and no account is guessed in their place.
+    'approval.from.conversation': 'the account this conversation is in',
+    'approval.fact.reach': 'Reach',
+    'approval.fact.reversibility': 'Reversibility',
+    'approval.fact.cost': 'Cost',
+    'approval.fact.reach.read': 'Contacts nobody: it only reads',
+    'approval.fact.reach.control': 'Contacts nobody: it acts in your provider account only',
+    'approval.fact.reach.act': 'Contacts the person: something is sent or shown to them',
+    'approval.fact.reversibility.reversible': 'Can be undone',
+    'approval.fact.reversibility.compensatable': 'Can be taken back afterwards, by a step that undoes it',
+    'approval.fact.reversibility.irreversible': 'Cannot be undone',
+    'approval.fact.cost.none': 'Costs nothing',
+    'approval.fact.cost.metered': "Spends your provider's allowance or credits",
+    // A property whose contract makes it depend on the moment, keyed by operation and property: the one sentence that
+    // replaces the whole line. A test beside the page tests holds every such contract property to a line here.
+    'approval.fact.campaign.activate.reach':
+        'Contacts everyone enrolled in the campaign. With nobody enrolled it contacts nobody yet, and the next person enrolled is sent to at once.',
+    'approval.fact.campaign.enroll.reach':
+        'Contacts nobody while the campaign is not live; contacts the person as soon as it is.',
+    'approval.fact.campaign.enroll.reversibility':
+        'Can be taken back until the first message or invitation goes; cannot be undone after.',
+    'approval.fact.contact.delete.reversibility':
+        "Can be restored within your provider account's restore window; cannot be undone after it.",
+    'approval.fact.campaign.enroll.cost':
+        "Costs nothing while the campaign is not live; spends your provider's allowance once it is.",
+    'approval.fact.message.send.cost':
+        'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+    'approval.fact.conversation.reply.cost':
+        'Spends your message allowance on channels that meter sending; costs nothing on the others.',
+    // Why a card of a Full access turn asks, one sentence per case the desktop names (`DesktopFullAccessWhy`). A shell
+    // command is held for the reason it gives; any other request by Ask first's card for it.
+    'fullAccess.why.command.expansion':
+        'This command has something the shell expands only as it runs, such as a variable or a substitution, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.escape':
+        'This command has a backslash escape, which changes how the shell reads the characters after it, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.glob':
+        'This command has a wildcard (*, ? or [ ]), which the shell turns into file names only as it runs, so Jason cannot read plainly what it would touch.',
+    'fullAccess.why.command.brace':
+        'This command has braces, which the shell can turn into several words as it runs, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.group':
+        'This command has parentheses, which the shell can read as a group of commands or a command of its own, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.history':
+        'This command has an exclamation mark, which the shell can read as a call back to an earlier command, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.comment':
+        'This command has a #, which the shell can read as the start of a comment that hides the rest, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.tilde':
+        'This command has a ~, which Jason does not read plainly in this shell, so it cannot tell what the command would touch.',
+    'fullAccess.why.command.non_ascii':
+        'This command has a character outside plain ASCII, which can look like another character on the card, so Jason does not run it without you.',
+    'fullAccess.why.command.control_character':
+        'This command has a control character, which may not show on the card, so Jason does not run it without you.',
+    'fullAccess.why.command.character':
+        'This command has a character Jason does not know how this shell would read, so it cannot read plainly what the command would do.',
+    'fullAccess.why.command.operator':
+        'This command has an operator, a redirection, a line break or a device path (/dev/...) Jason does not read, so it cannot tell plainly what the command would do.',
+    'fullAccess.why.command.background':
+        'This command runs something in the background (&), which goes on after the command returns, so Jason does not run it without you.',
+    'fullAccess.why.command.assignment':
+        'This command sets a variable for what it runs, which can change what that program does, so Jason does not run it without you.',
+    'fullAccess.why.command.here_document':
+        'This command has a here-document, a block of text handed to a program, which Jason does not read as part of the command.',
+    'fullAccess.why.command.process_substitution':
+        'This command has a process substitution, which runs another command in the middle of this one, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.quote':
+        'This command has quoting Jason cannot read plainly, so it cannot tell where each word begins and ends.',
+    'fullAccess.why.command.array':
+        'This command has an @ or a comma, which PowerShell can read as an array of several words, so Jason cannot read plainly what it would do.',
+    'fullAccess.why.command.stop_parsing':
+        "This command has PowerShell's stop-parsing token (--%), after which PowerShell passes the rest on unread, so Jason cannot read plainly what it would do.",
+    'fullAccess.why.command.call_operator':
+        "This command has PowerShell's call operator (& or .), which runs what follows it as a command, so Jason cannot read plainly what it would do.",
+    'fullAccess.why.command.syntax': 'Jason could not read this command, so it does not run it without you.',
+    'fullAccess.why.command.unknown_shell': 'Full access does not run commands in this shell without asking you.',
+    'fullAccess.why.command.command_prompt':
+        'This command could run through cmd, as a batch file or by a % in what it passes on, which Jason does not read, so it cannot tell what it would do.',
+    'fullAccess.why.command.inline_code':
+        'This command hands a program code as text to run, which Jason does not read, so it cannot tell what it would do.',
+    'fullAccess.why.command.runner':
+        'This command starts another program to run something, and Jason does not read what that program would run.',
+    'fullAccess.why.command.builtin':
+        "This command uses a shell built-in that changes the shell itself (aliases, variables, options, traps, modules or the programs its names run), or reaches a function, an alias or a variable by its provider's name, so Jason cannot read plainly what the rest would do.",
+    'fullAccess.why.command.servers':
+        'This command would change the MCP servers or plugins an AI loads, or sign a server in.',
+    'fullAccess.why.command.directory_change':
+        'This command moves to a folder Jason cannot place, so it cannot tell what the commands after it would touch.',
+    'fullAccess.why.command.reply':
+        "This command runs reply in a form Jason does not run on its own, and reply can act on the provider directly, outside Jason's approvals.",
+    'fullAccess.why.command.guarded_name':
+        "This command names a file or folder Jason guards: an AI's settings, skills or instructions, the MCP servers it loads, a repository's own files, or a folder's Jason marker.",
+    'fullAccess.why.command.search':
+        'This command names a variable that decides where the shell looks for programs, which decides what later commands run.',
+    'fullAccess.why.command.local_jason':
+        "This command names a file called jason in a working folder, which the shell could run in place of the desktop's own.",
+    'fullAccess.why.command.holds_data':
+        "This command names a folder that holds Jason's own data, or in a demo one of your own folders, so it could reach into it.",
+    'fullAccess.why.command.link':
+        'This command makes or follows a link, which can lead somewhere its path does not show.',
+    'fullAccess.why.request.own_tool':
+        'This is a tool of one of your own MCP servers, and Jason cannot read what it does with what it is given.',
+    'fullAccess.why.request.settings': "This would change the AI's own settings, which act on what it runs next.",
+    'fullAccess.why.request.repository': "This would change a repository's own files, such as the hooks git runs.",
+    'fullAccess.why.request.marker': "This would change a folder's Jason marker, which is how Jason knows the folder.",
+    'fullAccess.why.request.loads': 'This would change the skills or settings an AI loads.',
+    'fullAccess.why.request.instructions': 'This would change instructions an AI reads.',
+    'fullAccess.why.request.server_list': 'This would change the MCP servers an AI loads.',
+    'fullAccess.why.request.local_jason': "This would write or run a jason that is not the desktop's own.",
+    'fullAccess.why.request.search':
+        'This would change where the shell finds programs, which decides what later commands run.',
+    'fullAccess.why.request.windows_name':
+        'This uses a path Windows reads as another name, so Jason cannot be sure which file it reaches.',
+    'fullAccess.why.request.tilde_path': 'This uses a path that begins with ~, which Jason does not read as a place.',
+    'fullAccess.why.request.no_file_named':
+        '{tool} was asked to act with no file named, so Jason cannot tell which file it would touch.',
+    'fullAccess.why.request.unknown_tool': 'Jason does not know the tool {tool}, so it cannot tell what it would do.',
+    'fullAccess.why.request.other': 'Full access does not run this kind of request on its own, so it asks you.',
+    'fullAccess.why.host_asked':
+        'Claude Code asked about this one itself, though Full access would run it, so it comes to you as it would in Ask first.',
     'waiting.unanswered': 'The runtime did not answer within {seconds} seconds.',
+    // A paid people search's own arguments, one plain line per argument, or per argument and value. A value with no line
+    // here is shown as the argument's name and the value, never guessed.
+    'approval.arg.count': 'People to find: up to {value}',
+    'approval.arg.people_per_company': 'At most {value} per company',
+    'approval.arg.include_without_email.false': 'Only people with an email address',
+    'approval.arg.include_without_email.true': 'People without an email address too',
+    'approval.arg.find_phones.true': 'Phone numbers too, which may cost extra',
+    'approval.arg.find_phones.false': 'No phone numbers',
+    'approval.arg.audience': 'More people for audience {value}',
 } as const;
 
 export type MessageKey = keyof typeof en;

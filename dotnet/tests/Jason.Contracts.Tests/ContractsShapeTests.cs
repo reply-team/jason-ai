@@ -226,7 +226,8 @@ public class ContractsShapeTests
     /// <summary>
     /// What each notification channel did last rides on <c>system.info</c> as a section of its own, after every
     /// section that came before it: whether notifications are on, each channel with its last outcome — or nulls
-    /// before anything was sent — and, for the toast, whether this runtime has a desktop to show one on at all.
+    /// before anything was sent — for the toast, whether this runtime has a desktop to show one on at all, and for a plugin
+    /// channel whether it could deliver now and what is missing.
     /// </summary>
     [Fact]
     public void System_info_says_what_each_notification_channel_did_last()
@@ -236,7 +237,10 @@ public class ContractsShapeTests
         {
             Notifications = new NotificationsInfo(
                 true,
-                [new NotificationChannelInfo("toast", "toast", true, "silenced", "disabled_for_application", null, null, null, at, "available", null)],
+                [
+                    new NotificationChannelInfo("toast", "toast", true, "silenced", "disabled_for_application", null, null, null, at, "available", null),
+                    new NotificationChannelInfo("ntfy", "plugin", false, null, null, null, null, null, null, null, null, "binding_invalid", "/topic required"),
+                ],
                 "ntf_01K",
                 at),
         };
@@ -244,7 +248,9 @@ public class ContractsShapeTests
         Assert.EndsWith(
             "\"notifications\":{\"enabled\":true,\"channels\":[{\"channel\":\"toast\",\"kind\":\"toast\",\"on\":true,"
                 + "\"outcome\":\"silenced\",\"reason\":\"disabled_for_application\",\"code\":null,\"class\":null,\"detail\":null,"
-                + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null}],"
+                + "\"at\":\"2026-10-01T09:06:00.000Z\",\"presence\":\"available\",\"presence_detail\":null,\"readiness\":null,\"readiness_detail\":null},"
+                + "{\"channel\":\"ntfy\",\"kind\":\"plugin\",\"on\":false,\"outcome\":null,\"reason\":null,\"code\":null,\"class\":null,\"detail\":null,"
+                + "\"at\":null,\"presence\":null,\"presence_detail\":null,\"readiness\":\"binding_invalid\",\"readiness_detail\":\"/topic required\"}],"
                 + "\"last_notification_id\":\"ntf_01K\",\"last_at\":\"2026-10-01T09:06:00.000Z\"},\"listening\":null,\"ui\":null,\"harness\":null,\"released_plugins\":null,\"send_modes\":null,\"setup\":null}",
             JsonSerializer.Serialize(info, JasonJson.Options),
             StringComparison.Ordinal);
@@ -315,6 +321,38 @@ public class ContractsShapeTests
                 + "\"problem_code\":\"role_directory_changed\",\"problem_exception\":null}],"
                 + "\"problem\":null,\"problem_code\":null,\"problem_exception\":null}",
             JsonSerializer.Serialize(skills, JasonJson.Options));
+    }
+
+    /// <summary>
+    /// A test build says so in the runtime's report, as <c>test_build: true</c> after every other section, and after its
+    /// version wherever that is stated to a person; the words are <see cref="JasonVersion.TestBuildMark"/>.
+    /// </summary>
+    [Fact]
+    public void A_test_build_says_so_in_the_report_and_after_its_version()
+    {
+        var info = SystemInfo() with { TestBuild = JasonVersion.ReportMember(testBuild: true) };
+        var json = JsonSerializer.Serialize(info, JasonJson.Options);
+
+        Assert.EndsWith(",\"send_modes\":null,\"setup\":null,\"test_build\":true}", json, StringComparison.Ordinal);
+        Assert.True(JsonSerializer.Deserialize<SystemInfoResponse>(json, JasonJson.Options)!.TestBuild);
+        Assert.Equal("0.49.0-dev+abc (a test build, not a release)", JasonVersion.Stated("0.49.0-dev+abc", testBuild: true));
+        Assert.Equal("This jason is a test build, not a release.", JasonVersion.TestBuildSentence);
+    }
+
+    /// <summary>
+    /// A released build says nothing: no member in the report, never a <c>false</c>, so its document is the one it was, and
+    /// its version as it is. This build is not a test build.
+    /// </summary>
+    [Fact]
+    public void A_released_build_says_nothing_of_a_test_build()
+    {
+        Assert.False(JasonVersion.TestBuild);
+        var json = JsonSerializer.Serialize(SystemInfo() with { TestBuild = JasonVersion.ReportMember(JasonVersion.TestBuild) }, JasonJson.Options);
+
+        Assert.DoesNotContain("test_build", json, StringComparison.Ordinal);
+        Assert.EndsWith(",\"send_modes\":null,\"setup\":null}", json, StringComparison.Ordinal);
+        Assert.Null(JsonSerializer.Deserialize<SystemInfoResponse>(json, JasonJson.Options)!.TestBuild);
+        Assert.Equal("0.49.0", JasonVersion.Stated("0.49.0", testBuild: false));
     }
 
     private static SystemInfoResponse SystemInfo() =>

@@ -17,6 +17,18 @@ name: CI
 #   a release branch, that changes nothing but the version prefix's line and the pins the version guards hold to it -
 #   runs the version and linux-x64 when it is ready, and linux-x64 tests the critical tier under its own name: for this
 #   pull request the tier is the ready run, by rule. Every other check reports as skipped by rule;
+# - a hotfix's pull request - one into main from a branch `hotfix/<name>` of this repository, carrying the fix, its test
+#   and the release notes of the version main builds - is refused by the version job, draft or ready, when it changes a
+#   path the deciding step's list of what a hotfix may not change names (OUTSIDE_A_HOTFIX: the database's shape, the
+#   contracts, CI and the release's machinery, installing, updating and uninstalling, the build and what it depends on),
+#   in one sentence naming the first such path, and nothing else of the run starts: such a change goes through a release
+#   branch. Otherwise a draft's push runs the Linux set, and once it is ready it runs the hotfix set: every platform's
+#   package and, on each platform, the critical tier under the platform's own name, with install.sh on ubuntu, the
+#   update on linux-x64, the UI and the desktop. On Linux that is less than any other pull request into main runs. The
+#   update on win-x64 reports as skipped by rule; the suite under a release's version, the executable on a Windows older
+#   than 24H2 and install.ps1 on windows skip by their own condition, which reports success as well. A name git prints
+#   quoted cannot be judged, and is refused. A fork's branch of that name is any other pull request, and its paths are
+#   not judged;
 # - any other pull request into main runs the Linux set when it is ready, and reports every other check as skipped by
 #   rule;
 # - every ready run of a pull request into main or into a release branch keeps a record of the tree it tested and of
@@ -26,7 +38,8 @@ name: CI
 #   is this repository's is believed, never a run of a fork's pull request;
 # - a push to main or to a release branch whose tree a run that passed recorded runs the version alone, and on main the
 #   rest report as skipped. Main passes over the record of a pull request into a release branch, whose test was the
-#   critical tier, and a run still in progress, cancelled or failed has recorded nothing;
+#   critical tier, and the record of a hotfix's pull request, whose test was the critical tier too: the push its squash
+#   makes is decided as a push no run recorded. A run still in progress, cancelled or failed has recorded nothing;
 # - a push to main whose tree no run recorded, and whose one commit changes nothing but documentation against its
 #   parent, runs the version alone as well, and the rest report as skipped. Any other push to main runs every check,
 #   macOS included;
@@ -240,8 +253,9 @@ jobs:
           # The record of this run's tree that the newest run to pass kept, on any ref, downloaded: the artifacts named by
           # this tree, newest first, each asked about the run that kept it, since an artifact is there from the moment its
           # run uploads it. A run still in progress, cancelled or failed is passed over, and on main so is the record of a
-          # pull request into a release branch, whose ready run tested the critical tier alone: main takes a tree tested
-          # by the whole suite, or by the version pull request, whose tier is its ready run by rule.
+          # pull request into a release branch, whose ready run tested the critical tier alone, and the record of a hotfix's
+          # pull request, whose ready run tested the critical tier too: main takes a tree tested by the whole suite, or by
+          # the version pull request, whose tier is its ready run by rule.
           function OfThisTree {
             $passed = @()
             $artifacts = @((Api "repos/$env:REPOSITORY/actions/artifacts?name=tested-tree-$($env:TREE)&per_page=20").artifacts |
@@ -256,6 +270,7 @@ jobs:
               $read = Download $id "$($artifact.name)"
               if ("$($read.record.tree)" -cne $env:TREE) { $passed += "run $id kept a record of another tree"; continue }
               if ($env:TARGET -ceq 'main' -and "$($read.record.checks)" -ceq 'linux') { $passed += "run $id on $($read.record.ref) tested the critical tier alone, into a release branch"; continue }
+              if ($env:TARGET -ceq 'main' -and "$($read.record.checks)" -ceq 'hotfix') { $passed += "run $id on $($read.record.ref) tested the critical tier alone, as a hotfix"; continue }
               return @{ file = $read.file; said = "run $id on $($read.record.ref) tested tree $($read.record.tree)" }
             }
             @{ file = ''; said = "no run that passed kept a record of tree $($env:TREE)$(if ($passed.Count -gt 0) { " ($($passed -join '; '))" })" }
@@ -293,7 +308,8 @@ jobs:
       # requires. A leg is skipped only on what was found: nothing found, or a record that cannot be read, skips nothing
       # the branch requires. A pull request into a release branch tests the critical tier, ready or draft: the whole
       # suite's run per release is the release's pull request's, and a change under dotnet/ ran it locally before it
-      # was marked ready.
+      # was marked ready. A hotfix's pull request tests the critical tier on every platform, and is refused here, draft or
+      # ready, when it changes what a hotfix may not change.
       - id: legs
         name: Decide which checks this run needs
         shell: pwsh
@@ -311,6 +327,18 @@ jobs:
           BASE: ${{ steps.tree.outputs.base }}
           RECORD: ${{ steps.earlier.outputs.record }}
           FOUND: ${{ steps.earlier.outputs.found }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          # What a hotfix may not change, kind by kind: the one list the deciding step reads and the hotfix's section of
+          # DEVELOPMENT.md prints. A path is matched whole, `**/` standing for any number of folders, none included, `/**`
+          # at the end for everything under a folder, and `*` for any run of characters within one name; a file of a kind
+          # added later is caught without anyone naming it.
+          OUTSIDE_A_HOTFIX: >-
+            [{"kind":"the database's shape","paths":"dotnet/src/Jason.Runtime/Persistence/Migrations/**"},
+            {"kind":"the contract documents and the operation catalog","paths":"docs/contracts/** dotnet/src/Jason.Contracts/Api/Operations.cs"},
+            {"kind":"CI and the release's machinery","paths":".github/**"},
+            {"kind":"installing, updating and uninstalling","paths":"install/** desktop/installer/** dotnet/src/Jason.Cli/Update/** dotnet/src/Jason.Cli/Installation/** dotnet/src/Jason.Cli/Uninstall/** dotnet/src/Jason.Cli/Ui/** dotnet/src/Jason.Cli/Skills/** dotnet/src/Jason.Cli/Autostart/** dotnet/src/Jason.Cli/Plugins/** dotnet/src/Jason.Contracts/Update/** dotnet/src/Jason.Runtime/Update/** desktop/src/update*.ts desktop/src/uninstall*.ts desktop/src/rollback*.ts desktop/src/installation*.ts desktop/src/machine-setup*.ts desktop/src/carried-*.ts desktop/src/own-runtime*.ts desktop/src/path-*.ts desktop/src/remove-placed*.ts desktop/src/bundle-copy*.ts desktop/src/linux-package*.ts desktop/src/login-item*.ts"},
+            {"kind":"the build and what it depends on","paths":"**/*.csproj **/*.props **/*.targets **/*.slnx **/*.manifest **/*.entitlements global.json **/dotnet-tools.json **/package.json **/package-lock.json **/tsconfig.json desktop/electron-builder.config.mjs desktop/electron-builder.config.d.mts desktop/scripts/** ui/scripts/** ui/vite.config.ts **/THIRD-PARTY-NOTICES"}]
           PLATFORMS: '[{"rid":"linux-x64","os":"ubuntu-latest","name":"linux-x64"},{"rid":"win-x64","os":"windows-latest","name":"win-x64"},{"rid":"osx-arm64","os":"macos-latest","name":"osx-arm64"}]'
           UPDATES: '[{"rid":"linux-x64","os":"ubuntu-latest"},{"rid":"win-x64","os":"windows-latest"}]'
           # The parts a platform's tests are run in, each on a runner of its own: the critical tier in one part, and the
@@ -439,11 +467,64 @@ jobs:
           # tree, changes against its base, once they are read.
           $seen = $null
 
+          # A hotfix's pull request is one into main from a branch hotfix/<name> whose head is this repository's. A fork's
+          # pull request runs here too, and its branch may carry any name: a fork's hotfix/<name> is any other pull
+          # request, and its paths are not judged.
+          $hotfix = $env:EVENT -eq 'pull_request' -and $env:TARGET -ceq 'main' -and $env:BRANCH -clike 'hotfix/*' -and
+            [bool] $env:HEAD_REPOSITORY -and $env:HEAD_REPOSITORY -ceq $env:REPOSITORY
+
+          # A hotfix that changes, adds or removes a path of the list, draft or ready, fails this step, and so the version
+          # check, which main's ruleset requires, and nothing else of the run starts: one sentence names the first such
+          # path, and says that the change goes through a release branch. A hotfix whose change against its base cannot be
+          # read is refused the same way, since its paths cannot be judged, and so is a path git prints quoted.
+          if ($hotfix) {
+            $outside = @(foreach ($entry in @($env:OUTSIDE_A_HOTFIX | ConvertFrom-Json)) {
+              foreach ($glob in @("$($entry.paths)".Split(' ', [StringSplitOptions]::RemoveEmptyEntries))) {
+                $pattern = [regex]::Escape($glob) -replace '\\\*\\\*/', '(?:.*/)?' -replace '/\\\*\\\*$', '/.*' -replace '\\\*', '[^/]*'
+                @{ kind = "$($entry.kind)"; glob = $glob; pattern = "^$pattern$" }
+              }
+            })
+            if ($outside.Count -eq 0) { throw 'the list of what a hotfix may not change names nothing' }
+            $refusal = ''
+            try {
+              if (-not $env:BASE) { throw "the tree step did not list this pull request's base" }
+              $before = Entries @(Get-Content -LiteralPath $env:BASE)
+              $after = Entries @(Get-Content -LiteralPath $env:LISTING)
+              $seen = Differing $before $after
+              foreach ($path in $seen) {
+                # A name git prints quoted - one with a byte above 0x7F, a tab, a quote or a backslash in it - matches no
+                # pattern as it is printed, so it cannot be judged, and is refused.
+                if ($path.StartsWith('"', [StringComparison]::Ordinal)) {
+                  $refusal = "this hotfix changes $path, a name git prints quoted, which cannot be judged against the list, and such a change goes through a release branch, not a hotfix"
+                  break
+                }
+                $hit = @($outside | Where-Object { $path -cmatch $_.pattern }) | Select-Object -First 1
+                if ($hit) {
+                  $refusal = "this hotfix changes $path, which is $($hit.kind) ($($hit.glob)), and such a change goes through a release branch, not a hotfix"
+                  break
+                }
+              }
+            } catch {
+              $refusal = "what this hotfix changes against main could not be read ($($_.Exception.Message)), so its paths cannot be judged, and a change that cannot be judged goes through a release branch, not a hotfix"
+            }
+            if ($refusal) {
+              $refusal = $refusal -replace '\s+', ' '
+              Write-Host "set -> refused; $refusal"
+              Write-Host "::error title=Not a hotfix::$refusal"
+              if ($env:GITHUB_STEP_SUMMARY) {
+                @('### Which checks this run needs', '', "**refused**: $refusal") | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+              }
+              exit 1
+            }
+          }
+
           try {
             if ($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true') {
               $set = 'linux'; $why = "a draft pull request's push runs the Linux set"
             } elseif ($env:EVENT -eq 'pull_request' -and $env:TARGET -cne 'main') {
               $set = 'linux'; $why = "a pull request into $($env:TARGET) runs the Linux set, which is all a release branch's ruleset requires"
+            } elseif ($hotfix) {
+              $set = 'hotfix'; $why = "a pull request into main from $($env:BRANCH) is a hotfix's: it builds every platform and tests the critical tier on each, with the Linux set's other jobs, which on Linux is less than any other pull request into main runs; the push its squash makes is decided as one no run recorded"
             } elseif ($env:EVENT -eq 'pull_request' -and -not $fromRelease) {
               # What it changes against its base, read here so that what cannot be read only says so: such a pull request is
               # not taken for the version pull request, and runs the Linux set.
@@ -514,12 +595,14 @@ jobs:
               'not-the-release' { $rid -eq 'linux-x64' }
               'version-only' { $rid -eq 'linux-x64' }
               'linux' { $rid -eq 'linux-x64' }
+              'hotfix' { $true }
               default { $false }
             }
           }
 
-          # An update on every platform that runs, but on the version pull request, which builds and tests alone.
-          function Updates([string] $rid) { $set -ne 'version-only' -and (Runs $rid) }
+          # An update on every platform that runs, but on the version pull request, which builds and tests alone, and on a
+          # hotfix's, which runs the Linux set's update alone.
+          function Updates([string] $rid) { $set -ne 'version-only' -and ($set -ne 'hotfix' -or $rid -eq 'linux-x64') -and (Runs $rid) }
 
           $platforms = @($env:PLATFORMS | ConvertFrom-Json)
           $updates = @($env:UPDATES | ConvertFrom-Json)
@@ -530,7 +613,7 @@ jobs:
           # check's own name, which is the platform's for a platform leg and the update job's for an update. Nothing
           # else does: nothing waits on a draft, and a release branch's ruleset requires only the Linux set.
           $skipped = @()
-          if ($set -in 'documentation', 'not-the-release', 'version-only', 'tested') {
+          if ($set -in 'documentation', 'not-the-release', 'version-only', 'hotfix', 'tested') {
             $skipped = @($platforms | Where-Object { -not (Runs $_.rid) } | ForEach-Object { @{ check = $_.rid; why = $why } }) +
               @($updates | Where-Object { -not (Updates $_.rid) } | ForEach-Object { @{ check = "an update on $($_.rid)"; why = $why } })
           }
@@ -543,7 +626,7 @@ jobs:
           # change, and its pull request's own Linux set; the whole suite runs once per release, at the release's pull
           # request into main. Every other run tests the whole suite.
           $draft = $env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'true'
-          $tier = $draft -or $set -eq 'version-only' -or ($env:EVENT -eq 'pull_request' -and $toRelease)
+          $tier = $draft -or $set -in 'version-only', 'hotfix' -or ($env:EVENT -eq 'pull_request' -and $toRelease)
 
           # A draft's leg is not named as the leg a ruleset requires: a required check is judged by the latest check of its
           # name on the commit, and a draft's tier must not stand in for the ready run in the moments before that run
@@ -599,7 +682,7 @@ jobs:
           # request's last run of every check tested.
           $recorded = ''
           if (($env:EVENT -eq 'pull_request' -and $env:DRAFT -eq 'false' -and
-                ($set -in 'everything', 'not-the-release', 'version-only' -or ($set -eq 'linux' -and $toRelease))) -or
+                ($set -in 'everything', 'not-the-release', 'version-only', 'hotfix' -or ($set -eq 'linux' -and $toRelease))) -or
               ($env:EVENT -eq 'push' -and -not $toRelease -and $set -eq 'everything')) {
             $recorded = Join-Path $env:RUNNER_TEMP 'tested-tree'
             New-Item -ItemType Directory -Force -Path $recorded | Out-Null
@@ -2410,8 +2493,9 @@ jobs:
           JASON_SEALED_PROBE: '1'
         run: npm run e2e
 
-  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the
-  # electron package's own download never runs; the tests run their TypeScript as it is, on node 22 or later. Then the
+  # The desktop application's checks, in the order desktop/README.md gives them. No test starts a window, so the install
+  # fetches no Electron binary; one step fetches it for the rows that run code under it as Node, and the tests run their
+  # TypeScript as it is, on node 22 or later. Then the
   # Linux packages, the one platform's whose packages need no signature: the package action builds a deb and an
   # AppImage as a release does, around a jason this job publishes at a candidate's version, reads them back and starts
   # each once under a virtual display, with Electron's Linux distribution held to the sha256 the lockfile's electron
@@ -2451,7 +2535,18 @@ jobs:
           sudo apt-get -o Acquire::Retries=5 update -qq
           sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends zsh
 
+      # Electron's own binary, for the rows that run code under it as Node, where the file system reads an .asar as an
+      # archive the way the application's main process does: the copy an update keeps aside is one. The electron
+      # package fetches it only when asked, held to the sha256 its checksums.json names, and the tests are told its
+      # absence is a failure here, never a skip.
+      - name: Install Electron's binary for the rows that run under it
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: ''
+        run: node node_modules/electron/install.js
+
       - name: Node tests
+        env:
+          JASON_DESKTOP_ELECTRON_REQUIRED: '1'
         run: npm test
 
       # The download address's short paths (get/) on Node's own runner, with the node this job already set up: get/ has
@@ -2480,7 +2575,8 @@ jobs:
   # A check main's ruleset requires whose leg this run does not need, reported under the leg's own name as a success
   # whose one step says why: win-x64, osx-arm64 and the update on win-x64 on a ready pull request into main that is not
   # the release's, and on a push to the release's pull request that changes documentation only; win-x64, osx-arm64 and
-  # both updates on the version pull request; every platform and update on a push to main whose tree was tested
+  # both updates on the version pull request; the update on win-x64 on a hotfix's pull request once it is ready; every
+  # platform and update on a push to main whose tree was tested
   # already, or whose one commit changes documentation alone. A matrix row that is absent would never report, and a
   # merge would wait for it, so the version job hands the legs it leaves out to this job. A job without a matrix reports
   # under its own name when its condition skips it, so every other check the ruleset requires reports without a

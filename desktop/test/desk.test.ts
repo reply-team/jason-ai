@@ -14,6 +14,8 @@ import { fileLogger } from '../src/log.ts';
 import { memoryLog } from './harness.ts';
 import { acceleratorPattern, bindings, bindingsFor, desktopCommands, isDesktopCommand, itemKeys, keyWords, mayCommand, type DesktopCommand } from '../src/keybindings.ts';
 import type { DesktopCommand as PageCommand } from '../../ui/src/platform/desktop.d.ts';
+import { actShown, updateAnswerOf } from '../src/update-item.ts';
+import { menuItemOf, pressItem, type UpdateState } from '../src/updates.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = join(root, '..', 'docs', 'api', 'fixtures');
@@ -256,7 +258,7 @@ test('the update item and the way back from the Demo have keys of their own, whi
     // A press of the update item goes through `pressItem`, which asks first when the key brought the install and installs
     // only on yes, asked in the desk's own box. The tray's menu has no key, and on Linux it reports a click with no mouse
     // button, which Electron counts as a key's (`triggeredByAccelerator`): a press there is always a click.
-    assert.match(method('updateItems'), /void pressItem\(updates, item\.act, !inTray && event\.triggeredByAccelerator === true, \(question\) => this\.box\(question\)\);/);
+    assert.match(method('updateItems'), /click: \(_menuItem, _window, event\) => this\.pressUpdate\(item\.act, !inTray && event\.triggeredByAccelerator === true\),/);
     assert.ok(desk.includes('...this.updateItems(false),'), 'the window’s menu: its key asks');
     assert.match(method('renderTray'), /\.\.\.this\.updateItems\(true\),/);
     // The page and the versions-differ sentence take the update key's words from the desktop, and only where the item can
@@ -265,6 +267,83 @@ test('the update item and the way back from the Demo have keys of their own, whi
     assert.ok(main.includes('const updateKey = () => updateKeyWords(updates !== null, updates?.active ?? false, process.platform);'), 'the key where the item can act');
     assert.ok(main.includes("handle(seam, 'updates.key', origin, updateKey, refused);"), 'updates.key answers it');
     assert.match(main, /\n {8}updateKey,\n/, 'the setup names it');
+});
+
+// The update item stands in the menu and at the foot of the page's Settings, and both are the one item: the page is
+// answered the menu's own item, label and enabled alike, and its press is a click in the menu, through the one method
+// the menu's click and key go through. No other way reaches `pressItem`.
+test('the page’s update item is the menu’s own, and its press goes the one way the menu’s does', () => {
+    const desk = readFileSync(join(root, 'src', 'desk.ts'), 'utf8');
+    const main = readFileSync(join(root, 'src', 'main.ts'), 'utf8');
+    const body = (name: string) => {
+        const at = desk.indexOf(`\n    ${name}(`);
+        return desk.slice(at, desk.indexOf('\n    }\n', at));
+    };
+    // One call of pressItem in the desktop's sources, in the one method, behind the guard of Remove What Jason Placed.
+    const sources = readdirSync(join(root, 'src')).filter((name) => name.endsWith('.ts') && name !== 'updates.ts');
+    const calls = sources.flatMap((name) => [...readFileSync(join(root, 'src', name), 'utf8').matchAll(/\bpressItem\(/g)].map(() => name));
+    assert.deepEqual(calls, ['desk.ts']);
+    const press = body('pressUpdate');
+    assert.ok(press.startsWith("\n    pressUpdate(act: MenuItem['act'], byKey: boolean): void {"));
+    const pressed = 'void pressItem(updates, act, byKey, (question) => this.box(question));';
+    assert.ok(press.includes(pressed));
+    assert.ok(press.indexOf('if (this.removing()) return;') < press.indexOf(pressed), 'the guard first');
+    // The item the menu draws is the one the page is answered, disabled alike while Remove What Jason Placed runs, and
+    // none in a demo run.
+    const item = body('updateItem');
+    assert.ok(item.includes('if (this.demo !== null) return null;'));
+    assert.ok(item.includes("const item = menuItemOf(updates?.current ?? { step: 'idle' }, updates !== null, updates?.active ?? true);"));
+    assert.ok(item.includes('return { ...item, enabled: item.enabled && !this.removing() };'));
+    assert.match(desk.slice(desk.indexOf('private updateItems('), desk.indexOf('updateItem(): MenuItem | null')), /const item = this\.updateItem\(\);\n {8}if \(item === null\) return \[\];/);
+    // The seam: the item answered with the desktop's version, its act never; a press is a click, never the key's.
+    assert.ok(main.includes("handle(seam, 'updates.item', origin, () => updateAnswerOf(app.getVersion(), desk.updateItem()), refused);"));
+    assert.ok(main.includes("handle(seam, 'updates.press', origin, (label) => desk.pressUpdate(actShown(desk.updateItem(), label), false), refused);"));
+    assert.equal(main.split('desk.pressUpdate(').length - 1, 1, 'the seam presses once, as a click');
+    // The page hears of every new drawing of the menu, so its item follows the menu's; the demo's run has no seam to tell.
+    assert.ok(body('renderMenu').includes('this.renderTray();\n        this.deps.menuChanged?.();'));
+    assert.ok(main.includes("        menuChanged: () => toPage('updates.changed'),\n    });"));
+    assert.equal(main.split('menuChanged:').length - 1, 1, 'Live alone');
+});
+
+// The page's press acts on what the person saw: it sends the label it drew, and the desktop presses only while its item
+// is enabled and says that very label. A step that moved on between the word of the change and the page's repaint is
+// never pressed by a click meant for the step before: above all the install, which a click does without asking.
+test('a press from the page acts only on the item it drew: the same label, enabled now', async () => {
+    const item = (step: UpdateState) => menuItemOf(step, true, true);
+    const offered = item({ step: 'offered', version: '0.48.6' });
+    const downloaded = item({ step: 'downloaded', version: '0.48.6' });
+    assert.equal(actShown(offered, 'Download Jason 0.48.6'), 'download');
+    assert.equal(actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), 'install');
+    // The item moved on from the label the person saw: nothing.
+    assert.equal(actShown(downloaded, 'Download Jason 0.48.6'), null);
+    assert.equal(actShown(item({ step: 'idle' }), 'Download Jason 0.48.6'), null);
+    // Disabled now (a step under way, or Remove What Jason Placed running), no item, or no label: nothing.
+    assert.equal(actShown(item({ step: 'downloading', version: '0.48.6' }), 'Downloading Jason 0.48.6…'), null);
+    assert.equal(actShown({ ...offered, enabled: false }, 'Download Jason 0.48.6'), null);
+    assert.equal(actShown(null, 'Check for Updates…'), null);
+    for (const label of [undefined, null, 1, {}, ['Download Jason 0.48.6']]) assert.equal(actShown(offered, label), null);
+    // Through the menu's own press: once with the current label, never with an old one, and never a question asked.
+    const acts: string[] = [];
+    const updater = {
+        current: { step: 'downloaded', version: '0.48.6' } as UpdateState,
+        check: async () => void acts.push('check'),
+        download: async () => void acts.push('download'),
+        install: async () => {
+            acts.push('install');
+            return true;
+        },
+    };
+    const ask = async () => {
+        acts.push('asked');
+        return 0;
+    };
+    await pressItem(updater, actShown(downloaded, 'Download Jason 0.48.6'), false, ask);
+    assert.deepEqual(acts, [], 'the old label presses nothing');
+    await pressItem(updater, actShown(downloaded, 'Restart Jason and Its Runtime to Install 0.48.6'), false, ask);
+    assert.deepEqual(acts, ['install'], 'the current label presses once, as a click');
+    // The page is answered the label and whether it is enabled, never the act.
+    assert.deepEqual(updateAnswerOf('0.48.5', offered), { version: '0.48.5', item: { label: 'Download Jason 0.48.6', enabled: true } });
+    assert.deepEqual(updateAnswerOf('0.48.5', null), { version: '0.48.5', item: null });
 });
 
 test('a packaged build offers no developer tools', () => {

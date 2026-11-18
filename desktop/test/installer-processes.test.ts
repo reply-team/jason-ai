@@ -788,3 +788,40 @@ test('no box of the include waits for a click in a silent run', () => {
         assert.ok(opened >= 0 && lines.slice(opened, index).includes('${AndIfNot} ${Silent}'), `a box a silent run reaches has no answer, at line ${index}`);
     }
 });
+
+test('the module path a setup inherits is removed, never set, at the first hook the installer and the uninstaller each reach, before any PowerShell runs', () => {
+    // The one line that names the variable: SetEnvironmentVariable with a null value, which deletes it from this process.
+    const removal = `System::Call 'Kernel32::SetEnvironmentVariable(t "PSModulePath", i 0)'`;
+    const naming = script.split(/\r?\n/).map((line) => line.trim()).filter((line) => !line.startsWith(';') && /PSModulePath/i.test(line));
+    assert.deepEqual(naming, [removal]);
+    assert.deepEqual(codeLines(macro('jasonForgetModulePath')), ['!macro jasonForgetModulePath', removal]);
+    // The installer's hook is preInit, and it does that and nothing else.
+    assert.deepEqual(codeLines(macro('preInit')), ['!macro preInit', '!insertmacro jasonForgetModulePath']);
+    // The check does it first, before the template's test whether PowerShell is available and before any look.
+    const check = codeLines(macro('customCheckAppRunning'));
+    assert.equal(check[1], '!insertmacro jasonForgetModulePath');
+    assert.ok(check.indexOf('!insertmacro IS_POWERSHELL_AVAILABLE') > 1);
+    assert.ok(check.slice(0, 2).every((line) => !/nsExec|Exec|PowerShell/i.test(line)));
+
+    // In the pinned template every PowerShell is in the one file of the check, and is run only through CHECK_APP_RUNNING.
+    const running = /\b(?:Exec|ExecWait|ExecShell|ExecShellWait|nsExec|UAC::Exec|UAC::ShellExec)\b|::Exec|PowerShell/i;
+    const powershellFiles = nsisFiles(templates).filter((file) => /PowerShell/i.test(template(file)));
+    assert.deepEqual(powershellFiles, [join('include', 'allowOnlyOneInstallerInstance.nsh')]);
+    // The installer's .onInit runs preInit before anything that starts a program or names PowerShell.
+    const installer = codeLines(template('installer.nsi'));
+    const onInit = installer.indexOf('Function .onInit');
+    const preInit = installer.indexOf('!insertmacro preInit', onInit);
+    assert.ok(onInit >= 0 && preInit > onInit && installer.indexOf('FunctionEnd', onInit) > preInit, 'preInit is not in the installer’s .onInit');
+    assert.deepEqual(installer.slice(onInit, preInit).filter((line) => running.test(line) || /CHECK_APP_RUNNING|checkAppRunning/i.test(line)), []);
+    // The uninstaller's un.onInit runs the check, whose first act is the removal, before any hook of ours and before
+    // anything that starts a program: customUnInit comes after it, so it could not be the hook.
+    const uninstaller = codeLines(template('uninstaller.nsh'));
+    const unOnInit = uninstaller.indexOf('Function un.onInit');
+    const firstCheck = uninstaller.indexOf('call un.checkAppRunning', unOnInit);
+    const unInit = uninstaller.indexOf('!insertmacro customUnInit', unOnInit);
+    assert.ok(unOnInit >= 0 && firstCheck > unOnInit && unInit > firstCheck, 'the uninstaller’s un.onInit does not run the check before customUnInit');
+    assert.deepEqual(uninstaller.slice(unOnInit, firstCheck).filter((line) => running.test(line) || /!insertmacro custom/.test(line)), []);
+    // That check is the template's CHECK_APP_RUNNING, which inserts ours.
+    const checkFunction = uninstaller.indexOf('Function un.checkAppRunning');
+    assert.deepEqual(uninstaller.slice(checkFunction, checkFunction + 3), ['Function un.checkAppRunning', '!insertmacro CHECK_APP_RUNNING', 'FunctionEnd']);
+});

@@ -73,6 +73,34 @@ public class UpdateSkillsStepTests
     }
 
     /// <summary>
+    /// An update whose release ships a name the person already holds a skill of their own under: their folder is left as it
+    /// is, nothing of it recorded, and the update's skills line names it, in the words every door says it in.
+    /// </summary>
+    [Fact]
+    [Critical(Family.I3, "an update's skills step leaves a person's own skill alone and names it")]
+    public async Task An_update_that_ships_a_name_the_person_holds_a_skill_under_leaves_theirs_alone_and_names_it()
+    {
+        using var installation = new FakeInstallation();
+        using var dir = new TempPaths();
+        var origin = await TaggedSource.CreateAsync(dir, Ct, tag => tag == Tag(installation), $"v{Before}", Tag(installation));
+        await InstallAsync(installation, ["skills", "install", "--source", origin]);
+        var own = SkillsLeftAloneTests.Plant(Harness(installation), "quick-start");
+        var before = SkillsLeftAloneTests.Snapshot(own);
+
+        var applier = Applier(installation);
+        var ledger = await applier.ApplyAsync(Request(installation), Ct);
+
+        Assert.Equal(UpdateStep.Complete, ledger.Step);
+        Assert.Equal(before, SkillsLeftAloneTests.Snapshot(own));
+        var sentence = SkillsDeployer.LeftAloneSentence(new UnrecordedSkill(Harness(installation), SkillPacks.Runtime, "quick-start"));
+        Assert.Contains(SkillsLines(applier), line => line.Contains(sentence, StringComparison.Ordinal));
+        var runtime = SkillsRecord.Read(Harness(installation))!.Packs.Single(pack => pack.Pack == SkillPacks.Runtime);
+        Assert.Equal(Tag(installation), runtime.Ref);
+        Assert.DoesNotContain(runtime.Files, file => file.Path.StartsWith("quick-start/", StringComparison.Ordinal));
+        Assert.Equal(["quick-start"], runtime.LeftAlone);
+    }
+
+    /// <summary>
     /// A release that changed none of the skills still moves their records: <c>jason status</c> compares the ref, and a
     /// record left at the tag before would fail it with every file already right.
     /// </summary>

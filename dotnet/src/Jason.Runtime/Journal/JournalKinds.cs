@@ -135,6 +135,12 @@ public static partial class JournalKinds
     /// </summary>
     public const string DefaultProfileUpdated = "default_profile_updated";
 
+    /// <summary>
+    /// One notification channel was turned on or off by <c>notification.enable</c> or <c>notification.disable</c> through the
+    /// settings writer: the setting's path and whether the channel was on before and after.
+    /// </summary>
+    public const string NotificationChannelUpdated = "notification_channel_updated";
+
     /// <summary>A new plugin snapshot became the active one: which packages, at which digests, from when.</summary>
     public const string PluginsReloaded = "plugins_reloaded";
 
@@ -402,6 +408,7 @@ public static partial class JournalKinds
         ProfileDisabled,
         ProfileEnabled,
         DefaultProfileUpdated,
+        NotificationChannelUpdated,
         PluginsReloaded,
         RoutesUpdated,
         GlobalRoutesUpdated,

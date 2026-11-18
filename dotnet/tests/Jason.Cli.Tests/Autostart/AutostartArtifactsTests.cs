@@ -233,15 +233,19 @@ public class AutostartArtifactsTests
         Assert.Contains("<string>--data-dir</string>", agent.Artifact, StringComparison.Ordinal);
         Assert.Contains($"<string>{Unix}</string>", agent.Artifact, StringComparison.Ordinal);
 
-        Assert.Equal([["launchctl", "load", "-w", agent.ArtifactPath]], agent.Apply);
+        // Loaded plainly: what brings the job back at the next login is the file in LaunchAgents with RunAtLoad and no
+        // Disabled key, and no override record is needed for it.
+        Assert.DoesNotContain("<key>Disabled</key>", agent.Artifact, StringComparison.Ordinal);
+        Assert.Equal([["launchctl", "load", agent.ArtifactPath]], agent.Apply);
         Assert.Equal([["launchctl", "unload", "-w", agent.ArtifactPath]], agent.Remove);
-        Assert.Empty(agent.Forget);
+        Assert.Empty(agent.ClearsDisabledIn);
     }
 
     /// <summary>
     /// The uninstall's removal leaves no mark for the label: on macOS it unloads through the file without <c>-w</c>, which
-    /// would leave the label disabled for a later install's job, and clears a disabled state an earlier removal left, in the
-    /// account's login domain; where the user id is not known it clears nothing. <c>disable</c>'s removal keeps <c>-w</c>,
+    /// would leave the label disabled for a later install's job, and clears a disabled record an earlier removal left, in the
+    /// account's login domain and its user domain, wherever one is recorded; where the user id is not known it clears
+    /// nothing. <c>disable</c>'s removal keeps <c>-w</c>,
     /// and on Windows and Linux the uninstall's removal is <c>disable</c>'s.
     /// </summary>
     [Fact]
@@ -252,10 +256,10 @@ public class AutostartArtifactsTests
         var leaving = AutostartArtifacts.LeavingNoMark(agent, 501);
 
         Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], leaving.Remove);
-        Assert.Equal([["/bin/launchctl", "enable", "gui/501/ai.jason.runtime"]], leaving.Forget);
+        Assert.Equal(["gui/501", "user/501"], leaving.ClearsDisabledIn);
         Assert.Equal(agent.Apply, leaving.Apply);
         Assert.Equal(agent.Artifact, leaving.Artifact);
-        Assert.Empty(AutostartArtifacts.LeavingNoMark(agent, null).Forget);
+        Assert.Empty(AutostartArtifacts.LeavingNoMark(agent, null).ClearsDisabledIn);
         Assert.Equal([["launchctl", "unload", agent.ArtifactPath]], AutostartArtifacts.LeavingNoMark(agent, null).Remove);
 
         foreach (var platform in new[] { AutostartPlatform.Windows, AutostartPlatform.Linux })

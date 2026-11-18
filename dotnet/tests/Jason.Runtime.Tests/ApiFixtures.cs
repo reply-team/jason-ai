@@ -35,6 +35,8 @@ public static class ApiFixtures
     //                     -item-approved|-item-all-approved).
     //   invitation:       approval.list card-invitation-pending, approval.get card-invitation, workitem.get
     //                     card-invitation-parked.
+    //   reply:            approval.list card-reply-pending, approval.get card-reply (a reply in a thread, which
+    //                     names no account it goes from).
     //   questions:        decision.list card-questions-pending|-after-answer, decision.get card-question-2|-3,
     //                     decision.answer card-free-text.
     //   many messages:    approval.list card-messages-first-page|-next-page.
@@ -74,6 +76,14 @@ public static class ApiFixtures
     // A third, a question the responder raised about a reply beside one about no thread (NeedsExchangesTests): decision.list
     // needs-inbox-questions and decision.get needs-inbox-question.
     //
+    // The "search-" files are a paid search waiting on a person, recorded as one story (SearchApprovalExchangesTests): a
+    // first search and a top-up of the audience it made, both parked by the claim (approval.list
+    // search-pending|-campaign-pending, decision.list search-campaign-none, approval.get search-first|-top-up), the Work
+    // items page's reads of the first (workitem.list|count search-now, workitem.count search-planned|-done, workitem.get,
+    // journal.list search-first, approval.list search-first-item), then the top-up approved (approval.approve
+    // search-top-up) and what waits read again (approval.list search-after-top-up). Its plugin is a stand-in named reply
+    // whose definition takes the Reply package's shape.
+    //
     // What a file holds, the runtime's own or a stand-in's. Every state, count, id, status, error and the claim, the
     // approvals and the questions are the runtime's own answers. A stand-in stands where a provider would answer, and
     // its content is invented: (1) the test plugin of the message, invitation, status and no-route stories is a bare
@@ -98,6 +108,7 @@ public static class ApiFixtures
         "approval.approve/needs-page-two-approved",
         "approval.approve/needs-two-first-approved",
         "approval.approve/panel-doubted",
+        "approval.approve/search-top-up",
         "approval.get/by-work-item",
         "approval.get/card-invitation",
         "approval.get/card-message",
@@ -105,6 +116,7 @@ public static class ApiFixtures
         "approval.get/card-message-withdrawn",
         "approval.get/card-needs-decided",
         "approval.get/card-needs-pending",
+        "approval.get/card-reply",
         "approval.get/email-message",
         "approval.get/for-campaign-row",
         "approval.get/linkedin-message",
@@ -129,6 +141,8 @@ public static class ApiFixtures
         "approval.get/park-sent-from-chat",
         "approval.get/pending-with-preview",
         "approval.get/released-automatically",
+        "approval.get/search-first",
+        "approval.get/search-top-up",
         "approval.get/with-doubts",
         "approval.list/archive-asked-and-given",
         "approval.list/by-campaign-pending",
@@ -151,6 +165,7 @@ public static class ApiFixtures
         "approval.list/card-messages-first-page",
         "approval.list/card-messages-next-page",
         "approval.list/card-needs-all",
+        "approval.list/card-reply-pending",
         "approval.list/card-status-waiting",
         "approval.list/decided",
         "approval.list/empty",
@@ -168,6 +183,10 @@ public static class ApiFixtures
         "approval.list/panel-doubted",
         "approval.list/panel-moved",
         "approval.list/pending",
+        "approval.list/search-after-top-up",
+        "approval.list/search-campaign-pending",
+        "approval.list/search-first-item",
+        "approval.list/search-pending",
         "approval.list/summer-pending",
         "approval.list/unauthorized",
         "approval.list_standing/listed",
@@ -436,6 +455,7 @@ public static class ApiFixtures
         "decision.list/needs-inbox-questions",
         "decision.list/needs-questions",
         "decision.list/pending",
+        "decision.list/search-campaign-none",
         "decision.list/summer-pending",
         "journal.kinds/first-page",
         "journal.list/by-awaiting-item",
@@ -463,7 +483,15 @@ public static class ApiFixtures
         "journal.list/panel-moved",
         "journal.list/panel-moved-edited",
         "journal.list/person-sent-from-the-account",
+        "journal.list/search-first",
         "journal.list/summer",
+        "notification.disable/plugin",
+        "notification.disable/toast",
+        "notification.enable/not-configured",
+        "notification.enable/not-named",
+        "notification.enable/notifications-off",
+        "notification.enable/toast",
+        "notification.enable/unknown-channel",
         "operation.describe/audience-search",
         "operation.describe/campaign-get",
         "operation.describe/on-a-channel",
@@ -613,6 +641,9 @@ public static class ApiFixtures
         "workitem.count/planned",
         "workitem.count/planned-on-16",
         "workitem.count/planned-on-17",
+        "workitem.count/search-done",
+        "workitem.count/search-now",
+        "workitem.count/search-planned",
         "workitem.count/smb-done",
         "workitem.count/smb-manager-done",
         "workitem.count/smb-manager-now",
@@ -658,6 +689,7 @@ public static class ApiFixtures
         "workitem.get/parked-send",
         "workitem.get/researcher-finding",
         "workitem.get/researcher-finding-second",
+        "workitem.get/search-first",
         "workitem.get/succeeded",
         "workitem.list/ada-now",
         "workitem.list/archive-open",
@@ -688,6 +720,7 @@ public static class ApiFixtures
         "workitem.list/researcher-findings-two",
         "workitem.list/review-latest",
         "workitem.list/review-none",
+        "workitem.list/search-now",
         "workitem.list/smb-now",
         "workitem.list/smb-operations-planned",
         "workitem.list/smb-planned",

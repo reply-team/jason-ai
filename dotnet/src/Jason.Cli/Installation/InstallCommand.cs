@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using Jason.Cli.Commands;
+using Jason.Cli.Process;
 using Jason.Cli.Update;
 using Jason.Contracts.Json;
 
@@ -81,7 +82,8 @@ public static class InstallCommand
              this jason; on macOS the file is moved and launchd loads it at the next logon, so nothing starts
              now, and until then the old job stays loaded and idle. Its notice files, and on Windows
              jason.previous.exe, removed. Windows: the executable removed, or, while a running process holds it, renamed into a jason-retired-<id> folder on its
-             own volume and left there, with nothing started to wait for that process; its Path entry taken
+             own volume and left there, with nothing started to wait for that process, until a later jason install,
+             jason update apply --finish or move finds that process ended and removes the folder; its Path entry taken
              off where its folder then holds nothing but what install.ps1 wrote there before 0.49; the folder once empty.
              macOS: the wrapper has replaced it at the default place; an executable elsewhere is removed, with
              its profile block where its folder then holds nothing but Jason.
@@ -121,6 +123,12 @@ public static class InstallCommand
         holder lets go. A setup the holder runs as its waited child, handed the holder's nonce in
         JASON_UPDATE_LOCK, goes on under that hold instead; one handed another nonce is refused. Where there
         is no update folder, or no data directory at all, it takes no lock and makes none.
+
+        Inside a move of a command-line install into Jason Desktop: the setup the move runs is given JASON_MOVE,
+        naming the move's record. A jason install that finds it, while that record in <data>/update/move.json
+        stands not done, does nothing - nothing placed, retired or stopped - says so in its document and exits 0:
+        the move sets the machine up itself once the installer has returned. A JASON_MOVE naming no such record is
+        ignored.
 
         Exit codes: 0 when everything it set out to do is done; 1 when it refused, or a step did not get there
         (problems names each); 2 for a usage error.
@@ -187,6 +195,13 @@ public static class InstallCommand
         // lock is taken or not, so that nothing this setup starts carries it on.
         var handed = UpdateLock.Handed(env.Variables);
         var update = new UpdatePaths(env.Paths);
+
+        // Inside a move: the installer the move runs is setting the application up, and the move sets the machine up itself
+        // once the installer has returned. Only under the move's own marker, naming its record while that stands not done.
+        if (MoveMarker.Standing(env.Variables, update) is { } moving)
+        {
+            return InsideAMove(env, options, carried, moving);
+        }
         UpdateLock? held = null;
         if (Directory.Exists(update.Root))
         {
@@ -231,6 +246,35 @@ public static class InstallCommand
         }
 
         return report.Completed ? ExitCodes.Success : ExitCodes.ApiError;
+    }
+
+    /// <summary>
+    /// The installer's own setup inside a move: nothing read, written, stopped or retired; the one document says so, exit 0.
+    /// </summary>
+    private static int InsideAMove(CliEnvironment env, InstallOptions options, CarriedExecutable carried, MoveRecord moving)
+    {
+        var left = $"The move of the command-line install at {moving.From} into Jason Desktop ran this installer and sets this machine up itself once the installer has returned, so this setup did nothing: nothing was placed, retired or stopped.";
+        var report = new InstallReport(
+            carried.Version,
+            carried.Executable,
+            null,
+            [],
+            null,
+            null,
+            DescriptorProcess.Live(env.Paths, env.Processes ?? RuntimeProcessControl.Instance) is null ? MachineSetup.RuntimeStates.NotRunning : MachineSetup.RuntimeStates.Running,
+            [],
+            [left],
+            []);
+        if (options.Human)
+        {
+            env.Out.WriteLine($"  {left}");
+        }
+        else
+        {
+            env.Out.WriteLine(JsonSerializer.Serialize(report, JasonJson.Options));
+        }
+
+        return ExitCodes.Success;
     }
 
     private static int Refuse(CliEnvironment env, bool human, string code, string message, bool retryable = false)

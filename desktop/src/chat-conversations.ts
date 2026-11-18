@@ -10,6 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isFullAccessWhy, type FullAccessWhy } from './chat-full-access-why.ts';
 import { currentModel, isEffort, modelShape, type Effort } from './chat-models.ts';
 import { givenUpTo, isJournalId, keptLineOf, type LineEntry } from './feed.ts';
 import { digestShape, memoryLevels, type GivenDigests } from './chat-memory.ts';
@@ -31,7 +32,8 @@ export type KeptEntry =
      */
     | { kind: 'text'; text: string; plan?: true; at?: string }
     | { kind: 'step'; text: string; detail?: string }
-    | { kind: 'permission'; title: string; detail: string; answer: KeptAnswer | null }
+    /** `why`, on a card of a Full access turn: why Full access asked, as a code the page has words for. */
+    | { kind: 'permission'; title: string; detail: string; answer: KeptAnswer | null; why?: FullAccessWhy }
     | { kind: 'error'; text: string }
     | { kind: 'pick'; campaignIds: string[] }
     | LineEntry
@@ -160,7 +162,10 @@ function entryOf(value: unknown): KeptEntry | null {
         case 'permission': {
             const answer = entry.answer;
             const known = answer === null || answer === 'allow' || answer === 'always' || answer === 'deny' || answer === 'gone';
-            return isText(entry.title) && isText(entry.detail) && known ? { kind: 'permission', title: entry.title, detail: entry.detail, answer } : null;
+            if (!isText(entry.title) || !isText(entry.detail) || !known) return null;
+            // A why that is not one the page has words for is dropped, never kept as words: the card stays without it.
+            const why = isFullAccessWhy(entry.why) ? { why: { ...entry.why } } : {};
+            return { kind: 'permission', title: entry.title, detail: entry.detail, answer, ...why };
         }
         case 'pick': {
             const ids = entry.campaignIds;
@@ -381,7 +386,7 @@ function fittedEntry(entry: KeptEntry): KeptEntry {
         case 'permission': {
             const title = fitted(entry.title);
             const detail = fitted(entry.detail);
-            return title === entry.title && detail === entry.detail ? entry : { kind: 'permission', title, detail, answer: entry.answer };
+            return title === entry.title && detail === entry.detail ? entry : { kind: 'permission', title, detail, answer: entry.answer, ...(entry.why === undefined ? {} : { why: entry.why }) };
         }
         case 'pick':
         case 'line':

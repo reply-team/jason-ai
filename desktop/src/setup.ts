@@ -609,6 +609,15 @@ export class Setup {
         return profile !== null && profile.name === name && !profile.disabled && profile.host !== null ? { name, host: profile.host } : null;
     }
 
+    /**
+     * The host word of the profile the agents' roles run on by default, read by the routine the cards' In use is read by
+     * (`#rolesDefault`): null where none is named, none answers as an enabled one, or the runtime could not be asked.
+     * "Change Jason itself" opens that host where the person has stated none of their own (`OpenIn.changeJason`).
+     */
+    async rolesHost(): Promise<string | null> {
+        return (await this.#rolesDefault())?.host ?? null;
+    }
+
     /** Wired: Jason's Reply plugin is valid, and the global default the runtime froze is Reply. */
     async #reply(valid: boolean): Promise<ReplyState> {
         const found = this.#deps.programs.find('reply') !== null;
