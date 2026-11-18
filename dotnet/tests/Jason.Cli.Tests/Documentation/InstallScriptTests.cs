@@ -743,6 +743,26 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// The uninstall the application's Uninstall Jason item starts writes both its streams into one file, and a wait's
+    /// sentence goes to standard error: the macOS menu leg reads the report as that file's one JSON line, says the other
+    /// lines, and holds the product's exit before it holds the reading, so the leg passes or fails on the product.
+    /// </summary>
+    [Fact]
+    public void The_macOS_menu_leg_reads_its_report_as_the_one_JSON_line_and_holds_the_exit_first()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var leg = macos[macos.IndexOf("\nuninstall-menu)\n", StringComparison.Ordinal)..];
+        leg = leg[..leg.IndexOf("\n    ;;\n", StringComparison.Ordinal)];
+        Assert.Contains("nohup \"$carried\" uninstall --wait-for \"$window\" > \"$OUT/uninstall-menu.json\" 2>&1 &", leg, StringComparison.Ordinal);
+        Assert.Contains("    (reports if isinstance(value, dict) else said).append(line)\n", leg, StringComparison.Ordinal);
+        Assert.Contains("if len(reports) != 1:\n", leg, StringComparison.Ordinal);
+        var exit = leg.IndexOf("[ \"$status\" -eq 0 ] || fail \"the uninstall the menu item starts exited with $status\"", StringComparison.Ordinal);
+        var reading = leg.IndexOf("[ -z \"${read_failed:-}\" ] || fail ", StringComparison.Ordinal);
+        Assert.True(exit > 0 && reading > exit, "the menu leg does not hold the uninstall's exit before the reading of its report");
+        Assert.DoesNotContain("json.load(open(sys.argv[1]", leg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// And CI holds install.sh, the path check and the uninstall to one login profile on a real machine: a home
     /// with <c>~/.bash_profile</c>, where bash never reads <c>~/.profile</c>. All three used to mean
     /// <c>~/.profile</c> there, and the check said <c>ok</c> about a file no login shell opens.
