@@ -68,18 +68,79 @@ internal static class LaunchdJobs
         run ??= AutostartRegistrars.Run;
         foreach (var domain in domains)
         {
-            try
+            if (Disabled(label, domain, run) is true)
             {
-                var (exit, output, _) = run([Launchctl, "print-disabled", domain], Limit);
-                if (exit == 0 && RecordsDisabled(output, label))
+                try
                 {
                     run([Launchctl, "enable", $"{domain}/{label}"], Limit);
                 }
+                catch (AutostartException)
+                {
+                    // launchctl could not be started, or did not answer in time: the record stays as it was.
+                }
             }
-            catch (AutostartException)
+        }
+    }
+
+    /// <summary>The account's two launchd domains: its login domain, <c>gui/&lt;uid&gt;</c>, and its user domain.</summary>
+    public static IReadOnlyList<string> Domains(uint userId)
+    {
+        var id = userId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return [$"gui/{id}", $"user/{id}"];
+    }
+
+    /// <summary>
+    /// Whether any of <paramref name="domains"/> records <paramref name="label"/> as disabled: true where one does, false
+    /// where every one was read and none does, and null where none does but one could not be read.
+    /// </summary>
+    public static bool? RecordedDisabled(string label, IEnumerable<string> domains, BoundedRun? run = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        ArgumentNullException.ThrowIfNull(domains);
+
+        run ??= AutostartRegistrars.Run;
+        bool? answer = false;
+        foreach (var domain in domains)
+        {
+            switch (Disabled(label, domain, run))
             {
-                // launchctl could not be started, or did not answer in time: nothing is written for that domain.
+                case true:
+                    return true;
+                case null:
+                    answer = null;
+                    break;
             }
+        }
+
+        return answer;
+    }
+
+    /// <summary>The load command with <c>-w</c>, which clears a disabled record and writes "enabled" in its place.</summary>
+    public static IReadOnlyList<string> ClearingDisabled(IReadOnlyList<string> command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return command.Count > 1 && command[1] == "load" && !command.Contains("-w") ? [command[0], command[1], "-w", .. command.Skip(2)] : command;
+    }
+
+    /// <summary>The command without <c>-w</c>, which writes no record.</summary>
+    public static IReadOnlyList<string> WritingNothing(IReadOnlyList<string> command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return [.. command.Where(word => word != "-w")];
+    }
+
+    /// <summary>One domain's record of the label: true disabled, false not, null not read.</summary>
+    private static bool? Disabled(string label, string domain, BoundedRun run)
+    {
+        try
+        {
+            var (exit, output, _) = run([Launchctl, "print-disabled", domain], Limit);
+            return exit == 0 ? RecordsDisabled(output, label) : null;
+        }
+        catch (AutostartException)
+        {
+            // launchctl could not be started, or did not answer in time.
+            return null;
         }
     }
 

@@ -144,7 +144,8 @@ public static class AutostartArtifacts
     /// once again enabled. This state persists across boots of the device." A label left disabled after an uninstall would
     /// refuse the job a later install registers under the same label. <c>disable</c> keeps <c>-w</c>: there a person asks that
     /// the runtime not start at logon, and where its file could not be deleted the disabled state is what keeps it from
-    /// loading at the next login; its <c>enable</c> loads with <c>-w</c>, which sets the state back to false.
+    /// loading at the next login; its <c>enable</c> loads with <c>-w</c> only where that state stands, which sets it back to
+    /// false, and otherwise loads plainly and writes no state (<see cref="LaunchAgentRegistrar.Apply"/>).
     /// </para>
     /// <para>
     /// The clearing is <c>launchctl enable &lt;domain&gt;/ai.jason.runtime</c>: <c>enable</c> "may only target services
@@ -167,9 +168,7 @@ public static class AutostartArtifacts
             : registration with
             {
                 Remove = [["launchctl", "unload", registration.ArtifactPath]],
-                ClearsDisabledIn = userId is { } account
-                    ? [$"gui/{account.ToString(CultureInfo.InvariantCulture)}", $"user/{account.ToString(CultureInfo.InvariantCulture)}"]
-                    : [],
+                ClearsDisabledIn = userId is { } account ? LaunchdJobs.Domains(account) : [],
             };
     }
 
@@ -368,7 +367,7 @@ public static class AutostartArtifacts
             Label,
             plistPath,
             plist,
-            [["launchctl", "load", "-w", plistPath]],
+            [["launchctl", "load", plistPath]],
             [["launchctl", "unload", "-w", plistPath]],
             QueryFor(AutostartPlatform.MacOs, string.Empty),
             line,

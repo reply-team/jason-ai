@@ -233,7 +233,10 @@ public class AutostartArtifactsTests
         Assert.Contains("<string>--data-dir</string>", agent.Artifact, StringComparison.Ordinal);
         Assert.Contains($"<string>{Unix}</string>", agent.Artifact, StringComparison.Ordinal);
 
-        Assert.Equal([["launchctl", "load", "-w", agent.ArtifactPath]], agent.Apply);
+        // Loaded plainly: what brings the job back at the next login is the file in LaunchAgents with RunAtLoad and no
+        // Disabled key, and no override record is needed for it.
+        Assert.DoesNotContain("<key>Disabled</key>", agent.Artifact, StringComparison.Ordinal);
+        Assert.Equal([["launchctl", "load", agent.ArtifactPath]], agent.Apply);
         Assert.Equal([["launchctl", "unload", "-w", agent.ArtifactPath]], agent.Remove);
         Assert.Empty(agent.ClearsDisabledIn);
     }

@@ -149,28 +149,121 @@ public sealed class AutostartRunLimitTests : IDisposable
     }
 
     /// <summary>
-    /// <c>disable</c> then <c>enable</c> behave as before: <c>disable</c> unloads with <c>-w</c> and removes by label, and reads
-    /// and clears no record; <c>enable</c> loads with <c>-w</c>.
+    /// <c>enable</c> where launchd holds no record of the label: both domains are read, the job is loaded without <c>-w</c>,
+    /// and no record is written; and the uninstall after it writes none either, so the records after equal the records before.
     /// </summary>
     [Fact]
-    public void Disable_then_enable_behave_as_before()
+    public void Enable_where_no_record_stands_loads_plainly_and_writes_none()
     {
         var home = Path.Combine(_tree.Paths.Root, "home");
-        var plist = AutostartArtifacts.ArtifactPath(AutostartPlatform.MacOs, home, string.Empty);
-        Directory.CreateDirectory(Path.GetDirectoryName(plist)!);
-        File.WriteAllText(plist, "<plist/>");
-        var ran = new List<string>();
-        var registrar = new LaunchAgentRegistrar((command, _) =>
-        {
-            ran.Add(string.Join(" ", command));
-            return (0, string.Empty, string.Empty);
-        }, home);
-        var registration = AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone") with { ArtifactPath = plist };
+        var launchd = new FakeLaunchd();
+        var registrar = new LaunchAgentRegistrar(launchd.Run, home, 501);
+        var registration = Agent(home);
+
+        registrar.Apply(registration);
+
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"launchctl load {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Empty(launchd.Records);
+
+        launchd.Ran.Clear();
+        registrar.Apply(registration);
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", "/bin/launchctl print-disabled user/501", $"launchctl unload {registration.ArtifactPath}", $"launchctl load {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Empty(launchd.Records);
+
+        registrar.Remove(AutostartArtifacts.LeavingNoMark(registration, 501));
+        Assert.Empty(launchd.Records);
+        Assert.DoesNotContain(launchd.Ran, command => command.Contains(" enable ", StringComparison.Ordinal) || command.Contains(" -w ", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// <c>disable</c> keeps its record: it unloads with <c>-w</c>, which records the label as disabled, and removes by label,
+    /// reading and clearing nothing. The <c>enable</c> after it finds that record and loads with <c>-w</c>, which clears it.
+    /// </summary>
+    [Fact]
+    public void Disable_keeps_its_record_and_the_enable_after_it_loads_with_w()
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var launchd = new FakeLaunchd();
+        var registrar = new LaunchAgentRegistrar(launchd.Run, home, 501);
+        var registration = Agent(home);
+        registrar.Apply(registration);
+        launchd.Ran.Clear();
 
         registrar.Remove(registration);
 
-        Assert.Equal([$"launchctl unload -w {plist}", "/bin/launchctl remove ai.jason.runtime"], ran);
-        Assert.Equal([["launchctl", "load", "-w", plist]], registration.Apply);
+        Assert.Equal([$"launchctl unload -w {registration.ArtifactPath}", "/bin/launchctl remove ai.jason.runtime"], launchd.Ran);
+        Assert.Equal("disabled", launchd.Records["gui/501"]);
+
+        launchd.Ran.Clear();
+        registrar.Apply(registration);
+
+        Assert.Equal(["/bin/launchctl print-disabled gui/501", $"launchctl load -w {registration.ArtifactPath}"], launchd.Ran);
+        Assert.Equal("enabled", launchd.Records["gui/501"]);
+    }
+
+    /// <summary>
+    /// A disabled record in the user domain alone is found as well; and where a domain cannot be read, or does not answer,
+    /// the record is taken as one that may stand and the job is loaded with <c>-w</c>, so that <c>enable</c> still loads it.
+    /// </summary>
+    [Theory]
+    [InlineData("user domain disabled", "user/501", false)]
+    [InlineData("not readable", null, true)]
+    public void Enable_loads_with_w_where_a_disabled_record_stands_or_may(string what, string? disabledIn, bool unreadable)
+    {
+        var home = Path.Combine(_tree.Paths.Root, "home");
+        var launchd = new FakeLaunchd { Unreadable = unreadable };
+        if (disabledIn is not null)
+        {
+            launchd.Records[disabledIn] = "disabled";
+        }
+
+        var registration = Agent(home);
+        new LaunchAgentRegistrar(launchd.Run, home, 501).Apply(registration);
+
+        Assert.True(launchd.Ran[^1] == $"launchctl load -w {registration.ArtifactPath}", $"{what}: {string.Join(" | ", launchd.Ran)}");
+    }
+
+    private AutostartRegistration Agent(string home) =>
+        AutostartArtifacts.Compose(AutostartPlatform.MacOs, ["/opt/jason"], Path.Combine(_tree.Paths.Root, "data"), home, "someone");
+
+    /// <summary>
+    /// launchctl as far as the records go: <c>print-disabled</c> prints them, <c>unload -w</c> records the label as disabled and
+    /// <c>load -w</c> as enabled in the login domain, <c>enable</c> records it as enabled in its own; nothing else writes one.
+    /// </summary>
+    private sealed class FakeLaunchd
+    {
+        public Dictionary<string, string> Records { get; } = new(StringComparer.Ordinal);
+
+        public List<string> Ran { get; } = [];
+
+        public bool Unreadable { get; init; }
+
+        public (int Exit, string Output, string Error) Run(IReadOnlyList<string> command, TimeSpan? limit)
+        {
+            Ran.Add(string.Join(" ", command));
+            switch (command)
+            {
+                case [_, "print-disabled", var domain]:
+                    if (Unreadable)
+                    {
+                        return (1, string.Empty, "Could not print disabled services");
+                    }
+
+                    var line = Records.TryGetValue(domain, out var state) ? $"\t\"ai.jason.runtime\" => {state}\n" : string.Empty;
+                    return (0, $"disabled services = {{\n{line}}}\n", string.Empty);
+                case ["launchctl", "unload", "-w", _]:
+                    Records["gui/501"] = "disabled";
+                    break;
+                case ["launchctl", "load", "-w", _]:
+                    Records["gui/501"] = "enabled";
+                    break;
+                case [_, "enable", var target]:
+                    Records[target[..target.LastIndexOf('/')]] = "enabled";
+                    break;
+            }
+
+            return (0, string.Empty, string.Empty);
+        }
     }
 
     /// <summary>
