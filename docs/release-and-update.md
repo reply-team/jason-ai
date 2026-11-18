@@ -1404,6 +1404,11 @@ move is done, it refuses with `update_carried_by_desktop` and points here. Going
 0.48.5, with the data directory kept. 0.49 adds no migration to the database and keeps the layout 0.48.5 runs, so 0.48.5
 opens the same data as it is, and there is no backup to put back.
 
+Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one "Jason did not deploy,
+under a name Jason ships, left as it is", move that folder out of the skills folder before step 3 and put it back after
+step 3. 0.49 leaves such a folder as it is; 0.48.5's `jason skills install` deploys its own skill over a folder of the
+same name and records it as its own, and 0.48.5's uninstall removes what it recorded.
+
 1. Quit Jason Desktop, then take Jason off in a terminal, keeping the data directory:
    ```sh
    jason uninstall
