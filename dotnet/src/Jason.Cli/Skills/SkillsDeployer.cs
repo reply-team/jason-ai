@@ -202,7 +202,7 @@ public static class SkillsDeployer
                 + $"To have the ones Jason ships, move or remove those {what}, then run `{RedeployRoles}`."
             : $"{paths} are skills under names Jason ships that no record of Jason's names there, so Jason takes them for yours: "
                 + $"left as they are, nothing written or recorded, and no flag writes over them; Jason's {names} are not installed there, "
-                + $"and an agent reading {first.Root} that is asked to use one of them reads that {(skills.All(skill => skill.Link) ? "link" : skills.Any(skill => skill.Link) ? "folder or link" : "folder")}. "
+                + $"and an agent reading {first.Root} that is asked to use one of them reads what stands there. "
                 + $"To have the ones Jason ships, move or remove those {what}, then run `{RedeployHost}`.";
     }
 

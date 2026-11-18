@@ -373,7 +373,7 @@ public sealed class SkillsLeftAloneTests
         Assert.Equal(
             $"{Path.Combine(root, "operating")} and {Path.Combine(root, "quick-start")} are skills under names Jason ships that no record of Jason's names there, so Jason takes them for yours: "
             + "left as they are, nothing written or recorded, and no flag writes over them; Jason's 'operating' and 'quick-start' are not installed there, "
-            + $"and an agent reading {root} that is asked to use one of them reads that folder. To have the ones Jason ships, move or remove those folders, then run `jason skills update`.",
+            + $"and an agent reading {root} that is asked to use one of them reads what stands there. To have the ones Jason ships, move or remove those folders, then run `jason skills update`.",
             sentence);
         Assert.Contains(sentence, run.Output, StringComparison.Ordinal);
         Assert.Equal(1, run.Output.Split("Jason takes", StringSplitOptions.None).Length - 1);
