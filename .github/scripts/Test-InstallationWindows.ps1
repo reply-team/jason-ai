@@ -48,7 +48,8 @@ uploads, and they are what a person reads.
   InstallOverCommandLine   the previous release's command-line Jason, a runtime running and its logon start registered, then
                     this build's unpinned line run over it: the old runtime stopped before the install is retired, a runtime
                     again from the carried jason, the Path, a new shell, and the campaigns the same by id
-  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, both on the Path, a runtime
+  OverBothPrevious  the previous release's Jason Desktop and its command-line Jason side by side, the command-line folder on
+                    the Path and the Desktop placing nothing there, as that release leaves them, a runtime
                     started by the command-line jason and left running, then this build's setup run silently as an update
                     without --force-run: at its exit one installation, the command-line one retired and its runtime ended,
                     the note that a start is owed standing; then the application started by the leg: a runtime answering
@@ -273,6 +274,43 @@ function Wait-Started([System.Diagnostics.Process] $process, [string] $what, [in
         Fail "$file $($arguments -join ' ') had not ended after $seconds seconds"
     }
     return $process.ExitCode
+}
+
+# The previous release's runtime started by its own jason. 0.48.5's start gives up after 30 s while the runtime it started
+# still runs, saying it may still be starting and that jason runtime status answers once it has (RuntimeStartCommand at
+# v0.48.5: a first start migrates the database after a backup). Where it says so, jason runtime status is asked until it
+# answers, up to 180 s from the start; the seconds it took are said either way. False where it never answers, or where the
+# start failed otherwise.
+function Start-PreviousRuntime([string] $jason, [hashtable] $environment = @{}) {
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    $start = Invoke-Program $jason @('runtime', 'start') $environment
+    if ($start.Exit -eq 0) { Say "the previous release's runtime answered its start $([int]$clock.Elapsed.TotalSeconds) s after it was asked"; return $true }
+    if (-not ("$($start.Said)".Contains('"runtime_start_failed"') -and "$($start.Said)".Contains('is still running'))) { return $false }
+    while ($clock.Elapsed.TotalSeconds -lt 180) {
+        Start-Sleep -Seconds 5
+        if ((Invoke-Program $jason @('runtime', 'status') $environment 60).Exit -eq 0) {
+            Say "the previous release's runtime answered jason runtime status $([int]$clock.Elapsed.TotalSeconds) s after its start was asked, past the start's own 30 s"
+            return $true
+        }
+    }
+    Say "the previous release's runtime never answered within 180 s of its start"
+    return $false
+}
+
+# The data directory's logs, copied into -Out before anything purges them, under the name of the leg they tell about; once a
+# leg. Nothing where there are none.
+function Save-JasonLogs([string] $leg) {
+    $logs = Join-Path $data 'logs'
+    if (-not $leg -or -not (Test-Path -LiteralPath $logs -PathType Container)) { return }
+    $slug = ($leg -replace '[^A-Za-z0-9]+', '-').Trim('-')
+    $kept = Join-Path $Out "logs-$($slug.Substring(0, [Math]::Min(80, $slug.Length)))"
+    if (Test-Path -LiteralPath $kept) { return }
+    try {
+        Copy-Item -LiteralPath $logs -Destination $kept -Recurse -Force -ErrorAction Stop
+        Write-Host "the data directory's logs, as '$leg' left them, are kept at $kept"
+    } catch {
+        Write-Host "the data directory's logs could not be kept for '$leg': $($_.Exception.Message)"
+    }
 }
 
 # A program run with its output kept and shown, and its exit code: Windows PowerShell's lines on stderr included.
@@ -532,6 +570,7 @@ function Close-Leg {
     $why = if (Test-Path -LiteralPath $words) { "it said: $((Get-Content -LiteralPath $words) -join ' / ')" } else { 'its own lines are in its step' }
     Write-Host "::error title=Installation::the leg '$open' failed; $why"
     Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value "the leg '$open' failed; $why"
+    Save-JasonLogs $open
 }
 
 # This leg not run, said by why: recorded for Held, and -Out\skip left for the job's step to end on.
@@ -792,6 +831,7 @@ switch ($Step) {
                 Say "before this leg the machine is not the machine before ($($found.Count) line(s)), after '$last' $(if ($ended) { 'ended leaving it, recorded as its failure' } else { 'failed' }); found: $($found -join '; ')"
                 if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Skip-Leg 'not run: the reset after a failed leg runs on a GitHub-hosted runner alone, and this is not one'; return }
                 # One door at a time, each waited to its end: two uninstallers on one folder each skip what the other holds.
+                Save-JasonLogs $last
                 try {
                     Write-ResetProcesses $resets 'before the reset'
                     foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) {
@@ -805,6 +845,13 @@ switch ($Step) {
                             Write-Host $said
                             Add-Content -LiteralPath $resets -Value $said
                             if ($jason -ne $carried) { continue }
+                            # Refused outright, as a release before 0.49 refuses for the jason its Jason Desktop carries
+                            # (uninstall_carried_by_desktop): nothing was handed to a waiter, so Installed apps is next, at once.
+                            $refusal = Read-Document $removed.Said
+                            if ($refusal -and $refusal.PSObject.Properties['error']) {
+                                Add-Content -LiteralPath $resets -Value "  the carried jason refused the uninstall outright ($($refusal.error.code)): Installed apps is next, with no wait"
+                                continue
+                            }
                             # The application's removal hands the folder to its own uninstaller, run by a waiter once the verb
                             # has ended: that waiter, by the process its report names, is waited for to its end; where none
                             # is named, the folder and its Installed apps entry, both gone. Bounded at 300 s.
@@ -827,8 +874,12 @@ switch ($Step) {
                     # uninstaller in a folder of its own, given the application's folder by _?=, so that NSIS runs that copy
                     # in place and to its end instead of relaunching one and returning at once.
                     Write-ResetProcesses $resets 'before Installed apps'
+                    $before049 = $false
                     foreach ($entry in @(Get-JasonUninstallEntries)) {
                         $quietLine = Get-QuietUninstall $entry
+                        $entryVersion = "$(if ($entry.PSObject.Properties.Name -contains 'DisplayVersion') { $entry.DisplayVersion } else { ($entry.DisplayName -replace '^Jason\s*', '') })"
+                        $parsedVersion = $null
+                        if ([version]::TryParse(($entryVersion -replace '[^0-9.].*$', ''), [ref] $parsedVersion) -and $parsedVersion -lt [version] '0.49') { $before049 = $true }
                         if ($quietLine -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
                             $uninstaller = $Matches['file']; $arguments = $Matches['arguments']
                             $copyFolder = Join-Path $temporary "jason-reset-uninstaller-$([Guid]::NewGuid().ToString('N'))"
@@ -841,6 +892,14 @@ switch ($Step) {
                             Add-Content -LiteralPath $resets -Value $said
                             Remove-Item -LiteralPath $copyFolder -Recurse -Force -ErrorAction SilentlyContinue
                         }
+                    }
+                    # A release before 0.49 keeps the updater's folder by its own design (its uninstall says the updater's
+                    # cache stays), and its setup stored itself there (electron-builder's installer.nsh): after Installed
+                    # apps' uninstall of one, the reset takes that folder by name. Never a proof of anything.
+                    $updaterFolder = Join-Path $env:LOCALAPPDATA 'jason-desktop-updater'
+                    if ($before049 -and (Test-Path -LiteralPath $updaterFolder)) {
+                        Remove-Item -LiteralPath $updaterFolder -Recurse -Force
+                        Add-Content -LiteralPath $resets -Value "  removed $updaterFolder by name, which Installed apps' uninstall of a release before 0.49 keeps by its own design"
                     }
                 } catch {
                     Add-Content -LiteralPath $resets -Value "  the reset failed: $($_.Exception.Message)"
@@ -1096,8 +1155,7 @@ switch ($Step) {
         # has one running from the carried jason, which the updater then stops, so one is started from it here.
         $opened = @(Open-Window)
         if ((Test-Runtime) -ne 'yes') {
-            $started = Invoke-Program $carried @('runtime', 'start')
-            if ($started.Exit -ne 0) { Fail "the previous release's carried jason could not start a runtime ($($started.Exit)): $($started.Said)" }
+            if (-not (Start-PreviousRuntime $carried)) { Fail "the previous release's carried jason could not start a runtime" }
         }
         Say "the previous Jason Desktop $previousVersion open, and a runtime running from its carried jason: $(Test-Runtime)"
 
@@ -1480,7 +1538,7 @@ switch ($Step) {
         $jason = Join-Path $commandLine 'jason.exe'
         $previousVersion = ((& $jason --version) -split '\+')[0]
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         Say "the previous release's command-line Jason $previousVersion installed by its own script at $jason, with a runtime running and a logon registration"
@@ -1605,7 +1663,7 @@ switch ($Step) {
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
         $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made before going back') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
@@ -1666,6 +1724,10 @@ switch ($Step) {
 
         # Step 3: its skills, its UI, its runtime and its logon start.
         foreach ($words in @(@('skills', 'install'), @('ui', 'install'), @('runtime', 'start'), @('runtime', 'autostart', 'enable'))) {
+            if ($words[0] -ceq 'runtime' -and $words[1] -ceq 'start') {
+                if (-not (Start-PreviousRuntime $jason $quiet)) { Fail "jason runtime start under $previousVersion did not bring up a runtime that answers" }
+                continue
+            }
             $ran = Invoke-Program $jason $words $quiet 600
             if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
         }
@@ -1795,7 +1857,7 @@ switch ($Step) {
         Assert-CommandLineFiles 'the previous release''s install.ps1'
         $previousVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
         if ($previousVersion -ceq $Version) { Fail "the previous release's jason says $previousVersion, the version this build is" }
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made before the line ran over it') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
@@ -1849,10 +1911,11 @@ switch ($Step) {
 
     'OverBothPrevious' {
         # The previous release's Jason Desktop, installed by its own setup /S, and its command-line Jason, installed by its own
-        # install.ps1, side by side, both on the Path; then this build's setup run silently as an update (/S --updated), whose
-        # own last step, jason install with no flags, retires the command-line one, and nothing else: without --force-run a
-        # silent one-click setup starts no application (electron-builder's installSection.nsh, ONE_CLICK: doStartApp only where
-        # not Silent or isForceRun), so what stands at the setup's exit is the setup's own doing.
+        # install.ps1, side by side: the command-line folder on the Path, the Desktop placing nothing there; then this build's
+        # setup run silently as an update (/S --updated), whose own last step, jason install with no flags, retires the
+        # command-line one, and nothing else: without --force-run a silent one-click setup starts no application
+        # (electron-builder's installSection.nsh, ONE_CLICK: doStartApp only where not Silent or isForceRun), so what stands at
+        # the setup's exit is the setup's own doing.
         # The runtime is started by the command-line jason and left running: the previous release's updater stops only a
         # runtime it judges its own, one started from the jason it carries, so a real update hands the setup a machine where
         # the command-line install's runtime still runs from its folder, and nothing here stops it first.
@@ -1886,16 +1949,21 @@ switch ($Step) {
         $cliVersion = (("$(& $jason --version)".Trim()) -split '\+')[0]
         if (-not $cliVersion -or $cliVersion -ceq $Version) { Fail "the previous release's command-line jason says '$cliVersion', where it must be a version before $Version" }
 
-        # Both on the Path: the command-line folder's entry, and whatever the previous Jason Desktop put there.
+        # Side by side as that release leaves them: the command-line folder's own entry on the Path, and nothing of the
+        # Desktop's there. Its setup runs no step of its own at install (v0.48.5's desktop/installer holds only uninstall.nsh,
+        # with no customInstall), and its application places its command, jason.cmd and a Git Bash wrapper in WindowsApps,
+        # only on the person's word and never as a Path entry (v0.48.5's desktop/src/path-command.ts). Held, so that what
+        # this build's setup puts there after is its own doing.
         if ((Count-Entry $commandLine) -ne 1) { Fail "the previous release's install did not put $commandLine on the user Path once" }
         $commandFiles = @(Get-WindowsAppsCommandFiles)
-        if ((Count-Entry $bundle) -lt 1 -and $commandFiles.Count -eq 0) { Fail "the previous release's Jason Desktop put nothing on the Path: no entry naming $bundle, no command file in WindowsApps" }
+        if ((Count-Entry $bundle) -ne 0) { Fail "the previous release's Jason Desktop is named on the user Path ($bundle), which its setup never writes" }
+        if ($commandFiles.Count -ne 0) { Fail "the previous release's Jason Desktop has command files in WindowsApps ($($commandFiles -join ', ')), which its application places only on the person's word" }
         $first = @(Find-InNewShell 'jason')
-        Say "side by side: Jason Desktop $desktopVersion at $app ($(if ((Count-Entry $bundle) -ge 1) { "its bundle folder on the Path" } else { "its command files in WindowsApps: $($commandFiles -join ', ')" })) and the command-line Jason $cliVersion at $jason on the Path; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
+        Say "side by side, as the previous release leaves them: Jason Desktop $desktopVersion at $app, named nowhere on the Path and with no command file in WindowsApps, and the command-line Jason $cliVersion at $jason, its folder on the Path once; a new shell finds $(if ($first) { $first -join ' saying ' } else { 'nothing' })"
 
         # The runtime, started by the command-line jason as a person using it starts it, its logon start registered, and one
         # campaign made.
-        if ((Invoke-Program $jason @('runtime', 'start') $quiet).Exit -ne 0) { Fail 'the previous release''s command-line jason could not start a runtime' }
+        if (-not (Start-PreviousRuntime $jason $quiet)) { Fail 'the previous release''s command-line jason could not start a runtime' }
         if ((Invoke-Program $jason @('runtime', 'autostart', 'enable') $quiet).Exit -ne 0) { Fail 'the previous release''s command-line jason could not register its logon start' }
         $made = Invoke-Program $jason @('campaign', 'create', '--name', 'Made beside both previous installs') $quiet
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
