@@ -121,6 +121,27 @@ public partial class PageClaimsTests
     }
 
     /// <summary>
+    /// Before step 1, a folder of the person's own under a name Jason ships is moved out of the way of step 3. The section
+    /// quotes the words <c>jason status</c> names such a folder with, in its harness_skills check, read from the record
+    /// that step 1 takes away: the words in the section are the check's own, so the section goes red the day they change.
+    /// </summary>
+    [Fact]
+    public void Going_back_from_0_49_moves_a_folder_of_yours_out_of_the_way_before_0_48_5_deploys()
+    {
+        var section = Flat(GoingBack());
+        var said = section.IndexOf("Before step 1, run `jason status`.", StringComparison.Ordinal);
+        Assert.True(said >= 0 && said < section.IndexOf("1. Quit Jason Desktop", StringComparison.Ordinal), "the section does not say, before step 1, to read jason status.");
+        Assert.Contains(
+            "Before step 1, run `jason status`. Where it names a folder in an agent's skills folder as one \"Jason did not deploy, under a name Jason ships, left as it is\", move that folder out of the skills folder before step 3 and put it back after step 3. 0.49 leaves such a folder as it is; 0.48.5's `jason skills install` deploys its own skill over a folder of the same name and records it as its own, and 0.48.5's uninstall removes what it recorded. A folder put back after step 3 differs from what 0.48.5 recorded, and 0.48.5 keeps a file it finds changed since it wrote it.",
+            section,
+            StringComparison.Ordinal);
+
+        var checks = Page("dotnet", "src", "Jason.Cli", "Status", "StatusChecks.cs");
+        Assert.Contains("? $\"{paths} is a {what} Jason did not deploy, under a name Jason ships, left as it is: ", checks, StringComparison.Ordinal);
+        Assert.Contains("if (LeftAloneStanding(root, standing, HostsReading(root)) is { } said)", checks, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// "Under 0.48.5, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again": the uninstall
     /// leaves the move's record, which says done, so the sentence holds only while a done record whose application is gone
     /// and whose install path holds a command-line executable again does not stand, and is a move to make again.
