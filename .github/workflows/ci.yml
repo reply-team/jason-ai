@@ -2385,7 +2385,8 @@ jobs:
             '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
             '- The updater''s publisher check, and window_open: this build''s updater checks no publisher, and with a window open only the refusal of a request naming a feed is seen.',
             '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
-            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
+            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.',
+            '- The start --force-run makes after the update over both previous installs: that leg runs the setup without --force-run and starts the application itself; the install over the previous release''s Jason Desktop is the leg that runs the setup with --force-run.'
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Keep the listings

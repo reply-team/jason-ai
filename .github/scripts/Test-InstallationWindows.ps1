@@ -428,9 +428,14 @@ function Get-ExtractBases {
 
 function Write-Listing([string] $file, [switch] $Quiet) {
     # One temporary folder for the job: a step reading another than a new shell's would look where no leg's programs
-    # unpacked, and miss what they left. The proof's own fault where it happens; never the product's.
-    $fresh = Get-NewShellTemporary
-    if ($fresh -ine $temporary) { Fail "this step's temporary folder is $temporary, and a new shell of this account has ${fresh}: the proof's own fault, since every step of the job is to be given the new shell's (OneTemporary)" }
+    # unpacked, and miss what they left. The proof's own fault where it happens; never the product's. Compared on a
+    # GitHub-hosted runner alone, by one new shell; elsewhere (a stub trial) no shell is started, since a new shell reads
+    # the account's own environment.
+    if ($env:GITHUB_ACTIONS -ceq 'true' -and $env:RUNNER_ENVIRONMENT -ceq 'github-hosted') {
+        $fresh = Get-NewShellTemporary
+        if ($fresh -ine $temporary) { Fail "this step's temporary folder is $temporary, and a new shell of this account has ${fresh}: the proof's own fault, since every step of the job is to be given the new shell's (OneTemporary)" }
+    }
+    else { Say "the new shell's temporary folder was not compared (not a hosted runner)" }
     $lines = [System.Collections.Generic.List[string]]::new()
     function Folder([string] $label, [string] $path) {
         if (-not (Test-Path -LiteralPath $path)) { $lines.Add("$label`tabsent"); return }
@@ -450,7 +455,10 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     foreach ($base in $bases.Keys) {
         foreach ($extracted in @(Get-ChildItem -LiteralPath (Join-Path $bases[$base] '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) { $lines.Add("extracted`t$base`t$($extracted.Name)") }
     }
-    foreach ($retired in @(Get-ChildItem -LiteralPath $temporary -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`t%TEMP%\$($retired.Name)") }
+    # The retired folders a process makes under its own temporary folder, so under every base as the extracted ones, named.
+    foreach ($base in $bases.Keys) {
+        foreach ($retired in @(Get-ChildItem -LiteralPath $bases[$base] -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`t$base`t$($retired.Name)") }
+    }
     foreach ($retired in @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`tPrograms\$($retired.Name)") }
     # What Windows and Electron keep for an application that ran, by its name, in the roaming and local application data:
     # listed, so a person sees what stays. The jobs open the window before each uninstall, so these are written as a
@@ -614,7 +622,9 @@ function Get-WindowsAppsCommandFiles {
 
 # ONE GUARD, AT THE ENTRY. Every step but the five that read the machine or this job's own files and write only those
 # files (the listing, the compare, the held list and a leg's begin and end, which the stub trials run) changes the machine
-# or runs a program on it, and runs on a GitHub-hosted runner alone. The reset inside Begin keeps its own refusal.
+# or runs a program on it, and runs on a GitHub-hosted runner alone. Of the five, a listing on a GitHub-hosted runner
+# starts one new shell, to read its temporary folder, and elsewhere starts none. The reset inside Begin keeps its own
+# refusal.
 $readingSteps = @('Listing', 'Compare', 'Held', 'Begin', 'End')
 if ($Step -cnotin $readingSteps -and ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted')) {
     Fail "the step $Step changes the machine it runs on, and runs on a GitHub-hosted runner alone"
