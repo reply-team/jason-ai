@@ -979,6 +979,62 @@ PY
     fi
     ;;
 
+over-previous-desktop)
+    # The previous release's Jason Desktop placed as a person places its download, opened and quit as a person leaves it,
+    # then this build installed over it by install.sh as an agent runs it: the application replaced in its own place at
+    # this version, one application only, the terminal command the application's wrapper naming no data directory, and a
+    # new login shell finding it. The uninstall and the compare after it are the leg's next steps.
+    previous="$1"; feed="$2"; version="$3"; script="$4"
+    zip="$previous/jason-desktop-macos-arm64.zip"
+    [ -f "$zip" ] || fail "no $zip: the step fetching the previous release did not take it"
+    [ -z "$(app)" ] || fail "an application is in place before the previous release's is placed: $(app)"
+    place=/Applications
+    [ -w "$place" ] || { place="$HOME/Applications"; mkdir -p "$place"; }
+    # Unpacked where applications are kept, by ditto, which keeps the links, the signature and its ticket.
+    within 300 "unpacking $zip" ditto -x -k "$zip" "$place" || fail "$zip could not be unpacked into $place"
+    placed="$place/Jason.app"
+    within 300 "codesign verifying the previous release's application" codesign --verify --deep --strict "$placed" || fail "the signature of the previous release's $placed does not verify"
+    old="$(within 60 "the previous release's carried jason --version" "$placed/Contents/Resources/bundle/jason" --version | cut -d+ -f1)" || fail "the previous release's carried jason --version failed"
+    { [ -n "$old" ] && [ "$old" != "$version" ]; } || fail "the previous release's application says '$old', where it must be a version before $version"
+    say "the previous release's Jason Desktop $old placed at $placed from its own download, its signature verified"
+
+    # Opened, as a person opens it, then quit, as a person closes it before running a line in a terminal.
+    "$placed/Contents/MacOS/Jason" > "$OUT/over-previous-window.log" 2>&1 &
+    window=$!
+    sleep 15
+    kill -0 "$window" 2>/dev/null || fail "the previous release's Jason Desktop did not stay running: $(tail -n 20 "$OUT/over-previous-window.log")"
+    if [ -e "$WRAPPER" ]; then opened_wrapper="$WRAPPER"; else opened_wrapper=none; fi
+    say "the previous release's Jason Desktop $old open; the terminal command after its first start: $opened_wrapper"
+    end_process "$window" "the previous release's Jason Desktop"
+    pkill -f '/Jason\.app/Contents/MacOS/' 2>/dev/null || true
+    sleep 3
+    say "the previous release's Jason Desktop quit, as a person closes it before installing"
+
+    # This build over it, by install.sh as an agent runs it.
+    status=0
+    within 300 'install.sh over the previous Jason Desktop' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-previous-install.txt" 2>&1 || status=$?
+    cat "$OUT/over-previous-install.txt"
+    [ "$status" -eq 0 ] || fail "install.sh over the previous Jason Desktop exited with $status: $(tail -n 3 "$OUT/over-previous-install.txt")"
+    [ "$(app)" = "$placed" ] || fail "install.sh over the previous Jason Desktop at $placed left the application at '$(app)'"
+    for other in /Applications/Jason.app "$HOME/Applications/Jason.app"; do
+        [ "$other" = "$placed" ] || [ ! -e "$other" ] || fail "a second application stands at $other beside $placed"
+    done
+    [ "$(version_of "$placed")" = "$version" ] || fail "$placed is $(version_of "$placed") after install.sh, not $version"
+    carried="$placed/Contents/Resources/bundle/jason"
+    [ "$(within 60 'the carried jason --version' "$carried" --version | cut -d+ -f1)" = "$version" ] || fail "the carried jason does not say $version"
+    say "install.sh put Jason Desktop $version in the previous release's place, $placed, and no second application stands"
+
+    # The terminal command: the application's wrapper, naming no data directory, and a new login shell finds it.
+    [ -f "$WRAPPER" ] || fail "no wrapper at $WRAPPER"
+    if file "$WRAPPER" | grep -q 'Mach-O'; then fail "$WRAPPER is an executable, not the application's wrapper"; fi
+    grep -q "$carried" "$WRAPPER" || fail "the wrapper at $WRAPPER does not run $carried"
+    ! grep -q 'JASON_DATA_DIR' "$WRAPPER" || fail "the wrapper at $WRAPPER names a data directory, with none named: $(cat "$WRAPPER")"
+    found="$(within 60 'a new login shell finding jason' fresh 'command -v jason; jason --version')" || true
+    [ "$(printf '%s\n' "$found" | sed -n 1p)" = "$WRAPPER" ] || fail "a new login shell finds jason at '$(printf '%s\n' "$found" | sed -n 1p)', not $WRAPPER"
+    [ "$(printf '%s\n' "$found" | sed -n 2p | cut -d+ -f1)" = "$version" ] || fail "jason in a new login shell does not say $version: $found"
+    say "~/.local/bin/jason is the application's wrapper running $carried, naming no data directory, and a new zsh login shell finds it saying $version"
+    ;;
+
 previous-removal)
     # The previous release's own removal of its logon registration, said in launchd's records: its command-line Jason
     # installed by its own script, its logon registration, and its own jason uninstall. Facts for the release before this
@@ -1073,7 +1129,7 @@ intel)
     ;;
 
 *)
-    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|assess|quarantine|intel ..." >&2
+    echo "usage: test-installation-macos.sh listing|compare|held|install|refuse-while-open|uninstall-terminal|uninstall-menu|from-previous|over-previous-desktop|assess|quarantine|intel ..." >&2
     exit 2
     ;;
 esac
