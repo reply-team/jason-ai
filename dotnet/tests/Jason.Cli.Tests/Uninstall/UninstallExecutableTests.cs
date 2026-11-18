@@ -935,7 +935,7 @@ public class UninstallExecutableTests
             windows: true,
             extractBase: null,
             directory => string.Equals(Path.GetFullPath(directory), unreadable, StringComparison.OrdinalIgnoreCase)
-                ? throw new UnauthorizedAccessException($"Access to the path '{directory}' is denied.")
+                ? throw new UnauthorizedAccessException($"the row refuses to list '{directory}'")
                 : Directory.EnumerateDirectories(directory));
 
         Assert.Equal([Path.Combine(temp, "2"), Path.Combine(temp, "4")], bases);
