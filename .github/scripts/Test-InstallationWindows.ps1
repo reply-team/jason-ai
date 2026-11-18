@@ -32,13 +32,22 @@ uploads, and they are what a person reads.
                     says it must (test on CI's build, release on the release's packages). The uninstall is the next step's
   Compare           -Name against -Against: every line equal but those of the data directory, which an uninstall keeps
   ModulePath        a reading, never a failure: the module path Windows PowerShell rebuilds from an empty one
+  Begin, End        a leg's two ends, so that no leg's failure keeps the legs after it from running. Begin records the
+                    leg before it as failed when that one began and never ended; says "not run" for this leg when a step
+                    it needs (-Needs 'name=outcome') did not succeed, and leaves -Out\skip for the job's step to read;
+                    and, with -Clean, holds the machine to the listing taken before anything was installed, a machine an
+                    earlier failed leg left being taken off by the product's own uninstalls and said so. Held lists
+                    every failed leg, every leg not run and every divergence, and fails the job at its end
 
 -Signer names the signer the script under test holds the setup to: the release's on the signed packages; on CI's test
 build, which a release never signs, the runner's own test certificate, which the job's copy of install.ps1 names.
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End')] [string] $Step,
+    [string] $Leg,
+    [string[]] $Needs = @(),
+    [switch] $Clean,
     [string] $Feed,
     [string] $Version,
     [string] $Script,
@@ -65,7 +74,11 @@ $uninstallKeys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
 # A skill folder of a name Jason ships, written before the install as a person's own: never touched, never recorded.
 $ownSkill = Join-Path $env:USERPROFILE '.agents\skills\quick-start'
 
-function Fail([string] $why) { throw $why }
+# A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
+function Fail([string] $why) {
+    Add-Content -LiteralPath (Join-Path $Out 'leg-failure.txt') -Value $why -ErrorAction SilentlyContinue
+    throw $why
+}
 
 # A failed assertion that does not keep the legs after it from being read: said now as an error, recorded, and failed by
 # the Held step at the end with its own words.
@@ -324,7 +337,7 @@ function Get-JasonUninstallEntries {
 
 # Every place an installation of Jason can touch on this account, one line each, sorted: what a person reads to see
 # what an uninstall left. A folder is listed by its files, relative, with their sizes; a registry value by its data.
-function Write-Listing([string] $file) {
+function Write-Listing([string] $file, [switch] $Quiet) {
     $lines = [System.Collections.Generic.List[string]]::new()
     function Folder([string] $label, [string] $path) {
         if (-not (Test-Path -LiteralPath $path)) { $lines.Add("$label`tabsent"); return }
@@ -366,8 +379,47 @@ function Write-Listing([string] $file) {
     foreach ($process in @(Get-CimInstance -ClassName Win32_Process | Where-Object { $_.ExecutablePath -match '(?i)\\jason[^\\]*\\|\\jason(\.exe)?$|\\Jason\.exe$' })) { $lines.Add("process`t$($process.ExecutablePath)") }
     $sorted = @($lines | Sort-Object -Unique)
     Set-Content -LiteralPath $file -Value $sorted
+    if ($Quiet) { return }
     Write-Host "$($sorted.Count) lines written to $file"
     $sorted | ForEach-Object { Write-Host "  $_" }
+}
+
+# --- the legs' two ends ----------------------------------------------------------------------------------------------
+
+# The leg begun and not yet ended, and every leg that ended.
+$legOpen = Join-Path $Out 'leg-open.txt'
+$legsEnded = Join-Path $Out 'legs-ended.txt'
+
+# A leg that began and never ended failed: recorded by its name, its own lines being its step's.
+function Close-Leg {
+    if (-not (Test-Path -LiteralPath $legOpen)) { return }
+    $open = (Get-Content -LiteralPath $legOpen -Raw).Trim()
+    Remove-Item -LiteralPath $legOpen -Force
+    if (-not $open) { return }
+    $words = Join-Path $Out 'leg-failure.txt'
+    $why = if (Test-Path -LiteralPath $words) { "it said: $((Get-Content -LiteralPath $words) -join ' / ')" } else { 'its own lines are in its step' }
+    Write-Host "::error title=Installation::the leg '$open' failed; $why"
+    Add-Content -LiteralPath (Join-Path $Out 'failed-legs.txt') -Value "the leg '$open' failed; $why"
+}
+
+# This leg not run, said by why: recorded for Held, and -Out\skip left for the job's step to end on.
+function Skip-Leg([string] $why) {
+    Write-Host "::error title=Installation::$Leg - $why"
+    Say "$Leg - $why"
+    Add-Content -LiteralPath (Join-Path $Out 'not-run.txt') -Value "$Leg - $why"
+    Remove-Item -LiteralPath $legOpen -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType File -Path (Join-Path $Out 'skip') -Force | Out-Null
+}
+
+# Every line of the machine now that is not a line of the machine before, and every line gone, the data directory and the
+# harness root aside, as Compare reads them.
+function Get-LeftOver {
+    $now = Join-Path $Out 'now.txt'
+    Write-Listing $now -Quiet
+    $before = @(Get-Content -LiteralPath (Join-Path $Out 'before.txt'))
+    $after = @(Get-Content -LiteralPath $now)
+    $kept = '^(data directory|harness root)'
+    @(@($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept } | ForEach-Object { "- $_" }))
 }
 
 switch ($Step) {
@@ -396,11 +448,72 @@ switch ($Step) {
         }
     }
 
+    'Begin' {
+        if (-not $Leg) { Fail '-Leg names the leg.' }
+        $skip = Join-Path $Out 'skip'
+        Remove-Item -LiteralPath $skip -Force -ErrorAction SilentlyContinue
+        Write-Host "=== $Leg"
+        Close-Leg
+        Remove-Item -LiteralPath (Join-Path $Out 'leg-failure.txt') -Force -ErrorAction SilentlyContinue
+        Set-Content -LiteralPath $legOpen -Value $Leg
+
+        # A step this leg needs that did not succeed: said, recorded, and the leg's step told to end here.
+        foreach ($need in $Needs) {
+            $at = $need.LastIndexOf('=')
+            if ($at -lt 1) { Fail "-Needs takes 'name=outcome', not '$need'" }
+            $needed = $need.Substring(0, $at)
+            $outcome = $need.Substring($at + 1)
+            if ($outcome -ceq 'success') { continue }
+            Skip-Leg $(if ($outcome -ceq 'failure') { "not run: the leg it needs failed, $needed" } else { "not run: the leg it needs did not run ($outcome), $needed" })
+            return
+        }
+
+        # The machine this leg starts from is the machine before anything was installed. A machine an earlier failed leg
+        # left is taken off by the product's own doors - jason uninstall from each jason found, then Installed apps' quiet
+        # uninstall - and said so; what they cannot bring back makes this leg not run, naming what is left. That earlier
+        # leg's failure is recorded already; nothing here is a proof of anything.
+        if ($Clean) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Out 'before.txt'))) { Skip-Leg 'not run: the leg it needs failed, The machine before anything is installed'; return }
+            $left = Get-LeftOver
+            if ($left.Count -gt 0) {
+                Say "the machine is not the machine before ($($left.Count) line(s): $(($left | Select-Object -First 6) -join '; ')); an earlier leg failed, and the product's own uninstalls take it off before this leg"
+                Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                foreach ($jason in @($carried, (Join-Path $commandLine 'jason.exe'))) {
+                    if (Test-Path -LiteralPath $jason) {
+                        $removed = Invoke-Program $jason @('uninstall', '--purge-data', '--yes') @{} 300
+                        Write-Host "$jason uninstall --purge-data --yes ended $($removed.Exit)"
+                    }
+                }
+                foreach ($entry in @(Get-JasonUninstallEntries)) {
+                    if (([string]$entry.QuietUninstallString) -match '^"(?<file>[^"]+)"\s*(?<arguments>.*)$' -and (Test-Path -LiteralPath $Matches['file'])) {
+                        $quiet = Wait-Program $Matches['file'] @($Matches['arguments'])
+                        Write-Host "Installed apps' quiet uninstall of $($entry.DisplayName) ended $quiet"
+                    }
+                }
+                $deadline = [DateTime]::UtcNow.AddSeconds(120)
+                while ([DateTime]::UtcNow -lt $deadline -and (Get-LeftOver).Count -gt 0) { Start-Sleep -Seconds 2 }
+                $left = Get-LeftOver
+                if ($left.Count -gt 0) { Skip-Leg "not run: the machine an earlier failed leg left could not be brought back by the product's own uninstalls: $($left -join '; ')"; return }
+                Say "the product's own uninstalls brought the machine back to the machine before"
+            }
+        }
+    }
+
+    'End' {
+        if (-not $Leg) { Fail '-Leg names the leg.' }
+        Add-Content -LiteralPath $legsEnded -Value $Leg
+        Remove-Item -LiteralPath $legOpen -Force -ErrorAction SilentlyContinue
+        Say "$Leg - ended"
+    }
+
     'Held' {
+        Close-Leg
         $divergent = Join-Path $Out 'divergent.txt'
         $failedLegs = Join-Path $Out 'failed-legs.txt'
+        $notRun = Join-Path $Out 'not-run.txt'
         $held = @()
         if (Test-Path -LiteralPath $failedLegs) { $held += @(Get-Content -LiteralPath $failedLegs) }
+        if (Test-Path -LiteralPath $notRun) { $held += @(Get-Content -LiteralPath $notRun) }
         if (Test-Path -LiteralPath $divergent) { $held += "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
         if ($held.Count -gt 0) { Fail ($held -join ' | ') }
         Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
@@ -412,6 +525,19 @@ switch ($Step) {
 
         # The pinned line reads its pin: one naming another version than the feed's is refused, naming both, and places
         # nothing, before the pin naming this one installs.
+        # -NoModifyPath, which a release before 0.49 took, is refused with its own sentence and installs nothing: every
+        # install puts jason in the terminal. Recorded, not thrown, so the install below is still read.
+        if (-not $Pinned) {
+            $refusal = "-NoModifyPath is not taken: every install puts jason in the terminal, on this account's Path. Nothing was installed: run this again without it."
+            $noPath = Invoke-InstallScript $Script @('-NoModifyPath')
+            $placed = @($app, $commandLine) | Where-Object { Test-Path -LiteralPath $_ }
+            if ($noPath.Exit -eq 0) { Fail-Held "install.ps1 -NoModifyPath ended 0" }
+            elseif (-not $noPath.Flat.Contains(($refusal -replace '\s+', ''))) { Fail-Held "install.ps1 -NoModifyPath was refused without its own sentence: $($noPath.Said)" }
+            elseif ($placed) { Fail-Held "the refused install.ps1 -NoModifyPath left $($placed -join ', ')" }
+            elseif ((Count-Entry $bundle) -ne 0) { Fail-Held 'the refused install.ps1 -NoModifyPath put the bundle folder on the Path' }
+            else { Say "install.ps1 -NoModifyPath was refused with its own sentence, '$refusal', and installed nothing" }
+        }
+
         $pin = @()
         if ($Pinned) {
             $wrong = Invoke-InstallScript $Script @('-Version', '9.9.9')
@@ -732,59 +858,86 @@ switch ($Step) {
         }
 
         # 1. Over a window that never quits, then the same setup again with the window ended.
-        From-Previous
-        $leg = Test-Leg 'leg 1, --updated /S over a window that never quits' @('--updated', '/S') @(3)
-        if ($leg.Ended -and $leg.Exit -eq 2 -and $leg.Seconds -lt 30) { $failures.Add('leg 1 ended 2 within 30 s: the include''s look missed the window, and the old uninstaller refused') }
-        if ($leg.Ended -and $leg.Exit -eq 3 -and $leg.Seconds -lt 45) { $failures.Add("leg 1 ended 3 after $($leg.Seconds) s, before the include's bound of about 60 s") }
-        Assert-Untouched 'leg 1' $true
-        End-Application
-        $null = Test-Leg 'leg 1, the same setup again once the window ended' @('--updated', '/S') @(0)
-        if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 1's second setup the application is $(Read-Version $carried), not $Version") }
+        # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        try {
+            From-Previous
+            $leg = Test-Leg 'leg 1, --updated /S over a window that never quits' @('--updated', '/S') @(3)
+            if ($leg.Ended -and $leg.Exit -eq 2 -and $leg.Seconds -lt 30) { $failures.Add('leg 1 ended 2 within 30 s: the include''s look missed the window, and the old uninstaller refused') }
+            if ($leg.Ended -and $leg.Exit -eq 3 -and $leg.Seconds -lt 45) { $failures.Add("leg 1 ended 3 after $($leg.Seconds) s, before the include's bound of about 60 s") }
+            Assert-Untouched 'leg 1' $true
+            End-Application
+            $null = Test-Leg 'leg 1, the same setup again once the window ended' @('--updated', '/S') @(0)
+            if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 1's second setup the application is $(Read-Version $carried), not $Version") }
+        } catch {
+            $failures.Add("leg 1 did not finish: $($_.Exception.Message)")
+        }
 
         # 2. Plain /S over a window.
-        From-Previous
-        $null = Test-Leg 'leg 2, plain /S over a window' @('/S') @(3)
-        Assert-Untouched 'leg 2' $true
+        # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        try {
+            From-Previous
+            $null = Test-Leg 'leg 2, plain /S over a window' @('/S') @(3)
+            Assert-Untouched 'leg 2' $true
+        } catch {
+            $failures.Add("leg 2 did not finish: $($_.Exception.Message)")
+        }
 
         # 3. Plain /S over the application in the tray: its window closed as a person closes it, the application left
         # running.
-        From-Previous
-        $main = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' -and $_.CommandLine -notmatch '--type=' })
-        foreach ($window in $main) { $running = Get-Process -Id $window.ProcessId -ErrorAction SilentlyContinue; if ($running) { $null = $running.CloseMainWindow() } }
-        Start-Sleep -Seconds 5
-        $shown = @($main | ForEach-Object { Get-VisibleWindows @([int] $_.ProcessId) }) | Where-Object { $_ }
-        if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0) {
-            $failures.Add('leg 3: closing the window ended the application, so there was no application in the tray to set up over')
-        } else {
-            Say "leg 3: the window closed, the application left running in the tray; its visible windows: $(if ($shown) { $shown -join '; ' } else { 'none' })"
-            $null = Test-Leg 'leg 3, plain /S over the application in the tray' @('/S') @(3)
-            Assert-Untouched 'leg 3' $true
+        # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        try {
+            From-Previous
+            $main = @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' -and $_.CommandLine -notmatch '--type=' })
+            foreach ($window in $main) { $running = Get-Process -Id $window.ProcessId -ErrorAction SilentlyContinue; if ($running) { $null = $running.CloseMainWindow() } }
+            Start-Sleep -Seconds 5
+            $shown = @($main | ForEach-Object { Get-VisibleWindows @([int] $_.ProcessId) }) | Where-Object { $_ }
+            if (@(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' }).Count -eq 0) {
+                $failures.Add('leg 3: closing the window ended the application, so there was no application in the tray to set up over')
+            } else {
+                Say "leg 3: the window closed, the application left running in the tray; its visible windows: $(if ($shown) { $shown -join '; ' } else { 'none' })"
+                $null = Test-Leg 'leg 3, plain /S over the application in the tray' @('/S') @(3)
+                Assert-Untouched 'leg 3' $true
+            }
+        } catch {
+            $failures.Add("leg 3 did not finish: $($_.Exception.Message)")
         }
 
         # 4. The old application quitting 20 s after the setup started.
-        From-Previous
-        $late = { param($elapsed) if ($elapsed -ge 20 -and -not $script:quit) { $script:quit = $true; End-Application } }
-        $script:quit = $false
-        $null = Test-Leg 'leg 4, --updated /S, the old application quitting 20 s late' @('--updated', '/S') @(0) $late
-        if (-not $script:quit) { $failures.Add('leg 4: the setup ended before the application was made to quit') }
-        if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 4 the application is $(Read-Version $carried), not $Version") }
+        # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        try {
+            From-Previous
+            $late = { param($elapsed) if ($elapsed -ge 20 -and -not $script:quit) { $script:quit = $true; End-Application } }
+            $script:quit = $false
+            $null = Test-Leg 'leg 4, --updated /S, the old application quitting 20 s late' @('--updated', '/S') @(0) $late
+            if (-not $script:quit) { $failures.Add('leg 4: the setup ended before the application was made to quit') }
+            if ((Read-Version $carried) -ne $Version) { $failures.Add("after leg 4 the application is $(Read-Version $carried), not $Version") }
+        } catch {
+            $failures.Add("leg 4 did not finish: $($_.Exception.Message)")
+        }
 
         # 5. The old uninstaller refusing: a file of the application's folder held by another process, no delete shared.
-        From-Previous $false
-        $held = @('LICENSE.electron.txt', 'LICENSES.chromium.html', 'resources\app.asar') | ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-        if (-not $held) { Fail 'leg 5: no file of the application''s folder to hold' }
-        $release = Join-Path $env:RUNNER_TEMP 'release-held-file'
-        Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
-        $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
-        Start-Sleep -Seconds 3
-        Say "leg 5: $(Split-Path -Leaf $held) of the application's folder held open by process $($holder.Id), sharing read alone"
-        $null = Test-Leg 'leg 5, --updated /S while the old uninstaller cannot remove the folder' @('--updated', '/S') @(2)
-        New-Item -ItemType File -Path $release -Force | Out-Null
-        $null = $holder.WaitForExit(15000)
-        Assert-Untouched 'leg 5' $false
-        $opened = Open-Window -RuntimeSeconds 0
-        if ($opened.Count -eq 0) { $failures.Add('after leg 5 the previous release does not open') } else { Say "after leg 5 the previous release $(Read-Version $carried) opens" }
-        End-Application
+        # A sub-leg that cannot finish is recorded, and the next one still runs from a fresh install of its own.
+        try {
+            From-Previous $false
+            $held = @('LICENSE.electron.txt', 'LICENSES.chromium.html', 'resources\app.asar') | ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+            if (-not $held) { Fail 'leg 5: no file of the application''s folder to hold' }
+            $release = Join-Path $env:RUNNER_TEMP 'release-held-file'
+            Remove-Item -LiteralPath $release -Force -ErrorAction SilentlyContinue
+            $holder = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$f = [System.IO.File]::Open('$held', 'Open', 'Read', 'Read'); while (-not (Test-Path -LiteralPath '$release')) { Start-Sleep -Milliseconds 200 }; `$f.Dispose()" -PassThru -WindowStyle Hidden
+            Start-Sleep -Seconds 3
+            Say "leg 5: $(Split-Path -Leaf $held) of the application's folder held open by process $($holder.Id), sharing read alone"
+            $null = Test-Leg 'leg 5, --updated /S while the old uninstaller cannot remove the folder' @('--updated', '/S') @(2)
+            New-Item -ItemType File -Path $release -Force | Out-Null
+            $null = $holder.WaitForExit(15000)
+            Assert-Untouched 'leg 5' $false
+            $opened = Open-Window -RuntimeSeconds 0
+            if ($opened.Count -eq 0) { $failures.Add('after leg 5 the previous release does not open') } else { Say "after leg 5 the previous release $(Read-Version $carried) opens" }
+            End-Application
+        } catch {
+            $failures.Add("leg 5 did not finish: $($_.Exception.Message)")
+        } finally {
+            New-Item -ItemType File -Path (Join-Path $env:RUNNER_TEMP 'release-held-file') -Force | Out-Null
+        }
 
         if ($failures.Count -gt 0) { Fail ($failures -join '; ') }
     }
@@ -796,7 +949,7 @@ switch ($Step) {
         # a runtime started, jason uninstall started, and the window opened once the verb has stopped that runtime, past
         # its own check. The second run is found, its window seen, and it is ended without an answer; the folder is still
         # there, and the waiter's line is in the desktop's log of the day. Installed apps then takes the application off.
-        if (-not $Script) { Fail '-Script is needed.' }
+        if (-not $Script -or -not $Feed) { Fail '-Script and -Feed are needed.' }
         $installed = Invoke-InstallScript $Script
         if ($installed.Exit -ne 0) { Fail "install.ps1 exited with $($installed.Exit): $($installed.Said)" }
         if ((Invoke-Program $carried @('runtime', 'start')).Exit -ne 0) { Fail 'a runtime could not be started' }
