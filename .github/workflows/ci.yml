@@ -1907,6 +1907,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # One temporary folder for the whole job: the one a new shell of this account has, where a terminal the legs open,
+      # and every program it starts, unpacks and renames aside. A step otherwise reads the runner's own TEMP, which can be
+      # another (a per-session folder), and its listings would look where no leg's program wrote. Every listing fails
+      # where its step's and a new shell's differ.
+      - name: Give the job's steps the temporary folder a new shell of this account has
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step OneTemporary -Out $env:OUT
+
       - uses: ./.github/actions/setup-dotnet
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}

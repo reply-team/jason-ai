@@ -50,7 +50,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary')] [string] $Step,
     [string] $Executable,
     [string] $Leg,
     [string[]] $Needs = @(),
@@ -390,7 +390,36 @@ function Get-JasonUninstallEntries {
 
 # Every place an installation of Jason can touch on this account, one line each, sorted: what a person reads to see
 # what an uninstall left. A folder is listed by its files, relative, with their sizes; a registry value by its data.
+# The temporary folder a new shell of this account has: where a terminal the legs open, and every program it starts,
+# unpacks its native libraries and renames a held executable aside.
+function Get-NewShellTemporary {
+    $file = Join-Path $Out "temporary-$([Guid]::NewGuid().ToString('N')).txt"
+    $shell = Start-Process pwsh -ArgumentList '-NoProfile', '-NonInteractive', '-Command', '[IO.Path]::GetTempPath()' -UseNewEnvironment -PassThru -NoNewWindow -RedirectStandardOutput $file
+    $null = $shell.Handle
+    if (-not $shell.WaitForExit(60000)) { Stop-Process -Id $shell.Id -Force -ErrorAction SilentlyContinue; Fail 'a new shell asked for its temporary folder did not end within 60 s' }
+    $said = ((Get-Content -LiteralPath $file -Raw) + '').Trim().TrimEnd('\')
+    Remove-Item -LiteralPath $file
+    if (-not $said) { Fail 'a new shell asked for its temporary folder said nothing' }
+    return $said
+}
+
+# Every folder the host may unpack this account's native libraries under: the account's temporary root and each numbered
+# per-session folder in it, and this step's own where it is neither. Each with the name its listing lines give it.
+function Get-ExtractBases {
+    $root = Join-Path $env:LOCALAPPDATA 'Temp'
+    $bases = [ordered]@{ 'Temp' = $root }
+    foreach ($session in @(Get-ChildItem -LiteralPath $root -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+$' })) { $bases["Temp\$($session.Name)"] = $session.FullName }
+    $known = @($bases.Values | ForEach-Object { (Get-Item -LiteralPath $_ -Force -ErrorAction SilentlyContinue).FullName })
+    $own = (Get-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue).FullName
+    if ($own -and $known -inotcontains $own) { $bases[$temporary] = $temporary }
+    return $bases
+}
+
 function Write-Listing([string] $file, [switch] $Quiet) {
+    # One temporary folder for the job: a step reading another than a new shell's would look where no leg's programs
+    # unpacked, and miss what they left. The proof's own fault where it happens; never the product's.
+    $fresh = Get-NewShellTemporary
+    if ($fresh -ine $temporary) { Fail "this step's temporary folder is $temporary, and a new shell of this account has ${fresh}: the proof's own fault, since every step of the job is to be given the new shell's (OneTemporary)" }
     $lines = [System.Collections.Generic.List[string]]::new()
     function Folder([string] $label, [string] $path) {
         if (-not (Test-Path -LiteralPath $path)) { $lines.Add("$label`tabsent"); return }
@@ -406,7 +435,10 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     # executable extracts, under %TEMP%\.net\jason\<id> (the host's default base, one id per build), and the folders a
     # retired command-line jason is renamed into while a process holds it - jason-retired-<id> in the temporary directory
     # on the executable's volume, .jason-retired-<id> beside its folder otherwise (CommandLineInstalls.AsideFolder).
-    foreach ($extracted in @(Get-ChildItem -LiteralPath (Join-Path $temporary '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) { $lines.Add("extracted`t$($extracted.Name)") }
+    $bases = Get-ExtractBases
+    foreach ($base in $bases.Keys) {
+        foreach ($extracted in @(Get-ChildItem -LiteralPath (Join-Path $bases[$base] '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) { $lines.Add("extracted`t$base`t$($extracted.Name)") }
+    }
     foreach ($retired in @(Get-ChildItem -LiteralPath $temporary -Directory -Force -Filter 'jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`t%TEMP%\$($retired.Name)") }
     foreach ($retired in @(Get-ChildItem -LiteralPath (Split-Path -Parent $commandLine) -Directory -Force -Filter '.jason-retired-*' -ErrorAction SilentlyContinue)) { $lines.Add("retired`tPrograms\$($retired.Name)") }
     # What Windows and Electron keep for an application that ran, by its name, in the roaming and local application data:
@@ -442,12 +474,10 @@ function Write-Listing([string] $file, [switch] $Quiet) {
     if ($Quiet) { return }
     Write-Host "$($sorted.Count) lines written to $file"
     $sorted | ForEach-Object { Write-Host "  $_" }
-    # Where the extraction folders stand and when each was made, said beside the listing and never part of it: the
-    # temporary folder this step reads, and every per-session one under it (%TEMP%\<n>), where a process started in
-    # another session unpacks.
-    $bases = @(@($temporary) + @(Get-ChildItem -LiteralPath $temporary -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d+$' } | ForEach-Object { $_.FullName }))
-    foreach ($base in $bases) {
-        foreach ($folder in @(Get-ChildItem -LiteralPath (Join-Path $base '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) {
+    # When each extraction folder was made and last written, said beside the listing and never part of it, against the
+    # times of the removal's own lines in the log.
+    foreach ($base in $bases.Keys) {
+        foreach ($folder in @(Get-ChildItem -LiteralPath (Join-Path $bases[$base] '.net\jason') -Directory -Force -ErrorAction SilentlyContinue)) {
             Write-Host "  (where) extracted $($folder.Name) at $($folder.FullName), made $($folder.CreationTimeUtc.ToString('o')), written $($folder.LastWriteTimeUtc.ToString('o'))"
         }
     }
@@ -520,7 +550,7 @@ function Get-LeftOver {
     $counts = {
         param([string] $line)
         if ($line -match $kept) { return $false }
-        if ($line -match '^extracted\t(?<id>.+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { return $false }
+        if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { return $false }
         if ($line -match '^(extracted|retired)\t' -and $extractedSoft) { return $false }
         return $true
     }
@@ -549,6 +579,16 @@ switch ($Step) {
         Add-Content -LiteralPath $thisBuild -Value $ids
         Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
         Say "this build's $(Split-Path -Leaf $Executable) extracts its native libraries to the id $($ids -join ', ') under %TEMP%\.net\jason"
+    }
+
+    'OneTemporary' {
+        # Every later step of the job gets the temporary folder a new shell of this account has, through GITHUB_ENV, so
+        # that the listings look where the legs' programs unpack and rename aside.
+        if (-not $env:GITHUB_ENV) { Fail 'OneTemporary writes the job''s environment, GITHUB_ENV, and there is none' }
+        $fresh = Get-NewShellTemporary
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value "TEMP=$fresh"
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value "TMP=$fresh"
+        Say "the job's steps get the temporary folder a new shell of this account has, $fresh, where this step had $temporary"
     }
 
     'PathShape' {
@@ -598,7 +638,7 @@ switch ($Step) {
         $expectedLines = [System.Collections.Generic.List[string]]::new()
         $softLines = [System.Collections.Generic.List[string]]::new()
         foreach ($line in $candidates) {
-            if ($line -match '^extracted\t(?<id>.+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
+            if ($line -match '^extracted\t(?:[^\t]*\t)?(?<id>[^\t]+)$' -and $ours.Count -gt 0 -and $ours -cnotcontains $Matches['id']) { $expectedLines.Add($line) }
             elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
             else { $left.Add($line) }
         }
