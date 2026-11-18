@@ -89,6 +89,13 @@ internal static partial class StatusChecks
         /// </summary>
         public const string UpdateThisJason = "jason update apply";
 
+        /// <summary>
+        /// The repair for a move into Jason Desktop that has not ended, where the jason that reads it is the application's: its own
+        /// setup, which retires the command-line install it finds. From the command-line install the move is carried on by
+        /// <see cref="FinishUpdate"/> instead.
+        /// </summary>
+        public const string SetUpMachine = "jason install";
+
         public const string ReloadPlugins = "jason plugin reload";
 
         /// <summary>
@@ -280,6 +287,7 @@ internal static partial class StatusChecks
             checks.Add(await RoleSkillsAsync(env, client, info, cancellationToken).ConfigureAwait(false));
             checks.Add(Path(env));
             checks.Add(UpdateInFlight(unfinished));
+            checks.Add(Move(env));
             checks.Add(Layout(env));
 
             checks.Add(ProviderPlugin(info));
@@ -356,7 +364,7 @@ internal static partial class StatusChecks
 
         return info is null
             ? new StatusCheck("runtime", true, CheckState.Failed, $"A descriptor names {descriptor.BaseUrl} and nothing answered there." + owes, Repair.Start)
-            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {info.RuntimeVersion}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
+            : new StatusCheck("runtime", true, CheckState.Ok, $"Running: version {JasonVersion.Stated(info.RuntimeVersion, info.TestBuild == true)}, pid {info.Pid.ToString(CultureInfo.InvariantCulture)}, data directory {info.DataDir}.", null);
     }
 
     /// <summary>
@@ -395,6 +403,75 @@ internal static partial class StatusChecks
     /// required check would stop every agent that branches on <c>ready</c> until the network came back. From that step
     /// on the required runtime check fails as well, and a ledger that cannot be read is said there.
     /// </summary>
+    /// <summary>
+    /// Where the move of a command-line install into Jason Desktop stands, from its record alone: optional, since every prefix
+    /// of a move leaves a working installation. A move that is not done names the one command that carries it on from the jason
+    /// this is: <c>jason update apply</c> typed into the command-line install, which carries it on at the version it is; and,
+    /// where the application's jason answers already, <c>jason install</c>, the routine the move had still to finish.
+    /// </summary>
+    internal static StatusCheck Move(CliEnvironment env)
+    {
+        const string Name = "move";
+        var file = new Jason.Cli.Update.UpdatePaths(env.Paths).Move;
+        Jason.Cli.Update.MoveRecord? record;
+        try
+        {
+            record = Jason.Cli.Update.MoveRecord.Read(file);
+        }
+        catch (Jason.Cli.Update.MoveRecordUnreadable unread)
+        {
+            return new StatusCheck(Name, false, CheckState.Unknown, unread.Message, null);
+        }
+
+        if (record is null)
+        {
+            return new StatusCheck(Name, false, CheckState.Absent, "No command-line install is being moved into Jason Desktop.", null);
+        }
+
+        if (record.State == Jason.Cli.Update.MoveStates.Done)
+        {
+            return new StatusCheck(Name, false, CheckState.Ok, $"The command-line install at {record.From} was moved into Jason Desktop at {record.Application}.", null);
+        }
+
+        // The routine retired the command-line install, renamed aside on Windows or a wrapper over the application's jason on
+        // macOS, and the move that asked for it ended before it said so: the install is in the application, and a start it
+        // owes is the runtime check's to name.
+        if (Jason.Cli.Update.MoveRecord.Retired(record.From))
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Ok,
+                $"The command-line install at {record.From} is retired into Jason Desktop{(record.Application is { } application ? " at " + application : string.Empty)}; the move's record stopped before it said so.",
+                null);
+        }
+
+        // Waiting on what no command typed here changes - an Intel Mac, an older or unreadable application: what stands and what
+        // would move it, with no repair that cannot help.
+        if (record.Waits is { } waits)
+        {
+            return new StatusCheck(
+                Name,
+                false,
+                CheckState.Unknown,
+                $"The move of the command-line install at {record.From} into Jason Desktop waits: {record.Reason ?? "it says no more."} It goes on once {waits}.",
+                null);
+        }
+
+        var carried = CarriedExecutable.Of(env) is not null;
+        var repair = carried ? Repair.SetUpMachine : Repair.FinishUpdate;
+        var fact = record.State == Jason.Cli.Update.MoveStates.Moving
+            ? $"The move of the command-line install at {record.From} into Jason Desktop was begun and has not ended: it runs now, or it was stopped at '{record.Doing ?? "the beginning"}'"
+              + (record.Step is { } done ? $", after '{done}'" : string.Empty)
+              + $". The command-line install answers as jason until the move retires it. `{repair}` carries it on once none runs."
+            : $"The move of the command-line install at {record.From} into Jason Desktop is {record.State}"
+              + (record.Step is { } last ? $" after '{last}'" : string.Empty)
+              + $": {record.Reason ?? "it says no more."}";
+        return carried
+            ? new StatusCheck(Name, false, CheckState.Failed, fact, Repair.SetUpMachine)
+            : new StatusCheck(Name, false, CheckState.Failed, fact, Repair.FinishUpdate);
+    }
+
     private static StatusCheck UpdateInFlight(Contracts.Update.UnfinishedUpdate? unfinished) => unfinished switch
     {
         null => new StatusCheck("update", false, CheckState.Ok, "No update is in flight.", null),

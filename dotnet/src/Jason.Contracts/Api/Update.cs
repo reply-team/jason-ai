@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Jason.Contracts.Api;
 
 /// <summary>
@@ -46,7 +48,29 @@ public sealed record PluginUpdate(string Id, string Installed, string Latest);
 /// themselves in the order they happened — the same lines <c>--human</c> prints, so a script and a person are
 /// reading the same account.
 /// </summary>
-public sealed record UpdateApplyResponse(string From, string To, string Step, IReadOnlyList<string> Steps);
+/// <param name="Move">
+/// Where the move of a command-line install into Jason Desktop stands, said apart from the update, which it never fails:
+/// present where an update of a command-line install completed in this process, or a move was carried on; omitted otherwise.
+/// </param>
+public sealed record UpdateApplyResponse(
+    string From,
+    string To,
+    string Step,
+    IReadOnlyList<string> Steps,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] UpdateMoveResponse? Move = null);
+
+/// <summary>
+/// Where the move of a command-line install into Jason Desktop stands, once an update of that install completed.
+/// </summary>
+/// <param name="State">
+/// <c>done</c>; <c>pending</c>, waiting on something outside it; <c>failed</c>, a step refused; both carried on by
+/// <c>jason update apply</c>; <c>not_applicable</c>, a system where Jason Desktop takes no command-line install in, and
+/// nothing was changed.
+/// </param>
+/// <param name="Step">The last step of the move that was done, or null where none was.</param>
+/// <param name="Application">The application the move installs into or reuses; null where it never looked for one.</param>
+/// <param name="Reason">Why it is pending, failed or does not apply, in a sentence that says what to do; null when done.</param>
+public sealed record UpdateMoveResponse(string State, string? Step, string? Application, string? Reason);
 
 /// <summary>
 /// Where this installation's update stands, read from the ledger and from nothing else. <c>in_flight</c> is the

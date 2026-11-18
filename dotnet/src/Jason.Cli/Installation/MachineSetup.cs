@@ -125,6 +125,10 @@ public static class MachineSetup
         ArgumentNullException.ThrowIfNull(places);
         ArgumentNullException.ThrowIfNull(options);
 
+        // The command-line executables an earlier run renamed aside while a process held them, once that process ended: before
+        // this run renames any, whose process still runs.
+        RetiredSweep.Sweep(places, options.Retire);
+
         var run = new Run(env, carried, places, options);
         string? old = null;
         var runtime = RuntimeStates.NotRunning;
