@@ -38,21 +38,21 @@ jobs:
           $release = (dotnet msbuild dotnet/src/Jason.App/Jason.App.csproj -getProperty:VersionPrefix).Trim()
           "release=$release" >> $env:GITHUB_OUTPUT
 
-  union-windows:
-    name: install.ps1 on windows
+  union-macos:
+    name: install.sh on macos
     needs: version
     if: needs.version.outputs.full == 'true'
-    runs-on: windows-latest
+    runs-on: macos-latest
     # A step that waits on a program that never ends is stopped here, not at the six hours a job may otherwise run.
-    timeout-minutes: 120
+    timeout-minutes: 135
     # Its token reads the repository for the checkout, and nothing more: the previous release is read from its public downloads.
     permissions:
       contents: read
     env:
       VERSION: ${{ needs.version.outputs.release }}-ci.${{ github.run_number }}
-      OUT: ${{ github.workspace }}\installation
-      FEED: ${{ github.workspace }}\feed
-      PREVIOUS: ${{ github.workspace }}\previous
+      OUT: ${{ github.workspace }}/installation
+      FEED: ${{ github.workspace }}/feed
+      PREVIOUS: ${{ github.workspace }}/previous
     steps:
       - uses: actions/checkout@v7
 
@@ -60,33 +60,45 @@ jobs:
         with:
           sdk-version: ${{ needs.version.outputs.sdk }}
 
-      # A package is built at a release's or a candidate's version and never at the -dev one the tree carries, so this
-      # job's carries the release this tree is on the way to with a ci word and the run's number, as the desktop job's
-      # does. Its upload is named for this job, outside jason-*, so no download of a release's files takes it.
+      # The requirement install.sh holds an application to, read from the script, against the application the latest
+      # release published, from its public downloads checked against its checksums.txt: every row elsewhere compares the
+      # line as a string, and only a real signature shows that it admits Jason's and refuses another team's.
+      - name: Hold install.sh's requirement against the latest published application
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          tag="$(curl -sS --max-time 60 -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
+          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/published"
+          for name in checksums.txt jason-desktop-macos-arm64.zip; do
+            curl -fsSL --max-time 600 -o "$RUNNER_TEMP/published/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          (cd "$RUNNER_TEMP/published" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
+          bash .github/scripts/test-installation-macos.sh requirement "$RUNNER_TEMP/published/jason-desktop-macos-arm64.zip"
+          echo "- install.sh's requirement admits the application $tag published, and refuses it named for another team" >> "$GITHUB_STEP_SUMMARY"
+
       # A test build (JasonTestBuild, read by MSBuild from the environment): it says so on --version's standard error and
-      # in the runtime's report, and its move into the application takes the signer this job names (the stand-in's), as no
-      # released build can. Packaged as a release packages it otherwise.
-      - name: Package jason for win-x64 as a release does, as a test build
+      # in the runtime's report, and its move into the application takes the requirement this job names (the ad hoc
+      # signature's), as no released build can.
+      - name: Package jason for osx-arm64 as a pull request does, as a test build
         timeout-minutes: 20
         id: package
         uses: ./.github/actions/package
         env:
           JasonTestBuild: 'true'
         with:
-          rid: win-x64
+          rid: osx-arm64
           version: ${{ env.VERSION }}
-          artifact: ci-union-win-x64
+          artifact: ci-union-osx-arm64
           retention-days: 3
 
-      # The id of the folder this build's jason extracts its native libraries to under %TEMP%\.net\jason, read with the host's
-      # base pointed elsewhere, so that the compares tell this build's extraction folder from the previous release's.
+      # The id of the folder this build's jason extracts its native libraries to under ~/.net/jason, read with the host's base
+      # pointed elsewhere, so that the compares tell this build's extraction folder from the previous release's.
       - name: Read the folder this build's jason extracts its native libraries to
         id: extracted
         timeout-minutes: 20
-        shell: pwsh
-        env:
-          EXECUTABLE: ${{ steps.package.outputs.executable }}
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Extracted -Out $env:OUT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh extracted "$GITHUB_WORKSPACE/${{ steps.package.outputs.executable }}"
 
       - uses: actions/setup-node@v5
         with:
@@ -94,6 +106,8 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
+      # CSC_FOR_PULL_REQUEST: electron-builder skips every signature on a pull request's build, the ad hoc one included,
+      # and an arm64 Mac runs no program without one. CSC_IDENTITY_AUTO_DISCOVERY: no identity of this runner is looked for.
       - name: Build Jason Desktop around it as a test build
         id: desktop-build
         timeout-minutes: 20
@@ -102,10 +116,10 @@ jobs:
         env:
           EXECUTABLE: ${{ steps.package.outputs.executable }}
           JASON_DESKTOP_TEST_BUILD: '1'
-        run: ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version $env:VERSION -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
+          CSC_FOR_PULL_REQUEST: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid osx-arm64 -Version $env:VERSION -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
 
-      # The feed a release would carry for this platform: the archive and its fragment, the skills' package, the installer,
-      # its block map and its update feed, with the manifest and the checksums written over them as a release writes them.
       - name: Assemble the feed the way a release is assembled
         id: feed
         timeout-minutes: 20
@@ -113,367 +127,248 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path $env:FEED | Out-Null
           Copy-Item artifacts/release/* $env:FEED
-          Copy-Item desktop/dist/jason-desktop-windows-x64-setup.exe, desktop/dist/jason-desktop-windows-x64-setup.exe.blockmap, desktop/dist/latest.yml $env:FEED
+          Copy-Item desktop/dist/jason-desktop-macos-arm64.zip, desktop/dist/jason-desktop-macos-arm64.zip.blockmap, desktop/dist/latest-mac.yml $env:FEED
           ./.github/scripts/Write-SkillsArchive.ps1 -Tree . -Archive (Join-Path $env:FEED 'jason-skills.zip') -Repository https://github.com/reply-team/jason-ai -Ref ("v" + ($env:VERSION -replace '-.*$', '')) -Commit "${{ github.sha }}"
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
+          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require osx-arm64 -Plugins jason-skills.zip,jason-desktop-macos-arm64.zip,jason-desktop-macos-arm64.zip.blockmap,latest-mac.yml
           Get-Content (Join-Path $env:FEED 'manifest.json')
 
-      # The released script, unchanged, holds the test build to the release's signer and refuses it, every run: the
-      # check the rest of this job steps past is live.
-      - name: The released install.ps1 refuses the unsigned test build
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          JASON_Update__CheckEnabled: 'false'
-        run: |
-          $said = (& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$env:JASON_INSTALL_FEED = '$env:FEED'; & ./install/install.ps1" 2>&1 | ForEach-Object { "$_" }) -join "`n"
-          $code = $LASTEXITCODE
-          Write-Host $said
-          if ($code -eq 0) { throw "the released install.ps1 installed an unsigned setup" }
-          if (-not ($said -replace '\s+', '').Contains('doesnotcarryavalidsignature')) { throw "the released install.ps1 failed for another reason than the signature" }
-          if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Programs\jason-desktop')) { throw "the refused install left the application's folder" }
-          # The script's own exit code, 1, was the pass; the step says how it ended itself.
-          exit 0
-
-      # The stand-in for the release's signer, on this runner alone: a code-signing certificate made here, its key never
-      # leaving this runner, trusted in this machine's root store, signs the test build's setup, so the script's own check -
-      # a valid signature, by the signer it names - runs as it runs on a release. The released script refuses that signer
-      # too; the copy the next steps run differs from it by the one line naming the signer, counted, and lives in the
-      # runner's temporary directory, never uploaded. Nothing of this runs anywhere but a GitHub-hosted runner.
-      - name: Sign the test build with this runner's own certificate, and copy install.ps1 to name it
+      # The released script, unchanged, holds the test build to the release's team and refuses it, every run. The copy the
+      # next steps run differs from it by the one line naming what a signature must satisfy, counted; it names this
+      # build's own ad hoc signature, and lives in the runner's temporary directory, never uploaded.
+      - name: The released install.sh refuses the ad hoc test build, and a copy names its signature
         timeout-minutes: 20
         id: stand-in
-        shell: pwsh
+        shell: bash
         run: |
-          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw "This step trusts a certificate in the machine's root store, and runs on a GitHub-hosted runner alone." }
-          $standIn = 'Jason CI test build'
-          $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=$standIn" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
-          $public = Join-Path $env:RUNNER_TEMP 'stand-in.cer'
-          Export-Certificate -Cert $certificate -FilePath $public | Out-Null
-          Import-Certificate -FilePath $public -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
-          $setup = Join-Path $env:FEED 'jason-desktop-windows-x64-setup.exe'
-          $signed = Set-AuthenticodeSignature -FilePath $setup -Certificate $certificate -HashAlgorithm SHA256
-          if ($signed.Status -ne 'Valid') { throw "the stand-in signature is $($signed.Status)" }
-          ./.github/scripts/Write-Manifest.ps1 -Version $env:VERSION -Directory $env:FEED -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
+          status=0
+          JASON_INSTALL_FEED="$FEED" sh install/install.sh > "$RUNNER_TEMP/refused.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/refused.txt"
+          [ "$status" -ne 0 ] || { echo "::error::the released install.sh installed an ad hoc signed application"; exit 1; }
+          grep -qi 'sign' "$RUNNER_TEMP/refused.txt" || { echo "::error::the released install.sh failed for another reason than the signature"; exit 1; }
+          [ ! -e /Applications/Jason.app ] && [ ! -e "$HOME/Applications/Jason.app" ] || { echo "::error::the refused install left an application"; exit 1; }
+          bash .github/scripts/test-installation-macos.sh stand-in desktop/dist/mac-arm64/Jason.app "$RUNNER_TEMP/install-stand-in-signer.sh"
+          echo "script=$RUNNER_TEMP/install-stand-in-signer.sh" >> "$GITHUB_OUTPUT"
 
-          # The released script refuses the stand-in's signature by its signer's name.
-          $said = (& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$env:JASON_INSTALL_FEED = '$env:FEED'; & ./install/install.ps1" 2>&1 | ForEach-Object { "$_" }) -join "`n"
-          $code = $LASTEXITCODE
-          Write-Host $said
-          if ($code -eq 0 -or -not ($said -replace '\s+', '').Contains(("is signed by '$standIn', not by ReplyApp Inc." -replace '\s+', ''))) { throw "the released install.ps1 did not refuse the stand-in signer by name" }
-
-          # The copy: the one line naming the signer, and nothing else.
-          $released = @(Get-Content -LiteralPath install/install.ps1)
-          $line = "        `$signer = 'ReplyApp Inc.'"
-          if (@($released | Where-Object { $_ -ceq $line }).Count -ne 1) { throw "install.ps1 does not name its signer in exactly one line '$line'" }
-          $copy = @($released | ForEach-Object { if ($_ -ceq $line) { "        `$signer = '$standIn'" } else { $_ } })
-          $changed = @(for ($at = 0; $at -lt $released.Count; $at++) { if ($released[$at] -cne $copy[$at]) { $at } })
-          if ($copy.Count -ne $released.Count -or $changed.Count -ne 1) { throw "the copy differs from install.ps1 in $($changed.Count) line(s), not one" }
-          $script = Join-Path $env:RUNNER_TEMP 'install-stand-in-signer.ps1'
-          Set-Content -LiteralPath $script -Value $copy -Encoding ascii
-          "script=$script" >> $env:GITHUB_OUTPUT
-          "signer=$standIn" >> $env:GITHUB_OUTPUT
-          exit 0
-
-      # The account's Path as an ordinary account has it: ExpandString, with an entry spelled through a variable. Every
-      # install after it holds both by name: the kind after is the kind before, and the entry is still unexpanded.
-      - name: Give the account's Path the shape an ordinary account has, ExpandString with an entry spelled through a variable
-        id: path-shape
-        timeout-minutes: 20
-        shell: pwsh
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step PathShape -Out $env:OUT
-
-      # A person's machine as an agent finds it: both agent hosts present, and a skill of the person's own under a name
-      # Jason ships. Then the listing everything after is compared with, and every leg starts from.
       - name: The machine before anything is installed
         id: before
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE '.claude'), (Join-Path $env:USERPROFILE '.codex'), (Join-Path $env:USERPROFILE '.agents\skills\quick-start') | Out-Null
-          [IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.agents\skills\quick-start\SKILL.md'), "a person's own skill`n")
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name before
+          mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.agents/skills/quick-start"
+          printf "a person's own skill" > "$HOME/.agents/skills/quick-start/SKILL.md"
+          bash .github/scripts/test-installation-macos.sh listing before
 
       # From here on no leg's failure stops the legs after it: each runs unless the job was cancelled, begins from the
       # machine before (one an earlier failed leg left is taken off by the product's own uninstalls, and said so) or says
       # it was not run and which step it needed, and the job fails at its end, in the last step, with the list.
-      - name: Install as an agent does, with install.ps1
+      - name: Install as an agent does, with install.sh
         id: install
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         env:
-          LEG: "Install as an agent does, with install.ps1"
-          JASON_Update__CheckEnabled: 'false'
+          LEG: "Install as an agent does, with install.sh"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      - name: Uninstall from a new terminal
+      - name: Uninstall from a new terminal, refused first while the application runs
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         env:
-          LEG: "Uninstall from a new terminal"
-          JASON_Update__CheckEnabled: 'false'
+          LEG: "Uninstall from a new terminal, refused first while the application runs"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Needs 'Install as an agent does, with install.ps1=${{ steps.install.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-terminal-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-terminal-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" "Install as an agent does, with install.sh=${{ steps.install.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh refuse-while-open
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-terminal-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-terminal-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # jason uninstall from a terminal, with the window opened once the verb is past its own check: the waiter's silent
-      # uninstaller finds the application and ends 3, and the waiter runs it once more without /S, which asks the person.
-      # That run is seen and ended unanswered; Installed apps then takes the application off.
-      - name: Uninstall from a terminal while the window opens, so the waiter asks
+      - name: Install again, and uninstall from the application's Uninstall Jason item
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         env:
-          LEG: "Uninstall from a terminal while the window opens, so the waiter asks"
-          JASON_Update__CheckEnabled: 'false'
+          LEG: "Install again, and uninstall from the application's Uninstall Jason item"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallWaiterShown -Out $env:OUT -Feed $env:FEED -Script "${{ steps.stand-in.outputs.script }}"
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-waiter-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-waiter-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+          bash .github/scripts/test-installation-macos.sh uninstall-menu
+          bash .github/scripts/test-installation-macos.sh listing after-menu-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-menu-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # The pinned line: a pin naming another version refused, then -Version naming this one, asserted as the unpinned
-      # install is, and taken off from a new terminal.
-      - name: Install by the pinned line, and uninstall from a new terminal
+      # The pinned line, on a machine the legs before brought back to its listing: a pin naming another version refused,
+      # then --version naming this one, asserted as the unpinned install is; whether autostart enable starts a runtime at
+      # once, said; and the installation taken off from a new terminal.
+      - name: Install by the pinned line, see whether autostart enable starts a runtime, and uninstall from a new terminal
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         env:
-          LEG: "Install by the pinned line, and uninstall from a new terminal"
-          JASON_Update__CheckEnabled: 'false'
+          LEG: "Install by the pinned line, see whether autostart enable starts a runtime, and uninstall from a new terminal"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Install -Pinned -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-pinned-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-pinned-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh install "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}" pinned
+          bash .github/scripts/test-installation-macos.sh enable-starts-now
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-pinned-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-pinned-uninstall before
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # The previous release, resolved now: the latest published release, which is never the one this tree is on the way
-      # to until that is published, read from where the public releases' latest redirects, and its files from its public
-      # downloads, each checked against its checksums.txt. No token: the repository's releases are public.
       - name: Fetch the previous release
         id: previous
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
+        shell: bash
         run: |
-          $release = "v$($env:VERSION -replace '-.*$', '')"
-          $landed = (Invoke-WebRequest -Uri https://github.com/reply-team/jason-ai/releases/latest -UseBasicParsing -TimeoutSec 60).BaseResponse.RequestMessage.RequestUri.AbsoluteUri
-          $tag = ([string]$landed) -replace '^.*/releases/tag/', ''
-          if ($tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw "the latest published release could not be read: '$landed'" }
-          if ($tag -ceq $release) { throw "the latest published release is $release, the one this tree builds: there is no previous release to update from here" }
-          New-Item -ItemType Directory -Force -Path $env:PREVIOUS | Out-Null
-          foreach ($name in 'checksums.txt', 'install.ps1', 'jason-win-x64.zip', 'manifest.json', 'jason-desktop-windows-x64-setup.exe') {
-            Invoke-WebRequest -Uri "https://github.com/reply-team/jason-ai/releases/download/$tag/$name" -OutFile (Join-Path $env:PREVIOUS $name) -UseBasicParsing -TimeoutSec 600
-          }
-          foreach ($line in Get-Content (Join-Path $env:PREVIOUS 'checksums.txt')) {
-            $hash, $name = $line -split '  ', 2
-            $file = Join-Path $env:PREVIOUS $name
-            if ((Test-Path -LiteralPath $file) -and (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $hash) { throw "$name does not match $tag's checksums.txt" }
-          }
-          Write-Host "the previous release is $tag"
-          "- the previous release is $tag" | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          release="v${VERSION%%-*}"
+          tag="$(curl -sS --max-time 60 -o /dev/null -w '%{redirect_url}' https://github.com/reply-team/jason-ai/releases/latest | sed 's|.*/releases/tag/||')"
+          printf '%s\n' "$tag" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+' || { echo "::error::the latest published release could not be read: '$tag'"; exit 1; }
+          [ "$tag" != "$release" ] || { echo "::error::the latest published release is $release, the one this tree builds: there is no previous release to update from here"; exit 1; }
+          mkdir -p "$PREVIOUS"
+          for name in checksums.txt install.sh jason-osx-arm64.tar.gz manifest.json jason-desktop-macos-arm64.zip; do
+            curl -fsSL --max-time 600 -o "$PREVIOUS/$name" "https://github.com/reply-team/jason-ai/releases/download/$tag/$name"
+          done
+          (cd "$PREVIOUS" && grep -E '  (install\.sh|jason-osx-arm64\.tar\.gz|manifest\.json)$' checksums.txt | shasum -a 256 -c -)
+          # The previous release's Desktop archive, held to checksums.txt as the three files beside it are: unlisted, it fails.
+          grep -qE '  jason-desktop-macos-arm64\.zip$' "$PREVIOUS/checksums.txt" || { echo "::error::jason-desktop-macos-arm64.zip is not listed in $tag's checksums.txt"; exit 1; }
+          (cd "$PREVIOUS" && grep -E '  jason-desktop-macos-arm64\.zip$' checksums.txt | shasum -a 256 -c -)
+          echo "the previous release is $tag"
+          echo "- the previous release is $tag" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install this build over the previous release's Jason Desktop, as its updater runs an installer
-        id: over-previous
+      # Over the previous release's Jason Desktop: its own download placed and opened as a person does, then this build
+      # installed over it by install.sh as an agent runs it, and taken off from a new terminal.
+      - name: Install this build by install.sh over the previous release's Jason Desktop
         if: ${{ !cancelled() }}
-        timeout-minutes: 20
-        shell: pwsh
+        timeout-minutes: 25
+        shell: bash
         env:
-          LEG: "Install this build over the previous release's Jason Desktop, as its updater runs an installer"
-          JASON_Update__CheckEnabled: 'false'
+          LEG: "Install this build by install.sh over the previous release's Jason Desktop"
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step InstallOverPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
-
-      - name: Uninstall from Installed apps
-        if: ${{ !cancelled() }}
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          LEG: "Uninstall from Installed apps"
-          JASON_Update__CheckEnabled: 'false'
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Needs 'Install this build over the previous release''s Jason Desktop, as its updater runs an installer=${{ steps.over-previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-installed-apps-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-installed-apps-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh over-previous-desktop "$PREVIOUS" "$FEED" "$VERSION" "${{ steps.stand-in.outputs.script }}"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-over-previous-uninstall
+          # The previous release's Desktop's first start ran its own jason install, which wrote the ~/.local/bin lines into a
+          # profile it keeps no record of creating; docs/release-and-update.md §9 ("in place of the PATH entry and the
+          # executable") says such a file stays: "a file the person had, one they have written into since, and one with no
+          # record (an install before 0.49) stay". previous-profiles excuses that file only when empty, and that release's
+          # enabled launchd record by name, each said.
+          bash .github/scripts/test-installation-macos.sh compare after-over-previous-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # The path every command-line user takes: the previous release's own install, its own jason update apply pinned to
       # this version, and the move into Jason Desktop asserted in full; then the moved installation taken off from a new
-      # terminal. JASON_TEST_BUILD_SIGNER is the stand-in's name, which this test build's move holds the setup to.
+      # terminal. JASON_TEST_BUILD_REQUIREMENT is this build's own ad hoc signature, which its move holds the application to.
       - name: Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop
         if: ${{ !cancelled() }}
         timeout-minutes: 30
-        shell: pwsh
+        shell: bash
         env:
           LEG: "Update the previous release's command-line Jason with its own update apply, and move it into Jason Desktop"
-          JASON_Update__CheckEnabled: 'false'
           JASON_PROOF_BUILD: test
-          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step FromPrevious -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-previous-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-previous-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
+          bash .github/scripts/test-installation-macos.sh from-previous "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh uninstall-terminal
+          bash .github/scripts/test-installation-macos.sh listing after-previous-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-previous-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # The next version, packaged and built as a test build the same way at this version and one: its own jason, its
-      # setup, its update feed and a manifest naming it, in a folder of its own that the update below reads.
-      - name: Package jason at the next version
+      # The previous release's own uninstall, for what it leaves in launchd's records: said, and its listing kept.
+      - name: Say what the previous release's own uninstall leaves in launchd
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        id: next
-        uses: ./.github/actions/package
-        with:
-          rid: win-x64
-          version: ${{ env.VERSION }}.1
-          artifact: ci-union-win-x64-next
-          retention-days: 3
-
-      - name: Build the next version as a test build
-        id: next-build
-        if: ${{ !cancelled() && steps.next.outcome == 'success' }}
-        timeout-minutes: 20
-        shell: pwsh
-        working-directory: desktop
+        shell: bash
         env:
-          EXECUTABLE: ${{ steps.next.outputs.executable }}
-          NEXT: ${{ env.VERSION }}.1
-          JASON_DESKTOP_TEST_BUILD: '1'
+          LEG: "Say what the previous release's own uninstall leaves in launchd"
         run: |
-          ../.github/scripts/Build-DesktopTestBuild.ps1 -Rid win-x64 -Version $env:NEXT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
-          ../.github/scripts/Test-InstallationWindows.ps1 -Step Extracted -Out $env:OUT -Executable (Join-Path $env:GITHUB_WORKSPACE $env:EXECUTABLE)
-          $next = Join-Path $env:GITHUB_WORKSPACE 'next'
-          New-Item -ItemType Directory -Force -Path $next | Out-Null
-          Copy-Item ../artifacts/release/jason-win-x64.zip, ../artifacts/release/jason-win-x64.zip.sha256, ../artifacts/release/jason-win-x64.fragment.json $next
-          Copy-Item dist/jason-desktop-windows-x64-setup.exe, dist/jason-desktop-windows-x64-setup.exe.blockmap, dist/latest.yml $next
-          Copy-Item (Join-Path $env:FEED 'jason-skills.zip') $next
-          ../.github/scripts/Write-Manifest.ps1 -Version $env:NEXT -Directory $next -Require win-x64 -Plugins jason-skills.zip,jason-desktop-windows-x64-setup.exe,jason-desktop-windows-x64-setup.exe.blockmap,latest.yml
-          Get-Content (Join-Path $next 'manifest.json')
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          bash .github/scripts/test-installation-macos.sh previous-removal "$PREVIOUS"
+          bash .github/scripts/test-installation-macos.sh listing after-previous-own-removal
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
-      # This build's silent setups over the previous release (desktop/installer/uninstall.nsh): over a window that never
-      # quits, 3 at the include's bound and the next setup not blocked; plain /S over a window and over the tray, 3; the old
-      # application quitting 20 s late, 0; the old uninstaller refusing, 2. None may show a window, and each sub-leg runs
-      # whatever the one before it did. Then Installed apps takes it off again, and the listing is held to the machine before.
-      - name: Install this build silently over the previous release
-        if: ${{ !cancelled() }}
-        timeout-minutes: 25
-        shell: pwsh
-        env:
-          LEG: "Install this build silently over the previous release"
-          JASON_Update__CheckEnabled: 'false'
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step SilentUpdateLegs -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromInstalledApps -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-silent-setups-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-silent-setups-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
-
-      - name: Read the module path Windows PowerShell rebuilds from an empty one
-        if: ${{ !cancelled() }}
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          LEG: "Read the module path Windows PowerShell rebuilds from an empty one"
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Reading
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step ModulePath -Out $env:OUT
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
-
-      # The carried jason update apply on a real install of this test build: first refused by an open window, which takes
-      # no request naming a feed; then to the next one with no window open, handed to Jason Desktop and finished by the new
-      # jason, not refused as elevated on this runner. A second reader holds the request's file as the Desktop writes it.
-      # The test build's updater checks no publisher.
-      - name: Update the test build from a terminal with jason update apply
-        if: ${{ !cancelled() }}
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          LEG: "Update the test build from a terminal with jason update apply"
-          JASON_Update__CheckEnabled: 'false'
-        run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Package jason at the next version=${{ steps.next.outcome }}', 'Build the next version as a test build=${{ steps.next-build.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step UpdateApply -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}" -Next (Join-Path $env:GITHUB_WORKSPACE 'next')
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-update-apply-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-update-apply-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
-
-      # LAST before the held step, so that whatever going back does to the machine takes no later leg.
+      # Among the last before the held step, so that whatever going back does to the machine takes no leg but the one that
+      # goes back and moves again, which follows it.
       # Going back from 0.49 (docs/release-and-update.md, "Going back from 0.49"): the previous release installed, one
       # campaign made, moved by its own update; then jason uninstall with no --purge-data and the previous release by its
       # pinned line from the real release page. The campaigns as many, the journal held by id, its version and its ready
-      # status; then its own uninstall, and the listing held to the machine before. The leg above keeps 0.49's own
-      # --purge-data uninstall of a moved machine.
+      # status; then its own uninstall, and the listing held to the machine before, that release's own launchd records
+      # named. The leg above keeps 0.49's own --purge-data uninstall of a moved Mac.
       - name: Move again from the previous release, then go back to it as the update page says
         if: ${{ !cancelled() }}
         timeout-minutes: 30
-        shell: pwsh
+        shell: bash
         env:
           LEG: "Move again from the previous release, then go back to it as the update page says"
-          JASON_Update__CheckEnabled: 'false'
-          JASON_TEST_BUILD_SIGNER: ${{ steps.stand-in.outputs.signer }}
         run: |
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}', 'Fetch the previous release=${{ steps.previous.outcome }}'
-          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step WayBack -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Previous $env:PREVIOUS
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-way-back-uninstall
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-way-back-uninstall -Against before
-          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
+          bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION"
+          bash .github/scripts/test-installation-macos.sh listing after-way-back-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-way-back-uninstall before previous-own
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
+
+      # Going back, then moving again: after going back to the previous release as the page says, its own jason update
+      # apply moves the install into Jason Desktop again, the wrapper naming no data directory, the campaigns as many; the
+      # moved install's own uninstall ends it, and the listing is held to the machine before, the previous release's empty
+      # profiles and enabled launchd record aside.
+      - name: Go back to the previous release, then move again with its own update
+        if: ${{ !cancelled() }}
+        timeout-minutes: 35
+        shell: bash
+        env:
+          LEG: "Go back to the previous release, then move again with its own update"
+        run: |
+          bash .github/scripts/test-installation-macos.sh begin "$LEG" clean "Package jason for osx-arm64 as a pull request does, as a test build=${{ steps.package.outcome }}" "Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}" "Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}" "The released install.sh refuses the ad hoc test build, and a copy names its signature=${{ steps.stand-in.outcome }}" "The machine before anything is installed=${{ steps.before.outcome }}" "Fetch the previous release=${{ steps.previous.outcome }}"
+          [ ! -e "$OUT/skip" ] || exit 0
+          export JASON_TEST_BUILD_REQUIREMENT="$(cat "${{ steps.stand-in.outputs.script }}.requirement")"
+          bash .github/scripts/test-installation-macos.sh way-back "$PREVIOUS" "$FEED" "$VERSION" again
+          bash .github/scripts/test-installation-macos.sh listing after-way-back-again-uninstall
+          bash .github/scripts/test-installation-macos.sh compare after-way-back-again-uninstall before previous-profiles
+          bash .github/scripts/test-installation-macos.sh end "$LEG"
 
       # Each leg's listing is compared with the machine before as it ends, and a divergence is recorded there; each leg that
       # failed or was not run is recorded by its name. All of it is read here, last, and fails the job with the list.
       - name: The machine after every uninstall is the machine before
         if: ${{ !cancelled() }}
         timeout-minutes: 20
-        shell: pwsh
-        run: ./.github/scripts/Test-InstallationWindows.ps1 -Step Held -Out $env:OUT
+        shell: bash
+        run: bash .github/scripts/test-installation-macos.sh held
 
       - name: Say what this job does not prove
         timeout-minutes: 20
         if: always()
-        shell: pwsh
+        shell: bash
         run: |
-          @(
-            '### What this job does not prove',
-            '- The release''s signer: the setup here is signed by a certificate made on this runner, and install.ps1 is run as a copy naming it. The release''s proof job runs the released script on the signed packages.',
-            '- The updater''s publisher check, and window_open: this build''s updater checks no publisher, and with a window open only the refusal of a request naming a feed is seen.',
-            '- SmartScreen and the mark of the web on a setup a browser downloaded, and a standard account: the runner''s user is an administrator whose downloads carry no mark.',
-            '- The previous release''s own Desktop updater reaching this version: it reads only the published releases; this job runs its installer as that updater would.'
-          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          {
+            echo '### What this job does not prove'
+            echo "- The release's signature and Gatekeeper: the application here is signed ad hoc, and install.sh is run as a copy naming that signature. The release's proof job runs the released script on the signed, notarized packages, with a quarantined variant."
+            echo "- The updater: Squirrel takes only an update signed by the running application's own team, which an ad hoc build has none of. The release's proof job updates a signed build to a signed next one."
+            echo "- App Management and a person's Terminal: this runner's System Integrity Protection is off and its shell is granted, so a rename or delete of Jason.app passing here says nothing about a person's Mac."
+            echo "- The previous release's own Desktop updater reaching this version: it reads only the published releases."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the listings
         timeout-minutes: 20
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ci-union-windows-listings
+          name: ci-union-macos-listings
           path: installation
           if-no-files-found: ignore
           retention-days: 3
