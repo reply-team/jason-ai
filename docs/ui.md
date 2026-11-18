@@ -151,8 +151,9 @@ What waits for you: approvals and questions, **Pending** or **Decided** (`jason 
 Opening one shows what the runtime recorded about it, and an approval's panel says why it is there, who it reaches, from
 which account and on which channel, and through which provider. A paid search of the provider's people is named "Find
 people", and under its operation's intent shows its definition: each filter by its own name with the values it takes,
-what it leaves out on one line, and the search's own arguments by their own names (`count`, `people_per_company` and the
-rest). An approval to send a message shows it under "The message as written", before the raw request, which stays
+what it leaves out on one line, and the search's own arguments in plain words ("People to find: up to 50", "At most 2
+per company" and the rest). An approval to send a message shows it under "The message as written", before the raw
+request, which stays
 folded: an email's sender, recipient, subject and body in that order, with the
 body's line breaks; a LinkedIn message's text; a template as written, then the runtime's own example of it for this person,
 labelled as an example the provider fills in. It is all drawn as text, so markup in a message appears as the characters it

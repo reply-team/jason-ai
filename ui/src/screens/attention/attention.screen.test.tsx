@@ -97,7 +97,7 @@ describe('Attention', () => {
         expect(fact('Channel')).toBe('Email');
     });
 
-    it('opens a paid search named in words, its definition and arguments as written under what will happen', async () => {
+    it('opens a paid search named in words, its definition as written and its arguments in plain words under what will happen', async () => {
         const fake = new FakeApi()
             .answer('approval.list', 'approval.list/search-pending')
             .answer('decision.list', 'decision.list/empty')

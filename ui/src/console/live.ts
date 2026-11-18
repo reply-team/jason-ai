@@ -2,6 +2,7 @@
 // runtime knows of, and nothing here is markup: the panels escape what they draw.
 import type { ApprovalSummary, CampaignSummary, CampaignSummaryRow, DecisionSummary, JournalEntry } from '../api/types';
 import type { DesktopHost } from '../platform/desktop';
+import { en, type MessageKey } from '../locale/en';
 import { t } from '../platform/i18n';
 
 export type Tone = 'green' | 'amber' | 'gray' | 'blue' | 'red' | 'violet' | 'teal';
@@ -98,13 +99,16 @@ export function toApprovalRow(row: ApprovalSummary, now: number, preview?: Recor
     };
 }
 
-/** What a search is for, as its preview highlights it, in the words of its own definition and arguments. */
+/** What a search is for, as its preview highlights it: its definition in its own words, its arguments in plain ones. */
 export interface SearchWords {
     /** Each filter of the definition and the values it takes, `name: values` as written, in the definition's order. */
     filters: string[];
     /** Each filter that leaves values out, `name: values`, in the same order. */
     leftOut: string[];
-    /** The search's other highlighted arguments, `name: value` as written, each that carries a value. */
+    /**
+     * The search's other highlighted arguments, each that carries a value, in the locale table's plain words; one the
+     * table has no line for is `name: value` as written.
+     */
     arguments: string[];
 }
 
@@ -136,6 +140,12 @@ const factNames: readonly [string, string][] = [
     ['cost', 'Cost'],
 ];
 
+/** A locale line by a key made from the runtime's words, or null where the table has none. */
+const line = (key: string, parameters: Readonly<Record<string, string>> = {}): string | null =>
+    Object.hasOwn(en, key) ? t(key as MessageKey, parameters) : null;
+
+// A list item `{ value, type: 'include' | 'exclude' }` is one provider's convention, not a contract: read where present,
+// never required. An item of any other shape is written as it is, with no "Leaving out" line.
 const isTerm = (value: unknown): value is { value: unknown; type: 'include' | 'exclude' } => {
     const term = record(value);
     return term !== null && 'value' in term && (term['type'] === 'include' || term['type'] === 'exclude');
@@ -143,16 +153,19 @@ const isTerm = (value: unknown): value is { value: unknown; type: 'include' | 'e
 
 /**
  * A value as written: a text as it stands, a list's items joined, an object's members named, anything else as JSON.
- * An item a list marks `exclude` is not written here but handed to `excluded`, and a member left with nothing to say is
- * not named.
+ * An item a list marks `exclude` is not written here but handed to `terms.excluded`, one it marks `include` is counted
+ * in `terms.included`, and a member left with nothing to say is not named.
  */
-function written(value: unknown, excluded: string[]): string {
+function written(value: unknown, terms: { included: number; excluded: string[] }): string {
     if (Array.isArray(value))
         return value
             .flatMap((each) => {
-                if (!isTerm(each)) return [written(each, excluded)];
-                if (each.type === 'include') return [written(each.value, excluded)];
-                excluded.push(written(each.value, excluded));
+                if (!isTerm(each)) return [written(each, terms)];
+                if (each.type === 'include') {
+                    terms.included += 1;
+                    return [written(each.value, terms)];
+                }
+                terms.excluded.push(written(each.value, terms));
                 return [];
             })
             .join(', ');
@@ -160,7 +173,7 @@ function written(value: unknown, excluded: string[]): string {
     if (object !== null)
         return Object.entries(object)
             .flatMap(([name, member]) => {
-                const taken = written(member, excluded);
+                const taken = written(member, terms);
                 return taken === '' ? [] : [`${name}: ${taken}`];
             })
             .join('; ');
@@ -169,21 +182,29 @@ function written(value: unknown, excluded: string[]): string {
 
 /**
  * What a search is for, where the preview highlights a definition: each filter by its own name, what it leaves out
- * apart, and the search's other arguments by their own names. Nothing is renamed or put into other words.
+ * apart, and the search's other arguments in plain words. Nothing of the definition is renamed or put into other words.
  */
 function searchOf(highlights: Record<string, unknown> | null): SearchWords | null {
     if (highlights === null || !Object.hasOwn(highlights, '/definition')) return null;
     const filters: string[] = [];
     const leftOut: string[] = [];
     for (const [name, value] of Object.entries(record(highlights['/definition']) ?? {})) {
-        const excluded: string[] = [];
-        const taken = written(value, excluded);
-        if (taken !== '') filters.push(`${name}: ${taken}`);
-        if (excluded.length > 0) leftOut.push(`${name}: ${excluded.join(', ')}`);
+        const terms = { included: 0, excluded: [] as string[] };
+        const taken = written(value, terms);
+        if (taken !== '' && (terms.included > 0 || terms.excluded.length === 0)) filters.push(`${name}: ${taken}`);
+        if (terms.excluded.length > 0) leftOut.push(`${name}: ${terms.excluded.join(', ')}`);
     }
     const searchArguments = Object.entries(highlights)
         .filter(([pointer, value]) => pointer !== '/definition' && value !== null && value !== undefined)
-        .map(([pointer, value]) => `${pointer.slice(pointer.lastIndexOf('/') + 1)}: ${written(value, [])}`);
+        .map(([pointer, value]) => {
+            const name = pointer.slice(pointer.lastIndexOf('/') + 1);
+            const shown = written(value, { included: 0, excluded: [] });
+            return (
+                line(`approval.arg.${name}.${shown}`) ??
+                line(`approval.arg.${name}`, { value: shown }) ??
+                `${name}: ${shown}`
+            );
+        });
     return filters.length + leftOut.length + searchArguments.length === 0
         ? null
         : { filters, leftOut, arguments: searchArguments };

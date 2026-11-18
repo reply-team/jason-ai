@@ -1,7 +1,8 @@
 import { fixtures } from './fixtures';
 
 // What every place that shows an approval says of the recorded paid search (`approval.get/search-first`), line for
-// line: its definition and its arguments as the runtime returns them, one statement for the four places' tests.
+// line: its definition as the runtime returns it and its arguments in plain words, one statement for the four places'
+// tests.
 
 /** The operation's own sentence, which stands under the title as it always has. */
 export const searchIntent = fixtures['approval.get/search-first'].response.preview.intent;
@@ -13,11 +14,11 @@ export const firstSearchLines = [
     'industries: Logistics',
     'companySizes: fifty, twoHundred',
     'Leaving out: jobTitles: Operations Intern · industries: Staffing and Recruiting',
-    'count: 50 · people_per_company: 2 · include_without_email: false · find_phones: true',
+    'People to find: up to 50 · At most 2 per company · Only people with an email address · Phone numbers too, which may cost extra',
 ];
 
 /** The top-up's arguments line: its count and the audience it adds to, the options it was not given left out. */
-export const topUpArguments = 'count: 20 · audience: 1';
+export const topUpArguments = 'People to find: up to 20 · More people for audience 1';
 
 /** An element's text with its runs of white space made one space, as a person reads it. */
 const words = (element: Element) => (element.textContent ?? '').replace(/\s+/g, ' ').trim();

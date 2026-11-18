@@ -109,8 +109,9 @@ shows before anything is typed and what you send waits, while the window is open
 
 - **Needs you** lists approvals and questions, says for an approval who it reaches, from which account and on which
   channel, and narrows to All, Approvals or Questions. A paid search is named "Find people" and shows, under what it
-  will do, its definition and arguments by their own names and values, with what it leaves out on a line of its own. An
-  approval's **Approve** is live only once Needs you has read that approval whole, with any doubt about a send shown
+  will do, its definition by its own names and values, with what it leaves out on a line of its own, and the search's
+  own arguments in plain words. An approval's **Approve** is live only once Needs you has read that approval whole,
+  with any doubt about a send shown
   above it; until then the row says it is being read, or why it could not be, and **Details** stays. Under the mailbox
   an email goes from it says the sending name the provider holds
   for that mailbox now, in the words an agent's chat's card uses below. A message you edit and save stays where it was,

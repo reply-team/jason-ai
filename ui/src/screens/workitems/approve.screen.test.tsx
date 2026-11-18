@@ -199,7 +199,7 @@ describe.each(shells)('Work items in %s: Approve by the rule', (_, listed, open)
         expect(words(panel())).toMatch(/in Spring launch · \S+ created/);
     });
 
-    it('names a paid search waiting in words, and shows its definition and arguments as written under its intent', async () => {
+    it('names a paid search waiting in words, and shows its definition as written and its arguments in plain words under its intent', async () => {
         const fake = waitingSearch(listed);
         await open(fake, { screen: 'workitems', tab: 'now', filters: {}, id: 'wi_1' });
         await waitFor(() => expect(approveButton().disabled).toBe(false));

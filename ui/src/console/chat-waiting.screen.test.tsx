@@ -300,7 +300,7 @@ describe('what waits in an agent’s chat', () => {
         expect(region.querySelectorAll('.waiting-card')).toHaveLength(5);
     });
 
-    it('names a paid search in words and shows its definition and its arguments as written under its intent', async () => {
+    it('names a paid search in words and shows its definition as written and its arguments in plain words under its intent', async () => {
         springApprovals = 'approval.list/search-campaign-pending';
         elsewhere = 'nothing';
         const { fake } = renderConsole();

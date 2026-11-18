@@ -433,7 +433,7 @@ describe('Needs you', () => {
                 .answer('decision.list', 'decision.list/empty')
                 .answer('approval.get', 'approval.get/search-first', 'approval.get/search-top-up');
 
-        it('is named in words, and shows its definition and its arguments as written under its intent', async () => {
+        it('is named in words, and shows its definition as written and its arguments in plain words under its intent', async () => {
             const fake = searches();
             await renderConsole(fake);
             await waitFor(() => expect(pane().querySelector('.needs-search')).toBeTruthy());
