@@ -4,12 +4,12 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { commandMenuOf, commandQuestion, PathCommand } from '../src/path-command.ts';
-import { addedWords, desktopFiles, heldBy, takeLines, unsafeFolder, exportLine, installerFiles, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines } from '../src/path-profile.ts';
+import { addedWords, addLines, desktopFiles, heldBy, takeLines, unsafeFolder, exportLine, installerFiles, interactiveProfile, loginProfile, pathLines, profileMarker, withoutLines, type PathLines } from '../src/path-profile.ts';
 import { memoryLog } from './harness.ts';
 
 const script = readFileSync(join(import.meta.dirname, '..', '..', 'install', 'install.sh'), 'utf8');
@@ -258,7 +258,77 @@ test('a removal leaves every other byte of the profile as it was, a last line wi
     // Two blocks, one in the middle, both come out; a marker over another folder's line stays.
     const other = exportLine('/elsewhere/bin');
     const middle = `a${block(line)}b\n${block(other)}${block(line)}`;
-    assert.equal(withoutLines(middle, folder), `ab\n${block(other)}`);
+    assert.equal(withoutLines(middle, folder), `a\nb\n${block(other)}`);
+});
+
+/**
+ * A profile with the given bytes, the desktop's own add of the lines, then whatever `then` does to it, and the desktop's
+ * own removal: the profile's bytes after it.
+ */
+function roundTrip(t: { after(fn: () => void): void }, original: string, then: (file: string, folder: string) => void = () => {}): Buffer {
+    const at = home(t);
+    const file = join(at, '.zprofile');
+    writeFileSync(file, bytes(original));
+    const folder = join(at, '.local', 'bin');
+    const line = exportLine(folder);
+    const lines: PathLines = { folder, line, byHand: line, add: [file], refused: [], interactive: true, take: [file], kept: [], held: null };
+    assert.deepEqual(addLines(lines), { added: [file], refused: [] });
+    then(file, folder);
+    assert.deepEqual(takeLines(lines), []);
+    return readFileSync(file);
+}
+
+/** The bytes of a text, as a profile holds them. */
+const bytes = (text: string) => Buffer.from(text, 'utf8');
+
+test('a profile comes back from the add and the removal byte for byte, whatever it ended with', (t) => {
+    for (const original of ['# mine\nexport EDITOR=vim\n', '# mine\nexport EDITOR=vim', '', '# mine\nexport EDITOR=vim\n\n', '# mine\r\nexport EDITOR=vim\r\n', '# mine\r\nexport EDITOR=vim']) {
+        assert.deepEqual(roundTrip(t, original), bytes(original), JSON.stringify(original));
+    }
+});
+
+test('the person’s own text after the block stays on lines of its own: the newline the block began with now separates them', (t) => {
+    for (const original of ['# mine\nexport EDITOR=vim', '# mine\nexport EDITOR=vim\n']) {
+        const back = roundTrip(t, original, (file) => appendFileSync(file, 'export LANG=C\n'));
+        assert.deepEqual(back, bytes('# mine\nexport EDITOR=vim\nexport LANG=C\n'), JSON.stringify(original));
+    }
+});
+
+test('two blocks come out and leave the profile as it began: the same block twice, and another folder’s under ours', (t) => {
+    for (const original of ['# mine\nexport EDITOR=vim', '# mine\nexport EDITOR=vim\n']) {
+        const twice = roundTrip(t, original, (file, folder) => appendFileSync(file, block(exportLine(folder))));
+        assert.deepEqual(twice, bytes(original), `twice: ${JSON.stringify(original)}`);
+        // Another folder's block appended first, ours under it: ours comes out, then the other's in its turn.
+        const other = exportLine('/opt/other/bin');
+        const two = roundTrip(t, `${original}${block(other)}`);
+        assert.deepEqual(two, bytes(`${original}${block(other)}`), `ours out: ${JSON.stringify(original)}`);
+        assert.deepEqual(Buffer.from(withoutLines(two.toString('latin1'), '/opt/other/bin'), 'latin1'), bytes(original), `the other's out: ${JSON.stringify(original)}`);
+    }
+});
+
+test('the block the repair of jason status appends, run in sh, comes back out byte for byte', { skip: process.platform === 'win32' && 'the repair runs in sh, on macOS and Linux' }, (t) => {
+    for (const original of ['# mine\nexport EDITOR=vim', '# mine\nexport EDITOR=vim\n', '']) {
+        const at = home(t);
+        const file = join(at, '.zprofile');
+        writeFileSync(file, bytes(original));
+        const folder = join(at, '.local', 'bin');
+        const line = exportLine(folder);
+        // The repair's own append: printf '\n%s\n%s\n' of the marker and the line (PathEntry.AppendFormat in C#).
+        const ran = spawnSync('/bin/sh', ['-c', `printf '\\n%s\\n%s\\n' "$1" "$2" >> "$3"`, 'sh', profileMarker, line, file]);
+        assert.equal(ran.status, 0, String(ran.stderr));
+        assert.notDeepEqual(readFileSync(file), bytes(original));
+        assert.deepEqual(takeLines({ folder, line, byHand: line, add: [], refused: [], interactive: true, take: [file], kept: [], held: null }), []);
+        assert.deepEqual(readFileSync(file), bytes(original), JSON.stringify(original));
+    }
+});
+
+test('every profile of a list survives the add and the removal byte for byte', (t) => {
+    const originals = [
+        '', '\n', '\n\n\n', '\r\n', 'x', 'x\n', 'x\r', 'x\r\n', 'a\nb', 'a\nb\n', 'a\n\nb', 'a\n\nb\n\n',
+        'a\r\nb\r\nc', 'a\r\nb\r\nc\r\n', 'mixed\r\nends\nhere', '\ttabbed\n\tlines', '# é, ü and ß\nexport X=1',
+        profileMarker, `${profileMarker}\n`, `# ${exportLine('/h/.local/bin')}`, `x\n${exportLine('/opt/other/bin')}`, "alias ll='ls -l'",
+    ];
+    for (const original of originals) assert.deepEqual(roundTrip(t, original), bytes(original), JSON.stringify(original));
 });
 
 test('a folder holding a character the shell reads in double quotes gets no line: the line to add by hand quotes it', (t) => {

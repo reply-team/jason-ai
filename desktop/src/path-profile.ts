@@ -115,18 +115,25 @@ export function carriesLine(text: string, folder: string): boolean {
  * the blank line above them where there is one — or the same string when it carries none. Every other byte stays.
  */
 export function withoutLines(text: string, folder: string): string {
-    // Exactly what the append wrote, `\n<marker>\n<line>\n`, ending the file or a line of it: taking it out leaves every
-    // other byte as it was, a last line the profile ended without a newline among them.
+    // Exactly what the append wrote, `\n<marker>\n<line>\n`, ending the file or a line of it, walked from the end as the
+    // uninstall walks it. Where a newline stands before it, its first `\n` made the blank line and goes with it. Where
+    // none does, the profile's last line had no newline and that `\n` ended it: it goes too where nothing follows the
+    // block, so the file ends as it began, and stays where something does, because it now separates the person's lines.
     const block = `\n${profileMarker}\n${asBytes(exportLine(folder))}`;
     let out = text;
-    let from = 0;
-    for (;;) {
-        const at = out.indexOf(block, from);
+    let from = out.length;
+    while (from >= 0) {
+        const at = out.lastIndexOf(block, from);
         if (at < 0) break;
         const end = at + block.length;
-        if (end === out.length) out = out.slice(0, at);
-        else if (out[end] === '\n') out = out.slice(0, at) + out.slice(end + 1);
-        else from = at + 1;
+        const after = end === out.length ? end : out[end] === '\n' ? end + 1 : -1;
+        if (after < 0) {
+            from = at - 1;
+            continue;
+        }
+        const blankAbove = at === 0 || out[at - 1] === '\n';
+        out = out.slice(0, blankAbove || after === out.length ? at : at + 1) + out.slice(after);
+        from = at;
     }
     return out === text ? text : out;
 }
