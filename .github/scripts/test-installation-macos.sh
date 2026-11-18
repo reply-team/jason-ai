@@ -1053,23 +1053,45 @@ over-running-cli)
     # The one line over a running command-line install of the previous release: its own install.sh from its own assets,
     # a runtime running, its login start registered and one campaign made; then this build's install.sh, as an agent runs
     # it, with that runtime still running. Asserted: the application at this version; ~/.local/bin/jason the
-    # application's wrapper, naming no data directory, and a new login shell finding it; the command-line install retired,
-    # no runtime running from it; the login registration naming the carried jason; and the campaigns as many. The
-    # uninstall and the compare after it are the leg's next steps.
+    # application's wrapper, naming no data directory, and a new login shell finding it; jason install's report saying the
+    # old runtime stopped and naming the retired executable; the command-line install retired, no runtime running from it;
+    # a runtime running from the carried jason, which install.sh starts again; the login registration naming the carried
+    # jason; and the campaigns the same, by id. The uninstall and the compare after it are the leg's next steps.
     previous="$1"; feed="$2"; version="$3"; script="$4"
     read_field() { python3 -c 'import json,sys
 doc = json.load(open(sys.argv[1]))
 for key in sys.argv[2].split("."):
     doc = doc.get(key) if isinstance(doc, dict) else None
 print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc))' "$@"; }
-    # The campaigns a jason lists, archived included, counted from one page of a thousand; more than one page is refused.
-    campaigns() {
+    # The ids of the campaigns a jason lists, archived included, sorted, one a line, into a file: one page of a thousand;
+    # more than one page is refused.
+    campaign_ids() {
         within 120 "jason campaign list with $1" "$1" campaign list --include-archived --limit 1000 > "$OUT/over-running-cli-campaigns.json" || fail "jason campaign list with $1 failed"
         python3 -c 'import json,sys
 doc = json.loads([l for l in open(sys.argv[1]).read().splitlines() if l.lstrip().startswith("{")][-1])
 if doc.get("next_cursor"): sys.exit("more than one page of campaigns")
-print(len(doc["items"]))' "$OUT/over-running-cli-campaigns.json"
+print("\n".join(sorted(item["id"] for item in doc["items"])))' "$OUT/over-running-cli-campaigns.json" > "$2" || fail "the campaigns $1 lists could not be read"
     }
+    # A member of jason install's report, the last document install.sh printed that has a command and a runtime.
+    report_field() { python3 -c 'import json,sys
+doc = None
+for line in open(sys.argv[1]).read().splitlines():
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    try:
+        found = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(found, dict) and "command" in found and "runtime" in found:
+        doc = found
+if doc is None:
+    sys.exit("no report of jason install")
+for key in sys.argv[2].split("."):
+    doc = doc.get(key) if isinstance(doc, dict) else None
+print("" if doc is None else doc)' "$@"; }
+    # The processes whose command line runs a runtime from the file named.
+    runtimes_of() { ps -axo pid=,command= | grep -F "$1 runtime run" | grep -v grep || true; }
     within 300 "the previous release's install.sh" env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$previous" sh "$previous/install.sh" > "$OUT/over-running-cli-previous.txt" 2>&1 || fail "the previous release's install.sh failed: $(tail -n 3 "$OUT/over-running-cli-previous.txt")"
     old="$(within 60 "the previous release's jason --version" "$WRAPPER" --version | cut -d+ -f1)" || fail "the previous release's jason --version failed"
     # The previous release, held: an empty or this build's own version would prove this build over itself.
@@ -1077,17 +1099,28 @@ print(len(doc["items"]))' "$OUT/over-running-cli-campaigns.json"
     within 120 "the previous release's jason runtime start" "$WRAPPER" runtime start > /dev/null || fail "the previous release could not start a runtime"
     within 60 "the previous release's jason runtime autostart enable" "$WRAPPER" runtime autostart enable > /dev/null || fail "the previous release could not register its login start"
     within 60 "the previous release's jason campaign create" "$WRAPPER" campaign create --name 'Made before the one line' > "$OUT/over-running-cli-campaign.json" || fail "the previous release could not make a campaign: $(cat "$OUT/over-running-cli-campaign.json")"
-    before_count="$(campaigns "$WRAPPER")" || fail "the campaigns could not be counted under $old"
-    [ "$before_count" -ge 1 ] || fail "the campaign made under the previous release is not listed"
+    made="$(read_field "$OUT/over-running-cli-campaign.json" id)" || fail "the campaign made under the previous release has no id: $(cat "$OUT/over-running-cli-campaign.json")"
+    [ -n "$made" ] || fail "the campaign made under the previous release has no id: $(cat "$OUT/over-running-cli-campaign.json")"
+    campaign_ids "$WRAPPER" "$OUT/over-running-cli-ids-before.txt"
+    grep -qx "$made" "$OUT/over-running-cli-ids-before.txt" || fail "the campaign $made made under the previous release is not listed"
     within 60 "the previous release's runtime answering" "$WRAPPER" runtime status > /dev/null || fail "no runtime answers under the previous release before the one line"
-    say "the previous release's command-line Jason $old installed by its own script at $WRAPPER, a runtime running, its login start registered, $before_count campaign(s)"
+    # What the retirement later takes, held first to be there: the notice files, and a runtime from $WRAPPER found by the
+    # same match that later finds none, so that a match which never finds anything cannot pass.
+    for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ -f "$HOME/.local/bin/$notice" ] || fail "the previous release's install.sh placed no $notice in ~/.local/bin"; done
+    [ -n "$(runtimes_of "$WRAPPER")" ] || fail "no process runs '$WRAPPER runtime run' before the one line, so finding none after it would prove nothing; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+    say "the previous release's command-line Jason $old installed by its own script at $WRAPPER with its notice files, a runtime running from it (pid $(runtimes_of "$WRAPPER" | awk '{print $1}' | tr '\n' ' ')), its login start registered, $(wc -l < "$OUT/over-running-cli-ids-before.txt" | tr -d ' ') campaign(s)"
 
     # This build's line, as an agent runs it, with that runtime still running.
     status=0
     within 300 'install.sh over the running command-line install' env PATH="$(plain_path)" SHELL=/bin/zsh JASON_INSTALL_FEED="$feed" sh "$script" > "$OUT/over-running-cli-install.txt" 2>&1 || status=$?
     cat "$OUT/over-running-cli-install.txt"
     [ "$status" -eq 0 ] || fail "this build's install.sh over the running $old exited with $status"
-    say "this build's install.sh ran over the running command-line $old and ended 0"
+    # jason install's report: the old runtime stopped, and the executable retired the one $old placed.
+    said_runtime="$(report_field "$OUT/over-running-cli-install.txt" runtime)" || fail "install.sh printed no report of jason install"
+    [ "$said_runtime" = stopped ] || fail "jason install's report says the old runtime is '$said_runtime', not stopped"
+    said_retired="$(report_field "$OUT/over-running-cli-install.txt" retired.executable)" || fail "install.sh printed no report of jason install"
+    [ "$said_retired" = "$WRAPPER" ] || fail "jason install's report retired '$said_retired', not $WRAPPER"
+    say "this build's install.sh ran over the running command-line $old and ended 0; jason install's report says the old runtime stopped and retired $said_retired"
 
     # The application in place, at this version.
     placed="$(app)"
@@ -1107,23 +1140,23 @@ print(len(doc["items"]))' "$OUT/over-running-cli-campaigns.json"
 
     # The command-line install retired: its notice files gone, no runtime running from its executable.
     for notice in jason-LICENSE jason-THIRD-PARTY-NOTICES; do [ ! -e "$HOME/.local/bin/$notice" ] || fail "the retired install's $notice is left in ~/.local/bin"; done
-    if ps -axo command= | grep -F "$WRAPPER runtime run" | grep -v grep > /dev/null; then fail "a runtime still runs from the retired $WRAPPER: $(ps -axo pid,command | grep -F "$WRAPPER runtime run" | grep -v grep || true)"; fi
+    [ -z "$(runtimes_of "$WRAPPER")" ] || fail "a runtime still runs from the retired $WRAPPER: $(runtimes_of "$WRAPPER")"
     say "the command-line install is retired: no notice file in ~/.local/bin, and no runtime runs from $WRAPPER"
 
-    # The runtime: the one answering after the install, else one started from the carried jason, said which.
-    if within 60 'a runtime answering after the one line' "$carried" runtime status > /dev/null 2>&1; then say 'a runtime answers after the install'
-    else
-        within 120 'jason runtime start from the carried jason' "$carried" runtime start > "$OUT/over-running-cli-start.txt" 2>&1 || fail "no runtime ran after the install, and the carried jason could not start one: $(cat "$OUT/over-running-cli-start.txt")"
-        say 'no runtime ran after the install; one was started from the carried jason'
-    fi
+    # The runtime install.sh starts again after jason install stopped the old one: answering, and running from the carried
+    # jason. None is started here.
+    within 60 'a runtime answering after the one line' "$carried" runtime status > "$OUT/over-running-cli-status.txt" 2>&1 || fail "no runtime answers after the one line, where install.sh starts one again after jason install stopped the old: $(cat "$OUT/over-running-cli-status.txt")"
+    [ -n "$(runtimes_of "$carried")" ] || fail "a runtime answers after the one line, but none runs from $carried; the jason processes: $(ps -axo pid=,command= | grep -F jason | grep -v grep || true)"
+    say "a runtime answers after the one line, running from $carried (pid $(runtimes_of "$carried" | awk '{print $1}' | tr '\n' ' '))"
 
-    # The data kept, and the login registration naming the carried file.
-    after_count="$(campaigns "$carried")" || fail "the campaigns could not be counted after the one line"
-    [ "$after_count" = "$before_count" ] || fail "after the one line $after_count campaign(s) are listed, not the $before_count listed before it"
+    # The data kept, by id, and the login registration naming the carried file.
+    campaign_ids "$carried" "$OUT/over-running-cli-ids-after.txt"
+    cmp -s "$OUT/over-running-cli-ids-before.txt" "$OUT/over-running-cli-ids-after.txt" || fail "after the one line the campaigns listed are not the ones listed before it: $(diff "$OUT/over-running-cli-ids-before.txt" "$OUT/over-running-cli-ids-after.txt" | tr '\n' ' ')"
+    after_count="$(wc -l < "$OUT/over-running-cli-ids-after.txt" | tr -d ' ')"
     within 60 'jason runtime autostart status' "$carried" runtime autostart status > "$OUT/over-running-cli-autostart.json" 2>/dev/null || fail "jason runtime autostart status failed after the one line"
     [ "$(read_field "$OUT/over-running-cli-autostart.json" registered)" = true ] || fail "no login registration after the one line: $(cat "$OUT/over-running-cli-autostart.json")"
     [ "$(read_field "$OUT/over-running-cli-autostart.json" executable)" = "$carried" ] || fail "the login registration names $(read_field "$OUT/over-running-cli-autostart.json" executable), not $carried"
-    say "after the one line: $after_count campaign(s), as before, and the login registration names $carried"
+    say "after the one line: the same $after_count campaign(s), by id, and the login registration names $carried"
     ;;
 
 vanishing-place)
