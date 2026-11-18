@@ -508,11 +508,20 @@ take_scratch() {
         say "$line"
         printf '%s\n' "$line" >> "$OUT/resets.txt"
     fi
-    if [ -d "$SCRATCH_OWN_OUT/quick-start" ] && [ ! -e "$OWN_SKILL" ]; then
+    # While the person's own quick-start is out of its place, whatever stands there is a stand-in (the previous release's
+    # skills write one): removed, then the person's copy put back, as the leg's own put-back does. Where it cannot be put
+    # back, nothing is removed and this leg is not run, so the person's copy is never taken with the scratch.
+    if [ -d "$SCRATCH_OWN_OUT/quick-start" ]; then
+        if [ -e "$OWN_SKILL" ] || [ -L "$OWN_SKILL" ]; then
+            if rm -rf "$OWN_SKILL"; then line="  removed $OWN_SKILL, a stand-in while the person's own quick-start was out of its place"; else line="  could not remove $OWN_SKILL, a stand-in while the person's own quick-start was out of its place"; fi
+            say "$line"
+            printf '%s\n' "$line" >> "$OUT/resets.txt"
+        fi
         mkdir -p "$(dirname "$OWN_SKILL")"
-        if mv "$SCRATCH_OWN_OUT/quick-start" "$OWN_SKILL"; then line="  put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start to $OWN_SKILL"; else line="  could not put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start"; fi
+        if [ ! -e "$OWN_SKILL" ] && mv "$SCRATCH_OWN_OUT/quick-start" "$OWN_SKILL"; then line="  put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start to $OWN_SKILL"; else line="  could not put the person's own quick-start back from $SCRATCH_OWN_OUT/quick-start"; fi
         say "$line"
         printf '%s\n' "$line" >> "$OUT/resets.txt"
+        if [ -d "$SCRATCH_OWN_OUT/quick-start" ]; then skip_leg "not run: the person's own quick-start could not be put back from $SCRATCH_OWN_OUT/quick-start to $OWN_SKILL"; exit 0; fi
     fi
     for place in $SCRATCH_STAGED $SCRATCH_ASIDE $SCRATCH_OWN_OUT $SCRATCH_IMAGE; do
         { [ -e "$place" ] || [ -L "$place" ]; } || continue

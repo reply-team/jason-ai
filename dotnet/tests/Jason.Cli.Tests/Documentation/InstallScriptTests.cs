@@ -717,6 +717,28 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// While the person's own quick-start is out of its place, whatever stands in its place is a stand-in (the previous
+    /// release's skills write one): a clean begin puts the person's copy back as the leg's own put-back does, the stand-in
+    /// removed first, never only where the place is empty, and never removes the folder it was moved out to while the
+    /// person's copy is still in it.
+    /// </summary>
+    [Fact]
+    public void A_clean_begin_puts_the_person_s_own_quick_start_back_over_a_stand_in_before_it_removes_any_scratch()
+    {
+        var macos = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "test-installation-macos.sh")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var take = macos[macos.IndexOf("\ntake_scratch() {\n", StringComparison.Ordinal)..];
+        take = take[..take.IndexOf("\n}\n", StringComparison.Ordinal)];
+        var check = take.IndexOf("    if [ -d \"$SCRATCH_OWN_OUT/quick-start\" ]; then\n", StringComparison.Ordinal);
+        var standIn = take.IndexOf("rm -rf \"$OWN_SKILL\"", StringComparison.Ordinal);
+        var back = take.IndexOf("mv \"$SCRATCH_OWN_OUT/quick-start\" \"$OWN_SKILL\"", StringComparison.Ordinal);
+        var removal = take.IndexOf("    for place in $SCRATCH_STAGED $SCRATCH_ASIDE $SCRATCH_OWN_OUT $SCRATCH_IMAGE; do\n        { [ -e \"$place\" ] || [ -L \"$place\" ]; } || continue\n", StringComparison.Ordinal);
+        Assert.True(check >= 0, "take_scratch does not put the person's own quick-start back whenever it is out of its place");
+        Assert.True(standIn > check && back > standIn && removal > back, "take_scratch does not remove the stand-in, then put the person's copy back, before it removes any scratch");
+        Assert.DoesNotContain("[ -d \"$SCRATCH_OWN_OUT/quick-start\" ] && [ ! -e \"$OWN_SKILL\" ]", take, StringComparison.Ordinal);
+        Assert.Contains("skip_leg \"not run: the person's own quick-start could not be put back", take, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The macOS legs serve their feed by serve-feed.py, which does nothing between bind and listen, and wait 30 s for it,
     /// printing the server's log, its process and what holds the port where it never answers.
     /// </summary>
