@@ -111,6 +111,12 @@ internal sealed class CommandLineRemoval(SetupPlaces places, List<string> left, 
     private readonly bool windows = places.Platform is SetupSystem.Windows;
 
     /// <summary>
+    /// Whether the rename aside of a held executable is said here. The removal says it no more: its sweep, after this, says
+    /// that folder once, taken or left with what to do, where this line and that one were the same folder said twice.
+    /// </summary>
+    public bool SaysAside { get; init; } = true;
+
+    /// <summary>
     /// Takes the install at <paramref name="old"/> off. Where the application's wrapper has replaced its executable at
     /// <c>~/.local/bin/jason</c>, that file, its folder and its profile block are the wrapper's now and stay.
     /// </summary>
@@ -189,7 +195,11 @@ internal sealed class CommandLineRemoval(SetupPlaces places, List<string> left, 
                 Directory.CreateDirectory(folder);
                 var aside = Path.Combine(folder, Path.GetFileName(old));
                 File.Move(old, aside);
-                left.Add($"{old} is held by a running process, so it was renamed to {aside}; nothing waits to remove it, and it can be deleted once nothing runs from it.");
+                if (SaysAside)
+                {
+                    left.Add($"{old} is held by a running process, so it was renamed to {aside}; nothing waits to remove it, and it can be deleted once nothing runs from it.");
+                }
+
                 return aside;
             }
             catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)

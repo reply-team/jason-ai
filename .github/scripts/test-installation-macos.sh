@@ -51,12 +51,12 @@ ROOT="$HOME/Jason"
 OWN_SKILL="$HOME/.agents/skills/quick-start"
 WRAPPER="$HOME/.local/bin/jason"
 export JASON_Update__CheckEnabled=false
-# SOFT UNTIL U19. The application's removal does not yet take this build's ~/.net/jason/<id>, so a compare prints that line
-# under "seen, and expected until the removal takes them" and fails no leg, and the clean check at a leg's start
-# (left_over) ignores it. The commit that merges into this branch the
-# release/49 head holding U19 (the carried removal taking or naming the extraction folder) sets this to 0 in the same
-# commit, and Test-InstallationWindows.ps1's $extractedSoft to $false; the gate run is made with both hard.
-EXTRACTED_SOFT=1
+# HARD SINCE U19. The application's removal takes this build's ~/.net/jason/<id> (other builds' are counted and left on
+# macOS), so a line of this build's left after a removal counts, in the compares and in the clean check at a leg's start
+# (left_over) alike. Set to 1, the two print that line under "seen, and expected until the removal takes them" and fail
+# nothing: for a build before U19 alone. Test-InstallationWindows.ps1's $extractedSoft is the same switch there, and the
+# two are flipped together.
+EXTRACTED_SOFT=0
 
 # A failed assertion ends its step; its words are kept beside the leg's name for the held step's list as well.
 fail() { echo "::error title=Installation::$1"; printf '%s\n' "$1" >> "$OUT/leg-failure.txt" 2>/dev/null || true; exit 1; }
@@ -183,7 +183,7 @@ write_listing() {
         done
         # The native libraries the single-file executable extracts, under ~/.net/jason/<id> (the host's default base on
         # macOS, one id per build): one line per folder.
-        find "$HOME/.net/jason" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r extracted; do printf 'extracted\t%s\n' "${extracted##*/}"; done
+        { find "$HOME/.net/jason" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true; } | while IFS= read -r extracted; do printf 'extracted\t%s\n' "${extracted##*/}"; done
         folder 'claude skills' "$HOME/.claude/skills"
         folder 'agents skills' "$HOME/.agents/skills"
         folder 'data directory' "$DATA"
@@ -235,7 +235,9 @@ left_over() {
             # not; counted once it is hard, so that no leg starts on a machine a removal left dirty. The one commit that
             # flips EXTRACTED_SOFT makes both hard.
             case "$line" in
-                "+ extracted	"*|"- extracted	"*)
+                # One gone is the removal's taking, never a reason to reset.
+                "- extracted	"*) continue ;;
+                "+ extracted	"*)
                     id="${line#? extracted	}"
                     if [ -s "$OUT/this-build-extracted.txt" ] && ! grep -qxF -- "$id" "$OUT/this-build-extracted.txt"; then continue; fi
                     [ "$EXTRACTED_SOFT" = 1 ] && continue ;;
@@ -276,7 +278,7 @@ extracted)
     executable="$1"
     probe="$RUNNER_TEMP/extract-probe-$$-$(date +%s)"
     within 120 "$executable --version" env DOTNET_BUNDLE_EXTRACT_BASE_DIR="$probe" "$executable" --version > /dev/null 2>&1 || fail "$executable --version failed"
-    ids="$(find "$probe" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | sed 's|.*/||')"
+    ids="$({ find "$probe" -mindepth 2 -maxdepth 2 -type d 2>/dev/null || true; } | sed 's|.*/||')"
     [ -n "$ids" ] || fail "$executable extracted nothing under $probe: no id to tell this build's extraction folder by"
     printf '%s\n' "$ids" >> "$OUT/this-build-extracted.txt"
     rm -rf "$probe"
@@ -322,9 +324,23 @@ compare)
             fi
         fi
     fi
+    # An extraction folder gone since the listing against is the removal's taking (this build's own; another release's by
+    # that release's own removal): said, and not counted.
+    taken_x="$(printf '%s\n' "$went" | grep -E '^extracted	' || true)"
+    if [ -n "$taken_x" ]; then
+        say "taken by the removal in $1: $(printf '%s' "$taken_x" | tr '\t\n' ' ;') (a removal takes what its build unpacked)"
+        went="$(printf '%s\n' "$went" | grep -vE '^extracted	' || true)"
+    fi
     # An extraction folder of another release's id is that release's own, named as expected with its reason; one of this
-    # build's ids counts - softly until U19 (see EXTRACTED_SOFT), as a section of its own.
+    # build's ids counts (softly only while EXTRACTED_SOFT says so, as a section of its own).
     ours="$(cat "$OUT/this-build-extracted.txt" 2>/dev/null || true)"
+    # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
+    # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
+    if [ "$EXTRACTED_SOFT" != 1 ] && [ -z "$(printf '%s' "$ours" | tr -d '[:space:]')" ]; then
+        why="$1 against $2: no id of this build is recorded ($OUT/this-build-extracted.txt is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
+        echo "::error title=Uninstall::$why"
+        printf '%s\n' "$why" >> "$OUT/divergent.txt"
+    fi
     expected_x=""; soft_x=""; rest=""
     while IFS= read -r line; do
         [ -n "$line" ] || continue
@@ -340,7 +356,7 @@ compare)
     left="$(printf '%s' "$rest" | sed '/^$/d')"
     [ -z "$expected_x" ] || say "expected in $1: $(printf '%s' "$expected_x" | tr '\t\n' ' ;') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)"
     if [ -n "$soft_x" ]; then
-        say "seen, and expected until the removal takes them (soft until U19), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
+        say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set), in $1: $(printf '%s' "$soft_x" | tr '\t\n' ' ;')"
         printf '%s: %s\n' "$1" "$(printf '%s' "$soft_x" | tr '\t\n' ' ;')" >> "$OUT/soft-seen.txt"
     fi
     { echo "only in $2 (before):"; [ -n "$went" ] && printf '%s\n' "$went" | sed 's/^/- /'; echo "only in $1 (after):"; [ -n "$left" ] && printf '%s\n' "$left" | sed 's/^/+ /'; } > "$diffed" || true
@@ -436,7 +452,7 @@ end)
 
 held)
     close_leg
-    [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft until U19; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
+    [ ! -s "$OUT/soft-seen.txt" ] || say "seen, and expected until the removal takes them (soft: EXTRACTED_SOFT is set; they fail nothing): $(paste -sd '|' "$OUT/soft-seen.txt" | sed 's/|/ | /g')"
     [ ! -s "$OUT/not-run.txt" ] || cat "$OUT/not-run.txt" >> "$OUT/failed-legs.txt"
     [ ! -s "$OUT/failed-legs.txt" ] || fail "$(paste -sd '|' "$OUT/failed-legs.txt" | sed 's/|/ | /g')$( [ -s "$OUT/divergent.txt" ] && printf '| the machine after an uninstall was not the machine before it: %s' "$(tr '\n' ' ' < "$OUT/divergent.txt")")"
     [ ! -s "$OUT/divergent.txt" ] || fail "the machine after an uninstall was not the machine before it: $(tr '\n' ' ' < "$OUT/divergent.txt")"

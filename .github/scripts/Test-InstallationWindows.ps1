@@ -89,13 +89,12 @@ $temporary = [IO.Path]::GetTempPath().TrimEnd('\')
 # The ids of the folders this build's executables extract to, written by the Extracted step; any other id under
 # %TEMP%\.net\jason is another release's (the previous release's jason runs in several legs).
 $thisBuild = Join-Path $Out 'this-build-extracted.txt'
-# SOFT UNTIL U19. The carried removal does not yet take this build's extraction folder or a retired folder, so a compare
-# prints those lines under "seen, and expected until the removal takes them" and fails no leg, and the clean check at a
-# leg's start (Get-LeftOver) ignores them. The commit that merges into
-# this branch the release/49 head holding U19 (the carried removal taking or naming %TEMP%\.net\jason\<id> and the retired
-# folders) sets this to $false in the same commit, and test-installation-macos.sh's EXTRACTED_SOFT to 0; the gate run is
-# made with both hard.
-$extractedSoft = $true
+# HARD SINCE U19. The carried removal takes this build's extraction folder (%TEMP%\.net\jason\<id>), on Windows every
+# other build's as well, and sweeps the retired folders, so a line of either left after a removal counts, in the compares
+# and in the clean check at a leg's start (Get-LeftOver) alike. Set to $true, the two print those lines under "seen, and
+# expected until the removal takes them" and fail nothing: for a build before U19 alone. test-installation-macos.sh's
+# EXTRACTED_SOFT is the same switch there, and the two are flipped together.
+$extractedSoft = $false
 
 # A failed assertion ends its step; its words are kept beside the leg's name for Held's list as well.
 function Fail([string] $why) {
@@ -476,6 +475,14 @@ function Skip-Leg([string] $why) {
 
 # Every line of the machine now that is not a line of the machine before, and every line gone, the data directory and the
 # harness root aside, as Compare reads them.
+function Read-OwnSkill([string] $folder) {
+    # A quick-start folder's SKILL.md by its bytes: its length and its SHA-256, or absent.
+    $file = Join-Path $folder 'SKILL.md'
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return 'absent' }
+    $bytes = [IO.File]::ReadAllBytes($file)
+    "$($bytes.Length) bytes, sha256 $([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant())"
+}
+
 function Get-LeftOver {
     $now = Join-Path $Out 'now.txt'
     Write-Listing $now -Quiet
@@ -494,7 +501,8 @@ function Get-LeftOver {
         if ($line -match '^(extracted|retired)\t' -and $extractedSoft) { return $false }
         return $true
     }
-    @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "- $_" }))
+    # One gone is the removal's taking, which on Windows takes every build's extraction folder and sweeps the retired ones.
+    @(@($after | Where-Object { $before -cnotcontains $_ -and (& $counts $_) } | ForEach-Object { "+ $_" }) + @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch '^(extracted|retired)\t' -and (& $counts $_) } | ForEach-Object { "- $_" }))
 }
 
 switch ($Step) {
@@ -539,11 +547,23 @@ switch ($Step) {
         $after = @(Get-Content -LiteralPath (Join-Path $Out "$Name.txt"))
         # The data directory is kept by every uninstall that is not told to purge it; the harness root by every one.
         $kept = '^(data directory|harness root)'
-        $gone = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
+        # An extraction folder or a retired folder gone since the listing against is the removal's taking: on Windows it takes
+        # this build's extraction folder and every other build's, and sweeps the retired folders. Said, and not counted.
+        $goneAll = @($before | Where-Object { $after -cnotcontains $_ -and $_ -notmatch $kept })
+        $taken = @($goneAll | Where-Object { $_ -match '^(extracted|retired)\t' })
+        $gone = @($goneAll | Where-Object { $_ -notmatch '^(extracted|retired)\t' })
+        if ($taken.Count -gt 0) { Say "taken by the removal in ${Name}: $(($taken | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (a removal takes what every build unpacked here and sweeps the retired folders)" }
         $candidates = @($after | Where-Object { $before -cnotcontains $_ -and $_ -notmatch $kept })
         # An extraction folder of another release's id is that release's own, named as expected with its reason; one of
-        # this build's ids, and every retired folder, count - softly until U19 (see $extractedSoft), as a section of their own.
+        # this build's ids, and every retired folder, count (softly only while $extractedSoft says so, as a section of their own).
         $ours = @(if (Test-Path -LiteralPath $thisBuild) { Get-Content -LiteralPath $thisBuild | Where-Object { $_ } })
+        # Hard, an extraction line is judged by this build's ids, so a compare with none recorded cannot judge one: it fails,
+        # by name, rather than counting another release's folder as this build's or excusing this build's as another's.
+        if (-not $extractedSoft -and $ours.Count -eq 0) {
+            $why = "${Name} against ${Against}: no id of this build is recorded ($thisBuild is missing or empty: the step reading the folder this build's jason extracts to did not run or failed), so no extraction folder can be told this build's or another release's"
+            Write-Host "::error title=Uninstall::$why"
+            Add-Content -LiteralPath (Join-Path $Out 'divergent.txt') -Value $why
+        }
         $left = [System.Collections.Generic.List[string]]::new()
         $expectedLines = [System.Collections.Generic.List[string]]::new()
         $softLines = [System.Collections.Generic.List[string]]::new()
@@ -552,9 +572,9 @@ switch ($Step) {
             elseif ($line -match '^(extracted|retired)\t' -and $extractedSoft) { $softLines.Add($line) }
             else { $left.Add($line) }
         }
-        if ($expectedLines.Count -gt 0) { Say "expected in ${Name}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job, and taking it is that release's removal's, never this build's)" }
+        if ($expectedLines.Count -gt 0) { Say "expected in ${Name}: $(($expectedLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ') (another release's own extraction folder: the previous release's jason ran in this job after this build's last removal; that release's own removal leaves it, and on Windows this build's removal takes it when it next runs)" }
         if ($softLines.Count -gt 0) {
-            Say "seen, and expected until the removal takes them (soft until U19), in ${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
+            Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set), in ${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
             Add-Content -LiteralPath (Join-Path $Out 'soft-seen.txt') -Value "${Name}: $(($softLines | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')"
         }
         $diff = Join-Path $Out "$Against-to-$Name.diff.txt"
@@ -677,7 +697,7 @@ switch ($Step) {
         if (Test-Path -LiteralPath $notRun) { $held += @(Get-Content -LiteralPath $notRun) }
         if (Test-Path -LiteralPath $divergent) { $held += "the machine after an uninstall was not the machine before it: $((Get-Content -LiteralPath $divergent) -join '; ')" }
         $soft = Join-Path $Out 'soft-seen.txt'
-        if (Test-Path -LiteralPath $soft) { Say "seen, and expected until the removal takes them (soft until U19; they fail nothing): $((Get-Content -LiteralPath $soft) -join ' | ')" }
+        if (Test-Path -LiteralPath $soft) { Say "seen, and expected until the removal takes them (soft: `$extractedSoft is set; they fail nothing): $((Get-Content -LiteralPath $soft) -join ' | ')" }
         if ($held.Count -gt 0) { Fail ($held -join ' | ') }
         Say 'the machine after every uninstall was the machine before it, the data directory and the harness root aside'
     }
@@ -1384,6 +1404,14 @@ switch ($Step) {
         if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted') { Fail 'WayBack runs on the account''s own home and data directory, and on a GitHub-hosted runner alone.' }
         $quiet = @{ JASON_Update__CheckEnabled = 'false' }
         $jason = Join-Path $commandLine 'jason.exe'
+        # The person's own quick-start, as the page's going back will say: moved out of the skills folder before step 3, then
+        # either put back after step 3 (put-back) or kept out while the previous release is installed (keep-out). The one
+        # switch is JASON_PROOF_OWN_SKILL_GOING_BACK in ci.yml. Its SKILL.md is read, by its bytes, at four moments: before
+        # step 1, after step 3, after the put-back where the words have one, and after the previous release's own uninstall.
+        $way = "$env:JASON_PROOF_OWN_SKILL_GOING_BACK"
+        if ($way -cnotin @('put-back', 'keep-out')) { Fail "JASON_PROOF_OWN_SKILL_GOING_BACK is '$way', where it says put-back or keep-out" }
+        $outside = Join-Path $env:RUNNER_TEMP 'own-quick-start-out'
+        $ownOut = Join-Path $outside 'quick-start'
 
         $old = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Previous 'install.ps1')) @{ JASON_INSTALL_FEED = $Previous }
         if ($old.Exit -ne 0) { Fail "the previous release's install.ps1 exited with $($old.Exit)" }
@@ -1415,6 +1443,9 @@ switch ($Step) {
         if ($journalBefore.Count -lt 1) { Fail 'the journal is empty under the moved 0.49' }
         $newest = $journalBefore[0].Id
         Say "under the moved 0.49: $($campaignsBefore.Count) campaign(s), archived included; the journal holds $($journalBefore.Count) entries, the newest $newest"
+        $own1 = Read-OwnSkill $ownSkill
+        if ($own1 -ceq 'absent') { Fail "the person's own quick-start is not at $ownSkill before going back" }
+        Say "moment 1, before step 1: the person's own quick-start\SKILL.md at $ownSkill is $own1"
 
         # Step 1: the leg's own window quit, then jason uninstall with no --purge-data.
         foreach ($process in @(Get-OwnProcesses $app | Where-Object { $_.Name -ceq 'Jason.exe' })) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -1432,12 +1463,34 @@ switch ($Step) {
         if (-not (Test-Path -LiteralPath $jason)) { Fail "the pinned line of $previousVersion placed no jason at $jason" }
         Say "$previousVersion installed by its pinned line from the real release page: $line"
 
+        # Before step 3: the person's own quick-start moved out of the skills folder, as it stood after steps 1 and 2.
+        $own = Read-OwnSkill $ownSkill
+        if ($own -cne $own1) { Fail "steps 1 and 2 changed the person's own quick-start: it is $own, where it was $own1" }
+        if (Test-Path -LiteralPath $outside) { Fail "$outside is there before the person's own quick-start is moved to it" }
+        New-Item -ItemType Directory -Force -Path $outside | Out-Null
+        Move-Item -LiteralPath $ownSkill -Destination $ownOut
+        Say "before step 3: the person's own quick-start moved out of the skills folder, to $ownOut"
+
         # Step 3: its skills, its UI, its runtime and its logon start.
         foreach ($words in @(@('skills', 'install'), @('ui', 'install'), @('runtime', 'start'), @('runtime', 'autostart', 'enable'))) {
             $ran = Invoke-Program $jason $words $quiet 600
             if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
         }
         Say "under ${previousVersion}: jason skills install, ui install, runtime start and runtime autostart enable each ended 0"
+        $own2 = Read-OwnSkill $ownOut
+        Say "moment 2, after step 3: the person's own SKILL.md, out at $ownOut, is $own2; at $ownSkill stands $(Read-OwnSkill $ownSkill)"
+        if ($own2 -cne $own1) { Fail "the person's own quick-start, out of the skills folder, changed during step 3: $own2, where it was $own1" }
+        if ($way -ceq 'put-back') {
+            # The put-back: the person's own quick-start in its place again, over the one the previous release's skills wrote.
+            if (Test-Path -LiteralPath $ownSkill) { Remove-Item -LiteralPath $ownSkill -Recurse -Force }
+            Move-Item -LiteralPath $ownOut -Destination $ownSkill
+            Remove-Item -LiteralPath $outside -Force
+            $own3 = Read-OwnSkill $ownSkill
+            Say "moment 3, after the put-back: the person's own SKILL.md at $ownSkill is $own3"
+            if ($own3 -cne $own1) { Fail "the person's own quick-start put back is $own3, where it was $own1" }
+        } else {
+            Say "moment 3: none; the page's words keep the person's own quick-start out while $previousVersion is installed"
+        }
 
         # (i) The campaigns, as many; the journal, held by id.
         $campaignsAfter = @(Read-All $jason @('campaign', 'list', '--include-archived'))
@@ -1470,6 +1523,22 @@ switch ($Step) {
             if ($ran.Exit -ne 0) { Fail "jason $($words -join ' ') under $previousVersion exited with $($ran.Exit): $($ran.Said)" }
         }
         Say "$previousVersion's own runtime stop, autostart disable and uninstall --purge-data --yes each ended 0"
+        if ($way -ceq 'put-back') {
+            $own4 = Read-OwnSkill $ownSkill
+            Say "moment 4, after $previousVersion's own uninstall: the person's own SKILL.md at $ownSkill is $own4"
+            if ($own4 -cne $own1) { Fail "$previousVersion's own uninstall took or changed the person's own quick-start: it is $own4, where it was $own1" }
+        } else {
+            $own4 = Read-OwnSkill $ownOut
+            $place4 = Read-OwnSkill $ownSkill
+            Say "moment 4, after $previousVersion's own uninstall: the person's own SKILL.md, out at $ownOut, is $own4; at $ownSkill stands $place4"
+            if ($own4 -cne $own1) { Fail "the person's own quick-start, out of the skills folder, changed while $previousVersion was installed: $own4, where it was $own1" }
+            if (Test-Path -LiteralPath $ownSkill) { Fail "after $previousVersion's own uninstall a quick-start stands at $ownSkill ($place4), where the person's own goes back" }
+            Move-Item -LiteralPath $ownOut -Destination $ownSkill
+            Remove-Item -LiteralPath $outside -Force
+            $back = Read-OwnSkill $ownSkill
+            if ($back -cne $own1) { Fail "the person's own quick-start put back is $back, where it was $own1" }
+            Say "the person's own quick-start put back at $ownSkill, $back"
+        }
         exit 0
     }
 

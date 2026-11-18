@@ -84,6 +84,10 @@ permissions:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   POWERSHELL_TELEMETRY_OPTOUT: '1'
+  # The one switch of the going-back legs of both union jobs: what the page's going back says of the person's own
+  # quick-start, moved out of the skills folder before step 3 - put back after step 3 (put-back), or kept out while the
+  # previous release is installed (keep-out).
+  JASON_PROOF_OWN_SKILL_GOING_BACK: put-back
 
 jobs:
   version:

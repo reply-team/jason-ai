@@ -64,17 +64,35 @@ public class ChildProcessModulePathTests
         });
     }
 
+    /// <summary>
+    /// What holds on every system: a bare name, and a path whose separator is the forward slash, which every system reads
+    /// as one; a name that only contains Windows PowerShell's, or a folder named after it, is not it.
+    /// </summary>
     [Theory]
-    [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", true)]
     [InlineData("powershell", true)]
     [InlineData("POWERSHELL.EXE", true)]
-    [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe", false)]
+    [InlineData("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", true)]
     [InlineData("pwsh.exe", false)]
+    [InlineData("C:/Program Files/PowerShell/7/pwsh.exe", false)]
+    [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe", false)]
     [InlineData(@"C:\Tools\powershell-helper.exe", false)]
     [InlineData(@"C:\powershell\program.exe", false)]
     public void Windows_PowerShell_is_known_by_its_file_name_alone(string program, bool windowsPowerShell)
     {
         Assert.Equal(windowsPowerShell, ChildProcess.IsWindowsPowerShell(program));
+    }
+
+    /// <summary>
+    /// A path with Windows' backslash is read by its file name where the backslash separates a path, on Windows, the one
+    /// system the door removes the variable on; elsewhere a backslash is a character of a file's name.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")]
+    [InlineData(@"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\PowerShell.exe")]
+    public void On_Windows_a_path_with_backslashes_is_known_by_its_file_name(string program)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "A backslash separates a path on Windows alone, the one system the door removes the variable on.");
+        Assert.True(ChildProcess.IsWindowsPowerShell(program));
     }
 
     /// <summary>

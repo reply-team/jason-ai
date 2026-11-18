@@ -89,7 +89,8 @@ That yes covers your own host and nothing else this page marks **Ask first.** Wh
 are not done now: you say so at the end, in one line with the command (§4). Given only the link, the mark in §4 stands. On macOS and Windows
 that line names only a host the install script did not give its skills.
 
-This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names.
+This page is served as plain text at `https://get.jasonharness.ai/install`, the address the README's prompt names, as the
+latest published release has it, so what it says matches what its `latest` addresses install.
 
 - Start your session without external connectors — on Claude Code, `--strict-mcp-config`. The install needs none.
 - Do §2, then §4 to §6, in order, and stop there. §3 is for a build from the runtime's repository, and
@@ -481,6 +482,18 @@ then `jason update apply`. Its own `jason update check` names 0.19.0 as `install
 `upgrade_command`, and a plain `jason update apply` refuses with `update_not_directly_applicable`, naming 0.19.0. A
 package manager's upgrade goes straight to the newest release.
 
+**A command-line install moves into Jason Desktop.** On macOS and Windows, a command-line install of an earlier version
+moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason
+Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it, so that the
+terminal's `jason` is the one the application carries. The update never fails because of the move. Where the move cannot
+go on, the command-line install is left as it was and still answers as `jason`, `jason status` says where the move
+stands in its `move` check, and where a command helps, the check names it: `jason update apply` typed again carries the
+move on. On Windows the move first verifies this `jason`'s own signature; where that does not verify, it fetches nothing
+and says to install Jason Desktop from the release page, whose first start takes the command-line install in. Once the
+install is moved, `jason update rollback` does not take it back
+([release-and-update.md](release-and-update.md), "Going back from 0.49"). On Linux there is no move: the command-line
+install is the installation there.
+
 `jason update apply` ends by running `jason skills update` at the new release's tag, and then places the release's
 UI as `jason ui install` does; an update applied by a build before 0.12.0 needs one `jason skills update` after it,
 and one applied by a build older than the UI step places no UI, so `jason ui install` follows it. On macOS and
@@ -582,7 +595,9 @@ Jason from 0.49.0 on refuses to start on (`data_newer`).
 
 `dispatcher` fails while the runtime is draining: it answers every question and claims no new work. A drain is what
 `jason runtime drain` does, and what an update or an install leaves where it ended part-way; it lasts until
-`jason runtime resume`, the check's repair, or a restart of the runtime. While an update stands unfinished the drain
+`jason runtime resume`, the check's repair, or a restart of the runtime. For a draining runtime of an older build than
+this `jason` the repair is `jason runtime restart` alone, as `runtime_version`'s is: where another build has replaced its
+executable, a resume would start its plugin hosts from that file. While an update stands unfinished the drain
 is the update's: the check says the runtime is draining for the update, and its repair is `jason update apply`, never a
 resume in the middle of it. A dispatcher the settings turn off (`Dispatcher:Enabled`) is said there and never failed.
 

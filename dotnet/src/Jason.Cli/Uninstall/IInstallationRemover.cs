@@ -6,6 +6,7 @@ using Jason.Cli.Files;
 using Jason.Cli.Process;
 using Jason.Contracts.Discovery;
 using Jason.Contracts.Files;
+using Jason.Contracts.Harness;
 
 namespace Jason.Cli.Uninstall;
 
@@ -164,7 +165,12 @@ public interface IInstallationRemover
     /// <summary>
     /// The processes running <paramref name="executable"/>: Jason Desktop's own, which an uninstall of the application does
     /// not remove from under. On Windows only this session's; elsewhere every one, since a session there is a terminal's
-    /// and never the one the application runs in. One whose image cannot be read, under that file's name, is counted.
+    /// and never the one the application runs in. One whose image cannot be read, under that file's name, is counted. A
+    /// process's image and <paramref name="executable"/> are compared by where each finally leads, every link in either
+    /// followed (<see cref="FolderPaths.Real"/>), since the system reports an image at its real path - on macOS the
+    /// temporary folder is reached through <c>/var</c>, a link to <c>/private/var</c> - and an application can be reached
+    /// through a linked folder; a part that cannot be read is compared as it is written. Names are compared as the system's
+    /// own: ignoring case on Windows, exactly elsewhere.
     /// </summary>
     IReadOnlyList<int> RunningFrom(string executable) => [];
 
@@ -746,6 +752,7 @@ public static class InstallationRemovers
             // started by the system, never is, so filtering by it there never found the window.
             var windows = OperatingSystem.IsWindows();
             var session = windows ? System.Diagnostics.Process.GetCurrentProcess().SessionId : 0;
+            var wanted = FolderPaths.Real(executable);
             var found = new List<int>();
             foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
             {
@@ -761,7 +768,7 @@ public static class InstallationRemovers
                         }
 
                         if (ImageOf(process) is { } image
-                            && string.Equals(Path.GetFullPath(image), Path.GetFullPath(executable), windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                            && string.Equals(FolderPaths.Real(image), wanted, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
                         {
                             found.Add(process.Id);
                         }

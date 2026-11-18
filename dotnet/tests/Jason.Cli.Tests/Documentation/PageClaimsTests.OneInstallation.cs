@@ -311,4 +311,63 @@ public partial class PageClaimsTests
         Assert.Contains("on macOS and Windows the first start of each version puts `jason` there and gives Claude Code and Codex Jason's skills, each where it is found, and the Command Line item of its menu says what that placed and puts it back; on Linux that item puts a command there", readme, StringComparison.Ordinal);
         Assert.DoesNotContain("and on macOS and Linux puts its folder on your terminal's PATH", readme, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// On macOS and Windows a command-line install of an earlier version moves into Jason Desktop through its own update, and
+    /// the pages say what a person sees. Each claim is held to a real run of the move: on a system with no application (Linux)
+    /// it does not apply; on Windows a jason whose own signature does not verify fetches nothing, changes nothing and points to
+    /// the release page; <c>jason status</c> names it in its <c>move</c> check; and a rollback points to the release page's
+    /// section on going back from 0.49, which is there.
+    /// </summary>
+    [Fact]
+    public async Task The_pages_say_how_a_command_line_install_moves_into_Jason_Desktop()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using (var rig = new Update.MoveRig(windows: true))
+        {
+            var answer = await new CommandLineMove(rig.Env with { Setup = null }, rig.Update, TimeProvider.System).RunAsync(rig.Complete(), rig.Installation.Feed, ct);
+            Assert.Equal(MoveStates.NotApplicable, answer.State);
+            Assert.Contains("on macOS and Windows only", answer.Reason!, StringComparison.Ordinal);
+        }
+
+        using (var rig = new Update.MoveRig(windows: true))
+        {
+            rig.Installation.WithRuntime();
+            rig.System.SelfSignedBy = null;
+            var fetches = rig.Installation.Release.Requested.Count;
+            var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, ct);
+            Assert.Equal(MoveStates.Failed, answer.State);
+            Assert.Equal(fetches, rig.Installation.Release.Requested.Count);
+            Assert.Contains("nothing was downloaded or changed, and the command-line install answers as jason as it did", answer.Reason!, StringComparison.Ordinal);
+            Assert.Contains("Install Jason Desktop yourself from", answer.Reason!, StringComparison.Ordinal);
+            Assert.Contains("its first start takes the command-line install in", answer.Reason!, StringComparison.Ordinal);
+        }
+
+        using var dir = new TempPaths();
+        Assert.Equal("move", StatusChecks.Move(new CliEnvironment(new StringWriter(), new StringWriter(), dir.Paths)).Name);
+        Assert.EndsWith("/docs/release-and-update.md#going-back-from-049", PublicRepository.GoingBackFrom049, StringComparison.Ordinal);
+        Assert.Contains("\n### Going back from 0.49\n", Page("docs", "release-and-update.md"), StringComparison.Ordinal);
+
+        var install = Flat(Page("docs", "INSTALL.md"));
+        Assert.Contains("On macOS and Windows, a command-line install of an earlier version moves into Jason Desktop through its own update: `jason update apply` updates it to this version, then installs Jason Desktop, or takes one of 0.49.0 or later that is already there, and moves the command line into it", install, StringComparison.Ordinal);
+        Assert.Contains("The update never fails because of the move. Where the move cannot go on, the command-line install is left as it was and still answers as `jason`, `jason status` says where the move stands in its `move` check", install, StringComparison.Ordinal);
+        Assert.Contains("On Windows the move first verifies this `jason`'s own signature; where that does not verify, it fetches nothing and says to install Jason Desktop from the release page, whose first start takes the command-line install in.", install, StringComparison.Ordinal);
+        Assert.Contains("Once the install is moved, `jason update rollback` does not take it back ([release-and-update.md](release-and-update.md), \"Going back from 0.49\"). On Linux there is no move", install, StringComparison.Ordinal);
+
+        Assert.Contains("On macOS and Windows a command-line install of an earlier version moves into Jason Desktop through that same `apply`", Flat(Page("docs", "handbook.md")), StringComparison.Ordinal);
+        Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`, which installs the application", Flat(Page("docs", "desktop.md")), StringComparison.Ordinal);
+        Assert.Contains("A command-line install of an earlier version on macOS or Windows moves into Jason Desktop through its own `jason update apply`: it installs the application and moves the command line into it, and the update never fails because of the move; `jason status` says where the move stands. Linux has no move.", Flat(Page(".github", "release-notes-template.md")), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The application goes to <c>/Applications</c> where this account may write there, and an application there is one for
+    /// every account of the Mac: §9 says, in the row that deletes it, that taking it off takes it from all of them.
+    /// </summary>
+    [Fact]
+    public void Taking_the_application_off_says_one_in_Applications_is_every_account_s()
+    {
+        var off = Flat(Section(Page("docs", "release-and-update.md"), "## 9. "));
+        Assert.Contains("macOS: the `Jason.app` the `jason` is inside, deleted by this verb", off, StringComparison.Ordinal);
+        Assert.Contains("An application in `/Applications` is one for every account of the Mac, and taking it off takes it from all of them.", off, StringComparison.Ordinal);
+    }
 }
