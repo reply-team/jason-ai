@@ -773,6 +773,43 @@ public partial class InstallScriptTests
     }
 
     /// <summary>
+    /// Going back and forward again on Windows, with the person's own quick-start put back under Jason's name, leaves the
+    /// skills record in ~\.agents\skills: this build's own uninstall reports that file as edited, keeps it without --force,
+    /// and keeps the record that names it. One name is this build's own kept record and no other; the leg that moves again
+    /// records its exact listing line only where that uninstall's own report names exactly the person's file, under that
+    /// root, as the one edited file, and the record names it; and a compare excuses the line only where that leg recorded it.
+    /// </summary>
+    [Fact]
+    public void The_Windows_compare_excuses_this_build_s_own_kept_record_only_where_its_uninstall_reports_the_person_s_file_edited()
+    {
+        var windows = File.ReadAllText(Path.Combine(RepositoryRoot(), ".github", "scripts", "Test-InstallationWindows.ps1")).Replace("\r\n", "\n", StringComparison.Ordinal);
+        string Function(string name)
+        {
+            var body = windows[windows.IndexOf($"\nfunction {name}", StringComparison.Ordinal)..];
+            return body[..body.IndexOf("\n}\n", StringComparison.Ordinal)];
+        }
+
+        Assert.Contains("\n$thisBuildKept = [ordered]@{ 'agents skills\\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\\skills\\.jason-skills.json') }\n", windows, StringComparison.Ordinal);
+        Assert.Contains("@(Get-Content -LiteralPath $thisBuildKeptRows) -ccontains \"$leg`t$line\"", Function("Test-ThisBuildKept"), StringComparison.Ordinal);
+        Assert.Contains("elseif (Test-ThisBuildKept $by $line) { $keptOwn.Add(", Function("Compare-Listings"), StringComparison.Ordinal);
+
+        // The one writer of a row: the leg that moves again, after its own uninstall, once the report and the record are read.
+        Assert.Single(Regex.Matches(windows, @"Add-Content -LiteralPath \$thisBuildKeptRows"));
+        var wayBack = windows[windows.IndexOf("\n    'WayBack' {\n", StringComparison.Ordinal)..];
+        wayBack = wayBack[..wayBack.IndexOf("\n    'InstallOverCommandLine' {\n", StringComparison.Ordinal)];
+        var again = wayBack.IndexOf("        if ($Again) {\n", StringComparison.Ordinal);
+        var uninstall = wayBack.IndexOf("$ran = Invoke-Program $carried @('uninstall', '--purge-data', '--yes') $quiet 300", StringComparison.Ordinal);
+        var edited = wayBack.IndexOf("$edited = @($roots | ForEach-Object { $root = $_; @($root.files) | Where-Object { $_.edited -eq $true } | ForEach-Object { \"$($root.root)`t$($_.path)\" } })", StringComparison.Ordinal);
+        var exact = wayBack.IndexOf("if ($edited.Count -ne 1 -or $edited[0] -ine \"$keptRoot`t$keptFile\") { Fail ", StringComparison.Ordinal);
+        var names = wayBack.IndexOf("if ($recorded -cnotcontains 'quick-start/SKILL.md') { Fail ", StringComparison.Ordinal);
+        var row = wayBack.IndexOf("Add-Content -LiteralPath $thisBuildKeptRows", StringComparison.Ordinal);
+        var said = wayBack.IndexOf("Say \"going back and forward again leaves the person ", StringComparison.Ordinal);
+        var otherwise = wayBack.IndexOf("        } else {\n            # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.\n", StringComparison.Ordinal);
+        Assert.True(again >= 0 && uninstall > again && edited > uninstall && exact > edited && names > exact && row > names && said > row && otherwise > said,
+            "the leg that moves again does not record this build's own kept record only after its own uninstall's report names exactly the person's file as edited and the record names it, and say so");
+    }
+
+    /// <summary>
     /// The macOS proof script runs under the system's bash, 3.2, which misreads a here-document opened inside a command
     /// substitution once the document holds an odd number of apostrophes, and then cannot parse the script at all, so every
     /// step of the job fails at once. No here-document is opened inside a command substitution there: a program fed one

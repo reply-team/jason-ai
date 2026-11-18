@@ -131,6 +131,14 @@ $scratchRecords = Join-Path $Out 'scratch-pids.txt'
 # that leg takes it (Take-PreviousOwn). Nothing else is ever recorded there.
 $previousOwn = [ordered]@{ 'agents skills\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json') }
 $previousOwnRows = Join-Path $Out 'previous-own.txt'
+# What this build's own uninstall keeps by its own design, by the listing's name for it and the place it is: the skills
+# record in ~\.agents\skills, kept beside a file it names that the person changed, which the uninstall reports as edited
+# and keeps without --force. Only the leg that moves again records its listing line, exactly ("<leg><TAB><line>",
+# -Out\kept-own.txt), and only where that uninstall's own report names the person's file under that root as the one edited
+# file and the record names it: that leg's compare excuses that line alone, and the held step's whole compare excuses it
+# where it is attributed to that leg. Nothing else is ever recorded there.
+$thisBuildKept = [ordered]@{ 'agents skills\.jason-skills.json' = (Join-Path $env:USERPROFILE '.agents\skills\.jason-skills.json') }
+$thisBuildKeptRows = Join-Path $Out 'kept-own.txt'
 
 # The leg a line of -Out\inherited.txt, or of the file $rows, is attributed to, for the line ("+ <line>" or "- <line>");
 # nothing where none.
@@ -772,6 +780,12 @@ function Test-PreviousOwn([string] $leg, [string] $line) {
     ($previousLegs -ccontains $leg) -and (@(Get-Content -LiteralPath $previousOwnRows) -ccontains "$leg`t$line")
 }
 
+# Whether $line is this build's own kept record that the leg $leg recorded, exactly (see $thisBuildKept).
+function Test-ThisBuildKept([string] $leg, [string] $line) {
+    if (-not $leg -or -not (Test-Path -LiteralPath $thisBuildKeptRows)) { return $false }
+    @(Get-Content -LiteralPath $thisBuildKeptRows) -ccontains "$leg`t$line"
+}
+
 # The previous release's own lines the leg that last changed the machine, $by, recorded (see $previousOwn), taken before a
 # clean leg reads the machine: each file removed only while its listing line is still exactly the one recorded. On a
 # GitHub-hosted runner alone, as the reset; each act said and logged in -Out\resets.txt, never a proof. $false where the
@@ -992,18 +1006,23 @@ function Compare-Listings([string] $listed, [string] $base, [switch] $Final) {
     }
     # The previous release's own lines (see $previousOwn): excused exactly where the leg that left them recorded them, the
     # open leg in its own compare, the leg a line is attributed to in the held step's whole one.
+    # This build's own kept record (see $thisBuildKept), by the same rule.
     $own = [System.Collections.Generic.List[string]]::new()
+    $keptOwn = [System.Collections.Generic.List[string]]::new()
     $ownBy = if ($Final) { '' } elseif (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
     foreach ($line in @($left)) {
         $by = if ($Final) { Get-InheritedBy "+ $line" (Join-Path $Out 'final-attributed.txt') } else { $ownBy }
         if (Test-PreviousOwn $by $line) { $own.Add("+ $line  (left by '$by', the previous release's own, as its uninstall leaves it)"); [void] $left.Remove($line) }
+        elseif (Test-ThisBuildKept $by $line) { $keptOwn.Add("+ $line  (left by '$by', this build's own uninstall keeping it beside the person's file it names, reported edited)"); [void] $left.Remove($line) }
     }
     if ($own.Count -gt 0) { Say "expected in ${listed}, the previous release's own as its uninstall leaves it, each recorded by the leg that left it: $(($own | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
+    if ($keptOwn.Count -gt 0) { Say "expected in ${listed}, this build's own uninstall keeping it beside the person's file it names, which its report says is edited, each recorded by the leg that left it: $(($keptOwn | ForEach-Object { $_ -replace "`t", ' ' }) -join '; ')" }
     foreach ($line in $own) { $excused.Add($line) }
+    foreach ($line in $keptOwn) { $excused.Add($line) }
     $diff = Join-Path $Out "$base-to-$listed.diff.txt"
     Set-Content -LiteralPath $diff -Value (@("only in $base (before):") + @($gone | ForEach-Object { "- $_" }) + @("only in $listed (after):") + @($left | ForEach-Object { "+ $_" }) +
         @(if ($inheritedHere.Count -gt 0) { "inherited at this leg's begin, not counted here (each by the leg that left it):"; $inheritedHere }) +
-        @(if ($excused.Count -gt 0) { "expected, each left by a leg of the previous release:"; $excused }))
+        @(if ($excused.Count -gt 0) { "expected, each by the leg that left it, with why:"; $excused }))
     Get-Content -LiteralPath $diff | ForEach-Object { Write-Host $_ }
     $keptLines = @($after | Where-Object { $_ -match $kept -and $before -cnotcontains $_ })
     Say "$listed against ${base}: $($left.Count) line(s) left, $($gone.Count) gone, beside $($keptLines.Count) line(s) of the data directory and the harness root, which are kept"
@@ -2262,6 +2281,26 @@ switch ($Step) {
             Wait-Until { -not (Test-Path -LiteralPath $app) } 120 "the application's folder going after jason uninstall ended"
             $remover = "the moved install's own uninstall"
             Say "$Version's own uninstall --purge-data --yes, after moving again, ended 0 and the application's folder went"
+
+            # What going back and forward again leaves where the person's own quick-start stands under Jason's name: this
+            # build's uninstall reports that file as edited, keeps it without --force, and keeps the record that names it
+            # (see $thisBuildKept). Recorded by its listing line, exactly, only where that uninstall's own report names the
+            # person's file under that root as the one edited file and the record names it; anything wider fails the leg.
+            $keptRecord = $thisBuildKept['agents skills\.jason-skills.json']
+            if (Test-Path -LiteralPath $keptRecord -PathType Leaf) {
+                $keptRoot = Split-Path -Parent $keptRecord
+                $keptFile = Join-Path $ownSkill 'SKILL.md'
+                $report = Read-Document $ran.Said
+                $roots = @(if ($report -and $report.PSObject.Properties['plan'] -and $report.plan.PSObject.Properties['roots']) { @($report.plan.roots) })
+                $edited = @($roots | ForEach-Object { $root = $_; @($root.files) | Where-Object { $_.edited -eq $true } | ForEach-Object { "$($root.root)`t$($_.path)" } })
+                if ($edited.Count -ne 1 -or $edited[0] -ine "$keptRoot`t$keptFile") { Fail "after $remover, $keptRecord is left, and its report does not name $keptFile under $keptRoot as the one edited file: it names '$(($edited | ForEach-Object { $_ -replace "`t", ' ' }) -join "', '")'" }
+                $recorded = @(try { @((Get-Content -LiteralPath $keptRecord -Raw | ConvertFrom-Json).packs) | ForEach-Object { @($_.files) } | ForEach-Object { [string]$_.path } } catch { })
+                if ($recorded -cnotcontains 'quick-start/SKILL.md') { Fail "after $remover, $keptRecord is left, and it does not name quick-start/SKILL.md, the file its uninstall reports as edited" }
+                $openLeg = if (Test-Path -LiteralPath $legOpen) { "$(Get-Content -LiteralPath $legOpen -Raw)".Trim() } else { '' }
+                if (-not $openLeg) { Fail "no leg is open to record $keptRecord as this build's own kept record" }
+                Add-Content -LiteralPath $thisBuildKeptRows -Value "$openLeg`tagents skills\.jason-skills.json`t$((Get-Item -LiteralPath $keptRecord -Force).Length)"
+                Say "going back and forward again leaves the person who put a quick-start of their own under Jason's name with $keptFile as they wrote it and $keptRecord beside it: $remover reports that file as edited and keeps it without --force, and keeps the record because it names that file; this leg's compare excuses exactly that line as this build's own"
+            }
         } else {
             # The leg's own end: the runtime stopped, the logon start taken off, and the previous release's own uninstall.
             foreach ($words in @(@('runtime', 'stop'), @('runtime', 'autostart', 'disable'), @('uninstall', '--purge-data', '--yes'))) {
