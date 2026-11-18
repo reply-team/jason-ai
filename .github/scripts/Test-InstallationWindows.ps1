@@ -1780,7 +1780,9 @@ switch ($Step) {
         $idsBefore = @(Read-All $jason @('campaign', 'list', '--include-archived') | ForEach-Object { $_.GetProperty('id').GetString() } | Sort-Object)
         if ($idsBefore.Count -lt 1) { Fail 'the campaign made under the previous release is not listed' }
         $runtimesBefore = @(Get-RuntimeProcesses)
-        if (@($runtimesBefore | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" }).Count -lt 1) { Fail "no runtime runs from $commandLine before the setup; the runtimes running: $(if ($runtimesBefore) { ($runtimesBefore | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })" }
+        # Judged after by process id as well as by path: a retired image renamed aside would escape a filter on the folder.
+        $oldRuntimeIds = @($runtimesBefore | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" } | ForEach-Object { [int]$_.ProcessId })
+        if ($oldRuntimeIds.Count -lt 1) { Fail "no runtime runs from $commandLine before the setup; the runtimes running: $(if ($runtimesBefore) { ($runtimesBefore | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })" }
         # A fact, not an assertion: what runtime status answers before the setup, and the runtimes running, by their files.
         $before = Invoke-Program $jason @('runtime', 'status') $quiet
         Say "before the setup, runtime status ended $($before.Exit) and said: $("$($before.Said)".Trim()); runtimes running from: $(($runtimesBefore | ForEach-Object { $_.ExecutablePath }) -join ', '); $($idsBefore.Count) campaign(s)"
@@ -1816,6 +1818,8 @@ switch ($Step) {
         if ($moveCheck[0].state -cne 'absent') { Fail "no move record was written, and jason status's move check does not read absent: $moveSaid" }
         Say "one installation: one Installed apps entry, $app at $Version, the command-line install's files gone from $commandLine; no move record was written, as the setup's own jason install writes none; jason status's move check reads $moveSaid"
         $runtimesAfter = @(Get-RuntimeProcesses)
+        $oldAlive = @($oldRuntimeIds | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+        if ($oldAlive.Count -ne 0) { Fail "the command-line install's runtime is still alive after the update, process $($oldAlive -join ', '), wherever its image now stands" }
         if (@($runtimesAfter | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" }).Count -ne 0) { Fail "a runtime still runs from the retired install at $commandLine after the update; the runtimes running: $(($runtimesAfter | ForEach-Object { $_.ExecutablePath }) -join ', ')" }
         Say "no runtime runs from $commandLine after the update; the runtimes running from: $(if ($runtimesAfter) { ($runtimesAfter | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })"
 
@@ -1848,9 +1852,11 @@ switch ($Step) {
         # A runtime answering from the carried jason, which that start brings up where the setup's run stopped one; none from
         # the command-line folder; and no note that a start is owed left standing (JasonPaths.StartOwedFile, run\start-owed.json).
         $startOwed = Join-Path $data 'run\start-owed.json'
-        Wait-Until { @(Get-RuntimeProcesses | Where-Object { [string]$_.ExecutablePath -ieq $carried }).Count -gt 0 } 120 "a runtime running from $carried after the application's start"
-        if ((Invoke-Program $carried @('runtime', 'status') $quiet).Exit -ne 0) { Fail "no runtime answers through $carried after the application's start" }
+        Wait-Until { (Invoke-Program $carried @('runtime', 'status') $quiet).Exit -eq 0 } 120 "a runtime answering through $carried, the start the setup owed paid by the application's start"
         $runtimesStarted = @(Get-RuntimeProcesses)
+        if (@($runtimesStarted | Where-Object { [string]$_.ExecutablePath -ieq $carried }).Count -lt 1) { Fail "a runtime answers, but none runs from $carried; the runtimes running: $(if ($runtimesStarted) { ($runtimesStarted | ForEach-Object { $_.ExecutablePath }) -join ', ' } else { 'none' })" }
+        $oldAlive = @($oldRuntimeIds | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+        if ($oldAlive.Count -ne 0) { Fail "the command-line install's runtime is alive after the application's start, process $($oldAlive -join ', ')" }
         if (@($runtimesStarted | Where-Object { [string]$_.ExecutablePath -like "$commandLine\*" }).Count -ne 0) { Fail "a runtime runs from the retired install at $commandLine after the application's start" }
         Wait-Until { -not (Test-Path -LiteralPath $startOwed) } 60 "the note that a start is owed, $startOwed, going once a runtime started"
         Say "a runtime answers from $carried and none runs from $commandLine; no note that a start is owed stands at $startOwed"
