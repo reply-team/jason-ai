@@ -62,6 +62,12 @@ public sealed record SetupPlaces(SetupSystem Platform, string Home, string? Loca
     /// </summary>
     internal Func<string?> AccountHome { get; init; } = AccountDatabase.Home;
 
+    /// <summary>
+    /// Whether a folder is on a read-only volume, as a mounted disk image is (<see cref="VanishingPlace"/>): asked on macOS
+    /// alone, through a look that writes nothing; on every other system false. A test's own answer in a test.
+    /// </summary>
+    internal Func<string, bool> ReadOnlyVolume { get; init; } = VanishingPlace.OnReadOnlyVolume;
+
     /// <summary>The system's temporary directory, where a held executable is renamed aside when it is on that volume.</summary>
     internal string Temporary { get; init; } = Path.GetTempPath();
 
