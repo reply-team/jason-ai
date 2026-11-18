@@ -18,7 +18,7 @@ namespace Jason.Cli.Tests.Uninstall;
 /// which, where no system's places are known, still refuses before anything is read or removed. Run against a scratch home,
 /// a scratch data directory, an application folder of the test's own and, on Windows, registry keys of the test's own.
 /// </summary>
-public sealed class UninstallCarriedTests : IDisposable
+public sealed partial class UninstallCarriedTests : IDisposable
 {
     private readonly TempPaths _dir = new();
     private readonly TempPaths _tree = new();
@@ -584,7 +584,7 @@ public sealed class UninstallCarriedTests : IDisposable
         var problem = Assert.Single(problems);
         Assert.Contains($"{application} is still there", problem, StringComparison.Ordinal);
         // The bundle where it is, which need not be /Applications: the test's own folder here.
-        Assert.Contains($"Move {application} to the Bin (the Trash) in the Finder", problem, StringComparison.Ordinal);
+        Assert.Contains($"Move {application} to the Trash in the Finder", problem, StringComparison.Ordinal);
         Assert.DoesNotContain("from Applications", problem, StringComparison.Ordinal);
     }
 
@@ -821,6 +821,7 @@ public sealed class UninstallCarriedTests : IDisposable
         var refusal = RuntimeVerbs.Envelope(output.ToString());
         Assert.Equal("jason_running", refusal.Code);
         Assert.Contains("(process 9001)", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("wait until it ends, then uninstall again", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("runtime stop", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(remover.Calls);
         Assert.True(File.Exists(Path.Combine(apps, "jason.cmd")), "the command was removed");
