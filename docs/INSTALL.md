@@ -594,9 +594,9 @@ Jason from 0.49.0 on refuses to start on (`data_newer`).
 
 `dispatcher` fails while the runtime is draining: it answers every question and claims no new work. A drain is what
 `jason runtime drain` does, and what an update or an install leaves where it ended part-way; it lasts until
-`jason runtime resume`, the check's repair, or a restart of the runtime. A draining runtime of an older build than this
-`jason` runs from an executable another build has replaced, and a resume would start its plugin hosts from that file: its
-repair is `jason runtime restart` alone, as `runtime_version`'s is. While an update stands unfinished the drain
+`jason runtime resume`, the check's repair, or a restart of the runtime. For a draining runtime of an older build than
+this `jason` the repair is `jason runtime restart` alone, as `runtime_version`'s is: where another build has replaced its
+executable, a resume would start its plugin hosts from that file. While an update stands unfinished the drain
 is the update's: the check says the runtime is draining for the update, and its repair is `jason update apply`, never a
 resume in the middle of it. A dispatcher the settings turn off (`Dispatcher:Enabled`) is said there and never failed.
 

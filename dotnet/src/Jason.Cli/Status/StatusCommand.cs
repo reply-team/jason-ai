@@ -104,8 +104,9 @@ public static class StatusCommand
         The dispatcher check fails while the runtime is draining: it answers every question and claims no new
         work, until jason runtime resume or a restart of the runtime. A drain is what jason runtime drain does,
         and what an update or an install leaves where it ended part-way; its repair is jason runtime resume,
-        except for a runtime of an older build than this CLI, whose executable another build has replaced:
-        there it is jason runtime restart alone, as for runtime_version. While an update stands unfinished the drain is the update's: the check says so and its repair is
+        except for a runtime of an older build than this CLI: where another build has replaced its
+        executable, a resume would start its plugin hosts from that file, so there the repair is jason
+        runtime restart alone, as for runtime_version. While an update stands unfinished the drain is the update's: the check says so and its repair is
         jason update apply, never a resume in the middle of it. A dispatcher the settings turned off
         (Dispatcher:Enabled) is said and never failed.
 

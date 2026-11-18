@@ -556,8 +556,9 @@ internal static partial class StatusChecks
     /// Whether the runtime claims work. Required: a runtime left draining — by <c>jason runtime drain</c>, or by an update or
     /// an install that ended part-way — answers every question and claims nothing, so <c>ready</c> must not say yes to it.
     /// A drain lasts until <c>jason runtime resume</c> or a restart of the runtime, and the repair is the resume, which
-    /// restarts nothing; for a runtime of an older build than this CLI, whose executable another build has replaced, it is
-    /// the restart alone, since a resume would start its plugin hosts from that file. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
+    /// restarts nothing; for a runtime of an older build than this CLI it is the restart alone, since where another build
+    /// has replaced its executable a resume would start its plugin hosts from that file, which the check cannot tell from
+    /// where it stands. While an update's ledger stands unfinished the drain is the update's, and a resume in the middle
     /// of it is never offered: the check says the runtime is draining for the update and names the update's own repair. A
     /// dispatcher the settings turned off (<c>Dispatcher:Enabled</c>) is a choice and is said, never failed; a runtime that
     /// did not answer is not asked, and is unknown with the start the <c>runtime</c> check asks for.
@@ -591,7 +592,7 @@ internal static partial class StatusChecks
                 Name,
                 true,
                 CheckState.Failed,
-                $"The runtime is draining, and it is {info.RuntimeVersion}, not this CLI's {build}: it starts its plugin hosts from a file another build has replaced, so a restart of the runtime brings it back claiming work, never a resume; {running}.",
+                $"The runtime is draining, and it is {info.RuntimeVersion}, not this CLI's {build}: where another build has replaced its executable, a resume would start its plugin hosts from that file, so the repair is a restart of the runtime; {running}.",
                 Repair.Restart),
             DispatcherState.Draining => new StatusCheck(
                 Name,
@@ -606,7 +607,7 @@ internal static partial class StatusChecks
 
     /// <summary>
     /// Whether the runtime is another build than this CLI and not a newer one: the case <c>runtime_version</c> repairs with a
-    /// restart, a runtime whose executable another build has replaced.
+    /// restart, a runtime whose executable another build may have replaced.
     /// </summary>
     private static bool OlderBuild(SystemInfoResponse info, string build) =>
         !string.Equals(info.RuntimeVersion, build, StringComparison.Ordinal)

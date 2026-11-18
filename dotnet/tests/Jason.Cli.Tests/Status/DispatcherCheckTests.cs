@@ -47,8 +47,9 @@ public sealed class DispatcherCheckTests
     }
 
     /// <summary>
-    /// A draining runtime of an older build than this CLI runs from an executable another build has replaced: a resume would
-    /// have it claim work again and start its plugin hosts from a file that is no longer its own. Its repair is the restart,
+    /// A draining runtime of an older build than this CLI may run from an executable another build has replaced, and where it
+    /// does a resume would have it claim work again and start its plugin hosts from a file that is no longer its own; after a
+    /// held install it still runs from its own, so the fact says only what is known. Its repair is the restart,
     /// the one <c>runtime_version</c> names, and the resume is offered nowhere. A runtime of a newer build keeps the resume,
     /// since a restart from this older jason is what <c>runtime_version</c> refuses.
     /// </summary>
@@ -70,7 +71,7 @@ public sealed class DispatcherCheckTests
         if (repair == "jason runtime restart")
         {
             Assert.Equal(
-                "The runtime is draining, and it is 0.48.5, not this CLI's 0.49.0: it starts its plugin hosts from a file another build has replaced, so a restart of the runtime brings it back claiming work, never a resume; 1 attempt is still running.",
+                "The runtime is draining, and it is 0.48.5, not this CLI's 0.49.0: where another build has replaced its executable, a resume would start its plugin hosts from that file, so the repair is a restart of the runtime; 1 attempt is still running.",
                 check.Fact);
             var human = new StringWriter();
             await CliApp.RunAsync(["status", "--human"], StatusCommandTests.Machine(dir, human, build: "0.49.0"), Ct);
