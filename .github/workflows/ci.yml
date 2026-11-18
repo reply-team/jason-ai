@@ -2106,6 +2106,25 @@ jobs:
           ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-waiter-uninstall -Against before
           ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
 
+      # The line every real install takes reads its feed over the web, in Windows PowerShell 5.1: the same feed served on
+      # this machine, and install.ps1 given its address. The role skills come from the skills beside the application's
+      # jason whatever the feed, and a runtime over them says role_skills is ok.
+      - name: Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          LEG: "Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal"
+          JASON_Update__CheckEnabled: 'false'
+        run: |
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Begin -Out $env:OUT -Leg $env:LEG -Clean -Needs 'Package jason for win-x64 as a release does, as a test build=${{ steps.package.outcome }}', 'Build Jason Desktop around it as a test build=${{ steps.desktop-build.outcome }}', 'Assemble the feed the way a release is assembled=${{ steps.feed.outcome }}', 'Sign the test build with this runner''s own certificate, and copy install.ps1 to name it=${{ steps.stand-in.outcome }}', 'The machine before anything is installed=${{ steps.before.outcome }}'
+          if (Test-Path -LiteralPath (Join-Path $env:OUT 'skip')) { exit 0 }
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step ServedFeed -Out $env:OUT -Feed $env:FEED -Version $env:VERSION -Script "${{ steps.stand-in.outputs.script }}"
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step UninstallFromTerminal -Out $env:OUT
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Listing -Out $env:OUT -Name after-served-feed-uninstall
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step Compare -Out $env:OUT -Name after-served-feed-uninstall -Against before
+          ./.github/scripts/Test-InstallationWindows.ps1 -Step End -Out $env:OUT -Leg $env:LEG
+
       # The pinned line: a pin naming another version refused, then -Version naming this one, asserted as the unpinned
       # install is, and taken off from a new terminal.
       - name: Install by the pinned line, and uninstall from a new terminal

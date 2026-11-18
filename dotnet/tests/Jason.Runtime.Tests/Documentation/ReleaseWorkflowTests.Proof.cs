@@ -171,6 +171,7 @@ public partial class ReleaseWorkflowTests
         ("union-windows", "Sign the test build with this runner's own certificate, and copy install.ps1 to name it", "the test build's stand-in signer; a release is signed by its own"),
         ("union-windows", "Uninstall from a terminal while the window opens, so the waiter asks", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-windows", "Install by the pinned line, and uninstall from a new terminal", "the release runs the legs it ran before; this one joins once it is green in CI"),
+        ("union-windows", "Install from a feed served on this machine, over the web in Windows PowerShell 5.1, and uninstall from a new terminal", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-windows", "Run this build's line over the previous release's command-line Jason while its runtime runs", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-windows", "Install this build as an update over the previous release's Jason Desktop and its command-line Jason side by side", "the release runs the legs it ran before; this one joins once it is green in CI"),
         ("union-windows", "Move again from the previous release, then go back to it as the update page says", "the release runs the legs it ran before; this one joins once it is green in CI"),

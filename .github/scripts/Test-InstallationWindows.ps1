@@ -61,7 +61,7 @@ build, which a release never signs, the runner's own test certificate, which the
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
+    [Parameter(Mandatory)] [ValidateSet('Listing', 'Install', 'ServedFeed', 'UninstallFromTerminal', 'InstallOverPrevious', 'InstallOverOpenWindow', 'SilentUpdateLegs', 'UninstallWaiterShown', 'UpdateApply', 'UninstallFromInstalledApps', 'FromPrevious', 'Compare', 'Held', 'ModulePath', 'Begin', 'End', 'PathShape', 'WayBack', 'Extracted', 'OneTemporary', 'InstallOverCommandLine', 'OverBothPrevious')] [string] $Step,
     [string] $Executable,
     [string] $Leg,
     [string[]] $Needs = @(),
@@ -430,6 +430,56 @@ function Wait-Until([scriptblock] $condition, [int] $seconds, [string] $what) {
         Start-Sleep -Milliseconds 500
     }
     Fail "$what did not happen within $seconds s"
+}
+
+# What is known of a feed server that did not answer, printed before anything is killed: its log, whether its process
+# lives, and what holds the port, by Windows' own table of TCP connections and by netstat.
+function Write-FeedServerState([System.Diagnostics.Process] $server, [int] $port, [string] $log) {
+    Write-Host "the feed server's log, ${log}:"
+    foreach ($file in @($log, "$log.err")) {
+        if (Test-Path -LiteralPath $file) { Get-Content -LiteralPath $file | ForEach-Object { Write-Host "  $_" } } else { Write-Host "  ($file is not there)" }
+    }
+    $server.Refresh()
+    Write-Host "the feed server, process $($server.Id): $(if ($server.HasExited) { "ended, with $($server.ExitCode)" } else { 'still running' })"
+    $held = @(Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue)
+    if ($held.Count -eq 0) { Write-Host "no TCP connection or listener on port $port" }
+    foreach ($connection in $held) {
+        $owner = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $($connection.OwningProcess)" -ErrorAction SilentlyContinue
+        Write-Host "  $($connection.LocalAddress):$($connection.LocalPort) $($connection.State), held by $($connection.OwningProcess) $(if ($owner) { "$($owner.Name): $($owner.CommandLine)" } else { '(no such process)' })"
+    }
+    @(netstat -ano | Select-String -Pattern ":$port\s") | ForEach-Object { Write-Host "  netstat: $($_.Line.Trim())" }
+}
+
+# A folder served on 127.0.0.1 at the port by the proof's one feed server (serve-feed.py, which looks no name up between
+# bind and listen), and waited for up to 30 s until its manifest answers 200; the process is returned for the caller to
+# stop. One that never answers is described first, then fails the step.
+function Start-FeedServer([string] $folder, [int] $port, [string] $log) {
+    # Each argument quoted, as Start-Process joins them with spaces alone. The server writes every line to the log itself,
+    # and to stderr only a usage line.
+    $logged = "$(Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue)".Length
+    $arguments = @((Join-Path $PSScriptRoot 'serve-feed.py'), $folder, "$port", $log) | ForEach-Object { '"' + $_ + '"' }
+    $server = Start-Process python -ArgumentList $arguments -PassThru -NoNewWindow -RedirectStandardError "$log.err"
+    $null = $server.Handle
+    $until = [DateTime]::UtcNow.AddSeconds(30)
+    # An answer counts only once this server says it listens, which on Windows it can only do on a port no other socket
+    # holds: before that, or from a server that has ended, the answer came from whatever else holds the port.
+    # The log is appended to, so only what this server wrote after the bytes already there counts.
+    $listening = "listening on 127.0.0.1:$port"
+    $answered = $false
+    while (-not $answered -and [DateTime]::UtcNow -lt $until) {
+        $server.Refresh()
+        if ($server.HasExited) { break }
+        $written = "$(Get-Content -LiteralPath $log -Raw -ErrorAction SilentlyContinue)"
+        if (-not $server.HasExited -and $written.Length -gt $logged -and $written.Substring($logged).Contains($listening)) {
+            try { $answered = (Invoke-WebRequest -Uri "http://127.0.0.1:$port/manifest.json" -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { }
+        }
+        if (-not $answered) { Start-Sleep -Milliseconds 500 }
+    }
+    $server.Refresh()
+    if ($answered -and -not $server.HasExited) { return $server }
+    Write-FeedServerState $server $port $log
+    Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+    Fail $(if ($server.HasExited) { "the feed server for 127.0.0.1:$port ended, with $($server.ExitCode), before it answered: its log above says why" } else { "the feed on 127.0.0.1:$port answering did not happen within 30 s" })
 }
 
 function Get-OwnProcesses([string] $folder) {
@@ -1115,7 +1165,8 @@ switch ($Step) {
             if ($after.Entries -cnotcontains $keptEntry) { Fail "the install expanded or dropped the user Path entry '$keptEntry'" }
             Say "the user Path is ExpandString before and after the install, and its entry '$keptEntry' is still unexpanded"
         } else {
-            # The release's proof job gives the Path no shape; CI's job always does, and a guard holds it to that step.
+            # Both proof jobs give the Path that shape first, by the PathShape step, and a guard holds them to it; a run
+            # without it still holds the Path's kind and entries as they were.
             Say "the user Path was given no ExpandString shape before this install (kind $($before.Kind)): its kind and entries are held as they were"
         }
         $found = @(Find-InNewShell 'jason')
@@ -1143,11 +1194,19 @@ switch ($Step) {
         # version already installed, which downloads nothing.
         # The pinned one-liner runs the text as a script block given -Version, as the page's pinned line does.
         $text = if ($Pinned) { "& ([scriptblock]::Create((Get-Content -LiteralPath '$Script' -Raw))) -Version $Version" } else { "Invoke-Expression (Get-Content -LiteralPath '$Script' -Raw)" }
+        # The application and the jason it carries, read before the run again: a run over the version already here leaves
+        # both as they are.
+        $executablesBefore = @((Join-Path $app 'Jason.exe'), $carried) | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }
         $runAgain = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', "$text; if (Get-Command Install-Jason -ErrorAction SilentlyContinue) { 'Install-Jason is still defined'; exit 9 }") @{ JASON_INSTALL_FEED = $Feed }
         if ($runAgain.Exit -ne 0) { Fail "install.ps1's text run as the one-liner runs it exited with $($runAgain.Exit)" }
         if (-not $runAgain.Flat.Contains(("Jason Desktop $Version is already installed" -replace '\s+', ''))) { Fail 'the second run did not say the version is already installed' }
         if ((Count-Entry $bundle) -ne 1) { Fail 'a second run added a second Path entry' }
+        $executablesAfter = @((Join-Path $app 'Jason.exe'), $carried) | ForEach-Object { (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash }
+        if (($executablesAfter -join ' ') -cne ($executablesBefore -join ' ')) { Fail "the run again over the version already installed changed $(Join-Path $app 'Jason.exe') or $carried" }
+        $licenceLine = "Jason $Version is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v$Version/LICENSE"
+        if (-not $runAgain.Flat.Contains(($licenceLine -replace '\s+', ''))) { Fail "the run again did not say the licence: $licenceLine" }
         Say 'run again as the one-liner runs it, it downloads nothing, adds nothing to the Path and leaves no function behind'
+        Say "the run again left Jason.exe and the carried jason as they were, and said: $licenceLine"
 
         # The machine set-up an application's start runs, and the installer's own, with no flags: nothing written under the
         # data directory, so a person's first start still opens on the Demo.
@@ -1158,6 +1217,68 @@ switch ($Step) {
         $written = @(if (Test-Path -LiteralPath $fresh) { Get-ChildItem -LiteralPath $fresh -Recurse -Force })
         if ($written.Count -ne 0) { Fail "jason install with no flags wrote under the data directory: $($written.FullName -join ', ')" }
         Say 'jason install with no flags, as an application start and the installer run it, writes no entry under the data directory'
+    }
+
+    'ServedFeed' {
+        if (-not $Feed -or -not $Version -or -not $Script) { Fail '-Feed, -Version and -Script are needed.' }
+        # The feed this job assembled, served over http on this machine, and install.ps1 run by Windows PowerShell 5.1
+        # against its address: the path every real install line takes and a feed in a directory never reaches - TLS 1.2
+        # and no progress bar under 5.1, and every file fetched by Invoke-WebRequest. The feed's address alone names it:
+        # JASON_INSTALL_FEED is taken out of the run.
+        $served = 'http://127.0.0.1:8099'
+        # The shell that runs it, said on a line of its own and held to Windows PowerShell 5.1: powershell.exe as this
+        # account finds it, asked for its own path, edition and version, so that a pwsh found first by that name shows here.
+        $asked = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('((Get-Process -Id $PID).Path, $PSVersionTable.PSEdition, $PSVersionTable.PSVersion.ToString()) -join "|"'))
+        $shell = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-EncodedCommand', $asked)
+        $shellPath, $shellEdition, $shellVersion = "$(@($shell.Said -split "`n" | Where-Object { $_.Contains('|') })[-1])".Trim() -split '\|', 3
+        Say "install.ps1 runs in $shellPath, PowerShell $shellVersion, edition $shellEdition"
+        if ($shell.Exit -ne 0 -or $shellEdition -cne 'Desktop' -or -not "$shellVersion".StartsWith('5.1.')) { Fail "powershell.exe is not Windows PowerShell 5.1: it said '$($shell.Said)'" }
+        $serverLog = Join-Path $Out 'served-feed-server.log'
+        $server = Start-FeedServer $Feed 8099 $serverLog
+        try {
+            $install = Invoke-Program 'powershell.exe' @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $Script, '-Feed', $served) @{ JASON_INSTALL_FEED = $null }
+            if ($install.Exit -ne 0) { Fail "install.ps1 -Feed $served exited with $($install.Exit)" }
+            if (-not $install.Flat.Contains(("Downloading Jason Desktop $Version for Windows from $served ..." -replace '\s+', ''))) { Fail "install.ps1 -Feed $served did not say it downloads from $served" }
+        } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            $null = $server.WaitForExit(10000)
+        }
+        Say "install.ps1 -Feed $served ran in Windows PowerShell 5.1 and said it downloads Jason Desktop $Version from $served"
+
+        # Each file came over the web, from this feed and nothing else: the server's own record of the three requests.
+        $requests = "$(Get-Content -LiteralPath $serverLog -Raw -ErrorAction SilentlyContinue)"
+        foreach ($requested in @('manifest.json', 'checksums.txt', 'jason-desktop-windows-x64-setup.exe')) {
+            if ($requests -notmatch ('"GET /' + [regex]::Escape($requested) + ' HTTP/1\.[01]" 200')) { Fail "the served feed's log records no answered request for $requested" }
+        }
+        Say 'the served feed answered install.ps1 its manifest, its checksums and the setup, each with 200'
+
+        # Installed, at this version.
+        if (-not (Test-Path -LiteralPath (Join-Path $app 'Jason.exe') -PathType Leaf)) { Fail "no Jason.exe at $app" }
+        if ((Read-Version $carried) -ne $Version) { Fail "$carried is $(Read-Version $carried), not $Version" }
+
+        # The role skills: deployed by the install's jason install --roles from the skills beside the jason it carries,
+        # never from a feed, so their record names a folder of the application.
+        $rolesRecord = Join-Path $data 'skills\roles\.jason-skills.json'
+        if (-not (Test-Path -LiteralPath $rolesRecord)) { Fail "no role skills record at $rolesRecord" }
+        $recorded = Get-Content -LiteralPath $rolesRecord -Raw
+        $sources = @([regex]::Matches($recorded, '"source"\s*:\s*("(?:[^"\\]|\\.)*")') | ForEach-Object { $_.Groups[1].Value | ConvertFrom-Json })
+        if ($sources.Count -eq 0) { Fail "the role skills' record names no source: $recorded" }
+        $outside = @($sources | Where-Object { -not ([string]$_).StartsWith($app.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) })
+        if ($outside.Count -ne 0) { Fail "the role skills' record names a source outside $app`: $($outside -join '; ')" }
+        Say "the role skills' record names the skills beside the application's jason: $(@($sources | Sort-Object -Unique) -join '; ')"
+
+        # And a runtime over them says role_skills is ok.
+        if ((Invoke-Program $carried @('runtime', 'status')).Exit -ne 0) {
+            $runtime = Invoke-Program $carried @('runtime', 'start') @{ JASON_Update__CheckEnabled = 'false' }
+            if ($runtime.Exit -ne 0) { Fail "a runtime could not be started over the installed role skills ($($runtime.Exit)): $($runtime.Said)" }
+        }
+        $status = Invoke-Program $carried @('status')
+        if (-not $status.Flat.Contains('"name":"role_skills","required":true,"state":"ok"')) { Fail "jason status does not say role_skills is ok: $($status.Said)" }
+        Say 'jason status says role_skills is ok'
+
+        $licenceLine = "Jason $Version is licensed under the MIT licence: https://github.com/reply-team/jason-ai/blob/v$Version/LICENSE"
+        if (-not $install.Flat.Contains(($licenceLine -replace '\s+', ''))) { Fail "install.ps1 -Feed $served did not say the licence: $licenceLine" }
+        Say "install.ps1 -Feed $served said: $licenceLine"
     }
 
     'UninstallFromTerminal' {
@@ -1567,9 +1688,8 @@ switch ($Step) {
             return $(if (Test-Path -LiteralPath $readsFile) { [int](Get-Content -LiteralPath $readsFile -Raw) } else { -1 })
         }
 
-        $server = Start-Process python -ArgumentList '-m', 'http.server', '8098', '--bind', '127.0.0.1', '--directory', $Next -PassThru -NoNewWindow
+        $server = Start-FeedServer $Next 8098 (Join-Path $Out 'feed-server-next-version.log')
         try {
-            Wait-Until { try { (Invoke-WebRequest -Uri 'http://127.0.0.1:8098/manifest.json' -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200 } catch { $false } } 20 'the next build''s feed answering on 127.0.0.1:8098'
             $feedAddress = 'http://127.0.0.1:8098/manifest.json'
 
             # A window open: the Desktop refuses a request that names a feed, and the verb says so.
@@ -1657,9 +1777,8 @@ switch ($Step) {
 
         # Its own update, pinned to this version, from the feed served on this machine. The update is the 0.48 parent's;
         # the move is this version's, which the parent hands the rest to.
-        $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $Feed -PassThru -NoNewWindow
+        $server = Start-FeedServer $Feed 8099 (Join-Path $Out 'feed-server-from-previous.log')
         try {
-            Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing -TimeoutSec 5 | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
             $update = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
             Set-Content -LiteralPath (Join-Path $Out 'update-from-previous.json') -Value $update.Said
             if ($update.Exit -ne 0) { Fail "the previous release's jason update apply --version $Version exited with $($update.Exit)" }
@@ -1781,9 +1900,8 @@ switch ($Step) {
         if ($made.Exit -ne 0) { Fail "the previous release could not make a campaign: $($made.Said)" }
         Say "the previous release's command-line Jason $previousVersion installed by its own script, a runtime running, its logon start registered and one campaign made"
 
-        $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $Feed -PassThru -NoNewWindow
+        $server = Start-FeedServer $Feed 8099 (Join-Path $Out "feed-server-way-back$(if ($Again) { '-again' }).log")
         try {
-            Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing -TimeoutSec 5 | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
             $update = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
         } finally {
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
@@ -1887,9 +2005,8 @@ switch ($Step) {
         if ($Again) {
             # Moving again: the previous release's own update apply, pinned to this version, from the feed served here, as the
             # page says it moves the install into Jason Desktop again.
-            $server = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1', '--directory', $Feed -PassThru -NoNewWindow
+            $server = Start-FeedServer $Feed 8099 (Join-Path $Out "feed-server-way-back-moved-again$(if ($Again) { '-again' }).log")
             try {
-                Wait-Until { try { Invoke-WebRequest -Uri http://127.0.0.1:8099/manifest.json -UseBasicParsing -TimeoutSec 5 | Out-Null; $true } catch { $false } } 10 'the feed on 127.0.0.1:8099 answering'
                 $moved = Invoke-Program $jason @('update', 'apply', '--version', $Version, '--feed', 'http://127.0.0.1:8099/manifest.json', '--drain-seconds', '0') $quiet 900
             } finally {
                 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
