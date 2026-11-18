@@ -1384,7 +1384,41 @@ build's report never has.
 ### Going back from 0.49
 
 `jason update rollback` does not roll Jason 0.49 back from a move of a command-line install into Jason Desktop: once the
-move is done, it refuses with `update_carried_by_desktop` and points here.
+move is done, it refuses with `update_carried_by_desktop` and points here. Going back is taking Jason off and installing
+0.48.5, with the data directory kept. 0.49 adds no migration to the database and keeps the layout 0.48.5 runs, so 0.48.5
+opens the same data as it is, and there is no backup to put back.
+
+1. Quit Jason Desktop, then take Jason off in a terminal, keeping the data directory:
+   ```sh
+   jason uninstall
+   ```
+   It removes Jason Desktop, the terminal command, the logon registration and the skills it deployed (§9), and keeps
+   `~/.jason` and the harness root. Where it refuses, its message says why (Jason Desktop still open, or on Windows
+   another `jason` still running), and nothing has been removed.
+2. Install 0.48.5 by its own pinned line, then open a new terminal.
+   Windows (PowerShell):
+   ```powershell
+   & ([scriptblock]::Create((irm https://get.jasonharness.ai/releases/download/v0.48.5/install.ps1))) -Version 0.48.5
+   ```
+   macOS:
+   ```sh
+   curl -fsSL https://get.jasonharness.ai/releases/download/v0.48.5/install.sh | sh -s -- --version 0.48.5
+   ```
+   A later 0.48 release, if the releases page shows one, is installed the same way under its own number.
+3. Put back what the uninstall took and the install does not:
+   ```sh
+   jason skills install
+   jason ui install
+   jason runtime start
+   ```
+   and `jason runtime autostart enable` where the runtime started at logon before.
+
+Nothing in the data directory is lost: campaigns, the journal, settings, plugins and their grants are data 0.48.5 reads
+as it is. What goes is Jason Desktop: under 0.48.5 it was a separate download, and whoever wants it takes it from
+[0.48.5's release page](https://get.jasonharness.ai/releases/tag/v0.48.5) after step 2. The same three steps
+also go back from a 0.49 installed fresh rather than moved. Under 0.48.5, `jason update apply` brings 0.49 back and moves
+the install into Jason Desktop again, and `jason update rollback` acts on 0.49's update record, putting back the version
+that update replaced over 0.48.5. Run neither until you want 0.49 again.
 
 ## 8. Starting at logon
 
