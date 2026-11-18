@@ -13,9 +13,11 @@ the terminal command, the skills and Jason's data are your account's own.
 
 Jason is used from a release: nothing in its repository is built, cloned or tested to use it, which is for changing
 Jason (§3). **From a release (§2):** a shell to install it with, and nothing else — the archive carries its own runtime, and the
-script ends by teaching it its role skills (§4). Teaching it is a fetch of its own: a release takes its skills from
-the package of them it published, `jason-skills.zip`, over the network, at the tag it was published as. A machine
-without the network teaches it from a checkout instead, with `--source`, which also takes a git repository at a ref;
+script ends by teaching it its role skills (§4). On macOS and Windows they come with Jason Desktop: the set-up reads them
+from the folder beside the `jason` it carries, with no network. On Linux teaching it is a fetch of its own, and so is a
+later `jason skills install` on any system: a release takes its skills from the package of them it published,
+`jason-skills.zip`, over the network, at the tag it was published as. A machine without the network teaches it from a
+checkout instead, with `--source`, which also takes a git repository at a ref;
 only that needs `git`.
 
 You also need a directory you can write to, and — if you want an agent harness taught — that

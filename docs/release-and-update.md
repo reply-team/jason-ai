@@ -887,9 +887,16 @@ cp ~/.jason/state/backups/jason-20260919T120000Z-before-20260920000000_Next.db ~
 rm -f ~/.jason/state/jason.db-wal ~/.jason/state/jason.db-shm
 
 # 4. Start the binary that matches that database — the one the backup's name was written by, which
-#    for a backup taken before a migration is the version you were on before the update.
+#    for a backup taken before a migration is the version you were on before the update; a command-line
+#    install's update kept it here:
 ~/.jason/update/previous/jason runtime start
 ```
+
+Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the
+update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/`
+(`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder,
+then run `jason runtime start`. `~/.jason/update/previous/jason` is not that version there: after a move into Jason
+Desktop it is the command-line executable the move's update replaced, a release before 0.49.
 
 There is one case the runtime puts a backup back itself: a start whose migration fails. Nothing has written to the
 database since that start took its backup, so it puts that copy back, does not start, and says so — the migration
