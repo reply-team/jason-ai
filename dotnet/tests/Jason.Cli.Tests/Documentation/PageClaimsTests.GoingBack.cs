@@ -120,6 +120,26 @@ public partial class PageClaimsTests
         Assert.Equal(GoingBackToPackages, newest);
     }
 
+    /// <summary>
+    /// "Under 0.48.5, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again": the uninstall
+    /// leaves the move's record, which says done, so the sentence holds only while a done record whose application is gone
+    /// and whose install path holds a command-line executable again does not stand, and is a move to make again.
+    /// </summary>
+    [Fact]
+    public void Going_back_from_0_49_leaves_a_done_move_record_that_no_longer_stands()
+    {
+        Assert.Contains("Under 0.48.5, `jason update apply` brings 0.49 back and moves the install into Jason Desktop again,", Flat(GoingBack()), StringComparison.Ordinal);
+
+        using var dir = new TempPaths();
+        var from = Path.Combine(dir.Paths.Root, "bin", "jason");
+        var application = Path.Combine(dir.Paths.Root, "Applications", "Jason.app");
+        Directory.CreateDirectory(Path.GetDirectoryName(from)!);
+        File.WriteAllBytes(from, new byte[4096]);
+        var record = new Jason.Cli.Update.MoveRecord("0.49.0", from, Jason.Cli.Update.MoveStates.Done, Jason.Cli.Update.MoveSteps.Started, null, application, null, null, DateTimeOffset.UnixEpoch);
+
+        Assert.False(record.DoneAndStanding(windows: false));
+    }
+
     /// <summary>The update page's "### Going back from 0.49", up to the next heading.</summary>
     private static string GoingBack()
     {

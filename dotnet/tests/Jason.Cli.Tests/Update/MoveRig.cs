@@ -250,12 +250,13 @@ public sealed class MoveRig : IDisposable
         return ledger;
     }
 
-    /// <summary>A move over this rig, its waits short.</summary>
-    public CommandLineMove Move(Action<MoveRecord>? writes = null) => new(Env, Update, TimeProvider.System)
+    /// <summary>A move over this rig, its waits short, its warm-up <paramref name="warmUp"/> or nothing.</summary>
+    public CommandLineMove Move(Action<MoveRecord>? writes = null, Action? warmUp = null) => new(Env, Update, TimeProvider.System)
     {
         Poll = TimeSpan.FromMilliseconds(20),
         StartWait = TimeSpan.FromSeconds(5),
         Writes = writes,
+        WarmUp = warmUp ?? (() => { }),
     };
 
     public MoveRecord? Record() => MoveRecord.Read(Update.Move);

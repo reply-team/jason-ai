@@ -360,6 +360,62 @@ public sealed class MoveHandOverTests
         Assert.DoesNotContain(rig.Installation.Root, refusal.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A done record whose install path holds a command-line executable again no longer says the install was moved, so a
+    /// rollback from the application's jason refuses as for any other record's file, naming the jason that rolls it back,
+    /// and not as after a move.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_rollback_with_a_done_record_that_no_longer_stands_is_not_refused_as_after_a_move(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        File.WriteAllBytes(rig.Old, new byte[4096]);
+        var output = new StringWriter();
+
+        var exit = await UpdateCommands.RollBackAsync(rig.Env with { Out = output, InstallPath = rig.Carried }, human: false, Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var refusal = RuntimeVerbs.Envelope(output.ToString());
+        Assert.Equal(UpdateCodes.CarriedByDesktop, refusal.Code);
+        Assert.DoesNotContain(PublicRepository.GoingBackFrom049, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains($"{rig.Old} update rollback", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// After going back from 0.49, the first move was killed before it wrote its record over, so a done record that no longer
+    /// stands meets this version's command line, already up to date. <c>jason status</c> says the next
+    /// <c>jason update apply</c> moves it again, and that very command carries the move on rather than answer that it is up
+    /// to date.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_done_record_that_no_longer_stands_is_carried_on_by_an_apply_with_nothing_newer(bool windows)
+    {
+        using var rig = new MoveRig(windows);
+        rig.Installation.WithRuntime();
+        Assert.Equal(MoveStates.Done, (await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct)).State);
+        Directory.Delete(rig.Application, recursive: true);
+        File.WriteAllBytes(rig.Old, new byte[4096]);
+        Assert.Equal(MoveStates.Done, rig.Record()!.State);
+        Assert.Contains("the next jason update apply moves it again", StatusChecks.Move(rig.Env).Fact, StringComparison.Ordinal);
+        rig.Acts.Clear();
+        var output = new StringWriter();
+
+        var exit = await UpdateCommands.ApplyAsync(rig.Env with { Out = output }, rig.Installation.Feed.AbsoluteUri, null, null, human: false, Ct);
+
+        Assert.DoesNotContain(UpdateCodes.UpToDate, output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(ExitCodes.Success, exit);
+        var answer = JsonSerializer.Deserialize<UpdateApplyResponse>(output.ToString(), JasonJson.Options)!;
+        Assert.Equal(MoveStates.Done, answer.Move!.State);
+        Assert.Contains("routine", rig.Acts);
+        Assert.True(rig.Record()!.DoneAndStanding(windows));
+    }
+
     // --- nothing of the move fails the update -------------------------------------------------------------
 
     /// <summary>
