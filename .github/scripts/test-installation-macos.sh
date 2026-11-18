@@ -897,7 +897,8 @@ print("" if doc is None else (str(doc).lower() if isinstance(doc, bool) else doc
     # (i) The campaigns, as many; the journal, held by id.
     read_all "$WRAPPER" campaign list --include-archived > "$OUT/way-back-campaigns-after.json" || fail "the campaigns could not be read under $old"
     read_all "$WRAPPER" journal list > "$OUT/way-back-journal-after.json" || fail "the journal could not be read under $old"
-    held="$(python3 - "$OUT/way-back-campaigns-before.json" "$OUT/way-back-campaigns-after.json" "$OUT/way-back-journal-before.json" "$OUT/way-back-journal-after.json" "$old" <<'PY'
+    # Written to a file and read after: the system's bash 3.2 misreads a here-document inside a command substitution.
+    python3 - "$OUT/way-back-campaigns-before.json" "$OUT/way-back-campaigns-after.json" "$OUT/way-back-journal-before.json" "$OUT/way-back-journal-after.json" "$old" > "$OUT/way-back-held.txt" <<'PY' || fail "the campaigns and the journal could not be held: see this step's log"
 import json, sys
 c0, c1, j0, j1 = (json.load(open(path)) for path in sys.argv[1:5])
 old = sys.argv[5]
@@ -923,7 +924,7 @@ if faults:
 else:
     print('under %s: %d campaign(s), as before; every one of the %d journal entries is there by id with its kind and its moment, and none has appeared at or before %s; %d newer entr(ies) are listed above it' % (old, len(c1), len(j0), newest, at))
 PY
-)" || fail "the campaigns and the journal could not be held: see this step's log"
+    held="$(cat "$OUT/way-back-held.txt")"
     case "$held" in FAIL\ *) fail "${held#FAIL }" ;; esac
     say "$held"
 
