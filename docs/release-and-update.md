@@ -1818,8 +1818,11 @@ install, with `--retire` naming the executable it moves from. On Windows `--term
 
 **A stop on an installer's behalf: `jason runtime stop --start-owed`.** A stop made on behalf of an install or an update
 leaves the note; only a stop a person or an agent asks for takes it back. `--start-owed` is that stop. It writes the
-note, as above, just before it asks the runtime to shut down, prints the stop's own answer unchanged, and takes the note
-back where the runtime then does not stop. It takes back only the note it wrote: where an
+note, as above, just before it asks the runtime to shut down, and prints the stop's own answer unchanged. Where it does
+not see the runtime end, it reads what became of the runtime as `jason install`'s stop does, by the same rule: the note is
+taken back only where the runtime refused the shutdown and goes on running, and stands where the runtime ended, where it
+took the shutdown and has not ended, and where the shutdown was sent and no answer came, a cancel inside the send among
+them, since whether that runtime is going down is not known. It takes back only the note it wrote: where an
 older note already stands it writes none and leaves that one as it is, whatever the stop comes to. Where no runtime
 answers to the data directory, none running or no data directory at all, it stops nothing, writes nothing and makes no
 folder. A note it cannot write is said on standard error, and the stop's exit code is the stop's. Jason Desktop's own
