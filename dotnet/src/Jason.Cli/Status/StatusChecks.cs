@@ -288,7 +288,7 @@ internal static partial class StatusChecks
             checks.Add(AgentHostsCheck(env.Harnesses?.Detect(), profiles.Profiles, profileNames, profiles.Unread));
             checks.Add(RolesLaunchableCheck(profiles.Profiles, profiles.Unread, env.Paths.UserSettingsFile, DefaultProfileOf(env), profileNames));
             checks.Add(Autostart(env));
-            checks.Add(Notifications(info));
+            checks.Add(Notifications(info, env.ToastSetting));
             checks.Add(UiModule(info, SkillsSource.BuildVersion(env)));
             checks.Add(HarnessRoot(info));
             checks.Add(SendModes(info));
@@ -2113,12 +2113,22 @@ internal static partial class StatusChecks
     /// </summary>
     /// <remarks>
     /// A person's own choice is never a failure: notifications switched off, or a machine with no desktop by design.
+    /// Windows' switches are read as they stand now where they can be (<see cref="IToastSetting"/>), and trusted one way:
+    /// a switch off now is said as a fact of now, whether the last toast was shown or not, and after a failure, which is
+    /// never hidden and comes first; a switch not off now never promises that a toast reaches anybody, it only says that
+    /// the last one, which Windows did not show, was not shown then.
     /// A runtime in session 0 is: a service or an SSH session runs there, but on a desktop it is most likely a runtime a
     /// 0.1.0 logon task left running, and for that one the fact names the acts in the order docs/release-and-update.md
     /// §8 gives them — the registration, the stop, a start — never the stop alone, which would leave the old task to
     /// start another runtime at the next sign-in.
     /// </remarks>
-    private static StatusCheck Notifications(SystemInfoResponse? info)
+    /// <summary>
+    /// What a sentence that sends a person to the switch named Jason adds: the entry meant is the runtime's, since Jason
+    /// Desktop's entry goes by the same name.
+    /// </summary>
+    private const string TwoEntries = "the runtime's entry; Jason Desktop has an entry of its own under the same name, which changes nothing here.";
+
+    private static StatusCheck Notifications(SystemInfoResponse? info, IToastSetting? toastSetting)
     {
         const string Name = "notifications";
         if (info is null)
@@ -2136,6 +2146,9 @@ internal static partial class StatusChecks
         {
             return new StatusCheck(Name, false, CheckState.Absent, "Notifications are off: nothing tells anybody when Jason starts waiting for them.", null);
         }
+
+        // Windows' switches as they stand now, read only where a toast is on: null where they cannot be read, or off Windows.
+        var switchNow = on.Any(channel => channel.Kind == ChannelKinds.Toast) ? toastSetting?.Read() : null;
 
         var failures = new List<string>();
         var asides = new List<string>();
@@ -2174,23 +2187,35 @@ internal static partial class StatusChecks
             {
                 asides.Add($"No desktop for this runtime to show a notification on ({noDesktop}). `jason notification disable toast --actor human:<Name>` turns the toast off.");
             }
-            else if (outcome == ChannelResults.Silenced)
-            {
-                asides.Add(channel.Reason switch
-                {
-                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason).",
-                    SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
-                    SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
-                    _ => "Windows has notifications switched off for every app.",
-                });
-            }
             else if (outcome == ChannelResults.Failed)
             {
+                // A failure is never hidden by a switch: it comes first, and a switch off now follows it.
                 failures.Add($"{channel.Channel}: {channel.Code} ({channel.Class}) at {When(channel.At)}{Detail(channel.Detail)}.");
+                failures.AddRange(OffNow(channel, switchNow));
             }
             else if (outcome == ChannelResults.NotAttempted)
             {
                 failures.Add($"{channel.Channel} was not attempted at {When(channel.At)}: {channel.Reason}{Detail(channel.Detail)}.");
+                failures.AddRange(OffNow(channel, switchNow));
+            }
+            else if (OffNow(channel, switchNow) is [var offNow])
+            {
+                asides.Add(offNow);
+            }
+            else if (channel.Kind == ChannelKinds.Toast && switchNow == ToastSwitch.NotOff && outcome == ChannelResults.Silenced
+                && channel.Reason is SilencedReasons.DisabledForApplication or SilencedReasons.DisabledForUser or SilencedReasons.DisabledByGroupPolicy)
+            {
+                asides.Add($"Windows' switches for Jason's notifications read as on now; the last one, at {When(channel.At)}, was not shown, because Windows had them switched off then.");
+            }
+            else if (outcome == ChannelResults.Silenced)
+            {
+                asides.Add(channel.Reason switch
+                {
+                    SilencedReasons.DisabledForApplication => "Windows has Jason's notifications switched off (Settings > System > Notifications > Jason), " + TwoEntries,
+                    SilencedReasons.DisabledByGroupPolicy => "A group policy on this machine switches Windows' notifications off; an administrator sets it.",
+                    SilencedReasons.DisabledByManifest => "Windows says this program's own manifest switches its notifications off.",
+                    _ => "Windows has notifications switched off for every app.",
+                });
             }
             else
             {
@@ -2243,6 +2268,21 @@ internal static partial class StatusChecks
             at?.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture) ?? "an unknown time";
 
         static string Detail(string? detail) => detail is null ? string.Empty : ": " + detail;
+
+        // The toast's sentence for a switch off now, or none: for any other channel, or where no switch is off or none was read.
+        static string[] OffNow(NotificationChannelInfo channel, ToastSwitch? now) =>
+            channel.Kind == ChannelKinds.Toast && now is { } off && off != ToastSwitch.NotOff ? [SwitchedOffNow(off)] : [];
+
+        // Which of Windows' three switches is off now, each with its own way out. Only the runtime's own entry is named by
+        // the name it shares with Jason Desktop's, so only a sentence that sends the person there says which of the two is meant.
+        static string SwitchedOffNow(ToastSwitch now) => now switch
+        {
+            ToastSwitch.OffForJason =>
+                "Windows has Jason's notifications switched off now, so none is shown: switch them on in Settings > System > Notifications > Jason, " + TwoEntries,
+            ToastSwitch.OffForEveryApp =>
+                "Windows has notifications switched off now for every app, so none of Jason's is shown: switch Notifications on at the top of Settings > System > Notifications.",
+            _ => "A group policy on this machine switches Windows' notifications off now, so none of Jason's is shown: only an administrator can change it.",
+        };
     }
 
     private static async Task<T?> ReadAsync<T>(RuntimeClient client, string operation, CancellationToken cancellationToken)
