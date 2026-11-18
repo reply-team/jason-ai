@@ -57,3 +57,9 @@ export const DESKTOP = Object.freeze({
   '/desktop/linux-deb': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-linux-x64.deb',
   '/desktop/linux-appimage': 'https://get.jasonharness.ai/releases/latest/download/jason-desktop-linux-x64.AppImage',
 });
+
+/**
+ * The header an answer of the install page names its source in: the release tag the guide was read at, or `main`. A
+ * redirect carries none.
+ */
+export const INSTALL_SOURCE_HEADER = 'x-jason-install-source';

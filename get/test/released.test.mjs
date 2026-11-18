@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GUIDE, fakeFetch, send } from '../fakes.mjs';
 import { wholeLinks } from '../src/install.mjs';
-import { INSTALL_PAGE, LATEST_RELEASE, installPageAt } from '../src/paths.mjs';
+import { INSTALL_PAGE, INSTALL_SOURCE_HEADER, LATEST_RELEASE, installPageAt } from '../src/paths.mjs';
 
 const raw = 'https://raw.githubusercontent.com/reply-team/jason-ai/';
 const page = (text) => () => new Response(text, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
@@ -89,4 +89,36 @@ test('a tag that is not a release tag never names an address', () => {
   for (const tag of ['v0.49.0-rc.1', 'main', '../main', 'v1.2', '', 'v1.2.3/x']) {
     assert.throws(() => installPageAt(tag), /release tag/, tag);
   }
+});
+
+test('the answer names the page it served: the release tag it was read at, or main; the redirect names none', async () => {
+  const fromTag = fakeFetch({ [LATEST_RELEASE]: moved(tagPage('v0.48.5')), [installPageAt('v0.48.5')]: page(released), [INSTALL_PAGE]: page(onMain) });
+  const { response: tagged } = await send('/install', { fetch: fromTag });
+  assert.equal(tagged.headers.get(INSTALL_SOURCE_HEADER), 'v0.48.5');
+
+  const fromMain = fakeFetch({ [LATEST_RELEASE]: new Error('unreachable'), [INSTALL_PAGE]: page(onMain) });
+  const { response: onMainAnswer } = await send('/install', { fetch: fromMain });
+  assert.equal(onMainAnswer.headers.get(INSTALL_SOURCE_HEADER), 'main');
+
+  const tagNotGuide = fakeFetch({ [LATEST_RELEASE]: moved(tagPage('v0.48.5')), [installPageAt('v0.48.5')]: page('Not the guide.\n'), [INSTALL_PAGE]: page(onMain) });
+  const { response: fellBack } = await send('/install', { fetch: tagNotGuide });
+  assert.equal(fellBack.headers.get(INSTALL_SOURCE_HEADER), 'main');
+
+  const head = fakeFetch({ [LATEST_RELEASE]: moved(tagPage('v0.48.5')), [installPageAt('v0.48.5')]: page(released) });
+  const { response: headAnswer } = await send('/install', { fetch: head, method: 'HEAD' });
+  assert.equal(headAnswer.headers.get(INSTALL_SOURCE_HEADER), 'v0.48.5', 'HEAD carries the same header');
+
+  const neither = fakeFetch({ [LATEST_RELEASE]: moved(tagPage('v0.48.5')), [installPageAt('v0.48.5')]: page('x'), [INSTALL_PAGE]: page('x') });
+  const { response: redirected } = await send('/install', { fetch: neither });
+  assert.equal(redirected.status, 302);
+  assert.equal(redirected.headers.get(INSTALL_SOURCE_HEADER), null, 'the 302 names no source');
+});
+
+test("the latest release's redirect is kept at the edge for five minutes by its status, over GitHub's no-cache", async () => {
+  const fetch = fakeFetch({ [LATEST_RELEASE]: moved(tagPage('v0.48.5')), [installPageAt('v0.48.5')]: page(released) });
+  await send('/install', { fetch });
+  const cf = fetch.asked[0].init.cf;
+  assert.deepEqual(cf.cacheTtlByStatus, { '300-399': 300 });
+  assert.equal(cf.cacheEverything, true);
+  assert.equal(cf.cacheTtl, undefined, 'the redirect is kept by the status-based TTL, not by cacheTtl');
 });

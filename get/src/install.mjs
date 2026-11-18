@@ -10,6 +10,10 @@ const ABSOLUTE = /^[a-z][a-z0-9+.-]*:/i;
 // Kept at Cloudflare's edge for five minutes, so a burst of installs reads each fixed address once.
 const EDGE = { cacheTtl: 300, cacheEverything: true };
 
+// The latest release's redirect, kept five minutes by its status: GitHub answers it with `Cache-Control: no-cache`, and a
+// TTL chosen by status overrides what the origin says, for the 3xx this read is about.
+const REDIRECT_EDGE = { cacheEverything: true, cacheTtlByStatus: { '300-399': 300 } };
+
 /**
  * Makes each relative Markdown link target whole against the address the page was read from. Read from this address, a
  * relative link would resolve against it, where nothing answers; made whole, it names the same file of the same tree.
@@ -34,7 +38,7 @@ export function isGuide(text) {
  */
 export async function latestTag(fetch) {
   try {
-    const answer = await fetch(LATEST_RELEASE, { redirect: 'manual', cf: EDGE });
+    const answer = await fetch(LATEST_RELEASE, { redirect: 'manual', cf: REDIRECT_EDGE });
     if (answer.status < 300 || answer.status > 399) return null;
     const match = LATEST_RELEASE_LOCATION.exec(answer.headers.get('location') ?? '');
     return match ? match[1] : null;
@@ -57,9 +61,12 @@ async function readGuide(fetch, address) {
 
 /**
  * Reads the guide: the latest published release's, at its tag; else main's, where the tag cannot be learnt or the page at
- * it is not the guide. Null where neither read gives the guide.
+ * it is not the guide. The text and its source, the tag or `main`; null where neither read gives the guide.
  */
 export async function readInstallPage(fetch) {
   const tag = await latestTag(fetch);
-  return (tag === null ? null : await readGuide(fetch, installPageAt(tag))) ?? (await readGuide(fetch, INSTALL_PAGE));
+  const released = tag === null ? null : await readGuide(fetch, installPageAt(tag));
+  if (released !== null) return { text: released, source: tag };
+  const onMain = await readGuide(fetch, INSTALL_PAGE);
+  return onMain === null ? null : { text: onMain, source: 'main' };
 }
