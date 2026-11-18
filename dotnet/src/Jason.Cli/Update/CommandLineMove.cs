@@ -92,6 +92,12 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
     private MoveRecord? _record;
 
+    /// <summary>
+    /// Windows: the publisher Jason Desktop is held to, read at the look: a test build's named signer, else the verified signer
+    /// of this jason; null before then and on macOS.
+    /// </summary>
+    private string? _publisher;
+
     /// <summary>The record a run before this one left, of this same install; null where there was none.</summary>
     private MoveRecord? _before;
 
@@ -208,6 +214,28 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
                 waits: "Jason Desktop is offered for Intel Macs");
         }
 
+        // Windows: the publisher Jason Desktop is held to is whoever signed this jason, its own signature verified by the routine
+        // that verifies the installer; a test build's named signer comes first. Unverified, nothing is fetched or looked at.
+        if (places.Platform is SetupSystem.Windows)
+        {
+            _publisher = MoveSignatures.TestSigner(MoveSignatures.TestBuild, env.Variables);
+            if (_publisher is null)
+            {
+                var (own, why) = System.WindowsSigner(System.RunningExecutable);
+                _publisher = why is null ? own : null;
+                if (_publisher is null)
+                {
+                    var page = $"{PublicRepository.Url}/releases/tag/v{version}";
+                    return End(
+                        MoveStates.Failed,
+                        $"This jason, {System.RunningExecutable}, does not verify as signed: {why ?? "its signer names no one"}. The move holds Jason Desktop's installer to whoever signed the jason that asks for it, so it moved nothing: nothing was downloaded or changed, and the command-line install answers as jason as it did. Install Jason Desktop yourself from {page}: its first start takes the command-line install in.",
+                        waits: $"Jason Desktop is installed from {page}");
+                }
+            }
+
+            Say($"checked this jason's own signature: Jason Desktop is held to {_publisher}");
+        }
+
         var found = Look(places);
         if (found.Refusal is { } refusal)
         {
@@ -226,7 +254,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
             }
 
             if (places.Platform is SetupSystem.Windows
-                && System.WindowsSignatureRefusal(Carried(places, found.Application)!, MoveSignatures.PublisherInForce) is { } unsignedHere)
+                && MoveSignatures.Refusal(System, Carried(places, found.Application)!, _publisher!) is { } unsignedHere)
             {
                 return End(MoveStates.Failed, $"The jason that Jason Desktop at {found.Application} carries was not run: {unsignedHere}. Nothing was changed. `jason update apply` carries the move on.");
             }
@@ -346,7 +374,7 @@ public sealed class CommandLineMove(CliEnvironment env, UpdatePaths update, Time
 
         if (windows)
         {
-            if (System.WindowsSignatureRefusal(download, MoveSignatures.PublisherInForce) is { } unsigned)
+            if (MoveSignatures.Refusal(System, download, _publisher!) is { } unsigned)
             {
                 Discard(download);
                 return End(MoveStates.Failed, $"{asset} was not run: {unsigned}. Nothing was installed or changed. `jason update apply` carries the move on.");

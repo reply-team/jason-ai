@@ -357,11 +357,14 @@ public sealed class CommandLineMoveTests
         Assert.False(File.Exists(Path.Combine(rig.Update.MoveDownloads, CommandLineMove.WindowsAsset)));
     }
 
-    /// <summary>An installer signed by anyone but the publisher, or not at all, is never run.</summary>
+    /// <summary>
+    /// An installer signed by anyone but the publisher that signed this jason, or not at all, is never run, and its download is
+    /// removed.
+    /// </summary>
     [Theory]
     [InlineData("Somebody Else Ltd.")]
     [InlineData(null)]
-    public async Task An_installer_not_signed_by_the_publisher_is_never_run(string? signer)
+    public async Task An_installer_not_signed_by_the_publisher_of_this_jason_is_never_run(string? signer)
     {
         using var rig = new MoveRig(windows: true);
         rig.Installation.WithRuntime();
@@ -374,6 +377,80 @@ public sealed class CommandLineMoveTests
         Assert.Equal(["signature"], rig.Acts);
         Assert.True(File.Exists(rig.Old));
         Assert.True(rig.Installation.Running);
+        Assert.False(File.Exists(Path.Combine(rig.Update.MoveDownloads, CommandLineMove.WindowsAsset)));
+    }
+
+    /// <summary>
+    /// The installer is held to whoever signed the jason that asks for the move, read from that jason's own verified signature:
+    /// no name is written in the sources, so a fork that signs its own builds is held to its own signer.
+    /// </summary>
+    [Fact]
+    public async Task The_installer_is_held_to_the_signer_of_the_running_jason()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        rig.System.SelfSignedBy = "A Fork That Signs Its Own";
+        rig.System.SignedBy = "A Fork That Signs Its Own";
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Done, answer.State);
+        Assert.Equal(1, rig.System.OwnSignatureReads);
+        Assert.Contains("signature", rig.Acts);
+    }
+
+    /// <summary>
+    /// A jason that is unsigned, or whose signature does not verify, moves nothing on Windows: refused at the first step, before
+    /// anything is fetched or looked at, with the way forward, and no repair typed here that cannot help.
+    /// </summary>
+    [Fact]
+    public async Task A_jason_whose_own_signature_does_not_verify_moves_nothing_and_fetches_nothing()
+    {
+        using var rig = new MoveRig(windows: true);
+        rig.Installation.WithRuntime();
+        rig.System.SelfSignedBy = null;
+        var fetches = rig.Installation.Release.Requested.Count;
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Failed, answer.State);
+        Assert.Null(answer.Step);
+        Assert.Contains("does not verify as signed", answer.Reason!, StringComparison.Ordinal);
+        Assert.Contains("Install Jason Desktop yourself from", answer.Reason!, StringComparison.Ordinal);
+        Assert.Empty(rig.Acts);
+        Assert.Equal(fetches, rig.Installation.Release.Requested.Count);
+        Assert.False(Directory.Exists(rig.Application));
+        Assert.False(Directory.Exists(rig.Update.MoveDownloads) && Directory.EnumerateFileSystemEntries(rig.Update.MoveDownloads).Any());
+        Assert.True(File.Exists(rig.Old));
+        Assert.True(rig.Installation.Running);
+
+        var check = StatusChecks.Move(rig.Env);
+        Assert.Equal(CheckState.Unknown, check.State);
+        Assert.Null(check.Fix);
+    }
+
+    /// <summary>
+    /// A test build's named signer comes before the running jason's own, and only a test build reads it: a released build given
+    /// the variable holds the installer to its own signer still.
+    /// </summary>
+    [Fact]
+    public async Task A_test_builds_named_signer_comes_first_and_a_released_build_reads_none()
+    {
+        var named = new Dictionary<string, string> { ["JASON_TEST_BUILD_SIGNER"] = "A Runner's Own Certificate" };
+        Assert.Equal("A Runner's Own Certificate", MoveSignatures.TestSigner(testBuild: true, named));
+        Assert.Null(MoveSignatures.TestSigner(testBuild: false, named));
+        Assert.Null(MoveSignatures.TestSigner(testBuild: true, new Dictionary<string, string>()));
+
+        // This build is a released one: the variable changes nothing, and an installer by that signer is refused.
+        using var rig = new MoveRig(windows: true, variables: named);
+        rig.Installation.WithRuntime();
+        rig.System.SignedBy = "A Runner's Own Certificate";
+
+        var answer = await rig.Move().RunAsync(rig.Complete(), rig.Installation.Feed, Ct);
+
+        Assert.Equal(MoveStates.Failed, answer.State);
+        Assert.Contains($"not by {FakeMoveSystem.Publisher}", answer.Reason!, StringComparison.Ordinal);
+        Assert.Equal(1, rig.System.OwnSignatureReads);
     }
 
     /// <summary>An application that does not meet the requirement is never run: its jason never sets anything up.</summary>
@@ -752,17 +829,15 @@ public sealed class CommandLineMoveTests
     // --- guards over the second copies --------------------------------------------------------------------
 
     /// <summary>
-    /// The publisher the move holds the installer to is install.ps1's, and the requirement it holds the application to is
-    /// install.sh's: each a second copy of one line, held equal to it.
+    /// The requirement the move holds an application to on macOS is install.sh's, a second copy of one line held equal to it.
+    /// On Windows no publisher is written in the sources: the move reads it from the signature of the jason that asks.
     /// </summary>
     [Fact]
-    public void The_signer_and_the_requirement_are_the_install_scripts_own()
+    public void The_requirement_is_the_install_scripts_own()
     {
         var root = TreeRoot();
-        var ps1 = File.ReadAllText(Path.Combine(root, "install", "install.ps1"));
         var sh = File.ReadAllText(Path.Combine(root, "install", "install.sh"));
 
-        Assert.Contains($"        $signer = '{MoveSignatures.Publisher}'", ps1, StringComparison.Ordinal);
         Assert.Contains($"APP_REQUIREMENT='{MoveSignatures.Requirement}'", sh, StringComparison.Ordinal);
         Assert.Contains("BD8M7U5YBV", MoveSignatures.Requirement, StringComparison.Ordinal);
         Assert.Contains(CommandLineMove.WindowsAsset, ReleaseAssets.Desktop);
@@ -816,7 +891,7 @@ public sealed class CommandLineMoveTests
     {
         Assert.False(MoveSignatures.TestBuild);
         Assert.Equal(Jason.Contracts.JasonVersion.TestBuild, MoveSignatures.TestBuild);
-        Assert.Equal(MoveSignatures.Publisher, MoveSignatures.PublisherInForce);
+        Assert.Null(MoveSignatures.TestSigner(MoveSignatures.TestBuild, new Dictionary<string, string> { ["JASON_TEST_BUILD_SIGNER"] = "Anyone" }));
         Assert.Equal(MoveSignatures.Requirement, MoveSignatures.RequirementInForce);
 
         var root = TreeRoot();
@@ -846,7 +921,8 @@ public sealed class CommandLineMoveTests
             var at = source.IndexOf($"\"{variable}\"", StringComparison.Ordinal);
             Assert.True(at >= 0, $"{variable} is not read");
             Assert.Equal(at, source.LastIndexOf($"\"{variable}\"", StringComparison.Ordinal));
-            Assert.Contains($"TestBuild && Environment.GetEnvironmentVariable(\"{variable}\")", source, StringComparison.Ordinal);
+            var line = source[(source.LastIndexOf('\n', at) + 1)..source.IndexOf('\n', at)];
+            Assert.Contains("estBuild && ", line, StringComparison.Ordinal);
         }
     }
 

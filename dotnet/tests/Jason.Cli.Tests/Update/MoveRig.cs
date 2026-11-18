@@ -17,8 +17,20 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
 {
     public bool AppleSilicon { get; set; } = true;
 
-    /// <summary>Who signed the Windows installer, as its signature names it; null for one that carries no valid signature.</summary>
-    public string? SignedBy { get; set; } = MoveSignatures.Publisher;
+    /// <summary>The publisher a test signs everything with unless it says otherwise: a name of the test's own, never a real one.</summary>
+    public const string Publisher = "The Publisher Of This Jason";
+
+    /// <summary>Who signed the Windows installer and a found application's jason, as the signature names it; null for one that carries no valid signature.</summary>
+    public string? SignedBy { get; set; } = Publisher;
+
+    /// <summary>Who signed the jason that runs the move, as its verified signature names it; null for one unsigned or that does not verify.</summary>
+    public string? SelfSignedBy { get; set; } = Publisher;
+
+    /// <summary>The file the jason that runs the move runs from.</summary>
+    public string RunningExecutable { get; set; } = Path.Combine(Path.GetTempPath(), "the-running-jason", "jason.exe");
+
+    /// <summary>How many times the running jason's own signature was read.</summary>
+    public int OwnSignatureReads { get; private set; }
 
     /// <summary>What codesign says of the application, where it does not verify; null where it does.</summary>
     public string? MacRefusal { get; set; }
@@ -44,11 +56,17 @@ public sealed class FakeMoveSystem(List<string> acts) : IMoveSystem
         return AppleSilicon;
     }
 
-    public string? WindowsSignatureRefusal(string file, string publisher)
+    public (string? Signer, string? Refusal) WindowsSigner(string file)
     {
+        if (string.Equals(file, RunningExecutable, StringComparison.OrdinalIgnoreCase))
+        {
+            OwnSignatureReads++;
+            return SelfSignedBy is null ? (null, "it does not carry a valid signature (WinVerifyTrust answered 0x800B0100)") : (SelfSignedBy, null);
+        }
+
         acts.Add("signature");
         Assert.True(File.Exists(file), "the signature is read off the downloaded file");
-        return SignedBy is null ? "it does not carry a valid signature" : SignedBy == publisher ? null : $"it is signed by '{SignedBy}', not by {publisher}";
+        return SignedBy is null ? (null, "it does not carry a valid signature") : (SignedBy, null);
     }
 
     public Task<string?> MacSignatureRefusalAsync(string application, string requirement, CancellationToken cancellationToken)
@@ -126,7 +144,7 @@ public sealed class MoveRig : IDisposable
 {
     /// <param name="windows">A Windows machine, else a macOS one.</param>
     /// <param name="localData">The name of the account's local application data folder, which may hold a space, as a profile's often does.</param>
-    public MoveRig(bool windows, string localData = "local")
+    public MoveRig(bool windows, string localData = "local", IReadOnlyDictionary<string, string>? variables = null)
     {
         _localData = localData;
         Windows = windows;
@@ -138,7 +156,7 @@ public sealed class MoveRig : IDisposable
             ? new SetupPlaces(SetupSystem.Windows, Home, LocalAppData, @"Software\jason-tests\never-written", null) { Temporary = Temporary }
             : new SetupPlaces(SetupSystem.MacOs, Home, null, @"Software\jason-tests\never-written", "/bin/zsh") { Temporary = Temporary };
         Registrar = new RecordingRegistrar(windows ? Jason.Cli.Autostart.AutostartPlatform.Windows : Jason.Cli.Autostart.AutostartPlatform.MacOs);
-        Env = Installation.Env with { Setup = Places, Moves = System, Autostart = Registrar, Variables = new Dictionary<string, string>() };
+        Env = Installation.Env with { Setup = Places, Moves = System, Autostart = Registrar, Variables = variables ?? new Dictionary<string, string>() };
         Installation.Machine = Env;
         Installation.Release.WithFile(windows ? CommandLineMove.WindowsAsset : CommandLineMove.MacAsset, Encoding.UTF8.GetBytes("Jason Desktop " + SemanticVersion.Current));
 

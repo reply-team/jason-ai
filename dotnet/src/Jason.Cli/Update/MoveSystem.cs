@@ -45,10 +45,14 @@ public interface IMoveSystem
     bool IsAppleSilicon();
 
     /// <summary>
-    /// Windows: null where <paramref name="file"/> carries a valid Authenticode signature whose signer's simple name is
-    /// <paramref name="publisher"/> in full and in the same case; else why not, in a sentence.
+    /// Windows: who signed <paramref name="file"/>, where its Authenticode signature verifies (WinVerifyTrust: valid, and
+    /// chained to a root this machine trusts): the signer certificate's simple name, and no refusal; else no signer, and why
+    /// not in a sentence. The one routine every signature the move reads goes through, this jason's own included.
     /// </summary>
-    string? WindowsSignatureRefusal(string file, string publisher);
+    (string? Signer, string? Refusal) WindowsSigner(string file);
+
+    /// <summary>The file this process runs from: the jason that asks for the move, whose own signer the move holds Jason Desktop to.</summary>
+    string RunningExecutable { get; }
 
     /// <summary>
     /// macOS: null where the application at <paramref name="application"/> verifies, deep and strict, against
@@ -77,22 +81,21 @@ public interface IMoveSystem
 }
 
 /// <summary>
-/// The publisher and the requirement the move holds Jason Desktop to before anything of it runs: the same two the install
-/// scripts hold it to, each a second copy of a line in another language, so a guard holds them equal to
-/// <c>install/install.ps1</c>'s signer and <c>install/install.sh</c>'s requirement.
+/// What the move holds Jason Desktop to before anything of it runs. On Windows, the publisher that signed the jason asking for
+/// the move: its own signature verified by the routine that verifies the installer, and its signer's name compared with the
+/// installer's and a found application's jason's, in full and in the same case. The name is read, never written here, so a
+/// fork that signs its own builds is held to its own signer. On macOS, the requirement <c>install/install.sh</c> holds an
+/// application to, a second copy of that line, held equal to it by a guard.
 /// </summary>
 /// <remarks>
 /// A test build (built with <c>-p:JasonTestBuild=true</c>, which defines <c>JASON_TEST_BUILD</c> in <c>Jason.Contracts</c> alone,
 /// read here through <see cref="Jason.Contracts.JasonVersion.TestBuild"/> and nothing else, so a build that relaxes these
-/// checks is always one that says it is a test build) reads another signer from <c>JASON_TEST_BUILD_SIGNER</c> and another requirement from <c>JASON_TEST_BUILD_REQUIREMENT</c>, so a
+/// checks is always one that says it is a test build) takes the signer <c>JASON_TEST_BUILD_SIGNER</c> names before its own and another requirement from <c>JASON_TEST_BUILD_REQUIREMENT</c>, so a
 /// proof on a runner can move an install into an application signed by that runner's own certificate. No released build
 /// is a test build: a guard holds the property out of the release workflow and the package action.
 /// </remarks>
 public static class MoveSignatures
 {
-    /// <summary>The simple name of the certificate that signs every Windows installer a release publishes.</summary>
-    public const string Publisher = "ReplyApp Inc.";
-
     /// <summary>
     /// The requirement every application a release publishes for macOS satisfies: a chain to Apple's own root, an
     /// intermediate that is Apple's Developer ID certification authority, a leaf that is a Developer ID Application
@@ -103,9 +106,27 @@ public static class MoveSignatures
     /// <summary>Whether this build is a test build, whose checks may be pointed at another signer: the build's one symbol for it.</summary>
     public static bool TestBuild => Jason.Contracts.JasonVersion.TestBuild;
 
-    /// <summary>The publisher the move holds an installer to: in a test build, the one <c>JASON_TEST_BUILD_SIGNER</c> names.</summary>
-    public static string PublisherInForce =>
-        TestBuild && Environment.GetEnvironmentVariable("JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : Publisher;
+    /// <summary>
+    /// The signer a test build is pointed at, which comes before the running jason's own: the one <c>JASON_TEST_BUILD_SIGNER</c>
+    /// names in <paramref name="variables"/> (the process's own where null), and only where <paramref name="testBuild"/> holds;
+    /// null otherwise. The move passes <see cref="TestBuild"/>.
+    /// </summary>
+    public static string? TestSigner(bool testBuild, IReadOnlyDictionary<string, string>? variables) =>
+        testBuild && Variable(variables, "JASON_TEST_BUILD_SIGNER") is { Length: > 0 } named ? named : null;
+
+    private static string? Variable(IReadOnlyDictionary<string, string>? variables, string name) =>
+        variables is null ? Environment.GetEnvironmentVariable(name) : variables.GetValueOrDefault(name);
+
+    /// <summary>
+    /// Null where <paramref name="file"/>'s signature verifies and its signer's simple name is <paramref name="publisher"/> in
+    /// full and in the same case; else why not, in a sentence.
+    /// </summary>
+    public static string? Refusal(IMoveSystem system, string file, string publisher)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+        var (signer, refusal) = system.WindowsSigner(file);
+        return refusal ?? (string.Equals(signer, publisher, StringComparison.Ordinal) ? null : $"it is signed by '{signer}', not by {publisher}");
+    }
 
     /// <summary>The requirement the move holds an application to: in a test build, the one <c>JASON_TEST_BUILD_REQUIREMENT</c> names.</summary>
     public static string RequirementInForce =>
@@ -125,17 +146,19 @@ public sealed class MoveSystem : IMoveSystem
         return exit == 0 && output.Trim() == "1";
     }
 
-    public string? WindowsSignatureRefusal(string file, string publisher)
+    public string RunningExecutable => Environment.ProcessPath ?? throw new InvalidOperationException("This process names no file it runs from.");
+
+    public (string? Signer, string? Refusal) WindowsSigner(string file)
     {
         if (!OperatingSystem.IsWindows())
         {
-            return "an Authenticode signature is read on Windows only";
+            return (null, "an Authenticode signature is read on Windows only");
         }
 
         var trust = Trust.Verify(file);
         if (trust != 0)
         {
-            return $"it does not carry a valid signature (WinVerifyTrust answered 0x{trust:X8})";
+            return (null, $"it does not carry a valid signature (WinVerifyTrust answered 0x{trust:X8})");
         }
 
         string? name;
@@ -148,10 +171,10 @@ public sealed class MoveSystem : IMoveSystem
         }
         catch (CryptographicException unread)
         {
-            return $"its signer could not be read ({unread.Message})";
+            return (null, $"its signer could not be read ({unread.Message})");
         }
 
-        return string.Equals(name, publisher, StringComparison.Ordinal) ? null : $"it is signed by '{name}', not by {publisher}";
+        return string.IsNullOrEmpty(name) ? (null, "its signer names no one") : (name, null);
     }
 
     public async Task<string?> MacSignatureRefusalAsync(string application, string requirement, CancellationToken cancellationToken)
