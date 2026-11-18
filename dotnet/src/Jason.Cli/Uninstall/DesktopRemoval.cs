@@ -184,47 +184,7 @@ public static partial class DesktopRemoval
         ArgumentNullException.ThrowIfNull(carried);
         ArgumentNullException.ThrowIfNull(plan);
 
-        var processes = env.Processes ?? RuntimeProcessControl.Instance;
-        var stopped = new HashSet<int> { Environment.ProcessId };
-        foreach (var paths in plan.Demo.Select(folder => new JasonPaths(folder)).Prepend(env.Paths))
-        {
-            if (DescriptorProcess.Live(paths, processes) is { } runtime)
-            {
-                stopped.Add(runtime.Pid);
-            }
-        }
-
-        var removes = env.Removes!;
-        return [.. removes.RunningFromInAnySession(carried.Executable).Where(pid => !stopped.Contains(pid) && !Descends(removes, pid, stopped)).Order()];
-    }
-
-    /// <summary>The deepest a chain of processes is followed up to one this uninstall stops.</summary>
-    private const int DeepestChain = 64;
-
-    /// <summary>
-    /// Whether <paramref name="pid"/> was started, through any number of processes, by one of <paramref name="ancestors"/>.
-    /// A parent that cannot be told ends the chain, and the process is counted.
-    /// </summary>
-    private static bool Descends(IInstallationRemover removes, int pid, HashSet<int> ancestors)
-    {
-        var seen = new HashSet<int> { pid };
-        var current = pid;
-        for (var step = 0; step < DeepestChain; step++)
-        {
-            if (removes.ParentOf(current) is not { } parent || !seen.Add(parent))
-            {
-                return false;
-            }
-
-            if (ancestors.Contains(parent))
-            {
-                return true;
-            }
-
-            current = parent;
-        }
-
-        return false;
+        return StartInFlight.Others(env, carried.Executable, plan.Demo);
     }
 
     /// <summary>The application's own executable inside its folder.</summary>
@@ -928,6 +888,31 @@ public static partial class DesktopRemoval
         }
     }
 
+    /// <summary>
+    /// The last look, just before the application is deleted: the window opened again, or a jason of this installation
+    /// started since the runtime stopped, both of which run from what goes next. Either keeps the application, and its state
+    /// under ~/Library, and is the problem this returns; null where neither runs.
+    /// </summary>
+    private static string? StartedSinceTheStop(CliEnvironment env, DesktopPlan plan, string application)
+    {
+        var window = env.Removes!.RunningFrom(ApplicationExecutable(application, SetupSystem.MacOs));
+        if (StartInFlight.Image(env) is not { } image)
+        {
+            return null;
+        }
+
+        var late = StartInFlight.LastLook(env, image, plan.Demo);
+        return window.Count == 0 && !late.Any
+            ? null
+            : StartInFlight.LateProblem(
+                env,
+                late,
+                window,
+                $"The application at {application} was not deleted",
+                image,
+                $"move {application} to the Trash in the Finder");
+    }
+
     /// <summary>The application itself, the last act: kept, handed to its uninstaller, or deleted.</summary>
     public static void RemoveApplication(CliEnvironment env, DesktopPlan plan, List<string> done, List<string> kept, List<string> problems)
     {
@@ -969,6 +954,12 @@ public static partial class DesktopRemoval
                     return;
                 }
 
+                if (StartedSinceTheStop(env, plan, application) is { } started)
+                {
+                    problems.Add(started);
+                    return;
+                }
+
                 RemoveApplicationState(env, plan, done, problems);
 
                 try
@@ -981,7 +972,7 @@ public static partial class DesktopRemoval
                     // macOS may refuse a terminal the right to delete an application (Privacy & Security, App Management), and
                     // a delete refused part-way leaves part of the bundle. Never passed over: the verb ends 1 on it.
                     var left = Directory.Exists(application) ? $"{application} is still there, and may be only part of the application now" : $"{application} is gone";
-                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Bin (the Trash) in the Finder to remove it.");
+                    problems.Add($"The application could not be deleted: {Causes.Line(refused)} {left}. Move {application} to the Trash in the Finder to remove it.");
                 }
 
                 return;

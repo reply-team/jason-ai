@@ -271,7 +271,7 @@ public sealed class RecordingRemover(StepLog? log = null) : IInstallationRemover
     public IReadOnlyList<int> RunningFromInAnySession(string executable)
     {
         Reads.Add($"any-session {executable}");
-        return RunningInAnySession.GetValueOrDefault(executable) ?? Running.GetValueOrDefault(executable) ?? [];
+        return Looks?.Invoke(executable, Reads.Count - 1) ?? RunningInAnySession.GetValueOrDefault(executable) ?? Running.GetValueOrDefault(executable) ?? [];
     }
 
     /// <summary>The process that started each, where a test says; any other has none that can be told.</summary>
