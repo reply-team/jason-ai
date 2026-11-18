@@ -1215,14 +1215,31 @@ internal static partial class StatusChecks
                 Repair.OnPath(env));
         }
 
-        var running = env.InstallPath;
-        if (running is not null && !string.Equals(System.IO.Path.GetFullPath(running), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
+        // Linux keeps the check it had: more than one installation may stand there, and another jason by name is said, not
+        // failed.
+        if (OperatingSystem.IsLinux())
+        {
+            var installed = env.InstallPath;
+            if (installed is not null && !string.Equals(System.IO.Path.GetFullPath(installed), System.IO.Path.GetFullPath(resolved), StringComparison.OrdinalIgnoreCase))
+            {
+                return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}, which is not the file answering here ({installed}): two installations are on this machine.", null);
+            }
+
+            return new StatusCheck("path", true, CheckState.Ok, $"'jason' resolves to {resolved}.", null);
+        }
+
+        // macOS and Windows, where a machine holds one installation. The file answering here, as installed: a release's
+        // image, which every release has. Another file first by name is what a person and every agent typing jason runs, so
+        // this one's readiness says nothing of theirs; the application's wrapper running this image is this jason by name.
+        var running = env.InstallPath ?? SelfExecutable.InstalledImage;
+        if (running is not null && !Installation.NewTerminal.Runs(resolved, running))
         {
             return new StatusCheck(
                 "path",
                 true,
-                CheckState.Ok,
-                $"'jason' resolves to {resolved}, which is not the file answering here ({running}): two installations are on this machine.",
+                CheckState.Failed,
+                $"'jason' resolves to {resolved}, not to this jason ({running}): typed by name, jason runs that other file, so a person and every agent use it and not this one. "
+                + $"Remove that file or take its folder off the PATH, or run this jason by its full path, {running}.",
                 null);
         }
 

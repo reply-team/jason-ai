@@ -79,6 +79,45 @@ public sealed class InstallCommandTests : IDisposable
     }
 
     /// <summary>
+    /// An elevated <c>jason install</c> - run as an administrator or as another account than the session's on Windows, as
+    /// root on macOS - would write the terminal command, the skills and a logon registration as that account, into a
+    /// profile the person's own jason cannot change: it refuses with install_elevated before anything is read, its own
+    /// version.json included, and before the update's lock is looked at, which another jason holds here.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_elevated_setup_is_refused_before_anything_is_read(bool windows)
+    {
+        var executable = Path.Combine(_tree.Paths.Root, "loose", windows ? "jason.exe" : "jason");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        File.WriteAllText(executable, "jason");
+        var update = new Jason.Cli.Update.UpdatePaths(_data.Paths);
+        Directory.CreateDirectory(update.Root);
+        var places = windows ? WindowsPlaces(@"Software\Jason.Tests\never-opened") : MacPlaces();
+        var (env, output) = Environment(places with { Elevated = true }, executable);
+
+        using (Jason.Cli.Update.UpdateLock.Take(update, "a test's update"))
+        {
+            var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+            Assert.Equal(ExitCodes.ApiError, exit);
+            var refusal = RuntimeVerbs.Envelope(output.ToString());
+            Assert.Equal(CliErrors.InstallElevated, refusal.Code);
+            Assert.False(refusal.Retryable);
+            Assert.Contains(
+                windows
+                    ? "This jason runs as an administrator, elevated above this account's ordinary rights, or as another account than the one signed in to this session"
+                    : "This jason runs as root",
+                refusal.Message,
+                StringComparison.Ordinal);
+            Assert.Contains("so nothing was read or written", refusal.Message, StringComparison.Ordinal);
+            Assert.Contains(windows ? "not run as an administrator" : "without sudo", refusal.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Home));
+        }
+    }
+
+    /// <summary>
     /// From a place that goes away - a copy macOS runs translocated, or a volume that is read-only, as a mounted disk image
     /// is - the setup refuses with install_vanishing_place before anything is stopped, written or retired: no update lock
     /// taken, so no holder file; the command-line install at ~/.local/bin/jason, its profile and its runtime as they were.
@@ -482,6 +521,143 @@ public sealed class InstallCommandTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, exit);
         Assert.Equal(written, File.Exists(Path.Combine(Home, ".zprofile")));
+    }
+
+    /// <summary>
+    /// What a new terminal finds, read once the Path entry is placed: the machine's Path comes before the account's, so a
+    /// jason on it answers before the entry appended last. The entry is placed all the same; the report names the file it
+    /// finds, a problem says what removes it - a command-line install's own update, or else removing it or taking its folder
+    /// off the Path - and the file is left as it is.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_a_jason_first_on_the_machine_Path_is_named_with_what_removes_it_and_left(bool commandLineInstall)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        var account = new AccountPathInMemory();
+        var tools = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "tools")).FullName;
+        var decoy = Path.Combine(tools, "jason.exe");
+        File.WriteAllText(decoy, "another jason");
+        if (commandLineInstall)
+        {
+            File.WriteAllText(Jason.Contracts.Update.ReleaseAssets.NoticeBeside(decoy, Jason.Contracts.Update.ReleaseAssets.Notices[0]), "MIT");
+        }
+
+        var executable = Carried("jason.exe");
+        var places = WindowsPlaces(NoKey) with { AccountPath = account, MachinePath = () => new StoredPath(tools, RegistryValueKind.ExpandString), PathExtensions = ".COM;.EXE;.BAT;.CMD" };
+        var (env, output) = Environment(places, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        var command = report.GetProperty("command");
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        Assert.Equal(decoy, command.GetProperty("finds").GetString());
+        Assert.False(command.GetProperty("finds_this").GetBoolean(), "another jason first by name reads as this one, and the install scripts would end saying jason is in the terminal");
+        var first = $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable})";
+        Assert.Contains(
+            commandLineInstall
+                ? $"{first}: it is a command-line install of Jason, and its own `jason update apply` moves it into Jason Desktop. It was left as it is."
+                : $"{first}. It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
+            report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+        Assert.Equal("another jason", File.ReadAllText(decoy));
+        Assert.True(PathEntry.Carries(account.Stored!.Raw, Path.GetDirectoryName(executable)!));
+    }
+
+    /// <summary>With nothing before it, the entry appended last is what a new terminal finds: this jason, and no problem.</summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_this_jason_is_what_a_new_terminal_finds_where_nothing_comes_before_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        var account = new AccountPathInMemory(new StoredPath(Path.Combine(_tree.Paths.Root, "empty"), RegistryValueKind.ExpandString));
+        var executable = Carried("jason.exe");
+        var (env, output) = Environment(WindowsPlaces(NoKey) with { AccountPath = account, PathExtensions = ".COM;.EXE;.BAT;.CMD" }, executable);
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
+
+        Assert.Equal(ExitCodes.Success, exit);
+        var command = Report(output).GetProperty("command");
+        Assert.Equal(executable, command.GetProperty("finds").GetString());
+        Assert.True(command.GetProperty("finds_this").GetBoolean());
+        Assert.Equal((Path.Combine(_tree.Paths.Root, "empty") + ";" + Path.GetDirectoryName(executable), RegistryValueKind.ExpandString), (account.Stored!.Raw, account.Stored.Kind));
+    }
+
+    /// <summary>
+    /// A command-line install held in this run - its runtime would not stop - still answers as jason: on Windows, as on
+    /// macOS, the terminal command is left as it is, the Path unwritten, placed false, and the problem says why.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task On_windows_a_held_command_line_install_leaves_the_Path_as_it_is()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
+        var before = Path.Combine(_tree.Paths.Root, "before");
+        var account = new AccountPathInMemory(new StoredPath(before, RegistryValueKind.ExpandString));
+        var (old, _, _, env, output) = OldRuntimeStopping(_ => RuntimeVerbs.Response(HttpStatusCode.InternalServerError, """{"error":{"code":"internal","message":"no","retryable":false}}"""), WindowsPlaces(NoKey) with { AccountPath = account });
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, StopTimeout: RuntimeVerbs.ShortTimeout, StopPoll: RuntimeVerbs.Poll), Ct);
+
+        Assert.Equal(ExitCodes.ApiError, exit);
+        var report = Report(output);
+        Assert.Equal(MachineSetup.RuntimeStates.WouldNotStop, report.GetProperty("runtime").GetString());
+        var command = report.GetProperty("command");
+        Assert.False(command.GetProperty("placed").GetBoolean());
+        Assert.False(command.GetProperty("changed").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, command.GetProperty("finds").ValueKind);
+        Assert.False(command.GetProperty("finds_this").GetBoolean());
+        Assert.Equal(new StoredPath(before, RegistryValueKind.ExpandString), account.Stored);
+        Assert.Contains(
+            $"The command-line install at {old} is not retired in this run, so this account's Path was left as it is: a new terminal still finds that jason.",
+            report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+        Assert.True(File.Exists(old));
+    }
+
+    /// <summary>
+    /// macOS: where <c>~/.local/bin</c> is on the terminal's PATH already, no profile line is written to put it in front,
+    /// and a jason earlier on that PATH is what a new terminal finds: named, with what removes it, and left. Where the lines
+    /// are written they put it in front, and the wrapper is what it finds.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [UnsupportedOSPlatform("windows")]
+    public async Task On_macos_a_jason_earlier_on_the_terminal_s_PATH_is_named_unless_the_lines_put_the_wrapper_in_front(bool onPathAlready)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A macOS PATH and an execute bit are not a Windows host's.");
+        var bin = Path.Combine(Home, ".local", "bin");
+        var tools = Directory.CreateDirectory(Path.Combine(_tree.Paths.Root, "usr-local-bin")).FullName;
+        var decoy = Path.Combine(tools, "jason");
+        File.WriteAllText(decoy, "another jason");
+        File.SetUnixFileMode(decoy, (UnixFileMode)0b111_101_101);
+        var executable = Carried();
+        var (env, output) = Environment(MacPlaces(), executable);
+        var terminal = onPathAlready ? $"{tools}:{bin}:/usr/bin" : $"{tools}:/usr/bin";
+
+        var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null, TerminalPath: terminal), Ct);
+
+        var report = Report(output);
+        var command = report.GetProperty("command");
+        Assert.True(command.GetProperty("placed").GetBoolean());
+        if (onPathAlready)
+        {
+            Assert.Equal(ExitCodes.ApiError, exit);
+            Assert.Equal(decoy, command.GetProperty("finds").GetString());
+            Assert.False(command.GetProperty("finds_this").GetBoolean());
+            Assert.Contains(
+                $"A terminal opened from now on finds {decoy} first by the name jason, not this jason ({executable}). It is not a file of Jason's, so it was left as it is: remove it, or take its folder off the PATH.",
+                report.GetProperty("problems").EnumerateArray().Select(said => said.GetString()));
+            Assert.Equal("another jason", File.ReadAllText(decoy));
+        }
+        else
+        {
+            Assert.Equal(ExitCodes.Success, exit);
+            Assert.Equal(Path.Combine(bin, "jason"), command.GetProperty("finds").GetString());
+            Assert.True(command.GetProperty("finds_this").GetBoolean(), "the wrapper running this jason reads as another file");
+        }
     }
 
     /// <summary>The gate is macOS's: on Windows a terminal PATH that names the folder already still leaves the Path entry written.</summary>
@@ -1075,36 +1251,67 @@ public sealed class InstallCommandTests : IDisposable
         Assert.Contains(report.GetProperty("problems").EnumerateArray(), said => said.GetString()!.Contains($"{old} was not retired", StringComparison.Ordinal));
     }
 
-    /// <summary>B1, Windows: a Path that cannot be written leaves the command-line install, its Path entry and the application's command files as they were.</summary>
+    /// <summary>
+    /// B1, Windows: a Path that cannot be written leaves the command-line install, its Path entry and the application's
+    /// command files as they were. The account's Path is held in memory and refuses every write, as one a policy locks
+    /// refuses them, so the row writes no registry key.
+    /// </summary>
     [Fact]
     [SupportedOSPlatform("windows")]
     public async Task On_windows_nothing_is_retired_or_taken_back_where_the_path_could_not_be_written()
     {
-        using var key = ScratchKey.Create();
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Path is Windows's.");
         var folder = Path.Combine(LocalAppData, "Programs", "jason");
         Directory.CreateDirectory(folder);
         var old = Path.Combine(folder, "jason.exe");
         File.WriteAllText(old, "old");
-        key.SetPath(folder, RegistryValueKind.ExpandString);
+        var account = new AccountPathInMemory(new StoredPath(folder, RegistryValueKind.ExpandString)) { RefusesWrites = true };
         var executable = Carried("jason.exe");
         var apps = Path.Combine(LocalAppData, "Microsoft", "WindowsApps");
         Directory.CreateDirectory(apps);
         var shim = Path.Combine(apps, "jason.cmd");
         File.WriteAllText(shim, $"@echo off\r\n\"{executable}\" %*\r\n");
-        key.DenySetValue();
-        var (env, output) = Environment(WindowsPlaces(key.SubKey), executable);
+        var (env, output) = Environment(WindowsPlaces(NoKey) with { AccountPath = account }, executable);
 
         var exit = await InstallCommand.RunAsync(env, new InstallOptions(false, false, null), Ct);
 
         Assert.Equal(ExitCodes.ApiError, exit);
         Assert.True(File.Exists(old), "jason.exe went though the bundle folder never reached the Path");
         Assert.True(File.Exists(shim), "the application's command file went though nothing else answers jason");
-        Assert.Equal((folder, RegistryValueKind.ExpandString), key.ReadPath());
+        Assert.Equal(new StoredPath(folder, RegistryValueKind.ExpandString), account.Stored);
         var report = Report(output);
         Assert.Equal(JsonValueKind.Null, report.GetProperty("retired").ValueKind);
         Assert.Equal(0, report.GetProperty("command").GetProperty("taken_back").GetArrayLength());
         Assert.False(report.GetProperty("command").GetProperty("placed").GetBoolean(), "a Path that was never written reads as placed, and the install scripts would end saying jason is in the terminal");
     }
+
+    /// <summary>
+    /// A scratch key whose writes a row denied is gone once the row ends: the deny rule once left one key behind for every
+    /// run, silently. It writes a key under the account it runs as, so it runs on a hosted runner only.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void A_scratch_key_whose_writes_were_denied_is_gone_once_the_row_ends()
+    {
+        Assert.SkipUnless(
+            OperatingSystem.IsWindows() && OnHostedRunner,
+            "It writes a key under the account it runs as: it runs on a hosted runner only, never on a person's machine.");
+        string subKey;
+        using (var key = ScratchKey.Create())
+        {
+            subKey = key.SubKey;
+            key.SetPath(Path.Combine(_tree.Paths.Root, "locked"), RegistryValueKind.ExpandString);
+            key.DenySetValue();
+        }
+
+        using var left = Registry.CurrentUser.OpenSubKey(subKey);
+        Assert.Null(left);
+    }
+
+    /// <summary>A GitHub-hosted runner, whose account is thrown away with the machine; never a person's own.</summary>
+    private static bool OnHostedRunner =>
+        string.Equals(System.Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.Ordinal)
+        && string.Equals(System.Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT"), "github-hosted", StringComparison.Ordinal);
 
     /// <summary>B2: on macOS the registration is moved on disk and takes effect at the next logon: no load, which would start a runtime now (RunAtLoad), and no unload.</summary>
     [Fact]
@@ -1279,9 +1486,10 @@ public sealed class InstallCommandTests : IDisposable
     /// A command-line install at <c>~/.local/bin/jason</c> whose runtime runs from it, drains with nothing running, resumes,
     /// and answers the shutdown with <paramref name="shutdown"/>.
     /// </summary>
-    private (string Old, List<string> Asked, FakeProcessControl Processes, CliEnvironment Env, StringWriter Output) OldRuntimeStopping(Func<HttpRequestMessage, HttpResponseMessage> shutdown)
+    private (string Old, List<string> Asked, FakeProcessControl Processes, CliEnvironment Env, StringWriter Output) OldRuntimeStopping(Func<HttpRequestMessage, HttpResponseMessage> shutdown, SetupPlaces? places = null)
     {
-        var old = PlantMacCommandLineInstall();
+        var windows = places?.Platform is SetupSystem.Windows;
+        var old = windows ? PlantWindowsCommandLineInstall(places!) : PlantMacCommandLineInstall();
         Directory.CreateDirectory(_data.Paths.Root);
         _data.WriteDescriptor(RuntimeVerbs.Descriptor("rt_OLD") with { InstalledImage = old });
         var processes = new FakeProcessControl { RunningPids = { RuntimeVerbs.Pid } };
@@ -1298,7 +1506,7 @@ public sealed class InstallCommandTests : IDisposable
                 _ => RuntimeVerbs.Response(HttpStatusCode.OK, RuntimeVerbs.InfoJson("rt_OLD")),
             };
         });
-        var (env, output) = Environment(MacPlaces(), Carried());
+        var (env, output) = Environment(places ?? MacPlaces(), Carried(windows ? "jason.exe" : "jason"));
         return (old, asked, processes, env with { HttpHandler = handler, Processes = processes }, output);
     }
 
@@ -1646,7 +1854,7 @@ public sealed class InstallCommandTests : IDisposable
         await CliApp.RunAsync(["install", "--help"], new CliEnvironment(output, new StringWriter(), paths.Paths), Ct);
 
         var help = output.ToString();
-        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
+        foreach (var phrase in new[] { "--roles", "--retire", "install_not_carried", "install_elevated", "taken_back, finds (the", "finds_this (whether", "open_shell", "left_alone", "would_not_stop", "Exit codes: 0", "no flags", "# added by jason install", "WindowsApps", "--terminal-path", "the PATH a terminal has", "the empty value", "holds ':'", "the wrapper has taken its executable's place", "the old job stays loaded and idle", "placed (whether a new terminal", "run/start-owed.json", "{\"stopped_at\":\"<ISO-8601 UTC>\"}" })
         {
             Assert.Contains(phrase, help, StringComparison.Ordinal);
         }
@@ -1718,6 +1926,15 @@ public sealed class InstallCommandTests : IDisposable
         return old;
     }
 
+    /// <summary>A command-line install of an earlier release in its Windows installer's place, which is Jason's by that place.</summary>
+    private static string PlantWindowsCommandLineInstall(SetupPlaces places)
+    {
+        var old = places.DefaultCommandLineExecutable;
+        Directory.CreateDirectory(Path.GetDirectoryName(old)!);
+        File.WriteAllBytes(old, new byte[200_000]);
+        return old;
+    }
+
     private string PlantMacCommandLineInstall()
     {
         var bin = Path.Combine(Home, ".local", "bin");
@@ -1742,6 +1959,9 @@ public sealed class InstallCommandTests : IDisposable
     }
 
     private SetupPlaces MacPlaces() => new(SetupSystem.MacOs, Home, null, UserPathValue.EnvironmentKey, "/bin/zsh") { Temporary = _tree.Paths.Root };
+
+    /// <summary>A key no row makes: places given an account Path of their own in memory name it, and nothing opens it.</summary>
+    private const string NoKey = @"Software\Jason.Tests\never-opened";
 
     private SetupPlaces WindowsPlaces(string pathKey) => new(SetupSystem.Windows, Home, LocalAppData, pathKey, null) { Temporary = _tree.Paths.Root };
 
@@ -1825,9 +2045,40 @@ public sealed class InstallCommandTests : IDisposable
                 : null;
         }
 
+        /// <summary>
+        /// Takes the key off, and fails the row where it is still there. A deny rule a row set (<see cref="DenySetValue"/>)
+        /// refused the writable open <see cref="RegistryKey.DeleteSubKeyTree(string, bool)"/> makes first, and with
+        /// <c>throwOnMissingSubKey</c> false that refusal returned silently and left the key behind: the account's explicit
+        /// deny rules on it come off first, and the key is read back gone, so a leak is never silent again.
+        /// </summary>
         public void Dispose()
         {
+            using (var key = Registry.CurrentUser.OpenSubKey(
+                SubKey,
+                RegistryKeyPermissionCheck.ReadWriteSubTree,
+                System.Security.AccessControl.RegistryRights.ReadPermissions | System.Security.AccessControl.RegistryRights.ChangePermissions))
+            {
+                if (key is not null)
+                {
+                    var security = key.GetAccessControl(System.Security.AccessControl.AccessControlSections.Access);
+                    var denied = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(System.Security.Principal.SecurityIdentifier))
+                        .OfType<System.Security.AccessControl.RegistryAccessRule>()
+                        .Where(rule => rule.AccessControlType == System.Security.AccessControl.AccessControlType.Deny)
+                        .ToList();
+                    if (denied.Count > 0)
+                    {
+                        denied.ForEach(security.RemoveAccessRuleSpecific);
+                        key.SetAccessControl(security);
+                    }
+                }
+            }
+
             Registry.CurrentUser.DeleteSubKeyTree(SubKey, throwOnMissingSubKey: false);
+            using (var left = Registry.CurrentUser.OpenSubKey(SubKey))
+            {
+                Assert.True(left is null, $@"HKCU\{SubKey} is still there after the row: a scratch key is never left behind under this account.");
+            }
+
             try
             {
                 Registry.CurrentUser.DeleteSubKey(Parent, throwOnMissingSubKey: false);

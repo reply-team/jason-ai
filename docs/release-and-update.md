@@ -903,9 +903,16 @@ cp ~/.jason/state/backups/jason-20260919T120000Z-before-20260920000000_Next.db ~
 rm -f ~/.jason/state/jason.db-wal ~/.jason/state/jason.db-shm
 
 # 4. Start the binary that matches that database — the one the backup's name was written by, which
-#    for a backup taken before a migration is the version you were on before the update.
+#    for a backup taken before a migration is the version you were on before the update; a command-line
+#    install's update kept it here:
 ~/.jason/update/previous/jason runtime start
 ```
+
+Step 4 is the command line's. **Where Jason Desktop carries `jason`**, on macOS and Windows, the version before the
+update is the copy of the application Jason Desktop kept under `~/.jason/desktop/rollback/<version>/`
+(`kept_application` in the ledger): quit Jason Desktop, put that copy back in the place of the application's folder,
+then run `jason runtime start`. `~/.jason/update/previous/jason` is not that version there: after a move into Jason
+Desktop it is the command-line executable the move's update replaced, a release before 0.49.
 
 There is one case the runtime puts a backup back itself: a start whose migration fails. Nothing has written to the
 database since that start took its backup, so it puts that copy back, does not start, and says so — the migration
@@ -1758,8 +1765,10 @@ jason install --terminal-path <PATH>
 
 Run by the `jason` the desktop application carries (a `version.json` beside it), it sets this machine up for the
 application: the terminal command, the skills for Claude Code and Codex where each is found, and an older command-line install retired. Any
-other `jason` is refused with `install_not_carried`, and a system other than macOS and Windows with
-`install_unsupported`, before anything is read or written. On macOS, the `jason` of an application that runs from a place
+other `jason` is refused with `install_not_carried`, a system other than macOS and Windows with
+`install_unsupported`, and a `jason` run elevated with `install_elevated` — on Windows as an administrator above the
+account's ordinary rights or as another account than the one signed in to the session, on macOS as root, by the rule
+`update_elevated` follows (§7) — each before anything is read or written. On macOS, the `jason` of an application that runs from a place
 that goes away, its disk image mounted or a copy macOS runs from a temporary place of its own (App Translocation) because
 it was opened where it was downloaded, is refused with `install_vanishing_place` before anything is stopped, written or
 retired, and before the update's lock is read or taken: nothing is placed, retired or stopped, and the sentence says to
@@ -1841,7 +1850,18 @@ the data, or takes it with the data under `--purge-data`.
 The document carries `version` and `executable` (the carried file); `command` — `runs` (what a new terminal finds `jason`
 through: the wrapper on macOS, the folder on the Path on Windows), `placed` (whether a
 new terminal finds this `jason`, as read back: a `command` that is null or not `placed` is what makes the install
-scripts end non-zero), `open_shell`, `changed`, `profiles`, `taken_back`;
+scripts end non-zero), `open_shell`, `changed`, `profiles`, `taken_back`, and `finds`: the file a terminal opened from
+now on runs for `jason`, read once everything is placed and retired, as that terminal reads it — on Windows the machine's
+Path, then the account's, each expanded as its registry kind says, the name tried with each `PATHEXT` extension in
+order; on macOS the PATH a terminal has, with `~/.local/bin` in front where the profile lines put it there. Where it is
+neither the carried file nor the wrapper running it, a problem names it and what removes it — a command-line install's
+own `jason update apply`, which moves it into Jason Desktop; a package manager's command; or else removing it or taking
+its folder off the PATH — and it is left as it is. Null where none is found or the command was not placed. Beside it,
+`finds_this` says whether `finds` is this jason or the wrapper running it, decided once by `jason install`: the install
+scripts read that member, compare no path themselves, and end non-zero where it is false; a report without it, from an
+older kept application, is read as before it existed. Where the command-line install of the first step is held, its runtime not stopped
+or the layout refusing, the terminal command is left as it is on both systems, the Path unwritten on Windows, and
+`placed` is false;
 `skills`, one entry per root — `root`, `hosts`, `written`, `unchanged`, `left_alone`; `roles` (with `--roles`, else null);
 `retired` — `executable`, `aside`, `removed`, `reregistered` — or null; `runtime` — `not_running`, `running` (another
 executable's, left as it is), `stopped`, `would_not_stop`; and `done`, `left` and `problems`, a sentence each, with
